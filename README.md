@@ -12,3 +12,4 @@
 - Add checkerboard rendering
 - Add tiled rendering
 - Add lightmapping demo (using xatlas-web)
+- Fallback to regular render during movement, render on top of rasterized render
