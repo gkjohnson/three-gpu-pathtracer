@@ -2,6 +2,7 @@
 
 ## TODO
 
+- Add drag and drop support
 - Add basic path tracer base class
 - Add demo with lambertian path tracer
 - Add with high quality path tracer based on CPU implementation
