@@ -4,7 +4,13 @@ function getGroupMaterialIndicesAttribute( geometry, indexOffset = 0 ) {
 
 	const vertCount = geometry.attributes.position.count;
 	const materialArray = new Uint8Array( vertCount );
-	const groups = geometry.groups;
+	let groups = geometry.groups;
+	if ( groups.length === 0 ) {
+
+		groups = [ { count: vertCount, offset: 0, materialIndex: 0 } ];
+
+	}
+
 	for ( let i = 0; i < groups.length; i ++ ) {
 
 		const { count, offset, materialIndex } = groups[ i ];

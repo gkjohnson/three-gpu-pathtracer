@@ -14,7 +14,7 @@ export class PathTracingViewer {
 
 		this.scene = new Scene();
 		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
-		this.camera.position.z = 3;
+		this.camera.position.set( 1, 1, 1 );
 
 		this.renderer = new WebGLRenderer();
 		this.fsQuad = new FullScreenQuad( new MeshBasicMaterial() );

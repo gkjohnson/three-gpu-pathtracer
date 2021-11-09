@@ -3,6 +3,7 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
+import { shaderMaterialStructs } from '../gpu/shaderStructs.js';
 import { MaterialStructArrayUniform } from '../gpu/MaterialStructArrayUniform.js';
 
 export class LambertPathTracingMaterial extends ShaderMaterial {
@@ -49,14 +50,17 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 precision highp usampler2D;
                 ${ shaderStructs }
                 ${ shaderIntersectFunction }
+				${ shaderMaterialStructs }
                 #include <common>
 
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
                 uniform sampler2D normalAttribute;
+				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
                 uniform float seed;
                 uniform float opacity;
+				uniform Material materials[ MATERIAL_LENGTH ];
                 varying vec2 vUv;
 
                 void main() {
@@ -78,8 +82,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                     vec3 barycoord = vec3( 0.0 );
                     float side = 1.0;
                     float dist = 0.0;
-
-                    for ( int i = 0; i < BOUNCES; i ++ ) {
+					int i;
+                    for ( i = 0; i < BOUNCES; i ++ ) {
 
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
@@ -120,6 +124,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                                 faceIndices.xyz
                             ).xyz;
 
+						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
+						throughputColor *= float( materialIndex + 1u ) / 4.0;
+
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point
                         // error as values increase.
@@ -131,6 +138,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                     }
 
+					// gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
                     gl_FragColor.a = opacity;
 
                 }

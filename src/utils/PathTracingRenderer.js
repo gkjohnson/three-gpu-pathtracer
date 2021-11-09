@@ -9,8 +9,6 @@ function* renderTask() {
 
 	while ( true ) {
 
-		// TODO: jitter camera
-
 		material.opacity = 1 / ( this.samples + 1 );
 		material.seed = ( material.seed + 0.11111 ) % 2;
 
