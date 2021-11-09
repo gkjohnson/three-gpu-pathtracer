@@ -9,11 +9,13 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
             defines: {
                 BOUNCES: 5,
+                MATERIAL_LENGTH: 0,
             },
 
             uniforms: {
                 bvh: { value: new MeshBVHUniformStruct() },
                 normalAttribute: { value: new FloatVertexAttributeTexture() },
+                uvAttribute: { value: new FloatVertexAttributeTexture() },
                 materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
                 materials: { value: new MaterialStructArrayUniform() },
                 cameraWorldMatrix: { value: new THREE.Matrix4() },
@@ -154,6 +156,30 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
         }
 
         this.setParameters( parameters );
+
+    }
+
+    setDefine( name, value = undefined ) {
+
+        if ( value === undefined || value === null ) {
+
+            if ( name in this.defines ) {
+
+                delete this.defines[ name ];
+                this.needsUpdate = true;
+
+            }
+
+        } else {
+
+            if ( this.defines[ name ] !== value ) {
+
+                this.defines[ name ] = value;
+                this.needsUpdate = true;
+
+            }
+
+        }
 
     }
 

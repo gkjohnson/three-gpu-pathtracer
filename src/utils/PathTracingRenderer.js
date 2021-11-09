@@ -9,6 +9,8 @@ function* renderTask() {
 
         // TODO: jitter camera
 
+        this.material.opacity = 1 / ( this.samples + 1 );
+
         for ( let x = 0; x < tw; x ++ ) {
 
             for ( let y = 0; y < ty; y ++ ) {
@@ -22,6 +24,8 @@ function* renderTask() {
             }
 
         }
+
+        this.samples ++;
 
     }
 
@@ -49,6 +53,7 @@ export class PathTracingRenderer {
             format: RGBAFormat,
             type: FloatType,
         } );
+        this.samples = 0;
         this._renderer = renderer;
         this._fsQuad = new FullScreenQuad( null );
         this._task = null;
@@ -76,6 +81,8 @@ export class PathTracingRenderer {
 
         renderer.setClearColor( ogClearColor, ogClearAlpha );
         renderer.setRenderTarget( ogRenderTarget );
+
+        this.samples = 0;
 
     }
 

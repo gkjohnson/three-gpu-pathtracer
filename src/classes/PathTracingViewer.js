@@ -1,5 +1,7 @@
 import { Scene, WebGLRenderer, MeshBasicMaterial } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/pass.js';
+import { SAH } from 'three-mesh-bvh';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js';
 import { PathTracingRenderer } from '../utils/PathTracingRenderer.js';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 
@@ -14,6 +16,8 @@ export class PathTracingViewer {
         this.ptModel = null;
         this.ptMaterials = null;
         this.model = null;
+        this.bvhGenerator = new GenerateMeshBVHWorker();
+        this._nextObject = null;
 
     }
 
@@ -26,11 +30,10 @@ export class PathTracingViewer {
 
     setModel( object ) {
 
-        if ( this.model ) {
+        if ( this.bvhGenerator.running ) {
 
-            this.model = null;
-            this.ptMaterials = null;
-            this.ptModel = null;
+            this._nextObject = object;
+            return;
 
         }
 
@@ -47,14 +50,39 @@ export class PathTracingViewer {
 
         } );
 
-
         const { geometry, materials } = mergeMeshes( meshes, { attributes: [ 'normal', 'uv' ] } );
-        const mesh = new Mesh( geometry );
+        return this
+            .bvhGenerator
+            .generate( geometry, { strategy: SAH, maxLeafTris: 1 } )
+            .then( bvh => {
 
-        this.scene.add( object );
-        this.ptModel = mesh;
-        this.ptMaterials = materials;
-        this.model = object;
+                if ( this._nextObject ) {
+
+                    this.setModel( this._nextObject );
+                    this._nextObject = null;
+                    return;
+
+                }
+
+                if ( this.model ) {
+
+                    this.scene.remove( this.model );
+
+                }
+
+                const mesh = new Mesh( geometry );
+                this.scene.add( object );
+                this.ptModel = mesh;
+                this.ptMaterials = materials;
+                this.model = object;
+
+                const { ptRenderer } = this;
+                ptRenderer.material.bvh.updateFrom( bvh );
+                ptRenderer.material.normalAttribute.updateFrom( geometry.attributes.normal );
+                ptRenderer.material.uvAttribute.updateFrom( geometry.attributes.uv );
+                ptRenderer.material.materialDefineAttribute.updateFrom( geometry.attributes.materialIndex );
+
+           } );
 
     }
 
@@ -77,10 +105,20 @@ export class PathTracingViewer {
 
         renderer.setAnimationLoop( () => {
 
-            ptRenderer.update();
+            if ( this.model ) {
 
-            fsQuad.material.map = ptRenderer.target;
-            fsQuad.render( renderer );
+                ptRenderer.material.setDefine( 'MATERIAL_LENGTH', this.materials.length );
+                ptRenderer.material.materials.updateFrom( this.materials );
+                ptRenderer.update();
+
+                fsQuad.material.map = ptRenderer.target;
+                fsQuad.render( renderer );
+
+            } else {
+
+                renderer.clear();
+
+            }
 
         } );
 
