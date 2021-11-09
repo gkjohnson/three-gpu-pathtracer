@@ -1,0 +1,24 @@
+{
+  "name": "three-shader-pathtracing",
+  "description": "Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) to accelerate path tracing on the GPU.",
+  "dependencies": {
+    "three": "^0.134.0",
+    "three-mesh-bvh": "^0.5.2",
+    "xatlas-web": "^0.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^6.3.0",
+    "parcel": "^2.0.1"
+  },
+  "scripts": {
+    "start": "concurrently \"cd example && parcel watch ./*.html --dist-dir ./dev-bundle/ --public-url . --no-cache --no-hmr\" \"static-server\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gkjohnson/three-shader-pathtracing.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gkjohnson/three-shader-pathtracing/issues"
+  },
+  "homepage": "https://github.com/gkjohnson/three-shader-pathtracing#readme"
+}
