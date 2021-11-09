@@ -1,34 +1,34 @@
 import { ShaderMaterial, Matrix4 } from 'three';
 import {
-    MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
-    shaderStructs, shaderIntersectFunction,
+	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
+	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { MaterialStructArrayUniform } from '../gpu/MaterialStructArrayUniform.js';
 
 export class LambertPathTracingMaterial extends ShaderMaterial {
 
-    constructor( parameters ) {
+	constructor( parameters ) {
 
-        super( {
+		super( {
 
-            defines: {
-                BOUNCES: 5,
-                MATERIAL_LENGTH: 0,
-            },
+			defines: {
+				BOUNCES: 5,
+				MATERIAL_LENGTH: 0,
+			},
 
-            uniforms: {
-                bvh: { value: new MeshBVHUniformStruct() },
-                normalAttribute: { value: new FloatVertexAttributeTexture() },
-                uvAttribute: { value: new FloatVertexAttributeTexture() },
-                materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
-                materials: { value: new MaterialStructArrayUniform() },
-                cameraWorldMatrix: { value: new Matrix4() },
-                invProjectionMatrix: { value: new Matrix4() },
-                seed: { value: 0 },
-                opacity: { value: 1 },
-            },
+			uniforms: {
+				bvh: { value: new MeshBVHUniformStruct() },
+				normalAttribute: { value: new FloatVertexAttributeTexture() },
+				uvAttribute: { value: new FloatVertexAttributeTexture() },
+				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
+				materials: { value: new MaterialStructArrayUniform() },
+				cameraWorldMatrix: { value: new Matrix4() },
+				invProjectionMatrix: { value: new Matrix4() },
+				seed: { value: 0 },
+				opacity: { value: 1 },
+			},
 
-            vertexShader: /* glsl */`
+			vertexShader: /* glsl */`
 
                 varying vec2 vUv;
                 void main() {
@@ -43,7 +43,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
             `,
 
-            fragmentShader: /* glsl */`
+			fragmentShader: /* glsl */`
                 #define RAY_OFFSET 1e-5
 
                 precision highp usampler2D;
@@ -137,54 +137,54 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
             `
 
-        } );
+		} );
 
-        for ( const key in this.uniforms ) {
+		for ( const key in this.uniforms ) {
 
-            Object.defineProperty( this, key, {
+			Object.defineProperty( this, key, {
 
-                get() {
+				get() {
 
-                    return this.uniforms[ key ].value;
+					return this.uniforms[ key ].value;
 
-                },
+				},
 
-                set( v ) {
+				set( v ) {
 
-                    this.uniforms[ key ].value = v;
+					this.uniforms[ key ].value = v;
 
-                }
+				}
 
-            } );
+			} );
 
-        }
+		}
 
-        this.setValues( parameters );
+		this.setValues( parameters );
 
-    }
+	}
 
-    setDefine( name, value = undefined ) {
+	setDefine( name, value = undefined ) {
 
-        if ( value === undefined || value === null ) {
+		if ( value === undefined || value === null ) {
 
-            if ( name in this.defines ) {
+			if ( name in this.defines ) {
 
-                delete this.defines[ name ];
-                this.needsUpdate = true;
+				delete this.defines[ name ];
+				this.needsUpdate = true;
 
-            }
+			}
 
-        } else {
+		} else {
 
-            if ( this.defines[ name ] !== value ) {
+			if ( this.defines[ name ] !== value ) {
 
-                this.defines[ name ] = value;
-                this.needsUpdate = true;
+				this.defines[ name ] = value;
+				this.needsUpdate = true;
 
-            }
+			}
 
-        }
+		}
 
-    }
+	}
 
 }

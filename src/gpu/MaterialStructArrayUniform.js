@@ -2,17 +2,17 @@ import { MaterialStructUniform } from './MaterialStructUniform.js';
 
 export class MaterialStructArrayUniform extends Array {
 
-    updateFrom( arr ) {
+	updateFrom( arr ) {
 
-        while ( this.length > arr.length ) this.pop();
-        while ( this.length < arr.length ) this.push( new MaterialStructUniform() );
+		while ( this.length > arr.length ) this.pop();
+		while ( this.length < arr.length ) this.push( new MaterialStructUniform() );
 
-        for ( let i = 0, l = this.length; i < l; i ++ ) {
+		for ( let i = 0, l = this.length; i < l; i ++ ) {
 
-            this[ i ].updateFrom( arr[ i ] );
+			this[ i ].updateFrom( arr[ i ] );
 
-        }
+		}
 
-    }
+	}
 
 }
