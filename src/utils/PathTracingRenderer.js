@@ -1,10 +1,10 @@
-import { RGBAFormat, FloatType, Color } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 function* renderTask() {
 
-    const tw = this.tiles.x;
-    const ty = this.tiles.y;
+    const tw = this.tiles.x || 1;
+    const ty = this.tiles.y || 1;
     while ( true ) {
 
         // TODO: jitter camera
@@ -20,6 +20,8 @@ function* renderTask() {
                 // TODO: render
 
                 // TODO: handle checker case?
+
+                yield;
 
             }
 

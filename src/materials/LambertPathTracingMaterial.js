@@ -1,4 +1,8 @@
-import { MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture } from 'three-mesh-bvh';
+import { ShaderMaterial, Matrix4 } from 'three';
+import {
+    MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
+    shaderStructs, shaderIntersectFunction,
+} from 'three-mesh-bvh';
 import { MaterialStructArrayUniform } from '../gpu/MaterialStructArrayUniform.js';
 
 export class LambertPathTracingMaterial extends ShaderMaterial {
@@ -18,8 +22,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uvAttribute: { value: new FloatVertexAttributeTexture() },
                 materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
                 materials: { value: new MaterialStructArrayUniform() },
-                cameraWorldMatrix: { value: new THREE.Matrix4() },
-                invProjectionMatrix: { value: new THREE.Matrix4() },
+                cameraWorldMatrix: { value: new Matrix4() },
+                invProjectionMatrix: { value: new Matrix4() },
                 seed: { value: 0 },
                 opacity: { value: 1 },
             },
@@ -155,7 +159,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
         }
 
-        this.setParameters( parameters );
+        this.setValues( parameters );
 
     }
 

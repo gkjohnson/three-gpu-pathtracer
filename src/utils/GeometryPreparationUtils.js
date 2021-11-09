@@ -1,5 +1,5 @@
 import { BufferAttribute } from 'three';
-
+import { mergeBufferGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 function getGroupMaterialIndicesAttribute( geometry, indexOffset = 0 ) {
 
     const vertCount = geometry.attributes.position.count;
@@ -32,7 +32,7 @@ export function mergeMeshes( meshes, options = { attributes: null, cloneGeometry
 
         // apply the matrix world to the geometry
         const originalGeometry = meshes[ i ].geometry;
-		const geometry = cloneGeometry ? originalGeometry.clone() : cloneGeometry;
+		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
         // trim any unneeded attributes
@@ -70,7 +70,7 @@ export function mergeMeshes( meshes, options = { attributes: null, cloneGeometry
 
 	}
 
-	const geometry = BufferGeometryUtils.mergeBufferGeometries( transformedGeometry, false );
+	const geometry = mergeBufferGeometries( transformedGeometry, false );
 	return { geometry, materials };
 
 }

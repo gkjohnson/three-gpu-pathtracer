@@ -15,3 +15,4 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 - Add tiled rendering
 - Add lightmapping demo (using xatlas-web)
 - Fallback to regular render during movement, render on top of rasterized render
+- Render lego models
