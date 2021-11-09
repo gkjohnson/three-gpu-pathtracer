@@ -3,23 +3,49 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 function* renderTask() {
 
-	const tw = this.tiles.x || 1;
+	const { _fsQuad, _renderer, target, camera, material } = this;
+	const tx = this.tiles.x || 1;
 	const ty = this.tiles.y || 1;
+
 	while ( true ) {
 
 		// TODO: jitter camera
 
-		this.material.opacity = 1 / ( this.samples + 1 );
+		material.opacity = 1 / ( this.samples + 1 );
+		material.seed = ( material.seed + 0.11111 ) % 2;
 
-		for ( let x = 0; x < tw; x ++ ) {
+		const w = target.width;
+		const h = target.height;
+		camera.setViewOffset(
+			w, h,
+			Math.random() - 0.5, Math.random() - 0.5,
+			w, h,
+		);
+		camera.updateProjectionMatrix();
 
-			for ( let y = 0; y < ty; y ++ ) {
+		for ( let y = 0; y < ty; y ++ ) {
 
-				// TODO: set camera offset
+			for ( let x = 0; x < tx; x ++ ) {
 
-				// TODO: render
+				material.cameraWorldMatrix.copy( camera.matrixWorld );
+				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
 
-				// TODO: handle checker case?
+				const ogRenderTarget = _renderer.getRenderTarget();
+				const ogAutoClear = _renderer.autoClear;
+
+				_renderer.setRenderTarget( target );
+				_renderer.setScissorTest( true );
+				_renderer.setScissor(
+					Math.ceil( x * w / tx ),
+					Math.ceil( ( ty - y - 1 ) * h / ty ),
+					Math.ceil( w / tx ),
+					Math.ceil( h / ty ) );
+				_renderer.autoClear = false;
+				_fsQuad.render( _renderer );
+
+				_renderer.setScissorTest( false );
+				_renderer.setRenderTarget( ogRenderTarget );
+				_renderer.autoClear = ogAutoClear;
 
 				yield;
 
@@ -50,6 +76,7 @@ export class PathTracingRenderer {
 
 	constructor( renderer ) {
 
+		this.camera = null;
 		this.tiles = new Vector2();
 		this.target = new WebGLRenderTarget( 1, 1, {
 			format: RGBAFormat,
@@ -77,14 +104,15 @@ export class PathTracingRenderer {
 		const ogClearAlpha = renderer.getClearAlpha();
 		renderer.getClearColor( ogClearColor );
 
-		renderer.setRenderTarget( target );
-		renderer.setClearColor( 0, 0 );
-		renderer.clearColor();
+		// renderer.setRenderTarget( target );
+		// renderer.setClearColor( 0, 0 );
+		// renderer.clearColor();
 
 		renderer.setClearColor( ogClearColor, ogClearAlpha );
 		renderer.setRenderTarget( ogRenderTarget );
 
 		this.samples = 0;
+		this._task = null;
 
 	}
 

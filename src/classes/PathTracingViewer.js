@@ -1,4 +1,4 @@
-import { Scene, WebGLRenderer, MeshBasicMaterial, Vector2, Mesh, PerspectiveCamera } from 'three';
+import { Scene, WebGLRenderer, MeshBasicMaterial, Vector2, Mesh, PerspectiveCamera, sRGBEncoding } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/pass.js';
 import { SAH } from 'three-mesh-bvh';
@@ -6,13 +6,16 @@ import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBV
 import { PathTracingRenderer } from '../utils/PathTracingRenderer.js';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 import { LambertPathTracingMaterial } from '../materials/LambertPathTracingMaterial.js';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
 
-const resolution = new Vector2();
 export class PathTracingViewer {
 
 	constructor() {
 
 		this.scene = new Scene();
+		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
+		this.camera.position.z = 3;
+
 		this.renderer = new WebGLRenderer();
 		this.fsQuad = new FullScreenQuad( new MeshBasicMaterial() );
 		this.ptRenderer = new PathTracingRenderer( this.renderer );
@@ -20,19 +23,26 @@ export class PathTracingViewer {
 		this.ptMaterials = null;
 		this.model = null;
 		this.bvhGenerator = new GenerateMeshBVHWorker();
-		this.camera = new PerspectiveCamera();
 		this._scale = 1;
 		this._nextObject = null;
+		this._needsSizeUpdate = false;
+		this._newSize = new Vector2();
 		this._resizeObserver = new ResizeObserver( entries => {
 
 			const { contentRect } = entries[ 0 ];
-			this.renderer.setSize( contentRect.width, contentRect.height, false );
-			this._updateSize();
+			this._newSize.set( contentRect.width, contentRect.height );
+			this._needsSizeUpdate = true;
 
 		} );
 
-		this.ptRenderer.material = new LambertPathTracingMaterial();
+		this._stats = new Stats();
+		document.body.appendChild( this._stats.dom );
+
+		this.ptRenderer.camera = this.camera;
+		this.ptRenderer.material = new LambertPathTracingMaterial( { transparent: true, depthWrite: false } );
+		this.renderer.outputEncoding = sRGBEncoding;
 		this._resizeObserver.observe( this.renderer.domElement );
+		this._updateSize();
 
 	}
 
@@ -40,17 +50,21 @@ export class PathTracingViewer {
 
 		const dpr = window.devicePixelRatio;
 		const scale = this._scale;
+		const size = this._newSize;
 		this.renderer.setPixelRatio( scale * dpr );
 
-		this.renderer.getSize( resolution );
-		this.ptRenderer.target.setSize( resolution.width * scale * dpr, resolution.height * scale * dpr );
+		this.renderer.setSize( size.width, size.height, false );
+		this.ptRenderer.target.setSize( size.width * scale * dpr, size.height * scale * dpr );
+		this.camera.aspect = size.width / size.height;
+		this.camera.updateProjectionMatrix();
+		this._needsSizeUpdate = false;
 
 	}
 
 	setScale( scale ) {
 
 		this._scale = scale;
-		this._updateSize();
+		this._needsSizeUpdate = true;
 
 	}
 
@@ -107,6 +121,7 @@ export class PathTracingViewer {
 				ptRenderer.material.normalAttribute.updateFrom( geometry.attributes.normal );
 				ptRenderer.material.uvAttribute.updateFrom( geometry.attributes.uv );
 				ptRenderer.material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+				ptRenderer.reset();
 
 			} );
 
@@ -123,7 +138,7 @@ export class PathTracingViewer {
 		const { ptRenderer, renderer, fsQuad, camera } = this;
 
 		const controls = new OrbitControls( camera, renderer.domElement );
-		controls.addEventListener( () => {
+		controls.addEventListener( 'change', () => {
 
 			ptRenderer.reset();
 
@@ -131,17 +146,24 @@ export class PathTracingViewer {
 
 		renderer.setAnimationLoop( () => {
 
+			this._stats.update();
+
+			if ( this._needsSizeUpdate ) {
+
+				this._updateSize();
+				this.ptRenderer.reset();
+
+			}
+
 			if ( this.model ) {
 
 				camera.updateMatrixWorld();
 
-				ptRenderer.material.cameraWorldMatrix.copy( camera.matrixWorld );
-				ptRenderer.material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
 				ptRenderer.material.setDefine( 'MATERIAL_LENGTH', this.ptMaterials.length );
 				ptRenderer.material.materials.updateFrom( this.ptMaterials );
 				ptRenderer.update();
 
-				fsQuad.material.map = ptRenderer.target;
+				fsQuad.material.map = ptRenderer.target.texture;
 				fsQuad.render( renderer );
 
 			} else {
