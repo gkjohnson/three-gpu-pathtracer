@@ -11,13 +11,13 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 - Add lightmapping demo (using xatlas-web)
 - Render lego models
 
-### TODO
+### Tasks
 - Add basic path tracer base class
-- Add support for sphere lights
 - Add support for multiple lights
 - Add support for materials, textures
 - Add tiled rendering
 - Fallback to regular render during movement, render on top of rasterized render
 
-## Long Term
+### Long Term
 - Add checkerboard rendering
+- Add support for sphere lights
