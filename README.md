@@ -11,11 +11,12 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 - Render lego models
 
 ### Tasks
-- Add basic path tracer base class
 - Add support for multiple lights
 - Add support for materials, textures
-- Add tiled rendering
+- Use a 1px white texture for unset textures
 - Fallback to regular render during movement, render on top of rasterized render
+- ~Add tiled rendering~
+- ~Add basic path tracer base class~
 
 ### Long Term
 - Add checkerboard rendering
