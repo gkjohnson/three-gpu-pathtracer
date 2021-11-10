@@ -56,6 +56,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
                 uniform sampler2D normalAttribute;
+                uniform sampler2D uvAttribute;
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
                 uniform float seed;

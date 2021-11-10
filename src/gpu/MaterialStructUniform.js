@@ -4,23 +4,23 @@ export class MaterialStructUniform {
 	constructor() {
 
 		this.color = new Color( 0xffffff );
-		this.map = null;
+		this.map = - 1;
 
 		this.metalness = 1.0;
-		this.metalnessMap = null;
+		this.metalnessMap = - 1;
 
 		this.roughness = 1.0;
-		this.roughnessMap = null;
+		this.roughnessMap = - 1;
 
 		this.ior = 1.0;
 		this.transmission = 0.0;
-		this.transmissionMap = null;
+		this.transmissionMap = - 1;
 
 		this.emissive = new Color( 0 );
 		this.emissiveIntensity = 1.0;
-		this.emissiveMap = null;
+		this.emissiveMap = - 1;
 
-		this.normalMap = null;
+		this.normalMap = - 1;
 
 		// TODO: Clearcoat
 
@@ -29,7 +29,7 @@ export class MaterialStructUniform {
 
 	}
 
-	updateFrom( material ) {
+	updateFrom( material, textures = [] ) {
 
 		// color
 		if ( 'color' in material ) this.color.copy( material.color );
@@ -41,22 +41,22 @@ export class MaterialStructUniform {
 		if ( 'metalness' in material ) this.metalness = material.metalness;
 		else this.metalness = 1.0;
 
-		this.metalnessMap = material.metalnessMap || null;
+		this.metalnessMap = textures.indexOf( material.metalnessMap );
 
 		// roughness
 		if ( 'roughness' in material ) this.roughness = material.roughness;
 		else this.roughness = 1.0;
 
-		this.roughnessMap = material.roughnessMap || null;
+		this.roughnessMap = textures.indexOf( material.roughnessMap );
 
 		// transmission
 		if ( 'ior' in material ) this.ior = material.ior;
 		else this.ior = 1.0;
 
-		if ( 'transmission' in material ) this.transmission = materia.transmission;
+		if ( 'transmission' in material ) this.transmission = material.transmission;
 		else this.transmission = 0.0;
 
-		this.transmissionMap = material.transmissionMap || null;
+		this.transmissionMap = textures.indexOf( material.transmissionMap );
 
 		// emission
 		if ( 'emissive' in material ) this.emissive.copy( material.emissive );
@@ -65,10 +65,10 @@ export class MaterialStructUniform {
 		if ( 'emissiveIntensity' in material ) this.emissiveIntensity = material.emissiveIntensity;
 		else this.emissiveIntensity = 1.0;
 
-		this.emissiveMap = material.emissiveMap || null;
+		this.emissiveMap = textures.indexOf( material.emissiveMap );
 
 		// normals
-		this.normalMap = material.normalMap || null;
+		this.normalMap = textures.indexOf( material.normalMap );
 
 	}
 
