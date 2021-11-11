@@ -7,16 +7,18 @@ function getGroupMaterialIndicesAttribute( geometry, indexOffset = 0 ) {
 	let groups = geometry.groups;
 	if ( groups.length === 0 ) {
 
-		groups = [ { count: vertCount, offset: 0, materialIndex: 0 } ];
+		groups = [ { count: vertCount, start: 0, materialIndex: 0 } ];
 
 	}
 
 	for ( let i = 0; i < groups.length; i ++ ) {
 
-		const { count, offset, materialIndex } = groups[ i ];
-		for ( let j = 0; j < count; j ++ ) {
+		const { count, start, materialIndex } = groups[ i ];
+		const endCount = Math.min( count, vertCount - start );
 
-			materialArray[ offset + j ] = indexOffset + materialIndex;
+		for ( let j = 0; j < endCount; j ++ ) {
+
+			materialArray[ start + j ] = indexOffset + materialIndex;
 
 		}
 
@@ -26,7 +28,9 @@ function getGroupMaterialIndicesAttribute( geometry, indexOffset = 0 ) {
 
 }
 
-export function mergeMeshes( meshes, options = { attributes: null, cloneGeometry: true } ) {
+export function mergeMeshes( meshes, options = {} ) {
+
+	options = { attributes: null, cloneGeometry: true, ...options };
 
 	const transformedGeometry = [];
 	const materials = [];
@@ -45,6 +49,13 @@ export function mergeMeshes( meshes, options = { attributes: null, cloneGeometry
 		if ( ! geometry.attributes.normal && ( attrs && attrs.includes( 'normal' ) ) ) {
 
 			geometry.computeVertexNormals();
+
+		}
+
+		if ( ! geometry.attributes.uv && ( attrs && attrs.includes( 'uv' ) ) ) {
+
+			const vertCount = geometry.attributes.position.count;
+			geometry.setAttribute( 'uv', new BufferAttribute( new Uint8Array( vertCount * 2 ), 2, true ) );
 
 		}
 
