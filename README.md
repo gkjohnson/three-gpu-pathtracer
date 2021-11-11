@@ -12,13 +12,15 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 
 ### Lambert Demo
 - Toggle-able models
+- Add toggle-able environment maps
+- Add option specify gradient background
 - Deduped materials
 - Fix mobile phone support
-- Add emission support
 - GUI Toggles
   - Set tiles
   - Set bounces
   - Set background / envmap
+- ~Add emission support~
 
 ### Tasks
 - Add support for multiple lights
