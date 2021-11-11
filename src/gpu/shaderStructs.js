@@ -3,23 +3,23 @@ export const shaderMaterialStructs = /* glsl */ `
     struct Material {
 
         vec3 color;
-        sampler2D map;
+        int map;
 
         float metalness;
-        sampler2D metalnessMap;
+        int metalnessMap;
 
         float roughness;
-        sampler2D roughnessMap;
+        int roughnessMap;
 
         float ior;
         float transmission;
-        sampler2D transmissionMap;
+        int transmissionMap;
 
         vec3 emissive;
         float emissiveIntensity;
-        sampler2D emissiveMap;
+        int emissiveMap;
 
-        sampler2D normalMap;
+    	int normalMap;
 
     };
 

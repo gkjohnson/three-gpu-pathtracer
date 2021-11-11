@@ -35,7 +35,7 @@ export class MaterialStructUniform {
 		if ( 'color' in material ) this.color.copy( material.color );
 		else material.color.set( 0xffffff );
 
-		this.map = material.map || null;
+		this.map = textures.indexOf( material.map );
 
 		// metalness
 		if ( 'metalness' in material ) this.metalness = material.metalness;

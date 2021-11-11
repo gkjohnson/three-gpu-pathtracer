@@ -76,7 +76,24 @@ export function mergeMeshes( meshes, options = { attributes: null, cloneGeometry
 
 	}
 
+	const textureSet = new Set();
+	materials.forEach( material => {
+
+		for ( const key in material ) {
+
+			const value = material[ key ];
+			if ( value && value.isTexture ) {
+
+				textureSet.add( value );
+
+			}
+
+		}
+
+	} );
+
 	const geometry = mergeBufferGeometries( transformedGeometry, false );
-	return { geometry, materials };
+	const textures = Array.from( textureSet );
+	return { geometry, materials, textures };
 
 }

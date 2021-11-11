@@ -1,10 +1,11 @@
-import { ShaderMaterial, Matrix4 } from 'three';
+import { ShaderMaterial, Matrix4, DataTexture2DArray } from 'three';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs } from '../gpu/shaderStructs.js';
 import { MaterialStructArrayUniform } from '../gpu/MaterialStructArrayUniform.js';
+import { RenderTarget2DArray } from '../gpu/RenderTarget2DArray.js';
 
 export class LambertPathTracingMaterial extends ShaderMaterial {
 
@@ -13,7 +14,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 		super( {
 
 			defines: {
-				BOUNCES: 5,
+				BOUNCES: 3,
 				MATERIAL_LENGTH: 0,
 			},
 
@@ -23,6 +24,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				uvAttribute: { value: new FloatVertexAttributeTexture() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialStructArrayUniform() },
+				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
 				seed: { value: 0 },
@@ -48,6 +50,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 #define RAY_OFFSET 1e-5
 
                 precision highp usampler2D;
+                precision highp sampler2DArray;
                 ${ shaderStructs }
                 ${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
@@ -62,6 +65,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uniform float seed;
                 uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
+				uniform sampler2DArray textures;
                 varying vec2 vUv;
 
                 void main() {
@@ -97,9 +101,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                         }
 
-                        // 1 / PI attenuation for physically correct lambert model
-                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                        throughputColor *= 1.0 / PI;
 
                         randomPoint = vec3(
                             rand( vUv + float( i + 1 ) + vec2( seed, seed ) ),
@@ -125,8 +126,19 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                                 faceIndices.xyz
                             ).xyz;
 
+						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
-						throughputColor *= float( materialIndex + 1u ) / 4.0;
+						Material material = materials[ materialIndex ];
+
+                        // 1 / PI attenuation for physically correct lambert model
+                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
+                        throughputColor *= 1.0 / PI;
+						throughputColor *= material.color;
+						if ( material.map != - 1 ) {
+
+							throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
+
+						}
 
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point

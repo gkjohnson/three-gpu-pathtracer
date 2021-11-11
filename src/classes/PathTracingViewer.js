@@ -21,6 +21,7 @@ export class PathTracingViewer {
 		this.ptRenderer = new PathTracingRenderer( this.renderer );
 		this.ptModel = null;
 		this.ptMaterials = null;
+		this.ptTextures = null;
 		this.model = null;
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 		this._scale = 1;
@@ -90,7 +91,7 @@ export class PathTracingViewer {
 
 		} );
 
-		const { geometry, materials } = mergeMeshes( meshes, { attributes: [ 'position', 'normal', 'uv' ] } );
+		const { geometry, materials, textures } = mergeMeshes( meshes, { attributes: [ 'position', 'normal', 'uv' ] } );
 		return this
 			.bvhGenerator
 			.generate( geometry, { strategy: SAH, maxLeafTris: 1 } )
@@ -114,6 +115,7 @@ export class PathTracingViewer {
 				this.scene.add( object );
 				this.ptModel = mesh;
 				this.ptMaterials = materials;
+				this.ptTextures = textures;
 				this.model = object;
 
 				const { ptRenderer } = this;
@@ -121,6 +123,9 @@ export class PathTracingViewer {
 				ptRenderer.material.normalAttribute.updateFrom( geometry.attributes.normal );
 				ptRenderer.material.uvAttribute.updateFrom( geometry.attributes.uv );
 				ptRenderer.material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+				ptRenderer.material.textures.setTextures( this.renderer, 1024, 1024, textures );
+				ptRenderer.material.materials.updateFrom( materials, textures );
+				ptRenderer.material.setDefine( 'MATERIAL_LENGTH', materials.length );
 				ptRenderer.reset();
 
 			} );
@@ -159,8 +164,6 @@ export class PathTracingViewer {
 
 				camera.updateMatrixWorld();
 
-				ptRenderer.material.setDefine( 'MATERIAL_LENGTH', this.ptMaterials.length );
-				ptRenderer.material.materials.updateFrom( this.ptMaterials );
 				ptRenderer.update();
 
 				fsQuad.material.map = ptRenderer.target.texture;

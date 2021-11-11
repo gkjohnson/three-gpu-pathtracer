@@ -4,9 +4,6 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 function* renderTask() {
 
 	const { _fsQuad, _renderer, target, camera, material } = this;
-	const tx = this.tiles.x || 1;
-	const ty = this.tiles.y || 1;
-
 	while ( true ) {
 
 		material.opacity = 1 / ( this.samples + 1 );
@@ -21,6 +18,8 @@ function* renderTask() {
 		);
 		camera.updateProjectionMatrix();
 
+		const tx = this.tiles.x || 1;
+		const ty = this.tiles.y || 1;
 		for ( let y = 0; y < ty; y ++ ) {
 
 			for ( let x = 0; x < tx; x ++ ) {
