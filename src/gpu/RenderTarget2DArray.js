@@ -5,7 +5,7 @@ import {
 	UnsignedByteType,
 	MeshBasicMaterial,
 	Color,
-	LinearMipmapLinearFilter,
+	RepeatWrapping,
 	LinearFilter,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/pass.js';
@@ -22,6 +22,8 @@ export class RenderTarget2DArray extends WebGLRenderTarget {
 		dataTexture.type = UnsignedByteType;
 		dataTexture.minFilter = LinearFilter;
 		dataTexture.magFilter = LinearFilter;
+		dataTexture.wrapS = RepeatWrapping;
+		dataTexture.wrapT = RepeatWrapping;
 		dataTexture.setTextures = ( ...args ) => {
 
 			this.setTextures( ...args );

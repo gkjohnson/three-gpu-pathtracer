@@ -97,7 +97,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                             float value = ( rayDirection.y + 0.5 ) / 1.5;
                             vec3 skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value );
 
-                            gl_FragColor = vec4( skyColor * throughputColor * 2.0, 1.0 );
+                            gl_FragColor += vec4( skyColor * throughputColor * 2.0, 1.0 );
 
                             break;
 
@@ -133,6 +133,18 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         // 1 / PI attenuation for physically correct lambert model
                         // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
                         throughputColor *= 1.0 / PI;
+
+						// emission
+						vec3 emission = material.emissiveIntensity * material.emissive;
+						if ( material.emissiveMap != - 1 ) {
+
+							emission *= texture2D( textures, vec3( uv, material.emissiveMap ) ).xyz;
+
+						}
+
+						gl_FragColor.rgb += emission * max( side, 0.0 );
+
+						// albedo
 						throughputColor *= material.color;
 						if ( material.map != - 1 ) {
 
@@ -140,6 +152,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 						}
 
+						// normal
 						if ( material.normalMap != - 1 ) {
 
 							vec4 tangentSample = textureSampleBarycoord(
@@ -153,6 +166,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 							vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
 							normal = normalize( vTBN * texNormal );
+
+							// TODO: normal scale
 
 						}
 
