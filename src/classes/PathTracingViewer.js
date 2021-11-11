@@ -91,7 +91,7 @@ export class PathTracingViewer {
 
 		} );
 
-		const { geometry, materials, textures } = mergeMeshes( meshes, { attributes: [ 'position', 'normal', 'uv' ] } );
+		const { geometry, materials, textures } = mergeMeshes( meshes, { attributes: [ 'position', 'normal', 'tangent', 'uv' ] } );
 		return this
 			.bvhGenerator
 			.generate( geometry, { strategy: SAH, maxLeafTris: 1 } )
@@ -121,9 +121,10 @@ export class PathTracingViewer {
 				const { ptRenderer } = this;
 				ptRenderer.material.bvh.updateFrom( bvh );
 				ptRenderer.material.normalAttribute.updateFrom( geometry.attributes.normal );
+				ptRenderer.material.tangentAttribute.updateFrom( geometry.attributes.tangent );
 				ptRenderer.material.uvAttribute.updateFrom( geometry.attributes.uv );
 				ptRenderer.material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-				ptRenderer.material.textures.setTextures( this.renderer, 1024, 1024, textures );
+				ptRenderer.material.textures.setTextures( this.renderer, 2048, 2048, textures );
 				ptRenderer.material.materials.updateFrom( materials, textures );
 				ptRenderer.material.setDefine( 'MATERIAL_LENGTH', materials.length );
 				ptRenderer.reset();

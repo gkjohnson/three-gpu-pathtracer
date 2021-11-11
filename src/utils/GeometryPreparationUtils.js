@@ -41,6 +41,19 @@ export function mergeMeshes( meshes, options = { attributes: null, cloneGeometry
 		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
+		const attrs = options.attributes;
+		if ( ! geometry.attributes.normal && ( attrs && attrs.includes( 'normal' ) ) ) {
+
+			geometry.computeVertexNormals();
+
+		}
+
+		if ( ! geometry.attributes.tangent && ( attrs && attrs.includes( 'tangent' ) ) ) {
+
+			geometry.computeTangents();
+
+		}
+
 		// trim any unneeded attributes
 		if ( options.attributes ) {
 

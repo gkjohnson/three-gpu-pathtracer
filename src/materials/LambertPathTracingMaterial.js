@@ -1,4 +1,4 @@
-import { ShaderMaterial, Matrix4, DataTexture2DArray } from 'three';
+import { ShaderMaterial, Matrix4 } from 'three';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
@@ -21,6 +21,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 			uniforms: {
 				bvh: { value: new MeshBVHUniformStruct() },
 				normalAttribute: { value: new FloatVertexAttributeTexture() },
+				tangentAttribute: { value: new FloatVertexAttributeTexture() },
 				uvAttribute: { value: new FloatVertexAttributeTexture() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialStructArrayUniform() },
@@ -59,6 +60,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
                 uniform sampler2D normalAttribute;
+                uniform sampler2D tangentAttribute;
                 uniform sampler2D uvAttribute;
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
@@ -118,13 +120,11 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         randomPoint *= 0.999;
 
                         // fetch the interpolated smooth normal
-                        vec3 normal =
-                            side *
-                            textureSampleBarycoord(
-                                normalAttribute,
-                                barycoord,
-                                faceIndices.xyz
-                            ).xyz;
+                        vec3 normal = normalize( textureSampleBarycoord(
+							normalAttribute,
+							barycoord,
+							faceIndices.xyz
+						).xyz );
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
@@ -139,6 +139,24 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 							throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
 
 						}
+
+						if ( material.normalMap != - 1 ) {
+
+							vec4 tangentSample = textureSampleBarycoord(
+								tangentAttribute,
+								barycoord,
+								faceIndices.xyz
+							);
+							vec3 tangent = normalize( tangentSample.xyz );
+							vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
+							mat3 vTBN = mat3( tangent, bitangent, normal );
+
+							vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
+							normal = normalize( vTBN * texNormal );
+
+						}
+
+						normal *= side;
 
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point
