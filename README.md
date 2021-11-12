@@ -11,15 +11,17 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 - Render lego models
 
 ### Lambert Demo
+- Fix Sponza model not applying materials correctly
+- On move render three.js rasterized models
 - Toggle-able models
 - Add toggle-able environment maps
 - Add option specify gradient background
-- Deduped materials
 - Fix mobile phone support
 - GUI Toggles
   - Set tiles
   - Set bounces
   - Set background / envmap
+- ~Dedupe materials~
 - ~Add emission support~
 
 ### Tasks
