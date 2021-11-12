@@ -1,4 +1,4 @@
-import { Color } from 'three';
+import { Color, Vector2 } from 'three';
 export class MaterialStructUniform {
 
 	constructor() {
@@ -21,6 +21,7 @@ export class MaterialStructUniform {
 		this.emissiveMap = - 1;
 
 		this.normalMap = - 1;
+		this.normalScale = new Vector2( 1, 1 );
 
 		// TODO: Clearcoat
 
@@ -69,6 +70,8 @@ export class MaterialStructUniform {
 
 		// normals
 		this.normalMap = textures.indexOf( material.normalMap );
+		if ( 'normalScale' in material ) this.normalScale.copy( material.normalScale );
+		else this.normalScale.set( 1, 1 );
 
 	}
 

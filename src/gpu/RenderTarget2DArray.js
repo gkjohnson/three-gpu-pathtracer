@@ -39,14 +39,17 @@ export class RenderTarget2DArray extends WebGLRenderTarget {
 
 	setTextures( renderer, width, height, textures ) {
 
+		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
 		const prevAlpha = renderer.getClearAlpha();
 		renderer.getClearColor( prevColor );
 
+		// resize the render target
 		const depth = textures.length;
 		this.setSize( width, height, depth );
 		renderer.setClearColor( 0, 0 );
 
+		// render each texture into each layer of the target
 		const fsQuad = this.fsQuad;
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
@@ -58,6 +61,8 @@ export class RenderTarget2DArray extends WebGLRenderTarget {
 
 		}
 
+		// reset the renderer
+		fsQuad.material.map = null;
 		renderer.setClearColor( prevColor, prevAlpha );
 		renderer.setRenderTarget( prevRenderTarget );
 

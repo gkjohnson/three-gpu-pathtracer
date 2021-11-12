@@ -81,7 +81,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                     gl_FragColor = vec4( 0.0 );
 
                     vec3 throughputColor = vec3( 1.0 );
-                    vec3 randomPoint = vec3( .0 );
+                    vec3 randomPoint = vec3( 0.0 );
 
                     // hit results
                     uvec4 faceIndices = uvec4( 0u );
@@ -130,10 +130,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
 
-                        // 1 / PI attenuation for physically correct lambert model
-                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                        throughputColor *= 1.0 / PI;
-
 						// emission
 						vec3 emission = material.emissiveIntensity * material.emissive;
 						if ( material.emissiveMap != - 1 ) {
@@ -142,7 +138,11 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 						}
 
-						gl_FragColor.rgb += emission * max( side, 0.0 );
+						gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
+
+						// 1 / PI attenuation for physically correct lambert model
+                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
+                        throughputColor *= 1.0 / PI;
 
 						// albedo
 						throughputColor *= material.color;
@@ -165,9 +165,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 							mat3 vTBN = mat3( tangent, bitangent, normal );
 
 							vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
+							texNormal.xy *= material.normalScale;
 							normal = normalize( vTBN * texNormal );
-
-							// TODO: normal scale
 
 						}
 
@@ -181,6 +180,15 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
                         rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
                         rayDirection = normalize( normal + randomPoint );
+
+						// if the surface normal is skewed such that the outgoing vector can wind up underneath
+						// the triangle surface then just consider it absorbed.
+						if ( dot( rayDirection, faceNormal ) < 0.0 ) {
+
+							break;
+
+						}
+
 
                     }
 

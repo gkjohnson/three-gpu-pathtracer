@@ -20,6 +20,7 @@ export const shaderMaterialStructs = /* glsl */ `
         int emissiveMap;
 
     	int normalMap;
+		vec2 normalScale;
 
     };
 

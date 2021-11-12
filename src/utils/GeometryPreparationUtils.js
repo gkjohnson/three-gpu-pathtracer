@@ -1,6 +1,12 @@
 import { BufferAttribute } from 'three';
-import { mergeBufferGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-function getGroupMaterialIndicesAttribute( geometry, indexOffset = 0 ) {
+import { mergeBufferGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
+
+	if ( ! Array.isArray( materials ) ) {
+
+		materials = [ materials ];
+
+	}
 
 	const vertCount = geometry.attributes.position.count;
 	const materialArray = new Uint8Array( vertCount );
@@ -13,12 +19,15 @@ function getGroupMaterialIndicesAttribute( geometry, indexOffset = 0 ) {
 
 	for ( let i = 0; i < groups.length; i ++ ) {
 
-		const { count, start, materialIndex } = groups[ i ];
+		const group = groups[ i ];
+		const { count, start } = group;
 		const endCount = Math.min( count, vertCount - start );
+		const mat = materials[ group.materialIndex ];
+		const materialIndex = allMaterials.indexOf( mat );
 
 		for ( let j = 0; j < endCount; j ++ ) {
 
-			materialArray[ start + j ] = indexOffset + materialIndex;
+			materialArray[ start + j ] = materialIndex;
 
 		}
 
@@ -33,7 +42,24 @@ export function mergeMeshes( meshes, options = {} ) {
 	options = { attributes: null, cloneGeometry: true, ...options };
 
 	const transformedGeometry = [];
-	const materials = [];
+	const materialSet = new Set();
+	for ( let i = 0, l = meshes.length; i < l; i ++ ) {
+
+		// save any materials
+		const mesh = meshes[ i ];
+		if ( Array.isArray( mesh.material ) ) {
+
+			mesh.material.forEach( m => materialSet.add( m ) );
+
+		} else {
+
+			materialSet.add( mesh.material );
+
+		}
+
+	}
+
+	const materials = Array.from( materialSet );
 	for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 		// ensure the matrix world is up to date
@@ -42,7 +68,7 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		// apply the matrix world to the geometry
 		const originalGeometry = meshes[ i ].geometry;
-		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
+		let geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
 		const attrs = options.attributes;
@@ -60,6 +86,13 @@ export function mergeMeshes( meshes, options = {} ) {
 		}
 
 		if ( ! geometry.attributes.tangent && ( attrs && attrs.includes( 'tangent' ) ) ) {
+
+			// computeTangents requires an index buffer
+			if ( geometry.index === null ) {
+
+				geometry = mergeVertices( geometry );
+
+			}
 
 			geometry.computeTangents();
 
@@ -80,20 +113,8 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		}
 
-		// save any materials
-		const materialOffset = materials.length;
-		if ( Array.isArray( mesh.material ) ) {
-
-			materials.push( ...mesh.material );
-
-		} else {
-
-			materials.push( mesh.material );
-
-		}
-
 		// create the material index attribute
-		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materialOffset );
+		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, mesh.material, materials );
 		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
 
 		transformedGeometry.push( geometry );

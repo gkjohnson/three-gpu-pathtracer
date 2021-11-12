@@ -6,6 +6,7 @@ import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBV
 import { PathTracingRenderer } from '../utils/PathTracingRenderer.js';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 import { LambertPathTracingMaterial } from '../materials/LambertPathTracingMaterial.js';
+import { MaterialReducer } from '../utils/MaterialReducer.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
 export class PathTracingViewer {
@@ -13,7 +14,7 @@ export class PathTracingViewer {
 	constructor() {
 
 		this.scene = new Scene();
-		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 50 );
+		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 50 );
 		this.camera.position.set( 1, 1, 1 );
 
 		this.renderer = new WebGLRenderer();
@@ -79,6 +80,9 @@ export class PathTracingViewer {
 		}
 
 		object.updateMatrixWorld( true );
+
+		const materialReducer = new MaterialReducer();
+		materialReducer.process( object );
 
 		const meshes = [];
 		object.traverse( c => {
