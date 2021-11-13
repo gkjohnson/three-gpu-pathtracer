@@ -29,6 +29,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
 				environmentIntensity: { value: 2.0 },
+				environmentMap: { value: null },
 				seed: { value: 0 },
 				opacity: { value: 1 },
 			},
@@ -50,13 +51,17 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 			fragmentShader: /* glsl */`
                 #define RAY_OFFSET 1e-5
+				#define ENVMAP_TYPE_CUBE_UV
 
                 precision highp usampler2D;
                 precision highp sampler2DArray;
                 ${ shaderStructs }
                 ${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
+
+				vec4 envMapTexelToLinear( vec4 a ) { return RGBEToLinear( a ); }
                 #include <common>
+				#include <cube_uv_reflection_fragment>
 
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
@@ -66,6 +71,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
                 uniform float environmentIntensity;
+                uniform sampler2D environmentMap;
                 uniform float seed;
                 uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
@@ -97,7 +103,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
                             float value = ( rayDirection.y + 0.5 ) / 1.5;
-                            vec3 skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value ) * environmentIntensity;
+                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb * environmentIntensity;
+							skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value ) * environmentIntensity;
 
                             gl_FragColor += vec4( skyColor * throughputColor * 1.0, 1.0 );
 
@@ -195,6 +202,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                     }
 
 					// gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
+					// gl_FragColor.rgb = mix( textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
                     gl_FragColor.a = opacity;
 
                 }

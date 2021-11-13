@@ -1,4 +1,5 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator } from 'three';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { GUI } from 'three/examples/jsm/libs/dat.gui.module.js';
@@ -102,3 +103,15 @@ new GLTFLoader( manager ).load( 'https://raw.githubusercontent.com/KhronosGroup/
 // 	centerAndSetModel( model );
 
 // } );
+
+new RGBELoader( manager ).load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+
+	const pmremGenerator = new PMREMGenerator( viewer.renderer );
+	pmremGenerator.compileCubemapShader();
+
+	const envMap = pmremGenerator.fromEquirectangular( texture );
+
+	texture.mapping = EquirectangularReflectionMapping;
+	viewer.ptRenderer.material.environmentMap = envMap;
+
+} );
