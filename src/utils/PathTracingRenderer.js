@@ -20,6 +20,7 @@ function* renderTask() {
 
 		const tx = this.tiles.x || 1;
 		const ty = this.tiles.y || 1;
+		const totalTiles = tx * ty;
 		for ( let y = 0; y < ty; y ++ ) {
 
 			for ( let x = 0; x < tx; x ++ ) {
@@ -44,13 +45,15 @@ function* renderTask() {
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
+				this.samples += ( 1 / totalTiles );
+
 				yield;
 
 			}
 
 		}
 
-		this.samples ++;
+		this.samples = Math.round( this.samples );
 
 	}
 
@@ -74,7 +77,7 @@ export class PathTracingRenderer {
 	constructor( renderer ) {
 
 		this.camera = null;
-		this.tiles = new Vector2();
+		this.tiles = new Vector2( 1, 1 );
 		this.target = new WebGLRenderTarget( 1, 1, {
 			format: RGBAFormat,
 			type: FloatType,
@@ -101,9 +104,9 @@ export class PathTracingRenderer {
 		const ogClearAlpha = renderer.getClearAlpha();
 		renderer.getClearColor( ogClearColor );
 
-		// renderer.setRenderTarget( target );
-		// renderer.setClearColor( 0, 0 );
-		// renderer.clearColor();
+		renderer.setRenderTarget( target );
+		renderer.setClearColor( 0, 0 );
+		renderer.clearColor();
 
 		renderer.setClearColor( ogClearColor, ogClearAlpha );
 		renderer.setRenderTarget( ogRenderTarget );

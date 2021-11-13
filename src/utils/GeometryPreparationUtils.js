@@ -87,14 +87,23 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		if ( ! geometry.attributes.tangent && ( attrs && attrs.includes( 'tangent' ) ) ) {
 
-			// computeTangents requires an index buffer
-			if ( geometry.index === null ) {
+			if ( mesh.material.normalMap ) {
 
-				geometry = mergeVertices( geometry );
+				// computeTangents requires an index buffer
+				if ( geometry.index === null ) {
+
+					geometry = mergeVertices( geometry );
+
+				}
+
+				geometry.computeTangents();
+
+			} else {
+
+				const vertCount = geometry.attributes.position.count;
+				geometry.setAttribute( 'tangent', new BufferAttribute( new Float32Array( vertCount * 4 ), 4, false ) );
 
 			}
-
-			geometry.computeTangents();
 
 		}
 

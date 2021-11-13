@@ -1,4 +1,4 @@
-import { Scene, WebGLRenderer, MeshBasicMaterial, Vector2, Mesh, PerspectiveCamera, sRGBEncoding } from 'three';
+import { Scene, WebGLRenderer, MeshBasicMaterial, Vector2, Mesh, PerspectiveCamera, sRGBEncoding, HemisphereLight } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/pass.js';
 import { SAH } from 'three-mesh-bvh';
@@ -7,9 +7,14 @@ import { PathTracingRenderer } from '../utils/PathTracingRenderer.js';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 import { LambertPathTracingMaterial } from '../materials/LambertPathTracingMaterial.js';
 import { MaterialReducer } from '../utils/MaterialReducer.js';
-import Stats from 'three/examples/jsm/libs/stats.module.js';
 
 export class PathTracingViewer {
+
+	get domElement() {
+
+		return this._container;
+
+	}
 
 	constructor() {
 
@@ -17,14 +22,15 @@ export class PathTracingViewer {
 		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 50 );
 		this.camera.position.set( 1, 1, 1 );
 
-		this.renderer = new WebGLRenderer();
-		this.fsQuad = new FullScreenQuad( new MeshBasicMaterial() );
+		this.renderer = new WebGLRenderer( { antialias: true } );
+		this.fsQuad = new FullScreenQuad( new MeshBasicMaterial( { transparent: true } ) );
 		this.ptRenderer = new PathTracingRenderer( this.renderer );
 		this.ptModel = null;
 		this.ptMaterials = null;
 		this.ptTextures = null;
 		this.model = null;
 		this.bvhGenerator = new GenerateMeshBVHWorker();
+		this.onRender = null;
 		this._scale = 1;
 		this._nextObject = null;
 		this._needsSizeUpdate = false;
@@ -37,14 +43,19 @@ export class PathTracingViewer {
 
 		} );
 
-		this._stats = new Stats();
-		document.body.appendChild( this._stats.dom );
+		const container = document.createElement( 'div' );
+		container.style.overflow = 'hidden';
+		container.appendChild( this.renderer.domElement );
+		this._container = container;
 
 		this.ptRenderer.camera = this.camera;
 		this.ptRenderer.material = new LambertPathTracingMaterial( { transparent: true, depthWrite: false } );
 		this.renderer.outputEncoding = sRGBEncoding;
-		this._resizeObserver.observe( this.renderer.domElement );
+		this._resizeObserver.observe( container );
 		this._updateSize();
+
+		const hemisphereLight = new HemisphereLight( 0xffffff, 0xffffff, 2.0 );
+		this.scene.add( hemisphereLight );
 
 	}
 
@@ -53,9 +64,9 @@ export class PathTracingViewer {
 		const dpr = window.devicePixelRatio;
 		const scale = this._scale;
 		const size = this._newSize;
-		this.renderer.setPixelRatio( scale * dpr );
+		this.renderer.setPixelRatio( dpr );
 
-		this.renderer.setSize( size.width, size.height, false );
+		this.renderer.setSize( scale * size.width, scale * size.height, false );
 		this.ptRenderer.target.setSize( size.width * scale * dpr, size.height * scale * dpr );
 		this.camera.aspect = size.width / size.height;
 		this.camera.updateProjectionMatrix();
@@ -156,8 +167,6 @@ export class PathTracingViewer {
 
 		renderer.setAnimationLoop( () => {
 
-			this._stats.update();
-
 			if ( this._needsSizeUpdate ) {
 
 				this._updateSize();
@@ -170,13 +179,26 @@ export class PathTracingViewer {
 				camera.updateMatrixWorld();
 
 				ptRenderer.update();
+				if ( ptRenderer.samples < 1 ) {
 
+					renderer.render( this.scene, this.camera );
+
+				}
+
+				renderer.autoClear = false;
 				fsQuad.material.map = ptRenderer.target.texture;
 				fsQuad.render( renderer );
+				renderer.autoClear = true;
 
 			} else {
 
 				renderer.clear();
+
+			}
+
+			if ( this.onRender ) {
+
+				this.onRender();
 
 			}
 

@@ -7,6 +7,7 @@ import {
 	Color,
 	RepeatWrapping,
 	LinearFilter,
+	NoToneMapping,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/pass.js';
 
@@ -41,6 +42,7 @@ export class RenderTarget2DArray extends WebGLRenderTarget {
 
 		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
+		const prevToneMapping = renderer.toneMapping;
 		const prevAlpha = renderer.getClearAlpha();
 		renderer.getClearColor( prevColor );
 
@@ -48,6 +50,7 @@ export class RenderTarget2DArray extends WebGLRenderTarget {
 		const depth = textures.length;
 		this.setSize( width, height, depth );
 		renderer.setClearColor( 0, 0 );
+		renderer.toneMapping = NoToneMapping;
 
 		// render each texture into each layer of the target
 		const fsQuad = this.fsQuad;
@@ -65,6 +68,7 @@ export class RenderTarget2DArray extends WebGLRenderTarget {
 		fsQuad.material.map = null;
 		renderer.setClearColor( prevColor, prevAlpha );
 		renderer.setRenderTarget( prevRenderTarget );
+		renderer.toneMapping = prevToneMapping;
 
 	}
 
