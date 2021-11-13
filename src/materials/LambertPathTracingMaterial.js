@@ -3,7 +3,7 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs } from '../gpu/shaderStructs.js';
+import { shaderMaterialStructs, pathTracingHelpers } from '../gpu/shaderStructs.js';
 import { MaterialStructArrayUniform } from '../gpu/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../gpu/RenderTarget2DArray.js';
 
@@ -55,13 +55,14 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                 precision highp usampler2D;
                 precision highp sampler2DArray;
-                ${ shaderStructs }
-                ${ shaderIntersectFunction }
-				${ shaderMaterialStructs }
-
 				vec4 envMapTexelToLinear( vec4 a ) { return RGBEToLinear( a ); }
                 #include <common>
 				#include <cube_uv_reflection_fragment>
+
+                ${ shaderStructs }
+                ${ shaderIntersectFunction }
+				${ shaderMaterialStructs }
+				${ pathTracingHelpers }
 
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
@@ -103,30 +104,20 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
                             float value = ( rayDirection.y + 0.5 ) / 1.5;
-                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb * environmentIntensity;
-							skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value ) * environmentIntensity;
+                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, 1.0 ).rgb;
+							// skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value );
 
-                            gl_FragColor += vec4( skyColor * throughputColor * 1.0, 1.0 );
+                            gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
 
                             break;
 
                         }
-
 
                         randomPoint = vec3(
                             rand( vUv + float( i + 1 ) + vec2( seed, seed ) ),
                             rand( - vUv * seed + float( i ) - seed ),
                             rand( - vUv * float( i + 1 ) - vec2( seed, - seed ) )
                         );
-                        randomPoint -= 0.5;
-                        randomPoint *= 2.0;
-
-                        // ensure the random vector is not 0,0,0 and that it won't exactly negate
-                        // the surface normal
-
-                        float pointLength = max( length( randomPoint ), 1e-4 );
-                        randomPoint /= pointLength;
-                        randomPoint *= 0.999;
 
                         // fetch the interpolated smooth normal
                         vec3 normal = normalize( textureSampleBarycoord(
@@ -188,7 +179,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         vec3 absPoint = abs( point );
                         float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
                         rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-                        rayDirection = normalize( normal + randomPoint );
+                        rayDirection = getHemisphereSample( faceNormal, randomPoint.xy );
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.
