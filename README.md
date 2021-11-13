@@ -12,6 +12,7 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 
 ### Lambert Demo
 - *Fix Sponza model not applying materials correctly
+  - Fix MaterialReducer
 - *Add environment map support
 - Add toggle-able environment maps
 - Toggle-able models
