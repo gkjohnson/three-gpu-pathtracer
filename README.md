@@ -18,6 +18,7 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 - Toggle-able models
 - Add option specify gradient background
 - Fix mobile phone support
+- Improve hemisphere sampling
 - GUI Toggles
   - ~Color grading~
   - ~Set tiles~
