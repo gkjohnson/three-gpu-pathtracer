@@ -43,7 +43,7 @@ gui.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 	viewer.ptRenderer.tiles.y = parseInt( v );
 
 } );
-gui.add( params, 'environmentIntensity', 0.0, 5.0, 0.01 ).onChange( v => {
+gui.add( params, 'environmentIntensity', 0.0, 50.0, 0.01 ).onChange( v => {
 
 	viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
 	viewer.ptRenderer.reset();

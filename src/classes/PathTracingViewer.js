@@ -19,7 +19,7 @@ export class PathTracingViewer {
 	constructor() {
 
 		this.scene = new Scene();
-		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 50 );
+		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 		this.camera.position.set( 1, 1, 1 );
 
 		this.renderer = new WebGLRenderer( { antialias: true } );
@@ -66,6 +66,8 @@ export class PathTracingViewer {
 		const size = this._newSize;
 		this.renderer.setPixelRatio( dpr );
 
+		this.renderer.domElement.style.aspectRatio = `${ size.width } / ${ size.height }`;
+		this.renderer.domElement.style.width = `100%`;
 		this.renderer.setSize( scale * size.width, scale * size.height, false );
 		this.ptRenderer.target.setSize( size.width * scale * dpr, size.height * scale * dpr );
 		this.camera.aspect = size.width / size.height;

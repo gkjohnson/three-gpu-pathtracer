@@ -56,6 +56,14 @@ export class MaterialReducer {
 
 				}
 
+				const aIsImageBitmap = a instanceof ImageBitmap;
+				const bIsImageBitmap = b instanceof ImageBitmap;
+				if ( aIsImageBitmap || bIsImageBitmap ) {
+
+					return false;
+
+				}
+
 				if ( a.equals ) {
 
 					return a.equals( b );
