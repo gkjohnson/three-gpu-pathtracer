@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Mesh, TorusKnotBufferGeometry } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -20,6 +20,8 @@ const params = {
 	tilesY: 2,
 	environmentIntensity: 2.0,
 	environmentBlur: 0.2,
+
+	enable: true,
 	bounces: 3,
 
 };
@@ -58,6 +60,11 @@ environmentFolder.add( params, 'environmentIntensity', 0.0, 50.0, 0.01 ).onChang
 environmentFolder.open();
 
 const pathTracingFolder = gui.addFolder( 'path tracing');
+pathTracingFolder.add( params, 'enable' ).onChange( v => {
+
+	viewer.enablePathTracing = v;
+
+} );
 pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 	viewer.renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
@@ -91,9 +98,15 @@ function centerAndSetModel( model ) {
 
 	const box = new Box3();
 	box.setFromObject( model );
-	console.log( model.position.y )
-	model.position.y = - ( box.max.y - box.min.y ) / 2;
-	console.log( model.position.y )
+	model.position
+		.addScaledVector( box.min, - 0.5 )
+		.addScaledVector( box.max, - 0.5 );
+
+	const sphere = new Sphere();
+	box.getBoundingSphere( sphere );
+
+	model.scale.setScalar( 1 / sphere.radius );
+	model.position.multiplyScalar( 1 / sphere.radius );
 
 	viewer.setModel( model );
 
@@ -106,7 +119,7 @@ manager.onLoad = () => {
 	centerAndSetModel( model );
 
 };
-new GLTFLoader( manager ).load( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Buggy/glTF/Buggy.gltf', gltf => {
+new GLTFLoader( manager ).load( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf', gltf => {
 
 	model = gltf.scene;
 
@@ -134,5 +147,7 @@ new RGBELoader( manager ).load( 'https://raw.githubusercontent.com/mrdoob/three.
 
 	texture.mapping = EquirectangularReflectionMapping;
 	viewer.ptRenderer.material.environmentMap = envMap.texture;
+	viewer.scene.background = texture;
+	viewer.scene.environment = texture;
 
 } );

@@ -20,7 +20,7 @@ export class PathTracingViewer {
 
 		this.scene = new Scene();
 		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-		this.camera.position.set( 1, 1, 1 );
+		this.camera.position.set( 1, 0.5, 1 );
 
 		this.renderer = new WebGLRenderer( { antialias: true } );
 		this.fsQuad = new FullScreenQuad( new MeshBasicMaterial( { transparent: true } ) );
@@ -31,6 +31,7 @@ export class PathTracingViewer {
 		this.model = null;
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 		this.onRender = null;
+		this.enablePathTracing = true;
 		this._scale = 1;
 		this._nextObject = null;
 		this._needsSizeUpdate = false;
@@ -53,9 +54,6 @@ export class PathTracingViewer {
 		this.renderer.outputEncoding = sRGBEncoding;
 		this._resizeObserver.observe( container );
 		this._updateSize();
-
-		const hemisphereLight = new HemisphereLight( 0xffffff, 0xffffff, 2.0 );
-		this.scene.add( hemisphereLight );
 
 	}
 
@@ -178,19 +176,27 @@ export class PathTracingViewer {
 
 			if ( this.model ) {
 
-				camera.updateMatrixWorld();
+				if ( this.enablePathTracing ) {
 
-				ptRenderer.update();
-				if ( ptRenderer.samples < 1 ) {
+					camera.updateMatrixWorld();
+
+					ptRenderer.update();
+					if ( ptRenderer.samples < 1 ) {
+
+						renderer.render( this.scene, this.camera );
+
+					}
+
+					renderer.autoClear = false;
+					fsQuad.material.map = ptRenderer.target.texture;
+					fsQuad.render( renderer );
+					renderer.autoClear = true;
+
+				} else {
 
 					renderer.render( this.scene, this.camera );
 
 				}
-
-				renderer.autoClear = false;
-				fsQuad.material.map = ptRenderer.target.texture;
-				fsQuad.render( renderer );
-				renderer.autoClear = true;
 
 			} else {
 
