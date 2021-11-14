@@ -28,32 +28,21 @@ export const shaderMaterialStructs = /* glsl */ `
 
 export const pathTracingHelpers = /* glsl */ `
 
-	vec3 getHemisphereSample( vec3 normal, vec2 uv ) {
-
-		uv = abs( uv );
+	vec3 getHemisphereSample( vec3 n, vec2 uv ) {
 
 		// https://www.rorydriscoll.com/2009/01/07/better-sampling/
-		vec3 tangent;
-		vec3 bitangent;
-
-		if ( abs( normal.x ) > 0.5 ) {
-
-			tangent = vec3( 0.0, 1.0, 0.0 );
-
-		} else {
-
-			tangent = vec3( 1.0, 0.0, 0.0 );
-
-		}
-
-		bitangent = cross( normal, tangent );
-		tangent = cross( normal, bitangent );
+		// https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+		float sign = n.z == 0.0 ? 1.0 : sign( n.z );
+		float a = - 1.0 / ( sign + n.z );
+		float b = n.x * n.y * a;
+		vec3 b1 = vec3( 1.0 + sign * n.x * n.x * a, sign * b, - sign * n.x );
+		vec3 b2 = vec3( b, sign + n.y * n.y * a, - n.y );
 
 		float r = sqrt( uv.x );
 		float theta = 2.0 * PI * uv.y;
 		float x = r * cos( theta );
 		float y = r * sin( theta );
-		return x * tangent + y * bitangent + sqrt( 1.0 - uv.x ) * normal;
+		return x * b1 + y * b2 + sqrt( 1.0 - uv.x ) * n;
 
 	}
 
@@ -115,6 +104,5 @@ export const pathTracingHelpers = /* glsl */ `
 		return vec4(s0)/float(0xffffffffu);
 
 	}
-
 
 `;

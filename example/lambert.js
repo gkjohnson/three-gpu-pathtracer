@@ -83,9 +83,9 @@ pathTracingFolder.open();
 const stats = new Stats();
 document.body.appendChild( stats.dom );
 viewer.renderer.physicallyCorrectLights = true;
-// viewer.renderer.toneMapping = ACESFilmicToneMapping;
-// viewer.setScale( 0.5 );
-// viewer.ptRenderer.tiles.set( 2, 2 )
+viewer.renderer.toneMapping = ACESFilmicToneMapping;
+viewer.setScale( 0.5 );
+viewer.ptRenderer.tiles.set( 2, 2 )
 viewer.onRender = () => {
 
 	stats.update();
