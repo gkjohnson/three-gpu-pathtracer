@@ -123,6 +123,8 @@ export class PathTracingViewer {
 				if ( this.model ) {
 
 					this.scene.remove( this.model );
+					this.ptTextures.forEach( tex => tex.dispose() );
+					this.ptMaterials.forEach( mat => mat.dispose() );
 
 				}
 

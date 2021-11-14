@@ -81,7 +81,7 @@ export function mergeMeshes( meshes, options = {} ) {
 		if ( ! geometry.attributes.uv && ( attrs && attrs.includes( 'uv' ) ) ) {
 
 			const vertCount = geometry.attributes.position.count;
-			geometry.setAttribute( 'uv', new BufferAttribute( new Uint8Array( vertCount * 2 ), 2, true ) );
+			geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( vertCount * 2 ), 2, false ) );
 
 		}
 

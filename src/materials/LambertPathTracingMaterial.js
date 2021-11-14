@@ -158,13 +158,20 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 								barycoord,
 								faceIndices.xyz
 							);
-							vec3 tangent = normalize( tangentSample.xyz );
-							vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
-							mat3 vTBN = mat3( tangent, bitangent, normal );
 
-							vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
-							texNormal.xy *= material.normalScale;
-							normal = normalize( vTBN * texNormal );
+							// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+							// resulting in NaNs and slow path tracing.
+							if ( length( tangentSample.xyz ) > 0.0 ) {
+
+								vec3 tangent = normalize( tangentSample.xyz );
+								vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
+								mat3 vTBN = mat3( tangent, bitangent, normal );
+
+								vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
+								texNormal.xy *= material.normalScale;
+								normal = vTBN * texNormal;
+
+							}
 
 						}
 

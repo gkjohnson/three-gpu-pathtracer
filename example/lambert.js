@@ -1,4 +1,5 @@
 import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere } from 'three';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -82,9 +83,9 @@ pathTracingFolder.open();
 const stats = new Stats();
 document.body.appendChild( stats.dom );
 viewer.renderer.physicallyCorrectLights = true;
-viewer.renderer.toneMapping = ACESFilmicToneMapping;
-viewer.setScale( 0.59 );
-viewer.ptRenderer.tiles.set( 4, 6 )
+// viewer.renderer.toneMapping = ACESFilmicToneMapping;
+// viewer.setScale( 0.5 );
+// viewer.ptRenderer.tiles.set( 2, 2 )
 viewer.onRender = () => {
 
 	stats.update();
@@ -119,11 +120,18 @@ manager.onLoad = () => {
 	centerAndSetModel( model );
 
 };
-new GLTFLoader( manager ).load( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf', gltf => {
 
-	model = gltf.scene;
+const modelUrl = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
+new GLTFLoader( manager )
+	.setMeshoptDecoder( MeshoptDecoder )
+	.load(
+		new URL( modelUrl, import.meta.url ).toString(),
+		gltf => {
 
-} );
+			model = gltf.scene;
+
+		}
+	);
 
 // const mesh = new Mesh(
 // 	new TorusKnotBufferGeometry(),
