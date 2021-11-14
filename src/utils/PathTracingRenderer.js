@@ -21,6 +21,7 @@ function* renderTask() {
 		const tx = this.tiles.x || 1;
 		const ty = this.tiles.y || 1;
 		const totalTiles = tx * ty;
+		const dprInv = ( 1 / _renderer.getPixelRatio() );
 		for ( let y = 0; y < ty; y ++ ) {
 
 			for ( let x = 0; x < tx; x ++ ) {
@@ -31,13 +32,14 @@ function* renderTask() {
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
 
+				// three.js renderer takes values relative to the current pixel ratio
 				_renderer.setRenderTarget( target );
 				_renderer.setScissorTest( true );
 				_renderer.setScissor(
-					Math.ceil( x * w / tx ),
-					Math.ceil( ( ty - y - 1 ) * h / ty ),
-					Math.ceil( w / tx ),
-					Math.ceil( h / ty ) );
+					dprInv * Math.ceil( x * w / tx ),
+					dprInv * Math.ceil( ( ty - y - 1 ) * h / ty ),
+					dprInv * Math.ceil( w / tx ),
+					dprInv * Math.ceil( h / ty ) );
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
 

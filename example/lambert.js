@@ -112,6 +112,6 @@ new RGBELoader( manager ).load( 'https://raw.githubusercontent.com/mrdoob/three.
 	const envMap = pmremGenerator.fromEquirectangular( texture );
 
 	texture.mapping = EquirectangularReflectionMapping;
-	viewer.ptRenderer.material.environmentMap = envMap;
+	viewer.ptRenderer.material.environmentMap = envMap.texture;
 
 } );
