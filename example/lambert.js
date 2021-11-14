@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Mesh, TorusKnotBufferGeometry } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -15,53 +15,69 @@ document.body.appendChild( viewer.domElement );
 const params = {
 
 	acesToneMapping: true,
-	resolutionScale: 1,
-	tilesX: 1,
-	tilesY: 1,
+	resolutionScale: 0.5,
+	tilesX: 2,
+	tilesY: 2,
 	environmentIntensity: 2.0,
+	environmentBlur: 0.2,
 	bounces: 3,
 
 };
 const gui = new GUI();
-gui.add( params, 'acesToneMapping' ).onChange( v => {
-
-	viewer.renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-	viewer.fsQuad.material.needsUpdate = true;
-
-} );
-gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
+const resolutionFolder = gui.addFolder( 'resolution' );
+resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
 
 	viewer.setScale( parseFloat( v ) );
 
 } );
-gui.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
+resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
 	viewer.ptRenderer.tiles.x = parseInt( v );
 
 } );
-gui.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
+resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
 	viewer.ptRenderer.tiles.y = parseInt( v );
 
 } );
-gui.add( params, 'environmentIntensity', 0.0, 50.0, 0.01 ).onChange( v => {
+resolutionFolder.open();
+
+const environmentFolder = gui.addFolder( 'environment' );
+environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
+
+	viewer.ptRenderer.material.environmentBlur = parseFloat( v );
+	viewer.ptRenderer.reset();
+
+} );
+environmentFolder.add( params, 'environmentIntensity', 0.0, 50.0, 0.01 ).onChange( v => {
 
 	viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
 	viewer.ptRenderer.reset();
 
 } );
-gui.add( params, 'bounces', 1, 20, 1 ).onChange( v => {
+environmentFolder.open();
+
+const pathTracingFolder = gui.addFolder( 'path tracing');
+pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
+
+	viewer.renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+	viewer.fsQuad.material.needsUpdate = true;
+
+} );
+pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( v => {
 
 	viewer.ptRenderer.material.setDefine( 'BOUNCES', parseInt( v ) );
 	viewer.ptRenderer.reset();
 
 } );
-
+pathTracingFolder.open();
 
 const stats = new Stats();
 document.body.appendChild( stats.dom );
 viewer.renderer.physicallyCorrectLights = true;
 viewer.renderer.toneMapping = ACESFilmicToneMapping;
+viewer.setScale( 0.59 );
+viewer.ptRenderer.tiles.set( 4, 6 )
 viewer.onRender = () => {
 
 	stats.update();
@@ -96,11 +112,16 @@ new GLTFLoader( manager ).load( 'https://raw.githubusercontent.com/KhronosGroup/
 
 } );
 
-// new LDrawLoader().load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd', model => {
+// const mesh = new Mesh(
+// 	new TorusKnotBufferGeometry(),
+// );
+// viewer.setModel( mesh );
 
-// 	model.scale.setScalar( 0.001 );
-// 	model.rotation.x = Math.PI;
-// 	centerAndSetModel( model );
+// new LDrawLoader().load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd', result => {
+
+// 	result.scale.setScalar( 0.001 );
+// 	result.rotation.x = Math.PI;
+// 	model = result;
 
 // } );
 

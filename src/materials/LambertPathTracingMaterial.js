@@ -28,6 +28,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
+				environmentBlur: { value: 0.2 },
 				environmentIntensity: { value: 2.0 },
 				environmentMap: { value: null },
 				seed: { value: 0 },
@@ -71,6 +72,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uniform sampler2D uvAttribute;
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
+                uniform float environmentBlur;
                 uniform float environmentIntensity;
                 uniform sampler2D environmentMap;
                 uniform int seed;
@@ -105,8 +107,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
                             float value = ( rayDirection.y + 0.5 ) / 1.5;
-                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb;
-							// skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value );
+                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
+							// vec3 skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value );
+							// skyColor = abs( rayDirection );
 
                             gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
 

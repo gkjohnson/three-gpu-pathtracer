@@ -36,7 +36,7 @@ export const pathTracingHelpers = /* glsl */ `
 		vec3 tangent;
 		vec3 bitangent;
 
-		if ( abs( normal.x ) > 0.9 ) {
+		if ( abs( normal.x ) > 0.5 ) {
 
 			tangent = vec3( 0.0, 1.0, 0.0 );
 
