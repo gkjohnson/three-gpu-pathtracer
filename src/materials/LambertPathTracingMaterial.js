@@ -73,13 +73,15 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uniform BVH bvh;
                 uniform float environmentIntensity;
                 uniform sampler2D environmentMap;
-                uniform float seed;
+                uniform int seed;
                 uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
 				uniform sampler2DArray textures;
                 varying vec2 vUv;
 
                 void main() {
+
+					rng_initialize( gl_FragCoord.xy, seed );
 
                     // get [-1, 1] normalized device coordinates
                     vec2 ndc = 2.0 * vUv - vec2( 1.0 );
@@ -90,7 +92,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                     gl_FragColor = vec4( 0.0 );
 
                     vec3 throughputColor = vec3( 1.0 );
-                    vec3 randomPoint = vec3( 0.0 );
 
                     // hit results
                     uvec4 faceIndices = uvec4( 0u );
@@ -104,7 +105,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
                             float value = ( rayDirection.y + 0.5 ) / 1.5;
-                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, 1.0 ).rgb;
+                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb;
 							// skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value );
 
                             gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
@@ -112,12 +113,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                             break;
 
                         }
-
-                        randomPoint = vec3(
-                            rand( vUv + float( i + 1 ) + vec2( seed, seed ) ),
-                            rand( - vUv * seed + float( i ) - seed ),
-                            rand( - vUv * float( i + 1 ) - vec2( seed, - seed ) )
-                        );
 
                         // fetch the interpolated smooth normal
                         vec3 normal = normalize( textureSampleBarycoord(
@@ -179,7 +174,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                         vec3 absPoint = abs( point );
                         float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
                         rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-                        rayDirection = getHemisphereSample( faceNormal, randomPoint.xy );
+                        rayDirection = getHemisphereSample( normal, rand2() );
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.

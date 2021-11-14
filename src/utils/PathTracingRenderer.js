@@ -7,7 +7,7 @@ function* renderTask() {
 	while ( true ) {
 
 		material.opacity = 1 / ( this.samples + 1 );
-		material.seed = ( material.seed + 0.11111 ) % 2;
+		material.seed ++;
 
 		const w = target.width;
 		const h = target.height;
