@@ -41,6 +41,7 @@ export class EquirectPdfUniform {
 		const color = new Color();
 		const hsl = {};
 
+		// track the importance of any given pixel in the image by tracking its weight relative to other pixels in the image
 		const pdfConditional = new Float32Array( width * height );
 		const cdfConditional = new Float32Array( width * height );
 
