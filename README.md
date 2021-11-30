@@ -13,8 +13,3 @@ Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohn
 ### Tasks
 - Add support for multiple lights
 - Fallback to regular render during movement, render on top of rasterized render
-- ~Add support for materials, textures~
-- ~Use a 1px white texture for unset textures~
-- ~Add tiled rendering~
-- ~Add basic path tracer base class~
-
