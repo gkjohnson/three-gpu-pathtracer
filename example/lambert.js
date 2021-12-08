@@ -19,6 +19,12 @@ const params = {
 	resolutionScale: 0.5,
 	tilesX: 2,
 	tilesY: 2,
+
+	environment: 'ENVMAP',
+
+	gradientBottom: '#ffffff',
+	gradientTop: '#bfd8ff',
+
 	environmentIntensity: 2.0,
 	environmentBlur: 0.2,
 
@@ -46,18 +52,36 @@ resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 resolutionFolder.open();
 
 const environmentFolder = gui.addFolder( 'environment' );
+environmentFolder.add( params, 'environment', [ 'ENVMAP', 'GRADIENT' ] ).onChange( v => {
+
+	viewer.ptRenderer.material.setDefine( 'USE_ENVMAP', v === 'ENVMAP' ? 1 : 0 );
+	viewer.ptRenderer.reset();
+
+} );
+environmentFolder.addColor( params, 'gradientBottom' ).onChange( v => {
+
+	viewer.ptRenderer.material.uniforms.gradientBottom.value.set( v );
+	viewer.ptRenderer.reset();
+
+} );
+environmentFolder.addColor( params, 'gradientTop' ).onChange( v => {
+
+	viewer.ptRenderer.material.uniforms.gradientTop.value.set( v );
+	viewer.ptRenderer.reset();
+
+} );
 environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
 
 	viewer.ptRenderer.material.environmentBlur = parseFloat( v );
 	viewer.ptRenderer.reset();
 
-} );
+} ).name( 'env map blur' );
 environmentFolder.add( params, 'environmentIntensity', 0.0, 50.0, 0.01 ).onChange( v => {
 
 	viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
 	viewer.ptRenderer.reset();
 
-} );
+} ).name( 'intensity' );
 environmentFolder.open();
 
 const pathTracingFolder = gui.addFolder( 'path tracing');

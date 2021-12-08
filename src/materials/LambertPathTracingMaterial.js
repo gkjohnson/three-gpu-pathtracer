@@ -1,4 +1,4 @@
-import { ShaderMaterial, Matrix4 } from 'three';
+import { ShaderMaterial, Matrix4, Color } from 'three';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
@@ -16,6 +16,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 			defines: {
 				BOUNCES: 3,
 				MATERIAL_LENGTH: 0,
+				USE_ENVMAP: 1,
 			},
 
 			uniforms: {
@@ -33,6 +34,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				environmentMap: { value: null },
 				seed: { value: 0 },
 				opacity: { value: 1 },
+
+				gradientTop: { value: new Color( 0xbfd8ff ) },
+				gradientBottom: { value: new Color( 0xffffff ) },
 			},
 
 			vertexShader: /* glsl */`
@@ -64,6 +68,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 ${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
+
+                uniform vec3 gradientTop;
+                uniform vec3 gradientBottom;
 
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
@@ -106,10 +113,17 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
-                            float value = ( rayDirection.y + 0.5 ) / 1.5;
+							#if USE_ENVMAP
+
                             vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
-							// vec3 skyColor = mix( vec3( 1.0 ), vec3( 0.75, 0.85, 1.0 ), value );
-							// skyColor = abs( rayDirection );
+
+							#else
+
+							rayDirection = normalize( rayDirection );
+							float value = ( rayDirection.y + 1.0 ) / 2.0;
+							vec3 skyColor = mix( gradientBottom, gradientTop, value );
+
+							#endif
 
                             gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
 
