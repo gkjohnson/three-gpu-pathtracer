@@ -32,77 +32,101 @@ const params = {
 	bounces: 3,
 
 };
-const gui = new GUI();
-const resolutionFolder = gui.addFolder( 'resolution' );
-resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
 
-	viewer.setScale( parseFloat( v ) );
+let gui = null;
+function buildGui() {
 
-} );
-resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
+	if ( gui ) {
 
-	viewer.ptRenderer.tiles.x = parseInt( v );
+		gui.destroy();
 
-} );
-resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
+	}
 
-	viewer.ptRenderer.tiles.y = parseInt( v );
+	gui = new GUI();
 
-} );
-resolutionFolder.open();
+	const resolutionFolder = gui.addFolder( 'resolution' );
+	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
 
-const environmentFolder = gui.addFolder( 'environment' );
-environmentFolder.add( params, 'environment', [ 'ENVMAP', 'GRADIENT' ] ).onChange( v => {
+		viewer.setScale( parseFloat( v ) );
 
-	viewer.ptRenderer.material.setDefine( 'USE_ENVMAP', v === 'ENVMAP' ? 1 : 0 );
-	viewer.ptRenderer.reset();
+	} );
+	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-} );
-environmentFolder.addColor( params, 'gradientBottom' ).onChange( v => {
+		viewer.ptRenderer.tiles.x = parseInt( v );
 
-	viewer.ptRenderer.material.uniforms.gradientBottom.value.set( v );
-	viewer.ptRenderer.reset();
+	} );
+	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-} );
-environmentFolder.addColor( params, 'gradientTop' ).onChange( v => {
+		viewer.ptRenderer.tiles.y = parseInt( v );
 
-	viewer.ptRenderer.material.uniforms.gradientTop.value.set( v );
-	viewer.ptRenderer.reset();
+	} );
+	resolutionFolder.open();
 
-} );
-environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
+	const environmentFolder = gui.addFolder( 'environment' );
+	environmentFolder.add( params, 'environment', [ 'ENVMAP', 'GRADIENT' ] ).onChange( v => {
 
-	viewer.ptRenderer.material.environmentBlur = parseFloat( v );
-	viewer.ptRenderer.reset();
+		viewer.ptRenderer.material.setDefine( 'USE_ENVMAP', v === 'ENVMAP' ? 1 : 0 );
+		viewer.ptRenderer.reset();
 
-} ).name( 'env map blur' );
-environmentFolder.add( params, 'environmentIntensity', 0.0, 50.0, 0.01 ).onChange( v => {
+		buildGui();
 
-	viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
-	viewer.ptRenderer.reset();
+	} );
 
-} ).name( 'intensity' );
-environmentFolder.open();
+	if ( params.environment === 'GRADIENT' ) {
 
-const pathTracingFolder = gui.addFolder( 'path tracing');
-pathTracingFolder.add( params, 'enable' ).onChange( v => {
+		environmentFolder.addColor( params, 'gradientBottom' ).onChange( v => {
 
-	viewer.enablePathTracing = v;
+			viewer.ptRenderer.material.uniforms.gradientBottom.value.set( v );
+			viewer.ptRenderer.reset();
 
-} );
-pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
+		} );
+		environmentFolder.addColor( params, 'gradientTop' ).onChange( v => {
 
-	viewer.renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-	viewer.fsQuad.material.needsUpdate = true;
+			viewer.ptRenderer.material.uniforms.gradientTop.value.set( v );
+			viewer.ptRenderer.reset();
 
-} );
-pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( v => {
+		} );
 
-	viewer.ptRenderer.material.setDefine( 'BOUNCES', parseInt( v ) );
-	viewer.ptRenderer.reset();
+	} else {
 
-} );
-pathTracingFolder.open();
+		environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
+
+			viewer.ptRenderer.material.environmentBlur = parseFloat( v );
+			viewer.ptRenderer.reset();
+
+		} ).name( 'env map blur' );
+
+	}
+
+	environmentFolder.add( params, 'environmentIntensity', 0.0, 350.0, 0.01 ).onChange( v => {
+
+		viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
+		viewer.ptRenderer.reset();
+
+	} ).name( 'intensity' );
+	environmentFolder.open();
+
+	const pathTracingFolder = gui.addFolder( 'path tracing');
+	pathTracingFolder.add( params, 'enable' ).onChange( v => {
+
+		viewer.enablePathTracing = v;
+
+	} );
+	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
+
+		viewer.renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		viewer.fsQuad.material.needsUpdate = true;
+
+	} );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( v => {
+
+		viewer.ptRenderer.material.setDefine( 'BOUNCES', parseInt( v ) );
+		viewer.ptRenderer.reset();
+
+	} );
+	pathTracingFolder.open();
+
+}
 
 const stats = new Stats();
 document.body.appendChild( stats.dom );
@@ -142,6 +166,7 @@ const manager = new LoadingManager();
 manager.onLoad = () => {
 
 	centerAndSetModel( model );
+	buildGui();
 
 };
 
