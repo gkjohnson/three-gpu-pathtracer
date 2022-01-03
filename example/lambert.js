@@ -26,7 +26,7 @@ const params = {
 	gradientTop: '#bfd8ff',
 
 	environmentIntensity: 2.0,
-	environmentBlur: 0.2,
+	environmentBlur: 0.35,
 
 	enable: true,
 	bounces: 3,
