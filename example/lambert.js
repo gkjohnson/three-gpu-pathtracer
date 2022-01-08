@@ -1,8 +1,7 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Vector3 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { GUI } from 'three/examples/jsm/libs/dat.gui.module.js';
 import { PathTracingViewer } from '../src/classes/PathTracingViewer.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
@@ -14,10 +13,26 @@ viewer.domElement.style.height = '100%';
 document.body.appendChild( viewer.domElement );
 
 const envMaps = {
-	'royal esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
-	'moonless golf': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/moonless_golf_1k.hdr',
-	'pedestrian overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
-	'venice sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
+	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/moonless_golf_1k.hdr',
+	'Pedestrian Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
+	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
+};
+
+const models = {
+	'M2020 Rover': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
+	},
+	'Statue': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
+	},
+	'Crab Sculpture': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Elbow_Crab.glb',
+
+	},
+	'Stylized Carriage': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/wooden-stylised-carriage/scene.gltf',
+	},
 };
 
 const params = {
@@ -26,16 +41,22 @@ const params = {
 	resolutionScale: 0.5,
 	tilesX: 1,
 	tilesY: 1,
-	iterationsPerFrame: 1,
+	samplesPerFrame: 1,
+
+	model: 'M2020 Rover',
 
 	environment: 'ENVMAP',
-	envMap: envMaps['royal esplanade'],
+	envMap: envMaps['Royal Esplanade'],
 
-	gradientBottom: '#ffffff',
 	gradientTop: '#bfd8ff',
+	gradientBottom: '#ffffff',
 
 	environmentIntensity: 2.0,
 	environmentBlur: 0.35,
+
+	backgroundType: 'Environment',
+	bgGradientTop: '#111111',
+	bgGradientBottom: '#000000',
 
 	enable: true,
 	bounces: 3,
@@ -53,15 +74,17 @@ function buildGui() {
 
 	gui = new GUI();
 
+	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
+
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
 
 		viewer.setScale( parseFloat( v ) );
 
 	} );
-	resolutionFolder.add( params, 'iterationsPerFrame', 1, 10, 1 ).onChange( v => {
+	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 ).onChange( v => {
 
-		viewer.iterationsPerFrame = parseInt( v );
+		viewer.samplesPerFrame = parseInt( v );
 
 	} );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
@@ -88,15 +111,16 @@ function buildGui() {
 
 	if ( params.environment === 'GRADIENT' ) {
 
-		environmentFolder.addColor( params, 'gradientBottom' ).onChange( v => {
-
-			viewer.ptRenderer.material.uniforms.gradientBottom.value.set( v );
-			viewer.ptRenderer.reset();
-
-		} );
 		environmentFolder.addColor( params, 'gradientTop' ).onChange( v => {
 
 			viewer.ptRenderer.material.uniforms.gradientTop.value.set( v );
+			viewer.ptRenderer.reset();
+
+		} );
+
+		environmentFolder.addColor( params, 'gradientBottom' ).onChange( v => {
+
+			viewer.ptRenderer.material.uniforms.gradientBottom.value.set( v );
 			viewer.ptRenderer.reset();
 
 		} );
@@ -122,6 +146,27 @@ function buildGui() {
 	} ).name( 'intensity' );
 	environmentFolder.open();
 
+	const backgroundFolder = gui.addFolder( 'background' );
+	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
+
+		viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', Number( v === 'Gradient' ) );
+		viewer.ptRenderer.reset();
+
+	} );
+	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
+
+		viewer.ptRenderer.material.uniforms.bgGradientTop.value.set( v );
+		viewer.ptRenderer.reset();
+
+	} );
+	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
+
+		viewer.ptRenderer.material.uniforms.bgGradientBottom.value.set( v );
+		viewer.ptRenderer.reset();
+
+	} );
+	backgroundFolder.open();
+
 	const pathTracingFolder = gui.addFolder( 'path tracing');
 	pathTracingFolder.add( params, 'enable' ).onChange( v => {
 
@@ -146,32 +191,108 @@ function buildGui() {
 
 function updateEnvMap() {
 
-	if ( viewer.ptRenderer.material.environmentMap ) {
+	return new Promise( resolve => {
 
-		viewer.ptRenderer.material.environmentMap.dispose();
-		viewer.scene.background.dispose();
+		new RGBELoader()
+			.load( params.envMap, texture => {
 
-	}
+				if ( viewer.ptRenderer.material.environmentMap ) {
 
-	new RGBELoader()
-		.load( params.envMap, texture => {
+					viewer.ptRenderer.material.environmentMap.dispose();
+					viewer.scene.background.dispose();
 
-			const pmremGenerator = new PMREMGenerator( viewer.renderer );
-			pmremGenerator.compileCubemapShader();
+				}
 
-			const envMap = pmremGenerator.fromEquirectangular( texture );
+				const pmremGenerator = new PMREMGenerator( viewer.renderer );
+				pmremGenerator.compileCubemapShader();
 
-			texture.mapping = EquirectangularReflectionMapping;
-			viewer.ptRenderer.material.environmentMap = envMap.texture;
-			viewer.scene.background = texture;
-			viewer.scene.environment = texture;
-			viewer.ptRenderer.reset();
+				const envMap = pmremGenerator.fromEquirectangular( texture );
 
-		} );
+				texture.mapping = EquirectangularReflectionMapping;
+				viewer.ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
+				viewer.ptRenderer.material.environmentMap = envMap.texture;
+				viewer.scene.background = texture;
+				viewer.scene.environment = texture;
+				viewer.ptRenderer.reset();
+
+				resolve();
+
+			} );
+
+	} );
 
 }
 
-function upateModel() {
+function updateModel() {
+
+	function centerAndSetModel( model ) {
+
+		const box = new Box3();
+		box.setFromObject( model );
+		model.position
+			.addScaledVector( box.min, - 0.5 )
+			.addScaledVector( box.max, - 0.5 );
+
+		const sphere = new Sphere();
+		box.getBoundingSphere( sphere );
+
+		model.scale.setScalar( 1 / sphere.radius );
+		model.position.multiplyScalar( 1 / sphere.radius );
+
+		return viewer.setModel( model );
+
+	}
+
+	if ( gui ) {
+
+		gui.destroy();
+		gui = null;
+
+	}
+
+	let model;
+	const manager = new LoadingManager();
+	const modelInfo = models[ params.model ];
+	manager.onLoad = async () => {
+
+		const promises = [];
+		if ( modelInfo.envMap && modelInfo.envMap !== params.envMap ) {
+
+			params.envMap = envMaps[ modelInfo.envMap ];
+			params.environmentIntensity = modelInfo.envIntensity;
+			promises.push( updateEnvMap() );
+
+		}
+
+		promises.push( centerAndSetModel( model ) );
+		await Promise.all( promises );
+		buildGui();
+
+	};
+
+	new GLTFLoader( manager )
+		.setMeshoptDecoder( MeshoptDecoder )
+		.load(
+			modelInfo.url,
+			gltf => {
+
+				model = gltf.scene;
+
+				const childrenToRemove = [];
+				model.traverse( c => {
+
+					if ( c.isMesh && c.material.opacity < 1 ) {
+
+						childrenToRemove.push( c );
+
+					}
+
+				} );
+				childrenToRemove.forEach( c => c.parent.remove( c ) );
+
+			}
+		);
+
 
 }
 
@@ -189,45 +310,6 @@ viewer.onRender = () => {
 
 };
 
-function centerAndSetModel( model ) {
-
-	const box = new Box3();
-	box.setFromObject( model );
-	model.position
-		.addScaledVector( box.min, - 0.5 )
-		.addScaledVector( box.max, - 0.5 );
-
-	const sphere = new Sphere();
-	box.getBoundingSphere( sphere );
-
-	model.scale.setScalar( 1 / sphere.radius );
-	model.position.multiplyScalar( 1 / sphere.radius );
-
-	viewer.setModel( model );
-
-}
-
-let model;
-const manager = new LoadingManager();
-manager.onLoad = () => {
-
-	centerAndSetModel( model );
-	buildGui();
-
-};
-
-const modelUrl = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
-new GLTFLoader( manager )
-	.setMeshoptDecoder( MeshoptDecoder )
-	.load(
-		new URL( modelUrl, import.meta.url ).toString(),
-		gltf => {
-
-			model = gltf.scene;
-
-		}
-	);
-
 // const mesh = new Mesh(
 // 	new TorusKnotBufferGeometry(),
 // );
@@ -243,4 +325,5 @@ new GLTFLoader( manager )
 
 // } );
 
+updateModel();
 updateEnvMap();

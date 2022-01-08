@@ -17,6 +17,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				BOUNCES: 3,
 				MATERIAL_LENGTH: 0,
 				USE_ENVMAP: 1,
+				GRADIENT_BG: 0,
 			},
 
 			uniforms: {
@@ -37,6 +38,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 				gradientTop: { value: new Color( 0xbfd8ff ) },
 				gradientBottom: { value: new Color( 0xffffff ) },
+
+				bgGradientTop: { value: new Color( 0xbfd8ff ) },
+				bgGradientBottom: { value: new Color( 0xffffff ) },
 			},
 
 			vertexShader: /* glsl */`
@@ -69,8 +73,24 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
+				#if USE_ENVMAP
+
+				uniform float environmentBlur;
+                uniform sampler2D environmentMap;
+
+				#else
+
                 uniform vec3 gradientTop;
                 uniform vec3 gradientBottom;
+
+				#endif
+
+				#if GRADIENT_BG
+
+				uniform vec3 bgGradientTop;
+                uniform vec3 bgGradientBottom;
+
+				#endif
 
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
@@ -79,9 +99,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 uniform sampler2D uvAttribute;
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
-                uniform float environmentBlur;
                 uniform float environmentIntensity;
-                uniform sampler2D environmentMap;
                 uniform int seed;
                 uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
@@ -112,6 +130,22 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                     for ( i = 0; i < BOUNCES; i ++ ) {
 
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+
+							#if GRADIENT_BG
+
+							if ( i == 0 ) {
+
+								rayDirection = normalize( rayDirection );
+								float value = ( rayDirection.y + 1.0 ) / 2.0;
+
+								value = pow( value, 2.0 );
+
+								gl_FragColor = vec4( mix( bgGradientBottom, bgGradientTop, value ), 1.0 );
+								break;
+
+							}
+
+							#endif
 
 							#if USE_ENVMAP
 
