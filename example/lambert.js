@@ -13,14 +13,23 @@ viewer.domElement.style.width = '100%';
 viewer.domElement.style.height = '100%';
 document.body.appendChild( viewer.domElement );
 
+const envMaps = {
+	'royal esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+	'moonless golf': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/moonless_golf_1k.hdr',
+	'pedestrian overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
+	'venice sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
+};
+
 const params = {
 
 	acesToneMapping: true,
 	resolutionScale: 0.5,
-	tilesX: 2,
-	tilesY: 2,
+	tilesX: 1,
+	tilesY: 1,
+	iterationsPerFrame: 1,
 
 	environment: 'ENVMAP',
+	envMap: envMaps['royal esplanade'],
 
 	gradientBottom: '#ffffff',
 	gradientTop: '#bfd8ff',
@@ -48,6 +57,11 @@ function buildGui() {
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
 
 		viewer.setScale( parseFloat( v ) );
+
+	} );
+	resolutionFolder.add( params, 'iterationsPerFrame', 1, 10, 1 ).onChange( v => {
+
+		viewer.iterationsPerFrame = parseInt( v );
 
 	} );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
@@ -89,6 +103,8 @@ function buildGui() {
 
 	} else {
 
+		environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
+
 		environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
 
 			viewer.ptRenderer.material.environmentBlur = parseFloat( v );
@@ -128,12 +144,42 @@ function buildGui() {
 
 }
 
+function updateEnvMap() {
+
+	if ( viewer.ptRenderer.material.environmentMap ) {
+
+		viewer.ptRenderer.material.environmentMap.dispose();
+		viewer.scene.background.dispose();
+
+	}
+
+	new RGBELoader()
+		.load( params.envMap, texture => {
+
+			const pmremGenerator = new PMREMGenerator( viewer.renderer );
+			pmremGenerator.compileCubemapShader();
+
+			const envMap = pmremGenerator.fromEquirectangular( texture );
+
+			texture.mapping = EquirectangularReflectionMapping;
+			viewer.ptRenderer.material.environmentMap = envMap.texture;
+			viewer.scene.background = texture;
+			viewer.scene.environment = texture;
+			viewer.ptRenderer.reset();
+
+		} );
+
+}
+
+function upateModel() {
+
+}
+
 const stats = new Stats();
 document.body.appendChild( stats.dom );
 viewer.renderer.physicallyCorrectLights = true;
 viewer.renderer.toneMapping = ACESFilmicToneMapping;
 viewer.setScale( 0.5 );
-viewer.ptRenderer.tiles.set( 2, 2 )
 viewer.onRender = () => {
 
 	stats.update();
@@ -187,24 +233,14 @@ new GLTFLoader( manager )
 // );
 // viewer.setModel( mesh );
 
-// new LDrawLoader().load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd', result => {
+// new LDrawLoader( manager ).load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd', result => {
 
 // 	result.scale.setScalar( 0.001 );
 // 	result.rotation.x = Math.PI;
 // 	model = result;
 
+// 	buildGui();
+
 // } );
 
-new RGBELoader( manager ).load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
-
-	const pmremGenerator = new PMREMGenerator( viewer.renderer );
-	pmremGenerator.compileCubemapShader();
-
-	const envMap = pmremGenerator.fromEquirectangular( texture );
-
-	texture.mapping = EquirectangularReflectionMapping;
-	viewer.ptRenderer.material.environmentMap = envMap.texture;
-	viewer.scene.background = texture;
-	viewer.scene.environment = texture;
-
-} );
+updateEnvMap();

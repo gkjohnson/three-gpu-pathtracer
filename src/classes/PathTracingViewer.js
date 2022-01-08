@@ -32,6 +32,7 @@ export class PathTracingViewer {
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 		this.onRender = null;
 		this.enablePathTracing = true;
+		this.samplesPerFrame = 1;
 		this._scale = 1;
 		this._nextObject = null;
 		this._needsSizeUpdate = false;
@@ -182,7 +183,12 @@ export class PathTracingViewer {
 
 					camera.updateMatrixWorld();
 
-					ptRenderer.update();
+					for ( let i = 0, l = this.samplesPerFrame; i < l; i ++ ) {
+
+						ptRenderer.update();
+
+					}
+
 					if ( ptRenderer.samples < 1 ) {
 
 						renderer.render( this.scene, this.camera );
