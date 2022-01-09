@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Vector3 } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Euler } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -10,6 +10,7 @@ const viewer = new PathTracingViewer();
 viewer.init();
 viewer.domElement.style.width = '100%';
 viewer.domElement.style.height = '100%';
+viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
 document.body.appendChild( viewer.domElement );
 
 const envMaps = {
@@ -23,12 +24,15 @@ const models = {
 	'M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 	},
+	'Japanese Temple': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/japanese-temple/scene.gltf',
+	},
 	'Statue': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
 	},
 	'Crab Sculpture': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Elbow_Crab.glb',
-
+		rotation: new Euler( 3.1 * Math.PI / 4, Math.PI, 0 ),
 	},
 	'Stylized Carriage': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/wooden-stylised-carriage/scene.gltf',
@@ -51,10 +55,10 @@ const params = {
 	gradientTop: '#bfd8ff',
 	gradientBottom: '#ffffff',
 
-	environmentIntensity: 2.0,
+	environmentIntensity: 3.0,
 	environmentBlur: 0.35,
 
-	backgroundType: 'Environment',
+	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
 
@@ -100,45 +104,14 @@ function buildGui() {
 	resolutionFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
-	environmentFolder.add( params, 'environment', [ 'ENVMAP', 'GRADIENT' ] ).onChange( v => {
+	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
+	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
 
-		viewer.ptRenderer.material.setDefine( 'USE_ENVMAP', v === 'ENVMAP' ? 1 : 0 );
+		viewer.ptRenderer.material.environmentBlur = parseFloat( v );
 		viewer.ptRenderer.reset();
 
-		buildGui();
-
-	} );
-
-	if ( params.environment === 'GRADIENT' ) {
-
-		environmentFolder.addColor( params, 'gradientTop' ).onChange( v => {
-
-			viewer.ptRenderer.material.uniforms.gradientTop.value.set( v );
-			viewer.ptRenderer.reset();
-
-		} );
-
-		environmentFolder.addColor( params, 'gradientBottom' ).onChange( v => {
-
-			viewer.ptRenderer.material.uniforms.gradientBottom.value.set( v );
-			viewer.ptRenderer.reset();
-
-		} );
-
-	} else {
-
-		environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-
-		environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
-
-			viewer.ptRenderer.material.environmentBlur = parseFloat( v );
-			viewer.ptRenderer.reset();
-
-		} ).name( 'env map blur' );
-
-	}
-
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 350.0, 0.01 ).onChange( v => {
+	} ).name( 'env map blur' );
+	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0, 0.01 ).onChange( v => {
 
 		viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
 		viewer.ptRenderer.reset();
@@ -225,24 +198,6 @@ function updateEnvMap() {
 
 function updateModel() {
 
-	function centerAndSetModel( model ) {
-
-		const box = new Box3();
-		box.setFromObject( model );
-		model.position
-			.addScaledVector( box.min, - 0.5 )
-			.addScaledVector( box.max, - 0.5 );
-
-		const sphere = new Sphere();
-		box.getBoundingSphere( sphere );
-
-		model.scale.setScalar( 1 / sphere.radius );
-		model.position.multiplyScalar( 1 / sphere.radius );
-
-		return viewer.setModel( model );
-
-	}
-
 	if ( gui ) {
 
 		gui.destroy();
@@ -255,17 +210,27 @@ function updateModel() {
 	const modelInfo = models[ params.model ];
 	manager.onLoad = async () => {
 
-		const promises = [];
-		if ( modelInfo.envMap && modelInfo.envMap !== params.envMap ) {
+		if ( modelInfo.rotation ) {
 
-			params.envMap = envMaps[ modelInfo.envMap ];
-			params.environmentIntensity = modelInfo.envIntensity;
-			promises.push( updateEnvMap() );
+			model.rotation.copy( modelInfo.rotation );
 
 		}
 
-		promises.push( centerAndSetModel( model ) );
-		await Promise.all( promises );
+		// center the model
+		const box = new Box3();
+		box.setFromObject( model );
+		model.position
+			.addScaledVector( box.min, - 0.5 )
+			.addScaledVector( box.max, - 0.5 );
+
+		const sphere = new Sphere();
+		box.getBoundingSphere( sphere );
+
+		model.scale.setScalar( 1 / sphere.radius );
+		model.position.multiplyScalar( 1 / sphere.radius );
+
+		await viewer.setModel( model );
+
 		buildGui();
 
 	};
@@ -277,6 +242,7 @@ function updateModel() {
 			gltf => {
 
 				model = gltf.scene;
+				window.MODEL = model
 
 				const childrenToRemove = [];
 				model.traverse( c => {
@@ -309,21 +275,6 @@ viewer.onRender = () => {
 	infoEl.innerText = `samples: ${ samples }`;
 
 };
-
-// const mesh = new Mesh(
-// 	new TorusKnotBufferGeometry(),
-// );
-// viewer.setModel( mesh );
-
-// new LDrawLoader( manager ).load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd', result => {
-
-// 	result.scale.setScalar( 0.001 );
-// 	result.rotation.x = Math.PI;
-// 	model = result;
-
-// 	buildGui();
-
-// } );
 
 updateModel();
 updateEnvMap();

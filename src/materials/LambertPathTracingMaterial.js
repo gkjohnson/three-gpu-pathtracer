@@ -39,8 +39,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				gradientTop: { value: new Color( 0xbfd8ff ) },
 				gradientBottom: { value: new Color( 0xffffff ) },
 
-				bgGradientTop: { value: new Color( 0xbfd8ff ) },
-				bgGradientBottom: { value: new Color( 0xffffff ) },
+				bgGradientTop: { value: new Color( 0x111111 ) },
+				bgGradientBottom: { value: new Color( 0x000000 ) },
 			},
 
 			vertexShader: /* glsl */`
