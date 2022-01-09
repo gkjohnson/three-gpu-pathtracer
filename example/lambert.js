@@ -22,19 +22,24 @@ const envMaps = {
 const models = {
 	'M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
 	},
 	'Japanese Temple': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/japanese-temple/scene.gltf',
+		credit: 'Japanese Temple Model by "Aditya Graphical" on Sketchfab.',
 	},
 	'Statue': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
+		credit: 'Model courtesy of threedscans.com.',
 	},
 	'Crab Sculpture': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Elbow_Crab.glb',
 		rotation: new Euler( 3.1 * Math.PI / 4, Math.PI, 0 ),
+		credit: 'Model courtesy of threedscans.com.',
 	},
 	'Stylized Carriage': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/wooden-stylised-carriage/scene.gltf',
+		credit: 'Model by "LamedeFeu" on Sketchfab.',
 	},
 };
 
@@ -232,6 +237,9 @@ function updateModel() {
 
 		await viewer.setModel( model );
 
+		const creditEl = document.getElementById( 'credits' );
+		creditEl.innerText = modelInfo.credit || '';
+		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
 		viewer.pausePathTracing = false;
@@ -275,7 +283,7 @@ viewer.onRender = () => {
 
 	stats.update();
 	const samples = Math.floor( viewer.ptRenderer.samples );
-	const infoEl = document.getElementById( 'info' );
+	const infoEl = document.getElementById( 'samples' );
 	infoEl.innerText = `samples: ${ samples }`;
 
 };
