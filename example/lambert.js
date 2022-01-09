@@ -10,7 +10,6 @@ const viewer = new PathTracingViewer();
 viewer.init();
 viewer.domElement.style.width = '100%';
 viewer.domElement.style.height = '100%';
-viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
 document.body.appendChild( viewer.domElement );
 
 const envMaps = {
@@ -208,6 +207,8 @@ function updateModel() {
 	let model;
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
+
+	viewer.pausePathTracing = true;
 	manager.onLoad = async () => {
 
 		if ( modelInfo.rotation ) {
@@ -232,6 +233,8 @@ function updateModel() {
 		await viewer.setModel( model );
 
 		buildGui();
+
+		viewer.pausePathTracing = false;
 
 	};
 
@@ -266,6 +269,7 @@ const stats = new Stats();
 document.body.appendChild( stats.dom );
 viewer.renderer.physicallyCorrectLights = true;
 viewer.renderer.toneMapping = ACESFilmicToneMapping;
+viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
 viewer.setScale( 0.5 );
 viewer.onRender = () => {
 

@@ -32,6 +32,7 @@ export class PathTracingViewer {
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 		this.onRender = null;
 		this.enablePathTracing = true;
+		this.pausePathTracing = false;
 		this.samplesPerFrame = 1;
 		this._scale = 1;
 		this._nextObject = null;
@@ -169,6 +170,12 @@ export class PathTracingViewer {
 		} );
 
 		renderer.setAnimationLoop( () => {
+
+			if ( this.pausePathTracing ) {
+
+				return;
+
+			}
 
 			if ( this._needsSizeUpdate ) {
 
