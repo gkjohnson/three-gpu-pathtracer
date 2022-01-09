@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Euler } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Euler, Color } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -47,8 +47,8 @@ const params = {
 
 	acesToneMapping: true,
 	resolutionScale: 0.5,
-	tilesX: 1,
-	tilesY: 1,
+	tilesX: 2,
+	tilesY: 2,
 	samplesPerFrame: 1,
 
 	model: 'M2020 Rover',
@@ -127,6 +127,15 @@ function buildGui() {
 	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
 
 		viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', Number( v === 'Gradient' ) );
+		if ( v === 'Gradient' ) {
+
+			viewer.scene.background = new Color( 0x060606 );
+
+		} else {
+
+			viewer.scene.background = viewer.scene.environment;
+
+		}
 		viewer.ptRenderer.reset();
 
 	} );
@@ -176,7 +185,7 @@ function updateEnvMap() {
 				if ( viewer.ptRenderer.material.environmentMap ) {
 
 					viewer.ptRenderer.material.environmentMap.dispose();
-					viewer.scene.background.dispose();
+					viewer.scene.environment.dispose();
 
 				}
 
@@ -188,8 +197,12 @@ function updateEnvMap() {
 				texture.mapping = EquirectangularReflectionMapping;
 				viewer.ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
 				viewer.ptRenderer.material.environmentMap = envMap.texture;
-				viewer.scene.background = texture;
 				viewer.scene.environment = texture;
+				if ( params.backgroundType !== 'Gradient' ) {
+
+					viewer.scene.background = texture;
+
+				}
 				viewer.ptRenderer.reset();
 
 				resolve();
@@ -278,6 +291,8 @@ document.body.appendChild( stats.dom );
 viewer.renderer.physicallyCorrectLights = true;
 viewer.renderer.toneMapping = ACESFilmicToneMapping;
 viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+viewer.scene.background = new Color( 0x060606 );
+viewer.ptRenderer.tiles.set( params.tilesX, params.tilesY );
 viewer.setScale( 0.5 );
 viewer.onRender = () => {
 
