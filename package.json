@@ -13,7 +13,8 @@
     "eslint": "^7.32.0"
   },
   "scripts": {
-    "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\""
+    "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\"",
+    "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash"
   },
   "repository": {
     "type": "git",
