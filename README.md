@@ -16,7 +16,7 @@ Lambert demo [here](https://gkjohnson.github.io/three-shader-pathtracing/example
 <i>Perseverance Rover model by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
 </p>
 
-![](./docs/double-threedscans.png)
+![](./docs/double-threedscans-envmap.png)
 
 <p align="center">
 <i>Sculpture scans model by <a href="https://threedscans.com">Threedscans</a></i>
