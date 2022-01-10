@@ -6,6 +6,10 @@ import { GUI } from 'three/examples/jsm/libs/dat.gui.module.js';
 import { PathTracingViewer } from '../src/classes/PathTracingViewer.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
+const creditEl = document.getElementById( 'credits' );
+const loadingEl = document.getElementById( 'loading' );
+const samplesEl = document.getElementById( 'samples' );
+
 const viewer = new PathTracingViewer();
 viewer.init();
 viewer.domElement.style.width = '100%';
@@ -177,39 +181,33 @@ function buildGui() {
 
 function updateEnvMap() {
 
-	return new Promise( resolve => {
+	new RGBELoader()
+		.load( params.envMap, texture => {
 
-		new RGBELoader()
-			.load( params.envMap, texture => {
+			if ( viewer.ptRenderer.material.environmentMap ) {
 
-				if ( viewer.ptRenderer.material.environmentMap ) {
+				viewer.ptRenderer.material.environmentMap.dispose();
+				viewer.scene.environment.dispose();
 
-					viewer.ptRenderer.material.environmentMap.dispose();
-					viewer.scene.environment.dispose();
+			}
 
-				}
+			const pmremGenerator = new PMREMGenerator( viewer.renderer );
+			pmremGenerator.compileCubemapShader();
 
-				const pmremGenerator = new PMREMGenerator( viewer.renderer );
-				pmremGenerator.compileCubemapShader();
+			const envMap = pmremGenerator.fromEquirectangular( texture );
 
-				const envMap = pmremGenerator.fromEquirectangular( texture );
+			texture.mapping = EquirectangularReflectionMapping;
+			viewer.ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
+			viewer.ptRenderer.material.environmentMap = envMap.texture;
+			viewer.scene.environment = texture;
+			if ( params.backgroundType !== 'Gradient' ) {
 
-				texture.mapping = EquirectangularReflectionMapping;
-				viewer.ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
-				viewer.ptRenderer.material.environmentMap = envMap.texture;
-				viewer.scene.environment = texture;
-				if ( params.backgroundType !== 'Gradient' ) {
+				viewer.scene.background = texture;
 
-					viewer.scene.background = texture;
+			}
+			viewer.ptRenderer.reset();
 
-				}
-				viewer.ptRenderer.reset();
-
-				resolve();
-
-			} );
-
-	} );
+		} );
 
 }
 
@@ -227,6 +225,12 @@ function updateModel() {
 	const modelInfo = models[ params.model ];
 
 	viewer.pausePathTracing = true;
+	viewer.renderer.domElement.style.visibility = 'hidden';
+	samplesEl.innerText = '--';
+	creditEl.innerText = '--';
+	loadingEl.innerText = 'Loading';
+	loadingEl.style.visibility = 'visible';
+
 	manager.onLoad = async () => {
 
 		if ( modelInfo.rotation ) {
@@ -248,14 +252,21 @@ function updateModel() {
 		model.scale.setScalar( 1 / sphere.radius );
 		model.position.multiplyScalar( 1 / sphere.radius );
 
-		await viewer.setModel( model );
+		await viewer.setModel( model, { onProgress: v => {
 
-		const creditEl = document.getElementById( 'credits' );
+			const percent = Math.floor( 100 * v );
+			loadingEl.innerText = `Building BVH : ${ percent }%`;
+
+		} } );
+
+		loadingEl.style.visibility = 'hidden';
+
 		creditEl.innerText = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
 		viewer.pausePathTracing = false;
+		viewer.renderer.domElement.style.visibility = 'visible';
 
 	};
 
@@ -280,7 +291,15 @@ function updateModel() {
 				} );
 				childrenToRemove.forEach( c => c.parent.remove( c ) );
 
-			}
+			},
+			progress => {
+				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
+
+					const percent = Math.floor( 100 * progress.loaded / progress.total );
+					loadingEl.innerText = `Loading : ${ percent }%`;
+
+				}
+			},
 		);
 
 
@@ -298,8 +317,7 @@ viewer.onRender = () => {
 
 	stats.update();
 	const samples = Math.floor( viewer.ptRenderer.samples );
-	const infoEl = document.getElementById( 'samples' );
-	infoEl.innerText = `samples: ${ samples }`;
+	samplesEl.innerText = `samples: ${ samples }`;
 
 };
 

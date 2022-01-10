@@ -55,7 +55,6 @@ export class PathTracingViewer {
 		this.ptRenderer.material = new LambertPathTracingMaterial( { transparent: true, depthWrite: false } );
 		this.renderer.outputEncoding = sRGBEncoding;
 		this._resizeObserver.observe( container );
-		this._updateSize();
 
 	}
 
@@ -83,7 +82,7 @@ export class PathTracingViewer {
 
 	}
 
-	setModel( object ) {
+	setModel( object, bvhOptions = {} ) {
 
 		if ( this.bvhGenerator.running ) {
 
@@ -111,7 +110,7 @@ export class PathTracingViewer {
 		const { geometry, materials, textures } = mergeMeshes( meshes, { attributes: [ 'position', 'normal', 'tangent', 'uv' ] } );
 		return this
 			.bvhGenerator
-			.generate( geometry, { strategy: SAH, maxLeafTris: 1 } )
+			.generate( geometry, { strategy: SAH, maxLeafTris: 1, ...bvhOptions } )
 			.then( bvh => {
 
 				if ( this._nextObject ) {
