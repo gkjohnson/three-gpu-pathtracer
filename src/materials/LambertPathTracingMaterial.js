@@ -62,6 +62,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 #define RAY_OFFSET 1e-5
 				#define ENVMAP_TYPE_CUBE_UV
 
+                precision highp isampler2D;
                 precision highp usampler2D;
                 precision highp sampler2DArray;
 				vec4 envMapTexelToLinear( vec4 a ) { return RGBEToLinear( a ); }
