@@ -293,12 +293,14 @@ function updateModel() {
 
 			},
 			progress => {
+
 				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
 					const percent = Math.floor( 100 * progress.loaded / progress.total );
 					loadingEl.innerText = `Loading : ${ percent }%`;
 
 				}
+
 			},
 		);
 
