@@ -162,7 +162,15 @@ export class PathTracingViewer {
 		const { ptRenderer, renderer, fsQuad, camera } = this;
 
 		const controls = new OrbitControls( camera, renderer.domElement );
+		let delaySamples = 0;
 		controls.addEventListener( 'change', () => {
+
+			const tiles = this.ptRenderer.tiles;
+			if ( tiles.x * tiles.y !== 1 ) {
+
+				delaySamples = 1;
+
+			}
 
 			ptRenderer.reset();
 
@@ -185,7 +193,7 @@ export class PathTracingViewer {
 
 			if ( this.model ) {
 
-				if ( this.enablePathTracing ) {
+				if ( this.enablePathTracing && delaySamples === 0 ) {
 
 					camera.updateMatrixWorld();
 
@@ -207,6 +215,12 @@ export class PathTracingViewer {
 					renderer.autoClear = true;
 
 				} else {
+
+					if ( delaySamples > 0 ) {
+
+						delaySamples --;
+
+					}
 
 					renderer.render( this.scene, this.camera );
 
