@@ -277,7 +277,6 @@ function updateModel() {
 			gltf => {
 
 				model = gltf.scene;
-				window.MODEL = model
 
 				const childrenToRemove = [];
 				model.traverse( c => {
