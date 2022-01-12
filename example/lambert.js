@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Euler, Color } from 'three';
+import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Euler, Color, DoubleSide } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -27,6 +27,12 @@ const models = {
 	'M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
+	},
+	'Neko Stop Diorama': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/neko-stop-diorama/scene.gltf',
+		credit: 'Model by "Art by Kidd" on Sketchfab.',
+		rotation: new Euler( 0, 1.15 * Math.PI / 4, 0 ),
+		removeEmission: true,
 	},
 	'Japanese Temple': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/japanese-temple/scene.gltf',
@@ -58,7 +64,7 @@ const params = {
 	model: 'M2020 Rover',
 
 	environment: 'ENVMAP',
-	envMap: envMaps['Royal Esplanade'],
+	envMap: envMaps[ 'Royal Esplanade' ],
 
 	gradientTop: '#bfd8ff',
 	gradientBottom: '#ffffff',
@@ -140,6 +146,7 @@ function buildGui() {
 			viewer.scene.background = viewer.scene.environment;
 
 		}
+
 		viewer.ptRenderer.reset();
 
 	} );
@@ -157,7 +164,7 @@ function buildGui() {
 	} );
 	backgroundFolder.open();
 
-	const pathTracingFolder = gui.addFolder( 'path tracing');
+	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' ).onChange( v => {
 
 		viewer.enablePathTracing = v;
@@ -205,6 +212,7 @@ function updateEnvMap() {
 				viewer.scene.background = texture;
 
 			}
+
 			viewer.ptRenderer.reset();
 
 		} );
@@ -238,6 +246,42 @@ function updateModel() {
 			model.rotation.copy( modelInfo.rotation );
 
 		}
+
+		if ( modelInfo.removeEmission ) {
+
+			model.traverse( c => {
+
+				if ( c.material ) {
+
+					c.material.emissiveMap = null;
+					c.material.emissiveIntensity = 0;
+
+				}
+
+			} );
+
+		}
+
+		const childrenToRemove = [];
+		model.traverse( c => {
+
+			if ( c.material ) {
+
+				c.material.side = DoubleSide;
+				c.material.depthWrite = true;
+				c.material.transparent = false;
+
+				if ( c.material.opacity < 1 ) {
+
+					childrenToRemove.push( c );
+
+				}
+
+			}
+
+		} );
+		childrenToRemove.forEach( c => c.parent.remove( c ) );
+
 
 		// center the model
 		const box = new Box3();
@@ -277,18 +321,6 @@ function updateModel() {
 			gltf => {
 
 				model = gltf.scene;
-
-				const childrenToRemove = [];
-				model.traverse( c => {
-
-					if ( c.isMesh && c.material.opacity < 1 ) {
-
-						childrenToRemove.push( c );
-
-					}
-
-				} );
-				childrenToRemove.forEach( c => c.parent.remove( c ) );
 
 			},
 			progress => {
