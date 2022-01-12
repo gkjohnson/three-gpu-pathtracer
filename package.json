@@ -1,6 +1,6 @@
 {
-  "name": "three-shader-pathtracing",
-  "description": "Set of experiments and examples using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) to accelerate path tracing on the GPU.",
+  "name": "three-gpu-pathtracing",
+  "description": "Set of experiments and examples using three-mesh-bvh to accelerate path tracing on the GPU.",
   "dependencies": {
     "three": "^0.134.0",
     "three-mesh-bvh": "^0.5.3",
