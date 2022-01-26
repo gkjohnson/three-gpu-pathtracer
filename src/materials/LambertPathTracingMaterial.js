@@ -166,6 +166,19 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                         }
 
+						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
+						Material material = materials[ materialIndex ];
+
+						if ( pow( material.opacity, 2.0 ) < rand() ) {
+
+							vec3 point = rayOrigin + rayDirection * dist;
+							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
+
+							i --;
+							continue;
+
+						}
+
                         // fetch the interpolated smooth normal
                         vec3 normal = normalize( textureSampleBarycoord(
 							normalAttribute,
@@ -174,8 +187,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 						).xyz );
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
-						Material material = materials[ materialIndex ];
 
 						// emission
 						vec3 emission = material.emissiveIntensity * material.emissive;

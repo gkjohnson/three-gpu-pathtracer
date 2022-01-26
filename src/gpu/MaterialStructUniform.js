@@ -23,6 +23,8 @@ export class MaterialStructUniform {
 		this.normalMap = - 1;
 		this.normalScale = new Vector2( 1, 1 );
 
+		this.opacity = 1.0;
+
 		// TODO: Clearcoat
 
 		// TODO: Sheen
@@ -72,6 +74,9 @@ export class MaterialStructUniform {
 		this.normalMap = textures.indexOf( material.normalMap );
 		if ( 'normalScale' in material ) this.normalScale.copy( material.normalScale );
 		else this.normalScale.set( 1, 1 );
+
+		// opacity
+		this.opacity = material.opacity;
 
 	}
 

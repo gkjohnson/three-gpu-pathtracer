@@ -53,6 +53,12 @@ const models = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/wooden-stylised-carriage/scene.gltf',
 		credit: 'Model by "LamedeFeu" on Sketchfab.',
 	},
+	'LEGO': {
+		url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
+		credit: 'asdf'
+	},
+
+
 };
 
 const params = {
@@ -63,7 +69,7 @@ const params = {
 	tilesY: 2,
 	samplesPerFrame: 1,
 
-	model: 'M2020 Rover',
+	model: 'LEGO',
 
 	environment: 'ENVMAP',
 	envMap: envMaps[ 'Royal Esplanade' ],
@@ -264,16 +270,25 @@ async function updateModel() {
 
 		}
 
+		const childrenToRemove = [];
 		model.traverse( c => {
 
 			if ( c.material ) {
 
 				c.material.side = DoubleSide;
+				c.material.depthWrite = true;
+				c.material.transparent = false;
+
+				if ( c.material.opacity < 1 ) {
+
+					childrenToRemove.push( c );
+
+				}
 
 			}
 
 		} );
-
+		childrenToRemove.forEach( c => c.parent.remove( c ) );
 
 		// center the model
 		const box = new Box3();
@@ -293,7 +308,11 @@ async function updateModel() {
 			const percent = Math.floor( 100 * v );
 			loadingEl.innerText = `Building BVH : ${ percent }%`;
 
-		} } );
+		} } ).catch( err => {
+			console.log('CAUGHT', err);
+		})
+
+		console.log('SET MODEL!' );
 
 		loadingEl.style.visibility = 'hidden';
 
@@ -343,6 +362,7 @@ async function updateModel() {
 				result => {
 
 					model = LDrawUtils.mergeObject( result );
+					model.rotation.set( Math.PI, 0, 0 );
 					onFinish();
 
 				},

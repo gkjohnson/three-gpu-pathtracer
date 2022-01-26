@@ -22,6 +22,8 @@ export const shaderMaterialStructs = /* glsl */ `
     	int normalMap;
 		vec2 normalScale;
 
+		float opacity;
+
     };
 
 `;
