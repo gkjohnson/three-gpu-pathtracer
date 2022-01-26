@@ -53,11 +53,6 @@ const models = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/wooden-stylised-carriage/scene.gltf',
 		credit: 'Model by "LamedeFeu" on Sketchfab.',
 	},
-	'LEGO': {
-		url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
-		credit: 'asdf'
-	},
-
 
 };
 
@@ -69,7 +64,7 @@ const params = {
 	tilesY: 2,
 	samplesPerFrame: 1,
 
-	model: 'LEGO',
+	model: 'M2020 Rover',
 
 	environment: 'ENVMAP',
 	envMap: envMaps[ 'Royal Esplanade' ],
@@ -308,11 +303,7 @@ async function updateModel() {
 			const percent = Math.floor( 100 * v );
 			loadingEl.innerText = `Building BVH : ${ percent }%`;
 
-		} } ).catch( err => {
-			console.log('CAUGHT', err);
-		})
-
-		console.log('SET MODEL!' );
+		} } );
 
 		loadingEl.style.visibility = 'hidden';
 
@@ -356,7 +347,6 @@ async function updateModel() {
 		await loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
 		loader
 			.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
-			// .setPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
 			.load(
 				url,
 				result => {

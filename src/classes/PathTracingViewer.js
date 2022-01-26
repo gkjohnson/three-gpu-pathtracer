@@ -137,14 +137,24 @@ export class PathTracingViewer {
 				this.model = object;
 
 				const { ptRenderer } = this;
-				ptRenderer.material.bvh.updateFrom( bvh );
-				ptRenderer.material.normalAttribute.updateFrom( geometry.attributes.normal );
-				ptRenderer.material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-				ptRenderer.material.uvAttribute.updateFrom( geometry.attributes.uv );
-				ptRenderer.material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-				ptRenderer.material.textures.setTextures( this.renderer, 2048, 2048, textures );
-				ptRenderer.material.materials.updateFrom( materials, textures );
-				ptRenderer.material.setDefine( 'MATERIAL_LENGTH', materials.length );
+				const { material } = ptRenderer;
+
+				// dispose of textures because they cannot be updated in later version of three.js
+				material.bvh.dispose();
+				material.normalAttribute.dispose();
+				material.tangentAttribute.dispose();
+				material.uvAttribute.dispose();
+				material.materialIndexAttribute.dispose();
+				material.textures.dispose();
+
+				material.bvh.updateFrom( bvh );
+				material.normalAttribute.updateFrom( geometry.attributes.normal );
+				material.tangentAttribute.updateFrom( geometry.attributes.tangent );
+				material.uvAttribute.updateFrom( geometry.attributes.uv );
+				material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+				material.textures.setTextures( this.renderer, 2048, 2048, textures );
+				material.materials.updateFrom( materials, textures );
+				material.setDefine( 'MATERIAL_LENGTH', materials.length );
 				ptRenderer.reset();
 
 			} );
