@@ -2,7 +2,9 @@ import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, Equirectang
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { GUI } from 'three/examples/jsm/libs/dat.gui.module.js';
+import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
+import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { PathTracingViewer } from '../src/classes/PathTracingViewer.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
@@ -219,7 +221,7 @@ function updateEnvMap() {
 
 }
 
-function updateModel() {
+async function updateModel() {
 
 	if ( gui ) {
 
@@ -239,7 +241,7 @@ function updateModel() {
 	loadingEl.innerText = 'Loading';
 	loadingEl.style.visibility = 'visible';
 
-	manager.onLoad = async () => {
+	const onFinish = async () => {
 
 		if ( modelInfo.rotation ) {
 
@@ -262,25 +264,15 @@ function updateModel() {
 
 		}
 
-		const childrenToRemove = [];
 		model.traverse( c => {
 
 			if ( c.material ) {
 
 				c.material.side = DoubleSide;
-				c.material.depthWrite = true;
-				c.material.transparent = false;
-
-				if ( c.material.opacity < 1 ) {
-
-					childrenToRemove.push( c );
-
-				}
 
 			}
 
 		} );
-		childrenToRemove.forEach( c => c.parent.remove( c ) );
 
 
 		// center the model
@@ -314,26 +306,50 @@ function updateModel() {
 
 	};
 
-	new GLTFLoader( manager )
-		.setMeshoptDecoder( MeshoptDecoder )
-		.load(
-			modelInfo.url,
-			gltf => {
+	const url = modelInfo.url;
+	if ( /(gltf|glb)$/i.test( url ) ) {
 
-				model = gltf.scene;
+		manager.onLoad = onFinish;
+		new GLTFLoader( manager )
+			.setMeshoptDecoder( MeshoptDecoder )
+			.load(
+				url,
+				gltf => {
 
-			},
-			progress => {
+					model = gltf.scene;
 
-				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
+				},
+				progress => {
 
-					const percent = Math.floor( 100 * progress.loaded / progress.total );
-					loadingEl.innerText = `Loading : ${ percent }%`;
+					if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-				}
+						const percent = Math.floor( 100 * progress.loaded / progress.total );
+						loadingEl.innerText = `Loading : ${ percent }%`;
 
-			},
-		);
+					}
+
+				},
+			);
+
+	} else if ( /mpd$/i.test( url ) ) {
+
+		const loader = new LDrawLoader( manager );
+		await loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
+		loader
+			.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
+			// .setPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
+			.load(
+				url,
+				result => {
+
+					model = LDrawUtils.mergeObject( result );
+					onFinish();
+
+				},
+			);
+
+
+	}
 
 
 }
