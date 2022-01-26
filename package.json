@@ -2,8 +2,8 @@
   "name": "three-gpu-pathtracing",
   "description": "Set of experiments and examples using three-mesh-bvh to accelerate path tracing on the GPU.",
   "dependencies": {
-    "three": "^0.134.0",
-    "three-mesh-bvh": "^0.5.3",
+    "three": "^0.137.0",
+    "three-mesh-bvh": "^0.5.4",
     "xatlas-web": "^0.1.0"
   },
   "devDependencies": {

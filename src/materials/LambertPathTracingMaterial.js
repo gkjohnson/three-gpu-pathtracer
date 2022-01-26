@@ -65,7 +65,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
                 precision highp isampler2D;
                 precision highp usampler2D;
                 precision highp sampler2DArray;
-				vec4 envMapTexelToLinear( vec4 a ) { return RGBEToLinear( a ); }
+				vec4 envMapTexelToLinear( vec4 a ) { return a; }
                 #include <common>
 				#include <cube_uv_reflection_fragment>
 
