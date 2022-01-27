@@ -18,6 +18,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				MATERIAL_LENGTH: 0,
 				USE_ENVMAP: 1,
 				GRADIENT_BG: 0,
+				DISPLAY_FLOOR: 1,
 			},
 
 			uniforms: {
@@ -41,6 +42,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 				bgGradientTop: { value: new Color( 0x111111 ) },
 				bgGradientBottom: { value: new Color( 0x000000 ) },
+
+				floorHeight: { value: 0.0 },
+				floorColor: { value: new Color( 0x080808 ) },
 			},
 
 			vertexShader: /* glsl */`
@@ -93,6 +97,13 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 				#endif
 
+				#if DISPLAY_FLOOR
+
+				uniform vec3 floorColor;
+				uniform float floorHeight;
+
+				#endif
+
                 uniform mat4 cameraWorldMatrix;
                 uniform mat4 invProjectionMatrix;
                 uniform sampler2D normalAttribute;
@@ -132,23 +143,25 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
-							// - 1.0 = rayOrigin + rayDirection * c
-							// - 1 - rayORigin
-							float distToFloor = ( - 0.2 - rayOrigin.y ) / rayDirection.y;
+							#if DISPLAY_FLOOR
+
+							// display a radial gradient floor
+							float distToFloor = ( floorHeight - rayOrigin.y ) / rayDirection.y;
 							vec3 floorNormal = vec3( 0.0, 1.0, 0.0 );
 							vec3 floorHitPoint = rayOrigin + rayDirection * distToFloor + floorNormal * RAY_OFFSET;
 							float centerDist = length( floorHitPoint.xz );
-							float alpha = pow( 1.0 - saturate( centerDist ), 2.0 );
+							float alpha = pow( saturate( 1.25 - centerDist ), 2.0 );
 							if ( distToFloor > dist && dot( floorNormal, rayDirection ) < 0.0 && alpha > rand() ) {
 
 								rayOrigin = floorHitPoint;
 								rayDirection = getHemisphereSample( floorNormal, rand2() );
-								throughputColor *= 1.0 / PI;
-
+								throughputColor *= floorColor / PI;
 
 								continue;
 
 							}
+
+							#endif
 
 							#if GRADIENT_BG
 

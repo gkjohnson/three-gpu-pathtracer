@@ -82,6 +82,9 @@ const params = {
 	enable: true,
 	bounces: 3,
 
+	floorColor: '#080808',
+	floorEnabled: true,
+
 };
 
 let gui = null;
@@ -166,6 +169,20 @@ function buildGui() {
 
 	} );
 	backgroundFolder.open();
+
+	const floorFolder = gui.addFolder( 'floor' );
+	floorFolder.add( params, 'floorEnabled' ).onChange( v => {
+
+		viewer.ptRenderer.material.setDefine( 'DISPLAY_FLOOR', Number( v ) );
+		viewer.ptRenderer.reset();
+
+	} );
+	floorFolder.addColor( params, 'floorColor' ).onChange( v => {
+
+		viewer.ptRenderer.material.uniforms.floorColor.value.set( v );
+		viewer.ptRenderer.reset();
+
+	} );
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' ).onChange( v => {
@@ -314,6 +331,7 @@ async function updateModel() {
 
 		viewer.pausePathTracing = false;
 		viewer.renderer.domElement.style.visibility = 'visible';
+		viewer.ptRenderer.material.uniforms.floorHeight.value = - ( box.max.y - box.min.y ) / ( 2 * sphere.radius );
 
 	};
 
