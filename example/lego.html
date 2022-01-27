@@ -1,0 +1,104 @@
+<html>
+    <head>
+        <title>Lambert Surface Path Tracing - LDraw Models</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+				background-color: #111;
+            }
+
+			#info {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				pointer-events: none;
+			}
+
+			#samples, #credits {
+
+				opacity: 0.5;
+				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
+				padding: 5px;
+				display: inline-block;
+
+			}
+
+			#loading {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				color: white;
+				font-family: 'Courier New', Courier, monospace;
+			}
+
+			a {
+				color: white;
+				pointer-events: all;
+			}
+        </style>
+
+    </head>
+    <body>
+		<div id="loading">LOADING</div>
+		<div id="info">
+			<div>
+				<div id="samples">--</div>
+			</div>
+			<div>
+				<div id="credits">--</div>
+			</div>
+		</div>
+		<script>
+			window.MODEL_LIST = {
+
+				'X-Wing': {
+					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
+				},
+
+				'UCS AT-ST': {
+					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
+				},
+
+				'Death Star': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/10143-1 - Death Star II.mpd',
+				},
+
+				'Blacksmith': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/21325 - Medieval Blacksmith.mpd',
+				},
+
+				'Tree House': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/21318 - Tree House.mpd',
+				},
+
+				'Space Port Moon Buggy': {
+					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
+				},
+
+				'Cafe Corner': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/10182-1 - Cafe Corner.mpd',
+				},
+
+				'Scorpion Pyramid': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/7327-1 - Scorpion Pyramid.mpd',
+				},
+
+
+			};
+
+			for ( const key in window.MODEL_LIST ) {
+
+				const info = window.MODEL_LIST[ key ];
+				info.credit = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
+
+			}
+		</script>
+        <script src="./lambert.js" type="module"></script>
+    </body>
+</html>

@@ -169,7 +169,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
 
-						if ( pow( material.opacity, 2.0 ) < rand() ) {
+						if ( material.opacity < rand() ) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
 							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;

@@ -25,7 +25,7 @@ const envMaps = {
 	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
 };
 
-const models = {
+const models = window.MODEL_LIST || {
 	'M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
@@ -59,12 +59,12 @@ const models = {
 const params = {
 
 	acesToneMapping: true,
-	resolutionScale: 0.5,
+	resolutionScale: 1,
 	tilesX: 2,
 	tilesY: 2,
 	samplesPerFrame: 1,
 
-	model: 'M2020 Rover',
+	model: Object.keys( models )[ 0 ],
 
 	environment: 'ENVMAP',
 	envMap: envMaps[ 'Royal Esplanade' ],
@@ -265,25 +265,26 @@ async function updateModel() {
 
 		}
 
-		const childrenToRemove = [];
 		model.traverse( c => {
 
 			if ( c.material ) {
 
 				c.material.side = DoubleSide;
-				c.material.depthWrite = true;
-				c.material.transparent = false;
 
-				if ( c.material.opacity < 1 ) {
+				// boost particularly dark colors because all detail is lost with
+				// dark lambert shading
+				const hsl = {};
+				c.material.color.getHSL( hsl );
+				if ( hsl.l < 0.025 ) {
 
-					childrenToRemove.push( c );
+					hsl.l = 0.025;
+					c.material.color.setHSL( hsl.h, hsl.s, hsl.l );
 
 				}
 
 			}
 
 		} );
-		childrenToRemove.forEach( c => c.parent.remove( c ) );
 
 		// center the model
 		const box = new Box3();
@@ -307,7 +308,7 @@ async function updateModel() {
 
 		loadingEl.style.visibility = 'hidden';
 
-		creditEl.innerText = modelInfo.credit || '';
+		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
@@ -343,6 +344,13 @@ async function updateModel() {
 
 	} else if ( /mpd$/i.test( url ) ) {
 
+		manager.onProgress = ( url, loaded, total ) => {
+
+			const percent = Math.floor( 100 * loaded / total );
+			loadingEl.innerText = `Loading : ${ percent }%`;
+
+		};
+
 		const loader = new LDrawLoader( manager );
 		await loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
 		loader
@@ -371,7 +379,6 @@ viewer.renderer.toneMapping = ACESFilmicToneMapping;
 viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
 viewer.scene.background = new Color( 0x060606 );
 viewer.ptRenderer.tiles.set( params.tilesX, params.tilesY );
-viewer.setScale( 0.5 );
 viewer.onRender = () => {
 
 	stats.update();
