@@ -59,7 +59,7 @@ const models = window.MODEL_LIST || {
 const params = {
 
 	acesToneMapping: true,
-	resolutionScale: 1,
+	resolutionScale: 0.75,
 	tilesX: 2,
 	tilesY: 2,
 	samplesPerFrame: 1,
@@ -101,7 +101,7 @@ function buildGui() {
 	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
+	resolutionFolder.add( params, 'resolutionScale', 0.5, 1.0, 0.01 ).onChange( v => {
 
 		viewer.setScale( parseFloat( v ) );
 
@@ -404,6 +404,7 @@ viewer.renderer.toneMapping = ACESFilmicToneMapping;
 viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
 viewer.scene.background = new Color( 0x060606 );
 viewer.ptRenderer.tiles.set( params.tilesX, params.tilesY );
+viewer.setScale( params.resolutionScale );
 viewer.onRender = () => {
 
 	stats.update();
