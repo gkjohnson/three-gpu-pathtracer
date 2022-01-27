@@ -132,6 +132,24 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
+							// - 1.0 = rayOrigin + rayDirection * c
+							// - 1 - rayORigin
+							float distToFloor = ( - 0.2 - rayOrigin.y ) / rayDirection.y;
+							vec3 floorNormal = vec3( 0.0, 1.0, 0.0 );
+							vec3 floorHitPoint = rayOrigin + rayDirection * distToFloor + floorNormal * RAY_OFFSET;
+							float centerDist = length( floorHitPoint.xz );
+							float alpha = pow( 1.0 - saturate( centerDist ), 2.0 );
+							if ( distToFloor > dist && dot( floorNormal, rayDirection ) < 0.0 && alpha > rand() ) {
+
+								rayOrigin = floorHitPoint;
+								rayDirection = getHemisphereSample( floorNormal, rand2() );
+								throughputColor *= 1.0 / PI;
+
+
+								continue;
+
+							}
+
 							#if GRADIENT_BG
 
 							if ( i == 0 ) {
@@ -164,7 +182,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
                             break;
 
-                        }
+						}
+
 
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
