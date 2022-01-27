@@ -205,6 +205,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 							vec3 point = rayOrigin + rayDirection * dist;
 							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
+							throughputColor *= mix( vec3( 1.0 ), material.color, 0.5 );
 
 							i --;
 							continue;

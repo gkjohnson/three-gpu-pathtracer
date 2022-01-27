@@ -33,7 +33,7 @@ const models = window.MODEL_LIST || {
 	'Neko Stop Diorama': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/neko-stop-diorama/scene.gltf',
 		credit: 'Model by "Art by Kidd" on Sketchfab.',
-		rotation: new Euler( 0, 1.15 * Math.PI / 4, 0 ),
+		rotation: [ 0, 1.15 * Math.PI / 4, 0 ],
 		removeEmission: true,
 	},
 	'Japanese Temple': {
@@ -46,7 +46,7 @@ const models = window.MODEL_LIST || {
 	},
 	'Crab Sculpture': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Elbow_Crab.glb',
-		rotation: new Euler( 3.1 * Math.PI / 4, Math.PI, 0 ),
+		rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
 		credit: 'Model courtesy of threedscans.com.',
 	},
 	'Stylized Carriage': {
@@ -263,7 +263,7 @@ async function updateModel() {
 
 		if ( modelInfo.rotation ) {
 
-			model.rotation.copy( modelInfo.rotation );
+			model.rotation.set( ...modelInfo.rotation );
 
 		}
 
@@ -287,6 +287,13 @@ async function updateModel() {
 			if ( c.material ) {
 
 				c.material.side = DoubleSide;
+
+				if ( c.material.opacity < 1 ) {
+
+					// small hack to account for double sidedness making geometry look more opaque than intended
+					c.material.opacity *= 0.75;
+
+				}
 
 				// boost particularly dark colors because all detail is lost with
 				// dark lambert shading
