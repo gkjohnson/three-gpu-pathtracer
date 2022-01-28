@@ -30,3 +30,12 @@ Lambert demo [here](https://gkjohnson.github.io/three-gpu-pathtracing/example/bu
 <i>Sculpture scans model by <a href="https://threedscans.com">Threedscans</a></i>
 </p>
 
+![](./docs/lego-death-star-white.png)
+
+![](./docs/lego-x-wing-black.png)
+
+![](./docs/lego-egyptian-white.png)
+
+<p align="center">
+<i>Lego models courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository</a></i>
+</p>
