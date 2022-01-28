@@ -59,7 +59,7 @@ const models = window.MODEL_LIST || {
 const params = {
 
 	acesToneMapping: true,
-	resolutionScale: 1 / window.devicePixelRatio,
+	resolutionScale: 0.75 / window.devicePixelRatio,
 	tilesX: 2,
 	tilesY: 2,
 	samplesPerFrame: 1,
