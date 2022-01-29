@@ -386,6 +386,15 @@ async function updateModel() {
 
 					model = LDrawUtils.mergeObject( result );
 					model.rotation.set( Math.PI, 0, 0 );
+					model.traverse( c => {
+
+						if ( c.isLineSegments ) {
+
+							c.visible = false;
+
+						}
+
+					} );
 					onFinish();
 
 				},
