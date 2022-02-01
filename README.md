@@ -41,3 +41,11 @@ Sandbox project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-b
 <p align="center">
 <i>Lego models courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository</a></i>
 </p>
+
+### Resources
+
+[Raytracing in One Weekend Book](https://raytracing.github.io/)
+
+[PBR Book](https://pbr-book.org/)
+
+
