@@ -1,5 +1,7 @@
 # three-gpu-pathtracer
 
+[![lgtm code quality](https://img.shields.io/lgtm/grade/javascript/g/gkjohnson/three-mesh-bvh.svg?style=flat-square&label=code-quality)](https://lgtm.com/projects/g/gkjohnson/three-mesh-bvh/)
+
 Sandbox project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) to accelerate path tracing on the GPU. Features include basic Lambertian shadering, support for material information, textures, normal maps, emission, environment maps, tiled rendering, and more!
 
 [Lambert demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lambert.html)!
