@@ -50,4 +50,6 @@ Sandbox project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-b
 
 [PBR Book](https://pbr-book.org/)
 
+[knightcrawler25/GLSL-PathTracer](https://github.com/knightcrawler25/GLSL-PathTracer/)
+
 
