@@ -1,5 +1,5 @@
 {
-  "name": "three-gpu-pathtracing",
+  "name": "three-gpu-pathtracer",
 	"version": "0.0.1",
   "description": "Path tracing renderer and utilities for three.js built on top of three-mesh-bvh.",
   "dependencies": {
@@ -21,10 +21,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gkjohnson/three-gpu-pathtracing.git"
+    "url": "git+https://github.com/gkjohnson/three-gpu-pathtracer.git"
   },
   "bugs": {
-    "url": "https://github.com/gkjohnson/three-gpu-pathtracing/issues"
+    "url": "https://github.com/gkjohnson/three-gpu-pathtracer/issues"
   },
-  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracing#readme"
+  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracer#readme"
 }
