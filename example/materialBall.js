@@ -99,6 +99,12 @@ async function init() {
 
 				}
 
+				if ( c.name === 'subsphere_1' ) {
+
+					c.visible = false;
+
+				}
+
 			} );
 
 			materials = [ material1, material2 ];
