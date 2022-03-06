@@ -8,7 +8,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { LambertPathTracingMaterial } from '../src/materials/LambertPathTracingMaterial.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad;
+let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, materials;
 let samplesEl;
 const params = {
 
@@ -20,7 +20,7 @@ const params = {
 		transmission: 0.0,
 	},
 	material2: {
-		color: '#ffffff',
+		color: '#26C6DA',
 		roughness: 1.0,
 		metalness: 1.0,
 		ior: 1.0,
@@ -83,6 +83,26 @@ async function init() {
 
 			gltf.scene.scale.setScalar( 0.01 );
 			gltf.scene.updateMatrixWorld();
+
+			const material1 = new THREE.MeshStandardMaterial();
+			const material2 = new THREE.MeshStandardMaterial();
+
+			gltf.scene.traverse( c => {
+
+				if ( c.name === 'Sphere_1' ) {
+
+					c.material = material2;
+
+				} else {
+
+					c.material = material1;
+
+				}
+
+			} );
+
+			materials = [ material1, material2 ];
+
 			return generator.generate( gltf.scene );
 
 		} )
@@ -118,11 +138,7 @@ async function init() {
 
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -137,19 +153,19 @@ async function init() {
 	} );
 
 	const matFolder1 = gui.addFolder( 'Material 1' );
-	matFolder1.addColor( params.material1, 'color' );
-	matFolder1.add( params.material1, 'roughness', 0, 1 );
-	matFolder1.add( params.material1, 'metalness', 0, 1 );
-	matFolder1.add( params.material1, 'transmission', 0, 1 );
-	matFolder1.add( params.material1, 'ior', 0.5, 2.0 );
+	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
+	matFolder1.add( params.material1, 'roughness', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'ior', 0.5, 2.0 ).onChange( reset );
 	matFolder1.open();
 
 	const matFolder2 = gui.addFolder( 'Material 2' );
-	matFolder2.addColor( params.material2, 'color' );
-	matFolder2.add( params.material1, 'roughness', 0, 1 );
-	matFolder2.add( params.material1, 'metalness', 0, 1 );
-	matFolder2.add( params.material1, 'transmission', 0, 1 );
-	matFolder2.add( params.material1, 'ior', 0.5, 2 );
+	matFolder2.addColor( params.material2, 'color' ).onChange( reset );
+	matFolder2.add( params.material2, 'roughness', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'ior', 0.5, 2 ).onChange( reset );
 	matFolder2.open();
 
 	animate();
@@ -173,10 +189,33 @@ function onResize() {
 
 }
 
+function reset() {
+
+	ptRenderer.reset();
+
+}
+
 
 function animate() {
 
 	requestAnimationFrame( animate );
+
+	const m1 = materials[ 0 ];
+	m1.color.set( params.material1.color );
+	m1.metalness = params.material1.metalness;
+	m1.roughness = params.material1.roughness;
+	m1.transmission = params.material1.transmission;
+	m1.ior = params.material1.ior;
+
+	const m2 = materials[ 1 ];
+	m2.color.set( params.material2.color );
+	m2.metalness = params.material2.metalness;
+	m2.roughness = params.material2.roughness;
+	m2.transmission = params.material2.transmission;
+	m2.ior = params.material2.ior;
+
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+
 
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
