@@ -8,6 +8,8 @@ Sandbox project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-b
 
 [Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
+[Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
+
 ![](./docs/interior-scene-cropped.png)
 
 <p align="center">
