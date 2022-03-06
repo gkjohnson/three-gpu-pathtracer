@@ -1,10 +1,10 @@
 {
   "name": "three-gpu-pathtracing",
-  "description": "Set of experiments and examples using three-mesh-bvh to accelerate path tracing on the GPU.",
+	"version": "0.0.1",
+  "description": "Path tracing renderer and utilities for three.js built on top of three-mesh-bvh.",
   "dependencies": {
     "three": "^0.137.0",
-    "three-mesh-bvh": "^0.5.4",
-    "xatlas-web": "^0.1.0"
+    "three-mesh-bvh": "^0.5.4"
   },
   "devDependencies": {
     "eslint-config-mdcs": "^5.0.0",
@@ -12,16 +12,19 @@
     "parcel": "^2.1.1",
     "eslint": "^7.32.0"
   },
+	"peerDependencies": {
+		"xatlas-web": "^0.1.0"
+	},
   "scripts": {
     "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\"",
     "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gkjohnson/three-shader-pathtracing.git"
+    "url": "git+https://github.com/gkjohnson/three-gpu-pathtracing.git"
   },
   "bugs": {
-    "url": "https://github.com/gkjohnson/three-shader-pathtracing/issues"
+    "url": "https://github.com/gkjohnson/three-gpu-pathtracing/issues"
   },
-  "homepage": "https://github.com/gkjohnson/three-shader-pathtracing#readme"
+  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracing#readme"
 }
