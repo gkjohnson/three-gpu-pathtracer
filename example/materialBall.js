@@ -29,6 +29,7 @@ const params = {
 	environmentIntensity: 3,
 	bounces: 3,
 	samplesPerFrame: 1,
+	acesToneMapping: true,
 
 };
 
@@ -37,6 +38,7 @@ init();
 async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( { transparent: true } ) );
@@ -157,6 +159,12 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
+	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
+
+		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+		fsQuad.material.needsUpdate = true;
+
+	} );
 
 	const matFolder1 = gui.addFolder( 'Material 1' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
@@ -207,21 +215,20 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	const m1 = materials[ 0 ];
-	m1.color.set( params.material1.color );
+	m1.color.set( params.material1.color ).convertSRGBToLinear();
 	m1.metalness = params.material1.metalness;
 	m1.roughness = params.material1.roughness;
 	m1.transmission = params.material1.transmission;
 	m1.ior = params.material1.ior;
 
 	const m2 = materials[ 1 ];
-	m2.color.set( params.material2.color );
+	m2.color.set( params.material2.color ).convertSRGBToLinear();
 	m2.metalness = params.material2.metalness;
 	m2.roughness = params.material2.roughness;
 	m2.transmission = params.material2.transmission;
 	m2.ior = params.material2.ior;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-
 
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
