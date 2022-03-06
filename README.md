@@ -1,10 +1,10 @@
-# three-gpu-pathtracing
+# three-gpu-pathtracer
 
 Sandbox project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) to accelerate path tracing on the GPU. Features include basic Lambertian shadering, support for material information, textures, normal maps, emission, environment maps, tiled rendering, and more!
 
-[Lambert demo here](https://gkjohnson.github.io/three-gpu-pathtracing/example/bundle/lambert.html)!
+[Lambert demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lambert.html)!
 
-[Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracing/example/bundle/lego.html)!
+[Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
 ![](./docs/interior-scene-cropped.png)
 
