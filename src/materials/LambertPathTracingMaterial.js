@@ -3,9 +3,9 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs, pathTracingHelpers } from '../gpu/shaderStructs.js';
-import { MaterialStructArrayUniform } from '../gpu/MaterialStructArrayUniform.js';
-import { RenderTarget2DArray } from '../gpu/RenderTarget2DArray.js';
+import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
+import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
+import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 
 export class LambertPathTracingMaterial extends ShaderMaterial {
 

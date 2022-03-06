@@ -47,6 +47,8 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		// save any materials
 		const mesh = meshes[ i ];
+		if ( mesh.visible === false ) continue;
+
 		if ( Array.isArray( mesh.material ) ) {
 
 			mesh.material.forEach( m => materialSet.add( m ) );
@@ -64,6 +66,8 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		// ensure the matrix world is up to date
 		const mesh = meshes[ i ];
+		if ( mesh.visible === false ) continue;
+
 		mesh.updateMatrixWorld();
 
 		// apply the matrix world to the geometry
