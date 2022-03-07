@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PathTracingSceneGenerator, PathTracingRenderer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { LambertPathTracingMaterial } from '../src/materials/LambertPathTracingMaterial.js';
+import { PathTracingMaterial } from '../src/materials/PathTracingMaterial.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, materials;
@@ -18,6 +18,7 @@ const params = {
 		metalness: 1.0,
 		ior: 1.0,
 		transmission: 0.0,
+		opacity: 1.0,
 	},
 	material2: {
 		color: '#26C6DA',
@@ -25,6 +26,7 @@ const params = {
 		metalness: 1.0,
 		ior: 1.0,
 		transmission: 0.0,
+		opacity: 1.0,
 	},
 	environmentIntensity: 3,
 	bounces: 3,
@@ -48,7 +50,7 @@ async function init() {
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
-	ptRenderer.material = new LambertPathTracingMaterial( { transparent: true, depthWrite: false } );
+	ptRenderer.material = new PathTracingMaterial( { transparent: true, depthWrite: false } );
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -83,8 +85,23 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material-ball.glb' )
 		.then( gltf => {
 
+			const group = new THREE.Group();
+
 			gltf.scene.scale.setScalar( 0.01 );
 			gltf.scene.updateMatrixWorld();
+			group.add( gltf.scene );
+
+			const box = new THREE.Box3();
+			box.setFromObject( gltf.scene );
+
+			const floor = new THREE.Mesh(
+				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
+				new THREE.MeshStandardMaterial( { color: 0x1a1a1a } ),
+			);
+			floor.geometry = floor.geometry.toNonIndexed();
+			floor.geometry.clearGroups();
+			floor.position.y = box.min.y - 0.025;
+			group.add( floor );
 
 			const material1 = new THREE.MeshStandardMaterial();
 			const material2 = new THREE.MeshStandardMaterial();
@@ -111,7 +128,7 @@ async function init() {
 
 			materials = [ material1, material2 ];
 
-			return generator.generate( gltf.scene );
+			return generator.generate( group );
 
 		} )
 		.then( result => {
@@ -170,6 +187,7 @@ async function init() {
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
 	matFolder1.add( params.material1, 'roughness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.5, 2.0 ).onChange( reset );
 	matFolder1.open();
@@ -178,6 +196,7 @@ async function init() {
 	matFolder2.addColor( params.material2, 'color' ).onChange( reset );
 	matFolder2.add( params.material2, 'roughness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.5, 2 ).onChange( reset );
 	matFolder2.open();
@@ -220,6 +239,7 @@ function animate() {
 	m1.roughness = params.material1.roughness;
 	m1.transmission = params.material1.transmission;
 	m1.ior = params.material1.ior;
+	m1.opacity = params.material1.opacity;
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
@@ -227,11 +247,12 @@ function animate() {
 	m2.roughness = params.material2.roughness;
 	m2.transmission = params.material2.transmission;
 	m2.ior = params.material2.ior;
+	m2.opacity = params.material2.opacity;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
+	ptRenderer.material.environmentBlur = 1;
 
 	camera.updateMatrixWorld();
 
