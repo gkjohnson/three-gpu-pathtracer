@@ -1,5 +1,7 @@
 // https://github.com/mozilla/Spoke/commit/9701d647020e09d584885bd457eb225e9995c12f
 import XAtlas from 'xatlas-web';
+import { BufferGeometry, Float32BufferAttribute, Uint32BufferAttribute } from 'three';
+
 export class UVUnwrapper {
 
 	constructor() {
