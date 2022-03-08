@@ -103,7 +103,7 @@ export class EquirectPdfUniform {
 
 		for ( let i = 0; i < height; i ++ ) {
 
-			const dist = ( i + 1 ) / height;
+			//const dist = ( i + 1 ) / height;
 			const row = 0; // TODO: find the row that lies at the given cumulative distribution value above
 			marginalDataArray[ 2 * i + 0 ] = row / height;
 			marginalDataArray[ 2 * i + 1 ] = pdfMarginal[ i ];
@@ -115,7 +115,7 @@ export class EquirectPdfUniform {
 			for ( let x = 0; x < width; x ++ ) {
 
 				const i = y * width + x;
-				const dist = ( x + 1 ) / width;
+				//const dist = ( x + 1 ) / width;
 				const col = 0; // TODO: find the column in the given row that lies at the cumulative dist value above
 				conditionalDataArray[ 2 * i + 0 ] = col / width;
 				conditionalDataArray[ 2 * i + 1 ] = pdfConditional[ i ];
