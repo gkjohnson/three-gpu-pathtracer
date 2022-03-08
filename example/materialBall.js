@@ -252,7 +252,7 @@ function animate() {
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 1;
+	ptRenderer.material.environmentBlur = 0.35;
 
 	camera.updateMatrixWorld();
 
