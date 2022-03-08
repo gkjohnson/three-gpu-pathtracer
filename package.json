@@ -1,23 +1,35 @@
 {
   "name": "three-gpu-pathtracer",
-	"version": "0.0.1",
+  "version": "0.0.1",
   "description": "Path tracing renderer and utilities for three.js built on top of three-mesh-bvh.",
+	"module": "src/index.js",
+  "main": "build/index.umd.cjs",
+	"type": "module",
+	"sideEffects": false,
+	"files": [
+    "src/*",
+    "build/*"
+  ],
   "dependencies": {
     "three": "^0.137.0",
     "three-mesh-bvh": "^0.5.4"
   },
   "devDependencies": {
-    "eslint-config-mdcs": "^5.0.0",
     "concurrently": "^6.3.0",
+    "eslint": "^7.32.0",
+    "eslint-config-mdcs": "^5.0.0",
     "parcel": "^2.1.1",
-    "eslint": "^7.32.0"
+    "rollup": "^2.70.0"
   },
-	"peerDependencies": {
-		"xatlas-web": "^0.1.0"
-	},
+  "peerDependencies": {
+    "xatlas-web": "^0.1.0"
+  },
   "scripts": {
     "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\"",
-    "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash"
+    "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash",
+		"build": "rollup -c",
+		"lint": "eslint \"./src/**/*.{js,ts}\" \"./example/*.js\"",
+		"prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
