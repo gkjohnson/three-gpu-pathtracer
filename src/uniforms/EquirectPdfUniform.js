@@ -33,7 +33,6 @@ export class EquirectPdfUniform {
 
 	updateFrom( hdr ) {
 
-		/*
 		// TODO: another reference implementation with a different approach:
 		// https://github.com/nvpro-samples/vk_mini_samples/blob/main/hdr_sampling/src/hdr_env.cpp#L243
 
@@ -127,7 +126,6 @@ export class EquirectPdfUniform {
 
 		this.marginalData.image = { width, height, data: marginalDataArray };
 		this.conditionalData.image = { width, height, data: conditionalDataArray };
-		*/
 
 	}
 
