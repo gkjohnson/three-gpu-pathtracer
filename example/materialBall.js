@@ -32,6 +32,7 @@ const params = {
 	bounces: 3,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
+	resolutionScale: 1.0 / window.devicePixelRatio,
 
 };
 
@@ -171,7 +172,6 @@ async function init() {
 	} );
 	ptFolder.add( params, 'bounces', 1, 10, 1 ).onChange( value => {
 
-		console.log( value );
 		ptRenderer.material.setDefine( 'BOUNCES', value );
 		ptRenderer.reset();
 
@@ -180,6 +180,11 @@ async function init() {
 
 		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
 		fsQuad.material.needsUpdate = true;
+
+	} );
+	ptFolder.add( params, 'resolutionScale' ).onChange( () => {
+
+		onResize();
 
 	} );
 
@@ -209,7 +214,7 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = 1;
+	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
 	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
