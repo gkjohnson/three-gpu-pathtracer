@@ -182,7 +182,7 @@ async function init() {
 		fsQuad.material.needsUpdate = true;
 
 	} );
-	ptFolder.add( params, 'resolutionScale' ).onChange( () => {
+	ptFolder.add( params, 'resolutionScale', 0, 1 ).onChange( () => {
 
 		onResize();
 
