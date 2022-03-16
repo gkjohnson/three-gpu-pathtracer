@@ -1,11 +1,8 @@
-import { ShaderMaterial, Matrix4, Color } from 'three';
+import { ShaderMaterial } from 'three';
 import {
-	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
-	shaderStructs, shaderIntersectFunction,
+	MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
-import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
-import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 
 export class AmbientOcclusionMaterial extends ShaderMaterial {
 

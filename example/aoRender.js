@@ -13,7 +13,7 @@ let samplesEl, samples, totalSamples;
 const params = {
 
 	radius: 2.0,
-	samples: 5.0,
+	samplesPerFrame: 5.0,
 	singleFrame: false,
 
 };
@@ -92,7 +92,7 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'samples', 1, 10, 1 );
+	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
 	gui.add( params, 'singleFrame' ).onChange( reset );
 
@@ -131,7 +131,7 @@ function animate() {
 	material.seed ++;
 
 	material.radius = params.radius;
-	material.setDefine( 'SAMPLES', params.samples );
+	material.setDefine( 'SAMPLES', params.samplesPerFrame );
 
 	if ( params.singleFrame ) {
 
@@ -140,7 +140,7 @@ function animate() {
 	} else {
 
 		samples ++;
-		totalSamples += params.samples;
+		totalSamples += params.samplesPerFrame;
 
 		const w = target1.width;
 		const h = target1.height;
