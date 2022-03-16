@@ -13,7 +13,7 @@ let samplesEl, samples, totalSamples;
 const params = {
 
 	radius: 2.0,
-	samplesPerFrame: 5.0,
+	samplesPerFrame: 2.0,
 	singleFrame: false,
 
 };
