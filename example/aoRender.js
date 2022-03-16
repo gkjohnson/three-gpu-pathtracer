@@ -82,6 +82,7 @@ async function init() {
 			const { bvh } = result;
 			material.bvh.updateFrom( bvh );
 
+			// TODO: for some reason creating multiple materials _really_ slows down the rendering?
 			const group = result.scene;
 			group.traverse( c => {
 
