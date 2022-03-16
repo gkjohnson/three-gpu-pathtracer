@@ -14,7 +14,8 @@ const params = {
 
 	radius: 2.0,
 	samplesPerFrame: 2.0,
-	singleFrame: false,
+	accumulate: true,
+	pause: false,
 
 };
 
@@ -94,7 +95,8 @@ async function init() {
 	const gui = new GUI();
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
-	gui.add( params, 'singleFrame' ).onChange( reset );
+	gui.add( params, 'accumulate' ).onChange( reset );
+	gui.add( params, 'pause' );
 
 	reset();
 	animate();
@@ -128,43 +130,48 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	material.seed ++;
+	if ( ! params.pause ) {
+
+		material.seed ++;
+
+	}
 
 	material.radius = params.radius;
 	material.setDefine( 'SAMPLES', params.samplesPerFrame );
 
-	if ( params.singleFrame ) {
-
-		renderer.render( scene, camera );
-
-	} else {
+	if ( samples === 0 || ! params.pause ) {
 
 		samples ++;
 		totalSamples += params.samplesPerFrame;
 
-		const w = target1.width;
-		const h = target1.height;
-		camera.setViewOffset(
-			w, h,
-			Math.random() - 0.5, Math.random() - 0.5,
-			w, h,
-		);
+		if ( params.accumulate && ! params.pause ) {
+
+			const w = target1.width;
+			const h = target1.height;
+			camera.setViewOffset(
+				w, h,
+				Math.random() - 0.5, Math.random() - 0.5,
+				w, h,
+			);
+
+		}
+
 		renderer.setRenderTarget( target1 );
 		renderer.render( scene, camera );
 
 		renderer.setRenderTarget( target2 );
 		renderer.autoClear = false;
 		fsQuad.material.map = target1.texture;
-		fsQuad.material.opacity = 1 / samples;
+		fsQuad.material.opacity = params.accumulate ? 1 / samples : 1;
 		fsQuad.render( renderer );
 		renderer.autoClear = true;
 
-		renderer.setRenderTarget( null );
-		fsQuad.material.map = target2.texture;
-		fsQuad.material.opacity = 1;
-		fsQuad.render( renderer );
-
 	}
+
+	renderer.setRenderTarget( null );
+	fsQuad.material.map = target2.texture;
+	fsQuad.material.opacity = 1;
+	fsQuad.render( renderer );
 
 	samplesEl.innerText = `Samples: ${ totalSamples }`;
 
