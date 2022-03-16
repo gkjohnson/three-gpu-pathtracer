@@ -7,8 +7,9 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
 
-let renderer, controls, camera, material, scene;
+let renderer, controls, camera, material, scene, stats;
 let fsQuad, target1, target2;
 let samplesEl, samples, totalSamples;
 const params = {
@@ -49,6 +50,7 @@ async function init() {
 	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
 
 	material = new AmbientOcclusionMaterial();
+
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
@@ -80,11 +82,21 @@ async function init() {
 			const { bvh } = result;
 			material.bvh.updateFrom( bvh );
 
-			// create a cloned geometry and merge vertices to remove a normal bias in this particular model
-			const geometry = BufferGeometryUtils.mergeVertices( bvh.geometry );
-			geometry.computeVertexNormals();
+			const group = result.scene;
+			group.traverse( c => {
 
-			scene.add( new THREE.Mesh( geometry, material ) );
+				if ( c.isMesh ) {
+
+					const geometry = BufferGeometryUtils.mergeVertices( c.geometry );
+					geometry.computeVertexNormals();
+
+					c.geometry = geometry;
+					c.material = material;
+
+				}
+
+			} );
+			scene.add( group );
 
 			generator.dispose();
 
@@ -102,6 +114,9 @@ async function init() {
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
 	gui.add( params, 'accumulate' ).onChange( reset );
 	gui.add( params, 'pause' );
+
+	stats = new Stats();
+	document.body.appendChild( stats.domElement );
 
 	reset();
 	animate();
@@ -121,6 +136,7 @@ function onResize() {
 	renderer.setPixelRatio( window.devicePixelRatio );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
+	reset();
 
 }
 
@@ -134,6 +150,8 @@ function reset() {
 function animate() {
 
 	requestAnimationFrame( animate );
+
+	stats.update();
 
 	if ( ! params.pause ) {
 

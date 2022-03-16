@@ -31,9 +31,10 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
                     mvPosition = modelViewMatrix * mvPosition;
                     gl_Position = projectionMatrix * mvPosition;
 
+					mat3 modelNormalMatrix = transpose( inverse( mat3( modelMatrix ) ) );
+					vNorm = normalize( modelNormalMatrix * normal );
+					vPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
                     vUv = uv;
-					vNorm = normalize( normal );
-					vPos = ( vec4( position, 1.0 ) ).xyz;
 
                 }
 
