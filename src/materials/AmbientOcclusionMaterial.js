@@ -67,14 +67,6 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 					rng_initialize( gl_FragCoord.xy, seed );
 
-                    // Lambertian render
-                    gl_FragColor = vec4( 0.0 );
-
-                    vec3 throughputColor = vec3( 1.0 );
-
-                    // hit results
-                    uvec4 faceIndices = uvec4( 0u );
-
 					// compute the flat face surface normal
 					vec3 fdx = vec3( dFdx( vPos.x ), dFdx( vPos.y ), dFdx( vPos.z ) );
 					vec3 fdy = vec3( dFdy( vPos.x ), dFdy( vPos.y ), dFdy( vPos.z ) );
@@ -90,20 +82,16 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 						// sample the cosine weighted hemisphere and discard the sample if it's below
 						// the geometric surface
-						vec3 rayDirection = getHemisphereSample( vNorm, rand2() );
-						if ( dot( rayDirection, faceNormal ) < 0.0 ) {
-
-							gl_FragColor = vec4( 0.0, 0.0, 0.0, 1.0 );
-							continue;
-
-						}
+						vec3 rayDirection = getHemisphereSample( normalize( vNorm ), rand4().xy );
 
 						// check if we hit the mesh and its within the specified radius
 						float side = 1.0;
 						float dist = 0.0;
 						vec3 barycoord = vec3( 0.0 );
 						vec3 outNormal = vec3( 0.0 );
+						uvec4 faceIndices = uvec4( 0u );
 						if (
+							dot( rayDirection, faceNormal ) > 0.0 &&
 							bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) &&
 							dist < radius
 						) {
