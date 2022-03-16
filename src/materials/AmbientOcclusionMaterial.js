@@ -58,6 +58,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
                 uniform BVH bvh;
                 uniform int seed;
 				uniform float radius;
+
                 varying vec2 vUv;
 				varying vec3 vNorm;
 				varying vec3 vPos;
@@ -74,10 +75,12 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
                     // hit results
                     uvec4 faceIndices = uvec4( 0u );
 
+					// compute the flat face surface normal
 					vec3 fdx = vec3( dFdx( vPos.x ), dFdx( vPos.y ), dFdx( vPos.z ) );
 					vec3 fdy = vec3( dFdy( vPos.x ), dFdy( vPos.y ), dFdy( vPos.z ) );
 					vec3 faceNormal = normalize( cross( fdx, fdy ) );
 
+					// find the max component to scale the offset to account for floating point error
 					vec3 absPoint = abs( vPos );
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 
@@ -85,6 +88,8 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					float accumulated = 0.0;
 					for ( int i = 0; i < SAMPLES; i ++ ) {
 
+						// sample the cosine weighted hemisphere and discard the sample if it's below
+						// the geometric surface
 						vec3 rayDirection = getHemisphereSample( vNorm, rand2() );
 						if ( dot( rayDirection, faceNormal ) < 0.0 ) {
 
@@ -93,10 +98,15 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 						}
 
+						// check if we hit the mesh and its within the specified radius
 						float side = 1.0;
 						float dist = 0.0;
-						vec3 barycoord, outNormal;
-						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) && dist < radius ) {
+						vec3 barycoord = vec3( 0.0 );
+						vec3 outNormal = vec3( 0.0 );
+						if (
+							bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) &&
+							dist < radius
+						) {
 
 							accumulated += 1.0;
 
@@ -106,148 +116,6 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 					gl_FragColor.rgb = vec3( 1.0 - accumulated / float( SAMPLES ) );
 					gl_FragColor.a = 1.0;
-
-					return;
-
-
-                    // for ( i = 0; i < BOUNCES; i ++ ) {
-
-
-
-					// }
-
-                    //     if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
-
-					// 		#if GRADIENT_BG
-
-					// 		if ( i == 0 ) {
-
-					// 			rayDirection = normalize( rayDirection );
-					// 			float value = ( rayDirection.y + 1.0 ) / 2.0;
-
-					// 			value = pow( value, 2.0 );
-
-					// 			gl_FragColor = vec4( mix( bgGradientBottom, bgGradientTop, value ), 1.0 );
-					// 			break;
-
-					// 		}
-
-					// 		#endif
-
-					// 		#if USE_ENVMAP
-
-                    //         vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
-
-					// 		#else
-
-					// 		rayDirection = normalize( rayDirection );
-					// 		float value = ( rayDirection.y + 1.0 ) / 2.0;
-					// 		vec3 skyColor = mix( gradientBottom, gradientTop, value );
-
-					// 		#endif
-
-                    //         gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
-
-                    //         break;
-
-					// 	}
-
-
-					// 	uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
-					// 	Material material = materials[ materialIndex ];
-
-					// 	if ( material.opacity < rand() ) {
-
-					// 		vec3 point = rayOrigin + rayDirection * dist;
-					// 		rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
-					// 		throughputColor *= mix( vec3( 1.0 ), material.color, 0.5 * material.opacity );
-
-					// 		i --;
-					// 		continue;
-
-					// 	}
-
-                    //     // fetch the interpolated smooth normal
-                    //     vec3 normal = normalize( textureSampleBarycoord(
-					// 		normalAttribute,
-					// 		barycoord,
-					// 		faceIndices.xyz
-					// 	).xyz );
-
-					// 	vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-
-					// 	// emission
-					// 	vec3 emission = material.emissiveIntensity * material.emissive;
-					// 	if ( material.emissiveMap != - 1 ) {
-
-					// 		emission *= texture2D( textures, vec3( uv, material.emissiveMap ) ).xyz;
-
-					// 	}
-
-					// 	gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
-
-					// 	// 1 / PI attenuation for physically correct lambert model
-                    //     // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                    //     throughputColor *= 1.0 / PI;
-
-					// 	// albedo
-					// 	throughputColor *= material.color;
-					// 	if ( material.map != - 1 ) {
-
-					// 		throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
-
-					// 	}
-
-					// 	// normal
-					// 	if ( material.normalMap != - 1 ) {
-
-					// 		vec4 tangentSample = textureSampleBarycoord(
-					// 			tangentAttribute,
-					// 			barycoord,
-					// 			faceIndices.xyz
-					// 		);
-
-					// 		// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
-					// 		// resulting in NaNs and slow path tracing.
-					// 		if ( length( tangentSample.xyz ) > 0.0 ) {
-
-					// 			vec3 tangent = normalize( tangentSample.xyz );
-					// 			vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
-					// 			mat3 vTBN = mat3( tangent, bitangent, normal );
-
-					// 			vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
-					// 			texNormal.xy *= material.normalScale;
-					// 			normal = vTBN * texNormal;
-
-					// 		}
-
-					// 	}
-
-					// 	normal *= side;
-
-                    //     // adjust the hit point by the surface normal by a factor of some offset and the
-                    //     // maximum component-wise value of the current point to accommodate floating point
-                    //     // error as values increase.
-                    //     vec3 point = rayOrigin + rayDirection * dist;
-                    //     vec3 absPoint = abs( point );
-                    //     float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-                    //     rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-                    //     rayDirection = getHemisphereSample( normal, rand2() );
-
-					// 	// if the surface normal is skewed such that the outgoing vector can wind up underneath
-					// 	// the triangle surface then just consider it absorbed.
-					// 	if ( dot( rayDirection, faceNormal ) < 0.0 ) {
-
-					// 		break;
-
-					// 	}
-
-
-                    // }
-
-					// // gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
-					// // gl_FragColor.rgb = mix( textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
-                    // gl_FragColor.a = opacity;
 
                 }
 
