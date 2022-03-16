@@ -6,6 +6,7 @@ import { PathTracingSceneGenerator } from '../src/index.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let renderer, controls, camera, material, scene;
 let fsQuad, target1, target2;
@@ -79,8 +80,12 @@ async function init() {
 			const { bvh } = result;
 			material.bvh.updateFrom( bvh );
 
-			const bvhMesh = new THREE.Mesh( bvh.geometry, material );
-			scene.add( bvhMesh );
+			// create a cloned geometry and merge vertices to remove a normal bias in this particular model
+			const geometry = BufferGeometryUtils.mergeVertices( bvh.geometry );
+			geometry.computeVertexNormals();
+
+			scene.add( new THREE.Mesh( geometry, material ) );
+
 			generator.dispose();
 
 		} );
