@@ -14,21 +14,13 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 		super( {
 
 			defines: {
-				MATERIAL_LENGTH: 0,
 				SAMPLES: 10,
 			},
 
 			uniforms: {
 				bvh: { value: new MeshBVHUniformStruct() },
-				normalAttribute: { value: new FloatVertexAttributeTexture() },
-				tangentAttribute: { value: new FloatVertexAttributeTexture() },
-				uvAttribute: { value: new FloatVertexAttributeTexture() },
-				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
-				materials: { value: new MaterialStructArrayUniform() },
-				textures: { value: new RenderTarget2DArray().texture },
 				radius: { value: 1.0 },
 				seed: { value: 0 },
-				worldNormalMatrix: { value: new Matrix4() },
 			},
 
 			vertexShader: /* glsl */`
@@ -66,14 +58,8 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
-                uniform sampler2D normalAttribute;
-                uniform sampler2D tangentAttribute;
-                uniform sampler2D uvAttribute;
-				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
                 uniform int seed;
-				uniform Material materials[ MATERIAL_LENGTH ];
-				uniform sampler2DArray textures;
 				uniform float radius;
                 varying vec2 vUv;
 				varying vec3 vNorm;
@@ -98,7 +84,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					vec3 absPoint = abs( vPos );
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 
-					vec3 rayOrigin = vPos + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET * 10.0;
+					vec3 rayOrigin = vPos + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
 					float accumulated = 0.0;
 					for ( int i = 0; i < SAMPLES; i ++ ) {
 

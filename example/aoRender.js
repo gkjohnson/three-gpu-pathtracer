@@ -7,13 +7,14 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
 
-let renderer, controls, sceneInfo, camera, fsQuad, material, scene;
-let samplesEl;
+let renderer, controls, camera, material, scene;
+let fsQuad, target1, target2;
+let samplesEl, samples, totalSamples;
 const params = {
 
-	radius: 1.0,
+	radius: 2.0,
 	samples: 5.0,
-	randomize: true,
+	singleFrame: false,
 
 };
 
@@ -22,6 +23,7 @@ init();
 async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( { transparent: true } ) );
@@ -32,8 +34,17 @@ async function init() {
 	scene = new THREE.Scene();
 
 	controls = new OrbitControls( camera, renderer.domElement );
+	controls.addEventListener( 'change', () => {
+
+		reset();
+
+	} );
 
 	samplesEl = document.getElementById( 'samples' );
+
+	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
+
+	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
 
 	material = new AmbientOcclusionMaterial();
 	const generator = new PathTracingSceneGenerator();
@@ -64,20 +75,8 @@ async function init() {
 		} )
 		.then( result => {
 
-			sceneInfo = result;
-			sceneInfo.scene.add( new THREE.DirectionalLight() );
-
-			const { bvh, textures, materials } = result;
-			const geometry = bvh.geometry;
-
+			const { bvh } = result;
 			material.bvh.updateFrom( bvh );
-			material.normalAttribute.updateFrom( geometry.attributes.normal );
-			material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-			material.uvAttribute.updateFrom( geometry.attributes.uv );
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-			material.setDefine( 'MATERIAL_LENGTH', materials.length );
 
 			const bvhMesh = new THREE.Mesh( bvh.geometry, material );
 			scene.add( bvhMesh );
@@ -93,10 +92,11 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'samples', 1, 30, 1 );
-	gui.add( params, 'radius', 0, 5 );
-	gui.add( params, 'randomize', 0, 5 );
+	gui.add( params, 'samples', 1, 10, 1 );
+	gui.add( params, 'radius', 0, 4 ).onChange( reset );
+	gui.add( params, 'singleFrame' ).onChange( reset );
 
+	reset();
 	animate();
 
 }
@@ -105,6 +105,10 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
+	const dpr = window.devicePixelRatio;
+
+	target1.setSize( w * dpr, h * dpr );
+	target2.setSize( w * dpr, h * dpr );
 
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio );
@@ -113,21 +117,56 @@ function onResize() {
 
 }
 
+function reset() {
+
+	samples = 0;
+	totalSamples = 0;
+
+}
+
 function animate() {
 
 	requestAnimationFrame( animate );
 
-	if ( params.randomize ) {
-
-		material.seed ++;
-
-	}
+	material.seed ++;
 
 	material.radius = params.radius;
 	material.setDefine( 'SAMPLES', params.samples );
-	renderer.render( scene, camera );
 
-	// samplesEl.innerText = `Samples: ${ ptRenderer.samples }`;
+	if ( params.singleFrame ) {
+
+		renderer.render( scene, camera );
+
+	} else {
+
+		samples ++;
+		totalSamples += params.samples;
+
+		const w = target1.width;
+		const h = target1.height;
+		camera.setViewOffset(
+			w, h,
+			Math.random() - 0.5, Math.random() - 0.5,
+			w, h,
+		);
+		renderer.setRenderTarget( target1 );
+		renderer.render( scene, camera );
+
+		renderer.setRenderTarget( target2 );
+		renderer.autoClear = false;
+		fsQuad.material.map = target1.texture;
+		fsQuad.material.opacity = 1 / samples;
+		fsQuad.render( renderer );
+		renderer.autoClear = true;
+
+		renderer.setRenderTarget( null );
+		fsQuad.material.map = target2.texture;
+		fsQuad.material.opacity = 1;
+		fsQuad.render( renderer );
+
+	}
+
+	samplesEl.innerText = `Samples: ${ totalSamples }`;
 
 }
 
