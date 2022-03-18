@@ -6,6 +6,20 @@ import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStruc
 
 export class AmbientOcclusionMaterial extends ShaderMaterial {
 
+	get normalMap() {
+
+		return this.uniforms.normalMap.value;
+
+	}
+
+	set normalMap( v ) {
+
+		this.uniforms.normalMap.value = v;
+		this.setDefine( 'USE_NORMALMAP', v ? null : '' );
+		this.setDefine( 'USE_TANGENT', v ? null : '' );
+
+	}
+
 	constructor( parameters ) {
 
 		super( {
@@ -18,13 +32,23 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				bvh: { value: new MeshBVHUniformStruct() },
 				radius: { value: 1.0 },
 				seed: { value: 0 },
+
+				normalMap: { value: null },
+				normalScale: { value: 1 },
 			},
 
 			vertexShader: /* glsl */`
 
-                varying vec2 vUv;
 				varying vec3 vNorm;
 				varying vec3 vPos;
+
+				#ifdef USE_NORMALMAP
+
+					varying vec2 vUv;
+					varying vec4 vTan;
+
+				#endif
+
                 void main() {
 
                     vec4 mvPosition = vec4( position, 1.0 );
@@ -34,7 +58,13 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					mat3 modelNormalMatrix = transpose( inverse( mat3( modelMatrix ) ) );
 					vNorm = normalize( modelNormalMatrix * normal );
 					vPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
-                    vUv = uv;
+
+					#ifdef USE_NORMALMAP
+
+						vUv = uv;
+						vTan = tangent;
+
+					#endif
 
                 }
 
@@ -60,9 +90,17 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
                 uniform int seed;
 				uniform float radius;
 
-                varying vec2 vUv;
 				varying vec3 vNorm;
 				varying vec3 vPos;
+
+				#ifdef USE_NORMALMAP
+
+					uniform sampler2D normalMap;
+					uniform float normalScale;
+					varying vec2 vUv;
+					varying vec4 vTan;
+
+				#endif
 
                 void main() {
 
@@ -76,6 +114,26 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					// find the max component to scale the offset to account for floating point error
 					vec3 absPoint = abs( vPos );
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+
+					#ifdef USE_NORMALMAP
+
+						// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+						// resulting in NaNs and slow path tracing.
+						if ( length( vTan.xyz ) > 0.0 ) {
+
+							vec2 uv = vUv;
+							vec3 normal = vNorm;
+							vec3 tangent = normalize( vTan.xyz );
+							vec3 bitangent = normalize( cross( normal, tangent ) * vTan.w );
+							mat3 vTBN = mat3( tangent, bitangent, normal );
+
+							vec3 texNormal = texture2D( normalMap, uv ).xyz * 2.0 - 1.0;
+							texNormal.xy *= normalScale;
+							normal = vTBN * texNormal;
+
+						}
+
+					#endif
 
 					vec3 rayOrigin = vPos + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
 					float accumulated = 0.0;
@@ -119,21 +177,25 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 		for ( const key in this.uniforms ) {
 
-			Object.defineProperty( this, key, {
+			if ( ! ( key in this ) ) {
 
-				get() {
+				Object.defineProperty( this, key, {
 
-					return this.uniforms[ key ].value;
+					get() {
 
-				},
+						return this.uniforms[ key ].value;
 
-				set( v ) {
+					},
 
-					this.uniforms[ key ].value = v;
+					set( v ) {
 
-				}
+						this.uniforms[ key ].value = v;
 
-			} );
+					}
+
+				} );
+
+			}
 
 		}
 

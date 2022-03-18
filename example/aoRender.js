@@ -111,6 +111,7 @@ async function init() {
 						const material = new AmbientOcclusionMaterial( {
 
 							bvh: bvhUniform,
+							normalScale: c.material.normalScale,
 							normalMap,
 
 						} );
