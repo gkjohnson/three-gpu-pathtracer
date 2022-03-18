@@ -128,7 +128,7 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
+	const dpr = 1; //window.devicePixelRatio;
 
 	target1.setSize( w * dpr, h * dpr );
 	target2.setSize( w * dpr, h * dpr );

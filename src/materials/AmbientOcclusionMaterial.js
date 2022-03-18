@@ -91,10 +91,15 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 						vec3 barycoord = vec3( 0.0 );
 						vec3 outNormal = vec3( 0.0 );
 						uvec4 faceIndices = uvec4( 0u );
+
+						// if the ray is above the geometry surface, and it doesn't hit another surface within the specified radius then
+						// we consider it lit
 						if (
 							dot( rayDirection, faceNormal ) > 0.0 &&
-							bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) &&
-							dist < radius
+							(
+								! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) ||
+								dist > radius
+							)
 						) {
 
 							accumulated += 1.0;
@@ -103,7 +108,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 					}
 
-					gl_FragColor.rgb = vec3( 1.0 - accumulated / float( SAMPLES ) );
+					gl_FragColor.rgb = vec3( accumulated / float( SAMPLES ) );
 					gl_FragColor.a = 1.0;
 
                 }
