@@ -42,7 +42,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				varying vec3 vNorm;
 				varying vec3 vPos;
 
-				#ifdef USE_NORMALMAP
+				#ifdef USE_NORMALMAP && USE_TANGENT
 
 					varying vec2 vUv;
 					varying vec4 vTan;
@@ -59,7 +59,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					vNorm = normalize( modelNormalMatrix * normal );
 					vPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
 
-					#ifdef USE_NORMALMAP
+					#ifdef USE_NORMALMAP && USE_TANGENT
 
 						vUv = uv;
 						vTan = tangent;
@@ -93,7 +93,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				varying vec3 vNorm;
 				varying vec3 vPos;
 
-				#ifdef USE_NORMALMAP
+				#ifdef USE_NORMALMAP && USE_TANGENT
 
 					uniform sampler2D normalMap;
 					uniform float normalScale;
@@ -115,7 +115,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					vec3 absPoint = abs( vPos );
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 
-					#ifdef USE_NORMALMAP
+					#ifdef USE_NORMALMAP && USE_TANGENT
 
 						// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 						// resulting in NaNs and slow path tracing.
