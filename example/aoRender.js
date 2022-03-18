@@ -6,11 +6,10 @@ import { PathTracingSceneGenerator } from '../src/index.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
 
-let renderer, controls, camera, material, scene, stats;
+let renderer, controls, camera, scene, stats;
 let fsQuad, target1, target2, materials;
 let samplesEl, samples, totalSamples;
 const params = {
