@@ -102,9 +102,6 @@ async function init() {
 				// reuse materials as much as possible since different ones cause slow down
 				if ( c.isMesh ) {
 
-					const geometry = BufferGeometryUtils.mergeVertices( c.geometry );
-					geometry.computeVertexNormals();
-
 					const normalMap = c.material.normalMap;
 					if ( ! materialMap.has( normalMap ) ) {
 
@@ -120,7 +117,6 @@ async function init() {
 
 					}
 
-					c.geometry = geometry;
 					c.material = materialMap.get( normalMap );
 
 				}
