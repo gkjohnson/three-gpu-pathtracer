@@ -110,6 +110,7 @@ async function init() {
 							bvh: bvhUniform,
 							normalScale: c.material.normalScale,
 							normalMap,
+							normalMapType: c.material.normalMapType,
 
 						} );
 						materialMap.set( normalMap, material );

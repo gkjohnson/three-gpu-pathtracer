@@ -1,4 +1,4 @@
-import { ShaderMaterial } from 'three';
+import { ShaderMaterial, TangentSpaceNormalMap, Vector2 } from 'three';
 import {
 	MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
@@ -16,7 +16,22 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 		this.uniforms.normalMap.value = v;
 		this.setDefine( 'USE_NORMALMAP', v ? null : '' );
-		this.setDefine( 'USE_TANGENT', v ? null : '' );
+
+	}
+
+	get normalMapType() {
+
+		return TangentSpaceNormalMap;
+
+	}
+
+	set normalMapType( v ) {
+
+		if ( v !== TangentSpaceNormalMap ) {
+
+			throw new Error( 'AmbientOcclusionMaterial: Only tangent space normal map are supported' );
+
+		}
 
 	}
 
@@ -34,7 +49,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				seed: { value: 0 },
 
 				normalMap: { value: null },
-				normalScale: { value: 1 },
+				normalScale: { value: new Vector2( 1, 1 ) },
 			},
 
 			vertexShader: /* glsl */`
@@ -42,7 +57,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				varying vec3 vNorm;
 				varying vec3 vPos;
 
-				#ifdef USE_NORMALMAP && USE_TANGENT
+				#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
 
 					varying vec2 vUv;
 					varying vec4 vTan;
@@ -59,7 +74,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					vNorm = normalize( modelNormalMatrix * normal );
 					vPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
 
-					#ifdef USE_NORMALMAP && USE_TANGENT
+					#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
 
 						vUv = uv;
 						vTan = tangent;
@@ -93,10 +108,10 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				varying vec3 vNorm;
 				varying vec3 vPos;
 
-				#ifdef USE_NORMALMAP && USE_TANGENT
+				#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
 
 					uniform sampler2D normalMap;
-					uniform float normalScale;
+					uniform vec2 normalScale;
 					varying vec2 vUv;
 					varying vec4 vTan;
 
@@ -114,15 +129,15 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					// find the max component to scale the offset to account for floating point error
 					vec3 absPoint = abs( vPos );
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+					vec3 normal = vNorm;
 
-					#ifdef USE_NORMALMAP && USE_TANGENT
+					#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
 
 						// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 						// resulting in NaNs and slow path tracing.
 						if ( length( vTan.xyz ) > 0.0 ) {
 
 							vec2 uv = vUv;
-							vec3 normal = vNorm;
 							vec3 tangent = normalize( vTan.xyz );
 							vec3 bitangent = normalize( cross( normal, tangent ) * vTan.w );
 							mat3 vTBN = mat3( tangent, bitangent, normal );
@@ -141,7 +156,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 						// sample the cosine weighted hemisphere and discard the sample if it's below
 						// the geometric surface
-						vec3 rayDirection = getHemisphereSample( normalize( vNorm ), rand4().xy );
+						vec3 rayDirection = getHemisphereSample( normalize( normal ), rand4().xy );
 
 						// check if we hit the mesh and its within the specified radius
 						float side = 1.0;
