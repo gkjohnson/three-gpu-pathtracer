@@ -14,6 +14,7 @@ let fsQuad, target1, target2;
 let samplesEl, samples, totalSamples;
 const params = {
 
+	resolutionScale: 1 / window.devicePixelRatio,
 	radius: 2.0,
 	samplesPerFrame: 2.0,
 	accumulate: true,
@@ -111,6 +112,7 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
+	gui.add( params, 'resolutionScale', 0.1, 1 );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
 	gui.add( params, 'accumulate' ).onChange( reset );
