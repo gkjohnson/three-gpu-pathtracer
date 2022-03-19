@@ -49,18 +49,13 @@ export const pathTracingHelpers = /* glsl */ `
 	}
 
 	// https://www.shadertoy.com/view/wltcRS
-	uvec4 s0, s1;
-	ivec2 pixel;
+	uvec4 s0;
 
 	void rng_initialize(vec2 p, int frame) {
-
-		pixel = ivec2(p);
 
 		// white noise seed
 		s0 = uvec4( p, uint( frame ), uint( p.x ) + uint( p.y ) );
 
-		// blue noise seed
-		s1 = uvec4( frame, frame * 15843, frame * 31 + 4566, frame * 2345 + 58585 );
 	}
 
 	// https://www.pcg-random.org/

@@ -111,6 +111,21 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		}
 
+		if ( ! geometry.index ) {
+
+			// TODO: compute a typed array
+			const indexCount = geometry.attributes.position.count;
+			const array = new Array( indexCount );
+			for ( let i = 0; i < indexCount; i ++ ) {
+
+				array[ i ] = i;
+
+			}
+
+			geometry.setIndex( array );
+
+		}
+
 		// trim any unneeded attributes
 		if ( options.attributes ) {
 
