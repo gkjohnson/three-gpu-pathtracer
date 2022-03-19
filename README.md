@@ -11,6 +11,8 @@ Sandbox project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-b
 
 [Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
+[Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
+
 ![](./docs/interior-scene-cropped.png)
 
 <p align="center">
