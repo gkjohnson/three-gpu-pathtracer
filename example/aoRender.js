@@ -137,7 +137,7 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'resolutionScale', 0.1, 1 );
+	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
 	gui.add( params, 'accumulate' ).onChange( reset );
@@ -155,7 +155,7 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const dpr = 1; //window.devicePixelRatio;
+	const dpr = window.devicePixelRatio * params.resolutionScale;
 
 	target1.setSize( w * dpr, h * dpr );
 	target2.setSize( w * dpr, h * dpr );
