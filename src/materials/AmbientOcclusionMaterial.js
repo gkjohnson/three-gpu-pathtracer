@@ -1,10 +1,39 @@
-import { ShaderMaterial } from 'three';
+import { ShaderMaterial, TangentSpaceNormalMap, Vector2 } from 'three';
 import {
 	MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
 
 export class AmbientOcclusionMaterial extends ShaderMaterial {
+
+	get normalMap() {
+
+		return this.uniforms.normalMap.value;
+
+	}
+
+	set normalMap( v ) {
+
+		this.uniforms.normalMap.value = v;
+		this.setDefine( 'USE_NORMALMAP', v ? null : '' );
+
+	}
+
+	get normalMapType() {
+
+		return TangentSpaceNormalMap;
+
+	}
+
+	set normalMapType( v ) {
+
+		if ( v !== TangentSpaceNormalMap ) {
+
+			throw new Error( 'AmbientOcclusionMaterial: Only tangent space normal map are supported' );
+
+		}
+
+	}
 
 	constructor( parameters ) {
 
@@ -18,13 +47,23 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				bvh: { value: new MeshBVHUniformStruct() },
 				radius: { value: 1.0 },
 				seed: { value: 0 },
+
+				normalMap: { value: null },
+				normalScale: { value: new Vector2( 1, 1 ) },
 			},
 
 			vertexShader: /* glsl */`
 
-                varying vec2 vUv;
 				varying vec3 vNorm;
 				varying vec3 vPos;
+
+				#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+
+					varying vec2 vUv;
+					varying vec4 vTan;
+
+				#endif
+
                 void main() {
 
                     vec4 mvPosition = vec4( position, 1.0 );
@@ -34,7 +73,13 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					mat3 modelNormalMatrix = transpose( inverse( mat3( modelMatrix ) ) );
 					vNorm = normalize( modelNormalMatrix * normal );
 					vPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
-                    vUv = uv;
+
+					#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+
+						vUv = uv;
+						vTan = tangent;
+
+					#endif
 
                 }
 
@@ -60,9 +105,17 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
                 uniform int seed;
 				uniform float radius;
 
-                varying vec2 vUv;
 				varying vec3 vNorm;
 				varying vec3 vPos;
+
+				#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+
+					uniform sampler2D normalMap;
+					uniform vec2 normalScale;
+					varying vec2 vUv;
+					varying vec4 vTan;
+
+				#endif
 
                 void main() {
 
@@ -76,6 +129,26 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					// find the max component to scale the offset to account for floating point error
 					vec3 absPoint = abs( vPos );
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+					vec3 normal = vNorm;
+
+					#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+
+						// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+						// resulting in NaNs and slow path tracing.
+						if ( length( vTan.xyz ) > 0.0 ) {
+
+							vec2 uv = vUv;
+							vec3 tangent = normalize( vTan.xyz );
+							vec3 bitangent = normalize( cross( normal, tangent ) * vTan.w );
+							mat3 vTBN = mat3( tangent, bitangent, normal );
+
+							vec3 texNormal = texture2D( normalMap, uv ).xyz * 2.0 - 1.0;
+							texNormal.xy *= normalScale;
+							normal = vTBN * texNormal;
+
+						}
+
+					#endif
 
 					vec3 rayOrigin = vPos + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
 					float accumulated = 0.0;
@@ -83,7 +156,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 						// sample the cosine weighted hemisphere and discard the sample if it's below
 						// the geometric surface
-						vec3 rayDirection = getHemisphereSample( normalize( vNorm ), rand4().xy );
+						vec3 rayDirection = getHemisphereSample( normalize( normal ), rand4().xy );
 
 						// check if we hit the mesh and its within the specified radius
 						float side = 1.0;
@@ -91,10 +164,15 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 						vec3 barycoord = vec3( 0.0 );
 						vec3 outNormal = vec3( 0.0 );
 						uvec4 faceIndices = uvec4( 0u );
+
+						// if the ray is above the geometry surface, and it doesn't hit another surface within the specified radius then
+						// we consider it lit
 						if (
 							dot( rayDirection, faceNormal ) > 0.0 &&
-							bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) &&
-							dist < radius
+							(
+								! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) ||
+								dist > radius
+							)
 						) {
 
 							accumulated += 1.0;
@@ -103,7 +181,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 					}
 
-					gl_FragColor.rgb = vec3( 1.0 - accumulated / float( SAMPLES ) );
+					gl_FragColor.rgb = vec3( accumulated / float( SAMPLES ) );
 					gl_FragColor.a = 1.0;
 
                 }
@@ -114,21 +192,25 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 		for ( const key in this.uniforms ) {
 
-			Object.defineProperty( this, key, {
+			if ( ! ( key in this ) ) {
 
-				get() {
+				Object.defineProperty( this, key, {
 
-					return this.uniforms[ key ].value;
+					get() {
 
-				},
+						return this.uniforms[ key ].value;
 
-				set( v ) {
+					},
 
-					this.uniforms[ key ].value = v;
+					set( v ) {
 
-				}
+						this.uniforms[ key ].value = v;
 
-			} );
+					}
+
+				} );
+
+			}
 
 		}
 

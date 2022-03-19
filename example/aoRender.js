@@ -6,11 +6,11 @@ import { PathTracingSceneGenerator } from '../src/index.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
+import { MeshBVHUniformStruct } from 'three-mesh-bvh';
 
-let renderer, controls, camera, material, scene, stats;
-let fsQuad, target1, target2;
+let renderer, controls, camera, scene, stats;
+let fsQuad, target1, target2, materials;
 let samplesEl, samples, totalSamples;
 const params = {
 
@@ -26,6 +26,7 @@ init();
 
 async function init() {
 
+	// initialize renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
@@ -46,11 +47,12 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
+	// initialize render targs
 	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
 
 	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
 
-	material = new AmbientOcclusionMaterial();
+	materials = [];
 
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
@@ -60,11 +62,18 @@ async function init() {
 
 			const group = new THREE.Group();
 
-			gltf.scene.scale.setScalar( 0.01 );
+			// scale the scene to a reasonable size
+			const box = new THREE.Box3();
+			box.setFromObject( gltf.scene );
+
+			const sphere = new THREE.Sphere();
+			box.getBoundingSphere( sphere );
+
+			gltf.scene.scale.setScalar( 2.5 / sphere.radius );
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
 
-			const box = new THREE.Box3();
+			// position the floor
 			box.setFromObject( gltf.scene );
 
 			const floor = new THREE.Mesh(
@@ -81,19 +90,35 @@ async function init() {
 		.then( result => {
 
 			const { bvh } = result;
-			material.bvh.updateFrom( bvh );
+
+			const bvhUniform = new MeshBVHUniformStruct();
+			bvhUniform.updateFrom( bvh );
 
 			// TODO: for some reason creating multiple materials _really_ slows down the rendering?
+			const materialMap = new Map();
 			const group = result.scene;
 			group.traverse( c => {
 
+				// reuse materials as much as possible since different ones cause slow down
 				if ( c.isMesh ) {
 
-					const geometry = BufferGeometryUtils.mergeVertices( c.geometry );
-					geometry.computeVertexNormals();
+					const normalMap = c.material.normalMap;
+					if ( ! materialMap.has( normalMap ) ) {
 
-					c.geometry = geometry;
-					c.material = material;
+						const material = new AmbientOcclusionMaterial( {
+
+							bvh: bvhUniform,
+							normalScale: c.material.normalScale,
+							normalMap,
+							normalMapType: c.material.normalMapType,
+
+						} );
+						materialMap.set( normalMap, material );
+						materials.push( material );
+
+					}
+
+					c.material = materialMap.get( normalMap );
 
 				}
 
@@ -130,7 +155,7 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
+	const dpr = 1; //window.devicePixelRatio;
 
 	target1.setSize( w * dpr, h * dpr );
 	target2.setSize( w * dpr, h * dpr );
@@ -156,15 +181,21 @@ function animate() {
 
 	stats.update();
 
-	if ( ! params.pause ) {
+	// update all the material parameters
+	materials.forEach( material => {
 
-		material.seed ++;
+		if ( ! params.pause ) {
 
-	}
+			material.seed ++;
 
-	material.radius = params.radius;
-	material.setDefine( 'SAMPLES', params.samplesPerFrame );
+		}
 
+		material.radius = params.radius;
+		material.setDefine( 'SAMPLES', params.samplesPerFrame );
+
+	} );
+
+	// update the render targets if it's a first frame or not paused
 	if ( samples === 0 || ! params.pause ) {
 
 		samples ++;
@@ -194,6 +225,7 @@ function animate() {
 
 	}
 
+	// render to screen
 	renderer.setRenderTarget( null );
 	fsQuad.material.map = target2.texture;
 	fsQuad.material.opacity = 1;
