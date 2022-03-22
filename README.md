@@ -17,6 +17,10 @@ _More features and capabilities in progress!_
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
+# API
+
+_TODO_
+
 # Screenshots
 
 ![](./docs/interior-scene-cropped.png)
