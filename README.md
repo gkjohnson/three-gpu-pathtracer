@@ -7,6 +7,8 @@ Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-m
 
 _More features and capabilities in progress!_
 
+# Examples
+
 [Lambert demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lambert.html)!
 
 [Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
@@ -14,6 +16,8 @@ _More features and capabilities in progress!_
 [Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
+
+# Screenshots
 
 ![](./docs/interior-scene-cropped.png)
 
