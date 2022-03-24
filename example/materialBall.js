@@ -83,7 +83,7 @@ async function init() {
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material-ball.glb' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material_ball_v2.glb' )
 		.then( gltf => {
 
 			const group = new THREE.Group();
@@ -121,7 +121,7 @@ async function init() {
 
 				if ( c.name === 'subsphere_1' ) {
 
-					c.visible = false;
+					c.material = material2;
 
 				}
 
