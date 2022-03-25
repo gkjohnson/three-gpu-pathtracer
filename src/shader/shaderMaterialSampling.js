@@ -1,7 +1,3 @@
-import { schlickFresnelFromIor, refract, getHalfVector } from './utils.js';
-import { ggxDirection, ggxPDF, ggxShadowMaskG2, ggxDistribution } from './ggxSampling.js';
-import { MathUtils, Vector3, Color } from 'three';
-
 // Technically this value should be based on the index of refraction of the given dielectric.
 const tempDir = new Vector3();
 const halfVector = new Vector3();
@@ -10,24 +6,44 @@ const whiteColor = new Color( 0xffffff );
 
 export const shaderMaterialSampling = /* glsl */`
 
+struct SurfaceRec {
+	vec3 normal;
+	vec3 faceNormal;
+	float filteredSurfaceRoughness;
+}
+
+struct MaterialRec {
+	float roughness;
+	float metalness;
+	vec3 color;
+	vec3 emission;
+}
+
+struct SampleRec {
+	float pdf;
+	vec3 direction;
+}
+
 // diffuse
-function diffusePDF( wo, wi, material, hit ) {
+float diffusePDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html#lightscattering/thescatteringpdf
-	const cosValue = wi.z;
+	float cosValue = wi.z;
 	return cosValue / Math.PI;
 
 }
 
-function diffuseDirection( wo, hit, material, lightDirection ) {
+vec3 diffuseDirection( vec3 wo, SurfaceRec hit, MaterialRec material ) {
 
 	lightDirection.randomDirection();
 	lightDirection.z += 1;
 	lightDirection.normalize();
 
+	return lightDirection;
+
 }
 
-function diffuseColor( wo, wi, material, hit, colorTarget ) {
+function diffuseColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// TODO: scale by 1 - F here
 	// note on division by PI
@@ -37,6 +53,8 @@ function diffuseColor( wo, wi, material, hit, colorTarget ) {
 		.copy( material.color )
 		.multiplyScalar( ( 1.0 - metalness ) * wi.z / Math.PI / Math.PI )
 		.multiplyScalar( 1.0 - transmission );
+
+	return colorTarget;
 
 }
 
