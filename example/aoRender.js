@@ -8,6 +8,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
+// import { computeTangents, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let renderer, controls, camera, scene, stats;
 let fsQuad, target1, target2, materials;
@@ -83,6 +84,18 @@ async function init() {
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.025;
 			group.add( floor );
+
+			// requires bundle support for top level await
+			// group.traverse( c => {
+
+			// 	if ( c.geometry ) {
+
+			// 		c.geometry = computeTangents( c.geometry );
+			// 		c.geometry = mergeVertices( c.geometry );
+
+			// 	}
+
+			// } );
 
 			return generator.generate( group );
 
