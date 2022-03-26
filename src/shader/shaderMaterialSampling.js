@@ -1,15 +1,10 @@
-// Technically this value should be based on the index of refraction of the given dielectric.
-const tempDir = new Vector3();
-const halfVector = new Vector3();
-const tempColor = new Color();
-const whiteColor = new Color( 0xffffff );
-
 export const shaderMaterialSampling = /* glsl */`
 
 struct SurfaceRec {
 	vec3 normal;
 	vec3 faceNormal;
 	float filteredSurfaceRoughness;
+	bool frontFace;
 }
 
 struct MaterialRec {
@@ -17,6 +12,7 @@ struct MaterialRec {
 	float metalness;
 	vec3 color;
 	vec3 emission;
+	vec3 transmission;
 }
 
 struct SampleRec {
@@ -29,7 +25,7 @@ float diffusePDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html#lightscattering/thescatteringpdf
 	float cosValue = wi.z;
-	return cosValue / Math.PI;
+	return cosValue / PI;
 
 }
 
@@ -48,71 +44,69 @@ function diffuseColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) 
 	// TODO: scale by 1 - F here
 	// note on division by PI
 	// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
-	const { metalness, transmission } = material;
-	colorTarget
-		.copy( material.color )
-		.multiplyScalar( ( 1.0 - metalness ) * wi.z / Math.PI / Math.PI )
-		.multiplyScalar( 1.0 - transmission );
-
-	return colorTarget;
+	float metalFactor = ( 1.0 - material.metalness ) * wi.z / ( PI * PI );
+	float transmissionFactor = 1.0 - material.transmission;
+	return material.color * metalFactor * transmissionFactor;
 
 }
 
 // specular
-function specularPDF( wo, wi, material, hit ) {
+float specularPDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// See equation (17) in http://jcgt.org/published/0003/02/03/
-	const filteredRoughness = hit.filteredSurfaceRoughness;
+	float filteredRoughness = hit.filteredSurfaceRoughness;
 	getHalfVector( wi, wo, halfVector );
-	return ggxPDF( wi, halfVector, filteredRoughness ) / ( 4 * wi.dot( halfVector ) );
+	return ggxPDF( wi, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
 
 }
 
-function specularDirection( wo, hit, material, lightDirection ) {
+vec3 specularDirection( vec3 wo, SurfaceRec hit, MaterialRec material ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	const filteredRoughness = hit.filteredSurfaceRoughness;
+	float filteredRoughness = hit.filteredSurfaceRoughness;
 	ggxDirection(
 		wo,
 		filteredRoughness,
 		filteredRoughness,
-		Math.random(),
-		Math.random(),
+		random(),
+		random(),
 		halfVector,
 	);
 
 	// apply to new ray by reflecting off the new normal
-	lightDirection.copy( wo ).reflect( halfVector ).multiplyScalar( - 1 );
+	return - reflect( wo, halfVector );
 
 }
 
-function specularColor( wo, wi, material, hit, colorTarget ) {
+vec3 specularColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// if roughness is set to 0 then D === NaN which results in black pixels
-	const { metalness, ior } = material;
-	const { frontFace } = hit;
-	const filteredRoughness = hit.filteredSurfaceRoughness;
+	float metalness = material.metalness;
+	float ior = material.ior;
+	bool frontFace = hit.frontFace;
+	float filteredRoughness = hit.filteredSurfaceRoughness;
 
 	getHalfVector( wo, wi, halfVector );
-	const iorRatio = frontFace ? 1 / ior : ior;
-	const G = ggxShadowMaskG2( wi, wo, filteredRoughness );
-	const D = ggxDistribution( halfVector, filteredRoughness );
+	float iorRatio = frontFace ? 1.0 / ior : ior;
+	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
+	float D = ggxDistribution( halfVector, filteredRoughness );
 
-	let F = schlickFresnelFromIor( wi.dot( halfVector ), iorRatio );
-	const cosTheta = Math.min( wo.z, 1.0 );
-	const sinTheta = Math.sqrt( 1.0 - cosTheta * cosTheta );
-	const cannotRefract = iorRatio * sinTheta > 1.0;
+	float F = schlickFresnelFromIor( dot( wi, halfVector ), iorRatio );
+	float cosTheta = min( wo.z, 1.0 );
+	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		F = 1;
+		F = 1.0;
 
 	}
 
-	colorTarget
-		.lerpColors( whiteColor, material.color, metalness )
-		.multiplyScalar( G * D / ( 4 * Math.abs( wi.z * wo.z ) ) )
-		.multiplyScalar( MathUtils.lerp( F, 1.0, metalness ) )
-		.multiplyScalar( wi.z ); // scale the light by the direction the light is coming in from
+	vec3 color = mix( vec3( 1.0 ), material.color, metalness );
+	color *= G * D / ( 4 * abs( wi.z * wo.z ) );
+	color *= mix( F, 1.0, metalness );
+	color *= wi.z; // scale the light by the direction the light is coming in from
+
+	return color;
 
 }
 
@@ -170,38 +164,38 @@ function transmissionColor( wo, wi, material, hit, colorTarget ) {
 
 // TODO: This is just using a basic cosine-weighted specular distribution with an
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
-function transmissionPDF( wo, wi, material, hit ) {
+float transmissionPDF( vec3 wo, vec3 wi, MaterialRect material, SurfaceRect hit ) {
 
 	return 1.0;
 
 }
 
-function transmissionDirection( wo, hit, material, lightDirection ) {
+vec3 transmissionDirection( vec3 wo, SurfaceRect hit, MaterialRec material ) {
 
-	const { roughness, ior } = material;
-	const { frontFace } = hit;
-	const ratio = frontFace ? 1 / ior : ior;
+	float roughness = material.roughness;
+	float ior = material.ior;
+	bool frontFace = hit.frontFace;
+	float ratio = frontFace ? 1.0 / ior : ior;
 
-	tempDir.copy( wo ).multiplyScalar( - 1 );
-	refract( tempDir, new Vector3( 0, 0, 1 ), ratio, lightDirection );
-	tempDir.randomDirection().multiplyScalar( roughness );
-	lightDirection.add( tempDir );
+	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), ratio );
+	lightDirection += randomDirection() * roughness;
+	return lightDirection;
 
 }
 
-function transmissionColor( wo, wi, material, hit, colorTarget ) {
+vec3 transmissionColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
-	const { metalness, transmission } = material;
-	colorTarget
-		.copy( material.color )
-		.multiplyScalar( 1.0 - metalness )
-		.multiplyScalar( Math.abs( wi.z ) )
-		.multiplyScalar( transmission );
+	float metalness = material.metalness;
+	float transmission = material.transmission;
+	vec3 color = material.color;
+	color *= ( 1.0 - metalness );
+	color *= abs( wi.z );
+	color *= transmission;
 
 	// Color is clamped to [0, 1] to make up for incorrect PDF and over sampling
-	colorTarget.r = Math.min( colorTarget.r, 1.0 );
-	colorTarget.g = Math.min( colorTarget.g, 1.0 );
-	colorTarget.b = Math.min( colorTarget.b, 1.0 );
+	color.r = min( color.r, 1.0 );
+	color.g = min( color.g, 1.0 );
+	color.b = min( color.b, 1.0 );
 
 }
 
