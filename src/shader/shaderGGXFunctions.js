@@ -1,6 +1,4 @@
 export const shaderGGXFunctions = /* glsl */`
-import { Vector3 } from 'three';
-
 // The GGX functions provide sampling and distribution information for normals as output so
 // in order to get probability of scatter direction the half vector must be computed and provided.
 // [0] https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
@@ -15,23 +13,23 @@ vec3 ggxDirection( vec3 incidentDir, float roughnessX, float roughnessY, float r
 
 	// Implementation from reference [1]
 	// stretch view
-	const V = normalize( vec3( roughnessX * incidentDir.x, roughnessY * incidentDir.y, incidentDir.z ) );
+	vec3 V = normalize( vec3( roughnessX * incidentDir.x, roughnessY * incidentDir.y, incidentDir.z ) );
 
 	// orthonormal basis
-	const T1 = ( V.z < 0.9999 ) ? normalize( cross( V, vec3( 0.0, 0.0, 1.0 ) ) : vec3( 1.0, 0.0, 0.0 );
+	vec3 T1 = ( V.z < 0.9999 ) ? normalize( cross( V, vec3( 0.0, 0.0, 1.0 ) ) ) : vec3( 1.0, 0.0, 0.0 );
 	vec3 T2 = cross( T1, V );
 
 	// sample point with polar coordinates (r, phi)
-	const a = 1.0 / ( 1.0 + V.z );
-	const r = sqrt( random1 );
-	const phi = ( random2 < a ) ? random2 / a * PI : PI + ( random2 - a ) / ( 1.0 - a ) * PI;
-	const P1 = r * cos( phi );
-	const P2 = r * sin( phi ) * ( ( random2 < a ) ? 1.0 : V.z );
+	float a = 1.0 / ( 1.0 + V.z );
+	float r = sqrt( random1 );
+	float phi = ( random2 < a ) ? random2 / a * PI : PI + ( random2 - a ) / ( 1.0 - a ) * PI;
+	float P1 = r * cos( phi );
+	float P2 = r * sin( phi ) * ( ( random2 < a ) ? 1.0 : V.z );
 
 	// compute normal
 	T1 *= P1;
 	T2 *= P2;
-	vec3 N = T1 + T2 + V * sqrt( max( 0.0, 1.0 - P1 * P1 - P2 * P2 )
+	vec3 N = T1 + T2 + V * sqrt( max( 0.0, 1.0 - P1 * P1 - P2 * P2 ) );
 
 	// unstretch
 	N.x *= roughnessX;
@@ -52,8 +50,8 @@ float ggxLamda( float theta, float roughness ) {
 	float tanTheta2 = tanTheta * tanTheta;
 	float alpha2 = roughness * roughness;
 
-	float numerator = - 1 + sqrt( 1 + alpha2 * tanTheta2 );
-	return numerator / 2;
+	float numerator = - 1.0 + sqrt( 1.0 + alpha2 * tanTheta2 );
+	return numerator / 2.0;
 
 }
 
@@ -80,13 +78,13 @@ float ggxDistribution( vec3 halfVector, float roughness ) {
 	float cosTheta = halfVector.z;
 	float cosTheta4 = pow( cosTheta, 4.0 );
 
-	if ( cosTheta === 0.0 ) return 0.0;
+	if ( cosTheta == 0.0 ) return 0.0;
 
 	float theta = acos( halfVector.z );
 	float tanTheta = tan( theta );
 	float tanTheta2 = pow( tanTheta, 2.0 );
 
-	const denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
+	float denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
 	return a2 / denom;
 
 	// See equation (1) from reference [2]
