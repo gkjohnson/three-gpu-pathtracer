@@ -3,7 +3,7 @@ export const shaderUtils = /* glsl */`
 // https://google.github.io/filament/Filament.md.html#materialsystem/diffusebrdf
 float schlickFresnel( float cosine, float f0 ) {
 
-	return f0 + ( 1.0 - f0 ) * Math.pow( 1.0 - cosine, 5.0 );
+	return f0 + ( 1.0 - f0 ) * pow( 1.0 - cosine, 5.0 );
 
 }
 
@@ -11,40 +11,22 @@ float schlickFresnel( float cosine, float f0 ) {
 float schlickFresnelFromIor( float cosine, float iorRatio ) {
 
 	// Schlick approximation
-	const r0 = Math.pow( ( 1 - iorRatio ) / ( 1 + iorRatio ), 2 );
-	return schlickFresnel( cosine, r0 );
-
-}
-
-vec3 refract( vec3 dir, vec3 norm, float iorRatio, target ) {
-
-	// snell's law
-	// ior1 * sin( t1 ) = ior2 * sin( t2 )
-	float cosTheta = Math.min( - dir.dot( norm ), 1.0 );
-
-	tempVector
-		.copy( dir )
-		.addScaledVector( norm, cosTheta )
-		.multiplyScalar( iorRatio );
-
-	target
-		.copy( norm )
-		.multiplyScalar( - Math.sqrt( Math.abs( 1.0 - tempVector.lengthSq() ) ) )
-		.add( tempVector );
+	float r_0 = pow( ( 1.0 - iorRatio ) / ( 1.0 + iorRatio ), 2.0 );
+	return schlickFresnel( cosine, r_0 );
 
 }
 
 // forms a basis with the normal vector as Z
-mat3 getBasisFromNormal( vec3 normal, mat3 targetMatrix ) {
+mat3 getBasisFromNormal( vec3 normal ) {
 
 	vec3 other;
 	if ( abs( normal.x ) > 0.5 ) {
 
-		other = vec3( 0, 1, 0 );
+		other = vec3( 0.0, 1.0, 0.0 );
 
 	} else {
 
-		other = vec3( 1, 0, 0 );
+		other = vec3( 1.0, 0.0, 0.0 );
 
 	}
 
@@ -66,9 +48,9 @@ vec3 getHalfVector( vec3 a, vec3 b ) {
 // This function returns if the direction is on the same side of both planes.
 bool isDirectionValid( vec3 direction, vec3 surfaceNormal, vec3 geometryNormal ) {
 
-	const aboveSurfaceNormal = direction.dot( surfaceNormal ) > 0;
-	const aboveGeometryNormal = direction.dot( geometryNormal ) > 0;
-	return aboveSurfaceNormal === aboveGeometryNormal;
+	bool aboveSurfaceNormal = dot( direction, surfaceNormal ) > 0.0;
+	bool aboveGeometryNormal = dot( direction, geometryNormal ) > 0.0;
+	return aboveSurfaceNormal == aboveGeometryNormal;
 
 }
 `;

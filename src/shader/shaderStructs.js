@@ -106,9 +106,9 @@ export const pathTracingHelpers = /* glsl */ `
 	vec3 randDirection() {
 
 		vec2 r = rand2();
-		const u = ( r.x - 0.5 ) * 2.0;
-		const t = r.y * PI * 2.0;
-		const f = sqrt( 1.0 - u ** 2.0 );
+		float u = ( r.x - 0.5 ) * 2.0;
+		float t = r.y * PI * 2.0;
+		float f = sqrt( 1.0 - u * u );
 
 		return vec3( f * cos( t ), f * sin( t ), u );
 
