@@ -199,25 +199,27 @@ vec3 transmissionColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit )
 
 }
 
-export function bsdfPdf( wo, wi, material, hit ) {
+float bsdfPdf( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
-	const { ior, metalness, transmission } = material;
-	const { frontFace } = hit;
+	float ior = material.ior;
+	float metalness = material.metalness;
+	float transmission = material.transmission;
+	bool frontFace = material.frontFace;
 
-	const ratio = frontFace ? 1 / ior : ior;
-	const cosTheta = Math.min( wo.z, 1.0 );
-	const sinTheta = Math.sqrt( 1.0 - cosTheta * cosTheta );
-	let reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	const cannotRefract = ratio * sinTheta > 1.0;
+	float ratio = frontFace ? 1.0 / ior : ior;
+	float cosTheta = min( wo.z, 1.0 );
+	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
+	bool cannotRefract = ratio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		reflectance = 1;
+		reflectance = 1.0;
 
 	}
 
-	let spdf = 0;
-	let dpdf = 0;
-	let tpdf = 0;
+	float spdf = 0.0;
+	float dpdf = 0.0;
+	float tpdf = 0.0;
 
 	if ( wi.z < 0 ) {
 
@@ -230,7 +232,7 @@ export function bsdfPdf( wo, wi, material, hit ) {
 
 	}
 
-	const transSpecularProb = MathUtils.lerp( reflectance, 1.0, metalness );
+	const transSpecularProb = mix( reflectance, 1.0, metalness );
 	const diffSpecularProb = 0.5 + 0.5 * metalness;
 	const pdf =
 		spdf * transmission * transSpecularProb
@@ -242,51 +244,55 @@ export function bsdfPdf( wo, wi, material, hit ) {
 
 }
 
-export function bsdfColor( wo, wi, material, hit, targetColor ) {
+float bsdfColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
+	vec3 color = vec3( 0.0 );
 	if ( wi.z < 0 ) {
 
-		transmissionColor( wo, wi, material, hit, targetColor );
+		color = transmissionColor( wo, wi, material, hit );
 
 	} else {
 
-		diffuseColor( wo, wi, material, hit, targetColor );
-		targetColor.multiplyScalar( 1.0 - material.transmission );
+		color = diffuseColor( wo, wi, material, hit );
+		color *= 1.0 - material.transmission;
 
-		specularColor( wo, wi, material, hit, tempColor );
-		targetColor.add( tempColor );
+		color += specularColor( wo, wi, material, hit );
 
 	}
+
+	return color;
 
 }
 
-export function bsdfSample( wo, hit, material, sampleInfo ) {
+SampleRec bsdfSample( vec3 wo, SurfaceRec hit, MaterialRec material ) {
 
-	const lightDirection = sampleInfo.direction;
-	const { ior, metalness, transmission } = material;
-	const { frontFace } = hit;
+	float ior = material.ior;
+	float metalness = material.metalness;
+	float transmission = material.transmission;
+	bool frontFace = hit.frontFace;
 
-	const ratio = frontFace ? 1 / ior : ior;
-	const cosTheta = Math.min( wo.z, 1.0 );
-	const sinTheta = Math.sqrt( 1.0 - cosTheta * cosTheta );
-	let reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	const cannotRefract = ratio * sinTheta > 1.0;
+	float ratio = frontFace ? 1.0 / ior : ior;
+	float cosTheta = min( wo.z, 1.0 );
+	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
+	bool cannotRefract = ratio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		reflectance = 1;
+		reflectance = 1.0;
 
 	}
 
-	if ( Math.random() < transmission ) {
+	SurfaceRec result;
+	if ( random() < transmission ) {
 
-		const specularProb = MathUtils.lerp( reflectance, 1.0, metalness );
-		if ( Math.random() < specularProb ) {
+		const specularProb = mix( reflectance, 1.0, metalness );
+		if ( random() < specularProb ) {
 
-			specularDirection( wo, hit, material, lightDirection );
+			result.lightDirection = specularDirection( wo, hit, material );
 
 		} else {
 
-			transmissionDirection( wo, hit, material, lightDirection );
+			result.lightDirection = transmissionDirection( wo, hit, material );
 
 		}
 
@@ -295,18 +301,19 @@ export function bsdfSample( wo, hit, material, sampleInfo ) {
 		const specularProb = 0.5 + 0.5 * metalness;
 		if ( Math.random() < specularProb ) {
 
-			specularDirection( wo, hit, material, lightDirection );
+			result.lightDirection = specularDirection( wo, hit, material );
 
 		} else {
 
-			diffuseDirection( wo, hit, material, lightDirection );
+			result.lightDirection = diffuseDirection( wo, hit, material );
 
 		}
 
 	}
 
-	sampleInfo.pdf = bsdfPdf( wo, lightDirection, material, hit );
-	bsdfColor( wo, lightDirection, material, hit, sampleInfo.color );
+	result.pdf = bsdfPdf( wo, result.lightDirection, material, hit );
+	result.color = bsdfColor( wo, lightDirection, material, hit );
+	return result;
 
 }
 `;
