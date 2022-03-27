@@ -6,6 +6,9 @@ import {
 import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
+import { shaderGGXFunctions } from '../shader/shaderGGXFunctions.js';
+import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
+import { shaderUtils } from '../shader/shaderUtils.js';
 
 export class PathTracingMaterial extends ShaderMaterial {
 
@@ -73,6 +76,10 @@ export class PathTracingMaterial extends ShaderMaterial {
                 ${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
+
+				${ shaderUtils }
+				${ shaderGGXFunctions }
+				${ shaderMaterialSampling }
 
 				#if USE_ENVMAP
 
