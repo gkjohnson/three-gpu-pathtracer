@@ -8,6 +8,9 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
+import * as MikkTSpace from './lib/mikktspace.module.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { computeTangents } from './lib/BufferGeometryUtils.js';
 // import { computeTangents, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let renderer, controls, camera, scene, stats;
@@ -55,6 +58,8 @@ async function init() {
 
 	materials = [];
 
+	await MikkTSpace.ready;
+
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
@@ -86,16 +91,21 @@ async function init() {
 			group.add( floor );
 
 			// requires bundle support for top level await
-			// group.traverse( c => {
+			group.traverse( c => {
 
-			// 	if ( c.geometry ) {
+				if ( c.geometry ) {
 
-			// 		c.geometry = computeTangents( c.geometry );
-			// 		c.geometry = mergeVertices( c.geometry );
+					const geometry = c.geometry;
+					if ( ! ( 'tangent' in geometry.attributes ) ) {
 
-			// 	}
+						c.geometry = computeTangents( geometry, MikkTSpace );
+						c.geometry = mergeVertices( geometry );
 
-			// } );
+					}
+
+				}
+
+			} );
 
 			return generator.generate( group );
 
