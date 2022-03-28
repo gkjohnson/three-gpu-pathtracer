@@ -58,13 +58,12 @@ async function init() {
 
 	materials = [];
 
-	await MikkTSpace.ready;
 
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material-ball.glb' )
-		.then( gltf => {
+		.then( async gltf => {
 
 			const group = new THREE.Group();
 
@@ -89,6 +88,8 @@ async function init() {
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.025;
 			group.add( floor );
+
+			await MikkTSpace.ready;
 
 			// requires bundle support for top level await
 			group.traverse( c => {
