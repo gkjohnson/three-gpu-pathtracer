@@ -33,6 +33,7 @@ const params = {
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1.0 / window.devicePixelRatio,
+	transparentTraversals: 20,
 
 };
 
@@ -173,6 +174,12 @@ async function init() {
 	ptFolder.add( params, 'bounces', 1, 10, 1 ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'BOUNCES', value );
+		ptRenderer.reset();
+
+	} );
+	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( value => {
+
+		ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', value );
 		ptRenderer.reset();
 
 	} );
