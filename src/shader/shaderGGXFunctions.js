@@ -27,15 +27,10 @@ vec3 ggxDirection( vec3 incidentDir, float roughnessX, float roughnessY, float r
 	float P2 = r * sin( phi ) * ( ( random2 < a ) ? 1.0 : V.z );
 
 	// compute normal
-	T1 *= P1;
-	T2 *= P2;
-	vec3 N = T1 + T2 + V * sqrt( max( 0.0, 1.0 - P1 * P1 - P2 * P2 ) );
+	vec3 N = P1 * T1 + P2 * T2 + V * sqrt( max( 0.0, 1.0 - P1 * P1 - P2 * P2 ) );
 
 	// unstretch
-	N.x *= roughnessX;
-	N.y *= roughnessY;
-	N.z = max( 0.0, N.z );
-	N = normalize( N );
+	N = normalize( vec3( roughnessX * N.x, roughnessY * N.y, max( 0.0, N.z ) ) );
 
 	return N;
 

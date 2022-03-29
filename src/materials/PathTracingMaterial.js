@@ -175,7 +175,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
 
@@ -278,7 +277,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						MaterialRec materialRec;
 						materialRec.transmission = material.transmission;
 						materialRec.ior = material.ior;
-						materialRec.roughness = max( 1e-5, roughness );
+						materialRec.roughness = max( 1e-2, roughness );
 						materialRec.emission = emission;
 						materialRec.metalness = metalness;
 						materialRec.color = albedo.rgb;
@@ -286,11 +285,11 @@ export class PathTracingMaterial extends ShaderMaterial {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.filteredRoughness = material.roughness; // TODO: do we need this?
+						surfaceRec.filteredRoughness = materialRec.roughness; // TODO: do we need this?
 						surfaceRec.frontFace = side == 1.0;
 
 						// TODO: transform into local basis and then back out
-						mat3 normalBasis = getBasisFromNormal( normal );
+						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
 						mat3 invBasis = inverse( normalBasis );
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
@@ -305,14 +304,20 @@ export class PathTracingMaterial extends ShaderMaterial {
                         rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
                         rayDirection = normalize( normalBasis * sampleRec.direction );
 
-						// if the surface normal is skewed such that the outgoing vector can wind up underneath
-						// the triangle surface then just consider it absorbed.
-						// if ( dot( rayDirection, faceNormal ) < 0.0 ) {
+						// accumulate color
+						gl_FragColor.rgb += ( emission * throughputColor );
 
-						// 	break;
+						// skip the sample if our PDF or ray is impossible
+						if (
+							sampleRec.pdf <= 0.0
+							|| ! isDirectionValid( rayDirection, normal, faceNormal )
+						) {
 
-						// }
+							break;
 
+						}
+
+						throughputColor *= sampleRec.color / sampleRec.pdf;
 
                     }
 

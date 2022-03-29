@@ -13,23 +13,27 @@ let samplesEl;
 const params = {
 
 	material1: {
-		color: '#ffffff',
-		roughness: 1.0,
-		metalness: 0.0,
+		color: '#ffc766',
+		emissive: '#000000',
+		emissiveIntensity: 1,
+		roughness: 0.1,
+		metalness: 0.8,
 		ior: 1.0,
 		transmission: 0.0,
 		opacity: 1.0,
 	},
 	material2: {
-		color: '#26C6DA',
-		roughness: 1.0,
-		metalness: 0.0,
+		color: '#db7157',
+		emissive: '#000000',
+		emissiveIntensity: 1,
+		roughness: 0.8,
+		metalness: 0.1,
 		ior: 1.0,
 		transmission: 0.0,
 		opacity: 1.0,
 	},
 	environmentIntensity: 3,
-	bounces: 3,
+	bounces: 4,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1.0 / window.devicePixelRatio,
@@ -53,6 +57,7 @@ async function init() {
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PathTracingMaterial( { transparent: true, depthWrite: false } );
+	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -98,7 +103,7 @@ async function init() {
 
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
-				new THREE.MeshStandardMaterial( { color: 0x1a1a1a } ),
+				new THREE.MeshStandardMaterial( { color: 0x1a1a1a, roughness: 0.1, metalness: 0.2 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
@@ -109,6 +114,14 @@ async function init() {
 			const material2 = new THREE.MeshStandardMaterial();
 
 			gltf.scene.traverse( c => {
+
+				// the vertex normals on the material ball are off...
+				// TODO: precompute the vertex normals so they are correct on load
+				if ( c.geometry ) {
+
+					c.geometry.computeVertexNormals();
+
+				}
 
 				if ( c.name === 'Sphere_1' ) {
 
@@ -197,6 +210,8 @@ async function init() {
 
 	const matFolder1 = gui.addFolder( 'Material 1' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
+	matFolder1.addColor( params.material1, 'emissive' ).onChange( reset );
+	matFolder1.add( params.material1, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
 	matFolder1.add( params.material1, 'roughness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
@@ -206,6 +221,8 @@ async function init() {
 
 	const matFolder2 = gui.addFolder( 'Material 2' );
 	matFolder2.addColor( params.material2, 'color' ).onChange( reset );
+	matFolder2.addColor( params.material2, 'emissive' ).onChange( reset );
+	matFolder2.add( params.material2, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
 	matFolder2.add( params.material2, 'roughness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
@@ -247,6 +264,8 @@ function animate() {
 
 	const m1 = materials[ 0 ];
 	m1.color.set( params.material1.color ).convertSRGBToLinear();
+	m1.emissive.set( params.material1.emissive ).convertSRGBToLinear();
+	m1.emissiveIntensity = params.material1.emissiveIntensity;
 	m1.metalness = params.material1.metalness;
 	m1.roughness = params.material1.roughness;
 	m1.transmission = params.material1.transmission;
@@ -255,6 +274,8 @@ function animate() {
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
+	m2.emissive.set( params.material2.emissive ).convertSRGBToLinear();
+	m2.emissiveIntensity = params.material2.emissiveIntensity;
 	m2.metalness = params.material2.metalness;
 	m2.roughness = params.material2.roughness;
 	m2.transmission = params.material2.transmission;
