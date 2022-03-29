@@ -205,7 +205,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 							faceIndices.xyz
 						).xyz );
 
-
 						// roughness
 						float roughness = material.roughness;
 						if ( material.roughnessMap != - 1 ) {
@@ -286,7 +285,11 @@ export class PathTracingMaterial extends ShaderMaterial {
 						surfaceRec.frontFace = side == 1.0;
 
 						// TODO: transform into local basis and then back out
-						SampleRec sampleRec = bsdfSample( vec3( 0.0, 0.0, 1.0 ), surfaceRec, materialRec );
+						mat3 normalBasis = getBasisFromNormal( normal );
+						mat3 invBasis = inverse( normalBasis );
+
+						vec3 incoming = normalize( - rayDirection * invBasis );
+						SampleRec sampleRec = bsdfSample( incoming, surfaceRec, materialRec );
 
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point
@@ -295,7 +298,7 @@ export class PathTracingMaterial extends ShaderMaterial {
                         vec3 absPoint = abs( point );
                         float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
                         rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-                        rayDirection = getHemisphereSample( normal, rand2() );
+                        rayDirection = normalize( normalBasis * sampleRec.direction );
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.

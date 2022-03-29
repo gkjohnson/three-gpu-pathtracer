@@ -15,7 +15,7 @@ const params = {
 	material1: {
 		color: '#ffffff',
 		roughness: 1.0,
-		metalness: 1.0,
+		metalness: 0.0,
 		ior: 1.0,
 		transmission: 0.0,
 		opacity: 1.0,
@@ -23,7 +23,7 @@ const params = {
 	material2: {
 		color: '#26C6DA',
 		roughness: 1.0,
-		metalness: 1.0,
+		metalness: 0.0,
 		ior: 1.0,
 		transmission: 0.0,
 		opacity: 1.0,
