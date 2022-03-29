@@ -8,6 +8,10 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
+import * as MikkTSpace from './lib/mikktspace.module.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { computeTangents } from './lib/BufferGeometryUtils.js';
+// import { computeTangents, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let renderer, controls, camera, scene, stats;
 let fsQuad, target1, target2, materials;
@@ -54,11 +58,12 @@ async function init() {
 
 	materials = [];
 
+
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material-ball.glb' )
-		.then( gltf => {
+		.then( async gltf => {
 
 			const group = new THREE.Group();
 
@@ -83,6 +88,26 @@ async function init() {
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.025;
 			group.add( floor );
+
+			await MikkTSpace.ready;
+
+			// requires bundle support for top level await
+			group.traverse( c => {
+
+				if ( c.geometry ) {
+
+					const geometry = c.geometry;
+
+					if ( ! ( 'tangent' in geometry.attributes ) && 'normal' in geometry.attributes && 'uv' in geometry.attributes ) {
+
+						c.geometry = computeTangents( geometry, MikkTSpace );
+						c.geometry = mergeVertices( geometry );
+
+					}
+
+				}
+
+			} );
 
 			return generator.generate( group );
 

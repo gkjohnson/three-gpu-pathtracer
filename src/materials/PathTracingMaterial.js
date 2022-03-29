@@ -18,6 +18,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 			defines: {
 				BOUNCES: 3,
+				TRANSPARENT_TRAVERSALS: 20,
 				MATERIAL_LENGTH: 0,
 				USE_ENVMAP: 1,
 				GRADIENT_BG: 0,
@@ -135,6 +136,7 @@ export class PathTracingMaterial extends ShaderMaterial {
                     float side = 1.0;
                     float dist = 0.0;
 					int i;
+					int transparentTraversals = TRANSPARENT_TRAVERSALS;
                     for ( i = 0; i < BOUNCES; i ++ ) {
 
                         if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
@@ -193,7 +195,10 @@ export class PathTracingMaterial extends ShaderMaterial {
 							vec3 point = rayOrigin + rayDirection * dist;
 							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
 
-							i --;
+							// only allow a limited number of transparency discards otherwise we could
+							// crash the context with too long a loop.
+							i -= sign( transparentTraversals );
+							transparentTraversals --;
 							continue;
 
 						}
