@@ -29,6 +29,11 @@
     "three-mesh-bvh": "^0.5.10"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^2.0.5",
+    "@gltf-transform/extensions": "^2.0.5",
+    "@gltf-transform/functions": "^2.0.5",
+    "@gltf-transform/view": "^0.3.0",
+    "@placemarkio/flat-drop-files": "^1.0.1",
     "concurrently": "^6.3.0",
     "eslint": "^7.32.0",
     "eslint-config-mdcs": "^5.0.0",
