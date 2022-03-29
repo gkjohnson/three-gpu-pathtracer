@@ -150,6 +150,8 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 					#endif
 
+					normal *= gl_FrontFacing ? 1.0 : - 1.0;
+
 					vec3 rayOrigin = vPos + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
 					float accumulated = 0.0;
 					for ( int i = 0; i < SAMPLES; i ++ ) {

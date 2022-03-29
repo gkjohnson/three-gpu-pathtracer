@@ -97,7 +97,8 @@ async function init() {
 				if ( c.geometry ) {
 
 					const geometry = c.geometry;
-					if ( ! ( 'tangent' in geometry.attributes ) ) {
+
+					if ( ! ( 'tangent' in geometry.attributes ) && 'normal' in geometry.attributes && 'uv' in geometry.attributes ) {
 
 						c.geometry = computeTangents( geometry, MikkTSpace );
 						c.geometry = mergeVertices( geometry );
