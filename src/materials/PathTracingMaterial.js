@@ -234,19 +234,19 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-						gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
+						// gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
 
-						// 1 / PI attenuation for physically correct lambert model
-                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                        throughputColor *= 1.0 / PI;
+						// // 1 / PI attenuation for physically correct lambert model
+                        // // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
+                        // throughputColor *= 1.0 / PI;
 
-						// albedo
-						throughputColor *= material.color;
-						if ( material.map != - 1 ) {
+						// // albedo
+						// throughputColor *= material.color;
+						// if ( material.map != - 1 ) {
 
-							throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
+						// 	throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
 
-						}
+						// }
 
 						// normal
 						if ( material.normalMap != - 1 ) {
@@ -278,7 +278,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						MaterialRec materialRec;
 						materialRec.transmission = material.transmission;
 						materialRec.ior = material.ior;
-						materialRec.roughness = roughness;
+						materialRec.roughness = max( 1e-5, roughness );
 						materialRec.emission = emission;
 						materialRec.metalness = metalness;
 						materialRec.color = albedo.rgb;
@@ -286,15 +286,15 @@ export class PathTracingMaterial extends ShaderMaterial {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.filteredRoughness = 1.0;
+						surfaceRec.filteredRoughness = material.roughness; // TODO: do we need this?
 						surfaceRec.frontFace = side == 1.0;
 
 						// TODO: transform into local basis and then back out
 						mat3 normalBasis = getBasisFromNormal( normal );
 						mat3 invBasis = inverse( normalBasis );
 
-						vec3 incoming = normalize( - rayDirection * invBasis );
-						SampleRec sampleRec = bsdfSample( incoming, surfaceRec, materialRec );
+						vec3 outgoing = - normalize( invBasis * rayDirection );
+						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec, materialRec );
 
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point
@@ -307,11 +307,11 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.
-						if ( dot( rayDirection, faceNormal ) < 0.0 ) {
+						// if ( dot( rayDirection, faceNormal ) < 0.0 ) {
 
-							break;
+						// 	break;
 
-						}
+						// }
 
 
                     }
