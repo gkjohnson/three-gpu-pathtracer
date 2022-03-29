@@ -177,11 +177,21 @@ export class PathTracingMaterial extends ShaderMaterial {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
 
-						if ( material.opacity < rand() ) {
+						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
+
+						// albedo
+						vec4 albedo = vec4( material.color, material.opacity );
+						if ( material.map != - 1 ) {
+
+							albedo *= texture2D( textures, vec3( uv, material.map ) );
+
+						}
+
+						// possibly skip this sample if it's transparent
+						if ( albedo.a < rand() ) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
 							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
-							throughputColor *= mix( vec3( 1.0 ), material.color, 0.5 * material.opacity );
 
 							i --;
 							continue;
@@ -195,7 +205,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 							faceIndices.xyz
 						).xyz );
 
-						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 
 						// roughness
 						float roughness = material.roughness;
@@ -228,12 +237,10 @@ export class PathTracingMaterial extends ShaderMaterial {
                         throughputColor *= 1.0 / PI;
 
 						// albedo
-						vec3 albedo = material.color;
 						throughputColor *= material.color;
 						if ( material.map != - 1 ) {
 
 							throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
-							albedo *= texture2D( textures, vec3( uv, material.map ) ).xyz;
 
 						}
 
@@ -270,7 +277,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						materialRec.roughness = roughness;
 						materialRec.emission = emission;
 						materialRec.metalness = metalness;
-						materialRec.color = albedo;
+						materialRec.color = albedo.rgb;
 
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
