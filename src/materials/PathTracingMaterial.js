@@ -197,6 +197,22 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 
+						// roughness
+						float roughness = material.roughness;
+						if ( material.roughnessMap != - 1 ) {
+
+							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).r;
+
+						}
+
+						// metalness
+						float metalness = material.metalness;
+						if ( material.metalnessMap != - 1 ) {
+
+							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).r;
+
+						}
+
 						// emission
 						vec3 emission = material.emissiveIntensity * material.emissive;
 						if ( material.emissiveMap != - 1 ) {
@@ -212,10 +228,12 @@ export class PathTracingMaterial extends ShaderMaterial {
                         throughputColor *= 1.0 / PI;
 
 						// albedo
+						vec3 albedo = material.color;
 						throughputColor *= material.color;
 						if ( material.map != - 1 ) {
 
 							throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
+							albedo *= texture2D( textures, vec3( uv, material.map ) ).xyz;
 
 						}
 
@@ -245,6 +263,23 @@ export class PathTracingMaterial extends ShaderMaterial {
 						}
 
 						normal *= side;
+
+						MaterialRec materialRec;
+						materialRec.transmission = material.transmission;
+						materialRec.ior = material.ior;
+						materialRec.roughness = roughness;
+						materialRec.emission = emission;
+						materialRec.metalness = metalness;
+						materialRec.color = albedo;
+
+						SurfaceRec surfaceRec;
+						surfaceRec.normal = normal;
+						surfaceRec.faceNormal = faceNormal;
+						surfaceRec.filteredRoughness = 1.0;
+						surfaceRec.frontFace = side == 1.0;
+
+						// TODO: transform into local basis and then back out
+						SampleRec sampleRec = bsdfSample( vec3( 0.0, 0.0, 1.0 ), surfaceRec, materialRec );
 
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point

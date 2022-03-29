@@ -3,7 +3,7 @@ export const shaderMaterialSampling = /* glsl */`
 struct SurfaceRec {
 	vec3 normal;
 	vec3 faceNormal;
-	float filteredSurfaceRoughness;
+	float filteredRoughness;
 	bool frontFace;
 };
 
@@ -56,7 +56,7 @@ vec3 diffuseColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 float specularPDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// See equation (17) in http://jcgt.org/published/0003/02/03/
-	float filteredRoughness = hit.filteredSurfaceRoughness;
+	float filteredRoughness = hit.filteredRoughness;
 	vec3 halfVector = getHalfVector( wi, wo );
 	return ggxPDF( wi, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
 
@@ -65,7 +65,7 @@ float specularPDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 vec3 specularDirection( vec3 wo, SurfaceRec hit, MaterialRec material ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	float filteredRoughness = hit.filteredSurfaceRoughness;
+	float filteredRoughness = hit.filteredRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
 		filteredRoughness,
@@ -85,7 +85,7 @@ vec3 specularColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 	float metalness = material.metalness;
 	float ior = material.ior;
 	bool frontFace = hit.frontFace;
-	float filteredRoughness = hit.filteredSurfaceRoughness;
+	float filteredRoughness = hit.filteredRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
 	float iorRatio = frontFace ? 1.0 / ior : ior;
