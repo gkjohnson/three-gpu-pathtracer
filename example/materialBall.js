@@ -185,7 +185,7 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1, 0.01 ).onChange( () => {
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
@@ -213,7 +213,7 @@ async function init() {
 		fsQuad.material.needsUpdate = true;
 
 	} );
-	ptFolder.add( params, 'resolutionScale', 0, 1 ).onChange( () => {
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
 
@@ -261,7 +261,7 @@ function onResize() {
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio );
+	renderer.setPixelRatio( window.devicePixelRatio * scale );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
