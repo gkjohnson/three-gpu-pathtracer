@@ -113,7 +113,7 @@ async function init() {
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
-			floor.position.y = box.min.y - 0.025;
+			floor.position.y = box.min.y - 0.03;
 			group.add( floor );
 
 			const material1 = new THREE.MeshStandardMaterial();
