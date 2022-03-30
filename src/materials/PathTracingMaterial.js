@@ -275,7 +275,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
 						materialRec.roughness = clamp(
 							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
-							1e-2,
+							1e-3,
 							1.0
 						);
 

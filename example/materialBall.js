@@ -32,6 +32,11 @@ const params = {
 		transmission: 0.0,
 		opacity: 1.0,
 	},
+	material3: {
+		color: '#ffffff',
+		roughness: 0.1,
+		metalness: 0.1,
+	},
 	environmentIntensity: 3,
 	bounces: 4,
 	samplesPerFrame: 1,
@@ -142,7 +147,7 @@ async function init() {
 
 			} );
 
-			materials = [ material1, material2 ];
+			materials = [ material1, material2, floor.material ];
 
 			return generator.generate( group );
 
@@ -214,7 +219,7 @@ async function init() {
 
 	} );
 
-	const matFolder1 = gui.addFolder( 'Material 1' );
+	const matFolder1 = gui.addFolder( 'Shell Material' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
 	matFolder1.addColor( params.material1, 'emissive' ).onChange( reset );
 	matFolder1.add( params.material1, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
@@ -225,7 +230,7 @@ async function init() {
 	matFolder1.add( params.material1, 'ior', 0.5, 2.0 ).onChange( reset );
 	matFolder1.open();
 
-	const matFolder2 = gui.addFolder( 'Material 2' );
+	const matFolder2 = gui.addFolder( 'Ball Material' );
 	matFolder2.addColor( params.material2, 'color' ).onChange( reset );
 	matFolder2.addColor( params.material2, 'emissive' ).onChange( reset );
 	matFolder2.add( params.material2, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
@@ -235,6 +240,11 @@ async function init() {
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.5, 2 ).onChange( reset );
 	matFolder2.open();
+
+	const matFolder3 = gui.addFolder( 'Floor Material' );
+	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
+	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
 
 	animate();
 
@@ -287,6 +297,11 @@ function animate() {
 	m2.transmission = params.material2.transmission;
 	m2.ior = params.material2.ior;
 	m2.opacity = params.material2.opacity;
+
+	const m3 = materials[ 2 ];
+	m3.color.set( params.material3.color ).convertSRGBToLinear();
+	m3.metalness = params.material3.metalness;
+	m3.roughness = params.material3.roughness;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
