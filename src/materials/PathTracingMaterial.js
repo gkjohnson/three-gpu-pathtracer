@@ -39,6 +39,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 				environmentMap: { value: null },
 				seed: { value: 0 },
 				opacity: { value: 1 },
+				filterGlossyFactor: { value: 0.0 },
 
 				gradientTop: { value: new Color( 0xbfd8ff ) },
 				gradientBottom: { value: new Color( 0xffffff ) },
@@ -109,6 +110,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
                 uniform float environmentIntensity;
+                uniform float filterGlossyFactor;
                 uniform int seed;
                 uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
@@ -135,6 +137,7 @@ export class PathTracingMaterial extends ShaderMaterial {
                     vec3 barycoord = vec3( 0.0 );
                     float side = 1.0;
                     float dist = 0.0;
+					float accumulatedRoughness = 0.0;
 					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
                     for ( i = 0; i < BOUNCES; i ++ ) {
@@ -233,20 +236,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-						// gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
-
-						// // 1 / PI attenuation for physically correct lambert model
-                        // // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                        // throughputColor *= 1.0 / PI;
-
-						// // albedo
-						// throughputColor *= material.color;
-						// if ( material.map != - 1 ) {
-
-						// 	throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
-
-						// }
-
 						// normal
 						if ( material.normalMap != - 1 ) {
 
@@ -277,10 +266,18 @@ export class PathTracingMaterial extends ShaderMaterial {
 						MaterialRec materialRec;
 						materialRec.transmission = material.transmission;
 						materialRec.ior = material.ior;
-						materialRec.roughness = max( 1e-2, roughness );
 						materialRec.emission = emission;
 						materialRec.metalness = metalness;
 						materialRec.color = albedo.rgb;
+
+						// compute the filtered roughness value to use during specular reflection computations. A minimum
+						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
+						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
+						materialRec.roughness = clamp(
+							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
+							1e-2,
+							1.0
+						);
 
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
@@ -294,6 +291,10 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec, materialRec );
+
+						// determine if this is a rough normal or not by checking how far off straight up it is
+						vec3 halfVector = normalize( outgoing + sampleRec.direction );
+						accumulatedRoughness += sin( acos( halfVector.z ) );
 
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point
@@ -321,8 +322,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 
                     }
 
-					// gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
-					// gl_FragColor.rgb = mix( textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
                     gl_FragColor.a = opacity;
 
                 }

@@ -38,6 +38,7 @@ const params = {
 	acesToneMapping: true,
 	resolutionScale: 1.0 / window.devicePixelRatio,
 	transparentTraversals: 20,
+	filterGlossyFactor: 0.25,
 
 };
 
@@ -103,7 +104,7 @@ async function init() {
 
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
-				new THREE.MeshStandardMaterial( { color: 0x1a1a1a, roughness: 0.1, metalness: 0.2 } ),
+				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
@@ -179,6 +180,11 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1, 0.01 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
 	ptFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -284,6 +290,7 @@ function animate() {
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
+	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
 
