@@ -33,9 +33,9 @@ const params = {
 		opacity: 1.0,
 	},
 	material3: {
-		color: '#ffffff',
-		roughness: 0.1,
-		metalness: 0.1,
+		color: '#000000',
+		roughness: 0.01,
+		metalness: 0.05,
 	},
 	environmentIntensity: 3,
 	bounces: 4,
