@@ -102,4 +102,17 @@ export const pathTracingHelpers = /* glsl */ `
 
 	}
 
+	// https://github.com/mrdoob/three.js/blob/dev/src/math/Vector3.js#L724
+	vec3 randDirection() {
+
+		vec2 r = rand2();
+		float u = ( r.x - 0.5 ) * 2.0;
+		float t = r.y * PI * 2.0;
+		float f = sqrt( 1.0 - u * u );
+
+		return vec3( f * cos( t ), f * sin( t ), u );
+
+	}
+
+
 `;

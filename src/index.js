@@ -7,3 +7,8 @@ export * from './uniforms/MaterialStructUniform.js';
 export * from './uniforms/RenderTarget2DArray.js';
 
 export * from './utils/GeometryPreparationUtils.js';
+
+export * from './shader/shaderGGXFunctions.js';
+export * from './shader/shaderMaterialSampling.js';
+export * from './shader/shaderUtils.js';
+export * from './shader/shaderStructs.js';

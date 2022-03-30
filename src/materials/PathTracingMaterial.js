@@ -6,6 +6,9 @@ import {
 import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
+import { shaderGGXFunctions } from '../shader/shaderGGXFunctions.js';
+import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
+import { shaderUtils } from '../shader/shaderUtils.js';
 
 export class PathTracingMaterial extends ShaderMaterial {
 
@@ -36,6 +39,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 				environmentMap: { value: null },
 				seed: { value: 0 },
 				opacity: { value: 1 },
+				filterGlossyFactor: { value: 0.0 },
 
 				gradientTop: { value: new Color( 0xbfd8ff ) },
 				gradientBottom: { value: new Color( 0xffffff ) },
@@ -75,6 +79,10 @@ export class PathTracingMaterial extends ShaderMaterial {
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
+				${ shaderUtils }
+				${ shaderGGXFunctions }
+				${ shaderMaterialSampling }
+
 				#if USE_ENVMAP
 
 				uniform float environmentBlur;
@@ -102,6 +110,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 				uniform usampler2D materialIndexAttribute;
                 uniform BVH bvh;
                 uniform float environmentIntensity;
+                uniform float filterGlossyFactor;
                 uniform int seed;
                 uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
@@ -128,6 +137,7 @@ export class PathTracingMaterial extends ShaderMaterial {
                     vec3 barycoord = vec3( 0.0 );
                     float side = 1.0;
                     float dist = 0.0;
+					float accumulatedRoughness = 0.0;
 					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
                     for ( i = 0; i < BOUNCES; i ++ ) {
@@ -168,15 +178,24 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
 
-						if ( material.opacity < rand() ) {
+						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
+
+						// albedo
+						vec4 albedo = vec4( material.color, material.opacity );
+						if ( material.map != - 1 ) {
+
+							albedo *= texture2D( textures, vec3( uv, material.map ) );
+
+						}
+
+						// possibly skip this sample if it's transparent
+						if ( albedo.a < rand() ) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
 							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
-							throughputColor *= mix( vec3( 1.0 ), material.color, 0.5 * material.opacity );
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
@@ -193,27 +212,27 @@ export class PathTracingMaterial extends ShaderMaterial {
 							faceIndices.xyz
 						).xyz );
 
-						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
+						// roughness
+						float roughness = material.roughness;
+						if ( material.roughnessMap != - 1 ) {
+
+							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).r;
+
+						}
+
+						// metalness
+						float metalness = material.metalness;
+						if ( material.metalnessMap != - 1 ) {
+
+							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).r;
+
+						}
 
 						// emission
 						vec3 emission = material.emissiveIntensity * material.emissive;
 						if ( material.emissiveMap != - 1 ) {
 
 							emission *= texture2D( textures, vec3( uv, material.emissiveMap ) ).xyz;
-
-						}
-
-						gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
-
-						// 1 / PI attenuation for physically correct lambert model
-                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                        throughputColor *= 1.0 / PI;
-
-						// albedo
-						throughputColor *= material.color;
-						if ( material.map != - 1 ) {
-
-							throughputColor *= texture2D( textures, vec3( uv, material.map ) ).xyz;
 
 						}
 
@@ -244,6 +263,39 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						normal *= side;
 
+						MaterialRec materialRec;
+						materialRec.transmission = material.transmission;
+						materialRec.ior = material.ior;
+						materialRec.emission = emission;
+						materialRec.metalness = metalness;
+						materialRec.color = albedo.rgb;
+
+						// compute the filtered roughness value to use during specular reflection computations. A minimum
+						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
+						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
+						materialRec.roughness = clamp(
+							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
+							1e-3,
+							1.0
+						);
+
+						SurfaceRec surfaceRec;
+						surfaceRec.normal = normal;
+						surfaceRec.faceNormal = faceNormal;
+						surfaceRec.filteredRoughness = materialRec.roughness; // TODO: do we need this?
+						surfaceRec.frontFace = side == 1.0;
+
+						// TODO: transform into local basis and then back out
+						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
+						mat3 invBasis = inverse( normalBasis );
+
+						vec3 outgoing = - normalize( invBasis * rayDirection );
+						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec, materialRec );
+
+						// determine if this is a rough normal or not by checking how far off straight up it is
+						vec3 halfVector = normalize( outgoing + sampleRec.direction );
+						accumulatedRoughness += sin( acos( halfVector.z ) );
+
                         // adjust the hit point by the surface normal by a factor of some offset and the
                         // maximum component-wise value of the current point to accommodate floating point
                         // error as values increase.
@@ -251,21 +303,25 @@ export class PathTracingMaterial extends ShaderMaterial {
                         vec3 absPoint = abs( point );
                         float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
                         rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-                        rayDirection = getHemisphereSample( normal, rand2() );
+                        rayDirection = normalize( normalBasis * sampleRec.direction );
 
-						// if the surface normal is skewed such that the outgoing vector can wind up underneath
-						// the triangle surface then just consider it absorbed.
-						if ( dot( rayDirection, faceNormal ) < 0.0 ) {
+						// accumulate color
+						gl_FragColor.rgb += ( emission * throughputColor );
+
+						// skip the sample if our PDF or ray is impossible
+						if (
+							sampleRec.pdf <= 0.0
+							|| ! isDirectionValid( rayDirection, normal, faceNormal )
+						) {
 
 							break;
 
 						}
 
+						throughputColor *= sampleRec.color / sampleRec.pdf;
 
                     }
 
-					// gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
-					// gl_FragColor.rgb = mix( textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
                     gl_FragColor.a = opacity;
 
                 }

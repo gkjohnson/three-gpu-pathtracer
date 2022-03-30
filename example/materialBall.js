@@ -13,27 +13,37 @@ let samplesEl;
 const params = {
 
 	material1: {
-		color: '#ffffff',
-		roughness: 1.0,
-		metalness: 1.0,
+		color: '#ffc766',
+		emissive: '#000000',
+		emissiveIntensity: 1,
+		roughness: 0.1,
+		metalness: 0.8,
 		ior: 1.0,
 		transmission: 0.0,
 		opacity: 1.0,
 	},
 	material2: {
-		color: '#26C6DA',
-		roughness: 1.0,
-		metalness: 1.0,
+		color: '#db7157',
+		emissive: '#000000',
+		emissiveIntensity: 1,
+		roughness: 0.8,
+		metalness: 0.1,
 		ior: 1.0,
 		transmission: 0.0,
 		opacity: 1.0,
 	},
+	material3: {
+		color: '#000000',
+		roughness: 0.01,
+		metalness: 0.05,
+	},
 	environmentIntensity: 3,
-	bounces: 3,
+	bounces: 4,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1.0 / window.devicePixelRatio,
 	transparentTraversals: 20,
+	filterGlossyFactor: 0.25,
 
 };
 
@@ -53,6 +63,7 @@ async function init() {
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PathTracingMaterial( { transparent: true, depthWrite: false } );
+	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -84,7 +95,7 @@ async function init() {
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material-ball.glb' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material_ball_v2.glb' )
 		.then( gltf => {
 
 			const group = new THREE.Group();
@@ -98,17 +109,25 @@ async function init() {
 
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
-				new THREE.MeshStandardMaterial( { color: 0x1a1a1a } ),
+				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
-			floor.position.y = box.min.y - 0.025;
+			floor.position.y = box.min.y - 0.03;
 			group.add( floor );
 
 			const material1 = new THREE.MeshStandardMaterial();
 			const material2 = new THREE.MeshStandardMaterial();
 
 			gltf.scene.traverse( c => {
+
+				// the vertex normals on the material ball are off...
+				// TODO: precompute the vertex normals so they are correct on load
+				if ( c.geometry ) {
+
+					c.geometry.computeVertexNormals();
+
+				}
 
 				if ( c.name === 'Sphere_1' ) {
 
@@ -122,13 +141,13 @@ async function init() {
 
 				if ( c.name === 'subsphere_1' ) {
 
-					c.visible = false;
+					c.material = material2;
 
 				}
 
 			} );
 
-			materials = [ material1, material2 ];
+			materials = [ material1, material2, floor.material ];
 
 			return generator.generate( group );
 
@@ -166,6 +185,11 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
 	ptFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -189,14 +213,16 @@ async function init() {
 		fsQuad.material.needsUpdate = true;
 
 	} );
-	ptFolder.add( params, 'resolutionScale', 0, 1 ).onChange( () => {
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
 
 	} );
 
-	const matFolder1 = gui.addFolder( 'Material 1' );
+	const matFolder1 = gui.addFolder( 'Shell Material' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
+	matFolder1.addColor( params.material1, 'emissive' ).onChange( reset );
+	matFolder1.add( params.material1, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
 	matFolder1.add( params.material1, 'roughness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
@@ -204,14 +230,21 @@ async function init() {
 	matFolder1.add( params.material1, 'ior', 0.5, 2.0 ).onChange( reset );
 	matFolder1.open();
 
-	const matFolder2 = gui.addFolder( 'Material 2' );
+	const matFolder2 = gui.addFolder( 'Ball Material' );
 	matFolder2.addColor( params.material2, 'color' ).onChange( reset );
+	matFolder2.addColor( params.material2, 'emissive' ).onChange( reset );
+	matFolder2.add( params.material2, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
 	matFolder2.add( params.material2, 'roughness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.5, 2 ).onChange( reset );
 	matFolder2.open();
+
+	const matFolder3 = gui.addFolder( 'Floor Material' );
+	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
+	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
 
 	animate();
 
@@ -228,7 +261,7 @@ function onResize() {
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio );
+	renderer.setPixelRatio( window.devicePixelRatio * scale );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -247,6 +280,8 @@ function animate() {
 
 	const m1 = materials[ 0 ];
 	m1.color.set( params.material1.color ).convertSRGBToLinear();
+	m1.emissive.set( params.material1.emissive ).convertSRGBToLinear();
+	m1.emissiveIntensity = params.material1.emissiveIntensity;
 	m1.metalness = params.material1.metalness;
 	m1.roughness = params.material1.roughness;
 	m1.transmission = params.material1.transmission;
@@ -255,14 +290,22 @@ function animate() {
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
+	m2.emissive.set( params.material2.emissive ).convertSRGBToLinear();
+	m2.emissiveIntensity = params.material2.emissiveIntensity;
 	m2.metalness = params.material2.metalness;
 	m2.roughness = params.material2.roughness;
 	m2.transmission = params.material2.transmission;
 	m2.ior = params.material2.ior;
 	m2.opacity = params.material2.opacity;
 
+	const m3 = materials[ 2 ];
+	m3.color.set( params.material3.color ).convertSRGBToLinear();
+	m3.metalness = params.material3.metalness;
+	m3.roughness = params.material3.roughness;
+
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
+	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
 
