@@ -24,6 +24,7 @@ export class MaterialStructUniform {
 		this.normalScale = new Vector2( 1, 1 );
 
 		this.opacity = 1.0;
+		this.alphaTest = 0.0;
 
 		// TODO: Clearcoat
 
@@ -77,6 +78,9 @@ export class MaterialStructUniform {
 
 		// opacity
 		this.opacity = material.opacity;
+
+		// alpha test
+		this.alphaTest = material.alphaTest;
 
 	}
 
