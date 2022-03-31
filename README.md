@@ -21,9 +21,13 @@ _More features and capabilities in progress!_
 
 _TODO_
 
-# API
+# Exports
 
 _TODO_
+
+# Caveats
+
+- All textures must use the same wrap and interpolation flags.
 
 # Screenshots
 
