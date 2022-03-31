@@ -191,8 +191,11 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-						// possibly skip this sample if it's transparent
-						if ( albedo.a < rand() ) {
+						// possibly skip this sample if it's transparent or alpha test is enabled
+						if (
+							material.alphaTest != 0.0 && albedo.a < material.alphaTest
+							|| material.alphaTest == 0.0 && albedo.a < rand()
+						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
 							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
