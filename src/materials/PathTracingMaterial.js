@@ -333,7 +333,16 @@ export class PathTracingMaterial extends ShaderMaterial {
 
                     }
 
-                    gl_FragColor.a = opacity;
+					// if we have a nan or inf in the result then skip this sample
+					if ( any( isnan( gl_FragColor.rgb ) ) || any( isinf( gl_FragColor.rgb ) ) ) ) {
+
+						gl_FragColor = vec4( 0.0 );
+
+					} else {
+
+                    	gl_FragColor.a = opacity;
+
+					}
 
                 }
 
