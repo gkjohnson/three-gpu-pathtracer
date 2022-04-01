@@ -12,6 +12,13 @@ import { shaderUtils } from '../shader/shaderUtils.js';
 
 export class PathTracingMaterial extends ShaderMaterial {
 
+	// three.js relies on this field to add env map functions and defines
+	get envMap() {
+
+		return this.environmentMap;
+
+	}
+
 	constructor( parameters ) {
 
 		super( {
@@ -20,7 +27,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 				BOUNCES: 3,
 				TRANSPARENT_TRAVERSALS: 20,
 				MATERIAL_LENGTH: 0,
-				USE_ENVMAP: 1,
 				GRADIENT_BG: 0,
 			},
 
@@ -65,7 +71,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 			fragmentShader: /* glsl */`
                 #define RAY_OFFSET 1e-5
-				#define ENVMAP_TYPE_CUBE_UV
 
                 precision highp isampler2D;
                 precision highp usampler2D;
@@ -83,7 +88,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 				${ shaderGGXFunctions }
 				${ shaderMaterialSampling }
 
-				#if USE_ENVMAP
+				#ifdef USE_ENVMAP
 
 				uniform float environmentBlur;
                 uniform sampler2D environmentMap;
@@ -160,7 +165,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 							#endif
 
-							#if USE_ENVMAP
+							#ifdef USE_ENVMAP
 
                             vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
 

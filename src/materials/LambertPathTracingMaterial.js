@@ -9,6 +9,13 @@ import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 
 export class LambertPathTracingMaterial extends ShaderMaterial {
 
+	// three.js relies on this field to add env map functions and defines
+	get envMap() {
+
+		return this.environmentMap;
+
+	}
+
 	constructor( parameters ) {
 
 		super( {
@@ -16,7 +23,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 			defines: {
 				BOUNCES: 3,
 				MATERIAL_LENGTH: 0,
-				USE_ENVMAP: 1,
 				GRADIENT_BG: 0,
 				DISPLAY_FLOOR: 1,
 			},
@@ -64,7 +70,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 			fragmentShader: /* glsl */`
                 #define RAY_OFFSET 1e-5
-				#define ENVMAP_TYPE_CUBE_UV
 
                 precision highp isampler2D;
                 precision highp usampler2D;
@@ -78,7 +83,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
-				#if USE_ENVMAP
+				#ifdef USE_ENVMAP
 
 				uniform float environmentBlur;
                 uniform sampler2D environmentMap;
@@ -179,7 +184,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 							#endif
 
-							#if USE_ENVMAP
+							#ifdef USE_ENVMAP
 
                             vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
 
