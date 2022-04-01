@@ -6,6 +6,8 @@ export const shaderGGXFunctions = /* glsl */`
 // [2] http://jcgt.org/published/0007/04/01/
 // [4] http://jcgt.org/published/0003/02/03/
 
+// trowbridge-reitz === GGX === GTR
+
 vec3 ggxDirection( vec3 incidentDir, float roughnessX, float roughnessY, float random1, float random2 ) {
 
 	// TODO: try GGXVNDF implementation from reference [2], here. Needs to update ggxDistribution

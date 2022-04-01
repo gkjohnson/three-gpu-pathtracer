@@ -37,6 +37,7 @@ const params = {
 		roughness: 0.01,
 		metalness: 0.05,
 	},
+	resetSeed: true,
 	environmentIntensity: 3,
 	bounces: 4,
 	samplesPerFrame: 1,
@@ -184,6 +185,17 @@ async function init() {
 
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
+	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
+
+		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+		fsQuad.material.needsUpdate = true;
+
+	} );
+	ptFolder.add( params, 'resetSeed' ).onChange( value => {
+
+		ptRenderer.resetSeed = value;
+
+	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
@@ -205,12 +217,6 @@ async function init() {
 
 		ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', value );
 		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
-
-		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-		fsQuad.material.needsUpdate = true;
 
 	} );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
