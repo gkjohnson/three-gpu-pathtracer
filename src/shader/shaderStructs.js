@@ -1,31 +1,31 @@
 export const shaderMaterialStructs = /* glsl */ `
 
-    struct Material {
+	struct Material {
 
-        vec3 color;
-        int map;
+		vec3 color;
+		int map;
 
-        float metalness;
-        int metalnessMap;
+		float metalness;
+		int metalnessMap;
 
-        float roughness;
-        int roughnessMap;
+		float roughness;
+		int roughnessMap;
 
-        float ior;
-        float transmission;
-        int transmissionMap;
+		float ior;
+		float transmission;
+		int transmissionMap;
 
-        vec3 emissive;
-        float emissiveIntensity;
-        int emissiveMap;
+		vec3 emissive;
+		float emissiveIntensity;
+		int emissiveMap;
 
-    	int normalMap;
+		int normalMap;
 		vec2 normalScale;
 
 		float opacity;
 		float alphaTest;
 
-    };
+	};
 
 `;
 

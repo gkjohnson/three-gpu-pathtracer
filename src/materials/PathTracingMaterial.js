@@ -56,31 +56,31 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 			vertexShader: /* glsl */`
 
-                varying vec2 vUv;
-                void main() {
+				varying vec2 vUv;
+				void main() {
 
-                    vec4 mvPosition = vec4( position, 1.0 );
-                    mvPosition = modelViewMatrix * mvPosition;
-                    gl_Position = projectionMatrix * mvPosition;
+					vec4 mvPosition = vec4( position, 1.0 );
+					mvPosition = modelViewMatrix * mvPosition;
+					gl_Position = projectionMatrix * mvPosition;
 
-                    vUv = uv;
+					vUv = uv;
 
-                }
+				}
 
-            `,
+			`,
 
 			fragmentShader: /* glsl */`
-                #define RAY_OFFSET 1e-5
+				#define RAY_OFFSET 1e-5
 
-                precision highp isampler2D;
-                precision highp usampler2D;
-                precision highp sampler2DArray;
+				precision highp isampler2D;
+				precision highp usampler2D;
+				precision highp sampler2DArray;
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
-                #include <common>
+				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-                ${ shaderStructs }
-                ${ shaderIntersectFunction }
+				${ shaderStructs }
+				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
@@ -91,63 +91,63 @@ export class PathTracingMaterial extends ShaderMaterial {
 				#ifdef USE_ENVMAP
 
 				uniform float environmentBlur;
-                uniform sampler2D environmentMap;
+				uniform sampler2D environmentMap;
 
 				#else
 
-                uniform vec3 gradientTop;
-                uniform vec3 gradientBottom;
+				uniform vec3 gradientTop;
+				uniform vec3 gradientBottom;
 
 				#endif
 
 				#if GRADIENT_BG
 
 				uniform vec3 bgGradientTop;
-                uniform vec3 bgGradientBottom;
+				uniform vec3 bgGradientBottom;
 
 				#endif
 
-                uniform mat4 cameraWorldMatrix;
-                uniform mat4 invProjectionMatrix;
-                uniform sampler2D normalAttribute;
-                uniform sampler2D tangentAttribute;
-                uniform sampler2D uvAttribute;
+				uniform mat4 cameraWorldMatrix;
+				uniform mat4 invProjectionMatrix;
+				uniform sampler2D normalAttribute;
+				uniform sampler2D tangentAttribute;
+				uniform sampler2D uvAttribute;
 				uniform usampler2D materialIndexAttribute;
-                uniform BVH bvh;
-                uniform float environmentIntensity;
-                uniform float filterGlossyFactor;
-                uniform int seed;
-                uniform float opacity;
+				uniform BVH bvh;
+				uniform float environmentIntensity;
+				uniform float filterGlossyFactor;
+				uniform int seed;
+				uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
 				uniform sampler2DArray textures;
-                varying vec2 vUv;
+				varying vec2 vUv;
 
-                void main() {
+				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
 
-                    // get [-1, 1] normalized device coordinates
-                    vec2 ndc = 2.0 * vUv - vec2( 1.0 );
-                    vec3 rayOrigin, rayDirection;
-                    ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
+					// get [-1, 1] normalized device coordinates
+					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
+					vec3 rayOrigin, rayDirection;
+					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
 
-                    // Lambertian render
-                    gl_FragColor = vec4( 0.0 );
+					// Lambertian render
+					gl_FragColor = vec4( 0.0 );
 
-                    vec3 throughputColor = vec3( 1.0 );
+					vec3 throughputColor = vec3( 1.0 );
 
-                    // hit results
-                    uvec4 faceIndices = uvec4( 0u );
-                    vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
-                    vec3 barycoord = vec3( 0.0 );
-                    float side = 1.0;
-                    float dist = 0.0;
+					// hit results
+					uvec4 faceIndices = uvec4( 0u );
+					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
+					vec3 barycoord = vec3( 0.0 );
+					float side = 1.0;
+					float dist = 0.0;
 					float accumulatedRoughness = 0.0;
 					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
-                    for ( i = 0; i < BOUNCES; i ++ ) {
+					for ( i = 0; i < BOUNCES; i ++ ) {
 
-                        if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
 							#if GRADIENT_BG
 
@@ -167,7 +167,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 							#ifdef USE_ENVMAP
 
-                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
+							vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
 
 							#else
 
@@ -177,9 +177,9 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 							#endif
 
-                            gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
+							gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
 
-                            break;
+							break;
 
 						}
 
@@ -216,8 +216,8 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-                        // fetch the interpolated smooth normal
-                        vec3 normal = normalize( textureSampleBarycoord(
+						// fetch the interpolated smooth normal
+						vec3 normal = normalize( textureSampleBarycoord(
 							normalAttribute,
 							barycoord,
 							faceIndices.xyz
@@ -307,16 +307,16 @@ export class PathTracingMaterial extends ShaderMaterial {
 						vec3 halfVector = normalize( outgoing + sampleRec.direction );
 						accumulatedRoughness += sin( acos( halfVector.z ) );
 
-                        // adjust the hit point by the surface normal by a factor of some offset and the
-                        // maximum component-wise value of the current point to accommodate floating point
-                        // error as values increase.
-                        vec3 point = rayOrigin + rayDirection * dist;
-                        vec3 absPoint = abs( point );
-                        float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-                        rayDirection = normalize( normalBasis * sampleRec.direction );
+						// adjust the hit point by the surface normal by a factor of some offset and the
+						// maximum component-wise value of the current point to accommodate floating point
+						// error as values increase.
+						vec3 point = rayOrigin + rayDirection * dist;
+						vec3 absPoint = abs( point );
+						float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+						rayDirection = normalize( normalBasis * sampleRec.direction );
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-                        rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
 						// accumulate color
 						gl_FragColor.rgb += ( emission * throughputColor );
@@ -337,13 +337,13 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
-                    }
+					}
 
 					gl_FragColor.a = opacity;
 
-                }
+				}
 
-            `
+			`
 
 		} );
 

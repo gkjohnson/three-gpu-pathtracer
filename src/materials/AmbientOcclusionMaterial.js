@@ -64,11 +64,11 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 				#endif
 
-                void main() {
+				void main() {
 
-                    vec4 mvPosition = vec4( position, 1.0 );
-                    mvPosition = modelViewMatrix * mvPosition;
-                    gl_Position = projectionMatrix * mvPosition;
+					vec4 mvPosition = vec4( position, 1.0 );
+					mvPosition = modelViewMatrix * mvPosition;
+					gl_Position = projectionMatrix * mvPosition;
 
 					mat3 modelNormalMatrix = transpose( inverse( mat3( modelMatrix ) ) );
 					vNorm = normalize( modelNormalMatrix * normal );
@@ -81,26 +81,26 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 					#endif
 
-                }
+				}
 
-            `,
+			`,
 
 			fragmentShader: /* glsl */`
-                #define RAY_OFFSET 1e-5
+				#define RAY_OFFSET 1e-5
 
-                precision highp isampler2D;
-                precision highp usampler2D;
-                precision highp sampler2DArray;
-                #include <common>
+				precision highp isampler2D;
+				precision highp usampler2D;
+				precision highp sampler2DArray;
+				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-                ${ shaderStructs }
-                ${ shaderIntersectFunction }
+				${ shaderStructs }
+				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
-                uniform BVH bvh;
-                uniform int seed;
+				uniform BVH bvh;
+				uniform int seed;
 				uniform float radius;
 
 				varying vec3 vNorm;
@@ -115,7 +115,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 				#endif
 
-                void main() {
+				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
 
@@ -184,9 +184,9 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 					gl_FragColor.rgb = vec3( accumulated / float( SAMPLES ) );
 					gl_FragColor.a = 1.0;
 
-                }
+				}
 
-            `
+			`
 
 		} );
 

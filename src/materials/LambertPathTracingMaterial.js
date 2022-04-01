@@ -55,50 +55,50 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 			vertexShader: /* glsl */`
 
-                varying vec2 vUv;
-                void main() {
+				varying vec2 vUv;
+				void main() {
 
-                    vec4 mvPosition = vec4( position, 1.0 );
-                    mvPosition = modelViewMatrix * mvPosition;
-                    gl_Position = projectionMatrix * mvPosition;
+					vec4 mvPosition = vec4( position, 1.0 );
+					mvPosition = modelViewMatrix * mvPosition;
+					gl_Position = projectionMatrix * mvPosition;
 
-                    vUv = uv;
+					vUv = uv;
 
-                }
+				}
 
-            `,
+			`,
 
 			fragmentShader: /* glsl */`
-                #define RAY_OFFSET 1e-5
+				#define RAY_OFFSET 1e-5
 
-                precision highp isampler2D;
-                precision highp usampler2D;
-                precision highp sampler2DArray;
+				precision highp isampler2D;
+				precision highp usampler2D;
+				precision highp sampler2DArray;
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
-                #include <common>
+				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-                ${ shaderStructs }
-                ${ shaderIntersectFunction }
+				${ shaderStructs }
+				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
 				${ pathTracingHelpers }
 
 				#ifdef USE_ENVMAP
 
 				uniform float environmentBlur;
-                uniform sampler2D environmentMap;
+				uniform sampler2D environmentMap;
 
 				#else
 
-                uniform vec3 gradientTop;
-                uniform vec3 gradientBottom;
+				uniform vec3 gradientTop;
+				uniform vec3 gradientBottom;
 
 				#endif
 
 				#if GRADIENT_BG
 
 				uniform vec3 bgGradientTop;
-                uniform vec3 bgGradientBottom;
+				uniform vec3 bgGradientBottom;
 
 				#endif
 
@@ -109,44 +109,44 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 				#endif
 
-                uniform mat4 cameraWorldMatrix;
-                uniform mat4 invProjectionMatrix;
-                uniform sampler2D normalAttribute;
-                uniform sampler2D tangentAttribute;
-                uniform sampler2D uvAttribute;
+				uniform mat4 cameraWorldMatrix;
+				uniform mat4 invProjectionMatrix;
+				uniform sampler2D normalAttribute;
+				uniform sampler2D tangentAttribute;
+				uniform sampler2D uvAttribute;
 				uniform usampler2D materialIndexAttribute;
-                uniform BVH bvh;
-                uniform float environmentIntensity;
-                uniform int seed;
-                uniform float opacity;
+				uniform BVH bvh;
+				uniform float environmentIntensity;
+				uniform int seed;
+				uniform float opacity;
 				uniform Material materials[ MATERIAL_LENGTH ];
 				uniform sampler2DArray textures;
-                varying vec2 vUv;
+				varying vec2 vUv;
 
-                void main() {
+				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
 
-                    // get [-1, 1] normalized device coordinates
-                    vec2 ndc = 2.0 * vUv - vec2( 1.0 );
-                    vec3 rayOrigin, rayDirection;
-                    ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
+					// get [-1, 1] normalized device coordinates
+					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
+					vec3 rayOrigin, rayDirection;
+					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
 
-                    // Lambertian render
-                    gl_FragColor = vec4( 0.0 );
+					// Lambertian render
+					gl_FragColor = vec4( 0.0 );
 
-                    vec3 throughputColor = vec3( 1.0 );
+					vec3 throughputColor = vec3( 1.0 );
 
-                    // hit results
-                    uvec4 faceIndices = uvec4( 0u );
-                    vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
-                    vec3 barycoord = vec3( 0.0 );
-                    float side = 1.0;
-                    float dist = 0.0;
+					// hit results
+					uvec4 faceIndices = uvec4( 0u );
+					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
+					vec3 barycoord = vec3( 0.0 );
+					float side = 1.0;
+					float dist = 0.0;
 					int i;
-                    for ( i = 0; i < BOUNCES; i ++ ) {
+					for ( i = 0; i < BOUNCES; i ++ ) {
 
-                        if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
 							#if DISPLAY_FLOOR
 
@@ -186,7 +186,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 							#ifdef USE_ENVMAP
 
-                            vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
+							vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
 
 							#else
 
@@ -196,9 +196,9 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 							#endif
 
-                            gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
+							gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
 
-                            break;
+							break;
 
 						}
 
@@ -217,8 +217,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 						}
 
-                        // fetch the interpolated smooth normal
-                        vec3 normal = normalize( textureSampleBarycoord(
+						// fetch the interpolated smooth normal
+						vec3 normal = normalize( textureSampleBarycoord(
 							normalAttribute,
 							barycoord,
 							faceIndices.xyz
@@ -237,8 +237,8 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 						gl_FragColor.rgb += throughputColor * emission * max( side, 0.0 );
 
 						// 1 / PI attenuation for physically correct lambert model
-                        // https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
-                        throughputColor *= 1.0 / PI;
+						// https://www.rorydriscoll.com/2009/01/25/energy-conservation-in-games/
+						throughputColor *= 1.0 / PI;
 
 						// albedo
 						throughputColor *= material.color;
@@ -275,14 +275,14 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 						normal *= side;
 
-                        // adjust the hit point by the surface normal by a factor of some offset and the
-                        // maximum component-wise value of the current point to accommodate floating point
-                        // error as values increase.
-                        vec3 point = rayOrigin + rayDirection * dist;
-                        vec3 absPoint = abs( point );
-                        float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-                        rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-                        rayDirection = getHemisphereSample( normal, rand2() );
+						// adjust the hit point by the surface normal by a factor of some offset and the
+						// maximum component-wise value of the current point to accommodate floating point
+						// error as values increase.
+						vec3 point = rayOrigin + rayDirection * dist;
+						vec3 absPoint = abs( point );
+						float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
+						rayDirection = getHemisphereSample( normal, rand2() );
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.
@@ -293,15 +293,15 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 						}
 
 
-                    }
+					}
 
 					// gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
 					// gl_FragColor.rgb = mix( textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
-                    gl_FragColor.a = opacity;
+					gl_FragColor.a = opacity;
 
-                }
+				}
 
-            `
+			`
 
 		} );
 
