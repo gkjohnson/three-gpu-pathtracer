@@ -315,15 +315,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						gl_FragColor.rgb += ( emission * throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 ) {
-
-							break;
-
-						}
-
-						// NOTE: for some reason putting this condition and the above one on the same line with ||
-						// causes the pdf condition to fail always (seemingly)
-						if ( ! isDirectionValid( rayDirection, normal, faceNormal ) ) {
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, normal, faceNormal) ) {
 
 							break;
 
@@ -331,18 +323,16 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						throughputColor *= sampleRec.color / sampleRec.pdf;
 
+						// discard the sample if there are any NaNs
+						if ( any( isnan( throughputColor ) ) || any( isinf( throughputColor ) ) ) {
+
+							break;
+
+						}
+
                     }
 
-					// if we have a nan or inf in the result then skip this sample
-					if ( any( isnan( gl_FragColor.rgb ) ) || any( isinf( gl_FragColor.rgb ) ) ) {
-
-						gl_FragColor = vec4( 0.0 );
-
-					} else {
-
-                    	gl_FragColor.a = opacity;
-
-					}
+					gl_FragColor.a = opacity;
 
                 }
 
