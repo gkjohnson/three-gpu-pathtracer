@@ -8,10 +8,8 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
-import * as MikkTSpace from './lib/mikktspace.module.js';
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { computeTangents } from './lib/BufferGeometryUtils.js';
-// import { computeTangents, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
+import { mergeVertices, computeTangents } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let renderer, controls, camera, scene, stats;
 let fsQuad, target1, target2, materials;
