@@ -315,10 +315,15 @@ export class PathTracingMaterial extends ShaderMaterial {
 						gl_FragColor.rgb += ( emission * throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if (
-							sampleRec.pdf <= 0.0
-							|| ! isDirectionValid( rayDirection, normal, faceNormal )
-						) {
+						if ( sampleRec.pdf <= 0.0 ) {
+
+							break;
+
+						}
+
+						// NOTE: for some reason putting this condition and the above one on the same line with ||
+						// causes the pdf condition to fail always (seemingly)
+						if ( ! isDirectionValid( rayDirection, normal, faceNormal ) ) {
 
 							break;
 
