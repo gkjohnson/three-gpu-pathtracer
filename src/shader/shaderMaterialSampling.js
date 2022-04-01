@@ -178,6 +178,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec hit, MaterialRec material ) {
 	bool frontFace = hit.frontFace;
 	float ratio = frontFace ? 1.0 / ior : ior;
 
+	// TODO: is this right?
 	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), ratio );
 	lightDirection += randDirection() * roughness;
 	return lightDirection;

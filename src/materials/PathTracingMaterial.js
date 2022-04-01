@@ -308,8 +308,10 @@ export class PathTracingMaterial extends ShaderMaterial {
                         vec3 point = rayOrigin + rayDirection * dist;
                         vec3 absPoint = abs( point );
                         float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-                        rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
                         rayDirection = normalize( normalBasis * sampleRec.direction );
+
+						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+                        rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
 						// accumulate color
 						gl_FragColor.rgb += ( emission * throughputColor );
