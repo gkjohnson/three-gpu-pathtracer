@@ -11,7 +11,7 @@
     "build/*"
   ],
   "dependencies": {
-    "three": "^0.137.0",
+    "three": "^0.139.2",
     "three-mesh-bvh": "^0.5.4"
   },
   "devDependencies": {
