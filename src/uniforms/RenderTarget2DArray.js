@@ -1,6 +1,5 @@
 import {
-	DataTexture2DArray,
-	WebGLRenderTarget,
+	WebGLArrayRenderTarget,
 	RGBAFormat,
 	UnsignedByteType,
 	MeshBasicMaterial,
@@ -12,26 +11,24 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 const prevColor = new Color();
-export class RenderTarget2DArray extends WebGLRenderTarget {
+export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	constructor( ...args ) {
 
 		super( ...args );
 
-		const dataTexture = new DataTexture2DArray();
-		dataTexture.format = RGBAFormat;
-		dataTexture.type = UnsignedByteType;
-		dataTexture.minFilter = LinearFilter;
-		dataTexture.magFilter = LinearFilter;
-		dataTexture.wrapS = RepeatWrapping;
-		dataTexture.wrapT = RepeatWrapping;
-		dataTexture.setTextures = ( ...args ) => {
+		const tex = this.texture;
+		tex.format = RGBAFormat;
+		tex.type = UnsignedByteType;
+		tex.minFilter = LinearFilter;
+		tex.magFilter = LinearFilter;
+		tex.wrapS = RepeatWrapping;
+		tex.wrapT = RepeatWrapping;
+		tex.setTextures = ( ...args ) => {
 
 			this.setTextures( ...args );
 
 		};
-
-		this.setTexture( dataTexture );
 
 		const fsQuad = new FullScreenQuad( new MeshBasicMaterial() );
 		this.fsQuad = fsQuad;
