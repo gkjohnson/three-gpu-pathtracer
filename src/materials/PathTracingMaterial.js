@@ -274,34 +274,32 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						normal *= side;
 
-						MaterialRec materialRec;
-						materialRec.transmission = material.transmission;
-						materialRec.ior = material.ior;
-						materialRec.emission = emission;
-						materialRec.metalness = metalness;
-						materialRec.color = albedo.rgb;
-						materialRec.roughness = roughness;
+						SurfaceRec surfaceRec;
+						surfaceRec.normal = normal;
+						surfaceRec.faceNormal = faceNormal;
+						surfaceRec.frontFace = side == 1.0;
+						surfaceRec.transmission = material.transmission;
+						surfaceRec.ior = material.ior;
+						surfaceRec.emission = emission;
+						surfaceRec.metalness = metalness;
+						surfaceRec.color = albedo.rgb;
+						surfaceRec.roughness = roughness;
 
 						// compute the filtered roughness value to use during specular reflection computations. A minimum
 						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
 						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
-						materialRec.filteredRoughness = clamp(
+						surfaceRec.filteredRoughness = clamp(
 							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
 							1e-3,
 							1.0
 						);
 
-						SurfaceRec surfaceRec;
-						surfaceRec.normal = normal;
-						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.frontFace = side == 1.0;
-
 						// TODO: transform into local basis and then back out
-						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
+						mat3 normalBasis = getBasisFromNormal( normal );
 						mat3 invBasis = inverse( normalBasis );
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
-						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec, materialRec );
+						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec );
 
 						// determine if this is a rough normal or not by checking how far off straight up it is
 						vec3 halfVector = normalize( outgoing + sampleRec.direction );
