@@ -86,17 +86,47 @@ function animate() {
 readonly samples : Number
 ```
 
+Number of samples per pixel that have been rendered to the target.
+
+### .target
+
+```js
+readonly target : WebGLRenderTarget
+```
+
+The target being rendered to. The size of the target is updated with `setSize` and is initialized to a FloatType texture.
+
+### .camera
+
+```js
+camera = null : Camera
+```
+
+The camera to render with. The view offset of the camera will be updated every sample to enable anti aliasing.
+
+### .material
+
+```js
+material = null : ShaderMaterial
+```
+
+The Path Tracing material to render. This is expected to be a full screen quad material that respects the "opacity" field for every pixel so samples can be accumulated over time. The material is also expected to have `cameraWorldMatrix` and `invProjectionMatrix` fields of type `Matrix4`.
+
 ### .tiles
 
 ```js
 tiles = ( 1, 1 ) : Vector2
 ```
 
+Number of tiles on x and y to render to. Can be used to improve the responsiveness of a page while still rendering a high resolution target.
+
 ### .resetSeed
 
 ```js
 resetSeed = false
 ```
+
+Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
 
 ### constructor
 
@@ -110,17 +140,23 @@ constructor( renderer : WebGLRenderer )
 setSize( size : Vector2 ) : void
 ```
 
+Sets the size of the target to render to.
+
 ### .update
 
 ```js
 update()
 ```
 
+Renders a single sample to the target.
+
 ### .reset
 
 ```js
 reset() : void
 ```
+
+Resets and restarts the render from scratch.
 
 ## PathTracingSceneGenerator
 
