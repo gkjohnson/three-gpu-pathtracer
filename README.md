@@ -37,7 +37,6 @@ ptRenderer.material = ptMaterial;
 
 // init quad for rendering to the canvas
 const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-	transparent: true,
 	map: ptRenderer.target.texture,
 } ) );
 
