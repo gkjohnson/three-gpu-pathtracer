@@ -41,7 +41,7 @@ const params = {
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
-	resolutionScale: 1.0 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 
@@ -53,7 +53,16 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.roughness = 0.05;
 	params.material1.transmission = 1.0;
 	params.material1.color = '#ffffff';
-	params.bounces = 15;
+	params.bounces = 10;
+
+}
+
+// clamp value for mobile
+const aspectRatio = window.innerWidth / window.innerHeight;
+if ( aspectRatio < 0.65 ) {
+
+	params.bounces = Math.max( params.bounces, 6 );
+	params.resolutionScale *= 0.5;
 
 }
 
