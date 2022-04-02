@@ -294,7 +294,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 							1.0
 						);
 
-						// TODO: transform into local basis and then back out
 						mat3 normalBasis = getBasisFromNormal( normal );
 						mat3 invBasis = inverse( normalBasis );
 
