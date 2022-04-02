@@ -17,9 +17,25 @@ _More features and capabilities in progress!_
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
-# Use
+# Exports
 
-_TODO_
+## PathTracingRenderer
+
+## PathTracingSceneGenerator
+
+## PathTracingMaterial
+
+## RenderTarget2DArray
+
+## MaterialStructArrayUniform
+
+## MaterialStructUniform
+
+## Functions
+
+### mergeMeshes
+
+## Shader Chunks
 
 # Exports
 
