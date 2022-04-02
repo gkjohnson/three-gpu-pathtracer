@@ -7,12 +7,6 @@ Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-m
 
 _More features and capabilities in progress!_
 
-# Use
-
-```js
-// TODO
-```
-
 # Examples
 
 [Lambert demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lambert.html)!
@@ -22,6 +16,12 @@ _More features and capabilities in progress!_
 [Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
+
+# Use
+
+```js
+// TODO
+```
 
 # Exports
 
