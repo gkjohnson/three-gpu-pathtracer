@@ -15,13 +15,19 @@ _More features and capabilities in progress!_
 
 [Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
+[Transmission preset demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)!
+
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
 # Use
 
 ```js
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from 'three-gpu-pathtracer';
+import {
+	PathTracingSceneGenerator,
+	PathTracingRenderer,
+	PhysicalPathTracingMaterial,
+} from 'three-gpu-pathtracer';
 
 // init scene, renderer, camera, controls, etc
 
@@ -33,7 +39,6 @@ ptRenderer.material = ptMaterial;
 
 // init quad for rendering to the canvas
 const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-	transparent: true,
 	map: ptRenderer.target.texture,
 } ) );
 
@@ -59,6 +64,8 @@ animate();
 
 function animate() {
 
+	// if the camera position changes call "ptRenderer.reset()"
+
 	// update the camera and render one sample
 	camera.updateMatrixWorld();
 	ptRenderer.update();
@@ -77,11 +84,37 @@ function animate() {
 
 ## PathTracingRenderer
 
-### constructor
+### .samples
 
 ```js
-constructor( renderer : WebGLRenderer )
+readonly samples : Number
 ```
+
+Number of samples per pixel that have been rendered to the target.
+
+### .target
+
+```js
+readonly target : WebGLRenderTarget
+```
+
+The target being rendered to. The size of the target is updated with `setSize` and is initialized to a FloatType texture.
+
+### .camera
+
+```js
+camera = null : Camera
+```
+
+The camera to render with. The view offset of the camera will be updated every sample to enable anti aliasing.
+
+### .material
+
+```js
+material = null : ShaderMaterial
+```
+
+The Path Tracing material to render. This is expected to be a full screen quad material that respects the "opacity" field for every pixel so samples can be accumulated over time. The material is also expected to have `cameraWorldMatrix` and `invProjectionMatrix` fields of type `Matrix4`.
 
 ### .tiles
 
@@ -89,16 +122,20 @@ constructor( renderer : WebGLRenderer )
 tiles = ( 1, 1 ) : Vector2
 ```
 
-### .samples
-
-```js
-samples = 1 : Number
-```
+Number of tiles on x and y to render to. Can be used to improve the responsiveness of a page while still rendering a high resolution target.
 
 ### .resetSeed
 
 ```js
 resetSeed = false
+```
+
+Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
+
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer )
 ```
 
 ### .setSize
@@ -107,17 +144,23 @@ resetSeed = false
 setSize( size : Vector2 ) : void
 ```
 
+Sets the size of the target to render to.
+
 ### .update
 
 ```js
 update()
 ```
 
+Renders a single sample to the target.
+
 ### .reset
 
 ```js
 reset() : void
 ```
+
+Resets and restarts the render from scratch.
 
 ## PathTracingSceneGenerator
 
@@ -174,8 +217,14 @@ updateFrame( material : Material, textures : Array<Texture> ) : void
 ### mergeMeshes
 
 ```js
-mergeMeshes( meshes : Array<Mesh> ) : { TODO }
+mergeMeshes( meshes : Array<Mesh> ) : {
+	materials : Array<Material>,
+	textures : Array<Textures>,
+	geometry : BufferGeometry
+}
 ```
+
+Merges the set of meshes into a single geometry with a `materialIndex` vertex attribute included on the geometry identifying the associated material in the returned `materials` array.
 
 ## Shader Chunks
 
