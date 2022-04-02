@@ -247,6 +247,14 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
+						// transmission
+						float transmission = material.transmission;
+						if ( material.transmissionMap != - 1 ) {
+
+							transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+
+						}
+
 						// normal
 						if ( material.normalMap != - 1 ) {
 
@@ -274,38 +282,33 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						normal *= side;
 
-						MaterialRec materialRec;
-						materialRec.transmission = material.transmission;
-						materialRec.ior = material.ior;
-						materialRec.emission = emission;
-						materialRec.metalness = metalness;
-						materialRec.color = albedo.rgb;
+						SurfaceRec surfaceRec;
+						surfaceRec.normal = normal;
+						surfaceRec.faceNormal = faceNormal;
+						surfaceRec.frontFace = side == 1.0;
+						surfaceRec.transmission = transmission;
+						surfaceRec.ior = material.ior;
+						surfaceRec.emission = emission;
+						surfaceRec.metalness = metalness;
+						surfaceRec.color = albedo.rgb;
+						surfaceRec.roughness = roughness;
 
-						// compute the filtered roughness value to use during specular reflection computations. A minimum
+						// Compute the filtered roughness value to use during specular reflection computations. A minimum
 						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
 						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
-						materialRec.roughness = clamp(
+						// If we're exiting something transmissive then scale the factor down significantly so we can retain
+						// sharp internal reflections
+						surfaceRec.filteredRoughness = clamp(
 							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
 							1e-3,
 							1.0
 						);
 
-						SurfaceRec surfaceRec;
-						surfaceRec.normal = normal;
-						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.filteredRoughness = materialRec.roughness; // TODO: do we need this?
-						surfaceRec.frontFace = side == 1.0;
-
-						// TODO: transform into local basis and then back out
-						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
+						mat3 normalBasis = getBasisFromNormal( normal );
 						mat3 invBasis = inverse( normalBasis );
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
-						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec, materialRec );
-
-						// determine if this is a rough normal or not by checking how far off straight up it is
-						vec3 halfVector = normalize( outgoing + sampleRec.direction );
-						accumulatedRoughness += sin( acos( halfVector.z ) );
+						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
@@ -317,6 +320,16 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
+						// to a single pixel resulting in fireflies
+						if ( ! isBelowSurface ) {
+
+							// determine if this is a rough normal or not by checking how far off straight up it is
+							vec3 halfVector = normalize( outgoing + sampleRec.direction );
+							accumulatedRoughness += sin( acos( halfVector.z ) );
+
+						}
 
 						// accumulate color
 						gl_FragColor.rgb += ( emission * throughputColor );

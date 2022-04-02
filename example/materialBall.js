@@ -18,7 +18,7 @@ const params = {
 		emissiveIntensity: 1,
 		roughness: 0.1,
 		metalness: 0.8,
-		ior: 1.0,
+		ior: 1.495,
 		transmission: 0.0,
 		opacity: 1.0,
 	},
@@ -28,8 +28,8 @@ const params = {
 		emissiveIntensity: 1,
 		roughness: 0.8,
 		metalness: 0.1,
-		ior: 1.0,
 		transmission: 0.0,
+		ior: 1.495,
 		opacity: 1.0,
 	},
 	material3: {
@@ -39,14 +39,24 @@ const params = {
 	},
 	resetSeed: false,
 	environmentIntensity: 3,
-	bounces: 4,
+	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1.0 / window.devicePixelRatio,
 	transparentTraversals: 20,
-	filterGlossyFactor: 0.25,
+	filterGlossyFactor: 0.5,
 
 };
+
+if ( window.location.hash.includes( 'transmission' ) ) {
+
+	params.material1.metalness = 0.0;
+	params.material1.roughness = 0.05;
+	params.material1.transmission = 1.0;
+	params.material1.color = '#ffffff';
+	params.bounces = 15;
+
+}
 
 init();
 
@@ -207,7 +217,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 10, 1 ).onChange( value => {
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'BOUNCES', value );
 		ptRenderer.reset();
@@ -233,7 +243,7 @@ async function init() {
 	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
-	matFolder1.add( params.material1, 'ior', 0.5, 2.0 ).onChange( reset );
+	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
 	matFolder1.open();
 
 	const matFolder2 = gui.addFolder( 'Ball Material' );
@@ -244,7 +254,7 @@ async function init() {
 	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
-	matFolder2.add( params.material2, 'ior', 0.5, 2 ).onChange( reset );
+	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
 	matFolder2.open();
 
 	const matFolder3 = gui.addFolder( 'Floor Material' );

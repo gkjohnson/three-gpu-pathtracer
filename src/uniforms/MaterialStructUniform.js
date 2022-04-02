@@ -60,7 +60,7 @@ export class MaterialStructUniform {
 		if ( 'transmission' in material ) this.transmission = material.transmission;
 		else this.transmission = 0.0;
 
-		this.transmissionMap = textures.indexOf( material.transmissionMap );
+		if ( 'transmissionMap' in material ) this.transmissionMap = textures.indexOf( material.transmissionMap );
 
 		// emission
 		if ( 'emissive' in material ) this.emissive.copy( material.emissive );
