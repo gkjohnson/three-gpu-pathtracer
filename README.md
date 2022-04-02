@@ -21,7 +21,11 @@ _More features and capabilities in progress!_
 
 ```js
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from 'three-gpu-pathtracer';
+import {
+	PathTracingSceneGenerator,
+	PathTracingRenderer,
+	PhysicalPathTracingMaterial,
+} from 'three-gpu-pathtracer';
 
 // init scene, renderer, camera, controls, etc
 
