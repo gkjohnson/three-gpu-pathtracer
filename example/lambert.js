@@ -400,9 +400,7 @@ async function updateModel() {
 				},
 			);
 
-
 	}
-
 
 }
 

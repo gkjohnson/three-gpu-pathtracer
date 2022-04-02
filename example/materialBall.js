@@ -74,7 +74,6 @@ async function init() {
 	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		transparent: true,
 		map: ptRenderer.target.texture,
 	} ) );
 
