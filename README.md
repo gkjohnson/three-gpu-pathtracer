@@ -269,15 +269,15 @@ Merges the set of meshes into a single geometry with a `materialIndex` vertex at
 
 **shaderMaterialSampling**
 
-_TODO_
+Set of functions for performing material scatter and PDF sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderMaterialSampling.js) for full list of functions.
 
 **shaderStructs**
 
-_TODO_
+Material struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
 
 **shaderUtils**
 
-_TODO_
+Set of randomness and other light transmport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
 # Caveats
 
