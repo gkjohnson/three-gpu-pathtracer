@@ -164,8 +164,6 @@ function transmissionColor( wo, wi, material, hit, colorTarget ) {
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
 float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	float metalness = surf.metalness;
-	float transmission = surf.transmission;
 	float ior = surf.ior;
 	bool frontFace = surf.frontFace;
 
@@ -176,7 +174,7 @@ float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	bool cannotRefract = ratio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		reflectance = 1.0;
+		return 0.0;
 
 	}
 
