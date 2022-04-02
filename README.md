@@ -213,8 +213,14 @@ updateFrame( material : Material, textures : Array<Texture> ) : void
 ### mergeMeshes
 
 ```js
-mergeMeshes( meshes : Array<Mesh> ) : { TODO }
+mergeMeshes( meshes : Array<Mesh> ) : {
+	materials : Array<Material>,
+	textures : Array<Textures>,
+	geometry : BufferGeometry
+}
 ```
+
+Merges the set of meshes into a single geometry with a `materialIndex` vertex attribute included on the geometry identifying the associated material in the returned `materials` array.
 
 ## Shader Chunks
 
