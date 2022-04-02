@@ -36,10 +36,11 @@ export class MaterialStructUniform {
 
 		// TODO: Sheen
 
-
 	}
 
 	updateFrom( material, textures = [] ) {
+
+		this.init();
 
 		// color
 		if ( 'color' in material ) this.color.copy( material.color );

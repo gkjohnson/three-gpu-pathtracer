@@ -55,6 +55,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 			const texture = textures[ i ];
 			fsQuad.material.map = texture;
+			fsQuad.material.transparent = true;
 
 			renderer.setRenderTarget( this, i );
 			fsQuad.render( renderer );
