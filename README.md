@@ -13,7 +13,7 @@ _More features and capabilities in progress!_
 
 [Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
-[Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
+[Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html) ([Transmission Variant](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission))!
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
