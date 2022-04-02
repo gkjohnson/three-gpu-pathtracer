@@ -3,12 +3,12 @@ export const shaderMaterialSampling = /* glsl */`
 struct SurfaceRec {
 	vec3 normal;
 	vec3 faceNormal;
-	float filteredRoughness;
 	bool frontFace;
 };
 
 struct MaterialRec {
 	float roughness;
+	float filteredRoughness;
 	float metalness;
 	vec3 color;
 	vec3 emission;
@@ -56,7 +56,7 @@ vec3 diffuseColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 float specularPDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 
 	// See equation (17) in http://jcgt.org/published/0003/02/03/
-	float filteredRoughness = hit.filteredRoughness;
+	float filteredRoughness = material.filteredRoughness;
 	vec3 halfVector = getHalfVector( wi, wo );
 	return ggxPDF( wi, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
 
@@ -65,7 +65,7 @@ float specularPDF( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 vec3 specularDirection( vec3 wo, SurfaceRec hit, MaterialRec material ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	float filteredRoughness = hit.filteredRoughness;
+	float filteredRoughness = material.filteredRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
 		filteredRoughness,
@@ -85,7 +85,7 @@ vec3 specularColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit ) {
 	float metalness = material.metalness;
 	float ior = material.ior;
 	bool frontFace = hit.frontFace;
-	float filteredRoughness = hit.filteredRoughness;
+	float filteredRoughness = material.filteredRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
 	float iorRatio = frontFace ? 1.0 / ior : ior;
@@ -189,9 +189,17 @@ vec3 transmissionColor( vec3 wo, vec3 wi, MaterialRec material, SurfaceRec hit )
 
 	float metalness = material.metalness;
 	float transmission = material.transmission;
+	float ior = material.ior;
+	bool frontFace = hit.frontFace;
+
+	float ratio = frontFace ? 1.0 / ior : ior;
+	float cosTheta = min( wo.z, 1.0 );
+	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
+
 	vec3 color = material.color;
 	color *= ( 1.0 - metalness );
-	color *= abs( wi.z );
+	color *= 1.0 - reflectance;
 	color *= transmission;
 
 	// Color is clamped to [0, 1] to make up for incorrect PDF and over sampling
