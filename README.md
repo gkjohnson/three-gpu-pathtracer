@@ -80,10 +80,10 @@ function animate() {
 
 ## PathTracingRenderer
 
-### constructor
+### .samples
 
 ```js
-constructor( renderer : WebGLRenderer )
+readonly samples : Number
 ```
 
 ### .tiles
@@ -92,16 +92,16 @@ constructor( renderer : WebGLRenderer )
 tiles = ( 1, 1 ) : Vector2
 ```
 
-### .samples
-
-```js
-samples = 1 : Number
-```
-
 ### .resetSeed
 
 ```js
 resetSeed = false
+```
+
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer )
 ```
 
 ### .setSize
