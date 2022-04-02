@@ -12,6 +12,7 @@ export * from './uniforms/RenderTarget2DArray.js';
 export * from './utils/GeometryPreparationUtils.js';
 
 // materials
+export * from './materials/MaterialBase.js';
 export * from './materials/PhysicalPathTracingMaterial.js';
 
 // shaders
