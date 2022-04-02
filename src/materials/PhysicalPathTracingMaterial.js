@@ -228,7 +228,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float roughness = material.roughness;
 						if ( material.roughnessMap != - 1 ) {
 
-							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).r;
+							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).g;
 
 						}
 
@@ -236,7 +236,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float metalness = material.metalness;
 						if ( material.metalnessMap != - 1 ) {
 
-							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).r;
+							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
 
 						}
 

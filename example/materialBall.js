@@ -179,7 +179,6 @@ async function init() {
 		.then( result => {
 
 			sceneInfo = result;
-			sceneInfo.scene.add( new THREE.DirectionalLight() );
 
 			const { bvh, textures, materials } = result;
 			const geometry = bvh.geometry;
