@@ -27,35 +27,117 @@ _More features and capabilities in progress!_
 
 ## PathTracingRenderer
 
-_TODO_
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer )
+```
+
+### .tiles
+
+```js
+tiles = ( 1, 1 ) : Vector2
+```
+
+### .samples
+
+```js
+samples = 1 : Number
+```
+
+### .resetSeed
+
+```js
+resetSeed = false
+```
+
+### .setSize
+
+```js
+setSize( size : Vector2 ) : void
+```
+
+### .update
+
+```js
+update()
+```
+
+### .reset
+
+```js
+reset() : void
+```
 
 ## PathTracingSceneGenerator
 
 _TODO_
 
+## MaterialBase
+
+_extends THREE.ShaderMaterial_
+
+### .setDefine
+
+```js
+setDefine( name : string, value = undefined : any )
+```
+
 ## PhysicalPathTracingMaterial
+
+_extends MaterialBase_
+
+See material implementation page for full list of uniforms and properties.
 
 _TODO_
 
 ## RenderTarget2DArray
 
-_TODO_
+_extends WebGLArrayRenderTarget_
+
+### .setTextures
+
+```js
+setTextures( renderer : WebGLRenderer, width : Number, height : Number, textures : Array<Texture> ) : void
+```
 
 ## MaterialStructArrayUniform
 
-_TODO_
+_extends Array_
+
+### .updateFrom
+
+```js
+updateFrom( materials : Array<Material>, textures : Array<Texture> ) : void
+```
 
 ## MaterialStructUniform
 
-_TODO_
+### .updateFrom
+
+```js
+updateFrame( material : Material, textures : Array<Texture> ) : void
+```
 
 ## Functions
 
 ### mergeMeshes
 
-_TODO_
+```js
+mergeMeshes( meshes : Array<Mesh> ) : { TODO }
+```
 
 ## Shader Chunks
+
+**shaderMaterialSampling**
+
+_TODO_
+
+**shaderStructs**
+
+_TODO_
+
+**shaderUtils**
 
 _TODO_
 
