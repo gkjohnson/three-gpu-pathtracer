@@ -3,6 +3,12 @@ export class MaterialStructUniform {
 
 	constructor() {
 
+		this.init();
+
+	}
+
+	init() {
+
 		this.color = new Color( 0xffffff );
 		this.map = - 1;
 
