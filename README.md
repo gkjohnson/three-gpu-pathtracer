@@ -40,15 +40,20 @@ const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
 const { bvh, textures, materials } = await generator.generate( scene );
+
+// update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
 ptMaterial.normalAttribute.updateFrom( geometry.attributes.normal );
 ptMaterial.tangentAttribute.updateFrom( geometry.attributes.tangent );
 ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
+
+// update materials and texture arrays
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
 ptMaterial.materials.updateFrom( materials, textures );
 ptMaterial.setDefine( 'MATERIAL_LENGTH', materials.length );
-ptRenderer.reset();
+
+animate();
 
 // ...
 
