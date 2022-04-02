@@ -247,6 +247,14 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						}
 
+						// transmission
+						float transmission = material.transmission;
+						if ( material.transmissionMap != - 1 ) {
+
+							transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+
+						}
+
 						// normal
 						if ( material.normalMap != - 1 ) {
 
@@ -278,7 +286,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
 						surfaceRec.frontFace = side == 1.0;
-						surfaceRec.transmission = material.transmission;
+						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
 						surfaceRec.metalness = metalness;
