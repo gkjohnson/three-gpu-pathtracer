@@ -4,7 +4,7 @@ export class MaterialBase extends ShaderMaterial {
 
 	constructor( shader ) {
 
-		super( { transparent: true, depthWrite: false, ...shader } );
+		super( shader );
 
 		for ( const key in this.uniforms ) {
 

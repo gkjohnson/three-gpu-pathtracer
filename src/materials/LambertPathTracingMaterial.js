@@ -22,6 +22,9 @@ export class LambertPathTracingMaterial extends MaterialBase {
 
 		super( {
 
+			transparent: true,
+			depthWrite: false,
+
 			defines: {
 				BOUNCES: 3,
 				MATERIAL_LENGTH: 0,
@@ -293,7 +296,6 @@ export class LambertPathTracingMaterial extends MaterialBase {
 							break;
 
 						}
-
 
 					}
 

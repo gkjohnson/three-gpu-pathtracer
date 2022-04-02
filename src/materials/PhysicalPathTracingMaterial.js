@@ -23,6 +23,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 		super( {
 
+			transparent: true,
+			depthWrite: false,
+
 			defines: {
 				BOUNCES: 3,
 				TRANSPARENT_TRAVERSALS: 20,
