@@ -20,7 +20,7 @@ struct SampleRec {
 };
 
 // diffuse
-float diffusePDF( vec3 wo, vec3 wi, SurfaceRec hit ) {
+float diffusePDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html#lightscattering/thescatteringpdf
 	float cosValue = wi.z;
@@ -28,7 +28,7 @@ float diffusePDF( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 }
 
-vec3 diffuseDirection( vec3 wo, SurfaceRec hit ) {
+vec3 diffuseDirection( vec3 wo, SurfaceRec surf ) {
 
 	vec3 lightDirection = randDirection();
 	lightDirection.z += 1.0;
@@ -38,31 +38,31 @@ vec3 diffuseDirection( vec3 wo, SurfaceRec hit ) {
 
 }
 
-vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
+vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// TODO: scale by 1 - F here
 	// note on division by PI
 	// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
-	float metalFactor = ( 1.0 - hit.metalness ) * wi.z / ( PI * PI );
-	float transmissionFactor = 1.0 - hit.transmission;
-	return hit.color * metalFactor * transmissionFactor;
+	float metalFactor = ( 1.0 - surf.metalness ) * wi.z / ( PI * PI );
+	float transmissionFactor = 1.0 - surf.transmission;
+	return surf.color * metalFactor * transmissionFactor;
 
 }
 
 // specular
-float specularPDF( vec3 wo, vec3 wi, SurfaceRec hit ) {
+float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// See equation (17) in http://jcgt.org/published/0003/02/03/
-	float filteredRoughness = hit.filteredRoughness;
+	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = getHalfVector( wi, wo );
 	return ggxPDF( wi, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
 
 }
 
-vec3 specularDirection( vec3 wo, SurfaceRec hit ) {
+vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	float filteredRoughness = hit.filteredRoughness;
+	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
 		filteredRoughness,
@@ -76,13 +76,13 @@ vec3 specularDirection( vec3 wo, SurfaceRec hit ) {
 
 }
 
-vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
+vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// if roughness is set to 0 then D === NaN which results in black pixels
-	float metalness = hit.metalness;
-	float ior = hit.ior;
-	bool frontFace = hit.frontFace;
-	float filteredRoughness = hit.filteredRoughness;
+	float metalness = surf.metalness;
+	float ior = surf.ior;
+	bool frontFace = surf.frontFace;
+	float filteredRoughness = surf.filteredRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
 	float iorRatio = frontFace ? 1.0 / ior : ior;
@@ -99,7 +99,7 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 	}
 
-	vec3 color = mix( vec3( 1.0 ), hit.color, metalness );
+	vec3 color = mix( vec3( 1.0 ), surf.color, metalness );
 	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
 	color *= mix( F, 1.0, metalness );
 	color *= wi.z; // scale the light by the direction the light is coming in from
@@ -110,7 +110,7 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 /*
 // transmission
-function transmissionPDF( wo, wi, material, hit ) {
+function transmissionPDF( wo, wi, material, surf ) {
 
 	// See section 4.2 in https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 
@@ -162,17 +162,17 @@ function transmissionColor( wo, wi, material, hit, colorTarget ) {
 
 // TODO: This is just using a basic cosine-weighted specular distribution with an
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
-float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec hit ) {
+float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	return 1.0;
 
 }
 
-vec3 transmissionDirection( vec3 wo, SurfaceRec hit ) {
+vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
-	float roughness = hit.roughness;
-	float ior = hit.ior;
-	bool frontFace = hit.frontFace;
+	float roughness = surf.roughness;
+	float ior = surf.ior;
+	bool frontFace = surf.frontFace;
 	float ratio = frontFace ? 1.0 / ior : ior;
 
 	// TODO: is this right?
@@ -182,19 +182,19 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec hit ) {
 
 }
 
-vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
+vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	float metalness = hit.metalness;
-	float transmission = hit.transmission;
-	float ior = hit.ior;
-	bool frontFace = hit.frontFace;
+	float metalness = surf.metalness;
+	float transmission = surf.transmission;
+	float ior = surf.ior;
+	bool frontFace = surf.frontFace;
 
 	float ratio = frontFace ? 1.0 / ior : ior;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
 
-	vec3 color = hit.color;
+	vec3 color = surf.color;
 	color *= ( 1.0 - metalness );
 	color *= 1.0 - reflectance;
 	color *= transmission;
@@ -207,12 +207,12 @@ vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 }
 
-float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec hit ) {
+float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	float ior = hit.ior;
-	float metalness = hit.metalness;
-	float transmission = hit.transmission;
-	bool frontFace = hit.frontFace;
+	float ior = surf.ior;
+	float metalness = surf.metalness;
+	float transmission = surf.transmission;
+	bool frontFace = surf.frontFace;
 
 	float ratio = frontFace ? 1.0 / ior : ior;
 	float cosTheta = min( wo.z, 1.0 );
@@ -231,12 +231,12 @@ float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 	if ( wi.z < 0.0 ) {
 
-		tpdf = transmissionPDF( wo, wi, hit );
+		tpdf = transmissionPDF( wo, wi, surf );
 
 	} else {
 
-		spdf = specularPDF( wo, wi, hit );
-		dpdf = diffusePDF( wo, wi, hit );
+		spdf = specularPDF( wo, wi, surf );
+		dpdf = diffusePDF( wo, wi, surf );
 
 	}
 
@@ -252,19 +252,19 @@ float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 }
 
-vec3 bsdfColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
+vec3 bsdfColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	vec3 color = vec3( 0.0 );
 	if ( wi.z < 0.0 ) {
 
-		color = transmissionColor( wo, wi, hit );
+		color = transmissionColor( wo, wi, surf );
 
 	} else {
 
-		color = diffuseColor( wo, wi, hit );
-		color *= 1.0 - hit.transmission;
+		color = diffuseColor( wo, wi, surf );
+		color *= 1.0 - surf.transmission;
 
-		color += specularColor( wo, wi, hit );
+		color += specularColor( wo, wi, surf );
 
 	}
 
@@ -272,12 +272,12 @@ vec3 bsdfColor( vec3 wo, vec3 wi, SurfaceRec hit ) {
 
 }
 
-SampleRec bsdfSample( vec3 wo, SurfaceRec hit ) {
+SampleRec bsdfSample( vec3 wo, SurfaceRec surf ) {
 
-	float ior = hit.ior;
-	float metalness = hit.metalness;
-	float transmission = hit.transmission;
-	bool frontFace = hit.frontFace;
+	float ior = surf.ior;
+	float metalness = surf.metalness;
+	float transmission = surf.transmission;
+	bool frontFace = surf.frontFace;
 
 	float ratio = frontFace ? 1.0 / ior : ior;
 	float cosTheta = min( wo.z, 1.0 );
@@ -296,11 +296,11 @@ SampleRec bsdfSample( vec3 wo, SurfaceRec hit ) {
 		float specularProb = mix( reflectance, 1.0, metalness );
 		if ( rand() < specularProb ) {
 
-			result.direction = specularDirection( wo, hit );
+			result.direction = specularDirection( wo, surf );
 
 		} else {
 
-			result.direction = transmissionDirection( wo, hit );
+			result.direction = transmissionDirection( wo, surf );
 
 		}
 
@@ -309,18 +309,18 @@ SampleRec bsdfSample( vec3 wo, SurfaceRec hit ) {
 		float specularProb = 0.5 + 0.5 * metalness;
 		if ( rand() < specularProb ) {
 
-			result.direction = specularDirection( wo, hit );
+			result.direction = specularDirection( wo, surf );
 
 		} else {
 
-			result.direction = diffuseDirection( wo, hit );
+			result.direction = diffuseDirection( wo, surf );
 
 		}
 
 	}
 
-	result.pdf = bsdfPdf( wo, result.direction, hit );
-	result.color = bsdfColor( wo, result.direction, hit );
+	result.pdf = bsdfPdf( wo, result.direction, surf );
+	result.color = bsdfColor( wo, result.direction, surf );
 	return result;
 
 }
