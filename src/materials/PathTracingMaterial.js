@@ -285,11 +285,13 @@ export class PathTracingMaterial extends ShaderMaterial {
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.roughness = roughness;
 
-						// compute the filtered roughness value to use during specular reflection computations. A minimum
+						// Compute the filtered roughness value to use during specular reflection computations. A minimum
 						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
 						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
+						// If we're exiting something transmissive then scale the factor down significantly so we can retain
+						// sharp internal reflections
 						surfaceRec.filteredRoughness = clamp(
-							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
+							max( material.roughness, accumulatedRoughness * filterGlossyFactor * ( side == - 1.0 ? 0.05 : 5.0 ) ),
 							1e-3,
 							1.0
 						);

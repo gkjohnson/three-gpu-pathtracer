@@ -164,7 +164,23 @@ function transmissionColor( wo, wi, material, hit, colorTarget ) {
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
 float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	return 1.0;
+	float metalness = surf.metalness;
+	float transmission = surf.transmission;
+	float ior = surf.ior;
+	bool frontFace = surf.frontFace;
+
+	float ratio = frontFace ? 1.0 / ior : ior;
+	float cosTheta = min( wo.z, 1.0 );
+	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
+	bool cannotRefract = ratio * sinTheta > 1.0;
+	if ( cannotRefract ) {
+
+		reflectance = 1.0;
+
+	}
+
+	return 1.0 / ( 1.0 - reflectance );
 
 }
 
@@ -175,7 +191,6 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	bool frontFace = surf.frontFace;
 	float ratio = frontFace ? 1.0 / ior : ior;
 
-	// TODO: is this right?
 	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), ratio );
 	lightDirection += randDirection() * roughness;
 	return normalize( lightDirection );
@@ -186,23 +201,11 @@ vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
-
-	float ratio = frontFace ? 1.0 / ior : ior;
-	float cosTheta = min( wo.z, 1.0 );
-	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
 
 	vec3 color = surf.color;
 	color *= ( 1.0 - metalness );
-	color *= 1.0 - reflectance;
 	color *= transmission;
 
-	// Color is clamped to [0, 1] to make up for incorrect PDF and over sampling
-	color.r = min( color.r, 1.0 );
-	color.g = min( color.g, 1.0 );
-	color.b = min( color.b, 1.0 );
 	return color;
 
 }
