@@ -2,10 +2,9 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingSceneGenerator, PathTracingRenderer } from '../src/index.js';
+import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { PathTracingMaterial } from '../src/materials/PathTracingMaterial.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, materials;
@@ -73,7 +72,7 @@ async function init() {
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
-	ptRenderer.material = new PathTracingMaterial( { transparent: true, depthWrite: false } );
+	ptRenderer.material = new PhysicalPathTracingMaterial( { transparent: true, depthWrite: false } );
 	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 
 	controls = new OrbitControls( camera, renderer.domElement );

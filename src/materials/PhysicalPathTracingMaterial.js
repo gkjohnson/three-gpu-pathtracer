@@ -9,7 +9,7 @@ import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 
-export class PathTracingMaterial extends ShaderMaterial {
+export class PhysicalPathTracingMaterial extends ShaderMaterial {
 
 	// three.js relies on this field to add env map functions and defines
 	get envMap() {
