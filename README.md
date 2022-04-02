@@ -7,6 +7,12 @@ Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-m
 
 _More features and capabilities in progress!_
 
+# Use
+
+```js
+// TODO
+```
+
 # Examples
 
 [Lambert demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lambert.html)!
