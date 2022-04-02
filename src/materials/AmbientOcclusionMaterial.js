@@ -1,9 +1,10 @@
 import { ShaderMaterial, TangentSpaceNormalMap, Vector2 } from 'three';
+import { MaterialBase } from './MaterialBase.js';
 import { MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh';
 import { shaderMaterialStructs } from '../shader/shaderStructs.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 
-export class AmbientOcclusionMaterial extends ShaderMaterial {
+export class AmbientOcclusionMaterial extends MaterialBase {
 
 	get normalMap() {
 
@@ -189,55 +190,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 
 		} );
 
-		for ( const key in this.uniforms ) {
-
-			if ( ! ( key in this ) ) {
-
-				Object.defineProperty( this, key, {
-
-					get() {
-
-						return this.uniforms[ key ].value;
-
-					},
-
-					set( v ) {
-
-						this.uniforms[ key ].value = v;
-
-					}
-
-				} );
-
-			}
-
-		}
-
 		this.setValues( parameters );
-
-	}
-
-	setDefine( name, value = undefined ) {
-
-		if ( value === undefined || value === null ) {
-
-			if ( name in this.defines ) {
-
-				delete this.defines[ name ];
-				this.needsUpdate = true;
-
-			}
-
-		} else {
-
-			if ( this.defines[ name ] !== value ) {
-
-				this.defines[ name ] = value;
-				this.needsUpdate = true;
-
-			}
-
-		}
 
 	}
 

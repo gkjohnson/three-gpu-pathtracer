@@ -1,4 +1,5 @@
-import { ShaderMaterial, Matrix4, Color } from 'three';
+import { Matrix4, Color } from 'three';
+import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
@@ -8,7 +9,7 @@ import { shaderUtils } from '../shader/shaderUtils.js';
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 
-export class LambertPathTracingMaterial extends ShaderMaterial {
+export class LambertPathTracingMaterial extends MaterialBase {
 
 	// three.js relies on this field to add env map functions and defines
 	get envMap() {
@@ -296,8 +297,6 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 					}
 
-					// gl_FragColor.rgb = mix( gl_FragColor.rgb / 2.0, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
-					// gl_FragColor.rgb = mix( textureCubeUV( environmentMap, rayDirection, 0.0 ).rgb, gl_FragColor.rgb, clamp( float( i ), 0.0, 1.0 ) );
 					gl_FragColor.a = opacity;
 
 				}
@@ -306,51 +305,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 
 		} );
 
-		for ( const key in this.uniforms ) {
-
-			Object.defineProperty( this, key, {
-
-				get() {
-
-					return this.uniforms[ key ].value;
-
-				},
-
-				set( v ) {
-
-					this.uniforms[ key ].value = v;
-
-				}
-
-			} );
-
-		}
-
 		this.setValues( parameters );
-
-	}
-
-	setDefine( name, value = undefined ) {
-
-		if ( value === undefined || value === null ) {
-
-			if ( name in this.defines ) {
-
-				delete this.defines[ name ];
-				this.needsUpdate = true;
-
-			}
-
-		} else {
-
-			if ( this.defines[ name ] !== value ) {
-
-				this.defines[ name ] = value;
-				this.needsUpdate = true;
-
-			}
-
-		}
 
 	}
 
