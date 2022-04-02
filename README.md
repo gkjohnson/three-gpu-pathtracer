@@ -171,7 +171,11 @@ Utility class for generating the set of data required for initializing the path 
 ### .generate
 
 ```js
-async generate( scene : Object3D ) : { bvh : MeshBVH, materials : Array<Material>, textures : Array<Texture> }
+async generate( scene : Object3D ) : {
+	bvh : MeshBVH,
+	materials : Array<Material>,
+	textures : Array<Texture>
+}
 ```
 
 Merges the geometry in the given scene with an additional "materialIndex" attribute that references the associated material array. Also produces a set of textures referenced by the scene materials.
@@ -211,7 +215,12 @@ A convenience extension from `WebGLArrayRenderTarget` that affords easily creati
 ### .setTextures
 
 ```js
-setTextures( renderer : WebGLRenderer, width : Number, height : Number, textures : Array<Texture> ) : void
+setTextures(
+	renderer : WebGLRenderer,
+	width : Number,
+	height : Number,
+	textures : Array<Texture>
+) : void
 ```
 
 Takes the rendering context to updateh the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
