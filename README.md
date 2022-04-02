@@ -63,7 +63,7 @@ function animate() {
 	camera.updateMatrixWorld();
 	ptRenderer.update();
 
-  // copy the current state of the path tracer to canvas to display
+	// copy the current state of the path tracer to canvas to display
 	renderer.autoClear = false;
 	fsQuad.material.map = ptRenderer.target.texture;
 	fsQuad.render( renderer );
