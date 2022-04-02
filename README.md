@@ -21,23 +21,35 @@ _More features and capabilities in progress!_
 
 ## PathTracingRenderer
 
+_TODO_
+
 ## PathTracingSceneGenerator
+
+_TODO_
 
 ## PathTracingMaterial
 
+_TODO_
+
 ## RenderTarget2DArray
+
+_TODO_
 
 ## MaterialStructArrayUniform
 
+_TODO_
+
 ## MaterialStructUniform
+
+_TODO_
 
 ## Functions
 
 ### mergeMeshes
 
-## Shader Chunks
+_TODO_
 
-# Exports
+## Shader Chunks
 
 _TODO_
 
