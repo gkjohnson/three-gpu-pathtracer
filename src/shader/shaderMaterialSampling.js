@@ -1,3 +1,5 @@
+import { shaderGGXFunctions } from './shaderGGXFunctions.js';
+
 export const shaderMaterialSampling = /* glsl */`
 
 struct SurfaceRec {
@@ -18,6 +20,8 @@ struct SampleRec {
 	vec3 direction;
 	vec3 color;
 };
+
+${ shaderGGXFunctions }
 
 // diffuse
 float diffusePDF( vec3 wo, vec3 wi, SurfaceRec surf ) {

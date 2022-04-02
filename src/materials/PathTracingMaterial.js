@@ -3,10 +3,9 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
+import { shaderMaterialStructs } from '../shader/shaderStructs.js';
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
-import { shaderGGXFunctions } from '../shader/shaderGGXFunctions.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 
@@ -82,10 +81,8 @@ export class PathTracingMaterial extends ShaderMaterial {
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
-				${ pathTracingHelpers }
 
 				${ shaderUtils }
-				${ shaderGGXFunctions }
 				${ shaderMaterialSampling }
 
 				#ifdef USE_ENVMAP

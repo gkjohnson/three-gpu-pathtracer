@@ -3,7 +3,8 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
+import { shaderMaterialStructs } from '../shader/shaderStructs.js';
+import { shaderUtils } from '../shader/shaderUtils.js';
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 
@@ -81,7 +82,7 @@ export class LambertPathTracingMaterial extends ShaderMaterial {
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
-				${ pathTracingHelpers }
+				${ shaderUtils }
 
 				#ifdef USE_ENVMAP
 

@@ -1,8 +1,7 @@
 import { ShaderMaterial, TangentSpaceNormalMap, Vector2 } from 'three';
-import {
-	MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction,
-} from 'three-mesh-bvh';
-import { shaderMaterialStructs, pathTracingHelpers } from '../shader/shaderStructs.js';
+import { MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh';
+import { shaderMaterialStructs } from '../shader/shaderStructs.js';
+import { shaderUtils } from '../shader/shaderUtils.js';
 
 export class AmbientOcclusionMaterial extends ShaderMaterial {
 
@@ -97,7 +96,7 @@ export class AmbientOcclusionMaterial extends ShaderMaterial {
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
-				${ pathTracingHelpers }
+				${ shaderUtils }
 
 				uniform BVH bvh;
 				uniform int seed;
