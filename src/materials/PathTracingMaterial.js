@@ -291,7 +291,7 @@ export class PathTracingMaterial extends ShaderMaterial {
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
 						surfaceRec.filteredRoughness = clamp(
-							max( material.roughness, accumulatedRoughness * filterGlossyFactor * ( side == - 1.0 ? 0.05 : 5.0 ) ),
+							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
 							1e-3,
 							1.0
 						);
@@ -301,10 +301,6 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec );
-
-						// determine if this is a rough normal or not by checking how far off straight up it is
-						vec3 halfVector = normalize( outgoing + sampleRec.direction );
-						accumulatedRoughness += sin( acos( halfVector.z ) );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
@@ -316,6 +312,16 @@ export class PathTracingMaterial extends ShaderMaterial {
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
+						// to a single pixel resulting in fireflies
+						if ( ! isBelowSurface ) {
+
+							// determine if this is a rough normal or not by checking how far off straight up it is
+							vec3 halfVector = normalize( outgoing + sampleRec.direction );
+							accumulatedRoughness += sin( acos( halfVector.z ) );
+
+						}
 
 						// accumulate color
 						gl_FragColor.rgb += ( emission * throughputColor );
