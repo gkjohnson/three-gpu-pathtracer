@@ -20,42 +20,174 @@ _More features and capabilities in progress!_
 # Use
 
 ```js
-// TODO
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from 'three-gpu-pathtracer';
+
+// init scene, renderer, camera, controls, etc
+
+// initialize the path tracing material and renderer
+const ptMaterial = new PhysicalPathTracingMaterial();
+const ptRenderer = new PathTracingRenderer( renderer );
+ptRenderer.camera = camera;
+ptRenderer.material = ptMaterial;
+
+// init quad for rendering to the canvas
+const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	transparent: true,
+	map: ptRenderer.target.texture,
+} ) );
+
+// initialize the scene and update the material properties with the bvh, materials, etc
+const generator = new PathTracingSceneGenerator();
+const { bvh, textures, materials } = await generator.generate( scene );
+
+// update bvh and geometry attribute textures
+ptMaterial.bvh.updateFrom( bvh );
+ptMaterial.normalAttribute.updateFrom( geometry.attributes.normal );
+ptMaterial.tangentAttribute.updateFrom( geometry.attributes.tangent );
+ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
+
+// update materials and texture arrays
+ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
+ptMaterial.materials.updateFrom( materials, textures );
+ptMaterial.setDefine( 'MATERIAL_LENGTH', materials.length );
+
+animate();
+
+// ...
+
+function animate() {
+
+	// update the camera and render one sample
+	camera.updateMatrixWorld();
+	ptRenderer.update();
+
+  // copy the current state of the path tracer to canvas to display
+	renderer.autoClear = false;
+	fsQuad.material.map = ptRenderer.target.texture;
+	fsQuad.render( renderer );
+	renderer.autoClear = true;
+
+}
+
 ```
 
 # Exports
 
 ## PathTracingRenderer
 
-_TODO_
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer )
+```
+
+### .tiles
+
+```js
+tiles = ( 1, 1 ) : Vector2
+```
+
+### .samples
+
+```js
+samples = 1 : Number
+```
+
+### .resetSeed
+
+```js
+resetSeed = false
+```
+
+### .setSize
+
+```js
+setSize( size : Vector2 ) : void
+```
+
+### .update
+
+```js
+update()
+```
+
+### .reset
+
+```js
+reset() : void
+```
 
 ## PathTracingSceneGenerator
 
 _TODO_
 
-## PBRPathTracingMaterial
+## MaterialBase
+
+_extends THREE.ShaderMaterial_
+
+### .setDefine
+
+```js
+setDefine( name : string, value = undefined : any )
+```
+
+## PhysicalPathTracingMaterial
+
+_extends MaterialBase_
+
+See material implementation page for full list of uniforms and properties.
 
 _TODO_
 
 ## RenderTarget2DArray
 
-_TODO_
+_extends WebGLArrayRenderTarget_
+
+### .setTextures
+
+```js
+setTextures( renderer : WebGLRenderer, width : Number, height : Number, textures : Array<Texture> ) : void
+```
 
 ## MaterialStructArrayUniform
 
-_TODO_
+_extends Array_
+
+### .updateFrom
+
+```js
+updateFrom( materials : Array<Material>, textures : Array<Texture> ) : void
+```
 
 ## MaterialStructUniform
 
-_TODO_
+### .updateFrom
+
+```js
+updateFrame( material : Material, textures : Array<Texture> ) : void
+```
 
 ## Functions
 
 ### mergeMeshes
 
-_TODO_
+```js
+mergeMeshes( meshes : Array<Mesh> ) : { TODO }
+```
 
 ## Shader Chunks
+
+**shaderMaterialSampling**
+
+_TODO_
+
+**shaderStructs**
+
+_TODO_
+
+**shaderUtils**
 
 _TODO_
 
