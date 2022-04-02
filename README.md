@@ -33,7 +33,7 @@ _TODO_
 
 _TODO_
 
-## PathTracingMaterial
+## PBRPathTracingMaterial
 
 _TODO_
 
