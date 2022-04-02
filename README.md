@@ -84,6 +84,8 @@ function animate() {
 
 ## PathTracingRenderer
 
+Utility class for tracking and rendering a path traced scene to a render target.
+
 ### .samples
 
 ```js
@@ -164,17 +166,29 @@ Resets and restarts the render from scratch.
 
 ## PathTracingSceneGenerator
 
-_TODO_
+Utility class for generating the set of data required for initializing the path tracing material with a bvh, geometry, materials, and textures.
+
+### .generate
+
+```js
+async generate( scene : Object3D ) : { bvh : MeshBVH, materials : Array<Material>, textures : Array<Texture> }
+```
+
+Merges the geometry in the given scene with an additional "materialIndex" attribute that references the associated material array. Also produces a set of textures referenced by the scene materials.
 
 ## MaterialBase
 
 _extends THREE.ShaderMaterial_
 
+Convenience base class that adds additional functions and implicitly adds object definitions for all uniforms of the shader to the object.
+
 ### .setDefine
 
 ```js
-setDefine( name : string, value = undefined : any )
+setDefine( name : string, value = undefined : any ) : void
 ```
+
+Sets the define of the given name to the provided value. If the value is set to null or undefined then it is deleted from the defines of the material. If the define changed from the previous value then `Material.needsUpdate` is set to `true`.
 
 ## PhysicalPathTracingMaterial
 
@@ -182,11 +196,17 @@ _extends MaterialBase_
 
 See material implementation page for full list of uniforms and properties.
 
-_TODO_
+```js
+{
+	// TODO
+}
+```
 
 ## RenderTarget2DArray
 
 _extends WebGLArrayRenderTarget_
+
+A convenience extension from `WebGLArrayRenderTarget` that affords easily creating a uniform texture array from an array of textures.
 
 ### .setTextures
 
@@ -194,9 +214,13 @@ _extends WebGLArrayRenderTarget_
 setTextures( renderer : WebGLRenderer, width : Number, height : Number, textures : Array<Texture> ) : void
 ```
 
+Takes the rendering context to updateh the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
+
 ## MaterialStructArrayUniform
 
 _extends Array_
+
+Array of `MaterialStructUniform` definitions for use as a Shader uniform.
 
 ### .updateFrom
 
@@ -204,13 +228,19 @@ _extends Array_
 updateFrom( materials : Array<Material>, textures : Array<Texture> ) : void
 ```
 
+Updates the value of the uniform to align with the provided set of materials and textures.
+
 ## MaterialStructUniform
+
+Struct definiton for representing material information as a uniform. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full struct definition information.
 
 ### .updateFrom
 
 ```js
 updateFrame( material : Material, textures : Array<Texture> ) : void
 ```
+
+Updates the uniform with the information from the passed material. Texture fields are set to the index of the texture in the provided textures array.
 
 ## Functions
 
