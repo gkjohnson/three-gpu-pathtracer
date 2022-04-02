@@ -62,6 +62,8 @@ animate();
 
 function animate() {
 
+	// if the camera position changes call "ptRenderer.reset()"
+
 	// update the camera and render one sample
 	camera.updateMatrixWorld();
 	ptRenderer.update();
