@@ -65,15 +65,18 @@ async function init() {
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( { transparent: true } ) );
-
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 4, 2, 3 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
-	ptRenderer.material = new PhysicalPathTracingMaterial( { transparent: true, depthWrite: false } );
+	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
+
+	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+		transparent: true,
+		map: ptRenderer.target.texture,
+	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -179,7 +182,6 @@ async function init() {
 			material.textures.setTextures( renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );
 			material.setDefine( 'MATERIAL_LENGTH', materials.length );
-			ptRenderer.reset();
 
 			generator.dispose();
 
@@ -333,7 +335,6 @@ function animate() {
 	}
 
 	renderer.autoClear = false;
-	fsQuad.material.map = ptRenderer.target.texture;
 	fsQuad.render( renderer );
 	renderer.autoClear = true;
 

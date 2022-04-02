@@ -2,9 +2,9 @@ import { ShaderMaterial } from 'three';
 
 export class MaterialBase extends ShaderMaterial {
 
-	constructor( ...args ) {
+	constructor( shader ) {
 
-		super( ...args );
+		super( { transparent: true, depthWrite: false, ...shader } );
 
 		for ( const key in this.uniforms ) {
 
