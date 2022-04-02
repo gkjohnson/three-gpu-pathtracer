@@ -44,6 +44,7 @@ const params = {
 	resolutionScale: 1 / window.devicePixelRatio,
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
+	tiles: 1,
 
 };
 
@@ -63,6 +64,7 @@ if ( aspectRatio < 0.65 ) {
 
 	params.bounces = Math.max( params.bounces, 6 );
 	params.resolutionScale *= 0.5;
+	params.tiles = 2;
 
 }
 
@@ -81,6 +83,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
+	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -215,6 +218,11 @@ async function init() {
 		ptRenderer.resetSeed = value;
 
 	} );
+	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+
+		ptRenderer.tiles.set( value, value );
+
+	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
@@ -346,7 +354,7 @@ function animate() {
 	fsQuad.render( renderer );
 	renderer.autoClear = true;
 
-	samplesEl.innerText = `Samples: ${ ptRenderer.samples }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
 
