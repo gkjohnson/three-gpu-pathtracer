@@ -37,7 +37,7 @@ const params = {
 		roughness: 0.01,
 		metalness: 0.05,
 	},
-	resetSeed: true,
+	resetSeed: false,
 	environmentIntensity: 3,
 	bounces: 4,
 	samplesPerFrame: 1,
