@@ -27,7 +27,7 @@
     "three": "^0.139.2"
   },
   "scripts": {
-    "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr --public-url .\"",
+    "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\"",
     "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash",
     "build": "rollup -c",
     "lint": "eslint \"./src/**/*.{js,ts}\" \"./example/*.js\"",
