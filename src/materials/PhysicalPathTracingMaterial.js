@@ -305,7 +305,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							1.0
 						);
 
-						mat3 normalBasis = getBasisFromNormal( normal );
+						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
 						mat3 invBasis = inverse( normalBasis );
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
