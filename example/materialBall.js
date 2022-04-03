@@ -108,7 +108,6 @@ async function init() {
 
 				const envMap = pmremGenerator.fromEquirectangular( texture );
 
-				texture.mapping = THREE.EquirectangularReflectionMapping;
 				ptRenderer.material.environmentMap = envMap.texture;
 				resolve();
 
