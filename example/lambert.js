@@ -1,4 +1,19 @@
-import { ACESFilmicToneMapping, NoToneMapping, Box3, LoadingManager, EquirectangularReflectionMapping, PMREMGenerator, Sphere, Color, DoubleSide } from 'three';
+import {
+	ACESFilmicToneMapping,
+	NoToneMapping,
+	Box3,
+	LoadingManager,
+	EquirectangularReflectionMapping,
+	PMREMGenerator,
+	Sphere,
+	Color,
+	DoubleSide,
+	DataTexture,
+	RGBAFormat,
+	ByteType,
+	LinearFilter,
+	RepeatWrapping,
+} from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -203,6 +218,41 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.open();
+
+}
+
+function generateRadialFloorTexture( dim ) {
+
+	const data = new Uint8Array( dim * dim * 4 );
+
+	for ( let x = 0; x < dim; x ++ ) {
+
+		for ( let y = 0; y < dim; y ++ ) {
+
+			const xNorm = x / ( dim - 1 );
+			const yNorm = y / ( dim - 1 );
+
+			const xCent = xNorm - 0.5;
+			const yCent = yNorm - 0.5;
+			const a = Math.sqrt( xCent ** 2 + yCent ** 2 );
+
+			const i = y * dim + x;
+			data[ i * 4 + 0 ] = 255;
+			data[ i * 4 + 1 ] = 255;
+			data[ i * 4 + 2 ] = 255;
+			data[ i * 4 + 3 ] = a * 255;
+
+		}
+
+	}
+
+	const tex = new DataTexture( data, dim, dim );
+	tex.format = RGBAFormat;
+	tex.type = ByteType;
+	tex.minFilter = LinearFilter;
+	tex.magFilter = LinearFilter;
+	tex.wrapS = RepeatWrapping;
+	tex.wrapT = RepeatWrapping;
 
 }
 
