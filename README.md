@@ -133,10 +133,10 @@ tiles = ( 1, 1 ) : Vector2
 
 Number of tiles on x and y to render to. Can be used to improve the responsiveness of a page while still rendering a high resolution target.
 
-### .resetSeed
+### .stableSeed
 
 ```js
-resetSeed = false
+stableSeed = false
 ```
 
 Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
@@ -229,11 +229,11 @@ _extends MaterialBase_
 	// specular surfaces. Setting this higher alleviates fireflies but will remove some
 	// specular caustics.
 	filterGlossyFactor: Number,
-	
+
 	// The colors to use for the gradient env lighting when no environment map is provided.
 	gradientTop: Color,
 	gradientBottom: Color,
-	
+
 	// The colors to use for the gradient background when enabled.
 	bgGradientTop: Color,
 	bgGradientBottom: Color,
@@ -246,7 +246,7 @@ _extends MaterialBase_
 {
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	BOUNCES = 3 : Number,
-	
+
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 20 : Number,
 
@@ -255,8 +255,8 @@ _extends MaterialBase_
 
 	// The number of materials provided in the "materials" uniform.
 	MATERIAL_LENGTH : Number,
-	
-				
+
+
 }
 ```
 
