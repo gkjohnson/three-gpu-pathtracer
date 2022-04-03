@@ -46,7 +46,7 @@ const envMaps = {
 
 const models = window.MODEL_LIST || {
 	'M2020 Rover': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/ww2-cityscene/scene.gltf',
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 	'Neko Stop Diorama': {
