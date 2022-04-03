@@ -104,6 +104,7 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	}
 
 	vec3 color = mix( vec3( 1.0 ), surf.color, metalness );
+	color = mix( color, vec3( 1.0 ), F );
 	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
 	color *= mix( F, 1.0, metalness );
 	color *= wi.z; // scale the light by the direction the light is coming in from

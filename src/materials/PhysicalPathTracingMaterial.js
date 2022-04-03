@@ -300,7 +300,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
 						surfaceRec.filteredRoughness = clamp(
-							max( material.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
+							max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
 							1e-3,
 							1.0
 						);
