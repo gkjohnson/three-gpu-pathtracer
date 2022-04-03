@@ -1,4 +1,4 @@
-import { ShaderMaterial, TangentSpaceNormalMap, Vector2 } from 'three';
+import { TangentSpaceNormalMap, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import { MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh';
 import { shaderMaterialStructs } from '../shader/shaderStructs.js';
