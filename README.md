@@ -247,6 +247,7 @@ _extends MaterialBase_
 	MATERIAL_LENGTH : Number,
 				
 }
+```
 
 ## RenderTarget2DArray
 
