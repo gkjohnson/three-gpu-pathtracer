@@ -36,7 +36,7 @@ const params = {
 		roughness: 0.01,
 		metalness: 0.05,
 	},
-	stableSeed: false,
+	stableNoise: false,
 	environmentIntensity: 3,
 	bounces: 5,
 	samplesPerFrame: 1,
@@ -211,9 +211,9 @@ async function init() {
 		fsQuad.material.needsUpdate = true;
 
 	} );
-	ptFolder.add( params, 'stableSeed' ).onChange( value => {
+	ptFolder.add( params, 'stableNoise' ).onChange( value => {
 
-		ptRenderer.stableSeed = value;
+		ptRenderer.stableNoise = value;
 
 	} );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {

@@ -85,7 +85,7 @@ export class PathTracingRenderer {
 			type: FloatType,
 		} );
 		this.samples = 0;
-		this.stableSeed = false;
+		this.stableNoise = false;
 		this._renderer = renderer;
 		this._fsQuad = new FullScreenQuad( null );
 		this._task = null;
@@ -117,7 +117,7 @@ export class PathTracingRenderer {
 		this.samples = 0;
 		this._task = null;
 
-		if ( this.stableSeed ) {
+		if ( this.stableNoise ) {
 
 			this.material.seed = 0;
 

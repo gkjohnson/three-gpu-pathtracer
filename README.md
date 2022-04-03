@@ -133,10 +133,10 @@ tiles = ( 1, 1 ) : Vector2
 
 Number of tiles on x and y to render to. Can be used to improve the responsiveness of a page while still rendering a high resolution target.
 
-### .stableSeed
+### .stableNoise
 
 ```js
-stableSeed = false
+stableNoise = false
 ```
 
 Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
