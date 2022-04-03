@@ -6,6 +6,7 @@ import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBV
 import { PathTracingRenderer } from '../core/PathTracingRenderer.js';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 import { LambertPathTracingMaterial } from '../materials/LambertPathTracingMaterial.js';
+import { PhysicalPathTracingMaterial } from '../materials/PhysicalPathTracingMaterial.js';
 import { MaterialReducer } from '../core/MaterialReducer.js';
 
 export class PathTracingViewer {
@@ -52,7 +53,7 @@ export class PathTracingViewer {
 		this._container = container;
 
 		this.ptRenderer.camera = this.camera;
-		this.ptRenderer.material = new LambertPathTracingMaterial( { transparent: true, depthWrite: false } );
+		this.ptRenderer.material = new PhysicalPathTracingMaterial();
 		this.renderer.outputEncoding = sRGBEncoding;
 		this._resizeObserver.observe( container );
 
@@ -202,6 +203,10 @@ export class PathTracingViewer {
 			}
 
 			if ( this.model ) {
+
+				// ensure materials are updated
+				const { ptRenderer, ptMaterials, ptTextures } = this;
+				ptRenderer.material.materials.updateFrom( ptMaterials, ptTextures );
 
 				if ( this.enablePathTracing && delaySamples === 0 ) {
 

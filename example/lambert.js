@@ -10,9 +10,13 @@ import {
 	DoubleSide,
 	DataTexture,
 	RGBAFormat,
-	ByteType,
+	UnsignedByteType,
 	LinearFilter,
 	RepeatWrapping,
+	Mesh,
+	MeshStandardMaterial,
+	PlaneBufferGeometry,
+	Group,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -99,8 +103,22 @@ const params = {
 
 	floorColor: '#080808',
 	floorEnabled: true,
+	floorRoughness: 0.1,
 
 };
+
+const floorTex = generateRadialFloorTexture( 2048 );
+const floorPlane = new Mesh(
+	new PlaneBufferGeometry(),
+	new MeshStandardMaterial( {
+		map: floorTex,
+		transparent: true,
+		color: 0x080808,
+		roughness: 0.1,
+	} )
+);
+floorPlane.scale.setScalar( 3 );
+floorPlane.rotation.x = - Math.PI / 2;
 
 let gui = null;
 function buildGui() {
@@ -188,13 +206,19 @@ function buildGui() {
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.add( params, 'floorEnabled' ).onChange( v => {
 
-		viewer.ptRenderer.material.setDefine( 'DISPLAY_FLOOR', Number( v ) );
+		floorPlane.material.opacity = v ? 1 : 0;
 		viewer.ptRenderer.reset();
 
 	} );
 	floorFolder.addColor( params, 'floorColor' ).onChange( v => {
 
-		viewer.ptRenderer.material.uniforms.floorColor.value.set( v );
+		floorPlane.material.color.set( v );
+		viewer.ptRenderer.reset();
+
+	} );
+	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( v => {
+
+		floorPlane.material.roughness = v;
 		viewer.ptRenderer.reset();
 
 	} );
@@ -232,9 +256,11 @@ function generateRadialFloorTexture( dim ) {
 			const xNorm = x / ( dim - 1 );
 			const yNorm = y / ( dim - 1 );
 
-			const xCent = xNorm - 0.5;
-			const yCent = yNorm - 0.5;
-			const a = Math.sqrt( xCent ** 2 + yCent ** 2 );
+			const xCent = 2.0 * ( xNorm - 0.5 );
+			const yCent = 2.0 * ( yNorm - 0.5 );
+			let a = Math.max( Math.min( 1.0 - Math.sqrt( xCent ** 2 + yCent ** 2 ), 1.0 ), 0.0 );
+			a = a ** 2;
+			a = Math.min( a, 1.0 );
 
 			const i = y * dim + x;
 			data[ i * 4 + 0 ] = 255;
@@ -248,11 +274,13 @@ function generateRadialFloorTexture( dim ) {
 
 	const tex = new DataTexture( data, dim, dim );
 	tex.format = RGBAFormat;
-	tex.type = ByteType;
+	tex.type = UnsignedByteType;
 	tex.minFilter = LinearFilter;
 	tex.magFilter = LinearFilter;
 	tex.wrapS = RepeatWrapping;
 	tex.wrapT = RepeatWrapping;
+	tex.needsUpdate = true;
+	return tex;
 
 }
 
@@ -338,24 +366,6 @@ async function updateModel() {
 
 				c.material.side = DoubleSide;
 
-				if ( c.material.opacity < 1 ) {
-
-					// small hack to account for double sidedness making geometry look more opaque than intended
-					c.material.opacity *= 0.75;
-
-				}
-
-				// boost particularly dark colors because all detail is lost with
-				// dark lambert shading
-				const hsl = {};
-				c.material.color.getHSL( hsl );
-				if ( hsl.l < 0.025 ) {
-
-					hsl.l = 0.025;
-					c.material.color.setHSL( hsl.h, hsl.s, hsl.l );
-
-				}
-
 			}
 
 		} );
@@ -373,7 +383,13 @@ async function updateModel() {
 		model.scale.setScalar( 1 / sphere.radius );
 		model.position.multiplyScalar( 1 / sphere.radius );
 
-		await viewer.setModel( model, { onProgress: v => {
+		box.setFromObject( model );
+
+		const group = new Group();
+		floorPlane.position.y = box.min.y;
+		group.add( model, floorPlane );
+
+		await viewer.setModel( group, { onProgress: v => {
 
 			const percent = Math.floor( 100 * v );
 			loadingEl.innerText = `Building BVH : ${ percent }%`;
@@ -388,7 +404,6 @@ async function updateModel() {
 
 		viewer.pausePathTracing = false;
 		viewer.renderer.domElement.style.visibility = 'visible';
-		viewer.ptRenderer.material.uniforms.floorHeight.value = - ( box.max.y - box.min.y ) / ( 2 * sphere.radius );
 
 	};
 
@@ -447,7 +462,6 @@ async function updateModel() {
 						if ( c.isMesh ) {
 
 							c.material.roughness *= 0.01;
-							// TODO: opacity -> transmission
 
 						}
 

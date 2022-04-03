@@ -54,8 +54,6 @@ export class LambertPathTracingMaterial extends MaterialBase {
 				bgGradientTop: { value: new Color( 0x111111 ) },
 				bgGradientBottom: { value: new Color( 0x000000 ) },
 
-				floorHeight: { value: 0.0 },
-				floorColor: { value: new Color( 0x080808 ) },
 			},
 
 			vertexShader: /* glsl */`
@@ -107,13 +105,6 @@ export class LambertPathTracingMaterial extends MaterialBase {
 
 				#endif
 
-				#if DISPLAY_FLOOR
-
-				uniform vec3 floorColor;
-				uniform float floorHeight;
-
-				#endif
-
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
 				uniform sampler2D normalAttribute;
@@ -152,26 +143,6 @@ export class LambertPathTracingMaterial extends MaterialBase {
 					for ( i = 0; i < BOUNCES; i ++ ) {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
-
-							#if DISPLAY_FLOOR
-
-							// display a radial gradient floor
-							float distToFloor = ( floorHeight - rayOrigin.y ) / rayDirection.y;
-							vec3 floorNormal = vec3( 0.0, 1.0, 0.0 );
-							vec3 floorHitPoint = rayOrigin + rayDirection * distToFloor + floorNormal * RAY_OFFSET;
-							float centerDist = length( floorHitPoint.xz );
-							float alpha = pow( saturate( 1.25 - centerDist ), 2.0 );
-							if ( distToFloor > dist && dot( floorNormal, rayDirection ) < 0.0 && alpha > rand() ) {
-
-								rayOrigin = floorHitPoint;
-								rayDirection = getHemisphereSample( floorNormal, rand2() );
-								throughputColor *= floorColor / PI;
-
-								continue;
-
-							}
-
-							#endif
 
 							#if GRADIENT_BG
 
