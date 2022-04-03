@@ -11,7 +11,6 @@
     "build/*"
   ],
   "dependencies": {
-    "three": "^0.139.2",
     "three-mesh-bvh": "^0.5.4"
   },
   "devDependencies": {
@@ -20,10 +19,12 @@
     "eslint-config-mdcs": "^5.0.0",
     "parcel": "^2.4.0",
     "process": "^0.11.10",
-    "rollup": "^2.70.0"
+    "rollup": "^2.70.0",
+    "three": "^0.139.2"
   },
   "peerDependencies": {
-    "xatlas-web": "^0.1.0"
+    "xatlas-web": "^0.1.0",
+    "three": "^0.139.2"
   },
   "scripts": {
     "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\"",
