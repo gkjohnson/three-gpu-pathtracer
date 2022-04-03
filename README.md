@@ -85,7 +85,6 @@ function animate() {
 	renderer.autoClear = true;
 
 }
-
 ```
 
 # Exports
@@ -206,11 +205,11 @@ Sets the define of the given name to the provided value. If the value is set to 
 
 _extends MaterialBase_
 
-See material implementation page for full list of uniforms and properties.
+**Uniforms**
 
 ```js
 {
-	// Geometry and BVH information
+	// Geometry and BVH information,
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
 	tangentAttribute: FloatVertexAttributeTexture,
@@ -219,10 +218,10 @@ See material implementation page for full list of uniforms and properties.
 	materials: MaterialStructArrayUniform,
 	textures: RenderTarget2DArray,
 
-	// PMREM-processed Environment Map
+	// PMREM-processed Environment Map,
 	environmentMap: Texture,
 
-	// Environment Map information
+	// Environment Map information,
 	environmentBlur: Number,
 	environmentIntensity: Number,
 
@@ -233,6 +232,21 @@ See material implementation page for full list of uniforms and properties.
 	
 }
 ```
+
+**Defines**
+
+```js
+{
+	// The number of ray bounces to test. Higher is better quality but slower performance.
+	BOUNCES = 3 : Number,
+	
+	// The number of transparent pixels to allow on top of existing bounces for object transparency.
+	TRANSPARENT_TRAVERSALS = 20 : Number,
+	
+	// The number of materials provided in the "materials" uniform.
+	MATERIAL_LENGTH : Number,
+				
+}
 
 ## RenderTarget2DArray
 
