@@ -230,9 +230,13 @@ _extends MaterialBase_
 	// specular caustics.
 	filterGlossyFactor: Number,
 	
+	// The colors to use for the gradient env lighting when no environment map is provided.
+	gradientTop: Color,
+	gradientBottom: Color,
+	
 	// The colors to use for the gradient background when enabled.
 	bgGradientTop: Color,
-	bgGradientBottom: Color,	
+	bgGradientBottom: Color,
 }
 ```
 
