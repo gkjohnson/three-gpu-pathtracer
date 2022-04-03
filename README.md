@@ -230,6 +230,13 @@ _extends MaterialBase_
 	// specular caustics.
 	filterGlossyFactor: Number,
 	
+	// The colors to use for the gradient env lighting when no environment map is provided.
+	gradientTop: Color,
+	gradientBottom: Color,
+	
+	// The colors to use for the gradient background when enabled.
+	bgGradientTop: Color,
+	bgGradientBottom: Color,
 }
 ```
 
@@ -242,9 +249,13 @@ _extends MaterialBase_
 	
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 20 : Number,
-	
+
+	// Whether to use the "bg" gradient fields to sample for the backround
+	GRADIENT_BG = 0 : Number
+
 	// The number of materials provided in the "materials" uniform.
 	MATERIAL_LENGTH : Number,
+	
 				
 }
 ```
