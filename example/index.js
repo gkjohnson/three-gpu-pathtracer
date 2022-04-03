@@ -49,9 +49,9 @@ const models = window.MODEL_LIST || {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
-	'Neko Stop Diorama': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/neko-stop-diorama/scene.gltf',
-		credit: 'Model by "Art by Kidd" on Sketchfab.',
+	'Damaged Helmet': {
+		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
+		credit: 'glTF Sample Model.',
 		rotation: [ 0, 1.15 * Math.PI / 4, 0 ],
 		removeEmission: true,
 	},
