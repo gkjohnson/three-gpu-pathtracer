@@ -9,7 +9,7 @@ _More features and capabilities in progress!_
 
 # Examples
 
-[PBR demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lambert.html)!
+[PBR demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
 
 [Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
