@@ -210,7 +210,27 @@ See material implementation page for full list of uniforms and properties.
 
 ```js
 {
-	// TODO
+	// Geometry and BVH information
+	bvh: MeshBVHUniformStruct,
+	normalAttribute: FloatVertexAttributeTexture,
+	tangentAttribute: FloatVertexAttributeTexture,
+	uvAttribute: FloatVertexAttributeTexture,
+	materialIndexAttribute: UIntVertexAttributeTexture,
+	materials: MaterialStructArrayUniform,
+	textures: RenderTarget2DArray,
+
+	// PMREM-processed Environment Map
+	environmentMap: Texture,
+
+	// Environment Map information
+	environmentBlur: Number,
+	environmentIntensity: Number,
+
+	// Factor for alleviating bright pixels from rays that hit diffuse surfaces then
+	// specular surfaces. Setting this higher alleviates fireflies but will remove some
+	// specular caustics.
+	filterGlossyFactor: Number,
+	
 }
 ```
 
