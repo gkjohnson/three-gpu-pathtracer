@@ -58,6 +58,14 @@ ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
 ptMaterial.materials.updateFrom( materials, textures );
 ptMaterial.setDefine( 'MATERIAL_LENGTH', materials.length );
 
+// set the environment map
+const texture = await new RGBELoader().loadAsync( envMapUrl );
+const pmremGenerator = new THREE.PMREMGenerator( renderer );
+pmremGenerator.compileCubemapShader();
+
+const envMap = pmremGenerator.fromEquirectangular( texture );
+ptRenderer.material.environmentMap = envMap.texture;
+
 animate();
 
 // ...
