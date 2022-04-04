@@ -5,7 +5,6 @@ import { SAH } from 'three-mesh-bvh';
 import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js';
 import { PathTracingRenderer } from '../core/PathTracingRenderer.js';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
-import { LambertPathTracingMaterial } from '../materials/LambertPathTracingMaterial.js';
 import { PhysicalPathTracingMaterial } from '../materials/PhysicalPathTracingMaterial.js';
 import { MaterialReducer } from '../core/MaterialReducer.js';
 
@@ -21,7 +20,7 @@ export class PathTracingViewer {
 
 		this.scene = new Scene();
 		this.camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-		this.camera.position.set( 1, 0.5, 1 );
+		this.camera.position.set( - 1, 0.25, 1 );
 
 		this.renderer = new WebGLRenderer( { antialias: true } );
 		this.fsQuad = new FullScreenQuad( new MeshBasicMaterial( { transparent: true } ) );

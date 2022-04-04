@@ -52,8 +52,10 @@ const models = window.MODEL_LIST || {
 	'Damaged Helmet': {
 		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
 		credit: 'glTF Sample Model.',
-		rotation: [ 0, 1.15 * Math.PI / 4, 0 ],
-		removeEmission: true,
+	},
+	'Flight Helmet': {
+		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf',
+		credit: 'glTF Sample Model.',
 	},
 	'Japanese Temple': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/japanese-temple/scene.gltf',
@@ -104,6 +106,7 @@ const params = {
 	floorColor: '#080808',
 	floorEnabled: true,
 	floorRoughness: 0.1,
+	floorMetalness: 0.0
 
 };
 
@@ -115,6 +118,7 @@ const floorPlane = new Mesh(
 		transparent: true,
 		color: 0x080808,
 		roughness: 0.1,
+		metalness: 0.0
 	} )
 );
 floorPlane.scale.setScalar( 3 );
@@ -219,6 +223,12 @@ function buildGui() {
 	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( v => {
 
 		floorPlane.material.roughness = v;
+		viewer.ptRenderer.reset();
+
+	} );
+	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( v => {
+
+		floorPlane.material.metalness = v;
 		viewer.ptRenderer.reset();
 
 	} );
