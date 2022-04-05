@@ -250,7 +250,7 @@ _extends MaterialBase_
 	BOUNCES = 3 : Number,
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
-	TRANSPARENT_TRAVERSALS = 20 : Number,
+	TRANSPARENT_TRAVERSALS = 5 : Number,
 
 	// Whether to use the "bg" gradient fields to sample for the backround
 	GRADIENT_BG = 0 : Number
