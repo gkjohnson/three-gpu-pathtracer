@@ -10,7 +10,7 @@
     "src/*",
     "build/*"
   ],
-	"keywords": [
+  "keywords": [
     "webgl",
     "threejs",
     "performance",
