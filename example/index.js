@@ -58,19 +58,34 @@ const models = window.MODEL_LIST || {
 		bounces: 8,
 		postProcess( model ) {
 
+			const toRemove = [];
 			model.traverse( c => {
 
-				if ( c.material && c.material instanceof MeshPhysicalMaterial ) {
+				if ( c.material ) {
 
-					const material = c.material;
-					material.roughness *= 0.15;
-					material.metalness = 0.0;
-					material.ior = 1.2;
-					material.map = null;
+					if ( c.material instanceof MeshPhysicalMaterial ) {
 
-					c.geometry.computeVertexNormals();
+						const material = c.material;
+						material.roughness *= 0.15;
+						material.metalness = 0.0;
+						material.ior = 1.2;
+						material.map = null;
+
+						c.geometry.computeVertexNormals();
+
+					} else if ( c.material.opacity < 1.0 ) {
+
+						toRemove.push( c );
+
+					}
 
 				}
+
+			} );
+
+			toRemove.forEach( c => {
+
+				c.parent.remove( c );
 
 			} );
 
@@ -388,7 +403,6 @@ function convertOpacityToTransmission( model ) {
 
 				}
 
-				newMaterial.ior = 1.645;
 				newMaterial.opacity = 1.0;
 				newMaterial.transmission = 1.0;
 				c.material = newMaterial;
