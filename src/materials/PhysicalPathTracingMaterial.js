@@ -154,7 +154,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( i == 0 ) {
 
-								rayDirection = normalize( rayDirection );
+								rayDirection = normalize( rayDirection + randDirection() * 0.05 );
 								float value = ( rayDirection.y + 1.0 ) / 2.0;
 
 								value = pow( value, 2.0 );
