@@ -66,7 +66,7 @@ const models = window.MODEL_LIST || {
 					if ( c.material instanceof MeshPhysicalMaterial ) {
 
 						const material = c.material;
-						material.roughness *= 0.15;
+						material.roughness *= 0.1;
 						material.metalness = 0.0;
 						material.ior = 1.2;
 						material.map = null;
@@ -104,7 +104,6 @@ const models = window.MODEL_LIST || {
 
 					if ( c.material instanceof MeshPhysicalMaterial ) {
 
-
 						const material = c.material;
 						material.metalness = 0.0;
 						if ( material.transmission === 1.0 ) {
@@ -130,6 +129,29 @@ const models = window.MODEL_LIST || {
 						}
 
 					}
+
+				}
+
+			} );
+
+		}
+	},
+	'Scifi Toad': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/scifi-toad/scene.gltf',
+		credit: 'Model by "YuryTheCreator" on Sketchfab.',
+		opacityToTransmission: true,
+		bounces: 8,
+		postProcess( model ) {
+
+			model.traverse( c => {
+
+				if ( c.material && c.material instanceof MeshPhysicalMaterial ) {
+
+					const material = c.material;
+					material.metalness = 0.0;
+					material.roughness = 0.005;
+					material.ior = 1.645;
+					material.color.lerp( new Color( 0xffffff ), 0.65 );
 
 				}
 
