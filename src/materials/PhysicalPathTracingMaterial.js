@@ -212,7 +212,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
 							i -= sign( transparentTraversals );
-							transparentTraversals --;
+							transparentTraversals -= sign( transparentTraversals );
 							continue;
 
 						}

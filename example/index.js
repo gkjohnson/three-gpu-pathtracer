@@ -17,6 +17,7 @@ import {
 	MeshStandardMaterial,
 	PlaneBufferGeometry,
 	Group,
+	MeshPhysicalMaterial,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -49,6 +50,32 @@ const models = window.MODEL_LIST || {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
+	'Gelatinous Cube': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/gelatinous-cube/scene.gltf',
+		credit: '',
+		rotation: [ 0, - Math.PI / 8, 0.0 ],
+		opacityToTransmission: true,
+		bounces: 8,
+		postProcess( model ) {
+
+			model.traverse( c => {
+
+				if ( c.material && c.material instanceof MeshPhysicalMaterial ) {
+
+					const material = c.material;
+					material.roughness *= 0.15;
+					material.metalness = 0.0;
+					material.ior = 1.3;
+					material.map = null;
+
+					c.geometry.computeVertexNormals();
+
+				}
+
+			} );
+
+		}
+	},
 	'Damaged Helmet': {
 		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
 		credit: 'glTF Sample Model.',
@@ -56,10 +83,6 @@ const models = window.MODEL_LIST || {
 	'Flight Helmet': {
 		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf',
 		credit: 'glTF Sample Model.',
-	},
-	'Japanese Temple': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/japanese-temple/scene.gltf',
-		credit: 'Japanese Temple Model by "Aditya Graphical" on Sketchfab.',
 	},
 	'Statue': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
@@ -327,6 +350,57 @@ function updateEnvMap() {
 
 }
 
+function convertOpacityToTransmission( model ) {
+
+	model.traverse( c => {
+
+		if ( c.material ) {
+
+			const material = c.material;
+			if ( material.opacity < 0.6 && material.opacity > 0.35 ) {
+
+				const newMaterial = new MeshPhysicalMaterial();
+				for ( const key in material ) {
+
+					if ( key in material ) {
+
+						if ( material[ key ] === null ) {
+
+							continue;
+
+						}
+
+						if ( material[ key ].isTexture ) {
+
+							newMaterial[ key ] = material[ key ];
+
+						} else if ( material[ key ].copy && material[ key ].constructor === newMaterial[ key ].constructor ) {
+
+							newMaterial[ key ].copy( material[ key ] );
+
+						} else if ( ( typeof material[ key ] ) === 'number' ) {
+
+							newMaterial[ key ] = material[ key ];
+
+						}
+
+					}
+
+				}
+
+				newMaterial.ior = 1.645;
+				newMaterial.opacity = 1.0;
+				newMaterial.transmission = 1.0;
+				c.material = newMaterial;
+
+			}
+
+		}
+
+	} );
+
+}
+
 async function updateModel() {
 
 	if ( gui ) {
@@ -349,12 +423,6 @@ async function updateModel() {
 
 	const onFinish = async () => {
 
-		if ( modelInfo.rotation ) {
-
-			model.rotation.set( ...modelInfo.rotation );
-
-		}
-
 		if ( modelInfo.removeEmission ) {
 
 			model.traverse( c => {
@@ -370,6 +438,12 @@ async function updateModel() {
 
 		}
 
+		if ( modelInfo.opacityToTransmission ) {
+
+			convertOpacityToTransmission( model );
+
+		}
+
 		model.traverse( c => {
 
 			if ( c.material ) {
@@ -379,6 +453,12 @@ async function updateModel() {
 			}
 
 		} );
+
+		if ( modelInfo.postProcess ) {
+
+			modelInfo.postProcess( model );
+
+		}
 
 		// center the model
 		const box = new Box3();
@@ -395,6 +475,13 @@ async function updateModel() {
 
 		box.setFromObject( model );
 
+		// rotate model after so it doesn't affect the bounding sphere scale
+		if ( modelInfo.rotation ) {
+
+			model.rotation.set( ...modelInfo.rotation );
+
+		}
+
 		const group = new Group();
 		floorPlane.position.y = box.min.y;
 		group.add( model, floorPlane );
@@ -410,6 +497,8 @@ async function updateModel() {
 
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
+		params.bounces = modelInfo.bounces || 3;
+		viewer.ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 		buildGui();
 
 		viewer.pausePathTracing = false;
