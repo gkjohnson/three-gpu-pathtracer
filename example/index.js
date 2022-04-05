@@ -52,7 +52,7 @@ const models = window.MODEL_LIST || {
 	},
 	'Gelatinous Cube': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/gelatinous-cube/scene.gltf',
-		credit: '',
+		credit: 'Model by "glenatron" on Sketchfab.',
 		rotation: [ 0, - Math.PI / 8, 0.0 ],
 		opacityToTransmission: true,
 		bounces: 8,
