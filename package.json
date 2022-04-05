@@ -10,6 +10,19 @@
     "src/*",
     "build/*"
   ],
+	"keywords": [
+    "webgl",
+    "threejs",
+    "performance",
+    "geometry",
+    "graphics",
+    "mesh",
+    "renderer",
+    "raytracing",
+    "bvh",
+    "three-js",
+    "path-tracing"
+  ],
   "dependencies": {
     "three-mesh-bvh": "^0.5.4"
   },
