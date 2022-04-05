@@ -28,7 +28,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			defines: {
 				BOUNCES: 3,
-				TRANSPARENT_TRAVERSALS: 20,
+				TRANSPARENT_TRAVERSALS: 5,
 				MATERIAL_LENGTH: 0,
 				GRADIENT_BG: 0,
 			},
