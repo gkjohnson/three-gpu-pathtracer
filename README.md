@@ -345,34 +345,31 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 <i>"Interior Scene" model by <a href="https://sketchfab.com/3d-models/interior-scene-45ddbbc4c2dc4f8ca9ed99da9a78326a">Allay Design</a></i>
 </p>
 
-
-![](./docs/neko-stop.png)
-
-<p align="center">
-<i>Neko Stop Diorama model by <a href="https://sketchfab.com/3d-models/the-neko-stop-off-hand-painted-diorama-a5ea0bf252884fceabf1007e8050f3fc">Art by Kidd</a></i>
-</p>
-
-
-![](./docs/rover-orange.png)
+![](https://user-images.githubusercontent.com/734200/161820794-df0da371-ee5c-4368-9e7b-5e7daf6cf3c7.png)
 
 <p align="center">
 <i>Perseverance Rover model by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
 </p>
 
-![](./docs/double-threedscans-envmap.png)
+![](https://user-images.githubusercontent.com/734200/161820735-407f1be6-b4c1-420c-9433-633a8c888c80.png)
 
 <p align="center">
-<i>Sculpture scans model by <a href="https://threedscans.com">Threedscans</a></i>
+<i>Gelatinous Cube model by <a href="https://sketchfab.com/3d-models/gelatinous-cube-e08385238f4d4b59b012233a9fbdca21">glenatron</a></i>
 </p>
 
-![](./docs/lego-death-star-white.png)
+![](https://user-images.githubusercontent.com/734200/161822206-c27bf594-d648-4735-868e-4baf4e414802.png)
 
-![](./docs/lego-x-wing-black.png)
-
-![](./docs/lego-egyptian-white.png)
+![](https://user-images.githubusercontent.com/734200/161822214-eace4297-03c4-4adc-b472-efe29a862685.png)
 
 <p align="center">
 <i>Lego models courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository</a></i>
+</p>
+
+![](https://user-images.githubusercontent.com/734200/161820763-6658e84b-7805-4715-8549-e81757ecc84e.png)
+
+<p align="center">
+<i>Octopus Tea model by <a href="https://sketchfab.com/3d-models/cartoon-octopus-takes-a-tea-bath-107260cf0fd24202a67eb037a6c760a5
+">AzTiZ</a></i>
 </p>
 
 ### Resources
