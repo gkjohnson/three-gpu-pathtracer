@@ -65,7 +65,7 @@ const models = window.MODEL_LIST || {
 					const material = c.material;
 					material.roughness *= 0.15;
 					material.metalness = 0.0;
-					material.ior = 1.3;
+					material.ior = 1.2;
 					material.map = null;
 
 					c.geometry.computeVertexNormals();
