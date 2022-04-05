@@ -139,7 +139,11 @@ const models = window.MODEL_LIST || {
 
 			} );
 
-			toRemove.forEach( c => c.parent.remove(c ) );
+			toRemove.forEach( c => {
+
+				c.parent.remove( c );
+
+			} );
 
 		}
 	},
@@ -186,6 +190,18 @@ const models = window.MODEL_LIST || {
 
 };
 
+let initialModel = Object.keys( models )[ 0 ];
+if ( window.location.hash ) {
+
+	const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
+	if ( modelName in models ) {
+
+		initialModel = modelName;
+
+	}
+
+}
+
 const params = {
 
 	acesToneMapping: true,
@@ -194,7 +210,7 @@ const params = {
 	tilesY: 2,
 	samplesPerFrame: 1,
 
-	model: Object.keys( models )[ 0 ],
+	model: initialModel,
 
 	environment: 'ENVMAP',
 	envMap: envMaps[ 'Royal Esplanade' ],
