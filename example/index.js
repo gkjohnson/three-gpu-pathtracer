@@ -98,6 +98,7 @@ const models = window.MODEL_LIST || {
 		bounces: 8,
 		postProcess( model ) {
 
+			const toRemove = [];
 			model.traverse( c => {
 
 				if ( c.material ) {
@@ -128,11 +129,17 @@ const models = window.MODEL_LIST || {
 
 						}
 
+					} else if ( c.material.opacity < 1.0 ) {
+
+						toRemove.push( c );
+
 					}
 
 				}
 
 			} );
+
+			toRemove.forEach( c => c.parent.remove(c ) );
 
 		}
 	},
