@@ -91,6 +91,52 @@ const models = window.MODEL_LIST || {
 
 		}
 	},
+	'Octopus Tea': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/octopus-tea/scene.gltf',
+		credit: 'Model by "AzTiZ" on Sketchfab.',
+		opacityToTransmission: true,
+		bounces: 8,
+		postProcess( model ) {
+
+			model.traverse( c => {
+
+				if ( c.material ) {
+
+					if ( c.material instanceof MeshPhysicalMaterial ) {
+
+
+						const material = c.material;
+						material.metalness = 0.0;
+						if ( material.transmission === 1.0 ) {
+
+							material.roughness = 0.0;
+							material.metalness = 0.0;
+
+							// 29 === glass
+							// 27 === liquid top
+							// 23 === liquid
+							if ( c.name.includes( '29' ) ) {
+
+								c.geometry.index.array.reverse();
+								material.ior = 1.52;
+								material.color.set( 0xffffff );
+
+							} else {
+
+								material.ior = 1.2;
+
+							}
+
+						}
+
+					}
+
+				}
+
+			} );
+
+		}
+	},
 	'Damaged Helmet': {
 		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
 		credit: 'glTF Sample Model.',
@@ -107,10 +153,6 @@ const models = window.MODEL_LIST || {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Elbow_Crab.glb',
 		rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
 		credit: 'Model courtesy of threedscans.com.',
-	},
-	'Stylized Carriage': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/wooden-stylised-carriage/scene.gltf',
-		credit: 'Model by "LamedeFeu" on Sketchfab.',
 	},
 
 };
@@ -372,7 +414,7 @@ function convertOpacityToTransmission( model ) {
 		if ( c.material ) {
 
 			const material = c.material;
-			if ( material.opacity < 0.6 && material.opacity > 0.35 ) {
+			if ( material.opacity < 0.65 && material.opacity > 0.2 ) {
 
 				const newMaterial = new MeshPhysicalMaterial();
 				for ( const key in material ) {
