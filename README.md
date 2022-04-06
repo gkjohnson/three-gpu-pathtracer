@@ -353,7 +353,7 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 <i>Perseverance Rover model by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
 </p>
 
-![](https://user-images.githubusercontent.com/734200/161820735-407f1be6-b4c1-420c-9433-633a8c888c80.png)
+![](https://user-images.githubusercontent.com/734200/161877900-566652e4-c799-4940-bccb-0c8f4cea5387.png)
 
 <p align="center">
 <i>Gelatinous Cube model by <a href="https://sketchfab.com/3d-models/gelatinous-cube-e08385238f4d4b59b012233a9fbdca21">glenatron</a></i>
