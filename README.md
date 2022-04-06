@@ -367,7 +367,7 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 <i>Lego models courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository</a></i>
 </p>
 
-![](https://user-images.githubusercontent.com/734200/161820763-6658e84b-7805-4715-8549-e81757ecc84e.png)
+![](https://user-images.githubusercontent.com/734200/161877196-7ae2769e-7e54-4694-9ca8-e8f5219d1c2d.png)
 
 <p align="center">
 <i>Octopus Tea model by <a href="https://sketchfab.com/3d-models/cartoon-octopus-takes-a-tea-bath-107260cf0fd24202a67eb037a6c760a5
