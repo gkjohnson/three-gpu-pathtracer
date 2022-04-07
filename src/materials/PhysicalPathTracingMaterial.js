@@ -1,4 +1,4 @@
-import { Matrix4, Color } from 'three';
+import { Matrix4, Matrix3, Color } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
@@ -46,6 +46,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				environmentBlur: { value: 0.2 },
 				environmentIntensity: { value: 2.0 },
 				environmentMap: { value: null },
+				environmentRotation: { value: new Matrix3() },
 				seed: { value: 0 },
 				opacity: { value: 1 },
 				filterGlossyFactor: { value: 0.0 },
@@ -168,7 +169,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							#ifdef USE_ENVMAP
 
-							vec3 skyColor = textureCubeUV( environmentMap, rayDirection, environmentBlur ).rgb;
+                            vec3 skyColor = textureCubeUV( environmentMap, environmentRotation * rayDirection, environmentBlur ).rgb;
 
 							#else
 
