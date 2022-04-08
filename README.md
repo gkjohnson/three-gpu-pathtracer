@@ -222,6 +222,7 @@ _extends MaterialBase_
 
 	// PMREM-processed Environment Map,
 	environmentMap: Texture,
+	environmentRotaton: Matrix3,
 
 	// Environment Map information,
 	environmentBlur: Number,
