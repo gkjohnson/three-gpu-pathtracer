@@ -25,6 +25,7 @@ _More features and capabilities in progress!_
 # Use
 
 ```js
+import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import {
 	PathTracingSceneGenerator,
@@ -64,8 +65,6 @@ ptMaterial.setDefine( 'MATERIAL_LENGTH', materials.length );
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
 const pmremGenerator = new THREE.PMREMGenerator( renderer );
-pmremGenerator.compileCubemapShader();
-
 const envMap = pmremGenerator.fromEquirectangular( texture );
 ptRenderer.material.environmentMap = envMap.texture;
 
