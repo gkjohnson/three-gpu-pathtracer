@@ -342,6 +342,12 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 
 # Screenshots
 
+![](https://user-images.githubusercontent.com/734200/162584469-68e6df38-92da-4a13-b352-ca0bdea14548.png)
+
+<p align="center">
+<i>Sample materials</i>
+</p>
+
 ![](./docs/interior-scene-cropped.png)
 
 <p align="center">
