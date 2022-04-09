@@ -351,6 +351,8 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 
 ![](https://user-images.githubusercontent.com/734200/161820794-df0da371-ee5c-4368-9e7b-5e7daf6cf3c7.png)
 
+![](https://user-images.githubusercontent.com/734200/162550315-3cdabf40-3dea-4d7d-bcfc-eb543eea2d93.png)
+
 <p align="center">
 <i>Perseverance Rover model by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
 </p>
