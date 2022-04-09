@@ -50,6 +50,10 @@ const models = window.MODEL_LIST || {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
+	'M2020 Helicopter': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Ingenuity.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+	},
 	'Gelatinous Cube': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/gelatinous-cube/scene.gltf',
 		credit: 'Model by "glenatron" on Sketchfab.',
