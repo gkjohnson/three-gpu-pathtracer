@@ -174,6 +174,41 @@ const models = window.MODEL_LIST || {
 
 		}
 	},
+	'Halo Twist Ring': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/ring-twist-halo/scene.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+		opacityToTransmission: true,
+		bounces: 15,
+		postProcess( model ) {
+
+			model.traverse( c => {
+
+				if ( c.material ) {
+
+					if ( c.material instanceof MeshPhysicalMaterial ) {
+
+						if ( c.material.transmission === 1.0 ) {
+
+							const material = c.material;
+							material.roughness *= 0.1;
+							material.metalness = 0.0;
+							material.ior = 1.8;
+							material.color.set( 0xffffff );
+
+						} else {
+
+							c.material.roughness *= 0.1;
+
+						}
+
+					}
+
+				}
+
+			} );
+
+		}
+	},
 	'Damaged Helmet': {
 		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
 		credit: 'glTF Sample Model.',
@@ -436,8 +471,6 @@ function updateEnvMap() {
 			}
 
 			const pmremGenerator = new PMREMGenerator( viewer.renderer );
-			pmremGenerator.compileCubemapShader();
-
 			const envMap = pmremGenerator.fromEquirectangular( texture );
 
 			texture.mapping = EquirectangularReflectionMapping;
