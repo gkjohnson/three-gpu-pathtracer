@@ -336,8 +336,9 @@ Material struct definition for use with uniforms. See the [implementation](https
 
 Set of randomness and other light transmport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
-# Caveats
+# Gotchas
 
+- The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
 
 # Screenshots
