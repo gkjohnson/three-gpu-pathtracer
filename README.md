@@ -6,7 +6,7 @@
 
 ![](https://user-images.githubusercontent.com/734200/162287477-96696b18-890b-4c1b-8a73-d662e577cc48.png)
 
-Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) to accelerate high quality, physically based rendering on the GPU. Features include support for GGX surface model, material information, textures, normal maps, emission, environment maps, tiled rendering, and more!
+Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) and WebGL 2 to accelerate high quality, physically based rendering on the GPU. Features include support for GGX surface model, material information, textures, normal maps, emission, environment maps, tiled rendering, and more!
 
 _More features and capabilities in progress!_
 
@@ -25,6 +25,7 @@ _More features and capabilities in progress!_
 # Use
 
 ```js
+import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import {
 	PathTracingSceneGenerator,
@@ -64,8 +65,6 @@ ptMaterial.setDefine( 'MATERIAL_LENGTH', materials.length );
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
 const pmremGenerator = new THREE.PMREMGenerator( renderer );
-pmremGenerator.compileCubemapShader();
-
 const envMap = pmremGenerator.fromEquirectangular( texture );
 ptRenderer.material.environmentMap = envMap.texture;
 
@@ -337,11 +336,18 @@ Material struct definition for use with uniforms. See the [implementation](https
 
 Set of randomness and other light transmport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
-# Caveats
+# Gotchas
 
+- The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
 
 # Screenshots
+
+![](https://user-images.githubusercontent.com/734200/162584469-68e6df38-92da-4a13-b352-ca0bdea14548.png)
+
+<p align="center">
+<i>Sample materials</i>
+</p>
 
 ![](./docs/interior-scene-cropped.png)
 
@@ -351,8 +357,10 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 
 ![](https://user-images.githubusercontent.com/734200/161820794-df0da371-ee5c-4368-9e7b-5e7daf6cf3c7.png)
 
+![](https://user-images.githubusercontent.com/734200/162550315-3cdabf40-3dea-4d7d-bcfc-eb543eea2d93.png)
+
 <p align="center">
-<i>Perseverance Rover model by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
+<i>Perseverance Rover, Ingenuity Helicopter models by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
 </p>
 
 ![](https://user-images.githubusercontent.com/734200/161877900-566652e4-c799-4940-bccb-0c8f4cea5387.png)

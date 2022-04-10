@@ -50,6 +50,8 @@
     "type": "git",
     "url": "git+https://github.com/gkjohnson/three-gpu-pathtracer.git"
   },
+  "author": "Garrett Johnson <garrett.kjohnson@gmail.com>",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/gkjohnson/three-gpu-pathtracer/issues"
   },
