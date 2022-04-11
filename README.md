@@ -300,6 +300,20 @@ Updates the value of the uniform to align with the provided set of materials and
 
 Struct definiton for representing material information as a uniform. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full struct definition information.
 
+### .side
+
+```js
+side = 0 : Number
+```
+
+This is the one field that must be set manually and not assigned in the `updateFrom` function. It defaults to rendering double sided triangles since transmissive volumes require solid, double sided geometry. The possible options are as follows:
+
+```js
+0   // Double Sided
+1   // Front Sided
+- 1 // Back Sided
+```
+
 ### .updateFrom
 
 ```js

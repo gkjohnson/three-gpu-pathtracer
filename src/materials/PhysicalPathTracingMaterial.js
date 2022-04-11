@@ -199,12 +199,23 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						// possibly skip this sample if it's transparent or alpha test is enabled
-						// alpha test is disabled when it === 0
+						// possibly skip this sample if it's transparent, alpha test is enabled, or we hit the wrong material side
+						// and it's single sided.
+						// - alpha test is disabled when it === 0
+						// - the material sidedness test is complicated because we want light to pass through the back side but still
+						// be able to see the front side. This boolean checks if the side we hit is the front side on the first ray
+						// and we're rendering the other then we skip it. Do the opposite on subsequent bounces to get incoming light.
 						float alphaTest = material.alphaTest;
 						bool useAlphaTest = alphaTest != 0.0;
+						bool isFirstHit = i == 0;
 						if (
-							useAlphaTest && albedo.a < alphaTest
+							// material sidedness
+							material.side != 0.0 && ( side == material.side ) == isFirstHit
+
+							// alpha test
+							|| useAlphaTest && albedo.a < alphaTest
+
+							// opacity
 							|| ! useAlphaTest && albedo.a < rand()
 						) {
 
@@ -288,13 +299,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.frontFace = side == 1.0;
 						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.roughness = roughness;
+
+						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
+						// then we can just always assume this is a front face.
+						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 
 						// Compute the filtered roughness value to use during specular reflection computations. A minimum
 						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and

@@ -25,6 +25,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		float opacity;
 		float alphaTest;
 
+		float side;
+
 	};
 
 `;
