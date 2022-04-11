@@ -299,13 +299,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.frontFace = transmission < 1.0 ? side == 1.0 : true;
 						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.roughness = roughness;
+
+						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
+						// then we can just always assume this is a front face.
+						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 
 						// Compute the filtered roughness value to use during specular reflection computations. A minimum
 						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
