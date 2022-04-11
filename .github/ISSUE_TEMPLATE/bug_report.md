@@ -34,9 +34,9 @@ Steps to reproduce the behavior:
 
 A clear and concise description of what you expected to happen.
 
-**Screenshots**
+**Screenshots and Repro Model**
 
-If applicable, add screenshots to help explain your problem (drag and drop the image).
+Add screenshots and a gltf model to help explain your problem (drag and drop).
 
 **Platform:**
 
