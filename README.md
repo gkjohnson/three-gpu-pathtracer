@@ -354,6 +354,7 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
+- Texture repeat, rotation, and center properties are not supported.
 
 # Screenshots
 
