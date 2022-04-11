@@ -21,7 +21,8 @@
     "raytracing",
     "bvh",
     "three-js",
-    "path-tracing"
+    "path-tracing",
+    "three-mesh-bvh"
   ],
   "dependencies": {
     "three-mesh-bvh": "^0.5.4"
