@@ -148,11 +148,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float accumulatedRoughness = 0.0;
 					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
-					bool firstHit = true;
 					for ( i = 0; i < BOUNCES; i ++ ) {
 
-						bool isFirstHit = firstHit;
-						firstHit = false;
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
 							#if GRADIENT_BG
@@ -206,6 +203,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// alpha test is disabled when it === 0
 						float alphaTest = material.alphaTest;
 						bool useAlphaTest = alphaTest != 0.0;
+						bool isFirstHit = i == 0;
 						if (
 							useAlphaTest && albedo.a < alphaTest
 							|| ! useAlphaTest && albedo.a < rand()
@@ -225,7 +223,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// crash the context with too long a loop.
 							i -= sign( transparentTraversals );
 							transparentTraversals -= sign( transparentTraversals );
-							firstHit = isFirstHit;
 							continue;
 
 						}
