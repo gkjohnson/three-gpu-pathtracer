@@ -155,6 +155,7 @@ export class PathTracingViewer {
 				material.textures.setTextures( this.renderer, 2048, 2048, textures );
 				material.materials.updateFrom( materials, textures );
 				material.setDefine( 'MATERIAL_LENGTH', materials.length );
+				material.filterGlossyFactor = 0.25;
 				ptRenderer.reset();
 
 			} );
