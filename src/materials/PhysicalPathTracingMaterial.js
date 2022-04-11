@@ -299,7 +299,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.frontFace = side == 1.0;
+						surfaceRec.frontFace = transmission < 1.0 ? side == 1.0 : true;
 						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
