@@ -32,6 +32,8 @@ export class MaterialStructUniform {
 		this.opacity = 1.0;
 		this.alphaTest = 0.0;
 
+		this.side = 0;
+
 		// TODO: Clearcoat
 
 		// TODO: Sheen
