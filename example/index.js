@@ -226,6 +226,31 @@ const models = window.MODEL_LIST || {
 		rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
 		credit: 'Model courtesy of threedscans.com.',
 	},
+	// 'Astraia': {
+	// 	url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/astraia/scene.gltf',
+	// 	credit: 'Model by "Quentin Otani" on Sketchfab',
+	// 	removeEmission: true,
+	// 	postProcess( model ) {
+
+	// 		const toRemove = [];
+	// 		model.traverse( c => {
+
+	// 			if ( c.name.includes( 'ROND' ) ) {
+
+	// 				toRemove.push( c );
+
+	// 			}
+
+	// 		} );
+
+	// 		toRemove.forEach( c => {
+
+	// 			c.parent.remove( c );
+
+	// 		} );
+
+	// 	}
+	// },
 
 };
 
