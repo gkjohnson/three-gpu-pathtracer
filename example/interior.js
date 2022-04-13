@@ -17,7 +17,7 @@ const params = {
 	bounces: 20,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 0.25,
 	tiles: 2,
 
 
@@ -37,9 +37,9 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
-	params.bounces = Math.max( params.bounces, 6 );
+	params.bounces = Math.min( params.bounces, 10 );
 	params.resolutionScale *= 0.5;
-	params.tiles = 2;
+	params.tiles = 3;
 
 }
 
