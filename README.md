@@ -21,9 +21,9 @@ _More features and capabilities in progress!_
 
 [Interior Scene demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
 
-[Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
+[Material Test demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
-[Transmission preset demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)!
+[Transmission Preset demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)!
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
