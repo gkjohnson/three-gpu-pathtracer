@@ -1,0 +1,58 @@
+<html>
+	<head>
+		<title>Interior Scene Path Tracing</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+		<style>
+			html, body {
+				margin: 0;
+				padding: 0;
+				background-color: #111;
+			}
+
+			#info {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				pointer-events: none;
+			}
+
+			#samples, #credits {
+
+				opacity: 0.5;
+				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
+				padding: 5px;
+				display: inline-block;
+
+			}
+
+			a {
+				color: white;
+			}
+
+			#loading {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				color: white;
+				font-family: 'Courier New', Courier, monospace;
+			}
+		</style>
+
+	</head>
+	<body>
+		<div id="loading">LOADING</div>
+		<div id="info">
+			<div>
+				<div id="samples">--</div>
+			</div>
+			<div>
+				<div id="credits">Interior scene by <a href="https://twitter.com/charlesforman">Charles Forman</a></div>
+			</div>
+		</div>
+		<script src="./interior.js" type="module"></script>
+	</body>
+</html>
