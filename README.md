@@ -21,7 +21,7 @@ _More features and capabilities in progress!_
 
 [Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
-[Interior Scene demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
+[Interior Scene demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)!
 
 **Test Scenes**
 
