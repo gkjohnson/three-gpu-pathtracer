@@ -15,15 +15,21 @@ _More features and capabilities in progress!_
 
 # Examples
 
+**Beauty Demos**
+
 [PBR demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
 
 [Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
 [Interior Scene demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
 
+**Test Scenes**
+
 [Material Test demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
 [Transmission Preset demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)!
+
+**Light Baking**
 
 [Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
