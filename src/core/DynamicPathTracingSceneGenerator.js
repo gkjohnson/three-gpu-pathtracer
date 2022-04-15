@@ -2,7 +2,7 @@ import { BufferGeometry } from 'three';
 import { StaticGeometryGenerator, MeshBVH } from 'three-mesh-bvh';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
 
-export class PathTracingPersistentSceneGenerator {
+export class DynamicPathTracingSceneGenerator {
 
 	get initialized() {
 
@@ -77,6 +77,7 @@ export class PathTracingPersistentSceneGenerator {
 			this.bvh = new MeshBVH( geometry );
 			this.materials = materials;
 			this.textures = Array.from( textureSet );
+
 
 			return {
 				bvh: this.bvh,
