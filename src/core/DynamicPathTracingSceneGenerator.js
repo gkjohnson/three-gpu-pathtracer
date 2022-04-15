@@ -78,7 +78,6 @@ export class DynamicPathTracingSceneGenerator {
 			this.materials = materials;
 			this.textures = Array.from( textureSet );
 
-
 			return {
 				bvh: this.bvh,
 				materials: this.materials,

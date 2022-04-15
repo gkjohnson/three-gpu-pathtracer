@@ -16,15 +16,15 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 	let groups = geometry.groups;
 	if ( groups.length === 0 ) {
 
-		groups = [ { count: totalCount / 3, start: 0, materialIndex: 0 } ];
+		groups = [ { count: totalCount, start: 0, materialIndex: 0 } ];
 
 	}
 
 	for ( let i = 0; i < groups.length; i ++ ) {
 
 		const group = groups[ i ];
-		const start = group.start * 3;
-		const count = group.count * 3;
+		const start = group.start;
+		const count = group.count;
 		const endCount = Math.min( count, totalCount - start );
 
 		const mat = materials[ group.materialIndex ];
