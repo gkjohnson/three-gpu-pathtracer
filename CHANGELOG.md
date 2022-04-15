@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for material sidedness which must be set explicitly on the material uniforms. See `MaterialStructUniform.side` for more information.
 - "synchronous" flag to PathTracingSceneGenerator.
-- "DynamicPathTracingSceneGenerator" to support skinned and morph target meshes
+- "DynamicPathTracingSceneGenerator" to support skinned and morph target meshes.
 
 ### Fixed
 - Case where material arrays did not work correctly.
