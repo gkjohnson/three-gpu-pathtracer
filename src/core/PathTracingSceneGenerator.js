@@ -77,7 +77,7 @@ export class PathTracingSceneGenerator {
 
 	dispose() {
 
-		this.bvhGenerator.terminate();
+		this.bvhGenerator.dispose();
 
 	}
 
