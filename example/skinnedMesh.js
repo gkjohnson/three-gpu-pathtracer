@@ -9,6 +9,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, models;
 let samplesEl;
+let counter = 0;
 const params = {
 
 	environmentIntensity: 3,
@@ -18,8 +19,9 @@ const params = {
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.25,
 	tiles: 1,
+	autoPause: true,
 	pause: false,
-
+	continuous: false,
 
 };
 
@@ -130,18 +132,32 @@ async function init() {
 		onResize();
 
 	} );
+	gui.add( params, 'autoPause' ).listen();
 	gui.add( params, 'pause' ).onChange( v => {
 
-		models.trex.action.paused = v;
-		if ( v ) {
+		params.autoPause = false;
+		setPause( v );
 
-			regenerateScene();
+	} ).listen();
+	gui.add( params, 'continuous' ).onChange( () => {
 
-		}
+		params.autoPause = false;
 
 	} );
 
 	animate();
+
+}
+
+function setPause( v ) {
+
+	models.trex.action.paused = v;
+	params.pause = v;
+	if ( v ) {
+
+		regenerateScene();
+
+	}
 
 }
 
@@ -293,18 +309,41 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const delta = Math.min( clock.getDelta(), 30 );
+	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
 	for ( const key in models ) {
 
 		models[ key ].mixer.update( delta );
+		models[ key ].model.updateMatrixWorld();
 
 	}
 
-	if ( ! params.pause ) {
+	if ( params.autoPause ) {
+
+		counter += delta;
+		if ( ! params.pause && counter >= 2.5 || params.pause && counter >= 5 ) {
+
+			setPause( ! params.pause );
+			counter = 0;
+
+		}
+
+	} else {
+
+		counter = 0;
+
+	}
+
+	if ( ! params.pause && ! params.continuous ) {
 
 		renderer.render( scene, camera );
 
 	} else {
+
+		if ( params.continuous ) {
+
+			regenerateScene();
+
+		}
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
