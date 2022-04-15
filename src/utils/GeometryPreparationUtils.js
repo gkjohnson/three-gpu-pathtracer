@@ -1,6 +1,6 @@
 import { BufferAttribute } from 'three';
 import { mergeBufferGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
+export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
 	if ( ! Array.isArray( materials ) ) {
 
@@ -34,6 +34,25 @@ function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 	}
 
 	return new BufferAttribute( materialArray, 1, false );
+
+}
+
+export function trimToAttributes( geometry, attributes ) {
+
+	// trim any unneeded attributes
+	if ( attributes ) {
+
+		for ( const key in geometry.attributes ) {
+
+			if ( ! attributes.includes( key ) ) {
+
+				geometry.deleteAttribute( key );
+
+			}
+
+		}
+
+	}
 
 }
 
@@ -91,21 +110,6 @@ export function setCommonAttributes( geometry, options ) {
 
 	}
 
-	// trim any unneeded attributes
-	if ( attributes ) {
-
-		for ( const key in geometry.attributes ) {
-
-			if ( ! attributes.includes( key ) ) {
-
-				geometry.deleteAttribute( key );
-
-			}
-
-		}
-
-	}
-
 }
 
 export function mergeMeshes( meshes, options = {} ) {
@@ -151,6 +155,7 @@ export function mergeMeshes( meshes, options = {} ) {
 			attributes: options.attributes,
 			normalMapRequired: ! ! mesh.material.normalMap,
 		} );
+		trimToAttributes( geometry, options.attributes );
 
 		// create the material index attribute
 		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, mesh.material, materials );

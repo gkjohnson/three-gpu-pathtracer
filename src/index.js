@@ -1,6 +1,7 @@
 // core
 export * from './core/PathTracingRenderer.js';
 export * from './core/PathTracingSceneGenerator.js';
+export * from './core/PathTracingPersistentSceneGenerator.js';
 export * from './core/MaterialReducer.js';
 
 // uniforms

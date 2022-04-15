@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { PathTracingPersistentSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -200,8 +200,11 @@ function loadModel( url ) {
 			floorPlane.position.y = 0.075;
 			group.add( floorPlane );
 
+			const sceneGenerator = new PathTracingPersistentSceneGenerator( group );
+			sceneGenerator.synchronous = true;
 			return {
 				scene: group,
+				sceneGenerator,
 				mixer,
 				action,
 			};
@@ -270,11 +273,8 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { scene } = model;
-	const ptGenerator = new PathTracingSceneGenerator();
-	ptGenerator.synchronous = true;
-
-	const result = ptGenerator.generate( scene );
+	const { scene, sceneGenerator } = model;
+	const result = sceneGenerator.generate( scene );
 	sceneInfo = result;
 
 	const { bvh, textures, materials } = result;
@@ -290,7 +290,6 @@ function regenerateScene() {
 	material.materials.updateFrom( materials, textures );
 	material.setDefine( 'MATERIAL_LENGTH', materials.length );
 
-	ptGenerator.dispose();
 	ptRenderer.reset();
 
 }
