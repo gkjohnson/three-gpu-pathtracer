@@ -8,22 +8,25 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 
 	}
 
-	const vertCount = geometry.attributes.position.count;
+	const indexAttr = geometry.index;
+	const posAttr = geometry.attributes.position;
+	const vertCount = posAttr.count;
 	const materialArray = new Uint8Array( vertCount );
+	const totalCount = indexAttr ? indexAttr.count : vertCount;
 	let groups = geometry.groups;
 	if ( groups.length === 0 ) {
 
-		groups = [ { count: vertCount, start: 0, materialIndex: 0 } ];
+		groups = [ { count: totalCount / 3, start: 0, materialIndex: 0 } ];
 
 	}
 
-	const indexAttr = geometry.index;
-	const totalCount = indexAttr ? indexAttr.count : vertCount;
 	for ( let i = 0; i < groups.length; i ++ ) {
 
 		const group = groups[ i ];
-		const { count, start } = group;
+		const start = group.start * 3;
+		const count = group.count * 3;
 		const endCount = Math.min( count, totalCount - start );
+
 		const mat = materials[ group.materialIndex ];
 		const materialIndex = allMaterials.indexOf( mat );
 

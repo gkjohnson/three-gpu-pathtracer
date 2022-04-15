@@ -71,8 +71,6 @@ export class PathTracingSceneGenerator {
 
 		}
 
-
-
 	}
 
 	dispose() {
