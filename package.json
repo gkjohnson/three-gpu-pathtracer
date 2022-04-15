@@ -25,7 +25,7 @@
     "three-mesh-bvh"
   ],
   "dependencies": {
-    "three-mesh-bvh": "^0.5.4"
+    "three-mesh-bvh": "^0.5.10"
   },
   "devDependencies": {
     "concurrently": "^6.3.0",

@@ -188,10 +188,18 @@ Resets and restarts the render from scratch.
 
 Utility class for generating the set of data required for initializing the path tracing material with a bvh, geometry, materials, and textures.
 
+### .synchronous
+
+```js
+.synchronous = false : Boolean
+```
+
+If true then the generate function will return the result immediately instead of using a web worker.
+
 ### .generate
 
 ```js
-async generate( scene : Object3D ) : {
+generate( scene : Object3D ) : Promise | {
 	bvh : MeshBVH,
 	materials : Array<Material>,
 	textures : Array<Texture>
@@ -199,6 +207,48 @@ async generate( scene : Object3D ) : {
 ```
 
 Merges the geometry in the given scene with an additional "materialIndex" attribute that references the associated material array. Also produces a set of textures referenced by the scene materials.
+
+### .dispose
+
+```js
+dispose() : void
+```
+
+## DynamicPathTracingSceneGenerator
+
+A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
+
+In order to quickly update a dynamic scene the same BVH is reused across updates by refitting rather than regenerating. This is significantly faster but also results in a less optimal BVH after significant changes.
+
+If geometry or materials are added or removed from the scene then `reset` must be called.
+
+### constructor
+
+```js
+constructor( scene : Object3D )
+```
+
+Takes the scene to convert.
+
+### .generate
+
+```js
+generate() : {
+	bvh : MeshBVH,
+	materials : Array<Material>,
+	textures : Array<Texture>
+}
+```
+
+Generates and refits the bvh to the current scene state. The same bvh, materials, and textures objects are returns after the initial call until `reset` is called.
+
+### .reset
+
+```js
+reset() : void
+```
+
+Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
 
 ## MaterialBase
 
