@@ -339,7 +339,7 @@ function animate() {
 
 	} else {
 
-		if ( params.continuous ) {
+		if ( ! params.pause && params.continuous ) {
 
 			regenerateScene();
 
