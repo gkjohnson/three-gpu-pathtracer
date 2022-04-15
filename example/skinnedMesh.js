@@ -7,7 +7,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, models;
+let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, model;
 let samplesEl;
 let counter = 0;
 const params = {
@@ -17,7 +17,6 @@ const params = {
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.25,
 	tiles: 1,
 	autoPause: true,
 	pause: false,
@@ -51,6 +50,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
+	ptRenderer.material.filterGlossyFactor = 0.25;
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -92,10 +92,9 @@ async function init() {
 
 	} );
 
-	models = {};
-	models.trex = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/trex/scene.gltf' );
-	// models.pigman = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/pigman/scene.gltf' );
-	scene.add( models.trex.model );
+	model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/trex/scene.gltf' );
+	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/pigman/scene.gltf' );
+	scene.add( model.scene );
 
 	await envMapPromise;
 
@@ -111,11 +110,6 @@ async function init() {
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
 	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -151,7 +145,7 @@ async function init() {
 
 function setPause( v ) {
 
-	models.trex.action.paused = v;
+	model.action.paused = v;
 	params.pause = v;
 	if ( v ) {
 
@@ -182,10 +176,6 @@ function loadModel( url ) {
 			const group = new THREE.Group();
 			group.add( gltf.scene );
 
-			const box = new THREE.Box3();
-			group.updateMatrixWorld();
-			box.setFromObject( gltf.scene );
-
 			// animations
 			const animations = gltf.animations;
 			const mixer = new THREE.AnimationMixer( gltf.scene );
@@ -211,7 +201,7 @@ function loadModel( url ) {
 			group.add( floorPlane );
 
 			return {
-				model: group,
+				scene: group,
 				mixer,
 				action,
 			};
@@ -280,11 +270,11 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { model } = models.trex;
+	const { scene } = model;
 	const ptGenerator = new PathTracingSceneGenerator();
 	ptGenerator.synchronous = true;
 
-	const result = ptGenerator.generate( model );
+	const result = ptGenerator.generate( scene );
 	sceneInfo = result;
 
 	const { bvh, textures, materials } = result;
@@ -310,12 +300,8 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
-	for ( const key in models ) {
-
-		models[ key ].mixer.update( delta );
-		models[ key ].model.updateMatrixWorld();
-
-	}
+	model.mixer.update( delta );
+	model.scene.updateMatrixWorld();
 
 	if ( params.autoPause ) {
 
@@ -346,7 +332,6 @@ function animate() {
 		}
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.environmentBlur = 0.35;
 

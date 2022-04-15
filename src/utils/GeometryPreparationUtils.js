@@ -37,6 +37,77 @@ function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
 }
 
+export function setCommonAttributes( geometry, options ) {
+
+	const { attributes = [], normalMapRequired = false } = options;
+
+	if ( ! geometry.attributes.normal && ( attributes && attributes.includes( 'normal' ) ) ) {
+
+		geometry.computeVertexNormals();
+
+	}
+
+	if ( ! geometry.attributes.uv && ( attributes && attributes.includes( 'uv' ) ) ) {
+
+		const vertCount = geometry.attributes.position.count;
+		geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( vertCount * 2 ), 2, false ) );
+
+	}
+
+	if ( ! geometry.attributes.tangent && ( attributes && attributes.includes( 'tangent' ) ) ) {
+
+		if ( normalMapRequired ) {
+
+			// computeTangents requires an index buffer
+			if ( geometry.index === null ) {
+
+				geometry = mergeVertices( geometry );
+
+			}
+
+			geometry.computeTangents();
+
+		} else {
+
+			const vertCount = geometry.attributes.position.count;
+			geometry.setAttribute( 'tangent', new BufferAttribute( new Float32Array( vertCount * 4 ), 4, false ) );
+
+		}
+
+	}
+
+	if ( ! geometry.index ) {
+
+		// TODO: compute a typed array
+		const indexCount = geometry.attributes.position.count;
+		const array = new Array( indexCount );
+		for ( let i = 0; i < indexCount; i ++ ) {
+
+			array[ i ] = i;
+
+		}
+
+		geometry.setIndex( array );
+
+	}
+
+	// trim any unneeded attributes
+	if ( attributes ) {
+
+		for ( const key in geometry.attributes ) {
+
+			if ( ! attributes.includes( key ) ) {
+
+				geometry.deleteAttribute( key );
+
+			}
+
+		}
+
+	}
+
+}
+
 export function mergeMeshes( meshes, options = {} ) {
 
 	options = { attributes: null, cloneGeometry: true, ...options };
@@ -75,71 +146,11 @@ export function mergeMeshes( meshes, options = {} ) {
 		let geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
-		const attrs = options.attributes;
-		if ( ! geometry.attributes.normal && ( attrs && attrs.includes( 'normal' ) ) ) {
-
-			geometry.computeVertexNormals();
-
-		}
-
-		if ( ! geometry.attributes.uv && ( attrs && attrs.includes( 'uv' ) ) ) {
-
-			const vertCount = geometry.attributes.position.count;
-			geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( vertCount * 2 ), 2, false ) );
-
-		}
-
-		if ( ! geometry.attributes.tangent && ( attrs && attrs.includes( 'tangent' ) ) ) {
-
-			if ( mesh.material.normalMap ) {
-
-				// computeTangents requires an index buffer
-				if ( geometry.index === null ) {
-
-					geometry = mergeVertices( geometry );
-
-				}
-
-				geometry.computeTangents();
-
-			} else {
-
-				const vertCount = geometry.attributes.position.count;
-				geometry.setAttribute( 'tangent', new BufferAttribute( new Float32Array( vertCount * 4 ), 4, false ) );
-
-			}
-
-		}
-
-		if ( ! geometry.index ) {
-
-			// TODO: compute a typed array
-			const indexCount = geometry.attributes.position.count;
-			const array = new Array( indexCount );
-			for ( let i = 0; i < indexCount; i ++ ) {
-
-				array[ i ] = i;
-
-			}
-
-			geometry.setIndex( array );
-
-		}
-
-		// trim any unneeded attributes
-		if ( options.attributes ) {
-
-			for ( const key in geometry.attributes ) {
-
-				if ( ! options.attributes.includes( key ) ) {
-
-					geometry.deleteAttribute( key );
-
-				}
-
-			}
-
-		}
+		// ensure our geometry has common attributes
+		setCommonAttributes( geometry, {
+			attributes: options.attributes,
+			normalMapRequired: ! ! mesh.material.normalMap,
+		} );
 
 		// create the material index attribute
 		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, mesh.material, materials );

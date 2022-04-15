@@ -41,8 +41,9 @@ export class PathTracingSceneGenerator {
 
 		} );
 
-		const { geometry, materials, textures } = mergeMeshes( meshes, { attributes: [ 'position', 'normal', 'tangent', 'uv' ] } );
-
+		const { geometry, materials, textures } = mergeMeshes( meshes, {
+			attributes: [ 'position', 'normal', 'tangent', 'uv' ],
+		} );
 
 		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
 		if ( synchronous ) {
