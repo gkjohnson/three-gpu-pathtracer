@@ -17,17 +17,26 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 
 	}
 
+	const indexAttr = geometry.index;
+	const totalCount = indexAttr ? indexAttr.count : vertCount;
 	for ( let i = 0; i < groups.length; i ++ ) {
 
 		const group = groups[ i ];
 		const { count, start } = group;
-		const endCount = Math.min( count, vertCount - start );
+		const endCount = Math.min( count, totalCount - start );
 		const mat = materials[ group.materialIndex ];
 		const materialIndex = allMaterials.indexOf( mat );
 
 		for ( let j = 0; j < endCount; j ++ ) {
 
-			materialArray[ start + j ] = materialIndex;
+			let index = start + j;
+			if ( indexAttr ) {
+
+				index = indexAttr.getX( index );
+
+			}
+
+			materialArray[ index ] = materialIndex;
 
 		}
 
