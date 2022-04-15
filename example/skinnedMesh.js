@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { StaticGeometryGenerator } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -12,14 +11,13 @@ let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, mod
 let samplesEl;
 const params = {
 
-	environmentIntensity: 0,
-	environmentRotation: 0,
+	environmentIntensity: 3,
 	emissiveIntensity: 100,
-	bounces: 20,
+	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.25,
-	tiles: 2,
+	tiles: 1,
 	pause: false,
 
 
@@ -29,7 +27,6 @@ const params = {
 const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
-	params.bounces = Math.min( params.bounces, 10 );
 	params.resolutionScale *= 0.5;
 	params.tiles = 2;
 
@@ -46,7 +43,7 @@ async function init() {
 	scene = new THREE.Scene();
 
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 5.5, 1.5, 7.5 );
+	camera.position.set( 5.5, 3.5, 7.5 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
@@ -59,7 +56,7 @@ async function init() {
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.15, 0.33, - 0.08 );
+	controls.target.set( - 0.15, 2, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
@@ -77,16 +74,16 @@ async function init() {
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-				texture.mapping = THREE.EquirectangularReflectionMapping;
-				scene.background = texture;
-				scene.environment = texture;
-
 				const pmremGenerator = new THREE.PMREMGenerator( renderer );
 				pmremGenerator.compileCubemapShader();
 
 				const envMap = pmremGenerator.fromEquirectangular( texture );
 
 				ptRenderer.material.environmentMap = envMap.texture;
+				texture.mapping = THREE.EquirectangularReflectionMapping;
+				scene.background = texture;
+				scene.environment = texture;
+
 				resolve();
 
 			} );
@@ -117,18 +114,12 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
+	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( value => {
+	gui.add( params, 'bounces', 1, 5, 1 ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'BOUNCES', value );
 		ptRenderer.reset();
@@ -142,6 +133,11 @@ async function init() {
 	gui.add( params, 'pause' ).onChange( v => {
 
 		models.trex.action.paused = v;
+		if ( v ) {
+
+			regenerateScene();
+
+		}
 
 	} );
 
@@ -151,18 +147,28 @@ async function init() {
 
 function loadModel( url ) {
 
-	// const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( url )
 		.then( gltf => {
 
+			gltf.scene.traverse( c => {
+
+				if ( c.material ) {
+
+					c.material.metalness = 0;
+					c.material.map = null;
+
+				}
+
+			} );
+
 			const group = new THREE.Group();
 			group.add( gltf.scene );
 
 			const box = new THREE.Box3();
-			box.setFromObject( gltf.scene );
 			group.updateMatrixWorld();
+			box.setFromObject( gltf.scene );
 
 			// animations
 			const animations = gltf.animations;
@@ -170,7 +176,7 @@ function loadModel( url ) {
 
 			const action = mixer.clipAction( animations[ 0 ] );
 			action.play();
-			// action.paused = params.pause;
+			action.paused = params.pause;
 
 			const floorTex = generateRadialFloorTexture( 2048 );
 			const floorPlane = new THREE.Mesh(
@@ -183,20 +189,15 @@ function loadModel( url ) {
 					metalness: 1.0
 				} )
 			);
-			floorPlane.scale.setScalar( 20 );
+			floorPlane.scale.setScalar( 50 );
 			floorPlane.rotation.x = - Math.PI / 2;
-			floorPlane.geometry.computeTangents();
+			floorPlane.position.y = 0.075;
 			group.add( floorPlane );
-
-			const generator = new StaticGeometryGenerator( group );
-			generator.attributes = [ 'position', 'normal', 'tangent', 'uv'];
 
 			return {
 				model: group,
 				mixer,
 				action,
-				generator,
-				staticMesh: new THREE.Mesh( new THREE.BufferGeometry(), generator.getMaterials() ),
 			};
 
 		} );
@@ -263,30 +264,28 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { staticMesh, generator } = models.trex;
-	generator.generate( staticMesh.geometry );
-
+	const { model } = models.trex;
 	const ptGenerator = new PathTracingSceneGenerator();
-	ptGenerator.generate( staticMesh ).then( result => {
+	ptGenerator.synchronous = true;
 
-		sceneInfo = result;
+	const result = ptGenerator.generate( model );
+	sceneInfo = result;
 
-		const { bvh, textures, materials } = result;
-		const geometry = bvh.geometry;
-		const material = ptRenderer.material;
+	const { bvh, textures, materials } = result;
+	const geometry = bvh.geometry;
+	const material = ptRenderer.material;
 
-		material.bvh.updateFrom( bvh );
-		material.normalAttribute.updateFrom( geometry.attributes.normal );
-		material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-		material.uvAttribute.updateFrom( geometry.attributes.uv );
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.setDefine( 'MATERIAL_LENGTH', materials.length );
+	material.bvh.updateFrom( bvh );
+	material.normalAttribute.updateFrom( geometry.attributes.normal );
+	material.tangentAttribute.updateFrom( geometry.attributes.tangent );
+	material.uvAttribute.updateFrom( geometry.attributes.uv );
+	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+	material.textures.setTextures( renderer, 2048, 2048, textures );
+	material.materials.updateFrom( materials, textures );
+	material.setDefine( 'MATERIAL_LENGTH', materials.length );
 
-		ptGenerator.dispose();
-
-	} );
+	ptGenerator.dispose();
+	ptRenderer.reset();
 
 }
 
@@ -307,19 +306,7 @@ function animate() {
 
 	} else {
 
-		console.log( 'HEREaa', ptRenderer.samples )
-
-		if ( ptRenderer.samples === 0 ) {
-
-			console.log( ptRenderer.sample )
-			regenerateScene();
-
-		}
-
-		if ( ! sceneInfo ) return;
-
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.environmentBlur = 0.35;
