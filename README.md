@@ -17,21 +17,21 @@ _More features and capabilities in progress!_
 
 **Beauty Demos**
 
-[PBR demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
+[Physically Based Materials](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)!
 
-[Lego demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
+[Lego Models](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)!
 
-[Interior Scene demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)!
+[Interior Scene](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)!
 
 **Test Scenes**
 
-[Material Test demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
+[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)!
 
-[Transmission Preset demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)!
+[Transmission Preset Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)!
 
 **Light Baking**
 
-[Ambient Occlusion Material demo here](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
+[Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)!
 
 # Use
 
