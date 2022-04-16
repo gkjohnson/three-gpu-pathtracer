@@ -56,6 +56,7 @@ async function init() {
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
+		transparent: true,
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
