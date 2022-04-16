@@ -320,7 +320,6 @@ _extends MaterialBase_
 	// The number of materials provided in the "materials" uniform.
 	MATERIAL_LENGTH : Number,
 
-
 }
 ```
 
