@@ -23,6 +23,12 @@ _More features and capabilities in progress!_
 
 [Interior Scene](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)
 
+**Features**
+
+[Skinned Geometry Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/skinnedMesh.html)
+
+[Morph Target Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/skinnedMesh.html#morphtarget)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
