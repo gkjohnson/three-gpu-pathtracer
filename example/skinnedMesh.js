@@ -93,7 +93,15 @@ async function init() {
 
 	} );
 
-	model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/trex/scene.gltf' );
+	if ( window.location.hash === '#morphtarget' ) {
+
+		model = await loadModel( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb' );
+
+	} else {
+
+		model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/trex/scene.gltf' );
+
+	}
 	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/pigman/scene.gltf' );
 	scene.add( model.scene );
 
