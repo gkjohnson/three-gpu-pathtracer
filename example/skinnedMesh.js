@@ -102,6 +102,7 @@ async function init() {
 		model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/trex/scene.gltf' );
 
 	}
+
 	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/pigman/scene.gltf' );
 	scene.add( model.scene );
 
