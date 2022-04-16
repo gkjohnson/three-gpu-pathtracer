@@ -375,9 +375,9 @@ side = 0 : Number
 This is the one field that must be set manually and not assigned in the `updateFrom` function. It defaults to rendering double sided triangles since transmissive volumes require solid, double sided geometry. The possible options are as follows:
 
 ```js
-0   // Double Sided
-1   // Front Sided
-- 1 // Back Sided
+ 0   // Double Sided
+ 1   // Front Sided
+-1   // Back Sided
 ```
 
 ### .updateFrom
