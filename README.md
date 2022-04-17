@@ -224,11 +224,15 @@ dispose() : void
 
 _extends THREE.PerspectiveCamera_
 
+An extension of the three.js PerspectiveCamera with some other parameters associated with depth of field. These parameters otherwise do not affect the camera behavior are are for convenience of use with the PhysicalCameraUniform and pathtracer.
+
 ### .focusDistance
 
 ```js
 focusDistance = 25 : Number
 ```
+
+The distance from the camera that everything is is perfect focus.
 
 ### .apertureBlades
 
@@ -236,17 +240,23 @@ focusDistance = 25 : Number
 apertureBlades = 0 : Number
 ```
 
+The number of sides / blades on the aperture.
+
 ### .apertureRotation
 
 ```js
 apertureRotation = 0 : Number
 ```
 
+The rotation of the aperture shape in radians.
+
 ### .anamorphicRatio
 
 ```js
 anamorphicRatio = 1 : Number
 ```
+
+The anamorphic ratio of the lens. A higher value will stretch the bokeh effect horizontally.
 
 ## DynamicPathTracingSceneGenerator
 
@@ -384,11 +394,14 @@ Takes the rendering context to updateh the target for, the target dimensions of 
 
 ## PhysicalCameraUniform
 
+Uniform for storing the camera paramters for use with the shader.
+
 ### .updateFrom
 
 ```js
 updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
 ```
+Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used. `focalLength` is derived from the camera field of view using `PerspectiveCamera.getFocalLength()`.
 
 ## MaterialStructArrayUniform
 
