@@ -57,7 +57,6 @@ async function init() {
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -171,9 +170,8 @@ async function init() {
 
 	} );
 	gui.add( params, 'emissiveIntensity', 0, 150 ).onChange( updateIntensity );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( value => {
+	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
-		ptRenderer.material.setDefine( 'BOUNCES', value );
 		ptRenderer.reset();
 
 	} );
@@ -226,6 +224,7 @@ function animate() {
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
+	ptRenderer.material.bounces = params.bounces;
 
 	camera.updateMatrixWorld();
 

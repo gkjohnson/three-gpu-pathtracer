@@ -330,17 +330,17 @@ function buildGui() {
 	} );
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 ).onChange( v => {
 
-		viewer.samplesPerFrame = parseInt( v );
+		viewer.samplesPerFrame = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-		viewer.ptRenderer.tiles.x = parseInt( v );
+		viewer.ptRenderer.tiles.x = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-		viewer.ptRenderer.tiles.y = parseInt( v );
+		viewer.ptRenderer.tiles.y = v;
 
 	} );
 	resolutionFolder.open();
@@ -430,9 +430,8 @@ function buildGui() {
 		viewer.fsQuad.material.needsUpdate = true;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( v => {
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
-		viewer.ptRenderer.material.setDefine( 'BOUNCES', parseInt( v ) );
 		viewer.ptRenderer.reset();
 
 	} );
@@ -618,7 +617,6 @@ async function updateModel() {
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		params.bounces = modelInfo.bounces || 3;
-		viewer.ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 		buildGui();
 
 		viewer.pausePathTracing = false;
@@ -707,6 +705,7 @@ viewer.onRender = () => {
 	stats.update();
 	const samples = Math.floor( viewer.ptRenderer.samples );
 	samplesEl.innerText = `samples: ${ samples }`;
+	viewer.ptRenderer.material.bounces = params.bounces;
 
 };
 

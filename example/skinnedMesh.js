@@ -50,7 +50,6 @@ async function init() {
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 	ptRenderer.material.filterGlossyFactor = 0.25;
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
@@ -126,9 +125,8 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'bounces', 1, 5, 1 ).onChange( value => {
+	gui.add( params, 'bounces', 1, 5, 1 ).onChange( () => {
 
-		ptRenderer.material.setDefine( 'BOUNCES', value );
 		ptRenderer.reset();
 
 	} );
@@ -309,6 +307,7 @@ function animate() {
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.environmentBlur = 0.35;
+		ptRenderer.material.bounces = params.bounces;
 
 		camera.updateMatrixWorld();
 

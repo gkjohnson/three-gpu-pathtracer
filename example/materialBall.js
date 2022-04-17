@@ -83,7 +83,6 @@ async function init() {
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.setDefine( 'BOUNCES', params.bounces );
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
@@ -240,9 +239,8 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( value => {
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
-		ptRenderer.material.setDefine( 'BOUNCES', value );
 		ptRenderer.reset();
 
 	} );
@@ -347,6 +345,7 @@ function animate() {
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
+	ptRenderer.material.bounces = params.bounces;
 
 	camera.updateMatrixWorld();
 

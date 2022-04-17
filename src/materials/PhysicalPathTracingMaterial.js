@@ -27,13 +27,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			depthWrite: false,
 
 			defines: {
-				BOUNCES: 3,
 				TRANSPARENT_TRAVERSALS: 5,
 				MATERIAL_LENGTH: 0,
 				GRADIENT_BG: 0,
 			},
 
 			uniforms: {
+				bounces: { value: 3 },
+
 				bvh: { value: new MeshBVHUniformStruct() },
 				normalAttribute: { value: new FloatVertexAttributeTexture() },
 				tangentAttribute: { value: new FloatVertexAttributeTexture() },
@@ -110,6 +111,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#endif
 
+				uniform int bounces;
+
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
 				uniform sampler2D normalAttribute;
@@ -148,7 +151,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float accumulatedRoughness = 0.0;
 					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
-					for ( i = 0; i < BOUNCES; i ++ ) {
+					for ( i = 0; i < bounces; i ++ ) {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
