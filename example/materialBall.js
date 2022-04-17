@@ -120,7 +120,7 @@ async function init() {
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/material-balls/material_ball_v2.glb' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/material-balls/material_ball_v2.glb' )
 		.then( gltf => {
 
 			const group = new THREE.Group();

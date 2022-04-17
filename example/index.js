@@ -43,15 +43,15 @@ const envMaps = {
 
 const models = window.MODEL_LIST || {
 	'M2020 Rover': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Perseverance.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 	'M2020 Helicopter': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/nasa-m2020/Ingenuity.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/nasa-m2020/Ingenuity.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 	'Gelatinous Cube': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/gelatinous-cube/scene.gltf',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/gelatinous-cube/scene.gltf',
 		credit: 'Model by "glenatron" on Sketchfab.',
 		rotation: [ 0, - Math.PI / 8, 0.0 ],
 		opacityToTransmission: true,
@@ -92,7 +92,7 @@ const models = window.MODEL_LIST || {
 		}
 	},
 	'Octopus Tea': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/octopus-tea/scene.gltf',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/octopus-tea/scene.gltf',
 		credit: 'Model by "AzTiZ" on Sketchfab.',
 		opacityToTransmission: true,
 		bounces: 8,
@@ -148,7 +148,7 @@ const models = window.MODEL_LIST || {
 		}
 	},
 	'Scifi Toad': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/scifi-toad/scene.gltf',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/scifi-toad/scene.gltf',
 		credit: 'Model by "YuryTheCreator" on Sketchfab.',
 		opacityToTransmission: true,
 		bounces: 8,
@@ -171,7 +171,7 @@ const models = window.MODEL_LIST || {
 		}
 	},
 	'Halo Twist Ring': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/ring-twist-halo/scene.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/ring-twist-halo/scene.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 		opacityToTransmission: true,
 		bounces: 15,
@@ -214,16 +214,16 @@ const models = window.MODEL_LIST || {
 		credit: 'glTF Sample Model.',
 	},
 	'Statue': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
 		credit: 'Model courtesy of threedscans.com.',
 	},
 	'Crab Sculpture': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/threedscans/Elbow_Crab.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/threedscans/Elbow_Crab.glb',
 		rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
 		credit: 'Model courtesy of threedscans.com.',
 	},
 	// 'Astraia': {
-	// 	url: 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/astraia/scene.gltf',
+	// 	url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/astraia/scene.gltf',
 	// 	credit: 'Model by "Quentin Otani" on Sketchfab',
 	// 	removeEmission: true,
 	// 	postProcess( model ) {

@@ -96,7 +96,7 @@ async function init() {
 	const generator = new PathTracingSceneGenerator();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/gltf-demo-models/main/pathtracing-bathroom/modernbathroom.glb' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/pathtracing-bathroom/modernbathroom.glb' )
 		.then( gltf => {
 
 			const group = new THREE.Group();
