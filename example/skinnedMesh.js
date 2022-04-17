@@ -100,11 +100,11 @@ async function init() {
 
 	} else {
 
-		model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/trex/scene.gltf' );
+		model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' );
 
 	}
 
-	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-models/main/pigman/scene.gltf' );
+	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pigman/scene.gltf' );
 	scene.add( model.scene );
 
 	await envMapPromise;
