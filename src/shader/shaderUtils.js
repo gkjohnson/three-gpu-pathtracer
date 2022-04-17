@@ -145,17 +145,17 @@ export const shaderUtils = /* glsl */`
 		// center of the parallelogram
 		vec2 e1 = a - b;
 		vec2 e2 = c - b;
-		vec2 diag = e1 + e2;
+		vec2 diag = normalize( e1 + e2 );
 
 		// pick a random point in the parallelogram
 		vec2 r = rand2();
-		vec2 point = e1 * r.x + e2 * r.y;
+		if ( r.x + r.y > 1.0 ) {
 
-		// find the delta needed to project the point onto the other diagonal line
-		float delta = dot( point - a, diag );
-		point -= delta * max( 2.0 * scale, 0 );
+			r = vec2( 1.0 ) - r;
 
-		return point;
+		}
+
+		return e1 * r.x + e2 * r.y;
 
 	}
 
@@ -166,12 +166,12 @@ export const shaderUtils = /* glsl */`
 
 			vec2 r = rand2();
 			float angle = 2.0 * PI * r.x;
-			float radius = r.x;
+			float radius = sqrt( rand() );
 			return vec2( cos( angle ), sin( angle ) ) * radius;
 
 		} else {
 
-			blades = min( blades, 3 );
+			blades = max( blades, 3 );
 
 			vec3 r = rand3();
 			float anglePerSegment = 2.0 * PI / float( blades );
@@ -179,9 +179,9 @@ export const shaderUtils = /* glsl */`
 
 			float angle1 = anglePerSegment * segment;
 			float angle2 = angle1 + anglePerSegment;
-			vec3 a = vec2( cos( angle1 ), sin( angle1 ) );
-			vec3 b = vec2( 0.0, 0.0 );
-			vec3 c = vec2( cos( angle2 ), sin( angle2 ) );
+			vec2 a = vec2( cos( angle1 ), sin( angle1 ) );
+			vec2 b = vec2( 0.0, 0.0 );
+			vec2 c = vec2( cos( angle2 ), sin( angle2 ) );
 
 			return triangleSample( a, b, c );
 

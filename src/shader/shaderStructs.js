@@ -7,6 +7,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		float focusDistance;
 		float anamorphicRatio;
 		int apertureBlades;
+		float apertureRotation;
 
 	};
 

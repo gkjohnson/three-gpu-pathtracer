@@ -9,6 +9,7 @@ import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUnifo
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
+import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -34,6 +35,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			uniforms: {
 				bounces: { value: 3 },
+				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
 				normalAttribute: { value: new FloatVertexAttributeTexture() },
@@ -112,6 +114,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				#endif
 
 				uniform int bounces;
+				uniform PhysicalCamera physicalCamera;
 
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
@@ -136,6 +139,24 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
 					vec3 rayOrigin, rayDirection;
 					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
+
+					// depth of field
+					vec3 focalPoint = rayOrigin + rayDirection * physicalCamera.focusDistance;
+
+					// get the aperture sample
+					// TODO: scale based on fStop value, focal distance
+					vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * 0.05;
+
+					// rotate the aperture shape
+					float ac = cos( physicalCamera.apertureRotation );
+					float as = sin( physicalCamera.apertureRotation );
+					apertureSample.x = apertureSample.x * ac - apertureSample.y * as;
+					apertureSample.y = apertureSample.x * as + apertureSample.y * ac;
+					apertureSample.x *= physicalCamera.anamorphicRatio;
+
+					// create the new ray
+					rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
+					rayDirection = focalPoint - rayOrigin;
 
 					// Lambertian render
 					gl_FragColor = vec4( 0.0 );
