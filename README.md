@@ -234,6 +234,14 @@ focusDistance = 25 : Number
 
 The distance from the camera that everything is is perfect focus.
 
+### .fStop
+
+```js
+fStop = 1 : Number
+```
+
+TODO
+
 ### .apertureBlades
 
 ```js
