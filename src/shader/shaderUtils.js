@@ -179,9 +179,9 @@ export const shaderUtils = /* glsl */`
 
 			float angle1 = anglePerSegment * segment;
 			float angle2 = angle1 + anglePerSegment;
-			vec2 a = vec2( cos( angle1 ), sin( angle1 ) );
+			vec2 a = vec2( sin( angle1 ), cos( angle1 ) );
 			vec2 b = vec2( 0.0, 0.0 );
-			vec2 c = vec2( cos( angle2 ), sin( angle2 ) );
+			vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
 
 			return triangleSample( a, b, c );
 
