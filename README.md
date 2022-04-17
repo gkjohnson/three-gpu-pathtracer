@@ -237,10 +237,18 @@ The distance from the camera that everything is is perfect focus.
 ### .fStop
 
 ```js
-fStop = 1 : Number
+fStop = 1.4 : Number
 ```
 
-TODO
+The fstop value of the camera. If this is changed then the `bokehSize` field is implicitly updated.
+
+### .bokehSize
+
+```js
+bokehSize : Number
+```
+
+The bokeh size as derived from the fStop and focal length. If this is set then the fStop is implicitly updated.
 
 ### .apertureBlades
 
