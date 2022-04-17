@@ -3,7 +3,7 @@ export class PhysicalCameraUniform {
 
 	constructor() {
 
-		this.focalLength = 0;
+		this.bokehSize = 0;
 		this.apertureBlades = 0;
 		this.apertureRotation = 0;
 		this.fStop = 0;
@@ -14,9 +14,9 @@ export class PhysicalCameraUniform {
 
 	updateFrom( camera ) {
 
-		this.focalLength = camera.getFocalLength();
 		if ( camera instanceof PhysicalCamera ) {
 
+			this.bokehSize = camera.bokehSize;
 			this.apertureBlades = camera.apertureBlades;
 			this.apertureRotation = camera.apertureRotation;
 			this.fStop = camera.fStop;
@@ -25,6 +25,7 @@ export class PhysicalCameraUniform {
 
 		} else {
 
+			this.bokehSize = 0;
 			this.apertureRotation = 0;
 			this.apertureBlades = 0;
 			this.fStop = 0;

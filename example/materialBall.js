@@ -258,10 +258,23 @@ async function init() {
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( reset );
-	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( reset );
-	cameraFolder.add( camera, 'apertureRotation', 0, 10 ).onChange( reset );
-	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 2.0 ).onChange( reset );
-	cameraFolder.add( camera, 'fStop', 0, 20 ).onChange( reset );
+	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
+
+		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
+		this.updateDisplay();
+		reset();
+
+	} );
+	cameraFolder.add( camera, 'apertureRotation', 0, 12.5 ).onChange( reset );
+	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 10.0 ).onChange( reset );
+	cameraFolder.add( camera, 'bokehSize', 0, 50 ).onChange( reset ).listen();
+	cameraFolder.add( camera, 'fStop', 0.3, 20 ).onChange( reset ).listen();
+	cameraFolder.add( camera, 'fov', 25, 100 ).onChange( () => {
+
+		camera.updateProjectionMatrix();
+		reset();
+
+	} ).listen();
 
 	const matFolder1 = gui.addFolder( 'Shell Material' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );

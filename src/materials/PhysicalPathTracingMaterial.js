@@ -152,8 +152,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 focalPoint = rayOrigin + rayDirection * physicalCamera.focusDistance;
 
 					// get the aperture sample
-					// TODO: scale based on fStop value, focal distance
-					vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * 0.05;
+					vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * physicalCamera.bokehSize * 0.5 * 1e-3;
 
 					// rotate the aperture shape
 					float ac = cos( physicalCamera.apertureRotation );
@@ -162,7 +161,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						apertureSample.x * ac - apertureSample.y * as,
 						apertureSample.x * as + apertureSample.y * ac
 					);
-					apertureSample.x *= physicalCamera.anamorphicRatio;
+					apertureSample.x *= saturate( physicalCamera.anamorphicRatio );
+					apertureSample.y *= saturate( 1.0 / physicalCamera.anamorphicRatio );
 
 					#endif
 
