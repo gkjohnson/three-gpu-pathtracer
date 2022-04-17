@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { PathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -77,7 +77,7 @@ async function init() {
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera = new PhysicalCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 4, 2, 3 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
@@ -256,6 +256,13 @@ async function init() {
 
 	} );
 
+	const cameraFolder = gui.addFolder( 'Camera' );
+	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( reset );
+	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( reset );
+	cameraFolder.add( camera, 'apertureRotation', 0, 10 ).onChange( reset );
+	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 2.0 ).onChange( reset );
+	cameraFolder.add( camera, 'fStop', 0, 20 ).onChange( reset );
+
 	const matFolder1 = gui.addFolder( 'Shell Material' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
 	matFolder1.addColor( params.material1, 'emissive' ).onChange( reset );
@@ -265,7 +272,7 @@ async function init() {
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
-	matFolder1.open();
+	matFolder1.close();
 
 	const matFolder2 = gui.addFolder( 'Ball Material' );
 	matFolder2.addColor( params.material2, 'color' ).onChange( reset );
@@ -276,12 +283,13 @@ async function init() {
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
-	matFolder2.open();
+	matFolder2.close();
 
 	const matFolder3 = gui.addFolder( 'Floor Material' );
 	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
 	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
+	matFolder3.close();
 
 	animate();
 
@@ -346,6 +354,7 @@ function animate() {
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
 	ptRenderer.material.bounces = params.bounces;
+	ptRenderer.material.physicalCamera.updateFrom( camera );
 
 	camera.updateMatrixWorld();
 

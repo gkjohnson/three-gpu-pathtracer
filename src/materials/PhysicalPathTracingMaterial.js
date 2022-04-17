@@ -28,6 +28,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			depthWrite: false,
 
 			defines: {
+				DOF_SUPPORT: 1,
 				TRANSPARENT_TRAVERSALS: 5,
 				MATERIAL_LENGTH: 0,
 				GRADIENT_BG: 0,
@@ -113,8 +114,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#endif
 
-				uniform int bounces;
+				#if DOF_SUPPORT
+
 				uniform PhysicalCamera physicalCamera;
+
+				#endif
+
+				uniform int bounces;
 
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
@@ -140,6 +146,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 rayOrigin, rayDirection;
 					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
 
+					#if DOF_SUPPORT
+
 					// depth of field
 					vec3 focalPoint = rayOrigin + rayDirection * physicalCamera.focusDistance;
 
@@ -150,9 +158,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// rotate the aperture shape
 					float ac = cos( physicalCamera.apertureRotation );
 					float as = sin( physicalCamera.apertureRotation );
-					apertureSample.x = apertureSample.x * ac - apertureSample.y * as;
-					apertureSample.y = apertureSample.x * as + apertureSample.y * ac;
+					apertureSample = vec2(
+						apertureSample.x * ac - apertureSample.y * as,
+						apertureSample.x * as + apertureSample.y * ac
+					);
 					apertureSample.x *= physicalCamera.anamorphicRatio;
+
+					#endif
 
 					// create the new ray
 					rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
