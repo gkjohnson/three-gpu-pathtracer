@@ -6,7 +6,6 @@ export class PhysicalCameraUniform {
 		this.bokehSize = 0;
 		this.apertureBlades = 0;
 		this.apertureRotation = 0;
-		this.fStop = 0;
 		this.focusDistance = 10;
 		this.anamorphicRatio = 1;
 
@@ -19,7 +18,6 @@ export class PhysicalCameraUniform {
 			this.bokehSize = camera.bokehSize;
 			this.apertureBlades = camera.apertureBlades;
 			this.apertureRotation = camera.apertureRotation;
-			this.fStop = camera.fStop;
 			this.focusDistance = camera.focusDistance;
 			this.anamorphicRatio = camera.anamorphicRatio;
 
@@ -28,7 +26,6 @@ export class PhysicalCameraUniform {
 			this.bokehSize = 0;
 			this.apertureRotation = 0;
 			this.apertureBlades = 0;
-			this.fStop = 0;
 			this.focusDistance = 10;
 			this.anamorphicRatio = 1;
 

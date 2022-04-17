@@ -2,7 +2,6 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	struct PhysicalCamera {
 
-		float focalLength;
 		float focusDistance;
 		float anamorphicRatio;
 		float bokehSize;
