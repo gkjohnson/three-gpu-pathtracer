@@ -278,6 +278,9 @@ _extends MaterialBase_
 
 ```js
 {
+	// The number of ray bounces to test. Higher is better quality but slower performance.
+	bounces = 3 : Number,
+	
 	// Geometry and BVH information,
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
@@ -292,13 +295,13 @@ _extends MaterialBase_
 	environmentRotaton: Matrix3,
 
 	// Environment Map information,
-	environmentBlur: Number,
-	environmentIntensity: Number,
+	environmentBlur = 0: Number,
+	environmentIntensity = 1: Number,
 
 	// Factor for alleviating bright pixels from rays that hit diffuse surfaces then
 	// specular surfaces. Setting this higher alleviates fireflies but will remove some
 	// specular caustics.
-	filterGlossyFactor: Number,
+	filterGlossyFactor = 0: Number,
 
 	// The colors to use for the gradient env lighting when no environment map is provided.
 	gradientTop: Color,
@@ -314,9 +317,6 @@ _extends MaterialBase_
 
 ```js
 {
-	// The number of ray bounces to test. Higher is better quality but slower performance.
-	BOUNCES = 3 : Number,
-
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
