@@ -6,9 +6,8 @@ export class PhysicalCameraUniform {
 		this.focalLength = 0;
 		this.apertureBlades = 0;
 		this.fStop = 0;
-
-		// TODO: is this needed? or a function of fStop?
-		this.focalPlane = 0;
+		this.focusDistance = 10;
+		this.anamorphicRatio = 1;
 
 	}
 
@@ -19,11 +18,15 @@ export class PhysicalCameraUniform {
 
 			this.apertureBlades = camera.apertureBlades;
 			this.fStop = camera.fStop;
+			this.focusDistance = camera.focusDistance;
+			this.anamorphicRatio = camera.focusDistance;
 
 		} else {
 
 			this.apertureBlades = 0;
 			this.fStop = 0;
+			this.focusDistance = 10;
+			this.anamorphicRatio = 1;
 
 		}
 

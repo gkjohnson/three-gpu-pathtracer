@@ -1,5 +1,15 @@
 export const shaderMaterialStructs = /* glsl */ `
 
+	struct PhysicalCamera {
+
+		float fStop;
+		float focalLength;
+		float focusDistance;
+		float anamorphicRatio;
+		int apertureBlades;
+
+	};
+
 	struct Material {
 
 		vec3 color;
