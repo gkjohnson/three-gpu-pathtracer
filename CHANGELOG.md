@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - "synchronous" flag to PathTracingSceneGenerator.
 - "DynamicPathTracingSceneGenerator" to support skinned and morph target meshes.
 
+### Changed
+- `PhysicalPathTracingMaterial` to have a "bounces" uniform rather than define.
+
 ### Fixed
 - Case where material arrays did not work correctly.
 
