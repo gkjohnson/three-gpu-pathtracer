@@ -220,6 +220,34 @@ Merges the geometry in the given scene with an additional "materialIndex" attrib
 dispose() : void
 ```
 
+## PhysicalCamera
+
+_extends THREE.PerspectiveCamera_
+
+### .focusDistance
+
+```js
+focusDistance = 25 : Number
+```
+
+### .apertureBlades
+
+```js
+apertureBlades = 0 : Number
+```
+
+### .apertureRotation
+
+```js
+apertureRotation = 0 : Number
+```
+
+### .anamorphicRatio
+
+```js
+anamorphicRatio = 1 : Number
+```
+
 ## DynamicPathTracingSceneGenerator
 
 A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
@@ -281,6 +309,9 @@ _extends MaterialBase_
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	bounces = 3 : Number,
 	
+	// The physical camera parameters to use
+	physicalCamera : PhysicalCameraUniform,
+	
 	// Geometry and BVH information,
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
@@ -317,6 +348,9 @@ _extends MaterialBase_
 
 ```js
 {
+	// Whether the shader should include logic for physical camera and depth of field
+	DOF_SUPPORT = 1 : Number,
+
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
@@ -347,6 +381,14 @@ setTextures(
 ```
 
 Takes the rendering context to updateh the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
+
+## PhysicalCameraUniform
+
+### .updateFrom
+
+```js
+updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
+```
 
 ## MaterialStructArrayUniform
 
