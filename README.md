@@ -504,10 +504,18 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 <i>Sample materials</i>
 </p>
 
+![](https://user-images.githubusercontent.com/734200/163835927-be75d2c0-f27b-4e4b-a3eb-2371043fa5e1.png)
+
+![](https://user-images.githubusercontent.com/734200/163839431-ed75e64d-9ae4-4423-afca-55162a44873e.png)
+
+<p align="center">
+<i>"SD Macross City Standoff Diorama" scene by <a href="https://sketchfab.com/3d-models/interior-scene-45ddbbc4c2dc4f8ca9ed99da9a78326a">Allay Design</a></i>
+</p>
+
 ![](./docs/interior-scene-cropped.png)
 
 <p align="center">
-<i>"Interior Scene" model by <a href="https://sketchfab.com/3d-models/interior-scene-45ddbbc4c2dc4f8ca9ed99da9a78326a">Allay Design</a></i>
+<i>"Interior Scene" model by <a href="https://sketchfab.com/3d-models/sd-macross-city-standoff-diorama-b154220f7e7441799d6be2f7ff9658c7">tipatat</a></i>
 </p>
 
 ![](https://user-images.githubusercontent.com/734200/161820794-df0da371-ee5c-4368-9e7b-5e7daf6cf3c7.png)
