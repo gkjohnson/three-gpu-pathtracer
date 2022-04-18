@@ -232,15 +232,23 @@ An extension of the three.js PerspectiveCamera with some other parameters associ
 focusDistance = 25 : Number
 ```
 
-The distance from the camera that everything is is perfect focus.
+The distance from the camera in meters that everything is is perfect focus.
 
 ### .fStop
 
 ```js
-fStop = 1 : Number
+fStop = 1.4 : Number
 ```
 
-TODO
+The fstop value of the camera. If this is changed then the `bokehSize` field is implicitly updated.
+
+### .bokehSize
+
+```js
+bokehSize : Number
+```
+
+The bokeh size as derived from the fStop and focal length in millimeters. If this is set then the fStop is implicitly updated.
 
 ### .apertureBlades
 
@@ -402,14 +410,15 @@ Takes the rendering context to updateh the target for, the target dimensions of 
 
 ## PhysicalCameraUniform
 
-Uniform for storing the camera paramters for use with the shader.
+Uniform for storing the camera parameters for use with the shader.
 
 ### .updateFrom
 
 ```js
 updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
 ```
-Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used. `focalLength` is derived from the camera field of view using `PerspectiveCamera.getFocalLength()`.
+
+Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
 
 ## MaterialStructArrayUniform
 
