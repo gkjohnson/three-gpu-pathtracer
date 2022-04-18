@@ -149,7 +149,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#if DOF_SUPPORT
 
 					// depth of field
-					vec3 focalPoint = rayOrigin + rayDirection * physicalCamera.focusDistance;
+					vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
 
 					// get the aperture sample
 					vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * physicalCamera.bokehSize * 0.5 * 1e-3;
