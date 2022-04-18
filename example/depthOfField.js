@@ -158,8 +158,8 @@ async function init() {
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
-	window.addEventListener( 'mouseup', onMouseUp );
-	window.addEventListener( 'mousedown', onMouseDown );
+	renderer.domElement.addEventListener( 'mouseup', onMouseUp );
+	renderer.domElement.addEventListener( 'mousedown', onMouseDown );
 
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
