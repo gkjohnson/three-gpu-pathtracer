@@ -1,6 +1,6 @@
 <html>
 	<head>
-		<title>Material Orb Path Tracing</title>
+		<title>Camera Depth of Field</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 		<style>
@@ -10,7 +10,7 @@
 				background-color: #111;
 			}
 
-			#info {
+			#model-info {
 				position: absolute;
 				bottom: 0;
 				left: 0;
@@ -19,9 +19,9 @@
 				pointer-events: none;
 			}
 
-			#samples, #credits {
+			#samples, #credits, #instructions {
 
-				opacity: 0.5;
+				opacity: 0.75;
 				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
 				padding: 5px;
 				display: inline-block;
@@ -41,9 +41,15 @@
 	</head>
 	<body>
 		<div id="loading">LOADING</div>
-		<div id="info">
+		<div id="model-info">
 			<div>
 				<div id="samples">--</div>
+			</div>
+			<div>
+				<div id="credits">Model by tipatat on Sketchfab</div>
+			</div>
+			<div>
+				<div id="instructions">Click point in scene to focus</div>
 			</div>
 		</div>
 		<script src="./depthOfField.js" type="module"></script>
