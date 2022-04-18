@@ -98,6 +98,7 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	// returns [ 0, 1 ]
 	float rand() {
 
 		pcg4d(s0);
@@ -135,6 +136,56 @@ export const shaderUtils = /* glsl */`
 		float f = sqrt( 1.0 - u * u );
 
 		return vec3( f * cos( t ), f * sin( t ), u );
+
+	}
+
+	vec2 triangleSample( vec2 a, vec2 b, vec2 c ) {
+
+		// get the edges of the triangle and the diagonal across the
+		// center of the parallelogram
+		vec2 e1 = a - b;
+		vec2 e2 = c - b;
+		vec2 diag = normalize( e1 + e2 );
+
+		// pick a random point in the parallelogram
+		vec2 r = rand2();
+		if ( r.x + r.y > 1.0 ) {
+
+			r = vec2( 1.0 ) - r;
+
+		}
+
+		return e1 * r.x + e2 * r.y;
+
+	}
+
+	// samples an aperture shape with the given number of sides. 0 means circle
+	vec2 sampleAperture( int blades ) {
+
+		if ( blades == 0 ) {
+
+			vec2 r = rand2();
+			float angle = 2.0 * PI * r.x;
+			float radius = sqrt( rand() );
+			return vec2( cos( angle ), sin( angle ) ) * radius;
+
+		} else {
+
+			blades = max( blades, 3 );
+
+			vec3 r = rand3();
+			float anglePerSegment = 2.0 * PI / float( blades );
+			float segment = floor( float( blades ) * r.x );
+
+			float angle1 = anglePerSegment * segment;
+			float angle2 = angle1 + anglePerSegment;
+			vec2 a = vec2( sin( angle1 ), cos( angle1 ) );
+			vec2 b = vec2( 0.0, 0.0 );
+			vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
+
+			return triangleSample( a, b, c );
+
+		}
 
 	}
 `;

@@ -220,6 +220,60 @@ Merges the geometry in the given scene with an additional "materialIndex" attrib
 dispose() : void
 ```
 
+## PhysicalCamera
+
+_extends THREE.PerspectiveCamera_
+
+An extension of the three.js PerspectiveCamera with some other parameters associated with depth of field. These parameters otherwise do not affect the camera behavior are are for convenience of use with the PhysicalCameraUniform and pathtracer.
+
+### .focusDistance
+
+```js
+focusDistance = 25 : Number
+```
+
+The distance from the camera in meters that everything is is perfect focus.
+
+### .fStop
+
+```js
+fStop = 1.4 : Number
+```
+
+The fstop value of the camera. If this is changed then the `bokehSize` field is implicitly updated.
+
+### .bokehSize
+
+```js
+bokehSize : Number
+```
+
+The bokeh size as derived from the fStop and focal length in millimeters. If this is set then the fStop is implicitly updated.
+
+### .apertureBlades
+
+```js
+apertureBlades = 0 : Number
+```
+
+The number of sides / blades on the aperture.
+
+### .apertureRotation
+
+```js
+apertureRotation = 0 : Number
+```
+
+The rotation of the aperture shape in radians.
+
+### .anamorphicRatio
+
+```js
+anamorphicRatio = 1 : Number
+```
+
+The anamorphic ratio of the lens. A higher value will stretch the bokeh effect horizontally.
+
 ## DynamicPathTracingSceneGenerator
 
 A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
@@ -281,6 +335,9 @@ _extends MaterialBase_
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	bounces = 3 : Number,
 	
+	// The physical camera parameters to use
+	physicalCamera : PhysicalCameraUniform,
+	
 	// Geometry and BVH information,
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
@@ -317,6 +374,9 @@ _extends MaterialBase_
 
 ```js
 {
+	// Whether the shader should include logic for physical camera and depth of field
+	DOF_SUPPORT = 1 : Number,
+
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
@@ -347,6 +407,18 @@ setTextures(
 ```
 
 Takes the rendering context to updateh the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
+
+## PhysicalCameraUniform
+
+Uniform for storing the camera parameters for use with the shader.
+
+### .updateFrom
+
+```js
+updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
+```
+
+Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
 
 ## MaterialStructArrayUniform
 
