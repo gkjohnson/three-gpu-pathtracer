@@ -23,6 +23,8 @@ _More features and capabilities in progress!_
 
 [Interior Scene](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)
 
+[Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/depthOfField.html)
+
 **Features**
 
 [Skinned Geometry Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/skinnedMesh.html)
