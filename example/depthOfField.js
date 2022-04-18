@@ -10,6 +10,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad;
 let samplesEl;
 const mouse = new THREE.Vector2();
+const focusPoint = new THREE.Vector3();
 const params = {
 
 	environmentIntensity: 3,
@@ -19,6 +20,7 @@ const params = {
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
+	autoFocus: true,
 
 };
 
@@ -44,12 +46,16 @@ async function init() {
 	camera.position.set( - 0.262, 0.5276, - 1.1606 );
 	camera.apertureBlades = 6;
 	camera.fStop = 0.6;
-	camera.focusDistance = 1.1943;
+	camera.focusDistance = 1.1878;
+	focusPoint.set( - 0.5253353217832674, 0.3031596413506029, 0.000777794185259223 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
+	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	ptRenderer.material.bgGradientTop.set( 0x390f20 );
+	ptRenderer.material.bgGradientBottom.set( 0x151b1f );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -89,6 +95,23 @@ async function init() {
 		.then( gltf => {
 
 			const group = new THREE.Group();
+
+			const geometry = new THREE.SphereBufferGeometry( 1, 10, 10 );
+			const mat = new THREE.MeshStandardMaterial( {
+				emissiveIntensity: 10,
+				emissive: 0xffffff
+			} );
+			for ( let i = 0; i < 300; i ++ ) {
+
+				const m = new THREE.Mesh(
+					geometry,
+					mat
+				);
+				m.scale.setScalar( 0.075 * Math.random() + 0.03 );
+				m.position.randomDirection().multiplyScalar( 30 + Math.random() * 15 );
+				group.add( m );
+
+			}
 
 			gltf.scene.scale.setScalar( 0.5 );
 			gltf.scene.updateMatrixWorld();
@@ -176,6 +199,7 @@ async function init() {
 		reset();
 
 	} ).listen();
+	cameraFolder.add( params, 'autoFocus' );
 
 	animate();
 
@@ -201,10 +225,11 @@ function onMouseUp( e ) {
 
 		}, camera );
 
-		const res = bvh.raycastFirst( raycaster.ray );
-		if ( res ) {
+		const hit = bvh.raycastFirst( raycaster.ray );
+		if ( hit ) {
 
-			camera.focusDistance = res.distance - camera.near;
+			focusPoint.copy( hit.point );
+			camera.focusDistance = hit.distance - camera.near;
 			ptRenderer.reset();
 
 		}
@@ -241,8 +266,13 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	if ( params.autoFocus ) {
 
+		camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
+
+	}
+
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.environmentBlur = 0.35;
