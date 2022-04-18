@@ -191,8 +191,8 @@ async function init() {
 	} );
 	cameraFolder.add( camera, 'apertureRotation', 0, 12.5 ).onChange( reset );
 	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 10.0 ).onChange( reset );
-	cameraFolder.add( camera, 'bokehSize', 0, 50 ).onChange( reset ).listen();
-	cameraFolder.add( camera, 'fStop', 0.3, 20 ).onChange( reset ).listen();
+	cameraFolder.add( camera, 'bokehSize', 0, 100 ).onChange( reset ).listen();
+	cameraFolder.add( camera, 'fStop', 0.02, 20 ).onChange( reset ).listen();
 	cameraFolder.add( camera, 'fov', 25, 100 ).onChange( () => {
 
 		camera.updateProjectionMatrix();
