@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Support for material sidedness which must be set explicitly on the material uniforms. See `MaterialStructUniform.side` for more information.
 - "synchronous" flag to PathTracingSceneGenerator.
 - "DynamicPathTracingSceneGenerator" to support skinned and morph target meshes.
+- A "PhysicalCamera" instance and associated shader uniforms and updates to support camera depth of field and shaped bokeh.
 
 ### Changed
 - `PhysicalPathTracingMaterial` to have a "bounces" uniform rather than define.
