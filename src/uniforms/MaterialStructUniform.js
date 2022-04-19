@@ -1,4 +1,4 @@
-import { Color, Vector2 } from 'three';
+import { Color, Vector2, DoubleSide, FrontSide, BackSide } from 'three';
 export class MaterialStructUniform {
 
 	constructor() {
@@ -90,6 +90,34 @@ export class MaterialStructUniform {
 
 		// alpha test
 		this.alphaTest = material.alphaTest;
+
+		if ( ! ( 'transmission' in material ) || material.transmission === 0.0 ) {
+
+			this.setSide( material.side );
+
+		} else {
+
+			this.side = 0;
+
+		}
+
+	}
+
+	setSide( side ) {
+
+		switch ( side ) {
+
+			case DoubleSide:
+				this.side = 0;
+				break;
+			case FrontSide:
+				this.side = 1;
+				break;
+			case BackSide:
+				this.side = - 1;
+				break;
+
+		}
 
 	}
 
