@@ -246,7 +246,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool isFirstHit = i == 0;
 						if (
 							// material sidedness
-							material.side != 0.0 && ( side == material.side ) == isFirstHit
+							material.side != 0.0 && ( side != material.side ) == isFirstHit
 
 							// alpha test
 							|| useAlphaTest && albedo.a < alphaTest
