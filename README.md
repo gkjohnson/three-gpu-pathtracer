@@ -108,6 +108,21 @@ function animate() {
 }
 ```
 
+## Dynamic Scenes
+
+Using the dynamic scene generator the same, frequently updated scene can be converted into a single reusable geometry multiple times and BVH refit which greatly improves subsequent scene updates. See `DynamicPathTracingSceneGenerator` docs for more info.
+
+```js
+import { DynamicPathTracingSceneGenerator } from 'three-gpu-pathtracer';
+
+// ... initialize scene etc
+
+const generator = new DynamicPathTracingSceneGenerator( scene );
+const { bvh, textures, materials } = generator.generate( scene );
+
+// ... update path tracer and render
+```
+
 ## Asynchronous Scene Generation
 
 _NOTE WebWorker syntax is inconsistently supported across bundlers and sometimes not supported at all so the PathTracingSceneWorker class is not exported from the package root. If needed the code from src/worker can be copied and modified to accomodate a particular build process._
