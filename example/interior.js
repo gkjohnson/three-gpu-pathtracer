@@ -169,7 +169,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'emissiveIntensity', 0, 150 ).onChange( updateIntensity );
+	gui.add( params, 'emissiveIntensity', 0, 300 ).onChange( updateIntensity );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
