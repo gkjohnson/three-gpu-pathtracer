@@ -67,7 +67,7 @@ const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials } = await generator.generate( scene );
+const { bvh, textures, materials } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
@@ -106,6 +106,22 @@ function animate() {
 	renderer.autoClear = true;
 
 }
+```
+
+## Asynchronous Scene Generation
+
+_NOTE WebWorker syntax is inconsistently supported across bundlers and sometimes not supported at all so the PathTracingSceneWorker class is not exported from the package root. If needed the code from src/worker can be copied and modified to accomodate a particular build process._
+
+```js
+import { PathTracingSceneWorker } from 'three-gpu-pathtracer/src/workers/PathTracingSceneWorker.js';
+
+// ...
+
+// initialize the scene and update the material properties with the bvh, materials, etc
+const generator = new PathTracingSceneWorker();
+const { bvh, textures, materials } = await generator.generate( scene );
+
+// ...
 ```
 
 # Exports
@@ -196,18 +212,10 @@ Resets and restarts the render from scratch.
 
 Utility class for generating the set of data required for initializing the path tracing material with a bvh, geometry, materials, and textures.
 
-### .synchronous
-
-```js
-.synchronous = false : Boolean
-```
-
-If true then the generate function will return the result immediately instead of using a web worker.
-
 ### .generate
 
 ```js
-generate( scene : Object3D ) : Promise | {
+generate( scene : Object3D, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
 	textures : Array<Texture>
@@ -215,6 +223,22 @@ generate( scene : Object3D ) : Promise | {
 ```
 
 Merges the geometry in the given scene with an additional "materialIndex" attribute that references the associated material array. Also produces a set of textures referenced by the scene materials.
+
+## PathTracingSceneWorker
+
+_extends PathTracingSceneGenerator_
+
+See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
+
+### .generate
+
+```js
+async generate( scene : Object3D, options = {} : Object ) : {
+	bvh : MeshBVH,
+	materials : Array<Material>,
+	textures : Array<Texture>
+}
+```
 
 ### .dispose
 

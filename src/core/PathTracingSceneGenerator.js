@@ -1,23 +1,12 @@
 import { Mesh } from 'three';
-import { SAH, MeshBVH } from 'three-mesh-bvh';
-import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js';
+import { SAH, MeshBVH, StaticGeometryGenerator } from 'three-mesh-bvh';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
-import { StaticGeometryGenerator } from 'three-mesh-bvh';
 
 export class PathTracingSceneGenerator {
 
-	constructor() {
+	prepScene( scene ) {
 
-		this.bvhGenerator = new GenerateMeshBVHWorker();
-		this.synchronous = false;
-
-	}
-
-	generate( scene, options = {} ) {
-
-		const { bvhGenerator, synchronous } = this;
 		const meshes = [];
-
 		scene.traverse( c => {
 
 			if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
@@ -41,41 +30,22 @@ export class PathTracingSceneGenerator {
 
 		} );
 
-		const { geometry, materials, textures } = mergeMeshes( meshes, {
+		return mergeMeshes( meshes, {
 			attributes: [ 'position', 'normal', 'tangent', 'uv' ],
 		} );
 
-		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
-		if ( synchronous ) {
-
-			return {
-				scene,
-				materials,
-				textures,
-				bvh: new MeshBVH( geometry, bvhOptions ),
-			};
-
-		} else {
-
-			const bvhPromise = bvhGenerator.generate( geometry, bvhOptions );
-			return bvhPromise.then( bvh => {
-
-				return {
-					scene,
-					materials,
-					textures,
-					bvh,
-				};
-
-			} );
-
-		}
-
 	}
 
-	dispose() {
+	generate( scene, options = {} ) {
 
-		this.bvhGenerator.dispose();
+		const { materials, textures, geometry } = this.prepScene( scene );
+		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
+		return {
+			scene,
+			materials,
+			textures,
+			bvh: new MeshBVH( geometry, bvhOptions ),
+		};
 
 	}
 
