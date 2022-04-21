@@ -8,7 +8,7 @@ export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 
 	}
-	
+
 	generate( scene, options = {} ) {
 
 		const { bvhGenerator } = this;
