@@ -4,6 +4,7 @@ export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 
 	constructor() {
 
+		super();
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 
 	}
