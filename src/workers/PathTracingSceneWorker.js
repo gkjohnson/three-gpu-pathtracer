@@ -29,4 +29,10 @@ export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 
 	}
 
+	dispose() {
+
+		this.bvhGenerator.dispose();
+
+	}
+
 }
