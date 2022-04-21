@@ -1,4 +1,6 @@
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
+import { SAH } from 'three-mesh-bvh';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js';
 
 export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 

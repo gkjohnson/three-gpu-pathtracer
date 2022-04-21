@@ -89,7 +89,7 @@ async function init() {
 
 	} );
 
-	const generator = new PathTracingSceneGenerator();
+	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb' )
