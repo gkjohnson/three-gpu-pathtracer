@@ -13,6 +13,11 @@ import {
 	PlaneBufferGeometry,
 	Group,
 	MeshPhysicalMaterial,
+	WebGLRenderer,
+	Scene,
+	PerspectiveCamera,
+	MeshBasicMaterial,
+	sRGBEncoding,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -20,19 +25,13 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { PathTracingViewer } from './utils/PathTracingViewer.js';
+// import { PathTracingViewer } from './utils/PathTracingViewer.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-
-const creditEl = document.getElementById( 'credits' );
-const loadingEl = document.getElementById( 'loading' );
-const samplesEl = document.getElementById( 'samples' );
-
-const viewer = new PathTracingViewer();
-viewer.init();
-viewer.domElement.style.width = '100%';
-viewer.domElement.style.height = '100%';
-document.body.appendChild( viewer.domElement );
+import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -295,21 +294,158 @@ const params = {
 
 };
 
-const floorTex = generateRadialFloorTexture( 2048 );
-const floorPlane = new Mesh(
-	new PlaneBufferGeometry(),
-	new MeshStandardMaterial( {
-		map: floorTex,
-		transparent: true,
-		color: 0x080808,
-		roughness: 0.1,
-		metalness: 0.0
-	} )
-);
-floorPlane.scale.setScalar( 3 );
-floorPlane.rotation.x = - Math.PI / 2;
+let creditEl, loadingEl, samplesEl;
+let floorPlane, gui, stats, sceneInfo;
+let renderer, camera, ptRenderer, fsQuad, controls, scene;
+let loadingModel = false;
+let delaySamples = 0;
 
-let gui = null;
+init();
+
+async function init() {
+
+	creditEl = document.getElementById( 'credits' );
+	loadingEl = document.getElementById( 'loading' );
+	samplesEl = document.getElementById( 'samples' );
+
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.outputEncoding = sRGBEncoding;
+	renderer.toneMapping = ACESFilmicToneMapping;
+	document.body.appendChild( renderer.domElement );
+
+	scene = new Scene();
+
+	camera = new PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera.position.set( - 1, 0.25, 1 );
+
+	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer.camera = camera;
+	ptRenderer.material = new PhysicalPathTracingMaterial();
+	ptRenderer.tiles.set( params.tiles, params.tiles );
+	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
+	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
+
+	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
+		map: ptRenderer.target.texture,
+		transparent: true,
+	} ) );
+
+	controls = new OrbitControls( camera, renderer.domElement );
+	controls.update();
+	controls.addEventListener( 'change', () => {
+
+		if ( params.tilesX * params.tilesY !== 1.0 ) {
+
+			delaySamples = 1;
+
+		}
+
+		ptRenderer.reset();
+
+	} );
+
+	const floorTex = generateRadialFloorTexture( 2048 );
+	floorPlane = new Mesh(
+		new PlaneBufferGeometry(),
+		new MeshStandardMaterial( {
+			map: floorTex,
+			transparent: true,
+			color: 0x080808,
+			roughness: 0.1,
+			metalness: 0.0
+		} )
+	);
+	floorPlane.scale.setScalar( 3 );
+	floorPlane.rotation.x = - Math.PI / 2;
+
+	stats = new Stats();
+	document.body.appendChild( stats.dom );
+	renderer.physicallyCorrectLights = true;
+	renderer.toneMapping = ACESFilmicToneMapping;
+	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	scene.background = new Color( 0x060606 );
+	ptRenderer.tiles.set( params.tilesX, params.tilesY );
+
+	updateModel();
+	updateEnvMap();
+	onResize();
+
+	animate();
+
+	window.addEventListener( 'resize', onResize );
+
+}
+
+function animate() {
+
+	requestAnimationFrame( animate );
+
+	stats.update();
+
+	if ( loadingModel ) {
+
+		return;
+
+	}
+
+	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
+
+		renderer.render( scene, camera );
+
+	}
+
+	if ( params.enable && delaySamples === 0 ) {
+
+		const samples = Math.floor( ptRenderer.samples );
+		samplesEl.innerText = `samples: ${ samples }`;
+
+		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
+		ptRenderer.material.environmentIntensity = params.environmentIntensity;
+		ptRenderer.material.environmentBlur = 0.35;
+		ptRenderer.material.bounces = params.bounces;
+		ptRenderer.material.physicalCamera.updateFrom( camera );
+
+		camera.updateMatrixWorld();
+
+		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
+
+			ptRenderer.update();
+
+		}
+
+		renderer.autoClear = false;
+		fsQuad.render( renderer );
+		renderer.autoClear = true;
+
+	} else if ( delaySamples > 0 ) {
+
+		delaySamples --;
+
+	}
+
+	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+
+}
+
+function onResize() {
+
+	const w = window.innerWidth;
+	const h = window.innerHeight;
+	const scale = params.resolutionScale;
+	const dpr = window.devicePixelRatio;
+
+	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
+	ptRenderer.reset();
+
+	renderer.setSize( w, h );
+	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	camera.aspect = w / h;
+	camera.updateProjectionMatrix();
+
+}
+
 function buildGui() {
 
 	if ( gui ) {
@@ -323,24 +459,20 @@ function buildGui() {
 	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
+	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
-		viewer.setScale( parseFloat( v ) );
-
-	} );
-	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 ).onChange( v => {
-
-		viewer.samplesPerFrame = v;
+		onResize();
 
 	} );
+	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-		viewer.ptRenderer.tiles.x = v;
+		ptRenderer.tiles.x = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-		viewer.ptRenderer.tiles.y = v;
+		ptRenderer.tiles.y = v;
 
 	} );
 	resolutionFolder.open();
@@ -349,14 +481,14 @@ function buildGui() {
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
 	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
 
-		viewer.ptRenderer.material.environmentBlur = parseFloat( v );
-		viewer.ptRenderer.reset();
+		ptRenderer.material.environmentBlur = parseFloat( v );
+		ptRenderer.reset();
 
 	} ).name( 'env map blur' );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0, 0.01 ).onChange( v => {
 
-		viewer.ptRenderer.material.environmentIntensity = parseFloat( v );
-		viewer.ptRenderer.reset();
+		ptRenderer.material.environmentIntensity = parseFloat( v );
+		ptRenderer.reset();
 
 	} ).name( 'intensity' );
 	environmentFolder.open();
@@ -364,30 +496,30 @@ function buildGui() {
 	const backgroundFolder = gui.addFolder( 'background' );
 	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
 
-		viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', Number( v === 'Gradient' ) );
+		ptRenderer.material.setDefine( 'GRADIENT_BG', Number( v === 'Gradient' ) );
 		if ( v === 'Gradient' ) {
 
-			viewer.scene.background = new Color( 0x060606 );
+			scene.background = new Color( 0x060606 );
 
 		} else {
 
-			viewer.scene.background = viewer.scene.environment;
+			scene.background = scene.environment;
 
 		}
 
-		viewer.ptRenderer.reset();
+		ptRenderer.reset();
 
 	} );
 	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
 
-		viewer.ptRenderer.material.uniforms.bgGradientTop.value.set( v );
-		viewer.ptRenderer.reset();
+		ptRenderer.material.uniforms.bgGradientTop.value.set( v );
+		ptRenderer.reset();
 
 	} );
 	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
 
-		viewer.ptRenderer.material.uniforms.bgGradientBottom.value.set( v );
-		viewer.ptRenderer.reset();
+		ptRenderer.material.uniforms.bgGradientBottom.value.set( v );
+		ptRenderer.reset();
 
 	} );
 	backgroundFolder.open();
@@ -396,43 +528,39 @@ function buildGui() {
 	floorFolder.add( params, 'floorEnabled' ).onChange( v => {
 
 		floorPlane.material.opacity = v ? 1 : 0;
-		viewer.ptRenderer.reset();
+		ptRenderer.reset();
 
 	} );
 	floorFolder.addColor( params, 'floorColor' ).onChange( v => {
 
 		floorPlane.material.color.set( v );
-		viewer.ptRenderer.reset();
+		ptRenderer.reset();
 
 	} );
 	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( v => {
 
 		floorPlane.material.roughness = v;
-		viewer.ptRenderer.reset();
+		ptRenderer.reset();
 
 	} );
 	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( v => {
 
 		floorPlane.material.metalness = v;
-		viewer.ptRenderer.reset();
+		ptRenderer.reset();
 
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
-	pathTracingFolder.add( params, 'enable' ).onChange( v => {
-
-		viewer.enablePathTracing = v;
-
-	} );
+	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
-		viewer.renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-		viewer.fsQuad.material.needsUpdate = true;
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		fsQuad.material.needsUpdate = true;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
-		viewer.ptRenderer.reset();
+		ptRenderer.reset();
 
 	} );
 	pathTracingFolder.open();
@@ -444,27 +572,27 @@ function updateEnvMap() {
 	new RGBELoader()
 		.load( params.envMap, texture => {
 
-			if ( viewer.ptRenderer.material.environmentMap ) {
+			if ( ptRenderer.material.environmentMap ) {
 
-				viewer.ptRenderer.material.environmentMap.dispose();
-				viewer.scene.environment.dispose();
+				ptRenderer.material.environmentMap.dispose();
+				scene.environment.dispose();
 
 			}
 
-			const pmremGenerator = new PMREMGenerator( viewer.renderer );
+			const pmremGenerator = new PMREMGenerator( renderer );
 			const envMap = pmremGenerator.fromEquirectangular( texture );
 
 			texture.mapping = EquirectangularReflectionMapping;
-			viewer.ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
-			viewer.ptRenderer.material.environmentMap = envMap.texture;
-			viewer.scene.environment = texture;
+			ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
+			ptRenderer.material.environmentMap = envMap.texture;
+			scene.environment = texture;
 			if ( params.backgroundType !== 'Gradient' ) {
 
-				viewer.scene.background = texture;
+				scene.background = texture;
 
 			}
 
-			viewer.ptRenderer.reset();
+			ptRenderer.reset();
 
 		} );
 
@@ -533,12 +661,38 @@ async function updateModel() {
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
 
-	viewer.pausePathTracing = true;
-	viewer.renderer.domElement.style.visibility = 'hidden';
+	loadingModel = true;
+	renderer.domElement.style.visibility = 'hidden';
 	samplesEl.innerText = '--';
 	creditEl.innerText = '--';
 	loadingEl.innerText = 'Loading';
 	loadingEl.style.visibility = 'visible';
+
+	scene.traverse( c => {
+
+		if ( c.material ) {
+
+			const material = c.material;
+			for ( const key in material ) {
+
+				if ( material[ key ] && material[ key ].dispose ) {
+
+					material[ key ].dispose();
+
+				}
+
+			}
+
+		}
+
+	} );
+
+	if ( sceneInfo ) {
+
+		scene.remove( sceneInfo.scene );
+
+	}
+
 
 	const onFinish = async () => {
 
@@ -605,12 +759,34 @@ async function updateModel() {
 		floorPlane.position.y = box.min.y;
 		group.add( model, floorPlane );
 
-		await viewer.setModel( group, { onProgress: v => {
+		const reducer = new MaterialReducer();
+		reducer.process( group );
+
+		const generator = new PathTracingSceneWorker();
+		const result = await generator.generate( group, { onProgress: v => {
 
 			const percent = Math.floor( 100 * v );
 			loadingEl.innerText = `Building BVH : ${ percent }%`;
 
 		} } );
+
+		sceneInfo = result;
+		scene.add( sceneInfo.scene );
+
+		const { bvh, textures, materials } = result;
+		const geometry = bvh.geometry;
+		const material = ptRenderer.material;
+
+		material.bvh.updateFrom( bvh );
+		material.normalAttribute.updateFrom( geometry.attributes.normal );
+		material.tangentAttribute.updateFrom( geometry.attributes.tangent );
+		material.uvAttribute.updateFrom( geometry.attributes.uv );
+		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+		material.textures.setTextures( renderer, 2048, 2048, textures );
+		material.materials.updateFrom( materials, textures );
+		material.setDefine( 'MATERIAL_LENGTH', materials.length );
+
+		generator.dispose();
 
 		loadingEl.style.visibility = 'hidden';
 
@@ -619,8 +795,10 @@ async function updateModel() {
 		params.bounces = modelInfo.bounces || 3;
 		buildGui();
 
-		viewer.pausePathTracing = false;
-		viewer.renderer.domElement.style.visibility = 'visible';
+		loadingModel = false;
+		renderer.domElement.style.visibility = 'visible';
+
+		ptRenderer.reset();
 
 	};
 
@@ -691,23 +869,3 @@ async function updateModel() {
 	}
 
 }
-
-const stats = new Stats();
-document.body.appendChild( stats.dom );
-viewer.renderer.physicallyCorrectLights = true;
-viewer.renderer.toneMapping = ACESFilmicToneMapping;
-viewer.ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
-viewer.scene.background = new Color( 0x060606 );
-viewer.ptRenderer.tiles.set( params.tilesX, params.tilesY );
-viewer.setScale( params.resolutionScale );
-viewer.onRender = () => {
-
-	stats.update();
-	const samples = Math.floor( viewer.ptRenderer.samples );
-	samplesEl.innerText = `samples: ${ samples }`;
-	viewer.ptRenderer.material.bounces = params.bounces;
-
-};
-
-updateModel();
-updateEnvMap();
