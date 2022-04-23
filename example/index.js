@@ -401,8 +401,8 @@ function animate() {
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
+		ptRenderer.material.environmentBlur = params.environmentBlur;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-		ptRenderer.material.environmentBlur = 0.35;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
 
