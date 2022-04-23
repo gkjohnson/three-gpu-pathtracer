@@ -13,23 +13,6 @@ assignees: ''
 
 A clear and concise description of what the bug is. Before submitting, please remove unnecessary sections.
 
-**To Reproduce**
-
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. See error
-
-***Code***
-
-```js
-// code goes here
-```
-
-***Live example***
-
--
-
 **Expected behavior**
 
 A clear and concise description of what you expected to happen.
