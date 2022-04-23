@@ -485,7 +485,7 @@ Struct definiton for representing material information as a uniform. See the [im
 side = 0 : Number
 ```
 
-This field is set based on the Material.sid value only if transmission is equal to "0.0". Otherwise it is set to render as double sided. It defaults to rendering double sided triangles since transmissive volumes require solid, double sided geometry. The possible options are as follows:
+This is the only field that needs to be set explicitly and is not derived from the Material setting. It defaults to rendering double sided triangles since transmissive volumes require solid, double sided geometry. The possible options are as follows:
 
 ```js
  0   // Double Sided

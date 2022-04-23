@@ -91,16 +91,6 @@ export class MaterialStructUniform {
 		// alpha test
 		this.alphaTest = material.alphaTest;
 
-		if ( ! ( 'transmission' in material ) || material.transmission === 0.0 ) {
-
-			this.setSide( material.side );
-
-		} else {
-
-			this.side = 0;
-
-		}
-
 	}
 
 	setSide( side ) {
