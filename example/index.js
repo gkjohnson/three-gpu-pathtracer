@@ -674,7 +674,7 @@ async function updateModel() {
 			const material = c.material;
 			for ( const key in material ) {
 
-				if ( material[ key ] && material[ key ].dispose ) {
+				if ( material[ key ] && material[ key ].isTexture ) {
 
 					material[ key ].dispose();
 
