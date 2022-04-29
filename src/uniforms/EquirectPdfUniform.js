@@ -55,10 +55,8 @@ export class EquirectPdfUniform {
 
 	updateFrom( hdr ) {
 
-		// TODO: another reference implementation with a different approach:
-		// https://github.com/nvpro-samples/vk_mini_samples/blob/main/hdr_sampling/src/hdr_env.cpp#L243
-
-		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/master/src/loaders/hdrloader.cpp
+		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/3c6fd9b6b3da47cd50c527eeb45845eef06c55c3/src/loaders/hdrloader.cpp
+		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
 		const { width, height, data } = hdr.image;
 		const color = new Color();
 		const hsl = {};
@@ -123,6 +121,7 @@ export class EquirectPdfUniform {
 		// compute a sorted index of distributions and the probabilities along them for both
 		// the marginal and conditional data. These will be used to sample with a random number
 		// to retrieve a uv value to sample in the environment map.
+		// These values continually increase so it's okay to interpolate between them.
 		const marginalDataArray = new Float32Array( height * 2 );
 		const conditionalDataArray = new Float32Array( width * height * 2 );
 
