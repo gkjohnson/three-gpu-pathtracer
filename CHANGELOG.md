@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Changed
+- Materials to use a texture instead of uniforms to cut down on max uniform errors.
+
+### Added
+- Support for "matte" material flag.
+
+## [0.0.2] - 2022-04-26
 ### Added
 - Support for material sidedness which must be set explicitly on the material uniforms. See `MaterialStructUniform.side` for more information.
 - `DynamicPathTracingSceneGenerator` to support skinned and morph target meshes.
