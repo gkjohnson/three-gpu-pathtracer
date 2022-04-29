@@ -6,8 +6,7 @@ export * from './core/MaterialReducer.js';
 export * from './core/PhysicalCamera.js';
 
 // uniforms
-export * from './uniforms/MaterialStructArrayUniform.js';
-export * from './uniforms/MaterialStructUniform.js';
+export * from './uniforms/MaterialsTexture.js';
 export * from './uniforms/RenderTarget2DArray.js';
 
 // utils
