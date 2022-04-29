@@ -5,7 +5,7 @@ import {
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs } from '../shader/shaderStructs.js';
-import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
+import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
@@ -43,7 +43,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				tangentAttribute: { value: new FloatVertexAttributeTexture() },
 				uvAttribute: { value: new FloatVertexAttributeTexture() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
-				materials: { value: new MaterialStructArrayUniform() },
+				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
@@ -133,7 +133,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform float filterGlossyFactor;
 				uniform int seed;
 				uniform float opacity;
-				uniform Material materials[ MATERIAL_LENGTH ];
+				uniform sampler2D materials;
+
 				uniform sampler2DArray textures;
 				varying vec2 vUv;
 
@@ -239,7 +240,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
-						Material material = materials[ materialIndex ];
+						Material material = readMaterialInfo( materials, materialIndex );
 
 						if ( material.matte ) {
 

@@ -1,5 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
+const MATERIAL_PIXELS = 6;
 const MATERIAL_STRIDE = 6 * 4;
 
 export class MaterialsTexture extends DataTexture {
@@ -73,16 +74,27 @@ export class MaterialsTexture extends DataTexture {
 
 	updateFrom( materials, textures ) {
 
-		let index = 0;
-		const count = materials.length * MATERIAL_STRIDE;
-		const dimension = Math.ceil( Math.sqrt( count ) );
+		function getTexture( material, key, def = - 1 ) {
 
-		if ( this.data.width !== dimension ) {
+			return key in material ? textures.indexOf( material[ key ] ) : def;
+
+		}
+
+		function getField( material, key, def ) {
+
+			return key in material ? material[ key ] : def;
+
+		}
+
+		let index = 0;
+		const pixelCount = materials.length * MATERIAL_PIXELS;
+		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
+
+		if ( this.image.width !== dimension ) {
 
 			this.dispose();
-			this.needsUpdate = true;
 
-			this.image.data = new Float32Array( count );
+			this.image.data = new Float32Array( dimension * dimension * 4 );
 			this.image.width = dimension;
 			this.image.height = dimension;
 
@@ -91,7 +103,7 @@ export class MaterialsTexture extends DataTexture {
 		const floatArray = this.image.data;
 		const intArray = new Int32Array( floatArray.buffer );
 
-		for ( let i = 0, l = count; i < l; i ++ ) {
+		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];
 
@@ -99,28 +111,28 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = m.color.r;
 			floatArray[ index ++ ] = m.color.g;
 			floatArray[ index ++ ] = m.color.b;
-			intArray[ index ++ ] = textures.indexOf( m.map );
+			intArray[ index ++ ] = getTexture( m, 'map' );
 
 			// metalness & roughness
-			floatArray[ index ++ ] = m.metalness;
+			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
 			intArray[ index ++ ] = textures.indexOf( m.metalnessMap );
-			floatArray[ index ++ ] = m.roughess;
+			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
 			intArray[ index ++ ] = textures.indexOf( m.roughnessMap );
 
 			// transmission & emissiveIntensity
-			floatArray[ index ++ ] = m.ior;
-			floatArray[ index ++ ] = m.transmission;
-			intArray[ index ++ ] = textures.indexOf( m.ior );
-			floatArray[ index ++ ] = m.emissiveIntensity;
+			floatArray[ index ++ ] = getField( m, 'ior', 1.0 );
+			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
+			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
+			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
 
 			// emission
 			floatArray[ index ++ ] = m.emissive.r;
 			floatArray[ index ++ ] = m.emissive.g;
 			floatArray[ index ++ ] = m.emissive.b;
-			intArray[ index ++ ] = textures.indexOf( m.emissiveMap );
+			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
 
 			// normals
-			intArray[ index ++ ] = textures.indexOf( m.normalMap );
+			intArray[ index ++ ] = getTexture( m, 'normalMap' );
 			floatArray[ index ++ ] = m.normalScale.x;
 			floatArray[ index ++ ] = m.normalScale.y;
 			index ++;
@@ -132,6 +144,8 @@ export class MaterialsTexture extends DataTexture {
 			index ++; // matte
 
 		}
+
+		this.needsUpdate = true;
 
 	}
 
