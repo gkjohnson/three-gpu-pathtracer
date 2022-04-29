@@ -8,21 +8,21 @@ function RGBEToLinear( r, g, b, e, target ) {
 
 }
 
-function findIndexForValue( array, value, offset = 0, count = array.length ) {
+function findIndexForValue( array, targetValue, offset = 0, count = array.length ) {
 
-	// TODO: use binary search here
-	for ( let i = offset; i < count; i ++ ) {
+	// TODO: use binary search here?
+	for ( let i = 0; i < count; i ++ ) {
 	
-		const v = array[ i ];
-		if ( value < v ) {
+		const v = array[ offset + i ];
+		if ( targetValue < v ) {
 		
-			return i - 1;
+			return i;
 			
 		}
 		
 	}
 	
-	throw new Error();
+	return count - 1;
 	
 }
 
@@ -54,6 +54,9 @@ export class EquirectPdfUniform {
 	}
 
 	updateFrom( hdr ) {
+		
+		// TODO: make sure we handle an all black condition
+		// TODO: validate the offsets we're providing in the data
 
 		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/3c6fd9b6b3da47cd50c527eeb45845eef06c55c3/src/loaders/hdrloader.cpp
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
