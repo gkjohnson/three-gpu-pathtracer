@@ -19,7 +19,7 @@ export class MaterialsTexture extends DataTexture {
 	setSide( materialIndex, side ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 0;
+		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 2;
 		switch ( side ) {
 
 			case FrontSide:
@@ -39,7 +39,7 @@ export class MaterialsTexture extends DataTexture {
 	setMatte( materialIndex, matte ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 1;
+		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 3;
 		array[ index ] = matte ? 1 : 0;
 
 	}
@@ -99,10 +99,10 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 
 			// side & matte
+			floatArray[ index ++ ] = m.opacity;
+			floatArray[ index ++ ] = m.alphaTest;
 			index ++; // side
 			index ++; // matte
-			index ++;
-			index ++;
 
 		}
 
