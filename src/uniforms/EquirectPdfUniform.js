@@ -30,7 +30,8 @@ export class EquirectPdfUniform {
 
 	constructor() {
 
-		// The relative weight / importance of any given row compared to all other rows
+		// Stores a map of [0, 1] value -> cumulative importance row & pdf
+		// used to sampling a random value to a relevant row to sample from
 		const marginalData = new DataTexture();
 		marginalData.type = FloatType;
 		marginalData.format = RGFormat;
@@ -38,8 +39,8 @@ export class EquirectPdfUniform {
 		marginalData.maxFilter = LinearFilter;
 		marginalData.generateMipmaps = false;
 
-		// Stores the conditional weight of the pixel in a given row. The value of the pixel divided
-		// by the sum of all row pixels. In the range of [0, 1].
+		// Stores a map of [0, 1] value -> cumulative importance column & pdf
+		// used to sampling a random value to a relevant pixel to sample from
 		const conditionalData = new DataTexture();
 		conditionalData.type = FloatType;
 		conditionalData.format = RGFormat;
