@@ -12,7 +12,7 @@ export class EquirectPdfUniform {
 
 	constructor() {
 
-		// the
+		// The relative weight / importance of any given row compared to all other rows
 		const marginalData = new DataTexture();
 		marginalData.type = FloatType;
 		marginalData.format = RGFormat;
@@ -20,6 +20,8 @@ export class EquirectPdfUniform {
 		marginalData.maxFilter = LinearFilter;
 		marginalData.generateMipmaps = false;
 
+		// Stores the conditional weight of the pixel in a given row. The value of the pixel divided
+		// by the sum of all row pixels. In the range of [0, 1].
 		const conditionalData = new DataTexture();
 		conditionalData.type = FloatType;
 		conditionalData.format = RGFormat;
