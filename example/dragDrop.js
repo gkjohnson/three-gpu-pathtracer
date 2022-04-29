@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, MaterialReducer } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -151,6 +151,11 @@ async function updateModel( modelDocument ) {
 	const modelView = new DocumentView( modelDocument )
 		.setImageProvider( imageProvider );
 	const model = modelView.view( modelSceneDef );
+
+	// reuse as many materials as possible
+
+	const reducer = new MaterialReducer();
+	reducer.process( model );
 
 	// center the model
 
