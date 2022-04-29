@@ -8,6 +8,24 @@ function RGBEToLinear( r, g, b, e, target ) {
 
 }
 
+function findIndexForValue( array, value, offset = 0, count = array.length ) {
+
+	// TODO: use binary search here
+	for ( let i = offset; i < count; i ++ ) {
+	
+		const v = array[ i ];
+		if ( value < v ) {
+		
+			return i - 1;
+			
+		}
+		
+	}
+	
+	throw new Error();
+	
+}
+
 export class EquirectPdfUniform {
 
 	constructor() {
@@ -43,6 +61,9 @@ export class EquirectPdfUniform {
 		const { width, height, data } = hdr.image;
 		const color = new Color();
 		const hsl = {};
+		
+		// "conditional" = "pixel relative to row pixels sum"
+		// "marginal" = "row relative to row sum"
 
 		// track the importance of any given pixel in the image by tracking its weight relative to other pixels in the image
 		const pdfConditional = new Float32Array( width * height );
@@ -106,8 +127,9 @@ export class EquirectPdfUniform {
 
 		for ( let i = 0; i < height; i ++ ) {
 
-			//const dist = ( i + 1 ) / height;
-			const row = 0; // TODO: find the row that lies at the given cumulative distribution value above
+			const dist = ( i + 1 ) / height;
+			let row = findIndexForValue( cdfMarginal, dist );
+			
 			marginalDataArray[ 2 * i + 0 ] = row / height;
 			marginalDataArray[ 2 * i + 1 ] = pdfMarginal[ i ];
 
@@ -118,8 +140,8 @@ export class EquirectPdfUniform {
 			for ( let x = 0; x < width; x ++ ) {
 
 				const i = y * width + x;
-				//const dist = ( x + 1 ) / width;
-				const col = 0; // TODO: find the column in the given row that lies at the cumulative dist value above
+				const dist = ( x + 1 ) / width;
+				const col = findIndexForValue( cdfConditional, dist, width * y, width );
 				conditionalDataArray[ 2 * i + 0 ] = col / width;
 				conditionalDataArray[ 2 * i + 1 ] = pdfConditional[ i ];
 
