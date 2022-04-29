@@ -37,6 +37,8 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		float side;
 
+		bool matte;
+
 	};
 
 `;

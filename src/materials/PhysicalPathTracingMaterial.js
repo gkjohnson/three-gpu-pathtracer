@@ -78,7 +78,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			`,
 
 			fragmentShader: /* glsl */`
-				#define RAY_OFFSET 1e-5
+				#define RAY_OFFSET 1e-4
 
 				precision highp isampler2D;
 				precision highp usampler2D;
@@ -137,6 +137,43 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform sampler2DArray textures;
 				varying vec2 vUv;
 
+				vec3 sampleEnvironment( vec3 direction ) {
+
+					#ifdef USE_ENVMAP
+
+					vec3 skyColor = textureCubeUV( environmentMap, environmentRotation * direction, environmentBlur ).rgb;
+
+					#else
+
+					direction = normalize( direction );
+					float value = ( direction.y + 1.0 ) / 2.0;
+					vec3 skyColor = mix( gradientBottom, gradientTop, value );
+
+					#endif
+
+					return skyColor * environmentIntensity;
+
+				}
+
+				vec3 sampleBackground( vec3 direction ) {
+
+					#if GRADIENT_BG
+
+					direction = normalize( direction + randDirection() * 0.05 );
+					float value = ( direction.y + 1.0 ) / 2.0;
+
+					value = pow( value, 2.0 );
+
+					return mix( bgGradientBottom, bgGradientTop, value );
+
+					#else
+
+					return sampleEnvironment( direction );
+
+					#endif
+
+				}
+
 				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
@@ -188,42 +225,28 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
-							#if GRADIENT_BG
-
 							if ( i == 0 ) {
 
-								rayDirection = normalize( rayDirection + randDirection() * 0.05 );
-								float value = ( rayDirection.y + 1.0 ) / 2.0;
+								gl_FragColor = vec4( sampleBackground( rayDirection ), 1.0 );
 
-								value = pow( value, 2.0 );
+							} else {
 
-								gl_FragColor = vec4( mix( bgGradientBottom, bgGradientTop, value ), 1.0 );
-								break;
+								gl_FragColor += vec4( sampleEnvironment( rayDirection ) * throughputColor, 1.0 );
 
 							}
-
-							#endif
-
-							#ifdef USE_ENVMAP
-
-                            vec3 skyColor = textureCubeUV( environmentMap, environmentRotation * rayDirection, environmentBlur ).rgb;
-
-							#else
-
-							rayDirection = normalize( rayDirection );
-							float value = ( rayDirection.y + 1.0 ) / 2.0;
-							vec3 skyColor = mix( gradientBottom, gradientTop, value );
-
-							#endif
-
-							gl_FragColor += vec4( skyColor * throughputColor * environmentIntensity, 1.0 );
-
 							break;
 
 						}
 
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = materials[ materialIndex ];
+
+						if ( material.matte ) {
+
+							gl_FragColor = vec4( sampleEnvironment( rayDirection ), 1.0 );
+							break;
+
+						}
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 

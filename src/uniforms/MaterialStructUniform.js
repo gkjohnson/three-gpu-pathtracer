@@ -38,6 +38,8 @@ export class MaterialStructUniform {
 
 		// TODO: Sheen
 
+		this.matte = false;
+
 	}
 
 	updateFrom( material, textures = [] ) {

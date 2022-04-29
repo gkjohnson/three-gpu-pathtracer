@@ -493,6 +493,14 @@ This is the only field that needs to be set explicitly and is not derived from t
 -1   // Back Sided
 ```
 
+### .matte
+
+```js
+matte = false : Boolean
+```
+
+This is a field that must be set explicitly and is not derived from a Material setting. When "true" the background is rendered in place of the material.
+
 ### .updateFrom
 
 ```js
