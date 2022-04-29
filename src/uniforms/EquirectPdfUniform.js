@@ -12,6 +12,7 @@ export class EquirectPdfUniform {
 
 	constructor() {
 
+		// the
 		const marginalData = new DataTexture();
 		marginalData.type = FloatType;
 		marginalData.format = RGFormat;
@@ -124,7 +125,7 @@ export class EquirectPdfUniform {
 
 		}
 
-		this.marginalData.image = { width, height, data: marginalDataArray };
+		this.marginalData.image = { width, height: 1, data: marginalDataArray };
 		this.conditionalData.image = { width, height, data: conditionalDataArray };
 
 	}
