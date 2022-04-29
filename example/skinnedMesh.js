@@ -262,7 +262,6 @@ function regenerateScene() {
 	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 	material.textures.setTextures( renderer, 2048, 2048, textures );
 	material.materials.updateFrom( materials, textures );
-	material.setDefine( 'MATERIAL_LENGTH', materials.length );
 
 	ptRenderer.reset();
 

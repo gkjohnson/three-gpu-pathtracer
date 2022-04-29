@@ -79,7 +79,6 @@ ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
 ptMaterial.materials.updateFrom( materials, textures );
-ptMaterial.setDefine( 'MATERIAL_LENGTH', materials.length );
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -385,7 +384,7 @@ _extends MaterialBase_
 	tangentAttribute: FloatVertexAttributeTexture,
 	uvAttribute: FloatVertexAttributeTexture,
 	materialIndexAttribute: UIntVertexAttributeTexture,
-	materials: MaterialStructArrayUniform,
+	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
 
 	// PMREM-processed Environment Map,
@@ -423,9 +422,6 @@ _extends MaterialBase_
 
 	// Whether to use the "bg" gradient fields to sample for the backround
 	GRADIENT_BG = 0 : Number
-
-	// The number of materials provided in the "materials" uniform.
-	MATERIAL_LENGTH : Number,
 
 }
 ```

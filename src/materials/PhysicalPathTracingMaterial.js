@@ -30,7 +30,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			defines: {
 				DOF_SUPPORT: 1,
 				TRANSPARENT_TRAVERSALS: 5,
-				MATERIAL_LENGTH: 0,
 				GRADIENT_BG: 0,
 			},
 
