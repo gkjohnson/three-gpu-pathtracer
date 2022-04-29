@@ -36,11 +36,38 @@ export class MaterialsTexture extends DataTexture {
 
 	}
 
+	getSide( materialIndex ) {
+
+		const array = this.image.data;
+		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 2;
+		switch ( array[ index ] ) {
+
+			case 0:
+				return DoubleSide;
+			case 1:
+				return FrontSide;
+			case - 1:
+				return BackSide;
+
+		}
+
+		return 0;
+
+	}
+
 	setMatte( materialIndex, matte ) {
 
 		const array = this.image.data;
 		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 3;
 		array[ index ] = matte ? 1 : 0;
+
+	}
+
+	getMatte( materialIndex ) {
+
+		const array = this.image.data;
+		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 3;
+		return Boolean( array[ index ] );
 
 	}
 

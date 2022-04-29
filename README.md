@@ -461,11 +461,27 @@ updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
 
 Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
 
-## MaterialStructArrayUniform
+## MaterialsTexture
 
-_extends Array_
+_extends DataTexture_
 
-Array of `MaterialStructUniform` definitions for use as a Shader uniform.
+Helper texture uniform for encoding materials as texture data.
+
+### .setSide
+
+```js
+setSide( index : Number, side : FrontSide | BackSide | DoubleSide ) : void
+```
+
+Sets the side to render for the given material.
+
+### .setMatte
+
+```js
+setMatte( index : Number, matte : Boolean ) : void
+```
+
+Sets whether or not the material of the given index is matte or not. When "true" the background is rendered in place of the material.
 
 ### .updateFrom
 
@@ -473,41 +489,9 @@ Array of `MaterialStructUniform` definitions for use as a Shader uniform.
 updateFrom( materials : Array<Material>, textures : Array<Texture> ) : void
 ```
 
-Updates the value of the uniform to align with the provided set of materials and textures.
+Updates the size and values of the texture to align with the provided set of materials and textures.
 
-## MaterialStructUniform
-
-Struct definiton for representing material information as a uniform. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full struct definition information.
-
-### .side
-
-```js
-side = 0 : Number
-```
-
-This is the only field that needs to be set explicitly and is not derived from the Material setting. It defaults to rendering double sided triangles since transmissive volumes require solid, double sided geometry. The possible options are as follows:
-
-```js
- 0   // Double Sided
- 1   // Front Sided
--1   // Back Sided
-```
-
-### .matte
-
-```js
-matte = false : Boolean
-```
-
-This is a field that must be set explicitly and is not derived from a Material setting. When "true" the background is rendered in place of the material.
-
-### .updateFrom
-
-```js
-updateFrame( material : Material, textures : Array<Texture> ) : void
-```
-
-Updates the uniform with the information from the passed material. Texture fields are set to the index of the texture in the provided textures array.
+The "matte" and "side" values must be updated explicitly.
 
 ## Functions
 
