@@ -29,10 +29,10 @@
     "three-mesh-bvh": "^0.5.10"
   },
   "devDependencies": {
-    "@gltf-transform/core": "^2.0.5",
-    "@gltf-transform/extensions": "^2.0.5",
-    "@gltf-transform/functions": "^2.0.5",
-    "@gltf-transform/view": "^0.3.0",
+    "@gltf-transform/core": "^2.1.5",
+    "@gltf-transform/extensions": "^2.1.5",
+    "@gltf-transform/functions": "^2.1.5",
+    "@gltf-transform/view": "^0.4.4",
     "@placemarkio/flat-drop-files": "^1.0.1",
     "concurrently": "^6.3.0",
     "eslint": "^7.32.0",
@@ -62,5 +62,8 @@
   "bugs": {
     "url": "https://github.com/gkjohnson/three-gpu-pathtracer/issues"
   },
-  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracer#readme"
+  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracer#readme",
+  "alias": {
+    "buffer": false
+  }
 }
