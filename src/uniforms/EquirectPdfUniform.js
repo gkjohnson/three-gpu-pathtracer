@@ -26,7 +26,7 @@ function findIndexForValue( array, targetValue, offset = 0, count = array.length
 
 }
 
-export class EquirectPdfUniform {
+export class EquirectHdrInfoUniform {
 
 	constructor() {
 
