@@ -225,13 +225,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float side = 1.0;
 					float dist = 0.0;
 					float accumulatedRoughness = 0.0;
+					bool transmissiveRay = true;
 					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
 					for ( i = 0; i < bounces; i ++ ) {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
-							if ( i == 0 ) {
+							if ( i == 0 || transmissiveRay ) {
 
 								gl_FragColor = vec4( sampleBackground( rayDirection ), 1.0 );
 
@@ -410,6 +411,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
 							accumulatedRoughness += sin( acos( halfVector.z ) );
+							transmissiveRay = false;
 
 						}
 
