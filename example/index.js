@@ -754,6 +754,8 @@ async function updateModel() {
 
 		}
 
+		model.updateMatrixWorld();
+
 		const group = new Group();
 		floorPlane.position.y = box.min.y;
 		group.add( model, floorPlane );
