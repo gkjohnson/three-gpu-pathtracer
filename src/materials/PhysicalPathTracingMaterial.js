@@ -234,11 +234,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor = vec4( sampleBackground( rayDirection ), 1.0 );
+								gl_FragColor.rgb += sampleBackground( rayDirection ) * throughputColor;
 
 							} else {
 
-								gl_FragColor += vec4( sampleEnvironment( rayDirection ) * throughputColor, 1.0 );
+								gl_FragColor.rgb += sampleEnvironment( rayDirection ) * throughputColor;
 
 							}
 							break;
@@ -250,7 +250,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( material.matte ) {
 
-							gl_FragColor = vec4( sampleEnvironment( rayDirection ), 1.0 );
+							gl_FragColor.rgb = sampleEnvironment( rayDirection );
 							break;
 
 						}
