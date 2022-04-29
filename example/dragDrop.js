@@ -268,23 +268,80 @@ document.body.addEventListener('drop', ( e ) => {
 
 	getFilesFromDataTransferItems( e.dataTransfer.items ).then( async ( files ) => {
 
+		let rootPath = '';
+		let modelJSONDocument = {json: {}, resources: {}};
+
 		for ( const file of files ) {
 
 			if ( file.name.endsWith( '.glb' ) ) {
 
+				rootPath = file.path.replace( file.name, '' );
 				const arrayBuffer = await file.arrayBuffer();
-				const modelJSONDocument = await io.binaryToJSON( new Uint8Array( arrayBuffer ) );
-				const modelDocument = await io.readJSON( modelJSONDocument );
+				modelJSONDocument = await io.binaryToJSON( new Uint8Array( arrayBuffer ) );
+				break;
 
-				creditEl.innerText = JSON.stringify( modelJSONDocument.json.asset, null, 2 );
+			} else if ( file.name.endsWith( '.gltf' ) ) {
 
-				updateModel( modelDocument );
-				return;
+				rootPath = file.path.replace( file.name, '' );
+				modelJSONDocument.json = JSON.parse(await file.text());
+
+			} else {
+
+				modelJSONDocument.resources[ file.path ] = new Uint8Array( await file.arrayBuffer() );
 
 			}
 
 		}
 
+		if ( ! modelJSONDocument ) {
+
+			alert( 'No .gltf or .glb files found' );
+
+			return;
+
+		}
+
+		normalizeURIs( modelJSONDocument, rootPath );
+
+		creditEl.innerText = JSON.stringify( modelJSONDocument.json.asset, null, 2 );
+
+		updateModel( await io.readJSON( modelJSONDocument ) );
+
 	});
 
 });
+
+
+/** Normalize glTF URIs to match items from DataTransfer API. */
+function normalizeURIs( jsonDocument, rootPath ) {
+
+	// Update resource list.
+	for ( const srcURI in jsonDocument.resources ) {
+
+		const resource = jsonDocument.resources[ srcURI ];
+		delete jsonDocument.resources[ srcURI ];
+
+		const dstURI = srcURI.replace( rootPath, '' );
+		jsonDocument.resources[ dstURI ] = resource;
+
+	}
+
+	// Update glTF references.
+	const images = jsonDocument.json.images || [];
+	const buffers = jsonDocument.json.buffers || [];
+	for ( const resource of [ ...images, ...buffers ] ) {
+		if ( !resource.uri ) continue;
+		if ( resource.uri.startsWith( 'data:' ) ) continue;
+
+		resource.uri = decodeURI( resource.uri )
+			.replace( /^(\.?\/)/, '' )
+			.replace( rootPath, '' );
+
+		if ( ! ( resource.uri in jsonDocument.resources ) ) {
+
+			throw new Error( `Missing resource: ${ resource.uri }` );
+
+		}
+	}
+
+}
