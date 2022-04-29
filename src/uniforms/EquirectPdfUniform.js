@@ -12,18 +12,18 @@ function findIndexForValue( array, targetValue, offset = 0, count = array.length
 
 	// TODO: use binary search here?
 	for ( let i = 0; i < count; i ++ ) {
-	
+
 		const v = array[ offset + i ];
 		if ( targetValue < v ) {
-		
+
 			return i;
-			
+
 		}
-		
+
 	}
-	
+
 	return count - 1;
-	
+
 }
 
 export class EquirectPdfUniform {
@@ -32,29 +32,29 @@ export class EquirectPdfUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance row & pdf
 		// used to sampling a random value to a relevant row to sample from
-		const marginalData = new DataTexture();
-		marginalData.type = FloatType;
-		marginalData.format = RGFormat;
-		marginalData.minFilter = LinearFilter;
-		marginalData.maxFilter = LinearFilter;
-		marginalData.generateMipmaps = false;
+		const marginalWeights = new DataTexture();
+		marginalWeights.type = FloatType;
+		marginalWeights.format = RGFormat;
+		marginalWeights.minFilter = LinearFilter;
+		marginalWeights.maxFilter = LinearFilter;
+		marginalWeights.generateMipmaps = false;
 
 		// Stores a map of [0, 1] value -> cumulative importance column & pdf
 		// used to sampling a random value to a relevant pixel to sample from
-		const conditionalData = new DataTexture();
-		conditionalData.type = FloatType;
-		conditionalData.format = RGFormat;
-		conditionalData.minFilter = LinearFilter;
-		conditionalData.maxFilter = LinearFilter;
-		conditionalData.generateMipmaps = false;
+		const conditionalWeights = new DataTexture();
+		conditionalWeights.type = FloatType;
+		conditionalWeights.format = RGFormat;
+		conditionalWeights.minFilter = LinearFilter;
+		conditionalWeights.maxFilter = LinearFilter;
+		conditionalWeights.generateMipmaps = false;
 
-		this.marginalData = marginalData;
-		this.conditionalData = conditionalData;
+		this.marginalWeights = marginalWeights;
+		this.conditionalWeights = conditionalWeights;
 
 	}
 
 	updateFrom( hdr ) {
-		
+
 		// TODO: make sure we handle an all black condition
 		// TODO: validate the offsets we're providing in the data
 
@@ -152,8 +152,14 @@ export class EquirectPdfUniform {
 
 		}
 
-		this.marginalData.image = { width, height: 1, data: marginalDataArray };
-		this.conditionalData.image = { width, height, data: conditionalDataArray };
+		const { marginalWeights, conditionalWeights } = this;
+		marginalWeights.dispose();
+		marginalWeights.image = { width, height: 1, data: marginalDataArray };
+		marginalWeights.needsUpdate = true;
+
+		conditionalWeights.dispose();
+		conditionalWeights.image = { width, height, data: conditionalDataArray };
+		conditionalWeights.needsUpdate = true;
 
 	}
 
