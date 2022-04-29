@@ -24,7 +24,7 @@ const samplesEl = document.getElementById( 'samples' );
 
 const params = {
 
-	environmentIntensity: 1,
+	environmentIntensity: 3.0,
 	environmentRotation: 0,
 	emissiveIntensity: 1,
 	bounces: 20,
@@ -67,8 +67,8 @@ async function init() {
 
 	scene = new THREE.Scene();
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 0.4, 0.6, 2.65 );
+	camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 10 );
+	camera.position.set( 0, 0, 2 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
@@ -80,7 +80,7 @@ async function init() {
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.15, 0.33, - 0.08 );
+	controls.target.set( 0, 0, 0 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => ptRenderer.reset() );
 	controls.update();
@@ -168,6 +168,8 @@ async function updateModel( modelDocument ) {
 
 	model.scale.setScalar( 1 / sphere.radius );
 	model.position.multiplyScalar( 1 / sphere.radius );
+
+	model.updateMatrixWorld();
 
 	scene.add( model );
 
