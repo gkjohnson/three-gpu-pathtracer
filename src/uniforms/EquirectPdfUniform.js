@@ -50,6 +50,15 @@ export class EquirectPdfUniform {
 
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
+		this.map = null;
+
+	}
+	
+	dispose() {
+	
+		this.marginalWeights.dispose();
+		this.conditionalWeights.dispose();
+		if ( this.map ) this.map.dispose();
 
 	}
 
@@ -63,7 +72,7 @@ export class EquirectPdfUniform {
 		const { width, height, data } = hdr.image;
 		const color = new Color();
 		const hsl = {};
-		
+
 		// "conditional" = "pixel relative to row pixels sum"
 		// "marginal" = "row relative to row sum"
 
@@ -132,7 +141,7 @@ export class EquirectPdfUniform {
 
 			const dist = ( i + 1 ) / height;
 			let row = findIndexForValue( cdfMarginal, dist );
-			
+
 			marginalDataArray[ 2 * i + 0 ] = row / height;
 			marginalDataArray[ 2 * i + 1 ] = pdfMarginal[ i ];
 
@@ -152,14 +161,16 @@ export class EquirectPdfUniform {
 
 		}
 
+		this.dispose();
+
 		const { marginalWeights, conditionalWeights } = this;
-		marginalWeights.dispose();
 		marginalWeights.image = { width, height: 1, data: marginalDataArray };
 		marginalWeights.needsUpdate = true;
 
-		conditionalWeights.dispose();
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
+
+		this.map = hdr.clone();
 
 	}
 
