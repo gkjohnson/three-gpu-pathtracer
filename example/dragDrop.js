@@ -191,8 +191,6 @@ async function updateModel( modelDocument ) {
 	material.materials.updateFrom( materials, textures );
 	material.setDefine( 'MATERIAL_LENGTH', materials.length );
 
-	generator.dispose();
-
 	loadingEl.style.visibility = 'hidden';
 
 	animate();
