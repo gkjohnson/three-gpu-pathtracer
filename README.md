@@ -414,8 +414,6 @@ _extends MaterialBase_
 
 ```js
 {
-	// Whether the shader should include logic for physical camera and depth of field
-	DOF_SUPPORT = 1 : Number,
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,

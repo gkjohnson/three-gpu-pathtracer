@@ -20,6 +20,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 	}
 
+	onBeforeRender() {
+
+		this.setDefine( 'DOF_SUPPORT', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
+
+	}
+
 	constructor( parameters ) {
 
 		super( {
@@ -201,11 +207,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					apertureSample.x *= saturate( physicalCamera.anamorphicRatio );
 					apertureSample.y *= saturate( 1.0 / physicalCamera.anamorphicRatio );
 
-					#endif
-
 					// create the new ray
 					rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
 					rayDirection = focalPoint - rayOrigin;
+
+					#endif
 
 					// Lambertian render
 					gl_FragColor = vec4( 0.0 );
