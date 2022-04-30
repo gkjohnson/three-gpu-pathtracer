@@ -135,7 +135,7 @@ export class EquirectHdrInfoUniform {
 		for ( let i = 0; i < height; i ++ ) {
 
 			const dist = ( i + 1 ) / height;
-			let row = findIndexForValue( cdfMarginal, dist );
+			const row = findIndexForValue( cdfMarginal, dist );
 
 			marginalDataArray[ 2 * i + 0 ] = row / height;
 			marginalDataArray[ 2 * i + 1 ] = pdfMarginal[ i ];
