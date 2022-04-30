@@ -36,6 +36,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			depthWrite: false,
 
 			defines: {
+				USE_MIS: 1,
 				DOF_SUPPORT: 1,
 				TRANSPARENT_TRAVERSALS: 5,
 				GRADIENT_BG: 0,
@@ -264,7 +265,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// as well as the pdf of the material lobe (must be stored from previous hit)
 								// and weight the contribution
 
+								#if USE_MIS
+
+								vec3 envColor;
+								float envPdf = envMapSample( normalDirection, envMapInfo, envColor );
+								float misWeight = sampleRec.pdf / ( sampleRec.pdf + envPdf );
+								gl_FragColor.rgb += envColor * throughputColor * misWeight;
+
+
+								#else
+
 								gl_FragColor.rgb += sampleEnvironment( normalDirection ) * throughputColor;
+
+								#endif
 
 							}
 							break;
@@ -431,36 +444,31 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
-						// TODO: direct light / env map sampling and apply multiple importance contribution
-						// randomly sample the environment map with weighted sampling
-						// get the pdf of the light
-						// get the pdf of the material lobe
-						// weight the contribution
-						// #if USE_MIS
+						// direct env map sampling
+						#if USE_MIS
 						{
 
+							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
 							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
 
+							// check if a ray could even reach the surface
 							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
 
+								// get the material pdf
 								SampleRec envMaterialRec = bsdfSample( envDirection, surfaceRec );
 								if ( envMaterialRec.pdf > 0.0 ) {
 
+									// weight the direct light contribution
 									float misWeight = envPdf / ( envMaterialRec.pdf + envPdf );
 									gl_FragColor.rgb += envColor * throughputColor * envMaterialRec.color * misWeight / envPdf;
-
 
 								}								
 							
 							}
 
 						}
-						// #endif
-
-
-
-
+						#endif
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies
