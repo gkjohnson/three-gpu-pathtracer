@@ -1,5 +1,6 @@
 import { Color, DataTexture, FloatType, RGFormat, LinearFilter } from 'three';
 
+// TODO: this shouldn't be needed any longer -- all the values are loaded as floats
 function RGBEToLinear( r, g, b, e, target ) {
 
 	const exp = e * 255.0 - 128.0;
