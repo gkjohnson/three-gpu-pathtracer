@@ -1,5 +1,12 @@
 export const shaderEnvMapSampling = /* glsl */`
 
+float colorToLuminance( vec3 color ) {
+
+	// https://en.wikipedia.org/wiki/Relative_luminance
+	return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+
+}
+
 // ray sampling x and z are swapped to align with expected background view
 vec2 equirectDirectionToUv( vec3 direction ) {
 
@@ -60,6 +67,16 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 	ivec2 resolution = textureSize( info.map, 0 );
 	return envMapDirectionPdf( direction, resolution );
 	
+}
+
+vec2 sampleEnvMapCDF( EquirectHdrInfo info ) {
+
+	vec2 r = rand2();
+    float v = texture( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
+    float u = texture( info.conditionalWeights, vec2( r.y, v ) ).x;
+
+	return vec2( u, v );
+
 }
 
 float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
