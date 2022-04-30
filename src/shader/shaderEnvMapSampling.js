@@ -1,12 +1,33 @@
 export const shaderEnvMapSampling = /* glsl */`
 
+// ray sampling x and z are swapped to align with expected background view
 vec2 equirectUvFromDirection( vec3 direction ) {
 
-    vec2 uv = vec2( atan( direction.z, direction.x ), asin( direction.y ) );
+	// from Spherical.setFromCartesianCoords
+    vec2 uv = vec2( atan( direction.z, direction.x ), acos( direction.y ) );
     uv /= vec2( 2.0 * PI, PI );
-    uv += 0.5;
+
+	// apply adjustments to get values in range [0, 1] and y right side up
+    uv.x += 0.5;
+	uv.y = 1.0 - uv.y;
     return uv;
     
+}
+
+vec3 equirectUvToDirection( vec2 uv ) {
+
+	// undo above adjustments
+	uv.x -= 0.5;
+	uv.y = 1.0 - uv.y;
+
+	// from Vector3.setFromSphericalCoords
+	float theta = uv.x * 2.0 * PI;
+	float phi = uv.y * PI;
+
+	float sinPhi = sin( phi );
+
+	return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
+
 }
 
 vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
@@ -38,5 +59,14 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 	return 0.0;
 	
 }
+
+float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out float direction ) {
+
+
+
+	return 0.0;
+
+}
+
 
 `;

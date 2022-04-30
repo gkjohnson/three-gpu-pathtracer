@@ -43,7 +43,7 @@ const params = {
 	stableNoise: false,
 	environmentIntensity: 3,
 	environmentRotation: 0,
-	environmentBlur: 0.35,
+	environmentBlur: 0.15,
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
