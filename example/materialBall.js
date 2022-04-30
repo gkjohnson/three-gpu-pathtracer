@@ -43,7 +43,7 @@ const params = {
 	stableNoise: false,
 	environmentIntensity: 3,
 	environmentRotation: 0,
-	environmentBlur: 0.15,
+	backgroundBlur: 0.15,
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
@@ -238,7 +238,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	ptFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
+	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
@@ -381,7 +381,7 @@ function animate() {
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = params.environmentBlur;
+	ptRenderer.material.backgroundBlur = params.backgroundBlur;
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 

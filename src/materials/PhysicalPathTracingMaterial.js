@@ -54,7 +54,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
-				environmentBlur: { value: 0.2 },
+				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
 				environmentMap: { value: null },
 				environmentRotation: { value: new Matrix3() },
@@ -106,7 +106,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#ifdef USE_ENVMAP
 
-				uniform float environmentBlur;
+				uniform float backgroundBlur;
 				uniform sampler2D environmentMap;
 				uniform mat3 environmentRotation;
 
@@ -154,7 +154,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#ifdef USE_ENVMAP
 
-					// vec3 skyColor = textureCubeUV( environmentMap, environmentRotation * direction, environmentBlur ).rgb;
 					vec3 skyColor = sampleEquirectEnvMapColor( direction, envMapInfo.map );
 
 					#else
@@ -182,9 +181,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#else
 
-					return sampleEnvironment( direction );
+					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
+					return sampleEnvironment( sampleDir );
 
 					#endif
+
+				}
+
+				bool anyHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection ) {
+
+					uvec4 faceIndices;
+					vec3 faceNormal, barycoord;
+					float side, dist;
+					return bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 
 				}
 
@@ -246,8 +255,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 normalDirection = environmentRotation * normalize( rayDirection );
 							if ( i == 0 || transmissiveRay ) {
 
-								vec3 sampleDir = normalDirection + getHemisphereSample( normalDirection, rand2() ) * 0.5 * 2.0 * environmentBlur;
-								gl_FragColor.rgb += sampleBackground( sampleDir ) * throughputColor;
+								gl_FragColor.rgb += sampleBackground( normalDirection ) * throughputColor;
 
 							} else {
 
@@ -269,8 +277,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( material.matte && i == 0 ) {
 
 							vec3 normalDirection = environmentRotation * normalize( rayDirection );
-							vec3 sampleDir = normalDirection + getHemisphereSample( normalDirection, rand2() ) * 0.5 * 2.0 * environmentBlur;
-							gl_FragColor.rgb = sampleEnvironment( sampleDir );
+							gl_FragColor.rgb = sampleBackground( rayDirection );
 							break;
 
 						}
@@ -413,16 +420,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, surfaceRec );
 
-
-
-						// TODO: direct light / env map sampling and apply multiple importance contribution
-						// randomly sample the environment map with weighted sampling
-						// get the pdf of the light
-						// get the pdf of the material lobe
-						// weight the contribution
-
-
-
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
 						// error as values increase.
@@ -433,6 +430,37 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+						// TODO: direct light / env map sampling and apply multiple importance contribution
+						// randomly sample the environment map with weighted sampling
+						// get the pdf of the light
+						// get the pdf of the material lobe
+						// weight the contribution
+						// #if USE_MIS
+						{
+
+							vec3 envColor, envDirection;
+							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
+
+							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
+
+								SampleRec envMaterialRec = bsdfSample( envDirection, surfaceRec );
+								if ( envMaterialRec.pdf > 0.0 ) {
+
+									float misWeight = envPdf / ( envMaterialRec.pdf + envPdf );
+									gl_FragColor.rgb += envColor * throughputColor * envMaterialRec.color * misWeight / envPdf;
+
+
+								}								
+							
+							}
+
+						}
+						// #endif
+
+
+
+
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies

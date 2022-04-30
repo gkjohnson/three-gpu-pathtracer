@@ -76,6 +76,7 @@ export class EquirectHdrInfoUniform {
 		const pdfMarginal = new Float32Array( height );
 		const cdfMarginal = new Float32Array( height );
 
+		let totalSum = 0.0;
 		let cumulativeWeightMarginal = 0.0;
 		for ( let y = 0; y < height; y ++ ) {
 
@@ -93,6 +94,7 @@ export class EquirectHdrInfoUniform {
 				// TODO: this should also account for the solid angle of the pixel when sampling
 				const weight = color.setRGB( r, g, b ).getHSL( hsl ).l;
 				cumulativeWeight += weight;
+				totalSum += weight;
 
 				pdfConditional[ i ] = weight;
 				cdfConditional[ i ] = cumulativeWeight;
@@ -163,8 +165,8 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
 
-		// TODO: set totalSum
 		this.map = hdr.clone();
+		this.totalSum = totalSum;
 
 	}
 
