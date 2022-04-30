@@ -3,7 +3,7 @@ import { Color, DataTexture, FloatType, RGFormat, LinearFilter } from 'three';
 function RGBEToLinear( r, g, b, e, target ) {
 
 	const exp = e * 255.0 - 128.0;
-	target.set( r, g, b ).multiplyScalar( Math.pow( exp ) );
+	target.set( r, g, b ).multiplyScalar( Math.pow( 2, exp ) );
 	return target;
 
 }
