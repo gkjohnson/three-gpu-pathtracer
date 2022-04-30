@@ -1,14 +1,5 @@
 import { Color, DataTexture, FloatType, RGFormat, LinearFilter } from 'three';
 
-// TODO: this shouldn't be needed any longer -- all the values are loaded as floats
-function RGBEToLinear( r, g, b, e, target ) {
-
-	const exp = e * 255.0 - 128.0;
-	target.set( r, g, b ).multiplyScalar( Math.pow( 2, exp ) );
-	return target;
-
-}
-
 function findIndexForValue( array, targetValue, offset = 0, count = array.length ) {
 
 	// TODO: use binary search here?
@@ -95,12 +86,12 @@ export class EquirectHdrInfoUniform {
 				const r = data[ 4 * i + 0 ];
 				const g = data[ 4 * i + 1 ];
 				const b = data[ 4 * i + 2 ];
-				const e = data[ 4 * i + 3 ];
+				// const a = data[ 4 * i + 3 ];
 
 				// the probability of the pixel being selected in this row is the
 				// scale of the luminance relative to the rest of the pixels.
 				// TODO: this should also account for the solid angle of the pixel when sampling
-				const weight = RGBEToLinear( r, g, b, e, color ).getHSL( hsl ).l;
+				const weight = color.setRGB( r, g, b ).getHSL( hsl ).l;
 				cumulativeWeight += weight;
 
 				pdfConditional[ i ] = weight;
@@ -166,7 +157,7 @@ export class EquirectHdrInfoUniform {
 		this.dispose();
 
 		const { marginalWeights, conditionalWeights } = this;
-		marginalWeights.image = { width, height: 1, data: marginalDataArray };
+		marginalWeights.image = { width: height, height: 1, data: marginalDataArray };
 		marginalWeights.needsUpdate = true;
 
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
