@@ -51,6 +51,7 @@ export class EquirectHdrInfoUniform {
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
 		this.map = null;
+		this.totalSum = 0;
 
 	}
 	
