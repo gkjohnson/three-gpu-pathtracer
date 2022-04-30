@@ -1,7 +1,7 @@
 export const shaderEnvMapSampling = /* glsl */`
 
 // ray sampling x and z are swapped to align with expected background view
-vec2 equirectUvFromDirection( vec3 direction ) {
+vec2 equirectDirectionToUv( vec3 direction ) {
 
 	// from Spherical.setFromCartesianCoords
     vec2 uv = vec2( atan( direction.z, direction.x ), acos( direction.y ) );
@@ -33,13 +33,13 @@ vec3 equirectUvToDirection( vec2 uv ) {
 vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
 
 	// TODO: can we ensure that the ray is always normalized?
-	return texture2D( map, equirectUvFromDirection( direction ) ).rgb;
+	return texture2D( map, equirectDirectionToUv( direction ) ).rgb;
 
 }
 
-float envMapDirectionPdf( vec3 direction, vec2 resolution ) {
+float envMapDirectionPdf( vec3 direction, ivec2 resolution ) {
 
-	vec2 uv = equirectUvFromDirection( direction );
+	vec2 uv = equirectDirectionToUv( direction );
 	float theta = uv.y * PI;
 	float sinTheta = sin( theta );
 	if ( sinTheta == 0.0 ) {
@@ -48,23 +48,28 @@ float envMapDirectionPdf( vec3 direction, vec2 resolution ) {
 
 	}
 
-	return 2.0 * PI * PI * sinTheta / resolution.x * resolution.y;
+	return 2.0 * PI * PI * sinTheta / float( resolution.x * resolution.y );
 
 }
 
 float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 
-	// TODO
+	vec2 uv = equirectDirectionToUv( direction );
+	color = texture2D( info.map, uv ).rgb;
 
-	return 0.0;
+	ivec2 resolution = textureSize( info.map, 0 );
+	return envMapDirectionPdf( direction, resolution );
 	
 }
 
-float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out float direction ) {
+float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
 
+	vec2 uv = rand2(); // TODO: sample from the cdf
+	direction = equirectUvToDirection( uv );
+	color = texture2D( info.map, uv ).rgb;
 
-
-	return 0.0;
+	ivec2 resolution = textureSize( info.map, 0 );
+	return envMapDirectionPdf( direction, resolution );
 
 }
 
