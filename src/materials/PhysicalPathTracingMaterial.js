@@ -260,19 +260,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							} else {
 
-								// TODO: weight by multiple importance contribution
-								// get the pdf of the environment sample
-								// as well as the pdf of the material lobe (must be stored from previous hit)
-								// and weight the contribution
-
 								#if USE_MIS
 
+								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = envMapSample( normalDirection, envMapInfo, envColor );
+								
+								// and weight the contribution
 								float misWeight = sampleRec.pdf / ( sampleRec.pdf + envPdf );
 								gl_FragColor.rgb += envColor * throughputColor * misWeight;
-
-
+								
 								#else
 
 								gl_FragColor.rgb += sampleEnvironment( normalDirection ) * throughputColor;
