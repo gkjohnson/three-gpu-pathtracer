@@ -9,4 +9,12 @@ vec2 equirectUvFromDirection( vec3 direction ) {
     
 }
 
+float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
+
+	// TODO
+
+	return 0.0;
+	
+}
+
 `;
