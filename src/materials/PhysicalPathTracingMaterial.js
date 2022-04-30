@@ -221,10 +221,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#endif
 
-					// Lambertian render
+					// final color
 					gl_FragColor = vec4( 0.0 );
-
-					vec3 throughputColor = vec3( 1.0 );
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -232,10 +230,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 barycoord = vec3( 0.0 );
 					float side = 1.0;
 					float dist = 0.0;
+
+					// path tracing state
 					float accumulatedRoughness = 0.0;
 					bool transmissiveRay = true;
-					int i;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
+					vec3 throughputColor = vec3( 1.0 );
+					SampleRec sampleRec;
+					int i;
+
 					for ( i = 0; i < bounces; i ++ ) {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
@@ -408,7 +411,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						mat3 invBasis = inverse( normalBasis );
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
-						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec );
+						sampleRec = bsdfSample( outgoing, surfaceRec );
 
 
 
