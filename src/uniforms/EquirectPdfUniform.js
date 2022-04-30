@@ -54,9 +54,9 @@ export class EquirectHdrInfoUniform {
 		this.totalSum = 0;
 
 	}
-	
+
 	dispose() {
-	
+
 		this.marginalWeights.dispose();
 		this.conditionalWeights.dispose();
 		if ( this.map ) this.map.dispose();
@@ -171,6 +171,7 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
 
+		// TODO: set totalSum
 		this.map = hdr.clone();
 
 	}
