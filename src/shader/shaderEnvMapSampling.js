@@ -12,7 +12,7 @@ vec2 equirectUvFromDirection( vec3 direction ) {
 vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
 
 	// TODO: can we ensure that the ray is always normalized?
-	return texture2D( map, equirectUvFromDirection( normalize( direction ) ) ).rgb;
+	return texture2D( map, equirectUvFromDirection( direction ) ).rgb;
 
 }
 

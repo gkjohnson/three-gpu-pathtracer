@@ -240,18 +240,20 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
+							vec3 normalDirection = environmentRotation * normalize( rayDirection );
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( rayDirection ) * throughputColor;
+								vec3 sampleDir = normalDirection + getHemisphereSample( normalDirection, rand2() ) * 0.5 * 2.0 * environmentBlur;
+								gl_FragColor.rgb += sampleBackground( sampleDir ) * throughputColor;
 
 							} else {
 
 								// TODO: weight by multiple importance contribution
 								// get the pdf of the environment sample
-								// as well as the pdf of the material lobe (??)
+								// as well as the pdf of the material lobe (must be stored from previous hit)
 								// and weight the contribution
 
-								gl_FragColor.rgb += sampleEnvironment( rayDirection ) * throughputColor;
+								gl_FragColor.rgb += sampleEnvironment( normalDirection ) * throughputColor;
 
 							}
 							break;
@@ -261,9 +263,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
-						if ( material.matte ) {
+						if ( material.matte && i == 0 ) {
 
-							gl_FragColor.rgb = sampleEnvironment( rayDirection );
+							vec3 normalDirection = environmentRotation * normalize( rayDirection );
+							vec3 sampleDir = normalDirection + getHemisphereSample( normalDirection, rand2() ) * 0.5 * 2.0 * environmentBlur;
+							gl_FragColor.rgb = sampleEnvironment( sampleDir );
 							break;
 
 						}
