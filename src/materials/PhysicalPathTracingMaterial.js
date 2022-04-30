@@ -8,8 +8,10 @@ import { shaderMaterialStructs } from '../shader/shaderStructs.js';
 import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
+import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -56,6 +58,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				environmentIntensity: { value: 2.0 },
 				environmentMap: { value: null },
 				environmentRotation: { value: new Matrix3() },
+				envMapInfo: { value: new EquirectHdrInfoUniform() },
+
 				seed: { value: 0 },
 				opacity: { value: 1 },
 				filterGlossyFactor: { value: 0.0 },
@@ -98,6 +102,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				${ shaderUtils }
 				${ shaderMaterialSampling }
+				${ shaderEnvMapSampling }
 
 				#ifdef USE_ENVMAP
 
@@ -140,6 +145,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform float opacity;
 				uniform sampler2D materials;
 
+				uniform EquirectHdrInfo envMapInfo;
+
 				uniform sampler2DArray textures;
 				varying vec2 vUv;
 
@@ -147,7 +154,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#ifdef USE_ENVMAP
 
-					vec3 skyColor = textureCubeUV( environmentMap, environmentRotation * direction, environmentBlur ).rgb;
+					// vec3 skyColor = textureCubeUV( environmentMap, environmentRotation * direction, environmentBlur ).rgb;
+					vec3 skyColor = sampleEquirectEnvMapColor( direction, envMapInfo.map );
 
 					#else
 
@@ -237,6 +245,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								gl_FragColor.rgb += sampleBackground( rayDirection ) * throughputColor;
 
 							} else {
+
+								// TODO: weight by multiple importance contribution
+								// get the pdf of the environment sample
+								// as well as the pdf of the material lobe (??)
+								// and weight the contribution
 
 								gl_FragColor.rgb += sampleEnvironment( rayDirection ) * throughputColor;
 
@@ -392,6 +405,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						SampleRec sampleRec = bsdfSample( outgoing, surfaceRec );
+
+
+
+						// TODO: direct light / env map sampling and apply multiple importance contribution
+						// randomly sample the environment map with weighted sampling
+						// get the pdf of the light
+						// get the pdf of the material lobe
+						// weight the contribution
+
+
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point

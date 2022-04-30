@@ -111,6 +111,7 @@ async function init() {
 				const envMap = pmremGenerator.fromEquirectangular( texture );
 
 				ptRenderer.material.environmentMap = envMap.texture;
+				ptRenderer.material.envMapInfo.updateFrom( texture );
 				resolve();
 
 			} );
