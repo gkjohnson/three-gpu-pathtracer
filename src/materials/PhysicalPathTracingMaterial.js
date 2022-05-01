@@ -232,6 +232,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 					#endif
+					rayDirection = normalize( rayDirection );
 
 					// final color
 					gl_FragColor = vec4( 0.0 );
@@ -255,7 +256,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
-							vec3 normalDirection = environmentRotation * normalize( rayDirection );
+							vec3 normalDirection = environmentRotation * rayDirection;
 							if ( i == 0 || transmissiveRay ) {
 
 								gl_FragColor.rgb += sampleBackground( normalDirection ) * throughputColor;
@@ -288,7 +289,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( material.matte && i == 0 ) {
 
-							vec3 normalDirection = environmentRotation * normalize( rayDirection );
+							vec3 normalDirection = environmentRotation * rayDirection;
 							gl_FragColor.rgb = sampleBackground( rayDirection );
 							break;
 

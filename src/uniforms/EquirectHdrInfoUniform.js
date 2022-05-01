@@ -3,6 +3,7 @@ import { Color, DataTexture, FloatType, RGFormat, LinearFilter } from 'three';
 function findIndexForValue( array, targetValue, offset = 0, count = array.length ) {
 
 	// TODO: use binary search here
+	// TODO: confirm the result here is right
 	for ( let i = 0; i < count; i ++ ) {
 
 		const v = array[ offset + i ];
@@ -14,7 +15,7 @@ function findIndexForValue( array, targetValue, offset = 0, count = array.length
 
 	}
 
-	return count - 1;
+	return count;
 
 }
 
