@@ -272,7 +272,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								float envPdf = envMapSample( rayDirection, envMapInfo, environmentRotation, envColor );
 								
 								// and weight the contribution
-								float misWeight = sampleRec.pdf / ( sampleRec.pdf + envPdf );
+								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
 								gl_FragColor.rgb += envColor * throughputColor * misWeight;
 
 								#else
@@ -459,11 +459,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( rayDirection, envDirection, surfaceRec, sampleColor );
+								float envMaterialPdf = bsdfResult( outgoing, normalize( invBasis * envDirection ), surfaceRec, sampleColor );
 								if ( envMaterialPdf > 0.0 ) {
 
 									// weight the direct light contribution
-									float misWeight = envPdf / ( envMaterialPdf + envPdf );
+									float misWeight = misHeuristic( envPdf, envMaterialPdf );
 									gl_FragColor.rgb += envColor * throughputColor * sampleColor * misWeight / envPdf;
 
 								}

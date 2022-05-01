@@ -93,7 +93,7 @@ float randomEnvMapSample( EquirectHdrInfo info, mat3 invRotation, out vec3 color
 
 }
 
-float powerMISHeuristic( float a, float b ) { 
+float misHeuristic( float a, float b ) { 
 
 	float aa = a * a;
 	return aa / ( b * b + aa );
