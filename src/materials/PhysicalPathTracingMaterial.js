@@ -208,27 +208,29 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
 
 					#if DOF_SUPPORT
+					{
 
-					// depth of field
-					vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
+						// depth of field
+						vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
 
-					// get the aperture sample
-					vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * physicalCamera.bokehSize * 0.5 * 1e-3;
+						// get the aperture sample
+						vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * physicalCamera.bokehSize * 0.5 * 1e-3;
 
-					// rotate the aperture shape
-					float ac = cos( physicalCamera.apertureRotation );
-					float as = sin( physicalCamera.apertureRotation );
-					apertureSample = vec2(
-						apertureSample.x * ac - apertureSample.y * as,
-						apertureSample.x * as + apertureSample.y * ac
-					);
-					apertureSample.x *= saturate( physicalCamera.anamorphicRatio );
-					apertureSample.y *= saturate( 1.0 / physicalCamera.anamorphicRatio );
+						// rotate the aperture shape
+						float ac = cos( physicalCamera.apertureRotation );
+						float as = sin( physicalCamera.apertureRotation );
+						apertureSample = vec2(
+							apertureSample.x * ac - apertureSample.y * as,
+							apertureSample.x * as + apertureSample.y * ac
+						);
+						apertureSample.x *= saturate( physicalCamera.anamorphicRatio );
+						apertureSample.y *= saturate( 1.0 / physicalCamera.anamorphicRatio );
 
-					// create the new ray
-					rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
-					rayDirection = focalPoint - rayOrigin;
+						// create the new ray
+						rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
+						rayDirection = focalPoint - rayOrigin;
 
+					}
 					#endif
 
 					// final color
@@ -269,7 +271,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// and weight the contribution
 								float misWeight = sampleRec.pdf / ( sampleRec.pdf + envPdf );
 								gl_FragColor.rgb += envColor * throughputColor * misWeight;
-								
+
 								#else
 
 								gl_FragColor.rgb += sampleEnvironment( normalDirection ) * throughputColor;
@@ -453,15 +455,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
 
 								// get the material pdf
-								SampleRec envMaterialRec = bsdfSample( envDirection, surfaceRec );
-								if ( envMaterialRec.pdf > 0.0 ) {
+								vec3 sampleColor;
+								float envMaterialPdf = bsdfResult( rayDirection, envDirection, surfaceRec, sampleColor );
+								if ( envMaterialPdf > 0.0 ) {
 
 									// weight the direct light contribution
-									float misWeight = envPdf / ( envMaterialRec.pdf + envPdf );
-									gl_FragColor.rgb += envColor * throughputColor * envMaterialRec.color * misWeight / envPdf;
+									float misWeight = envPdf / ( envMaterialPdf + envPdf );
+									gl_FragColor.rgb += envColor * throughputColor * sampleColor * misWeight / envPdf;
 
-								}								
-							
+								}
+
 							}
 
 						}

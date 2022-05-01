@@ -102,7 +102,7 @@ export class EquirectHdrInfoUniform {
 			}
 
 			// scale the pdf and cdf to [0.0, 1.0]
-			for ( let i = 0, l = pdfConditional.length; i < l; i ++ ) {
+			for ( let i = y * width, l = y * width + width; i < l; i ++ ) {
 
 				pdfConditional[ i ] /= cumulativeWeight;
 				cdfConditional[ i ] /= cumulativeWeight;

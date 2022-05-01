@@ -278,6 +278,13 @@ vec3 bsdfColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 }
 
+float bsdfResult( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
+
+	color = bsdfColor( wo, wi, surf );
+	return bsdfPdf( wo, wi, surf );
+
+}
+
 SampleRec bsdfSample( vec3 wo, SurfaceRec surf ) {
 
 	float ior = surf.ior;
