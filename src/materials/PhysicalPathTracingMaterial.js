@@ -234,6 +234,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#endif
 					rayDirection = normalize( rayDirection );
 
+					// inverse environment rotation
+					mat3 invEnvironmentRotation = inverse( environmentRotation );
+
 					// final color
 					gl_FragColor = vec4( 0.0 );
 
@@ -451,6 +454,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
 							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
+							envDirection = normalize( invEnvironmentRotation * envDirection );
 
 							// check if a ray could even reach the surface
 							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
