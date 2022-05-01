@@ -259,10 +259,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
-							vec3 normalDirection = environmentRotation * rayDirection;
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( normalDirection ) * throughputColor;
+								gl_FragColor.rgb += sampleBackground( environmentRotation * rayDirection ) * throughputColor;
 
 							} else {
 
@@ -270,7 +269,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = envMapSample( normalDirection, envMapInfo, envColor );
+								float envPdf = envMapSample( rayDirection, envMapInfo, environmentRotation, envColor );
 								
 								// and weight the contribution
 								float misWeight = sampleRec.pdf / ( sampleRec.pdf + envPdf );
@@ -278,7 +277,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#else
 
-								gl_FragColor.rgb += sampleEnvironment( normalDirection ) * throughputColor;
+								gl_FragColor.rgb += sampleEnvironment( environmentRotation * rayDirection ) * throughputColor;
 
 								#endif
 
@@ -453,8 +452,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
-							envDirection = normalize( invEnvironmentRotation * envDirection );
+							float envPdf = randomEnvMapSample( envMapInfo, invEnvironmentRotation, envColor, envDirection );
 
 							// check if a ray could even reach the surface
 							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {

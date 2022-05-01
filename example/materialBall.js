@@ -40,6 +40,8 @@ const params = {
 		metalness: 0.05,
 		matte: false,
 	},
+
+	multipleImportanceSampling: true,
 	stableNoise: false,
 	environmentIntensity: 3,
 	environmentRotation: 0,
@@ -220,6 +222,12 @@ async function init() {
 	ptFolder.add( params, 'stableNoise' ).onChange( value => {
 
 		ptRenderer.stableNoise = value;
+
+	} );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
+
+		ptRenderer.material.setDefine( 'USE_MIS', Number( value ) );
+		ptRenderer.reset();
 
 	} );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
