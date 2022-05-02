@@ -1,4 +1,4 @@
-import { Color, DataTexture, FloatType, RGFormat, LinearFilter } from 'three';
+import { DataTexture, FloatType, RGFormat, LinearFilter, DataUtils, HalfFloatType } from 'three';
 
 function findIndexForValue( array, targetValue, offset = 0, count = array.length ) {
 
@@ -63,7 +63,8 @@ export class EquirectHdrInfoUniform {
 
 		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/3c6fd9b6b3da47cd50c527eeb45845eef06c55c3/src/loaders/hdrloader.cpp
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
-		const { width, height, data } = hdr.image;
+		const map = hdr.clone();
+		const { width, height, data } = map.image;
 
 		// "conditional" = "pixel relative to row pixels sum"
 		// "marginal" = "row relative to row sum"
@@ -75,6 +76,49 @@ export class EquirectHdrInfoUniform {
 		const pdfMarginal = new Float32Array( height );
 		const cdfMarginal = new Float32Array( height );
 
+		// convert the data from half float uint 16 arrays to float arrays for cdf computation
+		let newData = data;
+		if ( map.type === HalfFloatType ) {
+
+			newData = new Float32Array( data.length );
+			for ( const i in data ) {
+
+				newData[ i ] = DataUtils.fromHalfFloat( data[ i ] );
+
+			}
+
+			map.image.data = newData;
+			map.type = FloatType;
+
+		}
+
+		// remove any y flipping for cdf computation
+		if ( map.flipY ) {
+
+			const ogData = newData;
+			newData = newData.slice();
+			for ( let y = 0; y < height; y ++ ) {
+
+				for ( let x = 0; x < width; x ++ ) {
+
+					const newY = height - y - 1;
+					const ogIndex = 4 * ( y * width + x );
+					const newIndex = 4 * ( newY * width + x );
+
+					newData[ newIndex + 0 ] = ogData[ ogIndex + 0 ];
+					newData[ newIndex + 1 ] = ogData[ ogIndex + 1 ];
+					newData[ newIndex + 2 ] = ogData[ ogIndex + 2 ];
+					newData[ newIndex + 3 ] = ogData[ ogIndex + 3 ];
+
+				}
+
+			}
+
+			map.flipY = false;
+			map.image.data = newData;
+
+		}
+
 		let totalSum = 0.0;
 		let cumulativeWeightMarginal = 0.0;
 		for ( let y = 0; y < height; y ++ ) {
@@ -83,9 +127,9 @@ export class EquirectHdrInfoUniform {
 			for ( let x = 0; x < width; x ++ ) {
 
 				const i = y * width + x;
-				const r = data[ 4 * i + 0 ];
-				const g = data[ 4 * i + 1 ];
-				const b = data[ 4 * i + 2 ];
+				const r = newData[ 4 * i + 0 ];
+				const g = newData[ 4 * i + 1 ];
+				const b = newData[ 4 * i + 2 ];
 
 				// the probability of the pixel being selected in this row is the
 				// scale of the luminance relative to the rest of the pixels.
@@ -163,7 +207,7 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
 
-		this.map = hdr.clone();
+		this.map = map;
 		this.totalSum = totalSum;
 
 	}

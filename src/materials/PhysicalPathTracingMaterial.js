@@ -108,7 +108,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				#ifdef USE_ENVMAP
 
 				uniform float backgroundBlur;
-				uniform sampler2D environmentMap;
 				uniform mat3 environmentRotation;
 
 				#else
