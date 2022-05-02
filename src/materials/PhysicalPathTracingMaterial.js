@@ -272,7 +272,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
-								gl_FragColor.rgb += envColor * throughputColor * misWeight;
+								gl_FragColor.rgb += environmentIntensity * envColor * throughputColor * misWeight;
 
 								#else
 

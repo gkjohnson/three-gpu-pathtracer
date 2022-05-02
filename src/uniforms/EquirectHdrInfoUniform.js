@@ -76,6 +76,7 @@ export class EquirectHdrInfoUniform {
 		const pdfMarginal = new Float32Array( height );
 		const cdfMarginal = new Float32Array( height );
 
+		// TODO: is there a simple way to avoid cloning and adjusting the env map data here?
 		// convert the data from half float uint 16 arrays to float arrays for cdf computation
 		let newData = data;
 		if ( map.type === HalfFloatType ) {
