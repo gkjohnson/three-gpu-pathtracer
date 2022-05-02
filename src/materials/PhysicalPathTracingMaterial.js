@@ -65,9 +65,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				opacity: { value: 1 },
 				filterGlossyFactor: { value: 0.0 },
 
-				gradientTop: { value: new Color( 0xbfd8ff ) },
-				gradientBottom: { value: new Color( 0xffffff ) },
-
 				bgGradientTop: { value: new Color( 0x111111 ) },
 				bgGradientBottom: { value: new Color( 0x000000 ) },
 			},
@@ -105,17 +102,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderMaterialSampling }
 				${ shaderEnvMapSampling }
 
-				#ifdef USE_ENVMAP
-
 				uniform float backgroundBlur;
 				uniform mat3 environmentRotation;
-
-				#else
-
-				uniform vec3 gradientTop;
-				uniform vec3 gradientBottom;
-
-				#endif
 
 				#if GRADIENT_BG
 
@@ -150,24 +138,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform sampler2DArray textures;
 				varying vec2 vUv;
 
-				vec3 sampleEnvironment( vec3 direction ) {
-
-					#ifdef USE_ENVMAP
-
-					vec3 skyColor = sampleEquirectEnvMapColor( direction, envMapInfo.map );
-
-					#else
-
-					direction = normalize( direction );
-					float value = ( direction.y + 1.0 ) / 2.0;
-					vec3 skyColor = mix( gradientBottom, gradientTop, value );
-
-					#endif
-
-					return skyColor * environmentIntensity;
-
-				}
-
 				vec3 sampleBackground( vec3 direction ) {
 
 					#if GRADIENT_BG
@@ -182,7 +152,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#else
 
 					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
-					return sampleEnvironment( sampleDir );
+					return environmentIntensity * sampleEquirectEnvMapColor( sampleDir, envMapInfo.map );
 
 					#endif
 
@@ -276,7 +246,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#else
 
-								gl_FragColor.rgb += sampleEnvironment( environmentRotation * rayDirection ) * throughputColor;
+								gl_FragColor.rgb +=
+									environmentIntensity *
+									sampleEquirectEnvMapColor( environmentRotation * rayDirection, envMapInfo.map ) *
+									throughputColor;
 
 								#endif
 
