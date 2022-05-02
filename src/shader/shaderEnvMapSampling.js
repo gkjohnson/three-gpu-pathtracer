@@ -84,7 +84,6 @@ vec2 sampleEnvMapCDF( EquirectHdrInfo info ) {
 
 float randomEnvMapSample( EquirectHdrInfo info, mat3 invRotation, out vec3 color, out vec3 direction ) {
 
-	// vec2 uv = rand2(); // TODO: sample from the cdf
 	vec2 uv = sampleEnvMapCDF( info );
 	vec3 derivedDirection = equirectUvToDirection( uv );
 	direction = invRotation * derivedDirection;
@@ -100,8 +99,8 @@ float randomEnvMapSample( EquirectHdrInfo info, mat3 invRotation, out vec3 color
 
 float misHeuristic( float a, float b ) { 
 
-	float aa = a * a;
-	return aa / ( b * b + aa );
+	float aa = a;
+	return a / ( b + a );
 
 }
 
