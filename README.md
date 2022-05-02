@@ -57,6 +57,7 @@ import {
 // initialize the path tracing material and renderer
 const ptMaterial = new PhysicalPathTracingMaterial();
 const ptRenderer = new PathTracingRenderer( renderer );
+ptRenderer.setSize( window.innerWidth, window.innerHeight );
 ptRenderer.camera = camera;
 ptRenderer.material = ptMaterial;
 
