@@ -64,9 +64,11 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, mat3 rotation, out vec
 	vec2 uv = equirectDirectionToUv( rotation * direction );
 	color = texture2D( info.map, uv ).rgb;
 
+	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
-	
-	return envMapDirectionPdf( direction ) / float( resolution.y * resolution.x );
+	float pdf = lum / info.totalSum;
+
+	return float( resolution.x * resolution.y ) * pdf * envMapDirectionPdf( direction );
 	
 }
 
@@ -82,14 +84,17 @@ vec2 sampleEnvMapCDF( EquirectHdrInfo info ) {
 
 float randomEnvMapSample( EquirectHdrInfo info, mat3 invRotation, out vec3 color, out vec3 direction ) {
 
-	vec2 uv = rand2(); // TODO: sample from the cdf
-	// vec2 uv = sampleEnvMapCDF( info );
+	// vec2 uv = rand2(); // TODO: sample from the cdf
+	vec2 uv = sampleEnvMapCDF( info );
 	vec3 derivedDirection = equirectUvToDirection( uv );
 	direction = invRotation * derivedDirection;
 	color = texture2D( info.map, uv ).rgb;
 
+	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
-	return envMapDirectionPdf( direction ) / float( resolution.y * resolution.x );
+	float pdf = lum / info.totalSum;
+
+	return float( resolution.x * resolution.y ) * pdf * envMapDirectionPdf( direction );
 
 }
 

@@ -64,8 +64,6 @@ export class EquirectHdrInfoUniform {
 		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/3c6fd9b6b3da47cd50c527eeb45845eef06c55c3/src/loaders/hdrloader.cpp
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
 		const { width, height, data } = hdr.image;
-		const color = new Color();
-		const hsl = {};
 
 		// "conditional" = "pixel relative to row pixels sum"
 		// "marginal" = "row relative to row sum"
@@ -81,39 +79,38 @@ export class EquirectHdrInfoUniform {
 		let cumulativeWeightMarginal = 0.0;
 		for ( let y = 0; y < height; y ++ ) {
 
-			let cumulativeWeight = 0.0;
+			let cumulativeRowWeight = 0.0;
 			for ( let x = 0; x < width; x ++ ) {
 
 				const i = y * width + x;
 				const r = data[ 4 * i + 0 ];
 				const g = data[ 4 * i + 1 ];
 				const b = data[ 4 * i + 2 ];
-				// const a = data[ 4 * i + 3 ];
 
 				// the probability of the pixel being selected in this row is the
 				// scale of the luminance relative to the rest of the pixels.
 				// TODO: this should also account for the solid angle of the pixel when sampling
-				const weight = color.setRGB( r, g, b ).getHSL( hsl ).l;
-				cumulativeWeight += weight;
+				const weight = colorToLuminance( r, g, b );
+				cumulativeRowWeight += weight;
 				totalSum += weight;
 
 				pdfConditional[ i ] = weight;
-				cdfConditional[ i ] = cumulativeWeight;
+				cdfConditional[ i ] = cumulativeRowWeight;
 
 			}
 
 			// scale the pdf and cdf to [0.0, 1.0]
 			for ( let i = y * width, l = y * width + width; i < l; i ++ ) {
 
-				pdfConditional[ i ] /= cumulativeWeight;
-				cdfConditional[ i ] /= cumulativeWeight;
+				pdfConditional[ i ] /= cumulativeRowWeight;
+				cdfConditional[ i ] /= cumulativeRowWeight;
 
 			}
 
-			cumulativeWeightMarginal += cumulativeWeight;
+			cumulativeWeightMarginal += cumulativeRowWeight;
 
 			// compute the marginal pdf and cdf along the height of the map.
-			pdfMarginal[ y ] = cumulativeWeight;
+			pdfMarginal[ y ] = cumulativeRowWeight;
 			cdfMarginal[ y ] = cumulativeWeightMarginal;
 
 		}
