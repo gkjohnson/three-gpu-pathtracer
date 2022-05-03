@@ -152,9 +152,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				bool anyHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection ) {
 
-					uvec4 faceIndices;
-					vec3 faceNormal, barycoord;
-					float side, dist;
+					uvec4 faceIndices = uvec4( 0u );
+					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
+					vec3 barycoord = vec3( 0.0 );
+					float side = 1.0;
+					float dist = 0.0;
 					return bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 
 				}
@@ -231,7 +233,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
-								
+
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
 								gl_FragColor.rgb += environmentIntensity * envColor * throughputColor * misWeight;
@@ -418,6 +420,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 envColor, envDirection;
 							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
 							envDirection = invEnvironmentRotation * envDirection;
+
+							// this env sampling is not set up for transmissive sampling and yields overly bright
+							// results so we ignore the sample in this case.
+							// TODO: this should be improved
+							bool isSampleBelowSurface = dot( faceNormal, envDirection ) < 0.0;
+							if ( isSampleBelowSurface ) {
+
+								envPdf = 0.0;
+
+							}
 
 							// check if a ray could even reach the surface
 							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
