@@ -423,7 +423,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
-							// TODO: this should be improved
+							// TODO: this should be improved but how? The env samples could traverse a few layers?
 							bool isSampleBelowSurface = dot( faceNormal, envDirection ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
