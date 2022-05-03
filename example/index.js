@@ -283,6 +283,7 @@ const params = {
 
 	enable: true,
 	bounces: 3,
+	pause: false,
 
 	floorColor: '#080808',
 	floorEnabled: true,
@@ -406,9 +407,13 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
+		if ( ! params.pause || ptRenderer.samples < 1 ) {
 
-			ptRenderer.update();
+			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
+
+				ptRenderer.update();
+
+			}
 
 		}
 
@@ -549,6 +554,7 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
+	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
