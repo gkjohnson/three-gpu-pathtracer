@@ -10,6 +10,15 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	};
 
+	struct EquirectHdrInfo {
+
+		sampler2D marginalWeights;
+		sampler2D conditionalWeights;
+		sampler2D map;
+		float totalSum;
+
+	};
+
 	struct Material {
 
 		vec3 color;

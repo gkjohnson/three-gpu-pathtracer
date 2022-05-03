@@ -83,9 +83,7 @@ ptMaterial.materials.updateFrom( materials, textures );
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
-const pmremGenerator = new THREE.PMREMGenerator( renderer );
-const envMap = pmremGenerator.fromEquirectangular( texture );
-ptRenderer.material.environmentMap = envMap.texture;
+ptRenderer.material.envMapInfo.updateFrom( texture );
 
 animate();
 
@@ -379,7 +377,7 @@ _extends MaterialBase_
 	// The physical camera parameters to use
 	physicalCamera : PhysicalCameraUniform,
 	
-	// Geometry and BVH information,
+	// Geometry and BVH information
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
 	tangentAttribute: FloatVertexAttributeTexture,
@@ -388,11 +386,10 @@ _extends MaterialBase_
 	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
 
-	// PMREM-processed Environment Map,
-	environmentMap: Texture,
-	environmentRotaton: Matrix3,
+	// Environment Map information
+	envMapInfo: EquirectHdrInfoUniform,
+	environmentRotation: Matrix3,
 
-	// Environment Map information,
 	environmentBlur = 0: Number,
 	environmentIntensity = 1: Number,
 
@@ -400,10 +397,6 @@ _extends MaterialBase_
 	// specular surfaces. Setting this higher alleviates fireflies but will remove some
 	// specular caustics.
 	filterGlossyFactor = 0: Number,
-
-	// The colors to use for the gradient env lighting when no environment map is provided.
-	gradientTop: Color,
-	gradientBottom: Color,
 
 	// The colors to use for the gradient background when enabled.
 	bgGradientTop: Color,
@@ -487,6 +480,18 @@ updateFrom( materials : Array<Material>, textures : Array<Texture> ) : void
 Updates the size and values of the texture to align with the provided set of materials and textures.
 
 The "matte" and "side" values must be updated explicitly.
+
+## EquirectHdrInfoUniform
+
+Stores the environment map contents along with the intensity distribution information to support multiple importance sampling.
+
+### .updateFrom
+
+```js
+updateFrom( environmentMap : Texture ) : void
+```
+
+Takes an environment map to process into something usable by the path tracer. Is expected to be a DataTexture so the data can be read.
 
 ## Functions
 

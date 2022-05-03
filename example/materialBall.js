@@ -21,6 +21,7 @@ const params = {
 		ior: 1.495,
 		transmission: 0.0,
 		opacity: 1.0,
+		matte: false,
 	},
 	material2: {
 		color: '#db7157',
@@ -31,15 +32,20 @@ const params = {
 		transmission: 0.0,
 		ior: 1.495,
 		opacity: 1.0,
+		matte: false,
 	},
 	material3: {
 		color: '#000000',
 		roughness: 0.01,
 		metalness: 0.05,
+		matte: false,
 	},
+
+	multipleImportanceSampling: true,
 	stableNoise: false,
 	environmentIntensity: 3,
 	environmentRotation: 0,
+	backgroundBlur: 0.05,
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
@@ -56,6 +62,9 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.roughness = 0.05;
 	params.material1.transmission = 1.0;
 	params.material1.color = '#ffffff';
+
+	params.material2.metalness = 1.0;
+	params.material2.roughness = 0.1;
 	params.bounces = 10;
 
 }
@@ -105,12 +114,41 @@ async function init() {
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-				const pmremGenerator = new THREE.PMREMGenerator( renderer );
-				pmremGenerator.compileCubemapShader();
 
-				const envMap = pmremGenerator.fromEquirectangular( texture );
+				const arr = new Float32Array( 512 * 512 * 4 );
+				for ( let y = 0; y < 512; y ++ ) {
 
-				ptRenderer.material.environmentMap = envMap.texture;
+					for ( let x = 0; x < 512; x ++ ) {
+
+						const i = ( y * 512 + x ) * 4;
+						if ( y > 480 ) {
+
+							arr[ i ] = 150.0;
+							arr[ i + 1 ] = 150.0;
+							arr[ i + 2 ] = 150.0;
+
+						}
+
+						arr[ i + 3 ] = 1.0;
+
+					}
+
+				}
+
+				texture = new THREE.DataTexture( arr, 512, 512 );
+				texture.format = THREE.RGBAFormat;
+				texture.type = THREE.FloatType;
+
+
+
+
+
+
+				// texture = new THREE.DataTexture( arr, 512, 512 );
+				// texture.format = THREE.RGBAFormat;
+				// texture.type = THREE.FloatType;
+
+				ptRenderer.material.envMapInfo.updateFrom( texture );
 				resolve();
 
 			} );
@@ -217,6 +255,12 @@ async function init() {
 		ptRenderer.stableNoise = value;
 
 	} );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
+
+		ptRenderer.material.setDefine( 'USE_MIS', Number( value ) );
+		ptRenderer.reset();
+
+	} );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		ptRenderer.tiles.set( value, value );
@@ -236,6 +280,11 @@ async function init() {
 	ptFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
 
 		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.reset();
+
+	} );
+	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
+
 		ptRenderer.reset();
 
 	} );
@@ -285,6 +334,7 @@ async function init() {
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
+	matFolder1.add( params.material1, 'matte' ).onChange( reset );
 	matFolder1.close();
 
 	const matFolder2 = gui.addFolder( 'Ball Material' );
@@ -296,12 +346,14 @@ async function init() {
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
+	matFolder2.add( params.material2, 'matte' ).onChange( reset );
 	matFolder2.close();
 
 	const matFolder3 = gui.addFolder( 'Floor Material' );
 	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
 	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'matte' ).onChange( reset );
 	matFolder3.close();
 
 	animate();
@@ -362,10 +414,13 @@ function animate() {
 	m3.roughness = params.material3.roughness;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
+	ptRenderer.material.materials.setMatte( 1, params.material2.matte );
+	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
+	ptRenderer.material.backgroundBlur = params.backgroundBlur;
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 

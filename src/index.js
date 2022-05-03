@@ -8,6 +8,8 @@ export * from './core/PhysicalCamera.js';
 // uniforms
 export * from './uniforms/MaterialsTexture.js';
 export * from './uniforms/RenderTarget2DArray.js';
+export * from './uniforms/EquirectHdrInfoUniform.js';
+export * from './uniforms/PhysicalCameraUniform.js';
 
 // utils
 export * from './utils/GeometryPreparationUtils.js';
