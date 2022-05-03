@@ -39,7 +39,6 @@ vec3 equirectUvToDirection( vec2 uv ) {
 
 vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
 
-	// TODO: can we ensure that the ray is always normalized?
 	return texture2D( map, equirectDirectionToUv( direction ) ).rgb;
 
 }
@@ -59,9 +58,9 @@ float envMapDirectionPdf( vec3 direction ) {
 
 }
 
-float envMapSample( vec3 direction, EquirectHdrInfo info, mat3 rotation, out vec3 color ) {
+float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 
-	vec2 uv = equirectDirectionToUv( rotation * direction );
+	vec2 uv = equirectDirectionToUv( direction );
 	color = texture2D( info.map, uv ).rgb;
 
 	float lum = colorToLuminance( color );
@@ -69,7 +68,7 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, mat3 rotation, out vec
 	float pdf = lum / info.totalSum;
 
 	return float( resolution.x * resolution.y ) * pdf * envMapDirectionPdf( direction );
-	
+
 }
 
 vec2 sampleEnvMapCDF( EquirectHdrInfo info ) {
@@ -82,11 +81,11 @@ vec2 sampleEnvMapCDF( EquirectHdrInfo info ) {
 
 }
 
-float randomEnvMapSample( EquirectHdrInfo info, mat3 invRotation, out vec3 color, out vec3 direction ) {
+float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
 
 	vec2 uv = sampleEnvMapCDF( info );
 	vec3 derivedDirection = equirectUvToDirection( uv );
-	direction = invRotation * derivedDirection;
+	direction = derivedDirection;
 	color = texture2D( info.map, uv ).rgb;
 
 	float lum = colorToLuminance( color );

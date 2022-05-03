@@ -238,7 +238,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = envMapSample( rayDirection, envMapInfo, environmentRotation, envColor );
+								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
 								
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
@@ -424,7 +424,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = randomEnvMapSample( envMapInfo, invEnvironmentRotation, envColor, envDirection );
+							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
+							envDirection = invEnvironmentRotation * envDirection;
 
 							// check if a ray could even reach the surface
 							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
