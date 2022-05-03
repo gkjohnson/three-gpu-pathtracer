@@ -15,13 +15,6 @@ import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
-	// three.js relies on this field to add env map functions and defines
-	get envMap() {
-
-		return this.environmentMap;
-
-	}
-
 	onBeforeRender() {
 
 		this.setDefine( 'DOF_SUPPORT', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
@@ -57,7 +50,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				invProjectionMatrix: { value: new Matrix4() },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
-				environmentMap: { value: null },
 				environmentRotation: { value: new Matrix3() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
 
