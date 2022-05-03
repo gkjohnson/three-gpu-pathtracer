@@ -389,9 +389,15 @@ _extends MaterialBase_
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
 	environmentRotation: Matrix3,
-
-	environmentBlur = 0: Number,
 	environmentIntensity = 1: Number,
+
+	// Environment blur causes a mipmap to be sampled rather than the sharp texture. This is useful
+	// if multiple importance sampling must be disabled and can help non MIS renders resolve more quickly.
+	// Note there is a pinch artifact at the poles when using this field.
+	environmentBlur = 0: Number,
+
+	// background blur
+	blurBlur = 0: Number,
 
 	// Factor for alleviating bright pixels from rays that hit diffuse surfaces then
 	// specular surfaces. Setting this higher alleviates fireflies but will remove some
@@ -408,6 +414,9 @@ _extends MaterialBase_
 
 ```js
 {
+
+	// Whether to use multiple importance sampling to help the image converge more quickly
+	USE_MIS = 1 : Number,
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,

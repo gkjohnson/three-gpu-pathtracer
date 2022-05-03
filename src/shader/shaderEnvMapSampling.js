@@ -37,9 +37,9 @@ vec3 equirectUvToDirection( vec2 uv ) {
 
 }
 
-vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
+vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map, float lodBias ) {
 
-	return texture2D( map, equirectDirectionToUv( direction ) ).rgb;
+	return texture2D( map, equirectDirectionToUv( direction ), lodBias ).rgb;
 
 }
 
@@ -58,10 +58,10 @@ float envMapDirectionPdf( vec3 direction ) {
 
 }
 
-float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
+float envMapSample( vec3 direction, EquirectHdrInfo info, float mipBlur, out vec3 color ) {
 
 	vec2 uv = equirectDirectionToUv( direction );
-	color = texture2D( info.map, uv ).rgb;
+	color = texture2D( info.map, uv, mipBlur * info.maxMip ).rgb;
 
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
@@ -71,22 +71,17 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 
 }
 
-vec2 sampleEnvMapCDF( EquirectHdrInfo info ) {
+float randomEnvMapSample( EquirectHdrInfo info, float mipBlur, out vec3 color, out vec3 direction ) {
 
+	// sample env map cdf
 	vec2 r = rand2();
-    float v = texture( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
-    float u = texture( info.conditionalWeights, vec2( r.y, v ) ).x;
+    float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
+    float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
+	vec2 uv = vec2( u, v );
 
-	return vec2( u, v );
-
-}
-
-float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
-
-	vec2 uv = sampleEnvMapCDF( info );
 	vec3 derivedDirection = equirectUvToDirection( uv );
 	direction = derivedDirection;
-	color = texture2D( info.map, uv ).rgb;
+	color = texture2D( info.map, uv, mipBlur * info.maxMip ).rgb;
 
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
