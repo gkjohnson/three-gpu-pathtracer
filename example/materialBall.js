@@ -282,7 +282,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
 
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationX( v ) );
+		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
 		ptRenderer.reset();
 
 	} );
