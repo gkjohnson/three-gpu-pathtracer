@@ -114,40 +114,6 @@ async function init() {
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-
-				const arr = new Float32Array( 512 * 512 * 4 );
-				for ( let y = 0; y < 512; y ++ ) {
-
-					for ( let x = 0; x < 512; x ++ ) {
-
-						const i = ( y * 512 + x ) * 4;
-						if ( y > 480 ) {
-
-							arr[ i ] = 150.0;
-							arr[ i + 1 ] = 150.0;
-							arr[ i + 2 ] = 150.0;
-
-						}
-
-						arr[ i + 3 ] = 1.0;
-
-					}
-
-				}
-
-				texture = new THREE.DataTexture( arr, 512, 512 );
-				texture.format = THREE.RGBAFormat;
-				texture.type = THREE.FloatType;
-
-
-
-
-
-
-				// texture = new THREE.DataTexture( arr, 512, 512 );
-				// texture.format = THREE.RGBAFormat;
-				// texture.type = THREE.FloatType;
-
 				ptRenderer.material.envMapInfo.updateFrom( texture );
 				resolve();
 
