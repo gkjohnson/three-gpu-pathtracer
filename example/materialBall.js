@@ -45,7 +45,7 @@ const params = {
 	stableNoise: false,
 	environmentIntensity: 3,
 	environmentRotation: 0,
-	backgroundBlur: 0.15,
+	backgroundBlur: 0.05,
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
@@ -140,12 +140,11 @@ async function init() {
 
 
 
-				const pmremGenerator = new THREE.PMREMGenerator( renderer );
-				pmremGenerator.compileCubemapShader();
 
-				const envMap = pmremGenerator.fromEquirectangular( texture );
+				// texture = new THREE.DataTexture( arr, 512, 512 );
+				// texture.format = THREE.RGBAFormat;
+				// texture.type = THREE.FloatType;
 
-				ptRenderer.material.environmentMap = envMap.texture;
 				ptRenderer.material.envMapInfo.updateFrom( texture );
 				resolve();
 
@@ -275,14 +274,14 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
 	ptFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
 
 		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.reset();
+
+	} );
+	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
+
 		ptRenderer.reset();
 
 	} );

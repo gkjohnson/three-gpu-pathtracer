@@ -77,12 +77,7 @@ async function init() {
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-				const pmremGenerator = new THREE.PMREMGenerator( renderer );
-				pmremGenerator.compileCubemapShader();
-
-				const envMap = pmremGenerator.fromEquirectangular( texture );
-
-				ptRenderer.material.environmentMap = envMap.texture;
+				ptRenderer.material.envMapInfo.updateFrom( texture );
 				texture.mapping = THREE.EquirectangularReflectionMapping;
 				scene.background = texture;
 				scene.environment = texture;
