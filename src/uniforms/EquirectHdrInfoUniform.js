@@ -1,24 +1,31 @@
-import { DataTexture, FloatType, RGFormat, LinearFilter, DataUtils, HalfFloatType } from 'three';
+import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source } from 'three';
 
-function findIndexForValue( array, targetValue, offset = 0, count = array.length ) {
+function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
-	// TODO: use binary search here
-	// TODO: confirm the result here is right
-	for ( let i = 0; i < count; i ++ ) {
+	let lower = 0;
+	let upper = count;
+	while ( lower < upper ) {
 
-		const v = array[ offset + i ];
-		if ( targetValue < v ) {
+		const mid = ~ ~ ( 0.5 * upper + 0.5 * lower );
 
-			return i;
+
+		// check if the middle array value is above or below the target and shift
+		// which half of the array we're looking at
+		if ( array[ offset + mid ] < targetValue ) {
+
+			lower = mid + 1;
+
+		} else {
+
+			upper = mid;
 
 		}
 
 	}
 
-	return count;
+	return lower;
 
 }
-
 
 function colorToLuminance( r, g, b ) {
 
@@ -31,6 +38,7 @@ function colorToLuminance( r, g, b ) {
 function preprocessEnvMap( envMap ) {
 
 	const map = envMap.clone();
+	map.source = new Source( { ...map.image } );
 	const { width, height, data } = map.image;
 
 	// TODO: is there a simple way to avoid cloning and adjusting the env map data here?
@@ -89,7 +97,7 @@ export class EquirectHdrInfoUniform {
 		// used to sampling a random value to a relevant row to sample from
 		const marginalWeights = new DataTexture();
 		marginalWeights.type = FloatType;
-		marginalWeights.format = RGFormat;
+		marginalWeights.format = RedFormat;
 		marginalWeights.minFilter = LinearFilter;
 		marginalWeights.maxFilter = LinearFilter;
 		marginalWeights.generateMipmaps = false;
@@ -98,7 +106,7 @@ export class EquirectHdrInfoUniform {
 		// used to sampling a random value to a relevant pixel to sample from
 		const conditionalWeights = new DataTexture();
 		conditionalWeights.type = FloatType;
-		conditionalWeights.format = RGFormat;
+		conditionalWeights.format = RedFormat;
 		conditionalWeights.minFilter = LinearFilter;
 		conditionalWeights.maxFilter = LinearFilter;
 		conditionalWeights.generateMipmaps = false;
@@ -162,11 +170,16 @@ export class EquirectHdrInfoUniform {
 
 			}
 
-			// scale the pdf and cdf to [0.0, 1.0]
-			for ( let i = y * width, l = y * width + width; i < l; i ++ ) {
+			// can happen if the row is all black
+			if ( cumulativeRowWeight !== 0 ) {
 
-				pdfConditional[ i ] /= cumulativeRowWeight;
-				cdfConditional[ i ] /= cumulativeRowWeight;
+				// scale the pdf and cdf to [0.0, 1.0]
+				for ( let i = y * width, l = y * width + width; i < l; i ++ ) {
+
+					pdfConditional[ i ] /= cumulativeRowWeight;
+					cdfConditional[ i ] /= cumulativeRowWeight;
+
+				}
 
 			}
 
@@ -178,11 +191,16 @@ export class EquirectHdrInfoUniform {
 
 		}
 
-		// scale the marginal pdf and cdf to [0.0, 1.0]
-		for ( let i = 0, l = pdfMarginal.length; i < l; i ++ ) {
+		// can happen if the texture is all black
+		if ( cumulativeWeightMarginal !== 0 ) {
 
-			pdfMarginal[ i ] /= cumulativeWeightMarginal;
-			cdfMarginal[ i ] /= cumulativeWeightMarginal;
+			// scale the marginal pdf and cdf to [0.0, 1.0]
+			for ( let i = 0, l = pdfMarginal.length; i < l; i ++ ) {
+
+				pdfMarginal[ i ] /= cumulativeWeightMarginal;
+				cdfMarginal[ i ] /= cumulativeWeightMarginal;
+
+			}
 
 		}
 
@@ -190,16 +208,15 @@ export class EquirectHdrInfoUniform {
 		// the marginal and conditional data. These will be used to sample with a random number
 		// to retrieve a uv value to sample in the environment map.
 		// These values continually increase so it's okay to interpolate between them.
-		const marginalDataArray = new Float32Array( height * 2 );
-		const conditionalDataArray = new Float32Array( width * height * 2 );
+		const marginalDataArray = new Float32Array( height );
+		const conditionalDataArray = new Float32Array( width * height );
 
 		for ( let i = 0; i < height; i ++ ) {
 
 			const dist = ( i + 1 ) / height;
-			const row = findIndexForValue( cdfMarginal, dist );
+			const row = binarySearchFindClosestIndexOf( cdfMarginal, dist );
 
-			marginalDataArray[ 2 * i + 0 ] = row / height;
-			marginalDataArray[ 2 * i + 1 ] = pdfMarginal[ i ];
+			marginalDataArray[ i ] = row / height;
 
 		}
 
@@ -209,9 +226,9 @@ export class EquirectHdrInfoUniform {
 
 				const i = y * width + x;
 				const dist = ( x + 1 ) / width;
-				const col = findIndexForValue( cdfConditional, dist, width * y, width );
-				conditionalDataArray[ 2 * i + 0 ] = col / width;
-				conditionalDataArray[ 2 * i + 1 ] = pdfConditional[ i ];
+				const col = binarySearchFindClosestIndexOf( cdfConditional, dist, y * width, width );
+
+				conditionalDataArray[ i ] = col / width;
 
 			}
 
