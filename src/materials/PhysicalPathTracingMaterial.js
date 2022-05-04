@@ -1,4 +1,4 @@
-import { Matrix4, Matrix3, Color } from 'three';
+import { Matrix4, Matrix3, Color, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
@@ -36,6 +36,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			},
 
 			uniforms: {
+				resolution: { value: new Vector2() },
+
 				bounces: { value: 3 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
@@ -112,8 +114,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#endif
 
+				uniform vec2 resolution;
 				uniform int bounces;
-
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
 				uniform sampler2D normalAttribute;
@@ -171,6 +173,23 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
 					vec3 rayOrigin, rayDirection;
 					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
+
+					{
+
+						vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+						vec3 ss00, ss01, ss10, temp;
+						ndcToCameraRay( vec2( 0.0, 0.0 ), cameraWorldMatrix, invProjectionMatrix, ss00, temp );
+						ndcToCameraRay( vec2( 0.0, 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss01, temp );
+						ndcToCameraRay( vec2( 1.0, 0.0 ), cameraWorldMatrix, invProjectionMatrix, ss10, temp );
+
+						vec3 ssdX = 2.0 * ( ss10 - ss00 ) / resolution.x;
+						vec3 ssdY = 2.0 * ( ss01 - ss00 ) / resolution.y;
+
+						vec3 hs = 0.5 * getHemisphereSample( rayDirection, rand2() );
+						rayOrigin += ( hs.x ) * ssdX + ( hs.y ) * ssdY;
+						rayDirection = normalize( rayOrigin - cameraOrigin );
+
+					}
 
 					#if DOF_SUPPORT
 					{
