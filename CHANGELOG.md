@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Materials to use a texture instead of uniforms to cut down on max uniform errors.
 - `SUPPORT_DOF` no longer needs to be explicitly set and will be toggled automatically based on the bokeh size parameter.
 - `environmentBlur` option to `backgroundBlur`. And it no longer blurs the sample enviornment, only background.
+- Antialiasing jitter is now performed per ray in the shader instead of via camera position jitter.
 
 ### Added
 - Support for "matte" material flag.
