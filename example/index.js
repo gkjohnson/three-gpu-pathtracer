@@ -275,7 +275,7 @@ const params = {
 	gradientBottom: '#ffffff',
 
 	environmentIntensity: 3.0,
-	environmentBlur: 0.35,
+	environmentBlur: 0.0,
 
 	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
