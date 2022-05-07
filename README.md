@@ -66,6 +66,9 @@ const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 	map: ptRenderer.target.texture,
 } ) );
 
+// ensure scene matrices are up to date
+scene.updateMatrixWorld();
+
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
 const { bvh, textures, materials } = generator.generate( scene );
