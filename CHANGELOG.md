@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Fixed
 - Some black artifacts when rendering with depth of field.
+- DynamicPathTracingSceneGenerator.reset not correctly resetting the class resulting in errors when calling "generate" again.
 
 ### Changed
 - Materials to use a texture instead of uniforms to cut down on max uniform errors.
