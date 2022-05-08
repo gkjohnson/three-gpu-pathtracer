@@ -23,6 +23,7 @@ export class DynamicPathTracingSceneGenerator {
 
 	reset() {
 
+		this.bvh = null;
 		this.geometry.dispose();
 		this.geometry = new BufferGeometry();
 		this.materials = null;
