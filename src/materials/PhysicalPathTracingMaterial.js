@@ -87,7 +87,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				precision highp sampler2DArray;
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
-				#include <cube_uv_reflection_fragment>
 
 				${ shaderStructs }
 				${ shaderIntersectFunction }

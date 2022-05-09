@@ -1,4 +1,4 @@
-import { WebGLRenderTarget, RGBAFormat, FloatType, PMREMGenerator, ShaderMaterial, DataTexture } from 'three';
+import { WebGLRenderTarget, RGBAFormat, FloatType, PMREMGenerator, DataTexture } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
 import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
@@ -7,7 +7,7 @@ class PMREMCopyMaterial extends MaterialBase {
 
 	constructor() {
 
-		return new ShaderMaterial( {
+		super( {
 
 			uniforms: {
 
@@ -28,7 +28,24 @@ class PMREMCopyMaterial extends MaterialBase {
 
 			fragmentShader: /* glsl */`
 
-				${ shaderEnvMapSampling }
+				#include <common>
+				#include <cube_uv_reflection_fragment>
+
+				vec3 equirectUvToDirection( vec2 uv ) {
+
+					// undo above adjustments
+					uv.x -= 0.5;
+					uv.y = 1.0 - uv.y;
+
+					// from Vector3.setFromSphericalCoords
+					float theta = uv.x * 2.0 * PI;
+					float phi = uv.y * PI;
+
+					float sinPhi = sin( phi );
+
+					return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
+
+				}
 
 				uniform sampler2D envMap;
 				uniform float blur;
@@ -74,8 +91,8 @@ export class BlurredEnvMapGenerator {
 		const pmremTarget = pmremGenerator.fromEquirectangular( texture );
 
 		// set up the material
-		const { width, height } = texture.width;
-		renderTarget.setSize( texture.width, texture.height );
+		const { width, height } = texture.image;
+		renderTarget.setSize( width, height );
 		copyQuad.material.envMap = pmremTarget.texture;
 		copyQuad.material.blur = blur;
 
@@ -94,7 +111,12 @@ export class BlurredEnvMapGenerator {
 		const buffer = new Float32Array( width * height * 4 );
 		renderer.readRenderTargetPixels( renderTarget, 0, 0, width, height, buffer );
 
-		return new DataTexture( buffer, width, height, RGBAFormat, FloatType );
+		const result = new DataTexture( buffer, width, height, RGBAFormat, FloatType );
+		result.minFilter = texture.minFilter;
+		result.magFilter = texture.magFilter;
+		result.wrapS = texture.wrapS;
+		result.wrapT = texture.wrapT;
+		return result;
 
 	}
 
