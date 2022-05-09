@@ -88,8 +88,6 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		return m;
 
-
-
 	}
 
 `;

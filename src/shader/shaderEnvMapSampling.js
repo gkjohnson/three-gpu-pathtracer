@@ -11,14 +11,14 @@ float colorToLuminance( vec3 color ) {
 vec2 equirectDirectionToUv( vec3 direction ) {
 
 	// from Spherical.setFromCartesianCoords
-    vec2 uv = vec2( atan( direction.z, direction.x ), acos( direction.y ) );
-    uv /= vec2( 2.0 * PI, PI );
+	vec2 uv = vec2( atan( direction.z, direction.x ), acos( direction.y ) );
+	uv /= vec2( 2.0 * PI, PI );
 
 	// apply adjustments to get values in range [0, 1] and y right side up
-    uv.x += 0.5;
+	uv.x += 0.5;
 	uv.y = 1.0 - uv.y;
-    return uv;
-    
+	return uv;
+
 }
 
 vec3 equirectUvToDirection( vec2 uv ) {
@@ -75,8 +75,8 @@ float randomEnvMapSample( EquirectHdrInfo info, float mipBlur, out vec3 color, o
 
 	// sample env map cdf
 	vec2 r = rand2();
-    float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
-    float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
+	float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
+	float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
 	vec2 uv = vec2( u, v );
 
 	vec3 derivedDirection = equirectUvToDirection( uv );
