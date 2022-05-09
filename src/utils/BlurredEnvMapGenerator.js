@@ -1,7 +1,7 @@
 import { WebGLRenderTarget, RGBAFormat, FloatType, PMREMGenerator, DataTexture } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
-import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
+import { shaderUtils } from '../shader/shaderUtils.js';
 
 class PMREMCopyMaterial extends MaterialBase {
 
@@ -31,21 +31,7 @@ class PMREMCopyMaterial extends MaterialBase {
 				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-				vec3 equirectUvToDirection( vec2 uv ) {
-
-					// undo above adjustments
-					uv.x -= 0.5;
-					uv.y = 1.0 - uv.y;
-
-					// from Vector3.setFromSphericalCoords
-					float theta = uv.x * 2.0 * PI;
-					float phi = uv.y * PI;
-
-					float sinPhi = sin( phi );
-
-					return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
-
-				}
+				${ shaderUtils }
 
 				uniform sampler2D envMap;
 				uniform float blur;

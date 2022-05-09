@@ -1,42 +1,5 @@
 export const shaderEnvMapSampling = /* glsl */`
 
-float colorToLuminance( vec3 color ) {
-
-	// https://en.wikipedia.org/wiki/Relative_luminance
-	return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-
-}
-
-// ray sampling x and z are swapped to align with expected background view
-vec2 equirectDirectionToUv( vec3 direction ) {
-
-	// from Spherical.setFromCartesianCoords
-	vec2 uv = vec2( atan( direction.z, direction.x ), acos( direction.y ) );
-	uv /= vec2( 2.0 * PI, PI );
-
-	// apply adjustments to get values in range [0, 1] and y right side up
-	uv.x += 0.5;
-	uv.y = 1.0 - uv.y;
-	return uv;
-
-}
-
-vec3 equirectUvToDirection( vec2 uv ) {
-
-	// undo above adjustments
-	uv.x -= 0.5;
-	uv.y = 1.0 - uv.y;
-
-	// from Vector3.setFromSphericalCoords
-	float theta = uv.x * 2.0 * PI;
-	float phi = uv.y * PI;
-
-	float sinPhi = sin( phi );
-
-	return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
-
-}
-
 vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map, float lodBias ) {
 
 	return texture2D( map, equirectDirectionToUv( direction ), lodBias ).rgb;
