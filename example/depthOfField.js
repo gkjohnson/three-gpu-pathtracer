@@ -83,6 +83,7 @@ async function init() {
 				const blurredTex = generator.generate( texture, 0.35 );
 				ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 				generator.dispose();
+				texture.dispose();
 
 				resolve();
 

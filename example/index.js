@@ -38,214 +38,7 @@ const envMaps = {
 	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
 };
 
-const models = window.MODEL_LIST || {
-	'M2020 Rover': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Perseverance.glb',
-		credit: 'Model credit NASA / JPL-Caltech',
-	},
-	'M2020 Helicopter': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Ingenuity.glb',
-		credit: 'Model credit NASA / JPL-Caltech',
-	},
-	'Gelatinous Cube': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/gelatinous-cube/scene.gltf',
-		credit: 'Model by "glenatron" on Sketchfab.',
-		rotation: [ 0, - Math.PI / 8, 0.0 ],
-		opacityToTransmission: true,
-		bounces: 8,
-		postProcess( model ) {
-
-			const toRemove = [];
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						const material = c.material;
-						material.roughness *= 0.1;
-						material.metalness = 0.0;
-						material.ior = 1.2;
-						material.map = null;
-
-						c.geometry.computeVertexNormals();
-
-					} else if ( c.material.opacity < 1.0 ) {
-
-						toRemove.push( c );
-
-					}
-
-				}
-
-			} );
-
-			toRemove.forEach( c => {
-
-				c.parent.remove( c );
-
-			} );
-
-		}
-	},
-	'Octopus Tea': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/octopus-tea/scene.gltf',
-		credit: 'Model by "AzTiZ" on Sketchfab.',
-		opacityToTransmission: true,
-		bounces: 8,
-		postProcess( model ) {
-
-			const toRemove = [];
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						const material = c.material;
-						material.metalness = 0.0;
-						if ( material.transmission === 1.0 ) {
-
-							material.roughness = 0.0;
-							material.metalness = 0.0;
-
-							// 29 === glass
-							// 27 === liquid top
-							// 23 === liquid
-							if ( c.name.includes( '29' ) ) {
-
-								c.geometry.index.array.reverse();
-								material.ior = 1.52;
-								material.color.set( 0xffffff );
-
-							} else {
-
-								material.ior = 1.2;
-
-							}
-
-						}
-
-					} else if ( c.material.opacity < 1.0 ) {
-
-						toRemove.push( c );
-
-					}
-
-				}
-
-			} );
-
-			toRemove.forEach( c => {
-
-				c.parent.remove( c );
-
-			} );
-
-		}
-	},
-	'Scifi Toad': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/scifi-toad/scene.gltf',
-		credit: 'Model by "YuryTheCreator" on Sketchfab.',
-		opacityToTransmission: true,
-		bounces: 8,
-		postProcess( model ) {
-
-			model.traverse( c => {
-
-				if ( c.material && c.material instanceof MeshPhysicalMaterial ) {
-
-					const material = c.material;
-					material.metalness = 0.0;
-					material.roughness = 0.005;
-					material.ior = 1.645;
-					material.color.lerp( new Color( 0xffffff ), 0.65 );
-
-				}
-
-			} );
-
-		}
-	},
-	'Halo Twist Ring': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/ring-twist-halo/scene.glb',
-		credit: 'Model credit NASA / JPL-Caltech',
-		opacityToTransmission: true,
-		bounces: 15,
-		postProcess( model ) {
-
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						if ( c.material.transmission === 1.0 ) {
-
-							const material = c.material;
-							material.roughness *= 0.1;
-							material.metalness = 0.0;
-							material.ior = 1.8;
-							material.color.set( 0xffffff );
-
-						} else {
-
-							c.material.roughness *= 0.1;
-
-						}
-
-					}
-
-				}
-
-			} );
-
-		}
-	},
-	'Damaged Helmet': {
-		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
-		credit: 'glTF Sample Model.',
-	},
-	'Flight Helmet': {
-		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf',
-		credit: 'glTF Sample Model.',
-	},
-	'Statue': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
-		credit: 'Model courtesy of threedscans.com.',
-	},
-	'Crab Sculpture': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Elbow_Crab.glb',
-		rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
-		credit: 'Model courtesy of threedscans.com.',
-	},
-	// 'Astraia': {
-	// 	url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/astraia/scene.gltf',
-	// 	credit: 'Model by "Quentin Otani" on Sketchfab',
-	// 	removeEmission: true,
-	// 	postProcess( model ) {
-
-	// 		const toRemove = [];
-	// 		model.traverse( c => {
-
-	// 			if ( c.name.includes( 'ROND' ) ) {
-
-	// 				toRemove.push( c );
-
-	// 			}
-
-	// 		} );
-
-	// 		toRemove.forEach( c => {
-
-	// 			c.parent.remove( c );
-
-	// 		} );
-
-	// 	}
-	// },
-
-};
+const models = window.MODEL_LIST || {};
 
 let initialModel = Object.keys( models )[ 0 ];
 if ( window.location.hash ) {
@@ -261,6 +54,7 @@ if ( window.location.hash ) {
 
 const params = {
 
+	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
 	tilesX: 2,
@@ -321,6 +115,7 @@ async function init() {
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
 	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
@@ -400,7 +195,6 @@ function animate() {
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = 0.5;
-		ptRenderer.material.environmentBlur = params.environmentBlur;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
@@ -459,6 +253,27 @@ function buildGui() {
 	gui = new GUI();
 
 	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
+
+	const pathTracingFolder = gui.addFolder( 'path tracing' );
+	pathTracingFolder.add( params, 'enable' );
+	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
+
+		ptRenderer.material.setDefine( 'USE_MIS', Number( v ) );
+		ptRenderer.reset();
+
+	} );
+	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
+
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		// fsQuad.material.needsUpdate = true;
+
+	} );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
@@ -551,22 +366,6 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
-
-	const pathTracingFolder = gui.addFolder( 'path tracing' );
-	pathTracingFolder.add( params, 'enable' );
-	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-		fsQuad.material.needsUpdate = true;
-
-	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.open();
 
 }
 
