@@ -16,7 +16,6 @@ export const shaderMaterialStructs = /* glsl */ `
 		sampler2D conditionalWeights;
 		sampler2D map;
 		float totalSum;
-		float maxMip;
 
 	};
 

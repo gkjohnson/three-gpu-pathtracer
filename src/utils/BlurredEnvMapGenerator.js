@@ -1,4 +1,4 @@
-import { WebGLRenderTarget, RGBAFormat, FloatType, PMREMGenerator, DataTexture } from 'three';
+import { WebGLRenderTarget, RGBAFormat, FloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
@@ -102,6 +102,9 @@ export class BlurredEnvMapGenerator {
 		result.magFilter = texture.magFilter;
 		result.wrapS = texture.wrapS;
 		result.wrapT = texture.wrapT;
+		result.mapping = EquirectangularReflectionMapping;
+		result.needsUpdate = true;
+
 		return result;
 
 	}

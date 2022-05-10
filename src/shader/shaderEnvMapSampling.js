@@ -1,8 +1,8 @@
 export const shaderEnvMapSampling = /* glsl */`
 
-vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map, float lodBias ) {
+vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
 
-	return texture2D( map, equirectDirectionToUv( direction ), lodBias ).rgb;
+	return texture2D( map, equirectDirectionToUv( direction ) ).rgb;
 
 }
 
@@ -21,10 +21,10 @@ float envMapDirectionPdf( vec3 direction ) {
 
 }
 
-float envMapSample( vec3 direction, EquirectHdrInfo info, float mipBlur, out vec3 color ) {
+float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 
 	vec2 uv = equirectDirectionToUv( direction );
-	color = texture2D( info.map, uv, mipBlur * info.maxMip ).rgb;
+	color = texture2D( info.map, uv ).rgb;
 
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
@@ -34,7 +34,7 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, float mipBlur, out vec
 
 }
 
-float randomEnvMapSample( EquirectHdrInfo info, float mipBlur, out vec3 color, out vec3 direction ) {
+float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
 
 	// sample env map cdf
 	vec2 r = rand2();
@@ -44,7 +44,7 @@ float randomEnvMapSample( EquirectHdrInfo info, float mipBlur, out vec3 color, o
 
 	vec3 derivedDirection = equirectUvToDirection( uv );
 	direction = derivedDirection;
-	color = texture2D( info.map, uv, mipBlur * info.maxMip ).rgb;
+	color = texture2D( info.map, uv ).rgb;
 
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
