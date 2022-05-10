@@ -2,12 +2,6 @@ import { BufferAttribute } from 'three';
 import { mergeBufferGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
-	if ( ! Array.isArray( materials ) ) {
-
-		materials = [ materials ];
-
-	}
-
 	const indexAttr = geometry.index;
 	const posAttr = geometry.attributes.position;
 	const vertCount = posAttr.count;
@@ -27,7 +21,7 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 		const count = group.count;
 		const endCount = Math.min( count, totalCount - start );
 
-		const mat = materials[ group.materialIndex ];
+		const mat = Array.isArray( materials ) ? materials[ group.materialIndex ] : materials;
 		const materialIndex = allMaterials.indexOf( mat );
 
 		for ( let j = 0; j < endCount; j ++ ) {
