@@ -27,7 +27,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -89,6 +89,7 @@ const params = {
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, camera, ptRenderer, fsQuad, controls, scene;
+let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
 
@@ -137,6 +138,8 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
+
+	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -266,7 +269,6 @@ function buildGui() {
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-		// fsQuad.material.needsUpdate = true;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
@@ -296,15 +298,14 @@ function buildGui() {
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
+	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0 ).onChange( () => {
 
-		ptRenderer.material.environmentBlur = parseFloat( v );
+		updateEnvBlur();
 		ptRenderer.reset();
 
 	} ).name( 'env map blur' );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0, 0.01 ).onChange( v => {
+	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( () => {
 
-		ptRenderer.material.environmentIntensity = parseFloat( v );
 		ptRenderer.reset();
 
 	} ).name( 'intensity' );
@@ -374,26 +375,32 @@ function updateEnvMap() {
 	new RGBELoader()
 		.load( params.envMap, texture => {
 
-			if ( ptRenderer.material.environmentMap ) {
+			if ( scene.environmentMap ) {
 
 				scene.environment.dispose();
+				envMap.dispose();
 
 			}
 
-			texture.mapping = EquirectangularReflectionMapping;
-			ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
-			ptRenderer.material.envMapInfo.updateFrom( texture );
-
-			scene.environment = texture;
-			if ( params.backgroundType !== 'Gradient' ) {
-
-				scene.background = texture;
-
-			}
-
+			envMap = texture;
+			updateEnvBlur();
 			ptRenderer.reset();
 
 		} );
+
+}
+
+function updateEnvBlur() {
+
+	const blurredEnvMap = envMapGenerator.generate( envMap, params.environmentBlur );
+	ptRenderer.material.envMapInfo.updateFrom( blurredEnvMap );
+
+	scene.environment = blurredEnvMap;
+	if ( params.backgroundType !== 'Gradient' ) {
+
+		scene.background = blurredEnvMap;
+
+	}
 
 }
 
