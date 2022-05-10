@@ -3,7 +3,6 @@ import {
 	NoToneMapping,
 	Box3,
 	LoadingManager,
-	EquirectangularReflectionMapping,
 	Sphere,
 	Color,
 	DoubleSide,
@@ -27,7 +26,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -38,214 +37,7 @@ const envMaps = {
 	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
 };
 
-const models = window.MODEL_LIST || {
-	'M2020 Rover': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Perseverance.glb',
-		credit: 'Model credit NASA / JPL-Caltech',
-	},
-	'M2020 Helicopter': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Ingenuity.glb',
-		credit: 'Model credit NASA / JPL-Caltech',
-	},
-	'Gelatinous Cube': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/gelatinous-cube/scene.gltf',
-		credit: 'Model by "glenatron" on Sketchfab.',
-		rotation: [ 0, - Math.PI / 8, 0.0 ],
-		opacityToTransmission: true,
-		bounces: 8,
-		postProcess( model ) {
-
-			const toRemove = [];
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						const material = c.material;
-						material.roughness *= 0.1;
-						material.metalness = 0.0;
-						material.ior = 1.2;
-						material.map = null;
-
-						c.geometry.computeVertexNormals();
-
-					} else if ( c.material.opacity < 1.0 ) {
-
-						toRemove.push( c );
-
-					}
-
-				}
-
-			} );
-
-			toRemove.forEach( c => {
-
-				c.parent.remove( c );
-
-			} );
-
-		}
-	},
-	'Octopus Tea': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/octopus-tea/scene.gltf',
-		credit: 'Model by "AzTiZ" on Sketchfab.',
-		opacityToTransmission: true,
-		bounces: 8,
-		postProcess( model ) {
-
-			const toRemove = [];
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						const material = c.material;
-						material.metalness = 0.0;
-						if ( material.transmission === 1.0 ) {
-
-							material.roughness = 0.0;
-							material.metalness = 0.0;
-
-							// 29 === glass
-							// 27 === liquid top
-							// 23 === liquid
-							if ( c.name.includes( '29' ) ) {
-
-								c.geometry.index.array.reverse();
-								material.ior = 1.52;
-								material.color.set( 0xffffff );
-
-							} else {
-
-								material.ior = 1.2;
-
-							}
-
-						}
-
-					} else if ( c.material.opacity < 1.0 ) {
-
-						toRemove.push( c );
-
-					}
-
-				}
-
-			} );
-
-			toRemove.forEach( c => {
-
-				c.parent.remove( c );
-
-			} );
-
-		}
-	},
-	'Scifi Toad': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/scifi-toad/scene.gltf',
-		credit: 'Model by "YuryTheCreator" on Sketchfab.',
-		opacityToTransmission: true,
-		bounces: 8,
-		postProcess( model ) {
-
-			model.traverse( c => {
-
-				if ( c.material && c.material instanceof MeshPhysicalMaterial ) {
-
-					const material = c.material;
-					material.metalness = 0.0;
-					material.roughness = 0.005;
-					material.ior = 1.645;
-					material.color.lerp( new Color( 0xffffff ), 0.65 );
-
-				}
-
-			} );
-
-		}
-	},
-	'Halo Twist Ring': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/ring-twist-halo/scene.glb',
-		credit: 'Model credit NASA / JPL-Caltech',
-		opacityToTransmission: true,
-		bounces: 15,
-		postProcess( model ) {
-
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						if ( c.material.transmission === 1.0 ) {
-
-							const material = c.material;
-							material.roughness *= 0.1;
-							material.metalness = 0.0;
-							material.ior = 1.8;
-							material.color.set( 0xffffff );
-
-						} else {
-
-							c.material.roughness *= 0.1;
-
-						}
-
-					}
-
-				}
-
-			} );
-
-		}
-	},
-	'Damaged Helmet': {
-		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/DamagedHelmet/glTF/DamagedHelmet.gltf',
-		credit: 'glTF Sample Model.',
-	},
-	'Flight Helmet': {
-		url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf',
-		credit: 'glTF Sample Model.',
-	},
-	'Statue': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Le_Transi_De_Rene_De_Chalon.glb',
-		credit: 'Model courtesy of threedscans.com.',
-	},
-	'Crab Sculpture': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Elbow_Crab.glb',
-		rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
-		credit: 'Model courtesy of threedscans.com.',
-	},
-	// 'Astraia': {
-	// 	url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/astraia/scene.gltf',
-	// 	credit: 'Model by "Quentin Otani" on Sketchfab',
-	// 	removeEmission: true,
-	// 	postProcess( model ) {
-
-	// 		const toRemove = [];
-	// 		model.traverse( c => {
-
-	// 			if ( c.name.includes( 'ROND' ) ) {
-
-	// 				toRemove.push( c );
-
-	// 			}
-
-	// 		} );
-
-	// 		toRemove.forEach( c => {
-
-	// 			c.parent.remove( c );
-
-	// 		} );
-
-	// 	}
-	// },
-
-};
+const models = window.MODEL_LIST || {};
 
 let initialModel = Object.keys( models )[ 0 ];
 if ( window.location.hash ) {
@@ -261,6 +53,7 @@ if ( window.location.hash ) {
 
 const params = {
 
+	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
 	tilesX: 2,
@@ -295,6 +88,7 @@ const params = {
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, camera, ptRenderer, fsQuad, controls, scene;
+let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
 
@@ -321,6 +115,7 @@ async function init() {
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
 	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
@@ -342,6 +137,8 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
+
+	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -400,7 +197,6 @@ function animate() {
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = 0.5;
-		ptRenderer.material.environmentBlur = params.environmentBlur;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
@@ -460,6 +256,26 @@ function buildGui() {
 
 	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
 
+	const pathTracingFolder = gui.addFolder( 'path tracing' );
+	pathTracingFolder.add( params, 'enable' );
+	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
+
+		ptRenderer.material.setDefine( 'USE_MIS', Number( v ) );
+		ptRenderer.reset();
+
+	} );
+	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
+
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+
+	} );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
@@ -481,15 +297,14 @@ function buildGui() {
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0, 0.01 ).onChange( v => {
+	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0 ).onChange( () => {
 
-		ptRenderer.material.environmentBlur = parseFloat( v );
+		updateEnvBlur();
 		ptRenderer.reset();
 
 	} ).name( 'env map blur' );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0, 0.01 ).onChange( v => {
+	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( () => {
 
-		ptRenderer.material.environmentIntensity = parseFloat( v );
 		ptRenderer.reset();
 
 	} ).name( 'intensity' );
@@ -552,22 +367,6 @@ function buildGui() {
 
 	} );
 
-	const pathTracingFolder = gui.addFolder( 'path tracing' );
-	pathTracingFolder.add( params, 'enable' );
-	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-		fsQuad.material.needsUpdate = true;
-
-	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.open();
-
 }
 
 function updateEnvMap() {
@@ -575,26 +374,32 @@ function updateEnvMap() {
 	new RGBELoader()
 		.load( params.envMap, texture => {
 
-			if ( ptRenderer.material.environmentMap ) {
+			if ( scene.environmentMap ) {
 
 				scene.environment.dispose();
+				envMap.dispose();
 
 			}
 
-			texture.mapping = EquirectangularReflectionMapping;
-			ptRenderer.material.environmentIntensity = parseFloat( params.environmentIntensity );
-			ptRenderer.material.envMapInfo.updateFrom( texture );
-
-			scene.environment = texture;
-			if ( params.backgroundType !== 'Gradient' ) {
-
-				scene.background = texture;
-
-			}
-
+			envMap = texture;
+			updateEnvBlur();
 			ptRenderer.reset();
 
 		} );
+
+}
+
+function updateEnvBlur() {
+
+	const blurredEnvMap = envMapGenerator.generate( envMap, params.environmentBlur );
+	ptRenderer.material.envMapInfo.updateFrom( blurredEnvMap );
+
+	scene.environment = blurredEnvMap;
+	if ( params.backgroundType !== 'Gradient' ) {
+
+		scene.background = blurredEnvMap;
+
+	}
 
 }
 

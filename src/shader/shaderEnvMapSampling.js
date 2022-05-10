@@ -1,45 +1,8 @@
 export const shaderEnvMapSampling = /* glsl */`
 
-float colorToLuminance( vec3 color ) {
+vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map ) {
 
-	// https://en.wikipedia.org/wiki/Relative_luminance
-	return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-
-}
-
-// ray sampling x and z are swapped to align with expected background view
-vec2 equirectDirectionToUv( vec3 direction ) {
-
-	// from Spherical.setFromCartesianCoords
-    vec2 uv = vec2( atan( direction.z, direction.x ), acos( direction.y ) );
-    uv /= vec2( 2.0 * PI, PI );
-
-	// apply adjustments to get values in range [0, 1] and y right side up
-    uv.x += 0.5;
-	uv.y = 1.0 - uv.y;
-    return uv;
-    
-}
-
-vec3 equirectUvToDirection( vec2 uv ) {
-
-	// undo above adjustments
-	uv.x -= 0.5;
-	uv.y = 1.0 - uv.y;
-
-	// from Vector3.setFromSphericalCoords
-	float theta = uv.x * 2.0 * PI;
-	float phi = uv.y * PI;
-
-	float sinPhi = sin( phi );
-
-	return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
-
-}
-
-vec3 sampleEquirectEnvMapColor( vec3 direction, sampler2D map, float lodBias ) {
-
-	return texture2D( map, equirectDirectionToUv( direction ), lodBias ).rgb;
+	return texture2D( map, equirectDirectionToUv( direction ) ).rgb;
 
 }
 
@@ -58,10 +21,10 @@ float envMapDirectionPdf( vec3 direction ) {
 
 }
 
-float envMapSample( vec3 direction, EquirectHdrInfo info, float mipBlur, out vec3 color ) {
+float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 
 	vec2 uv = equirectDirectionToUv( direction );
-	color = texture2D( info.map, uv, mipBlur * info.maxMip ).rgb;
+	color = texture2D( info.map, uv ).rgb;
 
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
@@ -71,17 +34,17 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, float mipBlur, out vec
 
 }
 
-float randomEnvMapSample( EquirectHdrInfo info, float mipBlur, out vec3 color, out vec3 direction ) {
+float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
 
 	// sample env map cdf
 	vec2 r = rand2();
-    float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
-    float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
+	float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
+	float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
 	vec2 uv = vec2( u, v );
 
 	vec3 derivedDirection = equirectUvToDirection( uv );
 	direction = derivedDirection;
-	color = texture2D( info.map, uv, mipBlur * info.maxMip ).rgb;
+	color = texture2D( info.map, uv ).rgb;
 
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );

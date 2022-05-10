@@ -1,4 +1,4 @@
-import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, LinearMipMapLinearFilter, RepeatWrapping } from 'three';
+import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping } from 'three';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
@@ -134,8 +134,6 @@ export class EquirectHdrInfoUniform {
 		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/3c6fd9b6b3da47cd50c527eeb45845eef06c55c3/src/loaders/hdrloader.cpp
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
 		const map = preprocessEnvMap( hdr );
-		map.generateMipmaps = true;
-		map.minFilter = LinearMipMapLinearFilter;
 		map.wrapS = RepeatWrapping;
 		map.wrapT = RepeatWrapping;
 
@@ -250,7 +248,6 @@ export class EquirectHdrInfoUniform {
 
 		this.map = map;
 		this.totalSum = totalSum;
-		this.maxMip = ~ ~ Math.log2( Math.max( width, height ) );
 
 	}
 

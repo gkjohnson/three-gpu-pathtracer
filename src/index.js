@@ -13,6 +13,7 @@ export * from './uniforms/PhysicalCameraUniform.js';
 
 // utils
 export * from './utils/GeometryPreparationUtils.js';
+export * from './utils/BlurredEnvMapGenerator.js';
 
 // materials
 export * from './materials/MaterialBase.js';

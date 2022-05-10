@@ -352,6 +352,32 @@ reset() : void
 
 Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
 
+## BlurredEnvMapGenerator
+
+Utility for generating a PMREM blurred environment map that can be used with the path tracer.
+
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer )
+```
+
+### .generate
+
+```js
+generate( texture : Texture, blur : Number ) : DataTexture
+```
+
+Takes a texture to blur and the amount to blur it. Returns a new `DataTexture` that has been PMREM blurred environment map that can have distribution data generated for importance sampling.
+
+### .dispose
+
+```js
+dispose() : void
+```
+
+Disposes of the temporary files and textures for generation.
+
 ## MaterialBase
 
 _extends THREE.ShaderMaterial_
@@ -394,13 +420,8 @@ _extends MaterialBase_
 	environmentRotation: Matrix3,
 	environmentIntensity = 1: Number,
 
-	// Environment blur causes a mipmap to be sampled rather than the sharp texture. This is useful
-	// if multiple importance sampling must be disabled and can help non MIS renders resolve more quickly.
-	// Note there is a pinch artifact at the poles when using this field.
-	environmentBlur = 0: Number,
-
 	// background blur
-	blurBlur = 0: Number,
+	backgroundBlur = 0: Number,
 
 	// Factor for alleviating bright pixels from rays that hit diffuse surfaces then
 	// specular surfaces. Setting this higher alleviates fireflies but will remove some

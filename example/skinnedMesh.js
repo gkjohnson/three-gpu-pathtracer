@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, BlurredEnvMapGenerator } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -51,6 +51,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.filterGlossyFactor = 0.25;
+	ptRenderer.material.setDefine( 'USE_MIS', 0 );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -77,10 +78,13 @@ async function init() {
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-				ptRenderer.material.envMapInfo.updateFrom( texture );
-				texture.mapping = THREE.EquirectangularReflectionMapping;
-				scene.background = texture;
-				scene.environment = texture;
+				const generator = new BlurredEnvMapGenerator( renderer );
+				const blurredTex = generator.generate( texture, 0.35 );
+				ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+				generator.dispose();
+
+				scene.background = blurredTex;
+				scene.environment = blurredTex;
 
 				resolve();
 
