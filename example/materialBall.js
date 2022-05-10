@@ -64,9 +64,6 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.roughness = 0.05;
 	params.material1.transmission = 1.0;
 	params.material1.color = '#ffffff';
-
-	params.material2.metalness = 1.0;
-	params.material2.roughness = 0.1;
 	params.bounces = 10;
 
 }
