@@ -3,7 +3,6 @@ import {
 	NoToneMapping,
 	Box3,
 	LoadingManager,
-	EquirectangularReflectionMapping,
 	Sphere,
 	Color,
 	DoubleSide,

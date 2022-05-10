@@ -1,4 +1,4 @@
-import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, LinearMipMapLinearFilter, RepeatWrapping } from 'three';
+import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping } from 'three';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
