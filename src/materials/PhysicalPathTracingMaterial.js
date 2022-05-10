@@ -50,7 +50,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
-				environmentBlur: { value: 0.0 },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
 				environmentRotation: { value: new Matrix3() },
@@ -87,7 +86,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				precision highp sampler2DArray;
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
-				#include <cube_uv_reflection_fragment>
 
 				${ shaderStructs }
 				${ shaderIntersectFunction }
@@ -99,7 +97,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				uniform mat3 environmentRotation;
 				uniform float backgroundBlur;
-				uniform float environmentBlur;
 
 				#if GRADIENT_BG
 
@@ -148,7 +145,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#else
 
 					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
-					return environmentIntensity * sampleEquirectEnvMapColor( sampleDir, envMapInfo.map, 0.0 );
+					return environmentIntensity * sampleEquirectEnvMapColor( sampleDir, envMapInfo.map );
 
 					#endif
 
@@ -263,7 +260,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, environmentBlur, envColor );
+								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
 
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
@@ -273,7 +270,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								gl_FragColor.rgb +=
 									environmentIntensity *
-									sampleEquirectEnvMapColor( environmentRotation * rayDirection, envMapInfo.map, envMapInfo.maxMip * environmentBlur ) *
+									sampleEquirectEnvMapColor( environmentRotation * rayDirection, envMapInfo.map ) *
 									throughputColor;
 
 								#endif
@@ -449,7 +446,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = randomEnvMapSample( envMapInfo, environmentBlur, envColor, envDirection );
+							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
 							envDirection = invEnvironmentRotation * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright

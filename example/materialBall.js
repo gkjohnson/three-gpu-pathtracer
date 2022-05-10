@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, materials;
+let envMap, envMapGenerator;
 let samplesEl;
 const params = {
 
@@ -70,13 +71,15 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 
 }
 
-// clamp value for mobile
+// adjust performance parameters for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
 	params.bounces = Math.max( params.bounces, 6 );
 	params.resolutionScale *= 0.5;
 	params.tiles = 2;
+	params.multipleImportanceSampling = false;
+	params.environmentBlur = 0.35;
 
 }
 
@@ -95,6 +98,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
+	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -110,12 +114,16 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
+	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+
 	const envMapPromise = new Promise( resolve => {
 
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-				ptRenderer.material.envMapInfo.updateFrom( texture );
+				envMap = texture;
+
+				updateEnvBlur();
 				resolve();
 
 			} );
@@ -252,7 +260,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		updateEnvBlur();
 
 	} );
 	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
@@ -355,6 +363,13 @@ function reset() {
 
 }
 
+function updateEnvBlur() {
+
+	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
+	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+	ptRenderer.reset();
+
+}
 
 function animate() {
 
@@ -393,7 +408,6 @@ function animate() {
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.backgroundBlur = params.backgroundBlur;
-	ptRenderer.material.environmentBlur = params.environmentBlur;
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 
