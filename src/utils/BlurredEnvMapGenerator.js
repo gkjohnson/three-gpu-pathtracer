@@ -66,6 +66,7 @@ export class BlurredEnvMapGenerator {
 
 		this.pmremGenerator.dispose();
 		this.copyQuad.dispose();
+		this.renderTarget.dispose();
 
 	}
 
