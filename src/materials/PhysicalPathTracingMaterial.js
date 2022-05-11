@@ -165,6 +165,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
+							// TODO: attenuate the contribution based on the PDF of the resulting ray including refraction values
+							// Should be able to work using the material BSDF functions which will take into account specularity, etc.
+
 							vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 							Material material = readMaterialInfo( materials, materialIndex );
