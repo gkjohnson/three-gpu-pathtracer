@@ -151,6 +151,106 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
+				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, uint traversals, out vec3 color ) {
+
+					// hit results
+					uvec4 faceIndices = uvec4( 0u );
+					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
+					vec3 barycoord = vec3( 0.0 );
+					float side = 1.0;
+					float dist = 0.0;
+
+					color = vec3( 1.0 );
+					for ( uint i = 0u; i < traversals; i ++ ) {
+
+						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+
+							vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
+							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
+							Material material = readMaterialInfo( materials, materialIndex );
+
+							// Opacity Test
+
+							// albedo
+							vec4 albedo = vec4( material.color, material.opacity );
+							if ( material.map != - 1 ) {
+
+								albedo *= texture2D( textures, vec3( uv, material.map ) );
+
+							}
+
+							float alphaTest = material.alphaTest;
+							bool useAlphaTest = alphaTest != 0.0;
+							if (
+								! (
+									// material sidedness
+									material.side != 0.0 && side == material.side
+
+									// alpha test
+									|| useAlphaTest && albedo.a < alphaTest
+
+									// opacity
+									|| ! useAlphaTest && albedo.a < rand()
+								)
+							) {
+
+								return true;
+
+							}
+
+
+
+							// Transmissive Test
+
+							// transmission
+							float transmission = material.transmission;
+							if ( material.transmissionMap != - 1 ) {
+
+								transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+
+							}
+
+							// metalness
+							float metalness = material.metalness;
+							if ( material.metalnessMap != - 1 ) {
+
+								metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+
+							}
+
+							float transmissionFactor = ( 1.0 - metalness ) * transmission;
+							if ( transmissionFactor > rand() ) {
+
+								return true;
+
+							}
+
+							// only attenuate on the way in
+							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+							if ( ! isBelowSurface ) {
+
+								color *= albedo.rgb;
+
+							}
+
+							// adjust the ray to the new surface
+							vec3 point = rayOrigin + rayDirection * dist;
+							vec3 absPoint = abs( point );
+							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+						} else {
+
+							return false;
+
+						}
+
+					}
+
+					return true;
+
+				}
+
 				bool anyHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection ) {
 
 					uvec4 faceIndices = uvec4( 0u );
