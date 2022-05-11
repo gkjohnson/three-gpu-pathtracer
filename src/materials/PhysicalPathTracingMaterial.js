@@ -221,14 +221,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
-							// roughness
-							float roughness = material.roughness;
-							if ( material.roughnessMap != - 1 ) {
-
-								roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).g;
-
-							}
-
 							// only attenuate on the way in
 							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 							if ( isBelowSurface ) {
