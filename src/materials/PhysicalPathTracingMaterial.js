@@ -136,8 +136,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#if GRADIENT_BG
 
 					direction = normalize( direction + randDirection() * 0.05 );
-					float value = ( direction.y + 1.0 ) / 2.0;
 
+					float value = ( direction.y + 1.0 ) / 2.0;
 					value = pow( value, 2.0 );
 
 					return mix( bgGradientBottom, bgGradientTop, value );
@@ -151,6 +151,111 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
+				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
+				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, out vec3 color ) {
+
+					// hit results
+					uvec4 faceIndices = uvec4( 0u );
+					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
+					vec3 barycoord = vec3( 0.0 );
+					float side = 1.0;
+					float dist = 0.0;
+
+					color = vec3( 1.0 );
+
+					for ( int i = 0; i < traversals; i ++ ) {
+
+						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+
+							// TODO: attenuate the contribution based on the PDF of the resulting ray including refraction values
+							// Should be able to work using the material BSDF functions which will take into account specularity, etc.
+							// TODO: should we account for emissive surfaces here?
+
+							vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
+							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
+							Material material = readMaterialInfo( materials, materialIndex );
+
+							// Opacity Test
+
+							// albedo
+							vec4 albedo = vec4( material.color, material.opacity );
+							if ( material.map != - 1 ) {
+
+								albedo *= texture2D( textures, vec3( uv, material.map ) );
+
+							}
+
+							// transmission
+							float transmission = material.transmission;
+							if ( material.transmissionMap != - 1 ) {
+
+								transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+
+							}
+
+							// metalness
+							float metalness = material.metalness;
+							if ( material.metalnessMap != - 1 ) {
+
+								metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+
+							}
+
+							float alphaTest = material.alphaTest;
+							bool useAlphaTest = alphaTest != 0.0;
+							float transmissionFactor = ( 1.0 - metalness ) * transmission;
+							if (
+								transmissionFactor < rand() && ! (
+									// material sidedness
+									material.side != 0.0 && side == material.side
+
+									// alpha test
+									|| useAlphaTest && albedo.a < alphaTest
+
+									// opacity
+									|| ! useAlphaTest && albedo.a < rand()
+								)
+							) {
+
+								return true;
+
+							}
+
+							// roughness
+							float roughness = material.roughness;
+							if ( material.roughnessMap != - 1 ) {
+
+								roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).g;
+
+							}
+
+							// only attenuate on the way in
+							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+							if ( isBelowSurface ) {
+
+								color *= albedo.rgb;
+
+							}
+
+							// adjust the ray to the new surface
+							vec3 point = rayOrigin + rayDirection * dist;
+							vec3 absPoint = abs( point );
+							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+						} else {
+
+							return false;
+
+						}
+
+					}
+
+					return true;
+
+				}
+
+				// returns whether the ray hit anything, not just the first surface. Could be optimized to not check the full hierarchy.
 				bool anyHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection ) {
 
 					uvec4 faceIndices = uvec4( 0u );
@@ -460,7 +565,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// check if a ray could even reach the surface
-							if ( envPdf > 0.0 && isDirectionValid( envDirection, normal, faceNormal ) && ! anyHit( bvh, rayOrigin, envDirection ) ) {
+							vec3 attenuatedColor;
+							if (
+								envPdf > 0.0 &&
+								isDirectionValid( envDirection, normal, faceNormal ) &&
+								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, attenuatedColor )
+							) {
 
 								// get the material pdf
 								vec3 sampleColor;
@@ -469,7 +579,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 									// weight the direct light contribution
 									float misWeight = misHeuristic( envPdf, envMaterialPdf );
-									gl_FragColor.rgb += environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
+									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
 
 								}
 
