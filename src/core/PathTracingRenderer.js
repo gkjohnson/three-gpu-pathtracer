@@ -86,6 +86,8 @@ function* renderTask() {
 		}
 
 		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
+		_blendTargets[ 0 ] = blendTarget1;
+		_blendTargets[ 1 ] = blendTarget2;
 
 		this.samples = Math.round( this.samples );
 
