@@ -16,6 +16,7 @@ import {
 	PerspectiveCamera,
 	MeshBasicMaterial,
 	sRGBEncoding,
+	CustomBlending,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -73,6 +74,7 @@ const params = {
 	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
+	backgroundAlpha: 1.0,
 
 	enable: true,
 	bounces: 3,
@@ -110,7 +112,7 @@ async function init() {
 	camera = new PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 1, 0.25, 1 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = new PathTracingRenderer( renderer, { alpha: true } );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
@@ -121,7 +123,7 @@ async function init() {
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
-		transparent: true,
+		blending: CustomBlending
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -234,7 +236,7 @@ function onResize() {
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
+	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );
@@ -329,17 +331,22 @@ function buildGui() {
 	} );
 	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
 
-		ptRenderer.material.uniforms.bgGradientTop.value.set( v );
+		ptRenderer.material.bgGradientTop.set( v );
 		ptRenderer.reset();
 
 	} );
 	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
 
-		ptRenderer.material.uniforms.bgGradientBottom.value.set( v );
+		ptRenderer.material.bgGradientBottom.set( v );
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.open();
+	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( v => {
+
+		ptRenderer.material.backgroundAlpha = v;
+		ptRenderer.reset();
+
+	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.add( params, 'floorEnabled' ).onChange( v => {
@@ -366,6 +373,7 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
+	floorFolder.close();
 
 }
 
