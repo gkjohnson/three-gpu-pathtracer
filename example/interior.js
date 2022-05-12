@@ -189,7 +189,7 @@ function onResize() {
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
+	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );

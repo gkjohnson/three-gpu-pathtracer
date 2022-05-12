@@ -75,6 +75,7 @@ const params = {
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
 	backgroundAlpha: 1.0,
+	checkerboardTransparency: false,
 
 	enable: true,
 	bounces: 3,
@@ -345,6 +346,12 @@ function buildGui() {
 
 		ptRenderer.material.backgroundAlpha = v;
 		ptRenderer.reset();
+
+	} );
+	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
+
+		if ( v ) document.body.classList.add( 'checkerboard' );
+		else document.body.classList.remove( 'checkerboard' );
 
 	} );
 
