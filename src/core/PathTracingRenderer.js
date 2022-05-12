@@ -1,4 +1,4 @@
-import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
 
@@ -20,14 +20,22 @@ function* renderTask() {
 
 	while ( true ) {
 
-		// material.opacity = 1 / ( this.samples + 1 );
-		blendMaterial.opacity = 1 / ( this.samples + 1 );
-		material.seed ++;
+		if ( _alpha ) {
+
+			blendMaterial.opacity = 1 / ( this.samples + 1 );
+			material.blending = NoBlending;
+
+		} else {
+
+			material.opacity = 1 / ( this.samples + 1 );
+			material.blending = NormalBlending;
+
+		}
 
 		const w = _primaryTarget.width;
 		const h = _primaryTarget.height;
 		material.resolution.set( w, h );
-		material.blending = 0;
+		material.seed ++;
 
 		const tx = this.tiles.x || 1;
 		const ty = this.tiles.y || 1;
@@ -58,12 +66,16 @@ function* renderTask() {
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
-				blendMaterial.target1 = blendTarget1.texture;
-				blendMaterial.target2 = _primaryTarget.texture;
+				if ( _alpha ) {
 
-				_renderer.setRenderTarget( blendTarget2 );
-				_blendQuad.render( _renderer );
-				_renderer.setRenderTarget( ogRenderTarget );
+					blendMaterial.target1 = blendTarget1.texture;
+					blendMaterial.target2 = _primaryTarget.texture;
+
+					_renderer.setRenderTarget( blendTarget2 );
+					_blendQuad.render( _renderer );
+					_renderer.setRenderTarget( ogRenderTarget );
+
+				}
 
 				this.samples += ( 1 / totalTiles );
 
@@ -73,12 +85,7 @@ function* renderTask() {
 
 		}
 
-
-
 		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
-
-
-
 
 		this.samples = Math.round( this.samples );
 
@@ -103,8 +110,7 @@ export class PathTracingRenderer {
 
 	get target() {
 
-		// return this._primaryTarget;
-		return this._blendTargets[ 1 ];
+		return this._alpha ? this._blendTargets[ 1 ] : this._primaryTarget;
 
 	}
 

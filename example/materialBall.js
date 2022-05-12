@@ -56,6 +56,7 @@ const params = {
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	backgroundAlpha: 1,
+	checkerboardTransparency: false,
 
 };
 
@@ -92,7 +93,7 @@ async function init() {
 	camera = new PhysicalCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 4, 2, 3 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = new PathTracingRenderer( renderer, { alpha: true } );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
@@ -285,10 +286,22 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-
 	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
+
+		if ( v ) {
+
+			document.body.classList.add( 'checkerboard' );
+
+		} else {
+
+			document.body.classList.remove( 'checkerboard' );
+
+		}
 
 	} );
 
