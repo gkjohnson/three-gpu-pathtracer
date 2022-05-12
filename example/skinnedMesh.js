@@ -51,7 +51,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.filterGlossyFactor = 0.25;
-	ptRenderer.material.setDefine( 'USE_MIS', 0 );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {

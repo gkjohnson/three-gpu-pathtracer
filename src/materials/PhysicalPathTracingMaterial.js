@@ -17,7 +17,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 	onBeforeRender() {
 
-		this.setDefine( 'DOF_SUPPORT', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
+		this.setDefine( 'FEATURE_DOF', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
 
 	}
 
@@ -29,10 +29,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			depthWrite: false,
 
 			defines: {
-				USE_MIS: 1,
-				DOF_SUPPORT: 1,
+				FEATURE_MIS: 1,
+				FEATURE_DOF: 1,
+				FEATURE_GRADIENT_BG: 0,
 				TRANSPARENT_TRAVERSALS: 5,
-				GRADIENT_BG: 0,
 			},
 
 			uniforms: {
@@ -100,14 +100,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform float backgroundBlur;
 				uniform float backgroundAlpha;
 
-				#if GRADIENT_BG
+				#if FEATURE_GRADIENT_BG
 
 				uniform vec3 bgGradientTop;
 				uniform vec3 bgGradientBottom;
 
 				#endif
 
-				#if DOF_SUPPORT
+				#if FEATURE_DOF
 
 				uniform PhysicalCamera physicalCamera;
 
@@ -135,7 +135,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				vec3 sampleBackground( vec3 direction ) {
 
-					#if GRADIENT_BG
+					#if FEATURE_GRADIENT_BG
 
 					direction = normalize( direction + randDirection() * 0.05 );
 
@@ -297,7 +297,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 
-					#if DOF_SUPPORT
+					#if FEATURE_DOF
 					{
 
 						// depth of field
@@ -357,7 +357,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							} else {
 
-								#if USE_MIS
+								#if FEATURE_MIS
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
@@ -543,7 +543,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
 						// direct env map sampling
-						#if USE_MIS
+						#if FEATURE_MIS
 						{
 
 							// find a sample in the environment map to include in the contribution

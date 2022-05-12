@@ -114,8 +114,8 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
-	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
+	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
 	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
@@ -158,7 +158,7 @@ async function init() {
 	document.body.appendChild( stats.dom );
 	renderer.physicallyCorrectLights = true;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	scene.background = new Color( 0x060606 );
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
@@ -261,7 +261,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
 
-		ptRenderer.material.setDefine( 'USE_MIS', Number( v ) );
+		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
 		ptRenderer.reset();
 
 	} );
@@ -313,7 +313,7 @@ function buildGui() {
 	const backgroundFolder = gui.addFolder( 'background' );
 	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
 
-		ptRenderer.material.setDefine( 'GRADIENT_BG', Number( v === 'Gradient' ) );
+		ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', Number( v === 'Gradient' ) );
 		if ( v === 'Gradient' ) {
 
 			scene.background = new Color( 0x060606 );

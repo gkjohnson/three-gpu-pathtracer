@@ -402,10 +402,10 @@ _extends MaterialBase_
 {
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	bounces = 3 : Number,
-	
+
 	// The physical camera parameters to use
 	physicalCamera : PhysicalCameraUniform,
-	
+
 	// Geometry and BVH information
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
@@ -440,13 +440,14 @@ _extends MaterialBase_
 {
 
 	// Whether to use multiple importance sampling to help the image converge more quickly
-	USE_MIS = 1 : Number,
+	FEATURE_MIS = 1 : Number,
+
+	// Whether to use the "bg" gradient fields to sample for the background
+	FEATURE_GRADIENT_BG = 0 : Number
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
-	// Whether to use the "bg" gradient fields to sample for the backround
-	GRADIENT_BG = 0 : Number
 
 }
 ```

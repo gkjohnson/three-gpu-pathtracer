@@ -96,7 +96,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
-	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -232,7 +232,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
 
-		ptRenderer.material.setDefine( 'USE_MIS', Number( value ) );
+		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
 		ptRenderer.reset();
 
 	} );
