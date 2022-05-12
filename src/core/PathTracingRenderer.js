@@ -1,7 +1,6 @@
-import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, CustomBlending, MeshBasicMaterial } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
-import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
 
 function* renderTask() {
 
@@ -16,16 +15,19 @@ function* renderTask() {
 		material,
 	} = this;
 
+	const blendMaterial = _blendQuad.material;
 	let [ blendTarget1, blendTarget2 ] = _blendTargets;
 
 	while ( true ) {
 
 		// material.opacity = 1 / ( this.samples + 1 );
+		blendMaterial.opacity = 1 / ( this.samples + 1 );
 		material.seed ++;
 
 		const w = _primaryTarget.width;
 		const h = _primaryTarget.height;
 		material.resolution.set( w, h );
+		material.blending = 0;
 
 		const tx = this.tiles.x || 1;
 		const ty = this.tiles.y || 1;
@@ -56,6 +58,13 @@ function* renderTask() {
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
+				blendMaterial.target1 = blendTarget1.texture;
+				blendMaterial.target2 = _primaryTarget.texture;
+
+				_renderer.setRenderTarget( blendTarget2 );
+				_blendQuad.render( _renderer );
+				_renderer.setRenderTarget( ogRenderTarget );
+
 				this.samples += ( 1 / totalTiles );
 
 				yield;
@@ -65,17 +74,6 @@ function* renderTask() {
 		}
 
 
-
-
-		const blendMaterial = _blendQuad.material;
-		blendMaterial.opacity = 1 / ( this.samples );
-		blendMaterial.target1 = blendTarget1.texture;
-		blendMaterial.target2 = _primaryTarget.texture;
-
-		const ogRenderTarget = _renderer.getRenderTarget();
-		_renderer.setRenderTarget( blendTarget2 );
-		_blendQuad.render( _renderer );
-		_renderer.setRenderTarget( ogRenderTarget );
 
 		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
 
