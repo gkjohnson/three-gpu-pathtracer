@@ -17,7 +17,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 	onBeforeRender() {
 
-		this.setDefine( 'DOF_SUPPORT', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
+		this.setDefine( 'FEATURE_DOF', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
 
 	}
 
@@ -29,10 +29,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			depthWrite: false,
 
 			defines: {
-				USE_MIS: 1,
-				DOF_SUPPORT: 1,
+				FEATURE_MIS: 1,
+				FEATURE_DOF: 1,
+				FEATURE_GRADIENT_BG: 0,
 				TRANSPARENT_TRAVERSALS: 5,
-				GRADIENT_BG: 0,
 			},
 
 			uniforms: {
@@ -61,6 +61,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				bgGradientTop: { value: new Color( 0x111111 ) },
 				bgGradientBottom: { value: new Color( 0x000000 ) },
+				backgroundAlpha: { value: 1.0 },
 			},
 
 			vertexShader: /* glsl */`
@@ -97,15 +98,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				uniform mat3 environmentRotation;
 				uniform float backgroundBlur;
+				uniform float backgroundAlpha;
 
-				#if GRADIENT_BG
+				#if FEATURE_GRADIENT_BG
 
 				uniform vec3 bgGradientTop;
 				uniform vec3 bgGradientBottom;
 
 				#endif
 
-				#if DOF_SUPPORT
+				#if FEATURE_DOF
 
 				uniform PhysicalCamera physicalCamera;
 
@@ -133,7 +135,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				vec3 sampleBackground( vec3 direction ) {
 
-					#if GRADIENT_BG
+					#if FEATURE_GRADIENT_BG
 
 					direction = normalize( direction + randDirection() * 0.05 );
 
@@ -295,7 +297,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 
-					#if DOF_SUPPORT
+					#if FEATURE_DOF
 					{
 
 						// depth of field
@@ -327,6 +329,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// final color
 					gl_FragColor = vec4( 0.0 );
+					gl_FragColor.a = 1.0;
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -350,10 +353,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if ( i == 0 || transmissiveRay ) {
 
 								gl_FragColor.rgb += sampleBackground( environmentRotation * rayDirection ) * throughputColor;
+								gl_FragColor.a = backgroundAlpha;
 
 							} else {
 
-								#if USE_MIS
+								#if FEATURE_MIS
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
@@ -384,6 +388,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							vec3 normalDirection = environmentRotation * rayDirection;
 							gl_FragColor.rgb = sampleBackground( rayDirection );
+							gl_FragColor.a = backgroundAlpha;
 							break;
 
 						}
@@ -538,7 +543,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
 						// direct env map sampling
-						#if USE_MIS
+						#if FEATURE_MIS
 						{
 
 							// find a sample in the environment map to include in the contribution
@@ -612,7 +617,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 
-					gl_FragColor.a = opacity;
+					gl_FragColor.a *= opacity;
 
 				}
 

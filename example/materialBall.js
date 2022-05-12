@@ -55,6 +55,8 @@ const params = {
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
+	backgroundAlpha: 1,
+	checkerboardTransparency: false,
 
 };
 
@@ -91,15 +93,16 @@ async function init() {
 	camera = new PhysicalCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 4, 2, 3 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = new PathTracingRenderer( renderer, { alpha: true } );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
-	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
+		blending: THREE.CustomBlending,
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -229,7 +232,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
 
-		ptRenderer.material.setDefine( 'USE_MIS', Number( value ) );
+		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
 		ptRenderer.reset();
 
 	} );
@@ -240,27 +243,6 @@ async function init() {
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
-
-		updateEnvBlur();
-
-	} );
-	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
@@ -279,6 +261,47 @@ async function init() {
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
+
+	} );
+
+	const envFolder = gui.addFolder( 'Environment' );
+	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
+
+		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
+
+		updateEnvBlur();
+
+	} );
+	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
+
+		if ( v ) {
+
+			document.body.classList.add( 'checkerboard' );
+
+		} else {
+
+			document.body.classList.remove( 'checkerboard' );
+
+		}
 
 	} );
 
@@ -344,7 +367,7 @@ function onResize() {
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
+	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );
@@ -406,6 +429,7 @@ function animate() {
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.backgroundBlur = params.backgroundBlur;
 	ptRenderer.material.bounces = params.bounces;
+	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 
 	camera.updateMatrixWorld();

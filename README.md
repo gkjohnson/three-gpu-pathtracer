@@ -197,7 +197,18 @@ Whether to reset the random seed to `0` when restarting the render. If true then
 ### constructor
 
 ```js
-constructor( renderer : WebGLRenderer )
+constructor( renderer : WebGLRenderer, options = { alpha: false } )
+```
+
+Takes the renderer to use for rendering a set of options:
+
+```js
+{
+	// Whether to support rendering scenes with transparent backgrounds. When transparent
+	// backgrounds are used two extra render targets are used, custom blending is performed,
+	// and PathTracingRenderer.target will change on every completed sample.
+	alpha: false,
+}
 ```
 
 ### .setSize
@@ -402,10 +413,10 @@ _extends MaterialBase_
 {
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	bounces = 3 : Number,
-	
+
 	// The physical camera parameters to use
 	physicalCamera : PhysicalCameraUniform,
-	
+
 	// Geometry and BVH information
 	bvh: MeshBVHUniformStruct,
 	normalAttribute: FloatVertexAttributeTexture,
@@ -431,6 +442,10 @@ _extends MaterialBase_
 	// The colors to use for the gradient background when enabled.
 	bgGradientTop: Color,
 	bgGradientBottom: Color,
+
+	// The transparency to render the background with. Note that the "alpha" option
+	// must be set to true on PathTracingRenderer for this field to work properly.
+	backgroundAlpha: 1.0,
 }
 ```
 
@@ -440,13 +455,14 @@ _extends MaterialBase_
 {
 
 	// Whether to use multiple importance sampling to help the image converge more quickly
-	USE_MIS = 1 : Number,
+	FEATURE_MIS = 1 : Number,
+
+	// Whether to use the "bg" gradient fields to sample for the background
+	FEATURE_GRADIENT_BG = 0 : Number
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
-	// Whether to use the "bg" gradient fields to sample for the backround
-	GRADIENT_BG = 0 : Number
 
 }
 ```

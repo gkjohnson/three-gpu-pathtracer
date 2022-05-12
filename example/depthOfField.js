@@ -54,8 +54,8 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
-	ptRenderer.material.setDefine( 'USE_MIS', 0 );
+	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
 	ptRenderer.material.bgGradientTop.set( 0x390f20 );
 	ptRenderer.material.bgGradientBottom.set( 0x151b1f );
 
@@ -247,7 +247,7 @@ function onResize() {
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
+	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );

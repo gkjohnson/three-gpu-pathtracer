@@ -16,6 +16,7 @@ import {
 	PerspectiveCamera,
 	MeshBasicMaterial,
 	sRGBEncoding,
+	CustomBlending,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -73,6 +74,8 @@ const params = {
 	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
+	backgroundAlpha: 1.0,
+	checkerboardTransparency: false,
 
 	enable: true,
 	bounces: 3,
@@ -110,18 +113,18 @@ async function init() {
 	camera = new PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 1, 0.25, 1 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = new PathTracingRenderer( renderer, { alpha: true } );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
-	ptRenderer.material.setDefine( 'USE_MIS', Number( params.multipleImportanceSampling ) );
+	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
 	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
-		transparent: true,
+		blending: CustomBlending
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -158,7 +161,7 @@ async function init() {
 	document.body.appendChild( stats.dom );
 	renderer.physicallyCorrectLights = true;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	ptRenderer.material.setDefine( 'GRADIENT_BG', 1 );
+	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	scene.background = new Color( 0x060606 );
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
@@ -234,7 +237,7 @@ function onResize() {
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.target.setSize( w * scale * dpr, h * scale * dpr );
+	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
 	ptRenderer.reset();
 
 	renderer.setSize( w, h );
@@ -261,7 +264,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
 
-		ptRenderer.material.setDefine( 'USE_MIS', Number( v ) );
+		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
 		ptRenderer.reset();
 
 	} );
@@ -313,7 +316,7 @@ function buildGui() {
 	const backgroundFolder = gui.addFolder( 'background' );
 	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
 
-		ptRenderer.material.setDefine( 'GRADIENT_BG', Number( v === 'Gradient' ) );
+		ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', Number( v === 'Gradient' ) );
 		if ( v === 'Gradient' ) {
 
 			scene.background = new Color( 0x060606 );
@@ -329,17 +332,28 @@ function buildGui() {
 	} );
 	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
 
-		ptRenderer.material.uniforms.bgGradientTop.value.set( v );
+		ptRenderer.material.bgGradientTop.set( v );
 		ptRenderer.reset();
 
 	} );
 	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
 
-		ptRenderer.material.uniforms.bgGradientBottom.value.set( v );
+		ptRenderer.material.bgGradientBottom.set( v );
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.open();
+	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( v => {
+
+		ptRenderer.material.backgroundAlpha = v;
+		ptRenderer.reset();
+
+	} );
+	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
+
+		if ( v ) document.body.classList.add( 'checkerboard' );
+		else document.body.classList.remove( 'checkerboard' );
+
+	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.add( params, 'floorEnabled' ).onChange( v => {
@@ -366,6 +380,7 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
+	floorFolder.close();
 
 }
 

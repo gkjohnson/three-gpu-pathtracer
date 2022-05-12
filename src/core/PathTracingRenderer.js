@@ -1,18 +1,41 @@
-import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { BlendMaterial } from '../materials/BlendMaterial.js';
 
 function* renderTask() {
 
-	const { _fsQuad, _renderer, target, camera, material } = this;
+	const {
+		_renderer,
+		_fsQuad,
+		_blendQuad,
+		_primaryTarget,
+		_blendTargets,
+		_alpha,
+		camera,
+		material,
+	} = this;
+
+	const blendMaterial = _blendQuad.material;
+	let [ blendTarget1, blendTarget2 ] = _blendTargets;
 
 	while ( true ) {
 
-		material.opacity = 1 / ( this.samples + 1 );
-		material.seed ++;
+		if ( _alpha ) {
 
-		const w = target.width;
-		const h = target.height;
+			blendMaterial.opacity = 1 / ( this.samples + 1 );
+			material.blending = NoBlending;
+
+		} else {
+
+			material.opacity = 1 / ( this.samples + 1 );
+			material.blending = NormalBlending;
+
+		}
+
+		const w = _primaryTarget.width;
+		const h = _primaryTarget.height;
 		material.resolution.set( w, h );
+		material.seed ++;
 
 		const tx = this.tiles.x || 1;
 		const ty = this.tiles.y || 1;
@@ -29,7 +52,7 @@ function* renderTask() {
 				const ogAutoClear = _renderer.autoClear;
 
 				// three.js renderer takes values relative to the current pixel ratio
-				_renderer.setRenderTarget( target );
+				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
 				_renderer.setScissor(
 					dprInv * Math.ceil( x * w / tx ),
@@ -43,6 +66,17 @@ function* renderTask() {
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
+				if ( _alpha ) {
+
+					blendMaterial.target1 = blendTarget1.texture;
+					blendMaterial.target2 = _primaryTarget.texture;
+
+					_renderer.setRenderTarget( blendTarget2 );
+					_blendQuad.render( _renderer );
+					_renderer.setRenderTarget( ogRenderTarget );
+
+				}
+
 				this.samples += ( 1 / totalTiles );
 
 				yield;
@@ -50,6 +84,10 @@ function* renderTask() {
 			}
 
 		}
+
+		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
+		_blendTargets[ 0 ] = blendTarget1;
+		_blendTargets[ 1 ] = blendTarget2;
 
 		this.samples = Math.round( this.samples );
 
@@ -72,43 +110,72 @@ export class PathTracingRenderer {
 
 	}
 
-	constructor( renderer ) {
+	get target() {
+
+		return this._alpha ? this._blendTargets[ 1 ] : this._primaryTarget;
+
+	}
+
+	constructor( renderer, options = {} ) {
 
 		this.camera = null;
 		this.tiles = new Vector2( 1, 1 );
-		this.target = new WebGLRenderTarget( 1, 1, {
-			format: RGBAFormat,
-			type: FloatType,
-		} );
+
 		this.samples = 0;
 		this.stableNoise = false;
 		this._renderer = renderer;
+		this._alpha = options.alpha || false;
 		this._fsQuad = new FullScreenQuad( null );
+		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
+
+		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
+			format: RGBAFormat,
+			type: FloatType,
+		} );
+		this._blendTargets = [
+			new WebGLRenderTarget( 1, 1, {
+				format: RGBAFormat,
+				type: FloatType,
+			} ),
+			new WebGLRenderTarget( 1, 1, {
+				format: RGBAFormat,
+				type: FloatType,
+			} ),
+		];
 
 	}
 
 	setSize( w, h ) {
 
-		this.target.setSize( w, h );
+		this._primaryTarget.setSize( w, h );
+		this._blendTargets[ 0 ].setSize( w, h );
+		this._blendTargets[ 1 ].setSize( w, h );
 		this.reset();
 
 	}
 
 	reset() {
 
-		const renderer = this._renderer;
-		const target = this.target;
-		const ogRenderTarget = renderer.getRenderTarget();
-		const ogClearAlpha = renderer.getClearAlpha();
-		renderer.getClearColor( ogClearColor );
+		const { _renderer, _primaryTarget, _blendTargets } = this;
+		const ogRenderTarget = _renderer.getRenderTarget();
+		const ogClearAlpha = _renderer.getClearAlpha();
+		_renderer.getClearColor( ogClearColor );
 
-		renderer.setRenderTarget( target );
-		renderer.setClearColor( 0, 0 );
-		renderer.clearColor();
+		_renderer.setRenderTarget( _primaryTarget );
+		_renderer.setClearColor( 0, 0 );
+		_renderer.clearColor();
 
-		renderer.setClearColor( ogClearColor, ogClearAlpha );
-		renderer.setRenderTarget( ogRenderTarget );
+		_renderer.setRenderTarget( _blendTargets[ 0 ] );
+		_renderer.setClearColor( 0, 0 );
+		_renderer.clearColor();
+
+		_renderer.setRenderTarget( _blendTargets[ 1 ] );
+		_renderer.setClearColor( 0, 0 );
+		_renderer.clearColor();
+
+		_renderer.setClearColor( ogClearColor, ogClearAlpha );
+		_renderer.setRenderTarget( ogRenderTarget );
 
 		this.samples = 0;
 		this._task = null;
