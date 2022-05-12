@@ -61,6 +61,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				bgGradientTop: { value: new Color( 0x111111 ) },
 				bgGradientBottom: { value: new Color( 0x000000 ) },
+				backgroundAlpha: { value: 1.0 },
 			},
 
 			vertexShader: /* glsl */`
@@ -97,6 +98,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				uniform mat3 environmentRotation;
 				uniform float backgroundBlur;
+				uniform float backgroundAlpha;
 
 				#if GRADIENT_BG
 
@@ -327,6 +329,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// final color
 					gl_FragColor = vec4( 0.0 );
+					gl_FragColor.a = 1.0;
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -350,6 +353,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if ( i == 0 || transmissiveRay ) {
 
 								gl_FragColor.rgb += sampleBackground( environmentRotation * rayDirection ) * throughputColor;
+								gl_FragColor.a = backgroundAlpha;
 
 							} else {
 
@@ -384,6 +388,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							vec3 normalDirection = environmentRotation * rayDirection;
 							gl_FragColor.rgb = sampleBackground( rayDirection );
+							gl_FragColor.a = backgroundAlpha;
 							break;
 
 						}
@@ -612,7 +617,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 
-					gl_FragColor.a = opacity;
+					gl_FragColor.a *= opacity;
 
 				}
 

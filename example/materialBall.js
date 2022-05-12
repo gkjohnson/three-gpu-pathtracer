@@ -55,6 +55,7 @@ const params = {
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
+	backgroundAlpha: 1,
 
 };
 
@@ -100,6 +101,8 @@ async function init() {
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
+		blending: THREE.CustomBlending,
+		transparent: true,
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -244,27 +247,6 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	ptFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
-
-		updateEnvBlur();
-
-	} );
-	ptFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -279,6 +261,35 @@ async function init() {
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
+
+	} );
+
+	const envFolder = gui.addFolder( 'Environment' );
+	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
+
+		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
+
+		updateEnvBlur();
+
+	} );
+	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+
+	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( () => {
+
+		ptRenderer.reset();
 
 	} );
 
@@ -406,6 +417,7 @@ function animate() {
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.backgroundBlur = params.backgroundBlur;
 	ptRenderer.material.bounces = params.bounces;
+	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 
 	camera.updateMatrixWorld();
