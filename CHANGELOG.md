@@ -14,11 +14,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `SUPPORT_DOF` no longer needs to be explicitly set and will be toggled automatically based on the bokeh size parameter.
 - Removed direct support for environment blur with addition of MIS. Instead use `BlurredEnvMapGenerator` to preblur an environment map.
 - Antialiasing jitter is now performed per ray in the shader instead of via camera position jitter for improve AA.
+- `GRADIENT_BG` define option to `FEATURE_GRADIENT_BG`
 
 ### Added
 - Support for "matte" material flag.
 - Support for Multiple Importance Sampling for the envionment map and an associated "USE_MIS" flag.
 - BlurredEnvMapGenerator to blur environment maps.
+- Support for rendering transparent backgrounds.
 
 ### Removed
 - Support for gradient environment colors. Use a DataTexture, instead.
