@@ -189,26 +189,23 @@ Number of tiles on x and y to render to. Can be used to improve the responsivene
 ### .stableNoise
 
 ```js
-stableNoise = false
+stableNoise = false : Boolean
 ```
 
 Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
 
+### .alpha
+
+```js
+alpha = false : Boolean
+```
+
+Whether to support rendering scenes with transparent backgrounds. When transparent backgrounds are used two extra render targets are used, custom blending is performed, and PathTracingRenderer.target will change on every completed sample.
+
 ### constructor
 
 ```js
-constructor( renderer : WebGLRenderer, options = { alpha: false } )
-```
-
-Takes the renderer to use for rendering a set of options:
-
-```js
-{
-	// Whether to support rendering scenes with transparent backgrounds. When transparent
-	// backgrounds are used two extra render targets are used, custom blending is performed,
-	// and PathTracingRenderer.target will change on every completed sample.
-	alpha: false,
-}
+constructor( renderer : WebGLRenderer )
 ```
 
 ### .setSize

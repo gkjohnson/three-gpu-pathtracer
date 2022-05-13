@@ -93,7 +93,8 @@ async function init() {
 	camera = new PhysicalCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 4, 2, 3 );
 
-	ptRenderer = new PathTracingRenderer( renderer, { alpha: true } );
+	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer.alpha = true;
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );

@@ -113,7 +113,8 @@ async function init() {
 	camera = new PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 1, 0.25, 1 );
 
-	ptRenderer = new PathTracingRenderer( renderer, { alpha: true } );
+	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer.alpha = true;
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );

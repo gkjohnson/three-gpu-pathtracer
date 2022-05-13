@@ -10,7 +10,7 @@ function* renderTask() {
 		_blendQuad,
 		_primaryTarget,
 		_blendTargets,
-		_alpha,
+		alpha,
 		camera,
 		material,
 	} = this;
@@ -20,7 +20,7 @@ function* renderTask() {
 
 	while ( true ) {
 
-		if ( _alpha ) {
+		if ( alpha ) {
 
 			blendMaterial.opacity = 1 / ( this.samples + 1 );
 			material.blending = NoBlending;
@@ -66,7 +66,7 @@ function* renderTask() {
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
-				if ( _alpha ) {
+				if ( alpha ) {
 
 					blendMaterial.target1 = blendTarget1.texture;
 					blendMaterial.target2 = _primaryTarget.texture;
@@ -86,8 +86,6 @@ function* renderTask() {
 		}
 
 		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
-		_blendTargets[ 0 ] = blendTarget1;
-		_blendTargets[ 1 ] = blendTarget2;
 
 		this.samples = Math.round( this.samples );
 
@@ -116,7 +114,27 @@ export class PathTracingRenderer {
 
 	}
 
-	constructor( renderer, options = {} ) {
+	set alpha( v ) {
+
+		if ( ! v ) {
+
+			this._blendTargets[ 0 ].dispose();
+			this._blendTargets[ 1 ].dispose();
+
+		}
+
+		this._alpha = v;
+		this.reset();
+
+	}
+
+	get alpha() {
+
+		return this._alpha;
+
+	}
+
+	constructor( renderer ) {
 
 		this.camera = null;
 		this.tiles = new Vector2( 1, 1 );
@@ -124,7 +142,7 @@ export class PathTracingRenderer {
 		this.samples = 0;
 		this.stableNoise = false;
 		this._renderer = renderer;
-		this._alpha = options.alpha || false;
+		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
@@ -152,6 +170,18 @@ export class PathTracingRenderer {
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );
 		this.reset();
+
+	}
+
+	dispose() {
+
+		this._primaryTarget.dispose();
+		this._blendTargets[ 0 ].dispose();
+		this._blendTargets[ 1 ].dispose();
+
+		this._fsQuad.dispose();
+		this._blendQuad.dispose();
+		this._task = null;
 
 	}
 
