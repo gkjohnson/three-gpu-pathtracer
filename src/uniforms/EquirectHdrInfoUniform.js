@@ -99,7 +99,7 @@ export class EquirectHdrInfoUniform {
 		marginalWeights.type = FloatType;
 		marginalWeights.format = RedFormat;
 		marginalWeights.minFilter = LinearFilter;
-		marginalWeights.maxFilter = LinearFilter;
+		marginalWeights.magFilter = LinearFilter;
 		marginalWeights.generateMipmaps = false;
 
 		// Stores a map of [0, 1] value -> cumulative importance column & pdf
@@ -108,13 +108,22 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.type = FloatType;
 		conditionalWeights.format = RedFormat;
 		conditionalWeights.minFilter = LinearFilter;
-		conditionalWeights.maxFilter = LinearFilter;
+		conditionalWeights.magFilter = LinearFilter;
 		conditionalWeights.generateMipmaps = false;
+
+		// store the total sum in a 1x1 tex since some android mobile devices have issues
+		// storing large values in structs.
+		const totalSumTex = new DataTexture();
+		totalSumTex.type = FloatType;
+		totalSumTex.format = RedFormat;
+		totalSumTex.minFilter = LinearFilter;
+		totalSumTex.minFilter = LinearFilter;
+		totalSumTex.generateMipmaps = false;
 
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
+		this.totalSum = totalSumTex;
 		this.map = null;
-		this.totalSum = 0;
 
 	}
 
@@ -122,6 +131,7 @@ export class EquirectHdrInfoUniform {
 
 		this.marginalWeights.dispose();
 		this.conditionalWeights.dispose();
+		this.totalSum.dispose();
 		if ( this.map ) this.map.dispose();
 
 	}
@@ -149,7 +159,7 @@ export class EquirectHdrInfoUniform {
 		const pdfMarginal = new Float32Array( height );
 		const cdfMarginal = new Float32Array( height );
 
-		let totalSum = 0.0;
+		let totalSumValue = 0.0;
 		let cumulativeWeightMarginal = 0.0;
 		for ( let y = 0; y < height; y ++ ) {
 
@@ -166,7 +176,7 @@ export class EquirectHdrInfoUniform {
 				// TODO: this should also account for the solid angle of the pixel when sampling
 				const weight = colorToLuminance( r, g, b );
 				cumulativeRowWeight += weight;
-				totalSum += weight;
+				totalSumValue += weight;
 
 				pdfConditional[ i ] = weight;
 				cdfConditional[ i ] = cumulativeRowWeight;
@@ -239,15 +249,17 @@ export class EquirectHdrInfoUniform {
 
 		this.dispose();
 
-		const { marginalWeights, conditionalWeights } = this;
+		const { marginalWeights, conditionalWeights, totalSum } = this;
 		marginalWeights.image = { width: height, height: 1, data: marginalDataArray };
 		marginalWeights.needsUpdate = true;
 
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
 
+		totalSum.image = { width: 1, height: 1, data: new Float32Array( [ totalSumValue ] ) };
+		totalSum.needsUpdate = true;
+
 		this.map = map;
-		this.totalSum = totalSum;
 
 	}
 

@@ -15,7 +15,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		sampler2D marginalWeights;
 		sampler2D conditionalWeights;
 		sampler2D map;
-		float totalSum;
+		sampler2D totalSum;
 
 	};
 
