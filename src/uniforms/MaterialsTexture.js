@@ -126,15 +126,36 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
 
 			// emission
-			floatArray[ index ++ ] = m.emissive.r;
-			floatArray[ index ++ ] = m.emissive.g;
-			floatArray[ index ++ ] = m.emissive.b;
+			if ( 'emissive' in m ) {
+
+				floatArray[ index ++ ] = m.emissive.r;
+				floatArray[ index ++ ] = m.emissive.g;
+				floatArray[ index ++ ] = m.emissive.b;
+
+			} else {
+
+				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 0.0;
+
+			}
+
 			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
 
 			// normals
 			intArray[ index ++ ] = getTexture( m, 'normalMap' );
-			floatArray[ index ++ ] = m.normalScale.x;
-			floatArray[ index ++ ] = m.normalScale.y;
+			if ( 'normalScale' in m ) {
+
+				floatArray[ index ++ ] = m.normalScale.x;
+				floatArray[ index ++ ] = m.normalScale.y;
+
+ 			} else {
+
+ 				floatArray[ index ++ ] = 1;
+ 				floatArray[ index ++ ] = 1;
+
+ 			}
+
 			index ++;
 
 			// side & matte
