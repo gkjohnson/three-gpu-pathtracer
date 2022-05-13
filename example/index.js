@@ -555,6 +555,13 @@ async function updateModel() {
 
 		}
 
+		// rotate model after so it doesn't affect the bounding sphere scale
+		if ( modelInfo.rotation ) {
+
+			model.rotation.set( ...modelInfo.rotation );
+
+		}
+
 		// center the model
 		const box = new Box3();
 		box.setFromObject( model );
@@ -569,13 +576,6 @@ async function updateModel() {
 		model.position.multiplyScalar( 1 / sphere.radius );
 
 		box.setFromObject( model );
-
-		// rotate model after so it doesn't affect the bounding sphere scale
-		if ( modelInfo.rotation ) {
-
-			model.rotation.set( ...modelInfo.rotation );
-
-		}
 
 		model.updateMatrixWorld();
 
