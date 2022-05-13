@@ -43,8 +43,8 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		const prevAlpha = renderer.getClearAlpha();
 		renderer.getClearColor( prevColor );
 
-		// resize the render target
-		const depth = textures.length;
+		// resize the render target and ensure we don't have an empty texture
+		const depth = textures.length || 1;
 		this.setSize( width, height, depth );
 		renderer.setClearColor( 0, 0 );
 		renderer.toneMapping = NoToneMapping;
