@@ -56,7 +56,7 @@ const params = {
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	backgroundAlpha: 1,
-	checkerboardTransparency: false,
+	checkerboardTransparency: true,
 
 };
 
@@ -214,6 +214,7 @@ async function init() {
 	await Promise.all( [ gltfPromise, envMapPromise ] );
 
 	document.getElementById( 'loading' ).remove();
+	document.body.classList.add( 'checkerboard' );
 
 	onResize();
 	window.addEventListener( 'resize', onResize );

@@ -75,7 +75,7 @@ const params = {
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
 	backgroundAlpha: 1.0,
-	checkerboardTransparency: false,
+	checkerboardTransparency: true,
 
 	enable: true,
 	bounces: 3,
@@ -473,6 +473,7 @@ async function updateModel() {
 
 	if ( gui ) {
 
+		document.body.classList.remove( 'checkerboard' );
 		gui.destroy();
 		gui = null;
 
@@ -619,6 +620,11 @@ async function updateModel() {
 
 		loadingModel = false;
 		renderer.domElement.style.visibility = 'visible';
+		if ( params.checkerboardTransparency ) {
+
+			document.body.classList.add( 'checkerboard' );
+
+		}
 
 		ptRenderer.reset();
 
