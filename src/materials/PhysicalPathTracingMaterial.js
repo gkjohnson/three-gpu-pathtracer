@@ -422,7 +422,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
-							rayOrigin += rayDirection * dist - faceNormal * RAY_OFFSET;
+							vec3 absPoint = abs( point );
+							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
