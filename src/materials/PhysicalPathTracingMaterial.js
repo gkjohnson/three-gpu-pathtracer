@@ -386,9 +386,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( material.matte && i == 0 ) {
 
-							vec3 normalDirection = environmentRotation * rayDirection;
-							gl_FragColor.rgb = sampleBackground( rayDirection );
-							gl_FragColor.a = backgroundAlpha;
+							gl_FragColor = vec4( 0.0 );
 							break;
 
 						}
