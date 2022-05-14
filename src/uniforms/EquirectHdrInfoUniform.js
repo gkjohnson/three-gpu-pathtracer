@@ -117,7 +117,7 @@ export class EquirectHdrInfoUniform {
 		totalSumTex.type = FloatType;
 		totalSumTex.format = RedFormat;
 		totalSumTex.minFilter = LinearFilter;
-		totalSumTex.minFilter = LinearFilter;
+		totalSumTex.magFilter = LinearFilter;
 		totalSumTex.generateMipmaps = false;
 
 		this.marginalWeights = marginalWeights;
