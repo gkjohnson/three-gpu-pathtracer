@@ -43,6 +43,8 @@ _More features and capabilities in progress!_
 
 # Use
 
+**Basic Renderer**
+
 ```js
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -61,9 +63,15 @@ ptRenderer.setSize( window.innerWidth, window.innerHeight );
 ptRenderer.camera = camera;
 ptRenderer.material = ptMaterial;
 
+// if rendering transparent background
+ptRenderer.alpha = true;
+
 // init quad for rendering to the canvas
 const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 	map: ptRenderer.target.texture,
+	
+	// if rendering transparent background
+	blending: THREE.CustomBlending,
 } ) );
 
 // ensure scene matrices are up to date
@@ -107,6 +115,21 @@ function animate() {
 	renderer.autoClear = true;
 
 }
+```
+
+**Blurred Environment Map**
+
+```js
+import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
+
+// ...
+
+const envMap = await new RGBELoader().loadAsync( envMapUrl );
+const generator = new BlurredEnvMapGenerator( renderer );
+const blurredEnvMap = generator.generate( envMap, 0.35 );
+
+// render!
+
 ```
 
 ## Dynamic Scenes
