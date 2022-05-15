@@ -119,6 +119,8 @@ function animate() {
 
 **Blurred Environment Map**
 
+Using a pre blurred envioronment map can help improve frame convergence time at the cost of sharp environment reflections. If performance is concern then multiple importance sampling can be disabled and blurred environment map used.
+
 ```js
 import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
 
