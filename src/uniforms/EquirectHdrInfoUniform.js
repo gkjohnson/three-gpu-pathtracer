@@ -138,9 +138,6 @@ export class EquirectHdrInfoUniform {
 
 	updateFrom( hdr ) {
 
-		// TODO: make sure we handle an all black condition
-		// TODO: validate the offsets we're providing in the data
-
 		// https://github.com/knightcrawler25/GLSL-PathTracer/blob/3c6fd9b6b3da47cd50c527eeb45845eef06c55c3/src/loaders/hdrloader.cpp
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
 		const map = preprocessEnvMap( hdr );
