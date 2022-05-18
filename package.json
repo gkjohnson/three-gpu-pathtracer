@@ -29,20 +29,22 @@
     "three-mesh-bvh": "^0.5.10"
   },
   "devDependencies": {
-    "concurrently": "^6.3.0",
+    "concurrently": "^6.5.1",
     "eslint": "^7.32.0",
     "eslint-config-mdcs": "^5.0.0",
     "parcel": "^2.4.0",
     "process": "^0.11.10",
     "rollup": "^2.70.0",
+    "servez": "^1.14.1",
     "three": "^0.139.2"
   },
   "peerDependencies": {
-    "xatlas-web": "^0.1.0",
-    "three": "^0.139.2"
+    "three": "^0.139.2",
+    "xatlas-web": "^0.1.0"
   },
   "scripts": {
-    "start": "concurrently \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr\"",
+    "start": "cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr",
+    "start:remote": "concurrently \"servez --ssl\" \"cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr --public-url .\"",
     "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash",
     "build": "rollup -c",
     "lint": "eslint \"./src/**/*.{js,ts}\" \"./example/*.js\"",
