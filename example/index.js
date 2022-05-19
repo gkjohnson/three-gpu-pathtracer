@@ -17,6 +17,7 @@ import {
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
+	Matrix4
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -78,6 +79,7 @@ const params = {
 
 	environmentIntensity: 3.0,
 	environmentBlur: 0.0,
+	environmentRotation: 0,
 
 	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
@@ -90,7 +92,7 @@ const params = {
 	pause: false,
 
 	floorColor: '#080808',
-	floorEnabled: true,
+	floorOpacity: 1.0,
 	floorRoughness: 0.1,
 	floorMetalness: 0.0
 
@@ -320,6 +322,12 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} ).name( 'intensity' );
+	environmentFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
+
+		ptRenderer.material.environmentRotation.setFromMatrix4( new Matrix4().makeRotationY( v ) );
+		ptRenderer.reset();
+
+	} );
 	environmentFolder.open();
 
 	const backgroundFolder = gui.addFolder( 'background' );
@@ -365,12 +373,6 @@ function buildGui() {
 	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.add( params, 'floorEnabled' ).onChange( v => {
-
-		floorPlane.material.opacity = v ? 1 : 0;
-		ptRenderer.reset();
-
-	} );
 	floorFolder.addColor( params, 'floorColor' ).onChange( v => {
 
 		floorPlane.material.color.set( v );
@@ -386,6 +388,12 @@ function buildGui() {
 	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( v => {
 
 		floorPlane.material.metalness = v;
+		ptRenderer.reset();
+
+	} );
+	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( v => {
+
+		floorPlane.material.opacity = v;
 		ptRenderer.reset();
 
 	} );
