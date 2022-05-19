@@ -22,6 +22,7 @@ On Debian or Ubuntu, run `sudo apt install build-essential`.
 
 - To install dependencies, run `npm install`
 - To start the demos run `npm start`
+- Visit "http://localhost:1234/<demo-name.html>"
 
 ## Pull Requests
 
