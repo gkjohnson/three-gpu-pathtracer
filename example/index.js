@@ -322,7 +322,7 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
+	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
 		ptRenderer.material.environmentRotation.setFromMatrix4( new Matrix4().makeRotationY( v ) );
 		ptRenderer.reset();
