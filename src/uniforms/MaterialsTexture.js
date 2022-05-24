@@ -111,18 +111,18 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = m.color.r;
 			floatArray[ index ++ ] = m.color.g;
 			floatArray[ index ++ ] = m.color.b;
-			intArray[ index ++ ] = getTexture( m, 'map' );
+			floatArray[ index ++ ] = getTexture( m, 'map' );
 
 			// metalness & roughness
 			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			intArray[ index ++ ] = textures.indexOf( m.metalnessMap );
+			floatArray[ index ++ ] = textures.indexOf( m.metalnessMap );
 			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			intArray[ index ++ ] = textures.indexOf( m.roughnessMap );
+			floatArray[ index ++ ] = textures.indexOf( m.roughnessMap );
 
 			// transmission & emissiveIntensity
 			floatArray[ index ++ ] = getField( m, 'ior', 1.0 );
 			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
+			floatArray[ index ++ ] = getTexture( m, 'transmissionMap' );
 			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
 
 			// emission
@@ -140,10 +140,10 @@ export class MaterialsTexture extends DataTexture {
 
 			}
 
-			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
+			floatArray[ index ++ ] = getTexture( m, 'emissiveMap' );
 
 			// normals
-			intArray[ index ++ ] = getTexture( m, 'normalMap' );
+			floatArray[ index ++ ] = getTexture( m, 'normalMap' );
 			if ( 'normalScale' in m ) {
 
 				floatArray[ index ++ ] = m.normalScale.x;
