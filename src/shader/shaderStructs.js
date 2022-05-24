@@ -62,22 +62,22 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		Material m;
 		m.color = s0.rgb;
-		m.map = floatBitsToInt( s0.a );
+		m.map = int( round( s0.a ) );
 
 		m.metalness = s1.r;
-		m.metalnessMap = floatBitsToInt( s1.g );
+		m.metalnessMap = int( round( s1.g ) );
 		m.roughness = s1.b;
-		m.roughnessMap = floatBitsToInt( s1.a );
+		m.roughnessMap = int( round( s1.a ) );
 
 		m.ior = s2.r;
 		m.transmission = s2.g;
-		m.transmissionMap = floatBitsToInt( s2.b );
+		m.transmissionMap = int( round( s2.b ) );
 		m.emissiveIntensity = s2.a;
 
 		m.emissive = s3.rgb;
-		m.emissiveMap = floatBitsToInt( s3.a );
+		m.emissiveMap = int( round( s3.a ) );
 
-		m.normalMap = floatBitsToInt( s4.r );
+		m.normalMap = int( round( s4.r ) );
 		m.normalScale = s4.gb;
 
 		m.opacity = s5.r;
