@@ -108,9 +108,12 @@ function animate() {
 	camera.updateMatrixWorld();
 	ptRenderer.update();
 
+	// if using alpha = true then the target texture will change every frame
+	// so we must retrieve it before render.
+	fsQuad.material.map = ptRenderer.target.texture;
+
 	// copy the current state of the path tracer to canvas to display
 	renderer.autoClear = false;
-	fsQuad.material.map = ptRenderer.target.texture;
 	fsQuad.render( renderer );
 	renderer.autoClear = true;
 
