@@ -443,6 +443,7 @@ function animate() {
 	}
 
 	renderer.autoClear = false;
+	fsQuad.material.map = ptRenderer.target.texture;
 	fsQuad.render( renderer );
 	renderer.autoClear = true;
 
