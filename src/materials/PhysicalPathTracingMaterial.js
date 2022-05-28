@@ -177,6 +177,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 							Material material = readMaterialInfo( materials, materialIndex );
 
+							// adjust the ray to the new surface
+							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+							vec3 point = rayOrigin + rayDirection * dist;
+							vec3 absPoint = abs( point );
+							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+							if ( ! material.castShadow ) {
+
+								continue;
+
+							}
+
 							// Opacity Test
 
 							// albedo
@@ -207,7 +220,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							bool useAlphaTest = alphaTest != 0.0;
 							float transmissionFactor = ( 1.0 - metalness ) * transmission;
 							if (
-								material.castShadow &&
 								transmissionFactor < rand() && ! (
 									// material sidedness
 									material.side != 0.0 && side == material.side
@@ -225,18 +237,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// only attenuate on the way in
-							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 							if ( isBelowSurface ) {
 
 								color *= albedo.rgb;
 
 							}
-
-							// adjust the ray to the new surface
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
 						} else {
 
