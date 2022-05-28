@@ -291,6 +291,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
 					vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
 
+					// Jitter the camera ray by finding a new subpixel point to point to from the camera origin
+					// This is better than just jittering the camera position since it actually results in divergent
+					// rays providing better coverage for the pixel
 					vec3 rayOrigin = ndcToRayOrigin( ndc ) + tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
 
 					vec3 rayDirection;
