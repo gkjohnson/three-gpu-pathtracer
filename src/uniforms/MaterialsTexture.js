@@ -1,7 +1,7 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 6;
-const MATERIAL_STRIDE = 6 * 4;
+const MATERIAL_PIXELS = 7;
+const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 export class MaterialsTexture extends DataTexture {
 
@@ -21,7 +21,7 @@ export class MaterialsTexture extends DataTexture {
 
 		// invert the shadow value so we default to "true" when initializing a material
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 4 * 4 + 3;
+		const index = materialIndex * MATERIAL_STRIDE + 6 * 4 + 0;
 		array[ index ] = ! cast ? 1 : 0;
 
 	}
@@ -29,7 +29,7 @@ export class MaterialsTexture extends DataTexture {
 	getCastShadow( materialIndex ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 4 * 4 + 3;
+		const index = materialIndex * MATERIAL_STRIDE + 6 * 4 + 0;
 		return ! Boolean( array[ index ] );
 
 	}
@@ -176,13 +176,18 @@ export class MaterialsTexture extends DataTexture {
 
  			}
 
-			index ++; // shadow
+			index ++;
 
 			// side & matte
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 			index ++; // side
 			index ++; // matte
+
+			index ++; // shadow
+			index ++;
+			index ++;
+			index ++;
 
 		}
 
