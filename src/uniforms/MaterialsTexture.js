@@ -159,7 +159,7 @@ export class MaterialsTexture extends DataTexture {
 
  			}
 
-			index ++;
+			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
 
 			// side & matte
 			floatArray[ index ++ ] = m.opacity;

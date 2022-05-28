@@ -187,6 +187,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
+							// alphaMap
+							if ( material.alphaMap != -1 ) {
+								albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
+							}
+
 							// transmission
 							float transmission = material.transmission;
 							if ( material.transmissionMap != - 1 ) {
@@ -399,6 +404,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							albedo *= texture2D( textures, vec3( uv, material.map ) );
 
+						}
+
+						// alphaMap
+						if ( material.alphaMap != -1 ) {
+							albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
 						}
 
 						// possibly skip this sample if it's transparent, alpha test is enabled, or we hit the wrong material side
