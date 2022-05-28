@@ -398,6 +398,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						// if we've determined that this is a shadow ray and we've hit an item with no shadow casting
+						// then skip it
 						if ( ! material.castShadow && isShadowRay ) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
