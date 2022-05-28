@@ -14,6 +14,7 @@ import {
 	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
+	OrthographicCamera,
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
@@ -81,6 +82,8 @@ const params = {
 	environmentBlur: 0.0,
 	environmentRotation: 0,
 
+	cameraProjection: 'Perspective',
+
 	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
@@ -100,10 +103,13 @@ const params = {
 
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
-let renderer, camera, ptRenderer, fsQuad, controls, scene;
+let renderer, orthoCamera, perspectiveCamera, activeCamera;
+let	ptRenderer, fsQuad, orthoControls, perspectiveControls, scene;
 let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
+
+const orthoWidth = 3;
 
 init();
 
@@ -120,12 +126,16 @@ async function init() {
 
 	scene = new Scene();
 
-	camera = new PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( - 1, 0.25, 1 );
+	const aspect = window.innerWidth / window.innerHeight;
+	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
+	perspectiveCamera.position.set( - 1, 0.25, 1 );
+
+	const orthoHeight = orthoWidth / aspect;
+	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
-	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
@@ -138,19 +148,13 @@ async function init() {
 		blending: CustomBlending
 	} ) );
 
-	controls = new OrbitControls( camera, renderer.domElement );
-	controls.update();
-	controls.addEventListener( 'change', () => {
+	perspectiveControls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	perspectiveControls.update();
+	perspectiveControls.addEventListener( 'change', resetRenderer );
 
-		if ( params.tilesX * params.tilesY !== 1.0 ) {
-
-			delaySamples = 1;
-
-		}
-
-		ptRenderer.reset();
-
-	} );
+	orthoControls = new OrbitControls( orthoCamera, renderer.domElement );
+	orthoControls.update();
+	orthoControls.addEventListener( 'change', resetRenderer );
 
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
@@ -176,6 +180,7 @@ async function init() {
 	scene.background = new Color( 0x060606 );
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
+	updateCamera( params.cameraProjection );
 	updateModel();
 	updateEnvMap();
 	onResize();
@@ -200,7 +205,7 @@ function animate() {
 
 	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
 
-		renderer.render( scene, camera );
+		renderer.render( scene, activeCamera );
 
 	}
 
@@ -213,9 +218,11 @@ function animate() {
 		ptRenderer.material.filterGlossyFactor = 0.5;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.bounces = params.bounces;
-		ptRenderer.material.physicalCamera.updateFrom( camera );
+		ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 
-		camera.updateMatrixWorld();
+		activeCamera.updateMatrixWorld();
+
+
 
 		if ( ! params.pause || ptRenderer.samples < 1 ) {
 
@@ -241,6 +248,18 @@ function animate() {
 
 }
 
+function resetRenderer() {
+
+	if ( params.tilesX * params.tilesY !== 1.0 ) {
+
+		delaySamples = 1;
+
+	}
+
+	ptRenderer.reset();
+
+}
+
 function onResize() {
 
 	const w = window.innerWidth;
@@ -253,8 +272,15 @@ function onResize() {
 
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
-	camera.aspect = w / h;
-	camera.updateProjectionMatrix();
+
+	const aspect = w / h;
+	perspectiveCamera.aspect = aspect;
+	perspectiveCamera.updateProjectionMatrix();
+
+	const orthoHeight = orthoWidth / aspect;
+	orthoCamera.top = orthoHeight / 2;
+	orthoCamera.bottom = orthoHeight / - 2;
+	orthoCamera.updateProjectionMatrix();
 
 }
 
@@ -305,6 +331,11 @@ function buildGui() {
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
 		ptRenderer.tiles.y = v;
+
+	} );
+	resolutionFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
+
+		updateCamera( v );
 
 	} );
 	resolutionFolder.open();
@@ -432,6 +463,39 @@ function updateEnvBlur() {
 		scene.background = blurredEnvMap;
 
 	}
+
+}
+
+
+function switchControls( src, dst ) {
+
+	dst.object.position.copy( src.object.position );
+	dst.target.copy( dst.target );
+	dst.zoom = src.zoom;
+	dst.enabled = true;
+	src.enabled = false;
+	dst.update();
+
+}
+
+
+function updateCamera( cameraProjection ) {
+
+	if ( cameraProjection === "Perspective" ) {
+
+		activeCamera = perspectiveCamera;
+		switchControls( orthoControls, perspectiveControls );
+
+	} else {
+
+		activeCamera = orthoCamera;
+		switchControls( perspectiveControls, orthoControls );
+
+	}
+
+	ptRenderer.camera = activeCamera;
+
+	resetRenderer();
 
 }
 

@@ -50,6 +50,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
+				isOrthographicCamera: { value: true },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
 				environmentRotation: { value: new Matrix3() },
@@ -117,6 +118,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int bounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
+				uniform bool isOrthographicCamera;
 				uniform sampler2D normalAttribute;
 				uniform sampler2D tangentAttribute;
 				uniform sampler2D uvAttribute;
@@ -269,6 +271,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
+				void ndcToCameraRayOrthographic(
+					vec2 coord, mat4 cameraWorld, mat4 invProjectionMatrix,
+					out vec3 rayOrigin, out vec3 rayDirection
+				) {
+
+					vec4 rayOrigin4 = cameraWorldMatrix * invProjectionMatrix * vec4( coord, - 1.0, 1.0 );
+					vec4 rayDirection4 = cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 );
+
+					rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
+					rayDirection = normalize(rayDirection4.xyz);
+
+				}
+
 				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
@@ -276,24 +291,33 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// get [-1, 1] normalized device coordinates
 					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
 					vec3 rayOrigin, rayDirection;
-					ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
 
-					// Jitter the camera ray by finding a new subpixel point to point to from the camera origin
-					// This is better than just jittering the camera position since it actually results in divergent
-					// rays providing better coverage for the pixel
-					{
+					if ( isOrthographicCamera ) {
 
-						// TODO: the complexity here could be improved
-						vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
-						vec3 ss00, ss01, ss10, temp;
-						ndcToCameraRay( vec2( - 1.0, - 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss00, temp );
-						ndcToCameraRay( vec2( - 1.0, 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss01, temp );
-						ndcToCameraRay( vec2( 1.0, - 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss10, temp );
+						ndcToCameraRayOrthographic( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
 
-						vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
-						vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
-						rayOrigin += tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
-						rayDirection = normalize( rayOrigin - cameraOrigin );
+					} else {
+
+						ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
+
+						// Jitter the camera ray by finding a new subpixel point to point to from the camera origin
+						// This is better than just jittering the camera position since it actually results in divergent
+						// rays providing better coverage for the pixel
+						{
+
+							// TODO: the complexity here could be improved
+							vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+							vec3 ss00, ss01, ss10, temp;
+							ndcToCameraRay( vec2( - 1.0, - 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss00, temp );
+							ndcToCameraRay( vec2( - 1.0, 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss01, temp );
+							ndcToCameraRay( vec2( 1.0, - 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss10, temp );
+
+							vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
+							vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
+							rayOrigin += tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
+							rayDirection = normalize( rayOrigin - cameraOrigin );
+
+						}
 
 					}
 
