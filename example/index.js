@@ -109,7 +109,7 @@ let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
 
-const orthoWidth = 3;
+const orthoWidth = 2;
 
 init();
 

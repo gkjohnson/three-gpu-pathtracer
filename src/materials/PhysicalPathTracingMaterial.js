@@ -271,17 +271,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				void ndcToCameraRayOrthographic(
-					vec2 coord, mat4 cameraWorld, mat4 invProjectionMatrix,
-					out vec3 rayOrigin, out vec3 rayDirection
-				) {
-
+				vec3 ndcToRayOrigin( vec2 coord )
+				{
 					vec4 rayOrigin4 = cameraWorldMatrix * invProjectionMatrix * vec4( coord, - 1.0, 1.0 );
-					vec4 rayDirection4 = cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 );
-
-					rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
-					rayDirection = normalize(rayDirection4.xyz);
-
+					return rayOrigin4.xyz / rayOrigin4.w;
 				}
 
 				void main() {
@@ -290,34 +283,27 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// get [-1, 1] normalized device coordinates
 					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
-					vec3 rayOrigin, rayDirection;
+
+					vec3 ss00 = ndcToRayOrigin( vec2( - 1.0, - 1.0 ) );
+					vec3 ss01 = ndcToRayOrigin( vec2( - 1.0, 1.0 ) );
+					vec3 ss10 = ndcToRayOrigin( vec2( 1.0, - 1.0 ) );
+
+					vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
+					vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
+
+					vec3 rayOrigin = ndcToRayOrigin( ndc ) + tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
+
+					vec3 rayDirection;
 
 					if ( isOrthographicCamera ) {
 
-						ndcToCameraRayOrthographic( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
+						rayDirection = (cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 )).xyz;
+						rayDirection = normalize(rayDirection);
 
 					} else {
 
-						ndcToCameraRay( ndc, cameraWorldMatrix, invProjectionMatrix, rayOrigin, rayDirection );
-
-						// Jitter the camera ray by finding a new subpixel point to point to from the camera origin
-						// This is better than just jittering the camera position since it actually results in divergent
-						// rays providing better coverage for the pixel
-						{
-
-							// TODO: the complexity here could be improved
-							vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
-							vec3 ss00, ss01, ss10, temp;
-							ndcToCameraRay( vec2( - 1.0, - 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss00, temp );
-							ndcToCameraRay( vec2( - 1.0, 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss01, temp );
-							ndcToCameraRay( vec2( 1.0, - 1.0 ), cameraWorldMatrix, invProjectionMatrix, ss10, temp );
-
-							vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
-							vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
-							rayOrigin += tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
-							rayDirection = normalize( rayOrigin - cameraOrigin );
-
-						}
+						vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+						rayDirection = normalize( rayOrigin - cameraOrigin );
 
 					}
 
