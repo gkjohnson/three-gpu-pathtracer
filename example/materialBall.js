@@ -9,7 +9,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, materials;
-let envMap, envMapGenerator;
+let envMap, envMapGenerator, scene;
 let samplesEl;
 const params = {
 
@@ -88,6 +88,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PhysicalCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -112,6 +113,8 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
+
+	scene = new THREE.Scene();
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -194,6 +197,8 @@ async function init() {
 		.then( result => {
 
 			sceneInfo = result;
+
+			scene.add( result.scene );
 
 			const { bvh, textures, materials } = result;
 			const geometry = bvh.geometry;
@@ -389,6 +394,7 @@ function updateEnvBlur() {
 
 	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
 	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+	scene.environment = blurredTex;
 	ptRenderer.reset();
 
 }
@@ -436,9 +442,25 @@ function animate() {
 
 	camera.updateMatrixWorld();
 
+	if ( params.backgroundAlpha < 1.0 ) {
+
+		scene.background = null;
+
+	} else {
+
+		scene.background = scene.environment;
+
+	}
+
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
 		ptRenderer.update();
+
+	}
+
+	if ( ptRenderer.samples < 1 ) {
+
+		renderer.render( scene, camera );
 
 	}
 

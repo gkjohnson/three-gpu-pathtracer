@@ -315,6 +315,12 @@ function animate() {
 
 		}
 
+		if ( ptRenderer.samples < 1 ) {
+
+			renderer.render( scene, camera );
+
+		}
+
 		renderer.autoClear = false;
 		fsQuad.render( renderer );
 		renderer.autoClear = true;
