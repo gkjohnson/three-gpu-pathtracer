@@ -24,6 +24,7 @@ function* renderTask() {
 
 			blendMaterial.opacity = 1 / ( this.samples + 1 );
 			material.blending = NoBlending;
+			material.opacity = 1;
 
 		} else {
 
