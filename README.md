@@ -113,9 +113,7 @@ function animate() {
 	fsQuad.material.map = ptRenderer.target.texture;
 
 	// copy the current state of the path tracer to canvas to display
-	renderer.autoClear = false;
 	fsQuad.render( renderer );
-	renderer.autoClear = true;
 
 }
 ```
