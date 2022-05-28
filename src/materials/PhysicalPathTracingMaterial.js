@@ -154,7 +154,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				}
 
 				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
-				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, out vec3 color ) {
+				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, bool isShadowRay, out vec3 color ) {
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -184,7 +184,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
-							if ( ! material.castShadow ) {
+							if ( ! material.castShadow && isShadowRay ) {
 
 								continue;
 
@@ -351,6 +351,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 throughputColor = vec3( 1.0 );
 					SampleRec sampleRec;
 					int i;
+					bool isShadowRay = false;
 
 					for ( i = 0; i < bounces; i ++ ) {
 
@@ -394,6 +395,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							gl_FragColor = vec4( 0.0 );
 							break;
+
+						}
+
+						if ( ! material.castShadow && isShadowRay ) {
+
+							vec3 point = rayOrigin + rayDirection * dist;
+							vec3 absPoint = abs( point );
+							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
+
+							continue;
 
 						}
 
@@ -537,6 +549,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, surfaceRec );
 
+						float specRayPdf = specularPDF( outgoing, sampleRec.direction, surfaceRec );
+						isShadowRay = sampleRec.specularPdf < rand();
+
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
 						// error as values increase.
@@ -572,7 +587,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
