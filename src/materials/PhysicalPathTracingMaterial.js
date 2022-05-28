@@ -207,6 +207,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							bool useAlphaTest = alphaTest != 0.0;
 							float transmissionFactor = ( 1.0 - metalness ) * transmission;
 							if (
+								material.castShadow &&
 								transmissionFactor < rand() && ! (
 									// material sidedness
 									material.side != 0.0 && side == material.side

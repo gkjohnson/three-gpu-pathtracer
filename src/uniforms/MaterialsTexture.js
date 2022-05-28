@@ -17,6 +17,23 @@ export class MaterialsTexture extends DataTexture {
 
 	}
 
+	setCastShadow( materialIndex, cast ) {
+
+		// invert the shadow value so we default to "true" when initializing a material
+		const array = this.image.data;
+		const index = materialIndex * MATERIAL_STRIDE + 4 * 4 + 3;
+		array[ index ] = ! cast ? 1 : 0;
+
+	}
+
+	getCastShadow( materialIndex ) {
+
+		const array = this.image.data;
+		const index = materialIndex * MATERIAL_STRIDE + 4 * 4 + 3;
+		return ! Boolean( array[ index ] );
+
+	}
+
 	setSide( materialIndex, side ) {
 
 		const array = this.image.data;
@@ -159,7 +176,7 @@ export class MaterialsTexture extends DataTexture {
 
  			}
 
-			index ++;
+			index ++; // shadow
 
 			// side & matte
 			floatArray[ index ++ ] = m.opacity;

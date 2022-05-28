@@ -41,6 +41,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		int normalMap;
 		vec2 normalScale;
 
+		bool castShadow;
 		float opacity;
 		float alphaTest;
 
@@ -79,6 +80,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		m.normalMap = int( round( s4.r ) );
 		m.normalScale = s4.gb;
+		m.castShadow = ! bool( s4.a );
 
 		m.opacity = s5.r;
 		m.alphaTest = s5.g;
