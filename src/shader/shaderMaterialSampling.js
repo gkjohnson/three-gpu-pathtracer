@@ -16,6 +16,7 @@ struct SurfaceRec {
 };
 
 struct SampleRec {
+	float specularPdf;
 	float pdf;
 	vec3 direction;
 	vec3 color;
@@ -213,7 +214,7 @@ vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 }
 
-float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec surf ) {
+float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec surf, out float specularPdf ) {
 
 	float ior = surf.ior;
 	float metalness = surf.metalness;
@@ -254,6 +255,9 @@ float bsdfPdf( vec3 wo, vec3 wi, SurfaceRec surf ) {
 		+ spdf * ( 1.0 - transmission ) * diffSpecularProb
 		+ dpdf * ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
 
+	// retrieve specular rays for the shadows flag
+	specularPdf = spdf * transmission * transSpecularProb + spdf * ( 1.0 - transmission ) * diffSpecularProb;
+
 	return pdf;
 
 }
@@ -280,8 +284,9 @@ vec3 bsdfColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 float bsdfResult( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
+	float specularPdf;
 	color = bsdfColor( wo, wi, surf );
-	return bsdfPdf( wo, wi, surf );
+	return bsdfPdf( wo, wi, surf, specularPdf );
 
 }
 
@@ -332,7 +337,7 @@ SampleRec bsdfSample( vec3 wo, SurfaceRec surf ) {
 
 	}
 
-	result.pdf = bsdfPdf( wo, result.direction, surf );
+	result.pdf = bsdfPdf( wo, result.direction, surf, result.specularPdf );
 	result.color = bsdfColor( wo, result.direction, surf );
 	return result;
 

@@ -8,7 +8,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad;
+let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene;
 let samplesEl;
 const mouse = new THREE.Vector2();
 const focusPoint = new THREE.Vector3();
@@ -50,6 +50,8 @@ async function init() {
 	camera.focusDistance = 1.1878;
 	focusPoint.set( - 0.5253353217832674, 0.3031596413506029, 0.000777794185259223 );
 
+	scene = new THREE.Scene();
+
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
@@ -61,6 +63,7 @@ async function init() {
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
+		blending: THREE.CustomBlending,
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -84,6 +87,8 @@ async function init() {
 				ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 				generator.dispose();
 				texture.dispose();
+
+				scene.environment = blurredTex;
 
 				resolve();
 
@@ -137,6 +142,8 @@ async function init() {
 		.then( result => {
 
 			sceneInfo = result;
+
+			scene.add( result.scene );
 
 			const { bvh, textures, materials } = result;
 			const geometry = bvh.geometry;
@@ -285,6 +292,12 @@ function animate() {
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
 		ptRenderer.update();
+
+	}
+
+	if ( ptRenderer.samples < 1 ) {
+
+		renderer.render( scene, camera );
 
 	}
 
