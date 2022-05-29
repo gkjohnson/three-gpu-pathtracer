@@ -271,8 +271,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				vec3 ndcToRayOrigin( vec2 coord )
-				{
+				vec3 ndcToRayOrigin( vec2 coord ) {
+
 					vec4 rayOrigin4 = cameraWorldMatrix * invProjectionMatrix * vec4( coord, - 1.0, 1.0 );
 					return rayOrigin4.xyz / rayOrigin4.w;
 				}
@@ -300,8 +300,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					if ( isOrthographicCamera ) {
 
-						rayDirection = (cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 )).xyz;
-						rayDirection = normalize(rayDirection);
+						rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
+						rayDirection = normalize( rayDirection );
 
 					} else {
 

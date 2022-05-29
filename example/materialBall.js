@@ -7,10 +7,15 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { OrthographicCamera } from "three";
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, materials;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
+let perspectiveCamera, orthoCamera;
 let envMap, envMapGenerator;
 let samplesEl;
+
+const orthoWidth = 5;
+
 const params = {
 
 	material1: {
@@ -57,7 +62,7 @@ const params = {
 	tiles: 1,
 	backgroundAlpha: 1,
 	checkerboardTransparency: true,
-
+	cameraProjection: 'Perspective',
 };
 
 if ( window.location.hash.includes( 'transmission' ) ) {
@@ -90,12 +95,16 @@ async function init() {
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	camera = new PhysicalCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( - 4, 2, 3 );
+	const aspect = window.innerWidth / window.innerHeight;
+	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
+	perspectiveCamera.position.set( - 4, 2, 3 );
+
+	const orthoHeight = orthoWidth / aspect;
+	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera.position.set( - 4, 2, 3 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
-	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
@@ -106,7 +115,7 @@ async function init() {
 		blending: THREE.CustomBlending,
 	} ) );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
 		ptRenderer.reset();
@@ -218,8 +227,10 @@ async function init() {
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
-
 	const gui = new GUI();
+
+	updateCamera( params.cameraProjection );
+
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
@@ -308,21 +319,26 @@ async function init() {
 	} );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( reset );
-	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
+	cameraFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
-		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
+		updateCamera( v );
+
+	} );
+	cameraFolder.add( perspectiveCamera, 'focusDistance', 1, 100 ).onChange( reset );
+	cameraFolder.add( perspectiveCamera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
+
+		perspectiveCamera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
 		this.updateDisplay();
 		reset();
 
 	} );
-	cameraFolder.add( camera, 'apertureRotation', 0, 12.5 ).onChange( reset );
-	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 10.0 ).onChange( reset );
-	cameraFolder.add( camera, 'bokehSize', 0, 50 ).onChange( reset ).listen();
-	cameraFolder.add( camera, 'fStop', 0.3, 20 ).onChange( reset ).listen();
-	cameraFolder.add( camera, 'fov', 25, 100 ).onChange( () => {
+	cameraFolder.add( perspectiveCamera, 'apertureRotation', 0, 12.5 ).onChange( reset );
+	cameraFolder.add( perspectiveCamera, 'anamorphicRatio', 0.1, 10.0 ).onChange( reset );
+	cameraFolder.add( perspectiveCamera, 'bokehSize', 0, 50 ).onChange( reset ).listen();
+	cameraFolder.add( perspectiveCamera, 'fStop', 0.3, 20 ).onChange( reset ).listen();
+	cameraFolder.add( perspectiveCamera, 'fov', 25, 100 ).onChange( () => {
 
-		camera.updateProjectionMatrix();
+		perspectiveCamera.updateProjectionMatrix();
 		reset();
 
 	} ).listen();
@@ -374,8 +390,16 @@ function onResize() {
 
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
-	camera.aspect = w / h;
-	camera.updateProjectionMatrix();
+
+	const aspect = w / h;
+
+	perspectiveCamera.aspect = aspect;
+	perspectiveCamera.updateProjectionMatrix();
+
+	const orthoHeight = orthoWidth / aspect;
+	orthoCamera.top = orthoHeight / 2;
+	orthoCamera.bottom = orthoHeight / - 2;
+	orthoCamera.updateProjectionMatrix();
 
 }
 
@@ -390,6 +414,39 @@ function updateEnvBlur() {
 	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
 	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 	ptRenderer.reset();
+
+}
+
+function updateCamera( cameraProjection ) {
+
+	if ( cameraProjection === "Perspective" ) {
+
+		if ( activeCamera ) {
+
+			perspectiveCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = perspectiveCamera;
+
+	} else {
+
+		if ( activeCamera ) {
+
+			orthoCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = orthoCamera;
+
+	}
+
+	controls.object = activeCamera;
+	ptRenderer.camera = activeCamera;
+
+	controls.update();
+
+	reset();
 
 }
 
@@ -432,9 +489,9 @@ function animate() {
 	ptRenderer.material.backgroundBlur = params.backgroundBlur;
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
-	ptRenderer.material.physicalCamera.updateFrom( camera );
+	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 
-	camera.updateMatrixWorld();
+	activeCamera.updateMatrixWorld();
 
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
