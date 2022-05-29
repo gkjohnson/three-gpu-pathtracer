@@ -104,7 +104,7 @@ const params = {
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
-let	ptRenderer, fsQuad, orthoControls, perspectiveControls, scene;
+let	ptRenderer, fsQuad, controls, scene;
 let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
@@ -148,13 +148,8 @@ async function init() {
 		blending: CustomBlending
 	} ) );
 
-	perspectiveControls = new OrbitControls( perspectiveCamera, renderer.domElement );
-	perspectiveControls.update();
-	perspectiveControls.addEventListener( 'change', resetRenderer );
-
-	orthoControls = new OrbitControls( orthoCamera, renderer.domElement );
-	orthoControls.update();
-	orthoControls.addEventListener( 'change', resetRenderer );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls.addEventListener( 'change', resetRenderer );
 
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
@@ -466,34 +461,34 @@ function updateEnvBlur() {
 
 }
 
-
-function switchControls( src, dst ) {
-
-	dst.object.position.copy( src.object.position );
-	dst.target.copy( dst.target );
-	dst.zoom = src.zoom;
-	dst.enabled = true;
-	src.enabled = false;
-	dst.update();
-
-}
-
-
 function updateCamera( cameraProjection ) {
 
 	if ( cameraProjection === "Perspective" ) {
 
+		if ( activeCamera ) {
+
+			perspectiveCamera.position.copy( activeCamera.position );
+
+		}
+
 		activeCamera = perspectiveCamera;
-		switchControls( orthoControls, perspectiveControls );
 
 	} else {
 
+		if ( activeCamera ) {
+
+			orthoCamera.position.copy( activeCamera.position );
+
+		}
+
 		activeCamera = orthoCamera;
-		switchControls( perspectiveControls, orthoControls );
 
 	}
 
+	controls.object = activeCamera;
 	ptRenderer.camera = activeCamera;
+
+	controls.update();
 
 	resetRenderer();
 
