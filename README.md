@@ -69,7 +69,7 @@ ptRenderer.alpha = true;
 // init quad for rendering to the canvas
 const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 	map: ptRenderer.target.texture,
-	
+
 	// if rendering transparent background
 	blending: THREE.CustomBlending,
 } ) );
@@ -113,9 +113,7 @@ function animate() {
 	fsQuad.material.map = ptRenderer.target.texture;
 
 	// copy the current state of the path tracer to canvas to display
-	renderer.autoClear = false;
 	fsQuad.render( renderer );
-	renderer.autoClear = true;
 
 }
 ```
@@ -544,6 +542,14 @@ setMatte( index : Number, matte : Boolean ) : void
 ```
 
 Sets whether or not the material of the given index is matte or not. When "true" the background is rendered in place of the material.
+
+### .setCastShadow
+
+```js
+setCastShadow( index : Number, enabled : Boolean ) : void
+```
+
+Sets whether or not the material of the given index will cast shadows. When "false" materials will not cast shadows on diffuse surfaces but will still be reflected. This is a good setting for lighting enclosed interiors with environment lighting.
 
 ### .updateFrom
 

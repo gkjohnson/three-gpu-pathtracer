@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Textures not working correctly on Pixel 6 due to an issue with `floatBitsToInt`.
 - `PathTracingRenderer.alpha` not being able to be changed after rendering.
 
+### Added
+- Support for material alpha map.
+- Ability to disable casting of shadows.
+- Support for rendering with Orthographic cameras.
+
 ## [0.0.3] - 2022-05-22
 ### Fixed
 - Some black artifacts when rendering with depth of field.

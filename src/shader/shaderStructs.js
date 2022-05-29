@@ -41,6 +41,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		int normalMap;
 		vec2 normalScale;
 
+		bool castShadow;
 		float opacity;
 		float alphaTest;
 
@@ -51,7 +52,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 6u;
+		uint i = index * 7u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -59,6 +60,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s3 = texelFetch1D( tex, i + 3u );
 		vec4 s4 = texelFetch1D( tex, i + 4u );
 		vec4 s5 = texelFetch1D( tex, i + 5u );
+		vec4 s6 = texelFetch1D( tex, i + 6u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -84,6 +86,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.alphaTest = s5.g;
 		m.side = s5.b;
 		m.matte = bool( s5.a );
+
+		m.castShadow = ! bool( s6.r );
 
 		return m;
 

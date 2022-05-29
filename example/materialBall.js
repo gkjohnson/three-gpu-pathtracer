@@ -11,7 +11,7 @@ import { OrthographicCamera } from "three";
 
 let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
 let perspectiveCamera, orthoCamera;
-let envMap, envMapGenerator;
+let envMap, envMapGenerator, scene;
 let samplesEl;
 
 const orthoWidth = 5;
@@ -28,6 +28,7 @@ const params = {
 		transmission: 0.0,
 		opacity: 1.0,
 		matte: false,
+		castShadow: true,
 	},
 	material2: {
 		color: '#db7157',
@@ -39,12 +40,14 @@ const params = {
 		ior: 1.495,
 		opacity: 1.0,
 		matte: false,
+		castShadow: true,
 	},
 	material3: {
 		color: '#000000',
 		roughness: 0.01,
 		metalness: 0.05,
 		matte: false,
+		castShadow: true,
 	},
 
 	multipleImportanceSampling: true,
@@ -93,6 +96,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
@@ -121,6 +125,8 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
+
+	scene = new THREE.Scene();
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -203,6 +209,8 @@ async function init() {
 		.then( result => {
 
 			sceneInfo = result;
+
+			scene.add( result.scene );
 
 			const { bvh, textures, materials } = result;
 			const geometry = bvh.geometry;
@@ -353,6 +361,7 @@ async function init() {
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'matte' ).onChange( reset );
+	matFolder1.add( params.material1, 'castShadow' ).onChange( reset );
 	matFolder1.close();
 
 	const matFolder2 = gui.addFolder( 'Ball Material' );
@@ -365,6 +374,7 @@ async function init() {
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'matte' ).onChange( reset );
+	matFolder2.add( params.material2, 'castShadow' ).onChange( reset );
 	matFolder2.close();
 
 	const matFolder3 = gui.addFolder( 'Floor Material' );
@@ -372,6 +382,7 @@ async function init() {
 	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'matte' ).onChange( reset );
+	matFolder3.add( params.material3, 'castShadow' ).onChange( reset );
 	matFolder3.close();
 
 	animate();
@@ -413,6 +424,7 @@ function updateEnvBlur() {
 
 	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
 	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+	scene.environment = blurredTex;
 	ptRenderer.reset();
 
 }
@@ -483,6 +495,9 @@ function animate() {
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
 	ptRenderer.material.materials.setMatte( 1, params.material2.matte );
 	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
+	ptRenderer.material.materials.setCastShadow( 0, params.material1.castShadow );
+	ptRenderer.material.materials.setCastShadow( 1, params.material2.castShadow );
+	ptRenderer.material.materials.setCastShadow( 2, params.material3.castShadow );
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
@@ -493,9 +508,25 @@ function animate() {
 
 	activeCamera.updateMatrixWorld();
 
+	if ( params.backgroundAlpha < 1.0 ) {
+
+		scene.background = null;
+
+	} else {
+
+		scene.background = scene.environment;
+
+	}
+
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
 		ptRenderer.update();
+
+	}
+
+	if ( ptRenderer.samples < 1 ) {
+
+		renderer.render( scene, camera );
 
 	}
 
