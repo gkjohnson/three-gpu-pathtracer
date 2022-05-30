@@ -104,7 +104,7 @@ const params = {
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
-let	ptRenderer, fsQuad, controls, scene;
+let ptRenderer, fsQuad, controls, scene;
 let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;

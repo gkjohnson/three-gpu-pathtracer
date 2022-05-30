@@ -7,7 +7,6 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { OrthographicCamera } from "three";
 
 let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
 let perspectiveCamera, orthoCamera;
@@ -104,7 +103,7 @@ async function init() {
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
 	const orthoHeight = orthoWidth / aspect;
-	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 4, 2, 3 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
@@ -526,7 +525,7 @@ function animate() {
 
 	if ( ptRenderer.samples < 1 ) {
 
-		renderer.render( scene, camera );
+		renderer.render( scene, activeCamera );
 
 	}
 
