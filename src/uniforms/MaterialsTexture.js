@@ -1,6 +1,6 @@
-import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
+import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, Matrix3 } from 'three';
 
-const MATERIAL_PIXELS = 7;
+const MATERIAL_PIXELS = 9;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 export class MaterialsTexture extends DataTexture {
@@ -187,6 +187,27 @@ export class MaterialsTexture extends DataTexture {
 			index ++; // shadow
 			index ++;
 			index ++;
+			index ++;
+
+			//initialize to identity
+			let elementsInRowOrder = new Matrix3().transpose().elements;
+
+			if ( m.map ) {
+
+				m.map.matrix.transposeIntoArray( elementsInRowOrder );
+
+
+			}
+
+			//first row
+			floatArray[ index ++ ] = elementsInRowOrder[ 0 ];
+			floatArray[ index ++ ] = elementsInRowOrder[ 1 ];
+			floatArray[ index ++ ] = elementsInRowOrder[ 2 ];
+			index ++;
+			//second row
+			floatArray[ index ++ ] = elementsInRowOrder[ 3 ];
+			floatArray[ index ++ ] = elementsInRowOrder[ 4 ];
+			floatArray[ index ++ ] = elementsInRowOrder[ 5 ];
 			index ++;
 
 		}
