@@ -195,8 +195,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// albedo
 							vec4 albedo = vec4( material.color, material.opacity );
 							if ( material.map != - 1 ) {
-
-								albedo *= texture2D( textures, vec3( uv, material.map ) );
+								vec3 uvPrime =  fract(material.matTransform * vec3(uv, 1));
+								albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 
 							}
 
@@ -416,9 +416,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
-
-							albedo *= texture2D( textures, vec3( uv, material.map ) );
-
+							vec3 uvPrime =  fract(material.matTransform * vec3(uv, 1));
+							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
 
 						// possibly skip this sample if it's transparent, alpha test is enabled, or we hit the wrong material side
