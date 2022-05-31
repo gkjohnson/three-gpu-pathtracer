@@ -7,6 +7,7 @@ import {
 	RepeatWrapping,
 	LinearFilter,
 	NoToneMapping,
+	Matrix3
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
@@ -54,11 +55,21 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
 			const texture = textures[ i ];
+			//save texture uv transform
+			texture.updateMatrix();
+			const uvTranform = texture.matrix;
+			texture.matrixAutoUpdate = false;
+			texture.matrix = new Matrix3();
+
 			fsQuad.material.map = texture;
 			fsQuad.material.transparent = true;
 
 			renderer.setRenderTarget( this, i );
 			fsQuad.render( renderer );
+
+			//restore uv tranform
+			texture.matrix = uvTranform;
+			texture.matrixAutoUpdate = true;
 
 		}
 
