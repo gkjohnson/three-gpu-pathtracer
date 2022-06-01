@@ -48,6 +48,9 @@ function* renderTask() {
 
 				material.cameraWorldMatrix.copy( camera.matrixWorld );
 				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
+				// An orthographic projection matrix will always have the bottom right element == 1
+				// And a perspective projection matrix will always have the bottom right element == 0
+				material.isOrthographicCamera = camera.projectionMatrix.elements[ 15 ] > 0;
 
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
