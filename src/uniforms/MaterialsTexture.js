@@ -103,6 +103,42 @@ export class MaterialsTexture extends DataTexture {
 
 		}
 
+		/**
+		 *
+		 * @param {Object} material
+		 * @param {string} textureKey
+		 * @param {Float32Array} array
+		 * @param {number} offset
+		 * @returns {8} number of floats written to array
+		 */
+		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
+
+			// initialize to identity
+			let elements = new Matrix3().elements;
+
+			if ( material[ textureKey ] && material[ textureKey ].isTexture ) {
+
+				material[ textureKey ].matrix.toArray( elements );
+
+			}
+
+			let i = 0;
+
+			// first row
+			array[ offset + i ++ ] = elements[ 0 ];
+			array[ offset + i ++ ] = elements[ 3 ];
+			array[ offset + i ++ ] = elements[ 6 ];
+			i ++;
+			// second row
+			array[ offset + i ++ ] = elements[ 1 ];
+			array[ offset + i ++ ] = elements[ 4 ];
+			array[ offset + i ++ ] = elements[ 7 ];
+			i ++;
+
+			return 8;
+
+		}
+
 		let index = 0;
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
@@ -189,26 +225,9 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 			index ++;
 
-			//initialize to identity
-			let elementsInRowOrder = new Matrix3().transpose().elements;
+			// map texture transform
+			index += writeTextureMatrixToArray( m, "map", floatArray, index );
 
-			if ( m.map ) {
-
-				m.map.matrix.transposeIntoArray( elementsInRowOrder );
-
-
-			}
-
-			//first row
-			floatArray[ index ++ ] = elementsInRowOrder[ 0 ];
-			floatArray[ index ++ ] = elementsInRowOrder[ 1 ];
-			floatArray[ index ++ ] = elementsInRowOrder[ 2 ];
-			index ++;
-			//second row
-			floatArray[ index ++ ] = elementsInRowOrder[ 3 ];
-			floatArray[ index ++ ] = elementsInRowOrder[ 4 ];
-			floatArray[ index ++ ] = elementsInRowOrder[ 5 ];
-			index ++;
 
 		}
 
