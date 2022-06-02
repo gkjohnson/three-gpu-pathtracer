@@ -195,7 +195,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// albedo
 							vec4 albedo = vec4( material.color, material.opacity );
 							if ( material.map != - 1 ) {
-								vec3 uvPrime =  fract(material.matTransform * vec3(uv, 1));
+								vec3 uvPrime =  material.matTransform * vec3(uv, 1);
 								albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 
 							}
@@ -416,7 +416,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
-							vec3 uvPrime =  fract(material.matTransform * vec3(uv, 1));
+							vec3 uvPrime =  material.matTransform * vec3(uv, 1);
 							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
 
