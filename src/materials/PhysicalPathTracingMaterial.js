@@ -212,8 +212,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// metalness
 							float metalness = material.metalness;
 							if ( material.metalnessMap != - 1 ) {
-								uvPrime =  material.metalnessTransform * vec3(uv, 1);
-								metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+								uvPrime =  material.metalnessMapTransform * vec3(uv, 1);
+								metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 							}
 
@@ -417,6 +417,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
+
 							uvPrime =  material.mapTransform * vec3(uv, 1);
 							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
@@ -465,15 +466,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float roughness = material.roughness;
 						if ( material.roughnessMap != - 1 ) {
 
-							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).g;
+							uvPrime =  material.roughnessMapTransform * vec3(uv, 1);
+							roughness *= texture2D( textures, vec3( uvPrime.xy, material.roughnessMap ) ).g;
 
 						}
 
 						// metalness
 						float metalness = material.metalness;
 						if ( material.metalnessMap != - 1 ) {
-							uvPrime =  material.metalnessTransform * vec3(uv, 1);
-							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+
+							uvPrime =  material.metalnessMapTransform * vec3(uv, 1);
+							metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 						}
 
