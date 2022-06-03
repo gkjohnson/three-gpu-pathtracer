@@ -7,7 +7,6 @@ import {
 	RepeatWrapping,
 	LinearFilter,
 	NoToneMapping,
-	Matrix3
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
