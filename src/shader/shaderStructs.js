@@ -52,6 +52,19 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	};
 
+	mat3 readTextureTransform( sampler2D tex, uint index){
+		mat3 textureTransform;
+
+		vec4 row1 = texelFetch1D( tex, index );
+		vec4 row2 = texelFetch1D( tex, index + 1u );
+
+		textureTransform[0] = vec3(row1.r, row2.r, 0.0);
+		textureTransform[1] = vec3(row1.g, row2.g, 0.0);
+		textureTransform[2] = vec3(row1.b, row2.b, 1.0);
+
+		return textureTransform;
+	}
+
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
 		uint i = index * 9u;
@@ -63,9 +76,6 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s4 = texelFetch1D( tex, i + 4u );
 		vec4 s5 = texelFetch1D( tex, i + 5u );
 		vec4 s6 = texelFetch1D( tex, i + 6u );
-		vec4 s7 = texelFetch1D( tex, i + 7u );
-		vec4 s8 = texelFetch1D( tex, i + 8u );
-
 
 		Material m;
 		m.color = s0.rgb;
@@ -94,9 +104,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		m.castShadow = ! bool( s6.r );
 
-		m.matTransform[0] = vec3(s7.r, s8.r, 0.0);
-		m.matTransform[1] = vec3(s7.g, s8.g, 0.0);
-		m.matTransform[2] = vec3(s7.b, s8.b, 1.0);
+		m.matTransform = m.map == -1 ? mat3( 0 ) : readTextureTransform( tex, i + 7u );
 
 		return m;
 
