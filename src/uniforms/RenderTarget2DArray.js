@@ -55,11 +55,9 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
 			const texture = textures[ i ];
-			//save texture uv transform
-			texture.updateMatrix();
-			const uvTranform = texture.matrix;
+			// revert to default texture transform before rendering
 			texture.matrixAutoUpdate = false;
-			texture.matrix = new Matrix3();
+			texture.matrix.identity();
 
 			fsQuad.material.map = texture;
 			fsQuad.material.transparent = true;
@@ -67,8 +65,8 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 			renderer.setRenderTarget( this, i );
 			fsQuad.render( renderer );
 
-			//restore uv tranform
-			texture.matrix = uvTranform;
+			// restore custom texture transform
+			texture.updateMatrix();
 			texture.matrixAutoUpdate = true;
 
 		}
