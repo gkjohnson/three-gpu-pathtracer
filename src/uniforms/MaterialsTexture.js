@@ -109,31 +109,30 @@ export class MaterialsTexture extends DataTexture {
 		 * @param {string} textureKey
 		 * @param {Float32Array} array
 		 * @param {number} offset
-		 * @returns {8} number of floats written to array
+		 * @returns {8} number of floats occupied by texture transform matrix
 		 */
 		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
 
-			// initialize to identity
-			let elements = new Matrix3().elements;
-
+			// check if is texture exists
 			if ( material[ textureKey ] && material[ textureKey ].isTexture ) {
 
-				material[ textureKey ].matrix.toArray( elements );
+				const elements = material[ textureKey ].matrix.elements;
+
+				let i = 0;
+
+				// first row
+				array[ offset + i ++ ] = elements[ 0 ];
+				array[ offset + i ++ ] = elements[ 3 ];
+				array[ offset + i ++ ] = elements[ 6 ];
+				i ++;
+
+				// second row
+				array[ offset + i ++ ] = elements[ 1 ];
+				array[ offset + i ++ ] = elements[ 4 ];
+				array[ offset + i ++ ] = elements[ 7 ];
+				i ++;
 
 			}
-
-			let i = 0;
-
-			// first row
-			array[ offset + i ++ ] = elements[ 0 ];
-			array[ offset + i ++ ] = elements[ 3 ];
-			array[ offset + i ++ ] = elements[ 6 ];
-			i ++;
-			// second row
-			array[ offset + i ++ ] = elements[ 1 ];
-			array[ offset + i ++ ] = elements[ 4 ];
-			array[ offset + i ++ ] = elements[ 7 ];
-			i ++;
 
 			return 8;
 
@@ -226,13 +225,13 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 
 			// map transform
-			index += writeTextureMatrixToArray( m, "map", floatArray, index );
+			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
 
 			// metalnessMap transform
-			index += writeTextureMatrixToArray( m, "metalnessMap", floatArray, index );
+			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
 
 			// roughnessMap transform
-			index += writeTextureMatrixToArray( m, "roughnessMap", floatArray, index );
+			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
 
 		}
 
