@@ -485,7 +485,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 emission = material.emissiveIntensity * material.emissive;
 						if ( material.emissiveMap != - 1 ) {
 
-							emission *= texture2D( textures, vec3( uv, material.emissiveMap ) ).xyz;
+							vec3 uvPrime = material.emissiveMapTransform * vec3( uv, 1 );
+							emission *= texture2D( textures, vec3( uvPrime.xy, material.emissiveMap ) ).xyz;
 
 						}
 

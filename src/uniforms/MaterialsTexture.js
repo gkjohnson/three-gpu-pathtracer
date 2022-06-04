@@ -1,6 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 15;
+const MATERIAL_PIXELS = 17;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 export class MaterialsTexture extends DataTexture {
@@ -235,6 +235,9 @@ export class MaterialsTexture extends DataTexture {
 
 			// transmissionMap transform
 			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
+
+			// emissiveMap transform
+			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
 
 		}
 
