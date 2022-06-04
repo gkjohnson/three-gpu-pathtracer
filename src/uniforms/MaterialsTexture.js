@@ -113,7 +113,7 @@ export class MaterialsTexture extends DataTexture {
 		 */
 		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
 
-			// check if is texture exists
+			// check if texture exists
 			if ( material[ textureKey ] && material[ textureKey ].isTexture ) {
 
 				const elements = material[ textureKey ].matrix.elements;
