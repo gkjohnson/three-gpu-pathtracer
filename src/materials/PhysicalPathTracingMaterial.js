@@ -174,7 +174,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// TODO: should we account for emissive surfaces here?
 
 							vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-							vec3 uvPrime;
 							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 							Material material = readMaterialInfo( materials, materialIndex );
 
@@ -196,7 +195,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// albedo
 							vec4 albedo = vec4( material.color, material.opacity );
 							if ( material.map != - 1 ) {
-								uvPrime =  material.mapTransform * vec3(uv, 1);
+								vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
 								albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 
 							}
@@ -212,7 +211,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// metalness
 							float metalness = material.metalness;
 							if ( material.metalnessMap != - 1 ) {
-								uvPrime =  material.metalnessMapTransform * vec3(uv, 1);
+								vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
 								metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 							}
@@ -413,12 +412,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-						vec3 uvPrime;
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
 
-							uvPrime =  material.mapTransform * vec3(uv, 1);
+							vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
 							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
 
@@ -466,7 +464,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float roughness = material.roughness;
 						if ( material.roughnessMap != - 1 ) {
 
-							uvPrime =  material.roughnessMapTransform * vec3(uv, 1);
+							vec3 uvPrime = material.roughnessMapTransform * vec3( uv, 1 );
 							roughness *= texture2D( textures, vec3( uvPrime.xy, material.roughnessMap ) ).g;
 
 						}
@@ -475,7 +473,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float metalness = material.metalness;
 						if ( material.metalnessMap != - 1 ) {
 
-							uvPrime =  material.metalnessMapTransform * vec3(uv, 1);
+							vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
 							metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 						}
