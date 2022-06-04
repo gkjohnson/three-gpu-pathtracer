@@ -1,4 +1,4 @@
-import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, Matrix3 } from 'three';
+import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
 const MATERIAL_PIXELS = 13;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
