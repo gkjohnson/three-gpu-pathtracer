@@ -110,7 +110,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		uint firstTextureTransformIdx = i + 7u;
 
-		m.mapTransform = m.map == -1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx);
+		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx);
 		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
 		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
 		return m;
