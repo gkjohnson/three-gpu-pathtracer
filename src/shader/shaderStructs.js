@@ -54,7 +54,8 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	};
 
-	mat3 readTextureTransform( sampler2D tex, uint index){
+	mat3 readTextureTransform( sampler2D tex, uint index ) {
+
 		mat3 textureTransform;
 
 		vec4 row1 = texelFetch1D( tex, index );
@@ -65,6 +66,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		textureTransform[2] = vec3(row1.b, row2.b, 1.0);
 
 		return textureTransform;
+
 	}
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
@@ -109,8 +111,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		uint firstTextureTransformIdx = i + 7u;
 
 		m.mapTransform = m.map == -1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx);
-		m.metalnessMapTransform = m.metalnessMap == -1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
-		m.roughnessMapTransform = m.roughnessMap == -1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
+		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
+		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
 		return m;
 
 	}
