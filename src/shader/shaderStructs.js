@@ -53,6 +53,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		mat3 roughnessMapTransform;
 		mat3 transmissionMapTransform;
 		mat3 emissiveMapTransform;
+		mat3 normalMapTransform;
 
 	};
 
@@ -73,7 +74,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 17u;
+		uint i = index * 19u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -117,6 +118,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
 		m.transmissionMapTransform = m.transmissionMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 6u );
 		m.emissiveMapTransform = m.emissiveMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 8u );
+		m.normalMapTransform = m.normalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 10u );
 
 		return m;
 
