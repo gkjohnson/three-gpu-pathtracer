@@ -50,7 +50,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
-				isOrthographicCamera: { value: true },
+				isOrthographicCamera: { value: false },
+				isSphericalCamera: { value: false },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
 				environmentRotation: { value: new Matrix3() },
@@ -119,6 +120,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
 				uniform bool isOrthographicCamera;
+				uniform bool isSphericalCamera;
 				uniform sampler2D normalAttribute;
 				uniform sampler2D tangentAttribute;
 				uniform sampler2D uvAttribute;
@@ -206,7 +208,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if ( material.alphaMap != -1 ) {
 
 								albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-							
+
 							}
 
 							// transmission
@@ -290,36 +292,43 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					return rayOrigin4.xyz / rayOrigin4.w;
 				}
 
-				void main() {
+				void getCameraRay( out vec3 rayDirection, out vec3 rayOrigin ) {
 
-					rng_initialize( gl_FragCoord.xy, seed );
+					vec2 ssd = vec2( 1.0 ) / resolution;
 
-					// get [-1, 1] normalized device coordinates
-					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
+					// Jitter the camera ray by finding a uv coordinate at a random sample
+					// around this pixel's UV coordinate
+					vec2 jitteredUv = vUv + vec2( tentFilter( rand() ) * ssd.x, tentFilter( rand() ) * ssd.y );
 
-					vec3 ss00 = ndcToRayOrigin( vec2( - 1.0, - 1.0 ) );
-					vec3 ss01 = ndcToRayOrigin( vec2( - 1.0, 1.0 ) );
-					vec3 ss10 = ndcToRayOrigin( vec2( 1.0, - 1.0 ) );
+					if ( isSphericalCamera ) {
 
-					vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
-					vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
+						vec4 rayDirection4 = vec4( equirectUvToDirection( jitteredUv ), 0.0 );
+						vec4 rayOrigin4 = vec4( 0.0, 0.0, 0.0, 1.0 );
 
-					// Jitter the camera ray by finding a new subpixel point to point to from the camera origin
-					// This is better than just jittering the camera position since it actually results in divergent
-					// rays providing better coverage for the pixel
-					vec3 rayOrigin = ndcToRayOrigin( ndc ) + tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
+						rayDirection4 = cameraWorldMatrix * rayDirection4;
+						rayOrigin4 = cameraWorldMatrix * rayOrigin4;
 
-					vec3 rayDirection;
-
-					if ( isOrthographicCamera ) {
-
-						rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
-						rayDirection = normalize( rayDirection );
+						rayDirection = normalize( rayDirection4.xyz );
+						rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 
 					} else {
 
-						vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
-						rayDirection = normalize( rayOrigin - cameraOrigin );
+						// get [-1, 1] normalized device coordinates
+						vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
+
+						rayOrigin = ndcToRayOrigin( ndc );
+
+						if ( isOrthographicCamera ) {
+
+							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
+							rayDirection = normalize( rayDirection );
+
+						} else {
+
+							vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+							rayDirection = normalize( rayOrigin - cameraOrigin );
+
+						}
 
 					}
 
@@ -348,7 +357,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 					#endif
+
 					rayDirection = normalize( rayDirection );
+
+				}
+
+				void main() {
+
+					rng_initialize( gl_FragCoord.xy, seed );
+
+					vec3 rayDirection;
+					vec3 rayOrigin;
+
+					getCameraRay( rayDirection, rayOrigin );
 
 					// inverse environment rotation
 					mat3 invEnvironmentRotation = inverse( environmentRotation );
@@ -445,7 +466,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( material.alphaMap != -1 ) {
 
 							albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-						
+
 						}
 
 						// possibly skip this sample if it's transparent, alpha test is enabled, or we hit the wrong material side

@@ -51,6 +51,7 @@ function* renderTask() {
 				// An orthographic projection matrix will always have the bottom right element == 1
 				// And a perspective projection matrix will always have the bottom right element == 0
 				material.isOrthographicCamera = camera.projectionMatrix.elements[ 15 ] > 0;
+				material.isSphericalCamera = camera.isSphericalCamera === true;
 
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
