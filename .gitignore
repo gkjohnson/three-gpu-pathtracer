@@ -105,3 +105,4 @@ dist
 
 .parcel-cache
 example/dev-bundle
+.vscode/

@@ -198,7 +198,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec4 albedo = vec4( material.color, material.opacity );
 							if ( material.map != - 1 ) {
 
-								albedo *= texture2D( textures, vec3( uv, material.map ) );
+								vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
+								albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 
 							}
 
@@ -213,7 +214,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							float transmission = material.transmission;
 							if ( material.transmissionMap != - 1 ) {
 
-								transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+								vec3 uvPrime = material.transmissionMapTransform * vec3( uv, 1 );
+								transmission *= texture2D( textures, vec3( uvPrime.xy, material.transmissionMap ) ).r;
 
 							}
 
@@ -221,7 +223,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							float metalness = material.metalness;
 							if ( material.metalnessMap != - 1 ) {
 
-								metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+								vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
+								metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 							}
 
@@ -432,13 +435,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
 
-							albedo *= texture2D( textures, vec3( uv, material.map ) );
-
+							vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
+							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
 
 						// alphaMap
@@ -492,7 +494,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float roughness = material.roughness;
 						if ( material.roughnessMap != - 1 ) {
 
-							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).g;
+							vec3 uvPrime = material.roughnessMapTransform * vec3( uv, 1 );
+							roughness *= texture2D( textures, vec3( uvPrime.xy, material.roughnessMap ) ).g;
 
 						}
 
@@ -500,7 +503,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float metalness = material.metalness;
 						if ( material.metalnessMap != - 1 ) {
 
-							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+							vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
+							metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 						}
 
@@ -508,7 +512,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 emission = material.emissiveIntensity * material.emissive;
 						if ( material.emissiveMap != - 1 ) {
 
-							emission *= texture2D( textures, vec3( uv, material.emissiveMap ) ).xyz;
+							vec3 uvPrime = material.emissiveMapTransform * vec3( uv, 1 );
+							emission *= texture2D( textures, vec3( uvPrime.xy, material.emissiveMap ) ).xyz;
 
 						}
 
@@ -516,7 +521,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float transmission = material.transmission;
 						if ( material.transmissionMap != - 1 ) {
 
-							transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+							vec3 uvPrime = material.transmissionMapTransform * vec3( uv, 1 );
+							transmission *= texture2D( textures, vec3( uvPrime.xy, material.transmissionMap ) ).r;
 
 						}
 
@@ -537,7 +543,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
 								mat3 vTBN = mat3( tangent, bitangent, normal );
 
-								vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
+								vec3 uvPrime = material.normalMapTransform * vec3( uv, 1 );
+								vec3 texNormal = texture2D( textures, vec3( uvPrime.xy, material.normalMap ) ).xyz * 2.0 - 1.0;
 								texNormal.xy *= material.normalScale;
 								normal = vTBN * texNormal;
 

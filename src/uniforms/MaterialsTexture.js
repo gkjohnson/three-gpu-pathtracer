@@ -1,6 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 7;
+const MATERIAL_PIXELS = 19;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 export class MaterialsTexture extends DataTexture {
@@ -103,6 +103,41 @@ export class MaterialsTexture extends DataTexture {
 
 		}
 
+		/**
+		 *
+		 * @param {Object} material
+		 * @param {string} textureKey
+		 * @param {Float32Array} array
+		 * @param {number} offset
+		 * @returns {8} number of floats occupied by texture transform matrix
+		 */
+		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
+
+			// check if texture exists
+			if ( material[ textureKey ] && material[ textureKey ].isTexture ) {
+
+				const elements = material[ textureKey ].matrix.elements;
+
+				let i = 0;
+
+				// first row
+				array[ offset + i ++ ] = elements[ 0 ];
+				array[ offset + i ++ ] = elements[ 3 ];
+				array[ offset + i ++ ] = elements[ 6 ];
+				i ++;
+
+				// second row
+				array[ offset + i ++ ] = elements[ 1 ];
+				array[ offset + i ++ ] = elements[ 4 ];
+				array[ offset + i ++ ] = elements[ 7 ];
+				i ++;
+
+			}
+
+			return 8;
+
+		}
+
 		let index = 0;
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
@@ -188,6 +223,24 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 			index ++;
 			index ++;
+
+			// map transform
+			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
+
+			// metalnessMap transform
+			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
+
+			// roughnessMap transform
+			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
+
+			// transmissionMap transform
+			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
+
+			// emissiveMap transform
+			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
+
+			// normalMap transform
+			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
 
 		}
 
