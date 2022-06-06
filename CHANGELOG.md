@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Ability to disable casting of shadows.
 - Support for rendering with Orthographic cameras.
 - Support for texture transform properties per texture.
+- Support for equirect rendering with the "FEATURE_EQUIRECT_RENDER" flag.
 
 ## [0.0.3] - 2022-05-22
 ### Fixed
