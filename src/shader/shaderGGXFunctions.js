@@ -82,7 +82,7 @@ float ggxDistribution( vec3 halfVector, float roughness ) {
 	float tanTheta2 = pow( tanTheta, 2.0 );
 
 	float denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
-	return a2 / denom;
+	return denom < 1e-6 ? 1.0 : a2 / denom;
 
 	// See equation (1) from reference [2]
 	// const { x, y, z } = halfVector;

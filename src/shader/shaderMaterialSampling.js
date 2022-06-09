@@ -67,11 +67,11 @@ float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	float roughness = surf.roughness;
+	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
-		roughness,
-		roughness,
+		filteredRoughness,
+		filteredRoughness,
 		rand(),
 		rand()
 	);
