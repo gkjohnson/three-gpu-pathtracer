@@ -77,7 +77,7 @@ float ggxDistribution( vec3 halfVector, float roughness ) {
 
 	if ( cosTheta == 0.0 ) return 0.0;
 
-	float theta = acos( halfVector.z );
+	float theta = acosApprox( halfVector.z );
 	float tanTheta = tan( theta );
 	float tanTheta2 = pow( tanTheta, 2.0 );
 

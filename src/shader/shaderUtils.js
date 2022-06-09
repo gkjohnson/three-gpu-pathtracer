@@ -225,4 +225,8 @@ export const shaderUtils = /* glsl */`
 		return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
 
 	}
+
+	float acosApprox(float x) {
+		return ( -0.69813170079773212 * x * x - 0.87266462599716477 ) * x + 1.5707963267948966;
+	}
 `;
