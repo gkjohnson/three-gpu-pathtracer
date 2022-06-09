@@ -568,16 +568,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then we can just always assume this is a front face.
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 
-						// Compute the filtered roughness value to use during specular reflection computations. A minimum
-						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
-						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
+						// Compute the filtered roughness value to use during specular reflection computations.
+						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
-						surfaceRec.filteredRoughness = clamp(
-							max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
-							1e-3,
-							1.0
-						);
+						surfaceRec.filteredRoughness = clamp( max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
 
 						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
 						mat3 invBasis = inverse( normalBasis );
@@ -648,7 +643,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
-							accumulatedRoughness += sin( acos( halfVector.z ) );
+							accumulatedRoughness += sin( acosApprox( halfVector.z ) );
 							transmissiveRay = false;
 
 						}

@@ -225,4 +225,11 @@ export const shaderUtils = /* glsl */`
 		return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
 
 	}
+
+	// Fast arccos approximation used to remove banding artifacts caused by numerical errors in acos.
+	// This is a cubic Lagrange interpolating polynomial for x = [-1, -1/2, 0, 1/2, 1].	
+	// Source: https://stackoverflow.com/questions/3380628/fast-arc-cos-algorithm/answer#3380723	
+	float acosApprox(float x) {
+		return ( -0.69813170079773212 * x * x - 0.87266462599716477 ) * x + 1.5707963267948966;
+	}
 `;
