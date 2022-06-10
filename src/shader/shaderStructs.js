@@ -129,3 +129,42 @@ export const shaderMaterialStructs = /* glsl */ `
 	}
 
 `;
+
+export const shaderLightStruct = /* glsl */ `
+	struct Light {
+
+		vec3 position;
+
+		vec3 color;
+		float intensity;
+
+		vec3 u;
+		vec3 v;
+		float area;
+
+	};
+
+	Light readLightInfo( sampler2D tex, uint index ) {
+
+		uint i = index * 4u;
+
+		vec4 s0 = texelFetch1D( tex, i + 0u );
+		vec4 s1 = texelFetch1D( tex, i + 1u );
+		vec4 s2 = texelFetch1D( tex, i + 2u );
+		vec4 s3 = texelFetch1D( tex, i + 3u );
+
+		Light l;
+		l.position = s0.rgb;
+
+		l.color = s1.rgb;
+		l.intensity = s1.a;
+
+		l.u = s2.rgb;
+		l.v = s3.rgb;
+		l.area = s3.a;
+
+		return l;
+
+	}
+
+`;
