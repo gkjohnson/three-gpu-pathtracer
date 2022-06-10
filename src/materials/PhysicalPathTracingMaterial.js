@@ -207,7 +207,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if ( material.alphaMap != -1 ) {
 
 								albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-							
+
 							}
 
 							// transmission
@@ -251,7 +251,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// only attenuate on the way in
 							if ( isBelowSurface ) {
 
-								color *= albedo.rgb;
+								color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
 
 							}
 
@@ -447,7 +447,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( material.alphaMap != -1 ) {
 
 							albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-						
+
 						}
 
 						// possibly skip this sample if it's transparent, alpha test is enabled, or we hit the wrong material side
