@@ -361,4 +361,41 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	bool intersectsRectangle( vec3 position, vec3 normal, vec3 u, vec3 v, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
+
+		float dt = dot( rayDirection, normal );
+		float t = ( dot( normal, position ) - dot( normal, rayOrigin ) ) / dt;
+
+		if ( t > EPSILON ) {
+
+			vec3 hit = rayOrigin + rayDirection * t;
+			vec3 vi = hit - position;
+			float a1 = dot( u, vi );
+			if ( a1 >= - 0.5 && a1 <= 0.5 ) {
+
+				float a2 = dot( v, vi );
+				if ( a2 >= - 0.5 && a2 <= 0.5 ) {
+
+					dist = t;
+					return true;
+
+				}
+
+			}
+
+		}
+
+		return false;
+
+	}
+
+	// power heuristic for multiple importance sampling
+	float misHeuristic( float a, float b ) {
+
+		float aa = a * a;
+		float bb = b * b;
+		return aa / ( aa + bb );
+
+	}
+
 `;
