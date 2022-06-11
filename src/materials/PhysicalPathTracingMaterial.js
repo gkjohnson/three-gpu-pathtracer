@@ -637,7 +637,40 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if FEATURE_MIS
 
 						// uniformly pick a light or environment map
-						if( rand() < 1.0 / float( lightCount + 1u ) ) {
+						if( rand() > 1.0 / float( lightCount + 1u ) ) {
+
+							// sample a light or environment
+							LightSampleRec lightSampleRec = randomLightSample( lights, lightCount, rayOrigin );
+
+							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
+							if ( isSampleBelowSurface ) {
+
+								lightSampleRec.pdf = 0.0;
+
+							}
+
+							// check if a ray could even reach the light area
+							if (
+								lightSampleRec.pdf > 0.0 &&
+								isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
+								! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
+							) {
+
+								// get the material pdf
+								vec3 sampleColor;
+								float lightMaterialPdf = bsdfResult( outgoing, normalize( invBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+								if ( lightMaterialPdf > 0.0 ) {
+
+									// weight the direct light contribution
+									float lightPdf = lightSampleRec.pdf / float( lightCount + 1u );
+									float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
+									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
+
+								}
+
+							}
+
+						} else {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
@@ -671,39 +704,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									envPdf /= float( lightCount + 1u );
 									float misWeight = misHeuristic( envPdf, envMaterialPdf );
 									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
-
-								}
-
-							}
-
-						} else {
-
-							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights, lightCount, rayOrigin );
-
-							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
-							if ( isSampleBelowSurface ) {
-
-								lightSampleRec.pdf = 0.0;
-
-							}
-
-							// check if a ray could even reach the light area
-							if (
-								lightSampleRec.pdf > 0.0 &&
-								isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
-								! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
-							) {
-
-								// get the material pdf
-								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, normalize( invBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
-								if ( lightMaterialPdf > 0.0 ) {
-
-									// weight the direct light contribution
-									float lightPdf = lightSampleRec.pdf / float( lightCount + 1u );
-									float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
-									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
 								}
 
