@@ -50,8 +50,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
-				isOrthographicCamera: { value: false },
-				isSphericalCamera: { value: false },
+				// 0 = Perspective
+				// 1 = Orthographic
+				// 2 = Equirectangular
+				cameraType: { value: 0 },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
 				environmentRotation: { value: new Matrix3() },
@@ -119,8 +121,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int bounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
-				uniform bool isOrthographicCamera;
-				uniform bool isSphericalCamera;
+				// 0 = Perspective
+				// 1 = Orthographic
+				// 2 = Equirectangular
+				uniform int cameraType;
 				uniform sampler2D normalAttribute;
 				uniform sampler2D tangentAttribute;
 				uniform sampler2D uvAttribute;
@@ -300,7 +304,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// around this pixel's UV coordinate
 					vec2 jitteredUv = vUv + vec2( tentFilter( rand() ) * ssd.x, tentFilter( rand() ) * ssd.y );
 
-					if ( isSphericalCamera ) {
+					if ( cameraType == 2 ) {
+
+						// Equirectangular projection
 
 						vec4 rayDirection4 = vec4( equirectUvToDirection( jitteredUv ), 0.0 );
 						vec4 rayOrigin4 = vec4( 0.0, 0.0, 0.0, 1.0 );
@@ -318,12 +324,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						rayOrigin = ndcToRayOrigin( ndc );
 
-						if ( isOrthographicCamera ) {
+						if ( cameraType == 1 ) {
+
+							// Orthographic projection
 
 							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
 							rayDirection = normalize( rayDirection );
 
 						} else {
+
+							// Perspective projection
 
 							vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
 							rayDirection = normalize( rayOrigin - cameraOrigin );

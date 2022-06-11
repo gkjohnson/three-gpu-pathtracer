@@ -48,10 +48,27 @@ function* renderTask() {
 
 				material.cameraWorldMatrix.copy( camera.matrixWorld );
 				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
+
+				// Perspective camera (default)
+				let cameraType = 0;
+
 				// An orthographic projection matrix will always have the bottom right element == 1
 				// And a perspective projection matrix will always have the bottom right element == 0
-				material.isOrthographicCamera = camera.projectionMatrix.elements[ 15 ] > 0;
-				material.isSphericalCamera = camera.isSphericalCamera === true;
+				if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
+
+					// Orthographic
+					cameraType = 1;
+
+				}
+
+				if ( camera.isEquirectCamera ) {
+
+					// Equirectangular
+					cameraType = 2;
+
+				}
+
+				material.cameraType = cameraType;
 
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
