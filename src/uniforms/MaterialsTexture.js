@@ -40,15 +40,15 @@ export class MaterialsTexture extends DataTexture {
 		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 2;
 		switch ( side ) {
 
-			case FrontSide:
-				array[ index ] = 1;
-				break;
-			case BackSide:
-				array[ index ] = - 1;
-				break;
-			case DoubleSide:
-				array[ index ] = 0;
-				break;
+		case FrontSide:
+			array[ index ] = 1;
+			break;
+		case BackSide:
+			array[ index ] = - 1;
+			break;
+		case DoubleSide:
+			array[ index ] = 0;
+			break;
 
 		}
 
@@ -60,12 +60,12 @@ export class MaterialsTexture extends DataTexture {
 		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 2;
 		switch ( array[ index ] ) {
 
-			case 0:
-				return DoubleSide;
-			case 1:
-				return FrontSide;
-			case - 1:
-				return BackSide;
+		case 0:
+			return DoubleSide;
+		case 1:
+			return FrontSide;
+		case - 1:
+			return BackSide;
 
 		}
 
