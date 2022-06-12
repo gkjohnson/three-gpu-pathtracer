@@ -34,10 +34,10 @@
     "parcel": "^2.4.0",
     "process": "^0.11.10",
     "rollup": "^2.70.0",
-    "three": "^0.139.2"
+    "three": "^0.141.0"
   },
   "peerDependencies": {
-    "three": "^0.139.2",
+    "three": "^0.141.0",
     "xatlas-web": "^0.1.0"
   },
   "scripts": {
