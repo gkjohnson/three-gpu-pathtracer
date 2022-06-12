@@ -402,7 +402,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								#if FEATURE_MIS
 
 								// weight the contribution
-								float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf );
+								float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lightCount + 1u ) );
 								gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
 
 								#else
@@ -432,6 +432,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
+								envPdf /= float( lightCount + 1u );
 
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
