@@ -72,17 +72,18 @@ float ggxDistribution( vec3 halfVector, float roughness ) {
 
 	// See equation (33) from reference [0]
 	float a2 = roughness * roughness;
+	a2 = max( EPSILON, a2 );
 	float cosTheta = halfVector.z;
 	float cosTheta4 = pow( cosTheta, 4.0 );
 
 	if ( cosTheta == 0.0 ) return 0.0;
 
-	float theta = ( roughness == 0.0 ) ? acosApprox( halfVector.z ) : acosSafe( halfVector.z );
+	float theta = acosSafe( halfVector.z );
 	float tanTheta = tan( theta );
 	float tanTheta2 = pow( tanTheta, 2.0 );
 
 	float denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
-	return ( denom < 1e-12 ) ? PI : ( a2 / denom );
+	return ( a2 / denom );
 
 	// See equation (1) from reference [2]
 	// const { x, y, z } = halfVector;
