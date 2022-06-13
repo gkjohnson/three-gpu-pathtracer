@@ -463,7 +463,7 @@ function updateEnvBlur() {
 
 function updateCamera( cameraProjection ) {
 
-	if ( cameraProjection === "Perspective" ) {
+	if ( cameraProjection === 'Perspective' ) {
 
 		if ( activeCamera ) {
 

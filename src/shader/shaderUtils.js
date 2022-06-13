@@ -227,10 +227,11 @@ export const shaderUtils = /* glsl */`
 	}
 
 	// Fast arccos approximation used to remove banding artifacts caused by numerical errors in acos.
-	// This is a cubic Lagrange interpolating polynomial for x = [-1, -1/2, 0, 1/2, 1].	
-	// Source: https://stackoverflow.com/questions/3380628/fast-arc-cos-algorithm/answer#3380723	
+	// This is a cubic Lagrange interpolating polynomial for x = [-1, -1/2, 0, 1/2, 1].
+	// For more information see: https://github.com/gkjohnson/three-gpu-pathtracer/pull/171#issuecomment-1152275248
 	float acosApprox( float x ) {
 
+		x = clamp( x, -1.0, 1.0 );
 		return ( - 0.69813170079773212 * x * x - 0.87266462599716477 ) * x + 1.5707963267948966;
 
 	}
@@ -269,6 +270,13 @@ export const shaderUtils = /* glsl */`
 		float aa = a * a;
 		float bb = b * b;
 		return aa / ( aa + bb );
+  
+	}
+
+	// An acos with input values bound to the range [-1, 1].
+	float acosSafe( float x ) {
+
+		return acos( clamp( x, -1.0, 1.0 ) );
 
 	}
 

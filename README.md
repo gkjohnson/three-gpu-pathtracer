@@ -657,6 +657,16 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 ">AzTiZ</a></i>
 </p>
 
+![](https://user-images.githubusercontent.com/734200/173212652-de6a83e5-dd2c-49b5-8ed7-484ff8969b5b.png)
+<p align="center">
+<i>Botanists Study model by <a href="https://sketchfab.com/3d-models/the-botanists-study-8b7b5743b1c848ed8ea58f5518c44e7e">riikkakilpelainen</a></i>
+</p>
+
+![](https://user-images.githubusercontent.com/734200/173170459-849b9343-efe3-4635-8719-346511472965.png)
+<p align="center">
+<i>Japanese Bridge Garden model by <a href="https://sketchfab.com/3d-models/japanese-bridge-garden-d122e17593eb4012913cde927486d15a">kristenlee</a></i>
+</p>
+
 ### Resources
 
 [Raytracing in One Weekend Book](https://raytracing.github.io/)

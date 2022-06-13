@@ -153,7 +153,7 @@ export function mergeMeshes( meshes, options = {} ) {
 
 		// apply the matrix world to the geometry
 		const originalGeometry = meshes[ i ].geometry;
-		let geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
+		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
 		// ensure our geometry has common attributes
