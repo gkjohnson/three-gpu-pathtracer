@@ -7,7 +7,7 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { EquirectCamera } from "../src/core/EquirectCamera";
+import { EquirectCamera } from '../src/core/EquirectCamera';
 
 let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad;
 let perspectiveCamera, orthoCamera, equirectCamera;
