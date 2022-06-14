@@ -14,6 +14,7 @@ import { shaderUtils } from '../shader/shaderUtils.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsTexture } from '../uniforms/LightsTexture.js';
+import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -56,6 +57,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				lights: { value: new LightsTexture() },
 				lightCount: { value: 0 },
+				iesProfiles: { value: new IESProfilesTexture().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
 				backgroundBlur: { value: 0.0 },
@@ -104,7 +106,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderUtils }
 				${ shaderMaterialSampling }
 				${ shaderEnvMapSampling }
-				${ shaderLightSampling }
 
 				uniform mat3 environmentRotation;
 				uniform float backgroundBlur;
@@ -139,6 +140,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform sampler2D materials;
 				uniform sampler2D lights;
 				uniform uint lightCount;
+				uniform sampler2DArray iesProfiles;
+
+				${ shaderLightSampling }
 
 				uniform EquirectHdrInfo envMapInfo;
 

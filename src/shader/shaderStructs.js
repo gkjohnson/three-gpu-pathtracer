@@ -191,6 +191,7 @@ export const shaderLightStruct = /* glsl */ `
 	struct Light {
 
 		vec3 position;
+		int type;
 
 		vec3 color;
 		float intensity;
@@ -203,7 +204,7 @@ export const shaderLightStruct = /* glsl */ `
 
 	Light readLightInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 4u;
+		uint i = index * 6u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -212,6 +213,7 @@ export const shaderLightStruct = /* glsl */ `
 
 		Light l;
 		l.position = s0.rgb;
+		l.type = int( round( s0.a ) );
 
 		l.color = s1.rgb;
 		l.intensity = s1.a;
@@ -221,6 +223,41 @@ export const shaderLightStruct = /* glsl */ `
 		l.area = s3.a;
 
 		return l;
+
+	}
+
+	struct SpotLight {
+
+		float radius;
+		float near;
+		float decay;
+		float distance;
+		float coneCos;
+		float penumbraCos;
+		float lampIntensityScale;
+		int iesProfile;
+
+	};
+
+	SpotLight readSpotLightInfo( sampler2D tex, uint index ) {
+
+		uint i = index * 6u;
+
+		vec4 s0 = texelFetch1D( tex, i + 4u );
+		vec4 s1 = texelFetch1D( tex, i + 5u );
+
+		SpotLight sl;
+		sl.radius = s0.r;
+		sl.near = s0.g;
+		sl.decay = s0.b;
+		sl.distance = s0.a;
+
+		sl.coneCos = s1.r;
+		sl.penumbraCos = s1.g;
+		sl.lampIntensityScale = s1.b;
+		sl.iesProfile = int( round ( s1.a ) );
+
+		return sl;
 
 	}
 

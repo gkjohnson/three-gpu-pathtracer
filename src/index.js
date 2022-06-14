@@ -11,10 +11,13 @@ export * from './uniforms/MaterialsTexture.js';
 export * from './uniforms/RenderTarget2DArray.js';
 export * from './uniforms/EquirectHdrInfoUniform.js';
 export * from './uniforms/PhysicalCameraUniform.js';
+export * from './uniforms/LightsTexture.js';
+export * from './uniforms/IESProfilesTexture.js';
 
 // utils
 export * from './utils/GeometryPreparationUtils.js';
 export * from './utils/BlurredEnvMapGenerator.js';
+export * from './utils/IESLoader.js';
 
 // materials
 export * from './materials/MaterialBase.js';

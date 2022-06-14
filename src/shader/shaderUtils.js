@@ -352,6 +352,32 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	bool intersectsCircle( vec3 position, vec3 normal, vec3 u, vec3 v, float radius, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
+
+		float dt = dot( rayDirection, normal );
+		float t = ( dot( normal, position ) - dot( normal, rayOrigin ) ) / dt;
+
+		if ( t > EPSILON ) {
+
+			vec3 hit = rayOrigin + rayDirection * t;
+			vec3 vi = hit - position;
+
+			float a1 = dot( u, vi );
+			float a2 = dot( v, vi );
+
+			if( length( vec2( a1, a2 ) ) <= radius ) {
+
+				dist = t;
+				return true;
+
+			}
+
+		}
+
+		return false;
+
+	}
+
 	// power heuristic for multiple importance sampling
 	float misHeuristic( float a, float b ) {
 
