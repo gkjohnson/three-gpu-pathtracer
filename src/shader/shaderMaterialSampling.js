@@ -57,10 +57,10 @@ vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 // specular
 float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	// See equation (17) in http://jcgt.org/published/0003/02/03/
+	// See equation (27) in http://jcgt.org/published/0003/02/03/
 	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = getHalfVector( wi, wo );
-	return ggxPDF( wi, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
+	return ggxPDF( wo, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
 
 }
 
