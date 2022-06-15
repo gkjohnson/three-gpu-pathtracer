@@ -14,7 +14,6 @@ const params = {
 
 	environmentIntensity: 0.5,
 	environmentRotation: 0,
-	emissiveIntensity: 100,
 	bounces: 20,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -39,6 +38,7 @@ init();
 async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -114,7 +114,7 @@ async function init() {
 	areaLights = [ areaLight1, areaLight2 ];
 
 	transformControls = new TransformControls( camera, renderer.domElement );
-	transformControls.addEventListener( 'change', () => {
+	transformControls.addEventListener( 'objectChange', () => {
 
 		ptRenderer.material.lights.updateFrom( areaLights );
 		ptRenderer.reset();
@@ -122,6 +122,22 @@ async function init() {
 	} );
 	transformControls.addEventListener( 'dragging-changed', ( e ) => controls.enabled = ! e.value );
 	transformControls.attach( areaLight1 );
+
+	window.addEventListener( 'keydown', function ( event ) {
+
+		switch ( event.key ) {
+
+		case 'w':
+			transformControls.setMode( 'translate' );
+			break;
+
+		case 'e':
+			transformControls.setMode( 'rotate' );
+			break;
+
+		}
+
+	} );
 
 	transformControlsScene = new Scene();
 	transformControlsScene.add( transformControls );
@@ -182,7 +198,6 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'emissiveIntensity', 0, 300 ).onChange( updateIntensity );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -200,8 +215,6 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-
-	updateIntensity();
 
 	animate();
 
@@ -221,17 +234,6 @@ function onResize() {
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
-
-}
-
-function updateIntensity() {
-
-	sceneInfo.materials.forEach( material => {
-
-		material.emissiveIntensity = params.emissiveIntensity;
-
-	} );
-	ptRenderer.reset();
 
 }
 
