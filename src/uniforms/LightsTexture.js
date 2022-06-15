@@ -42,7 +42,7 @@ export class LightsTexture extends DataTexture {
 
 			const l = lights[ i ];
 
-		    // position
+			// position
 			l.getWorldPosition( v );
 			floatArray[ index ++ ] = v.x;
 			floatArray[ index ++ ] = v.y;
@@ -57,16 +57,16 @@ export class LightsTexture extends DataTexture {
 			// intensity
 			floatArray[ index ++ ] = l.intensity;
 
-		    // u vector
-		    l.getWorldQuaternion( worldQuaternion );
-		    u.set( l.width, 0, 0 ).applyQuaternion( worldQuaternion );
+			// u vector
+			l.getWorldQuaternion( worldQuaternion );
+			u.set( l.width, 0, 0 ).applyQuaternion( worldQuaternion );
 			floatArray[ index ++ ] = u.x;
 			floatArray[ index ++ ] = u.y;
 			floatArray[ index ++ ] = u.z;
 			index ++;
 
-		    // v vector
-		    v.set( 0, l.height, 0 ).applyQuaternion( worldQuaternion );
+			// v vector
+			v.set( 0, l.height, 0 ).applyQuaternion( worldQuaternion );
 			floatArray[ index ++ ] = v.x;
 			floatArray[ index ++ ] = v.y;
 			floatArray[ index ++ ] = v.z;
