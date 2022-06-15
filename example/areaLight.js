@@ -12,8 +12,9 @@ let renderer, controls, transformControls, transformControlsScene, areaLights, s
 let samplesEl;
 const params = {
 
-	environmentIntensity: 0.5,
+	environmentIntensity: 0.2,
 	environmentRotation: 0,
+	areaLightIntensity: 20.0,
 	bounces: 20,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -96,7 +97,7 @@ async function init() {
 
 	group.updateMatrixWorld();
 
-	const areaLight1 = new THREE.RectAreaLight( new THREE.Color( 0xFFFFFF ), 50.0, 1.0, 1.0 );
+	const areaLight1 = new THREE.RectAreaLight( new THREE.Color( 0xFFFFFF ), 20.0, 1.0, 1.0 );
 	areaLight1.position.x = 1.5;
 	areaLight1.position.y = 1.0;
 	areaLight1.position.z = - 0.5;
@@ -104,7 +105,7 @@ async function init() {
 	areaLight1.rotateX( - Math.PI / 2 );
 	group.add( areaLight1 );
 
-	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0x00FF00 ), 20.0, 5.0, 1.0 );
+	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0x00FF00 ), 10.0, 5.0, 1.0 );
 	areaLight2.position.x = - 2.5;
 	areaLight2.position.y = 0.5;
 	areaLight2.position.z = - 3.0;
@@ -198,6 +199,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
+	gui.add( params, 'areaLightIntensity', 0, 50 ).onChange( updateIntensity );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -216,7 +218,17 @@ async function init() {
 
 	} );
 
+	updateIntensity();
+
 	animate();
+
+}
+
+function updateIntensity() {
+
+	areaLights[ 0 ].intensity = params.areaLightIntensity;
+	ptRenderer.material.lights.updateFrom( areaLights );
+	ptRenderer.reset();
 
 }
 
