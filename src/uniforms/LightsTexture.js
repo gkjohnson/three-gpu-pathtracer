@@ -51,7 +51,7 @@ export class LightsTexture extends DataTexture {
 			floatArray[ baseIndex + ( index ++ ) ] = v.z;
 
 			// type
-			floatArray[ baseIndex + ( index ++ ) ] = l.isRectAreaLight ? 0 : ( l.isSpotLight ? 1 : -1 );
+			floatArray[ baseIndex + ( index ++ ) ] = l.isRectAreaLight ? 0 : ( l.isSpotLight ? 1 : - 1 );
 
 			// color
 			floatArray[ baseIndex + ( index ++ ) ] = l.color.r;
@@ -61,7 +61,7 @@ export class LightsTexture extends DataTexture {
 			// intensity
 			floatArray[ baseIndex + ( index ++ ) ] = l.intensity;
 
-			if( l.isRectAreaLight ) {
+			if ( l.isRectAreaLight ) {
 
 				l.getWorldQuaternion( worldQuaternion );
 
@@ -83,7 +83,7 @@ export class LightsTexture extends DataTexture {
 				// area
 				floatArray[ baseIndex + ( index ++ ) ] = u.cross( v ).length();
 
-			} else if( l.isSpotLight ) {
+			} else if ( l.isSpotLight ) {
 
 				const eye = new Vector3();
 				eye.setFromMatrixPosition( l.matrixWorld );
@@ -141,6 +141,7 @@ export class LightsTexture extends DataTexture {
 
 				// iesProfile
 				floatArray[ baseIndex + ( index ++ ) ] = l.iesProfile;
+
 			}
 
 		}

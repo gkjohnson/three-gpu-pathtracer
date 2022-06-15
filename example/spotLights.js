@@ -180,7 +180,7 @@ async function init() {
 
 			const group = new THREE.Group();
 
-			const gltfScenes =  [ ];
+			const gltfScenes = [ ];
 
 			// objects
 			gltf.scene.scale.setScalar( 0.01 );
@@ -189,34 +189,34 @@ async function init() {
 			gltf.castShadow = true;
 			gltf.receiveShadow = true;
 			group.add( gltf.scene );
-			gltfScenes.push( gltf.scene )
+			gltfScenes.push( gltf.scene );
 
 			const box = new THREE.Box3();
 			box.setFromObject( gltf.scene );
 
-			gltf.scene = gltf.scene.clone()
+			gltf.scene = gltf.scene.clone();
 			gltf.scene.position.x += 8;
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
-			gltfScenes.push( gltf.scene )
+			gltfScenes.push( gltf.scene );
 
-			gltf.scene = gltf.scene.clone()
+			gltf.scene = gltf.scene.clone();
 			gltf.scene.position.x += 8;
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
-			gltfScenes.push( gltf.scene )
+			gltfScenes.push( gltf.scene );
 
-			gltf.scene = gltf.scene.clone()
+			gltf.scene = gltf.scene.clone();
 			gltf.scene.position.x += 8;
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
-			gltfScenes.push( gltf.scene )
+			gltfScenes.push( gltf.scene );
 
-			gltf.scene = gltf.scene.clone()
+			gltf.scene = gltf.scene.clone();
 			gltf.scene.position.x += 8;
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
-			gltfScenes.push( gltf.scene )
+			gltfScenes.push( gltf.scene );
 
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 100, 100, 0.05, 200 ),
@@ -249,7 +249,7 @@ async function init() {
 				const transformControls = new TransformControls( perspectiveCamera, renderer.domElement );
 				transformControls.addEventListener( 'change', () => {
 
-					if( draggingSpotLight ) {
+					if ( draggingSpotLight ) {
 
 						ptRenderer.reset();
 
@@ -274,19 +274,19 @@ async function init() {
 			lights = [ ];
 
 			const decays = [ 0, 1.5, 0, 0.25, 0 ];
-			for( let i = 0; i < 5; ++ i) {
+			for ( let i = 0; i < 5; ++ i ) {
 
 				const spotLight = new THREE.SpotLight( 0xffffff );
 
 				spotLight.position.set( i * 8, 7.0, 0.005 );
 				spotLight.angle = Math.PI / 8.0;
 				spotLight.penumbra = 0.0;
-				spotLight.decay = decays [ i ];
+				spotLight.decay = decays[ i ];
 				spotLight.distance = 0.0;
 				spotLight.intensity = 50.0;
 				spotLight.lampIntensityScale = 0.0;
 				spotLight.radius = 0.5;
-				spotLight.iesProfile = -1 + i;
+				spotLight.iesProfile = - 1 + i;
 
 				spotLight.shadow.mapSize.width = 512;
 				spotLight.shadow.mapSize.height = 512;
@@ -313,7 +313,7 @@ async function init() {
 
 					const spotLightHelper = new THREE.SpotLightHelper( spotLight );
 					spotLight.add( spotLightHelper );
-					transformControlsScene.add(spotLightHelper);
+					transformControlsScene.add( spotLightHelper );
 
 					spotLightHelpers.push ( spotLightHelper );
 
@@ -571,7 +571,7 @@ async function init() {
 	matFolder5.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'lampIntensityScale', 0.0, 1.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'iesProfile', -1, iesProfileURLs.length - 1, 1 ).onChange( reset );
+	matFolder5.add( spotLight1, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( reset );
 
 	animate();
 
@@ -619,7 +619,7 @@ function updateEnvBlur() {
 
 function updateCamera( cameraProjection ) {
 
-	if ( cameraProjection === "Perspective" ) {
+	if ( cameraProjection === 'Perspective' ) {
 
 		if ( activeCamera ) {
 
@@ -719,11 +719,11 @@ function animate() {
 
 	}
 
-	spotLightHelpers.forEach(spotLightHelper => {
+	spotLightHelpers.forEach( spotLightHelper => {
 
 		spotLightHelper.update();
 
-	});
+	} );
 
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
@@ -743,7 +743,7 @@ function animate() {
 	fsQuad.material.depthWrite = false;
 	fsQuad.render( renderer );
 
-	if( params.showTransformControls )
+	if ( params.showTransformControls )
 		renderer.render( transformControlsScene, activeCamera );
 
 	renderer.autoClear = true;

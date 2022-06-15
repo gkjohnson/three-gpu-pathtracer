@@ -112,7 +112,7 @@ function IESLamp( text ) {
 
 	while ( true ) {
 
-		var line = textArray[ lineNumber ++ ];
+		line = textArray[ lineNumber ++ ];
 
 		if ( line.includes( 'TILT' ) ) {
 
@@ -122,7 +122,7 @@ function IESLamp( text ) {
 
 	}
 
-	if ( !line.includes( 'NONE' ) ) {
+	if ( ! line.includes( 'NONE' ) ) {
 
 		if ( line.includes( 'INCLUDE' ) ) {
 
@@ -167,9 +167,10 @@ function IESLamp( text ) {
 				* _self.ballFactor * _self.blpFactor;
 
 		}
+
 	}
 
-	var maxVal = -1;
+	var maxVal = - 1;
 	for ( var i = 0; i < _self.numHorAngles; ++ i ) {
 
 		for ( var j = 0; j < _self.numVerAngles; ++ j ) {
@@ -188,7 +189,7 @@ function IESLamp( text ) {
 
 			for ( var j = 0; j < _self.numVerAngles; ++ j ) {
 
-				_self.candelaValues[ i ] [ j ] /= maxVal;
+				_self.candelaValues[ i ][ j ] /= maxVal;
 
 			}
 

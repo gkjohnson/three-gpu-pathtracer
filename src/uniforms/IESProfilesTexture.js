@@ -9,7 +9,7 @@ import {
 	WebGLArrayRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { IESLoader } from '../utils/IESLoader.js'
+import { IESLoader } from '../utils/IESLoader.js';
 
 const prevColor = new Color();
 export class IESProfilesTexture extends WebGLArrayRenderTarget {
@@ -64,6 +64,7 @@ export class IESProfilesTexture extends WebGLArrayRenderTarget {
 		await Promise.all( promises );
 
 		this._setTextures( renderer, textures );
+
 	}
 
 	_setTextures( renderer, textures ) {
