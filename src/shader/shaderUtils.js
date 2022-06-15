@@ -354,8 +354,7 @@ export const shaderUtils = /* glsl */`
 
 	bool intersectsCircle( vec3 position, vec3 normal, vec3 u, vec3 v, float radius, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
 
-		float dt = dot( rayDirection, normal );
-		float t = ( dot( normal, position ) - dot( normal, rayOrigin ) ) / dt;
+		float t = dot(position - rayOrigin, normal) / dot(rayDirection, normal);
 
 		if ( t > EPSILON ) {
 
@@ -389,8 +388,7 @@ export const shaderUtils = /* glsl */`
 
 	bool intersectsRectangle( vec3 position, vec3 normal, vec3 u, vec3 v, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
 
-		float dt = dot( rayDirection, normal );
-		float t = ( dot( normal, position ) - dot( normal, rayOrigin ) ) / dt;
+		float t = dot(position - rayOrigin, normal) / dot(rayDirection, normal);
 
 		if ( t > EPSILON ) {
 
