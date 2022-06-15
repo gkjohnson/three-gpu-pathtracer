@@ -14,7 +14,7 @@ const params = {
 
 	environmentIntensity: 0,
 	environmentRotation: 0,
-	emissiveIntensity: 100,
+	emissiveIntensity: 35,
 	bounces: 20,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -50,6 +50,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -164,7 +165,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'emissiveIntensity', 0, 300 ).onChange( updateIntensity );
+	gui.add( params, 'emissiveIntensity', 0, 150 ).onChange( updateIntensity );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
