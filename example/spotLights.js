@@ -315,7 +315,7 @@ async function init() {
 					spotLight.add( spotLightHelper );
 					transformControlsScene.add( spotLightHelper );
 
-					spotLightHelpers.push ( spotLightHelper );
+					spotLightHelpers.push( spotLightHelper );
 
 					spotLight1 = spotLight;
 
