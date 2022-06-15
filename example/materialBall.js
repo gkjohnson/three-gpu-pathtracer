@@ -51,10 +51,10 @@ const params = {
 
 	multipleImportanceSampling: true,
 	stableNoise: false,
-	environmentIntensity: 3,
+	environmentIntensity: 1,
 	environmentRotation: 0,
 	environmentBlur: 0.0,
-	backgroundBlur: 0.05,
+	backgroundBlur: 0.0,
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
@@ -95,6 +95,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 

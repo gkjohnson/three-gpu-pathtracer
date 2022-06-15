@@ -13,8 +13,7 @@ let samplesEl;
 let counter = 0;
 const params = {
 
-	environmentIntensity: 3,
-	emissiveIntensity: 100,
+	environmentIntensity: 1,
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -40,6 +39,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new THREE.Scene();
