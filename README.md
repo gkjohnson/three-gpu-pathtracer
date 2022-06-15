@@ -56,6 +56,9 @@ import {
 
 // init scene, renderer, camera, controls, etc
 
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
 // initialize the path tracing material and renderer
 const ptMaterial = new PhysicalPathTracingMaterial();
 const ptRenderer = new PathTracingRenderer( renderer );
