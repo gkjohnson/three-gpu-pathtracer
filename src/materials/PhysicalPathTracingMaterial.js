@@ -660,7 +660,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the material pdf
 								vec3 sampleColor;
 								float lightMaterialPdf = bsdfResult( outgoing, normalize( invBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
-								if ( lightMaterialPdf > 0.0 && ! any( isnan( sampleColor ) ) ) {
+								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
+								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
 									float lightPdf = lightSampleRec.pdf / float( lightCount + 1u );
@@ -699,7 +700,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the material pdf
 								vec3 sampleColor;
 								float envMaterialPdf = bsdfResult( outgoing, normalize( invBasis * envDirection ), surfaceRec, sampleColor );
-								if ( envMaterialPdf > 0.0 && ! any( isnan( sampleColor ) ) ) {
+								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
+								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
 									envPdf /= float( lightCount + 1u );
