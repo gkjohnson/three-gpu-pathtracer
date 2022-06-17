@@ -82,7 +82,7 @@ scene.updateMatrixWorld();
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials } = generator.generate( scene );
+const { bvh, textures, materials, lights } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
@@ -94,6 +94,10 @@ ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
 ptMaterial.materials.updateFrom( materials, textures );
+
+// update the lights
+ptMaterial.lights.updateFrom( lights );
+ptMaterial.lightCount = lights.length;
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -164,7 +168,7 @@ import { PathTracingSceneWorker } from 'three-gpu-pathtracer/src/workers/PathTra
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneWorker();
-const { bvh, textures, materials } = await generator.generate( scene );
+const { bvh, textures, materials, lights } = await generator.generate( scene );
 
 // ...
 ```
@@ -271,7 +275,8 @@ Utility class for generating the set of data required for initializing the path 
 generate( scene : Object3D, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
-	textures : Array<Texture>
+	textures : Array<Texture>,
+	lights : Array<Light>
 }
 ```
 
@@ -289,7 +294,8 @@ See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
 async generate( scene : Object3D, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
-	textures : Array<Texture>
+	textures : Array<Texture>,
+	lights : Array<Light>
 }
 ```
 
@@ -452,6 +458,10 @@ _extends MaterialBase_
 	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
 
+	// Light information
+	lights: LightsTexture,
+	lightCount = 0: Number,
+
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
 	environmentRotation: Matrix3,
@@ -564,6 +574,20 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
+## LightsTexture
+
+_extends DataTexture_
+
+Helper texture uniform for encoding lights as texture data.
+
+### .updateFrom
+
+```js
+updateFrom( lights : Array<Light> ) : void
+```
+
+Updates the size and values of the texture to align with the provided set of lights.
+
 ## EquirectHdrInfoUniform
 
 Stores the environment map contents along with the intensity distribution information to support multiple importance sampling.
@@ -596,13 +620,17 @@ Merges the set of meshes into a single geometry with a `materialIndex` vertex at
 
 Set of functions for performing material scatter and PDF sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderMaterialSampling.js) for full list of functions.
 
+**shaderLightSampling**
+
+Set of functions for performing light sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderLightSampling.js) for full list of functions.
+
 **shaderStructs**
 
-Material struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
+Material and light struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
 
 **shaderUtils**
 
-Set of randomness and other light transmport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
+Set of randomness and other light transport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
 # Gotchas
 

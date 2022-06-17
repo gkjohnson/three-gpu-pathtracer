@@ -14,7 +14,7 @@ export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 	generate( scene, options = {} ) {
 
 		const { bvhGenerator } = this;
-		const { geometry, materials, textures } = this.prepScene( scene );
+		const { geometry, materials, textures, lights } = this.prepScene( scene );
 
 		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
 		const bvhPromise = bvhGenerator.generate( geometry, bvhOptions );
@@ -24,6 +24,7 @@ export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 				scene,
 				materials,
 				textures,
+				lights,
 				bvh,
 			};
 
