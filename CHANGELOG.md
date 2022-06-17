@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Support for area lights.
 - Support for spotlights.
 
+### Fixed
+- Black renders on M1 Safari devices.
+
 ## [0.0.4] - 2022-06-12
 ### Fixed
 - Textures not working correctly on Pixel 6 due to an issue with `floatBitsToInt`.
