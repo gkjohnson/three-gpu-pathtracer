@@ -6,16 +6,18 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Scene } from 'three';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 let renderer, controls, transformControls, transformControlsScene, areaLights, sceneInfo, ptRenderer, camera, fsQuad;
-let samplesEl;
+let samplesEl, loadingEl;
 const params = {
 
 	environmentIntensity: 0.2,
 	environmentRotation: 0,
 	areaLightIntensity: 20.0,
-	bounces: 20,
+	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.25,
@@ -68,20 +70,31 @@ async function init() {
 	camera.lookAt( - 0.15, 0.33, - 0.08 );
 
 	samplesEl = document.getElementById( 'samples' );
+	loadingEl = document.getElementById( 'loading' );
 
-	const envMapPromise = new Promise( resolve => {
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			ptRenderer.material.envMapInfo.updateFrom( texture );
 
-				ptRenderer.material.envMapInfo.updateFrom( texture );
-				resolve();
-
-			} );
-
-	} );
+		} );
 
 	const group = new THREE.Group();
+
+	const box = new THREE.Box3();
+	const { scene } = await new GLTFLoader()
+		.setMeshoptDecoder( MeshoptDecoder )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Hosmer.glb' );
+
+	scene.scale.setScalar( 0.002 );
+	scene.rotation.x = - Math.PI / 2;
+	scene.updateMatrixWorld( true );
+
+	box.setFromObject( scene );
+	scene.position.y -= box.min.y;
+
+	group.add( scene );
 
 	const floorGeom = new THREE.PlaneBufferGeometry( 10, 10 );
 	const floorMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0x999999 ), roughness: 0.1 } );
@@ -144,7 +157,13 @@ async function init() {
 	transformControlsScene.add( transformControls );
 
 	const generator = new PathTracingSceneWorker();
-	const generatorPromise = generator.generate( group ).then( result => {
+	const generatorPromise = generator.generate( group, {
+		onProgress( v ) {
+
+			loadingEl.innerText = `Generating BVH ${ ( 100 * v ).toFixed( 2 ) }%`;
+
+		}
+	} ).then( result => {
 
 		sceneInfo = result;
 
@@ -167,9 +186,6 @@ async function init() {
 	} );
 
 	await Promise.all( [ generatorPromise, envMapPromise ] );
-
-	window.CAMERA = camera;
-	window.CONTROLS = controls;
 
 	document.getElementById( 'loading' ).remove();
 
