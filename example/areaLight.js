@@ -38,6 +38,18 @@ if ( aspectRatio < 0.65 ) {
 
 init();
 
+// hosmer has 1.3 million tris
+// https://sketchfab.com/3d-models/nile-42e02439c61049d681c897441d40aaa1
+// https://sketchfab.com/3d-models/statue-of-bacchus-09f1c94f43e0400c8916149bab297918
+// https://sketchfab.com/3d-models/ibex-statue-scan-berlin-tierpark-0f274384b28044e3a29fd87e4c765238
+// https://sketchfab.com/3d-models/2-aliens-figure-a58af7bd939d46fca4eb46e43588944f
+// https://sketchfab.com/3d-models/arthur-st-clair-marble-statue-52548aa254dd46488f8e5d5db705e35c
+// https://sketchfab.com/3d-models/louis-xiv-de-france-louvre-paris-a0cc0e7eee384c99838dff2857b8158c
+// https://sketchfab.com/3d-models/lowe-4afeca000f444619ad581a30aa4fd17e
+// https://sketchfab.com/3d-models/laocoon-and-his-sons-649111a9a7b74ddab3937292be5545fc
+// https://sketchfab.com/3d-models/mercury-about-to-kill-argos-by-b-thorvaldsen-bdcd0813bf54467fb879ee1681a3a6d3
+// https://sketchfab.com/3d-models/sculpture-portrait-of-jozef-poniatowski-365677341a3544b8bcc0e26e4dac1a25
+
 async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
