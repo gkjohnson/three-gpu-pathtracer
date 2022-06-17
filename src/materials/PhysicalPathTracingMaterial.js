@@ -35,6 +35,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_DOF: 1,
 				FEATURE_GRADIENT_BG: 0,
 				TRANSPARENT_TRAVERSALS: 5,
+				CAMERA_TYPE: 0,
 			},
 
 			uniforms: {
@@ -54,7 +55,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				lightCount: { value: 0 },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
-				isOrthographicCamera: { value: true },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 2.0 },
 				environmentRotation: { value: new Matrix3() },
@@ -124,7 +124,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int bounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
-				uniform bool isOrthographicCamera;
 				uniform sampler2D normalAttribute;
 				uniform sampler2D tangentAttribute;
 				uniform sampler2D uvAttribute;
@@ -323,17 +322,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					vec3 rayDirection;
 
-					if ( isOrthographicCamera ) {
+					#if CAMERA_TYPE == 1
 
+						// orthographic
 						rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
 						rayDirection = normalize( rayDirection );
 
-					} else {
+					#else
 
+						// perspective
 						vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
 						rayDirection = normalize( rayOrigin - cameraOrigin );
 
-					}
+					#endif
 
 					#if FEATURE_DOF
 					{
