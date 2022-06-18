@@ -56,6 +56,9 @@ import {
 
 // init scene, renderer, camera, controls, etc
 
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
 // initialize the path tracing material and renderer
 const ptMaterial = new PhysicalPathTracingMaterial();
 const ptRenderer = new PathTracingRenderer( renderer );
@@ -79,7 +82,7 @@ scene.updateMatrixWorld();
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials } = generator.generate( scene );
+const { bvh, textures, materials, lights } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
@@ -91,6 +94,10 @@ ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
 ptMaterial.materials.updateFrom( materials, textures );
+
+// update the lights
+ptMaterial.lights.updateFrom( lights );
+ptMaterial.lightCount = lights.length;
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -161,7 +168,7 @@ import { PathTracingSceneWorker } from 'three-gpu-pathtracer/src/workers/PathTra
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneWorker();
-const { bvh, textures, materials } = await generator.generate( scene );
+const { bvh, textures, materials, lights } = await generator.generate( scene );
 
 // ...
 ```
@@ -268,7 +275,8 @@ Utility class for generating the set of data required for initializing the path 
 generate( scene : Object3D, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
-	textures : Array<Texture>
+	textures : Array<Texture>,
+	lights : Array<Light>
 }
 ```
 
@@ -286,7 +294,8 @@ See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
 async generate( scene : Object3D, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
-	textures : Array<Texture>
+	textures : Array<Texture>,
+	lights : Array<Light>
 }
 ```
 
@@ -449,6 +458,10 @@ _extends MaterialBase_
 	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
 
+	// Light information
+	lights: LightsTexture,
+	lightCount = 0: Number,
+
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
 	environmentRotation: Matrix3,
@@ -561,6 +574,20 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
+## LightsTexture
+
+_extends DataTexture_
+
+Helper texture uniform for encoding lights as texture data.
+
+### .updateFrom
+
+```js
+updateFrom( lights : Array<Light> ) : void
+```
+
+Updates the size and values of the texture to align with the provided set of lights.
+
 ## EquirectHdrInfoUniform
 
 Stores the environment map contents along with the intensity distribution information to support multiple importance sampling.
@@ -593,19 +620,22 @@ Merges the set of meshes into a single geometry with a `materialIndex` vertex at
 
 Set of functions for performing material scatter and PDF sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderMaterialSampling.js) for full list of functions.
 
+**shaderLightSampling**
+
+Set of functions for performing light sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderLightSampling.js) for full list of functions.
+
 **shaderStructs**
 
-Material struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
+Material and light struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
 
 **shaderUtils**
 
-Set of randomness and other light transmport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
+Set of randomness and other light transport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
 # Gotchas
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
-- Texture repeat, rotation, and center properties are not supported.
 
 # Screenshots
 
@@ -656,6 +686,16 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 <p align="center">
 <i>Octopus Tea model by <a href="https://sketchfab.com/3d-models/cartoon-octopus-takes-a-tea-bath-107260cf0fd24202a67eb037a6c760a5
 ">AzTiZ</a></i>
+</p>
+
+![](https://user-images.githubusercontent.com/734200/173212652-de6a83e5-dd2c-49b5-8ed7-484ff8969b5b.png)
+<p align="center">
+<i>Botanists Study model by <a href="https://sketchfab.com/3d-models/the-botanists-study-8b7b5743b1c848ed8ea58f5518c44e7e">riikkakilpelainen</a></i>
+</p>
+
+![](https://user-images.githubusercontent.com/734200/173170459-849b9343-efe3-4635-8719-346511472965.png)
+<p align="center">
+<i>Japanese Bridge Garden model by <a href="https://sketchfab.com/3d-models/japanese-bridge-garden-d122e17593eb4012913cde927486d15a">kristenlee</a></i>
 </p>
 
 ### Resources

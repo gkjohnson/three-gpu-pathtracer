@@ -44,6 +44,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		renderer.getClearColor( prevColor );
 
 		// resize the render target and ensure we don't have an empty texture
+		// render target depth must be >= 1 to avoid unbound texture error on android devices
 		const depth = textures.length || 1;
 		this.setSize( width, height, depth );
 		renderer.setClearColor( 0, 0 );
@@ -54,11 +55,23 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
 			const texture = textures[ i ];
-			fsQuad.material.map = texture;
-			fsQuad.material.transparent = true;
+			if ( texture ) {
 
-			renderer.setRenderTarget( this, i );
-			fsQuad.render( renderer );
+				// revert to default texture transform before rendering
+				texture.matrixAutoUpdate = false;
+				texture.matrix.identity();
+
+				fsQuad.material.map = texture;
+				fsQuad.material.transparent = true;
+
+				renderer.setRenderTarget( this, i );
+				fsQuad.render( renderer );
+
+				// restore custom texture transform
+				texture.updateMatrix();
+				texture.matrixAutoUpdate = true;
+
+			}
 
 		}
 

@@ -5,14 +5,26 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Support for equirect rendering with the "FEATURE_EQUIRECT_RENDER" flag.
+- Support for area lights.
+- Support for spotlights.
+
+### Fixed
+- Black renders on M1 Safari devices.
+
+## [0.0.4] - 2022-06-12
 ### Fixed
 - Textures not working correctly on Pixel 6 due to an issue with `floatBitsToInt`.
 - `PathTracingRenderer.alpha` not being able to be changed after rendering.
+- Improved reflective behavior for perfectly smooth surfaces.
+- Case where partially transparent objects would cast full shadows.
 
 ### Added
 - Support for material alpha map.
 - Ability to disable casting of shadows.
 - Support for rendering with Orthographic cameras.
+- Support for texture transform properties per texture.
 
 ## [0.0.3] - 2022-05-22
 ### Fixed

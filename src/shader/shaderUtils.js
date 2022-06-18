@@ -225,4 +225,63 @@ export const shaderUtils = /* glsl */`
 		return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
 
 	}
+
+	// Fast arccos approximation used to remove banding artifacts caused by numerical errors in acos.
+	// This is a cubic Lagrange interpolating polynomial for x = [-1, -1/2, 0, 1/2, 1].
+	// For more information see: https://github.com/gkjohnson/three-gpu-pathtracer/pull/171#issuecomment-1152275248
+	float acosApprox( float x ) {
+
+		x = clamp( x, -1.0, 1.0 );
+		return ( - 0.69813170079773212 * x * x - 0.87266462599716477 ) * x + 1.5707963267948966;
+
+	}
+
+	// Finds the point where the ray intersects the plane defined by u and v and checks if this point
+	// falls in the bounds of the rectangle on that same plane.
+	// Plane intersection: https://lousodrome.net/blog/light/2020/07/03/intersection-of-a-ray-and-a-plane/
+	bool intersectsRectangle( vec3 center, vec3 normal, vec3 u, vec3 v, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
+
+		float t = dot( center - rayOrigin, normal ) / dot( rayDirection, normal );
+
+		if ( t > EPSILON ) {
+
+			vec3 p = rayOrigin + rayDirection * t;
+			vec3 vi = p - center;
+
+			// check if p falls inside the rectangle
+			float a1 = dot( u, vi );
+			if ( abs( a1 ) <= 0.5 ) {
+
+				float a2 = dot( v, vi );
+				if ( abs( a2 ) <= 0.5 ) {
+
+					dist = t;
+					return true;
+
+				}
+
+			}
+
+		}
+
+		return false;
+
+	}
+
+	// power heuristic for multiple importance sampling
+	float misHeuristic( float a, float b ) {
+
+		float aa = a * a;
+		float bb = b * b;
+		return aa / ( aa + bb );
+
+	}
+
+	// An acos with input values bound to the range [-1, 1].
+	float acosSafe( float x ) {
+
+		return acos( clamp( x, -1.0, 1.0 ) );
+
+	}
+
 `;

@@ -56,12 +56,4 @@ float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 directi
 
 }
 
-float misHeuristic( float a, float b ) {
-
-	float aa = a * a;
-	float bb = a * b;
-	return aa / ( bb + aa );
-
-}
-
 `;

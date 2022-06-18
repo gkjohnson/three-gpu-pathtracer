@@ -68,7 +68,7 @@ function* renderTask() {
 
 				}
 
-				material.cameraType = cameraType;
+				material.setDefine( 'CAMERA_TYPE', cameraType );
 
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
