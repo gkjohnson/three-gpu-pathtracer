@@ -9,7 +9,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { EquirectCamera } from '../src/core/EquirectCamera';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad;
+let renderer, controls, sphericalControls, sceneInfo, ptRenderer, activeCamera, fsQuad;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let samplesEl;
 const params = {
@@ -58,14 +58,16 @@ async function init() {
 	document.body.appendChild( renderer.domElement );
 
 	perspectiveCamera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
-	perspectiveCamera.position.set( - 0.2, 0.33, 0.08 );
+	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
 
 	const orthoHeight = orthoWidth / aspectRatio;
 	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.copy( perspectiveCamera.position );
 
 	equirectCamera = new EquirectCamera();
-	equirectCamera.position.copy( perspectiveCamera.position );
+	// Almost, but not quite on top of the control target.
+	// This allows for full rotation without moving the camera very much.
+	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.material = new PhysicalPathTracingMaterial();
@@ -84,6 +86,16 @@ async function init() {
 
 	} );
 	controls.update();
+
+	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
+	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
+	equirectCamera.lookAt( sphericalControls.target );
+	sphericalControls.addEventListener( 'change', () => {
+
+		ptRenderer.reset();
+
+	} );
+	sphericalControls.update();
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -239,40 +251,47 @@ function updateCamera( cameraProjection ) {
 
 	if ( cameraProjection === 'Perspective' ) {
 
-		if ( activeCamera ) {
+		if ( activeCamera === orthoCamera ) {
 
 			perspectiveCamera.position.copy( activeCamera.position );
 
 		}
 
 		activeCamera = perspectiveCamera;
+		controls.object = activeCamera;
 
 	} else if ( cameraProjection === 'Orthographic' ) {
 
-		if ( activeCamera ) {
+		if ( activeCamera === perspectiveCamera ) {
 
 			orthoCamera.position.copy( activeCamera.position );
 
 		}
 
 		activeCamera = orthoCamera;
-
-	} else { // Equirect
-
-		if ( activeCamera ) {
-
-			equirectCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = equirectCamera;
+		controls.object = activeCamera;
 
 	}
 
-	controls.object = activeCamera;
-	ptRenderer.camera = activeCamera;
+	if ( cameraProjection === 'Equirectangular' ) {
 
-	controls.update();
+		activeCamera = equirectCamera;
+
+		controls.enabled = false;
+		sphericalControls.enabled = true;
+
+		sphericalControls.update();
+
+	} else {
+
+		sphericalControls.enabled = false;
+		controls.enabled = true;
+
+		controls.update();
+
+	}
+
+	ptRenderer.camera = activeCamera;
 
 	window.CAMERA = activeCamera;
 
