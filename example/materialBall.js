@@ -7,9 +7,10 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { EquirectCamera } from '../src/core/EquirectCamera';
 
 let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
-let perspectiveCamera, orthoCamera;
+let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
 
@@ -106,6 +107,9 @@ async function init() {
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 4, 2, 3 );
+
+	equirectCamera = new EquirectCamera();
+	equirectCamera.position.set( - 4, 2, 3 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
@@ -327,7 +331,7 @@ async function init() {
 	} );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
+	cameraFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
 
 		updateCamera( v );
 
@@ -441,7 +445,7 @@ function updateCamera( cameraProjection ) {
 
 		activeCamera = perspectiveCamera;
 
-	} else {
+	} else if ( cameraProjection === 'Orthographic' ) {
 
 		if ( activeCamera ) {
 
@@ -450,6 +454,16 @@ function updateCamera( cameraProjection ) {
 		}
 
 		activeCamera = orthoCamera;
+
+	} else { // Equirect
+
+		if ( activeCamera ) {
+
+			equirectCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = equirectCamera;
 
 	}
 
