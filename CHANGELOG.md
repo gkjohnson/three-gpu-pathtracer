@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
-- Support for equirect rendering with the "FEATURE_EQUIRECT_RENDER" flag.
+- Support for equirect rendering with EquirectCamera.
 - Support for area lights.
 - Support for spotlights.
 
