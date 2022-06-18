@@ -359,6 +359,12 @@ anamorphicRatio = 1 : Number
 
 The anamorphic ratio of the lens. A higher value will stretch the bokeh effect horizontally.
 
+## EquirectCamera
+
+_extends THREE.Camera_
+
+A class indicating that the path tracer should render an equirectangular view. Does not work with three.js raster rendering.
+
 ## DynamicPathTracingSceneGenerator
 
 A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
