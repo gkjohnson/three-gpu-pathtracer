@@ -7,20 +7,33 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { Scene } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 let renderer, controls, transformControls, transformControlsScene, areaLights, sceneInfo, ptRenderer, camera, fsQuad;
 let samplesEl, loadingEl;
 const params = {
 
-	environmentIntensity: 0.2,
+	controls: true,
+
+	areaLight1Enabled: true,
+	areaLight2Enabled: true,
+	areaLight1Intensity: 5,
+	areaLight1Color: '#ffffff',
+	areaLight1Width: 1,
+	areaLight1Height: 1,
+
+	areaLight2Intensity: 20,
+	areaLight2Color: '#ff0000',
+	areaLight2Width: 1.25,
+	areaLight2Height: 2.75,
+
+	environmentIntensity: 0.1,
 	environmentRotation: 0,
-	areaLightIntensity: 20.0,
+
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.25,
+	filterGlossyFactor: 0.5,
 	tiles: 1,
 	multipleImportanceSampling: true
 
@@ -38,17 +51,13 @@ if ( aspectRatio < 0.65 ) {
 
 init();
 
-// hosmer has 1.3 million tris
-// https://sketchfab.com/3d-models/nile-42e02439c61049d681c897441d40aaa1
-// https://sketchfab.com/3d-models/statue-of-bacchus-09f1c94f43e0400c8916149bab297918
-// https://sketchfab.com/3d-models/ibex-statue-scan-berlin-tierpark-0f274384b28044e3a29fd87e4c765238
+// other sculptures
+// * https://sketchfab.com/3d-models/nile-42e02439c61049d681c897441d40aaa1
+// * https://sketchfab.com/3d-models/statue-of-bacchus-09f1c94f43e0400c8916149bab297918
 // https://sketchfab.com/3d-models/2-aliens-figure-a58af7bd939d46fca4eb46e43588944f
-// https://sketchfab.com/3d-models/arthur-st-clair-marble-statue-52548aa254dd46488f8e5d5db705e35c
-// https://sketchfab.com/3d-models/louis-xiv-de-france-louvre-paris-a0cc0e7eee384c99838dff2857b8158c
-// https://sketchfab.com/3d-models/lowe-4afeca000f444619ad581a30aa4fd17e
-// https://sketchfab.com/3d-models/laocoon-and-his-sons-649111a9a7b74ddab3937292be5545fc
-// https://sketchfab.com/3d-models/mercury-about-to-kill-argos-by-b-thorvaldsen-bdcd0813bf54467fb879ee1681a3a6d3
-// https://sketchfab.com/3d-models/sculpture-portrait-of-jozef-poniatowski-365677341a3544b8bcc0e26e4dac1a25
+// * https://sketchfab.com/3d-models/lowe-4afeca000f444619ad581a30aa4fd17e
+// * https://sketchfab.com/3d-models/laocoon-and-his-sons-649111a9a7b74ddab3937292be5545fc
+// * https://sketchfab.com/3d-models/mercury-about-to-kill-argos-by-b-thorvaldsen-bdcd0813bf54467fb879ee1681a3a6d3
 
 async function init() {
 
@@ -58,7 +67,7 @@ async function init() {
 	document.body.appendChild( renderer.domElement );
 
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 0.4, 0.6, 2.65 );
+	camera.position.set( 0.0, 0.6, 2.65 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
@@ -85,7 +94,7 @@ async function init() {
 	loadingEl = document.getElementById( 'loading' );
 
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr' )
 		.then( texture => {
 
 			ptRenderer.material.envMapInfo.updateFrom( texture );
@@ -97,10 +106,17 @@ async function init() {
 	const box = new THREE.Box3();
 	const { scene } = await new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Hosmer.glb' );
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb' );
 
-	scene.scale.setScalar( 0.002 );
-	scene.rotation.x = - Math.PI / 2;
+	scene.traverse( c => {
+
+		if ( c.material ) c.material.map = null;
+
+	} );
+
+	scene.scale.setScalar( 0.01 );
+	// scene.rotation.x = - Math.PI / 2;
+	scene.position.x = 0.05;
 	scene.updateMatrixWorld( true );
 
 	box.setFromObject( scene );
@@ -108,21 +124,21 @@ async function init() {
 
 	group.add( scene );
 
-	const floorGeom = new THREE.PlaneBufferGeometry( 10, 10 );
-	const floorMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0x999999 ), roughness: 0.1 } );
+	const floorGeom = new THREE.CylinderBufferGeometry( 3.5, 3.5, 0.05, 60 );
+	const floorMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
 	const floor = new THREE.Mesh( floorGeom, floorMat );
-	floor.rotateX( Math.PI / 2 );
+	floor.position.y = - 0.025;
 	group.add( floor );
 
-	const redBoxGeom = new THREE.BoxBufferGeometry( 0.5, 2, 2 );
-	const redBoxMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0xAA0000 ) } );
-	const redBox = new THREE.Mesh( redBoxGeom, redBoxMat );
-	redBox.position.set( - 1.5, 1.0, 0.0 );
-	group.add( redBox );
+	// const redBoxGeom = new THREE.BoxBufferGeometry( 0.1, 2, 2 );
+	// const redBoxMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0xFF0000 ) } );
+	// const redBox = new THREE.Mesh( redBoxGeom, redBoxMat );
+	// redBox.position.set( - 1.5, 1.0, 0.0 );
+	// // group.add( redBox );
 
 	group.updateMatrixWorld();
 
-	const areaLight1 = new THREE.RectAreaLight( new THREE.Color( 0xFFFFFF ), 20.0, 1.0, 1.0 );
+	const areaLight1 = new THREE.RectAreaLight( new THREE.Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
 	areaLight1.position.x = 1.5;
 	areaLight1.position.y = 1.0;
 	areaLight1.position.z = - 0.5;
@@ -130,10 +146,9 @@ async function init() {
 	areaLight1.rotateX( - Math.PI / 2 );
 	group.add( areaLight1 );
 
-	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0x00FF00 ), 10.0, 5.0, 1.0 );
-	areaLight2.position.x = - 2.5;
-	areaLight2.position.y = 0.5;
-	areaLight2.position.z = - 3.0;
+	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0xff0000 ), 15.0, 1.25, 2.75 );
+	areaLight2.position.y = 1.25;
+	areaLight2.position.z = - 1.5;
 	areaLight2.rotateX( Math.PI );
 	group.add( areaLight2 );
 
@@ -148,6 +163,7 @@ async function init() {
 	} );
 	transformControls.addEventListener( 'dragging-changed', ( e ) => controls.enabled = ! e.value );
 	transformControls.attach( areaLight1 );
+	transformControls.setSize( 0.5 );
 
 	window.addEventListener( 'keydown', function ( event ) {
 
@@ -165,7 +181,7 @@ async function init() {
 
 	} );
 
-	transformControlsScene = new Scene();
+	transformControlsScene = new THREE.Scene();
 	transformControlsScene.add( transformControls );
 
 	const generator = new PathTracingSceneWorker();
@@ -205,57 +221,94 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	gui.add( params, 'controls' ).onChange( v => {
+
+		transformControls.enabled = v;
+		transformControls.visible = v;
+
+	} );
+	const ptFolder = gui.addFolder( 'Path Tracing' );
+	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		ptRenderer.tiles.set( value, value );
 
 	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
+	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'areaLightIntensity', 0, 50 ).onChange( updateIntensity );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
 
 	} );
-	gui.add( params, 'multipleImportanceSampling' ).onChange( () => {
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( () => {
 
 		ptRenderer.material.defines.FEATURE_MIS = params.multipleImportanceSampling ? 1 : 0;
 		ptRenderer.material.needsUpdate = true;
 		ptRenderer.reset();
 
 	} );
+	ptFolder.close();
 
-	updateIntensity();
+	const envFolder = gui.addFolder( 'Environment' );
+	envFolder.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	envFolder.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
+
+		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.reset();
+
+	} );
+	envFolder.close();
+
+	const areaLight1Folder = gui.addFolder( 'Area Light 1' );
+	areaLight1Folder.add( params, 'areaLight1Enabled' ).name( 'enable' ).onChange( updateLights );
+	areaLight1Folder.add( params, 'areaLight1Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
+	areaLight1Folder.addColor( params, 'areaLight1Color' ).name( 'color' ).onChange( updateLights );
+	areaLight1Folder.add( params, 'areaLight1Width', 0, 5 ).name( 'width' ).onChange( updateLights );
+	areaLight1Folder.add( params, 'areaLight1Height', 0, 5 ).name( 'height' ).onChange( updateLights );
+
+	const areaLight2Folder = gui.addFolder( 'Area Light 2' );
+	areaLight2Folder.add( params, 'areaLight2Enabled' ).name( 'enable' ).onChange( updateLights );
+	areaLight2Folder.add( params, 'areaLight2Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
+	areaLight2Folder.addColor( params, 'areaLight2Color' ).name( 'color' ).onChange( updateLights );
+	areaLight2Folder.add( params, 'areaLight2Width', 0, 5 ).name( 'width' ).onChange( updateLights );
+	areaLight2Folder.add( params, 'areaLight2Height', 0, 5 ).name( 'height' ).onChange( updateLights );
+
+	updateLights();
 
 	animate();
 
 }
 
-function updateIntensity() {
+function updateLights() {
 
-	areaLights[ 0 ].intensity = params.areaLightIntensity;
-	ptRenderer.material.lights.updateFrom( areaLights );
+	areaLights[ 0 ].intensity = params.areaLight1Intensity;
+	areaLights[ 0 ].width = params.areaLight1Width;
+	areaLights[ 0 ].height = params.areaLight1Height;
+	areaLights[ 0 ].color.set( params.areaLight1Color ).convertSRGBToLinear();
+
+	areaLights[ 1 ].intensity = params.areaLight2Intensity;
+	areaLights[ 1 ].width = params.areaLight2Width;
+	areaLights[ 1 ].height = params.areaLight2Height;
+	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
+
+	const enabledLights = [];
+	if ( params.areaLight1Enabled ) enabledLights.push( areaLights[ 0 ] );
+	if ( params.areaLight2Enabled ) enabledLights.push( areaLights[ 1 ] );
+
+	ptRenderer.material.lights.updateFrom( enabledLights );
 	ptRenderer.reset();
 
 }
