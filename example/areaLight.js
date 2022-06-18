@@ -79,7 +79,7 @@ async function init() {
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.15, 0.33, - 0.08 );
+	controls.target.set( 0, 0.33, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
