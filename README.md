@@ -31,6 +31,8 @@ _More features and capabilities in progress!_
 
 [Morph Target Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/skinnedMesh.html#morphtarget)
 
+[Area Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/areaLight.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
