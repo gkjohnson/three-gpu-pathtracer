@@ -259,7 +259,7 @@ async function init() {
 	ptFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
+	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( () => {
 
 		ptRenderer.reset();
 
