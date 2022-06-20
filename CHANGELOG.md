@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 - Black renders on M1 Safari devices.
+- Camera ray direction recision issues when scrolling far from the origin.
 
 ## [0.0.4] - 2022-06-12
 ### Fixed
