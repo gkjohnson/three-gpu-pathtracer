@@ -343,8 +343,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// Perspective projection
 
-							vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
-							rayDirection = normalize( rayOrigin - cameraOrigin );
+							rayDirection = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
 
 						#endif
 
