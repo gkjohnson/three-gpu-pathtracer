@@ -610,7 +610,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
 								mat3 vTBN = mat3( tangent, bitangent, normal );
 
-								vec3 uvPrime = material.normalMapTransform * vec3( uv, 1 );
+								vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
 								vec3 texNormal = texture2D( textures, vec3( uvPrime.xy, material.normalMap ) ).xyz * 2.0 - 1.0;
 								texNormal.xy *= material.normalScale;
 								normal = vTBN * texNormal;
