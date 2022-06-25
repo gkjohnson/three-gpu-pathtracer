@@ -17,6 +17,7 @@ export * from './utils/GeometryPreparationUtils.js';
 export * from './utils/BlurredEnvMapGenerator.js';
 
 // materials
+export * from './materials/DenoiseMaterial';
 export * from './materials/MaterialBase.js';
 export * from './materials/PhysicalPathTracingMaterial.js';
 

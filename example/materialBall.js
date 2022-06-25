@@ -51,6 +51,12 @@ const params = {
 
 	multipleImportanceSampling: true,
 	stableNoise: false,
+	denoiseEnabled: true,
+	denoiseSliderEnabled: true,
+	denoiseSlider: 0.0,
+	denoiseSigma: 2.5,
+	denoiseThreshold: 0.1,
+	denoiseKSigma: 1.0,
 	environmentIntensity: 1,
 	environmentRotation: 0,
 	environmentBlur: 0.0,
@@ -116,6 +122,8 @@ async function init() {
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
+	ptRenderer.denoise = params.denoiseEnabled;
+	ptRenderer.denoiser.setDefine( 'USE_SLIDER', Number( params.denoiseSliderEnabled ) );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -285,6 +293,38 @@ async function init() {
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
+
+	} );
+
+	const denoiseFolder = gui.addFolder( 'Denoising' );
+	denoiseFolder.add( params, 'denoiseEnabled' ).onChange( value => {
+
+		ptRenderer.denoise = value;
+
+	} );
+	denoiseFolder.add( params, 'denoiseSliderEnabled' ).onChange( value => {
+
+		ptRenderer.denoiser.setDefine( 'USE_SLIDER', Number( value ) );
+
+	} );
+	denoiseFolder.add( params, 'denoiseSlider', - 1.0, 1.0 ).onChange( value => {
+
+		ptRenderer.denoiser.slider = value;
+
+	} );
+	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 ).onChange( value => {
+
+		ptRenderer.denoiser.sigma = value;
+
+	} );
+	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 ).onChange( value => {
+
+		ptRenderer.denoiser.threshold = value;
+
+	} );
+	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 ).onChange( value => {
+
+		ptRenderer.denoiser.kSigma = value;
 
 	} );
 
