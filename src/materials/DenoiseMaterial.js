@@ -111,7 +111,7 @@ export class DenoiseMaterial extends MaterialBase {
 							vec4 walkPx = texture2D( tex, uv + d / size );
 
 							vec4 dC = walkPx - centrPx;
-							float deltaFactor = exp( - dot( dC.rgb, dC.rgb ) * invThresholdSqx2 ) * invThresholdSqrt2PI * blurFactor;
+							float deltaFactor = exp( - dot( dC.rgba, dC.rgba ) * invThresholdSqx2 ) * invThresholdSqrt2PI * blurFactor;
 
 							zBuff += deltaFactor;
 							aBuff += deltaFactor * walkPx;
