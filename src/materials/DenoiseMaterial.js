@@ -94,6 +94,7 @@ export class DenoiseMaterial extends MaterialBase {
 					float invThresholdSqrt2PI = INV_SQRT_OF_2PI / threshold;
 
 					vec4 centrPx = texture2D( tex, uv );
+					centrPx.rgb *= centrPx.a;
 
 					float zBuff = 0.0;
 					vec4 aBuff = vec4( 0.0 );
@@ -109,6 +110,7 @@ export class DenoiseMaterial extends MaterialBase {
 							float blurFactor = exp( - dot( d, d ) * invSigmaQx2 ) * invSigmaQx2PI;
 
 							vec4 walkPx = texture2D( tex, uv + d / size );
+							walkPx.rgb *= walkPx.a;
 
 							vec4 dC = walkPx - centrPx;
 							float deltaFactor = exp( - dot( dC.rgba, dC.rgba ) * invThresholdSqx2 ) * invThresholdSqrt2PI * blurFactor;
