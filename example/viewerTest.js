@@ -28,8 +28,8 @@ const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	tilesX: 5,
-	tilesY: 5,
+	tilesX: 2,
+	tilesY: 2,
 	samplesPerFrame: 1,
 	scale: 1 / window.devicePixelRatio,
 
