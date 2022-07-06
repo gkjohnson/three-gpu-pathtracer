@@ -1,45 +1,29 @@
 import {
 	ACESFilmicToneMapping,
 	NoToneMapping,
-	Box3,
 	LoadingManager,
-	Sphere,
 	Color,
-	DoubleSide,
-	Mesh,
-	MeshStandardMaterial,
-	PlaneBufferGeometry,
-	Group,
-	MeshPhysicalMaterial,
 	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
-	OrthographicCamera,
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
-	Matrix4,
-	DataTexture,
-	RGBAFormat,
-	FloatType,
 	EquirectangularReflectionMapping,
 	MathUtils,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
-import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
-const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/';
+const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
 
 const params = {
 
@@ -125,7 +109,6 @@ async function init() {
 
 	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
 
-	console.log(scenarios)
 	models = {};
 	scenarios.forEach( s => {
 
@@ -297,23 +280,17 @@ async function updateModel() {
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
 
-	// lighting: '../../../shared-assets/environments/lightroom_14b.hdr',
-	// dimensions: {width: 768, height: 768},
-	// target: {x: 0, y: 0, z: 0},
-	// orbit: {theta: 0, phi: 90, radius: 1},
-	// verticalFoV: 45,
-	// renderSkybox: false
-
 	let {
 		orbit = {},
 		target = {},
-		verticalFoV = 45,
-		renderSkybox = false,
-		lighting = '../../shared-assets/environments/lightroom_14b.hdr',
 		dimensions = { width: 768, height: 768 },
 	} = modelInfo;
 
-	console.log(modelInfo.orbit);
+	const {
+		verticalFoV = 45,
+		renderSkybox = false,
+		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
+	} = modelInfo;
 
 	orbit = Object.assign( {}, { theta: 0, phi: 90, radius: 1 }, orbit );
 	target = Object.assign( {}, { x: 0, y: 0, z: 0 }, target );
@@ -419,6 +396,7 @@ async function updateModel() {
 		controls.update();
 		camera.updateMatrixWorld();
 
+		ptRenderer.material.backgroundAlpha = renderSkybox ? 1 : 0;
 
 		ptRenderer.reset();
 
@@ -429,29 +407,13 @@ async function updateModel() {
 
 	manager.onLoad = onFinish;
 
-	if ( lighting ) {
+	const envUrl = new URL( lighting, BASE_URL ).toString();
+	new RGBELoader( manager )
+		.load( envUrl, res => {
 
-		const envUrl = new URL( lighting, BASE_URL ).toString();
-		console.log(envUrl)
-		new RGBELoader( manager )
-			.load( envUrl, res => {
+			envMap = res;
 
-				envMap = res;
-
-			} );
-
-	} else {
-
-		envMap = new DataTexture(
-			new Float32Array( [ 1.0, 1.0, 1.0, 1.0 ] ),
-			1,
-			1,
-			RGBAFormat,
-			FloatType,
-			EquirectangularReflectionMapping,
-		);
-
-	}
+		} );
 
 	new GLTFLoader( manager )
 		.setMeshoptDecoder( MeshoptDecoder )
