@@ -139,7 +139,7 @@ function animate() {
 
 	stats.update();
 
-	imgEl.style.visibility = params.imageMode === 'hidden' ? 'hidden' : 'visible';
+	imgEl.style.display = params.imageMode === 'hidden' ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
 	imgEl.style.width = renderer.domElement.style.width;
@@ -320,7 +320,7 @@ async function updateModel() {
 	dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
 
 	loadingModel = true;
-	containerEl.style.visibility = 'hidden';
+	containerEl.style.display = 'none';
 	samplesEl.innerText = '--';
 	creditEl.innerText = '--';
 	loadingEl.innerText = 'Loading';
@@ -417,7 +417,7 @@ async function updateModel() {
 
 		ptRenderer.reset();
 
-		containerEl.style.visibility = 'visible';
+		containerEl.style.display = 'flex';
 		loadingModel = false;
 		if ( params.checkerboardTransparency ) {
 
