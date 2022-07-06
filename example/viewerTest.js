@@ -29,38 +29,32 @@ const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	resolutionScale: 1 / window.devicePixelRatio,
 	tilesX: 5,
 	tilesY: 5,
 	samplesPerFrame: 1,
 
 	model: '',
 
-	gradientTop: '#bfd8ff',
-	gradientBottom: '#ffffff',
-
 	environmentIntensity: 3.0,
-	environmentBlur: 0.0,
-	environmentRotation: 0,
-
 	checkerboardTransparency: true,
 
 	enable: true,
 	bounces: 2,
 	pause: false,
 
+	imageShow: false,
+	imageOpacity: 0.5,
+	imageType: 'dspbr-pt',
+
 };
 
-let creditEl, loadingEl, samplesEl, containerEl;
-let floorPlane, gui, stats, sceneInfo;
-let renderer, orthoCamera, camera;
+let creditEl, loadingEl, samplesEl, containerEl, imgEl;
+let gui, stats, sceneInfo;
+let renderer, camera;
 let ptRenderer, fsQuad, controls, scene;
-let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
 let models;
-
-const orthoWidth = 2;
 
 init();
 
@@ -70,6 +64,7 @@ async function init() {
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 	containerEl = document.getElementById( 'container' );
+	imgEl = document.querySelector( 'img' );
 
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.outputEncoding = sRGBEncoding;
@@ -94,10 +89,8 @@ async function init() {
 		blending: CustomBlending
 	} ) );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( camera, containerEl );
 	controls.addEventListener( 'change', resetRenderer );
-
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	stats = new Stats();
 	containerEl.appendChild( stats.dom );
@@ -105,7 +98,6 @@ async function init() {
 	renderer.toneMapping = ACESFilmicToneMapping;
 	scene.background = new Color( 0x060606 );
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
-
 
 	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
 
@@ -141,6 +133,9 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	stats.update();
+
+	imgEl.style.visibility = params.imageShow ? 'visible' : 'hidden';
+	imgEl.style.opacity = params.imageOpacity;
 
 	if ( loadingModel ) {
 
@@ -237,12 +232,20 @@ function buildGui() {
 
 	} );
 
+	const comparisonFolder = gui.addFolder( 'comparison' );
+	comparisonFolder.add( params, 'imageShow' );
+	comparisonFolder.add( params, 'imageType', [
+		'dspbr-pt',
+		'filament',
+		'babylon',
+		'gltf-sample-viewer',
+		'model-viewer',
+		'rhodonite',
+		'stellar'
+	] ).onChange( updateImage );
+	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
+
 	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onResize();
-
-	} );
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
@@ -297,11 +300,13 @@ async function updateModel() {
 	dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
 
 	loadingModel = true;
-	renderer.domElement.style.visibility = 'hidden';
+	containerEl.style.visibility = 'hidden';
 	samplesEl.innerText = '--';
 	creditEl.innerText = '--';
 	loadingEl.innerText = 'Loading';
 	loadingEl.style.visibility = 'visible';
+
+	updateImage();
 
 	scene.traverse( c => {
 
@@ -371,7 +376,7 @@ async function updateModel() {
 		buildGui();
 
 		loadingModel = false;
-		renderer.domElement.style.visibility = 'visible';
+		containerEl.style.visibility = 'visible';
 		if ( params.checkerboardTransparency ) {
 
 			containerEl.classList.add( 'checkerboard' );
@@ -435,5 +440,11 @@ async function updateModel() {
 
 			}
 		);
+
+}
+
+function updateImage() {
+
+	imgEl.src = `https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
 
 }
