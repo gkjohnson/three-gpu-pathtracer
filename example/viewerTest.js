@@ -2,7 +2,6 @@ import {
 	ACESFilmicToneMapping,
 	NoToneMapping,
 	LoadingManager,
-	Color,
 	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
@@ -32,6 +31,7 @@ const params = {
 	tilesX: 5,
 	tilesY: 5,
 	samplesPerFrame: 1,
+	scale: 1 / window.devicePixelRatio,
 
 	model: '',
 	checkerboardTransparency: true,
@@ -100,11 +100,12 @@ async function init() {
 	controls = new OrbitControls( camera, containerEl );
 	controls.addEventListener( 'change', resetRenderer );
 
+	// init stats
 	stats = new Stats();
 	containerEl.appendChild( stats.dom );
 
+	// init models
 	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
-
 	models = {};
 	scenarios.forEach( s => {
 
@@ -218,6 +219,17 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( v => {
+
+		const dpr = window.devicePixelRatio;
+		let { dimensions = {} } = models[ params.model ];
+		dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
+
+		const { width, height } = dimensions;
+		ptRenderer.setSize( width * dpr * v, height * dpr * v );
+		ptRenderer.reset();
+
+	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
@@ -289,7 +301,7 @@ async function updateModel() {
 	let {
 		orbit = {},
 		target = {},
-		dimensions = { width: 768, height: 768 },
+		dimensions = {},
 	} = modelInfo;
 
 	const {
@@ -395,7 +407,7 @@ async function updateModel() {
 		const { width, height } = dimensions;
 		renderer.setSize( width, height );
 		renderer.setPixelRatio( dpr );
-		ptRenderer.setSize( width * dpr, height * dpr );
+		ptRenderer.setSize( width * dpr * params.scale, height * dpr * params.scale );
 		camera.aspect = width / height;
 		camera.fov = verticalFoV;
 		camera.updateProjectionMatrix();
