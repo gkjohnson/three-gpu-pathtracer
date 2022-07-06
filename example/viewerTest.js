@@ -37,10 +37,10 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 2,
+	bounces: 5,
 	pause: false,
 
-	imageShow: false,
+	imageMode: 'hidden',
 	imageOpacity: 0.5,
 	imageType: 'dspbr-pt',
 
@@ -77,7 +77,7 @@ async function init() {
 
 	// init camera
 	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
+	camera = new PerspectiveCamera( 60, aspect, 0.01, 500 );
 	camera.position.set( - 1, 0.25, 1 );
 
 	// init path tracer
@@ -139,8 +139,11 @@ function animate() {
 
 	stats.update();
 
-	imgEl.style.visibility = params.imageShow ? 'visible' : 'hidden';
-	imgEl.style.opacity = params.imageOpacity;
+	imgEl.style.visibility = params.imageMode === 'hidden' ? 'hidden' : 'visible';
+	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
+	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
+	imgEl.style.width = renderer.domElement.style.width;
+	imgEl.style.height = renderer.domElement.style.height;
 
 	if ( loadingModel ) {
 
@@ -248,7 +251,7 @@ function buildGui() {
 	} );
 
 	const comparisonFolder = gui.addFolder( 'comparison' );
-	comparisonFolder.add( params, 'imageShow' );
+	comparisonFolder.add( params, 'imageMode', [ 'hidden', 'overlay', 'side-by-side' ] );
 	comparisonFolder.add( params, 'imageType', [
 		'dspbr-pt',
 		'filament',
@@ -297,6 +300,8 @@ async function updateModel() {
 	let model, envMap;
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
+
+	window.location.hash = params.model;
 
 	let {
 		orbit = {},
@@ -390,14 +395,6 @@ async function updateModel() {
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
-		loadingModel = false;
-		containerEl.style.visibility = 'visible';
-		if ( params.checkerboardTransparency ) {
-
-			containerEl.classList.add( 'checkerboard' );
-
-		}
-
 		camera.position.setFromSphericalCoords( orbit.radius, MathUtils.DEG2RAD * orbit.phi, MathUtils.DEG2RAD * orbit.theta );
 		camera.position.x += target.x;
 		camera.position.y += target.y;
@@ -419,6 +416,14 @@ async function updateModel() {
 		ptRenderer.material.backgroundAlpha = renderSkybox ? 1 : 0;
 
 		ptRenderer.reset();
+
+		containerEl.style.visibility = 'visible';
+		loadingModel = false;
+		if ( params.checkerboardTransparency ) {
+
+			containerEl.classList.add( 'checkerboard' );
+
+		}
 
 	};
 
