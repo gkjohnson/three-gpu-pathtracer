@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Support for equirect rendering with EquirectCamera.
 - Support for area lights.
 - Support for spotlights.
+- Support for threejs compatible texture transforms.
 
 ### Fixed
 - Black renders on M1 Safari devices.
