@@ -14,6 +14,7 @@ export class MaterialsTexture extends DataTexture {
 		this.wrapS = ClampToEdgeWrapping;
 		this.wrapT = ClampToEdgeWrapping;
 		this.generateMipmaps = false;
+		this.threeCompatibilityTransforms = false;
 
 	}
 
@@ -103,20 +104,52 @@ export class MaterialsTexture extends DataTexture {
 
 		}
 
-		/**
-		 *
-		 * @param {Object} material
-		 * @param {string} textureKey
-		 * @param {Float32Array} array
-		 * @param {number} offset
-		 * @returns {8} number of floats occupied by texture transform matrix
-		 */
+		function getUVTransformTexture( material ) {
+
+			// https://github.com/mrdoob/three.js/blob/f3a832e637c98a404c64dae8174625958455e038/src/renderers/webgl/WebGLMaterials.js#L204-L306
+			// https://threejs.org/docs/#api/en/textures/Texture.offset
+			// fallback order of textures to use as a common uv transform
+			return material.map ||
+				material.specularMap ||
+				material.displacementMap ||
+				material.normalMap ||
+				material.bumpMap ||
+				material.roughnessMap ||
+				material.metalnessMap ||
+				material.alphaMap ||
+				material.emissiveMap ||
+				material.clearcoatMap ||
+				material.clearcoatNormalMap ||
+				material.clearcoatRoughnessMap ||
+				material.iridescenceMap ||
+				material.iridescenceThicknessMap ||
+				material.specularIntensityMap ||
+				material.specularColorMap ||
+				material.transmissionMap ||
+				material.thicknessMap ||
+				material.sheenColorMap ||
+				material.sheenRoughnessMap ||
+				null;
+
+		}
+
 		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
 
-			// check if texture exists
-			if ( material[ textureKey ] && material[ textureKey ].isTexture ) {
+			let texture;
+			if ( threeCompatibilityTransforms ) {
 
-				const elements = material[ textureKey ].matrix.elements;
+				texture = getUVTransformTexture( material );
+
+			} else {
+
+				texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
+
+			}
+
+			// check if texture exists
+			if ( texture ) {
+
+				const elements = texture.matrix.elements;
 
 				let i = 0;
 
@@ -141,18 +174,19 @@ export class MaterialsTexture extends DataTexture {
 		let index = 0;
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
+		const { threeCompatibilityTransforms, image } = this;
 
-		if ( this.image.width !== dimension ) {
+		if ( image.width !== dimension ) {
 
 			this.dispose();
 
-			this.image.data = new Float32Array( dimension * dimension * 4 );
-			this.image.width = dimension;
-			this.image.height = dimension;
+			image.data = new Float32Array( dimension * dimension * 4 );
+			image.width = dimension;
+			image.height = dimension;
 
 		}
 
-		const floatArray = this.image.data;
+		const floatArray = image.data;
 
 		// on some devices (Google Pixel 6) the "floatBitsToInt" function does not work correctly so we
 		// can't encode texture ids that way.

@@ -509,7 +509,6 @@ _extends MaterialBase_
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
-
 }
 ```
 
@@ -549,6 +548,16 @@ Copies all fields from the passed PhysicalCamera if available otherwise the defa
 _extends DataTexture_
 
 Helper texture uniform for encoding materials as texture data.
+
+### .threeCompatibilityTransforms
+
+```js
+threeCompatibilityTransforms = false : Boolean
+```
+
+Three.js materials support only a single set of UV transforms in a certain fallback priority while the pathtracer supports a unique set of transforms per texture. Set this field to true in order to use the same uv transform handling as three.js materials.
+
+See fallback order documentation [here](https://threejs.org/docs/#api/en/textures/Texture.offset).
 
 ### .setSide
 
