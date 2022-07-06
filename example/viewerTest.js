@@ -18,7 +18,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -34,8 +34,6 @@ const params = {
 	samplesPerFrame: 1,
 
 	model: '',
-
-	environmentIntensity: 3.0,
 	checkerboardTransparency: true,
 
 	enable: true,
@@ -60,44 +58,50 @@ init();
 
 async function init() {
 
+	// get elements
 	creditEl = document.getElementById( 'credits' );
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 	containerEl = document.getElementById( 'container' );
 	imgEl = document.querySelector( 'img' );
 
+	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.physicallyCorrectLights = true;
 	containerEl.appendChild( renderer.domElement );
 
+	// init scene
 	scene = new Scene();
 
+	// init camera
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
 	camera.position.set( - 1, 0.25, 1 );
 
+	// init path tracer
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.alpha = true;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
+	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
+
+	// init fsquad
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: CustomBlending
 	} ) );
 
+	// init controls
 	controls = new OrbitControls( camera, containerEl );
 	controls.addEventListener( 'change', resetRenderer );
 
 	stats = new Stats();
 	containerEl.appendChild( stats.dom );
-	renderer.physicallyCorrectLights = true;
-	renderer.toneMapping = ACESFilmicToneMapping;
-	scene.background = new Color( 0x060606 );
-	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
 	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
 
@@ -156,7 +160,6 @@ function animate() {
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = 0.5;
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
 
