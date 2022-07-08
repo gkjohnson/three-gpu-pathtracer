@@ -26,6 +26,8 @@ const params = {
 		ior: 1.495,
 		transmission: 0.0,
 		opacity: 1.0,
+		clearcoat: 0.0,
+		clearcoatRoughness: 0.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -38,6 +40,8 @@ const params = {
 		transmission: 0.0,
 		ior: 1.495,
 		opacity: 1.0,
+		clearcoat: 0.0,
+		clearcoatRoughness: 0.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -45,6 +49,8 @@ const params = {
 		color: '#000000',
 		roughness: 0.01,
 		metalness: 0.05,
+		clearcoat: 0.0,
+		clearcoatRoughness: 0.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -363,6 +369,8 @@ async function init() {
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
+	matFolder1.add( params.material1, 'clearcoat', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'clearcoatRoughness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'matte' ).onChange( reset );
 	matFolder1.add( params.material1, 'castShadow' ).onChange( reset );
 	matFolder1.close();
@@ -376,6 +384,8 @@ async function init() {
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
+	matFolder2.add( params.material2, 'clearcoat', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'clearcoatRoughness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'matte' ).onChange( reset );
 	matFolder2.add( params.material2, 'castShadow' ).onChange( reset );
 	matFolder2.close();
@@ -384,6 +394,8 @@ async function init() {
 	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
 	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'clearcoat', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'clearcoatRoughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'matte' ).onChange( reset );
 	matFolder3.add( params.material3, 'castShadow' ).onChange( reset );
 	matFolder3.close();
@@ -488,6 +500,8 @@ function animate() {
 	m1.transmission = params.material1.transmission;
 	m1.ior = params.material1.ior;
 	m1.opacity = params.material1.opacity;
+	m1.clearcoat = params.material1.clearcoat;
+	m1.clearcoatRoughness = params.material1.clearcoatRoughness;
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
@@ -498,11 +512,15 @@ function animate() {
 	m2.transmission = params.material2.transmission;
 	m2.ior = params.material2.ior;
 	m2.opacity = params.material2.opacity;
+	m2.clearcoat = params.material2.clearcoat;
+	m2.clearcoatRoughness = params.material2.clearcoatRoughness;
 
 	const m3 = materials[ 2 ];
 	m3.color.set( params.material3.color ).convertSRGBToLinear();
 	m3.metalness = params.material3.metalness;
 	m3.roughness = params.material3.roughness;
+	m3.clearcoat = params.material3.clearcoat;
+	m3.clearcoatRoughness = params.material3.clearcoatRoughness;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );

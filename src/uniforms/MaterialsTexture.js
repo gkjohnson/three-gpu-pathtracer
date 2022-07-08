@@ -1,6 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 19;
+const MATERIAL_PIXELS = 26;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 export class MaterialsTexture extends DataTexture {
@@ -245,6 +245,30 @@ export class MaterialsTexture extends DataTexture {
 
  			}
 
+			// clearcoat
+			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
+			floatArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
+
+			// clearcoatRoughness
+			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
+			floatArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
+
+			// clearcoatNormal
+			floatArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
+
+			if ( 'clearcoatNormalScale' in m ) {
+
+				floatArray[ index ++ ] = m.clearcoatNormalScale.x;
+				floatArray[ index ++ ] = m.clearcoatNormalScale.y;
+
+			} else {
+
+				floatArray[ index ++ ] = 1;
+				floatArray[ index ++ ] = 1;
+
+			}
+
+			// alphaMap
 			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
 
 			// side & matte
@@ -254,9 +278,6 @@ export class MaterialsTexture extends DataTexture {
 			index ++; // matte
 
 			index ++; // shadow
-			index ++;
-			index ++;
-			index ++;
 
 			// map transform
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
@@ -275,6 +296,15 @@ export class MaterialsTexture extends DataTexture {
 
 			// normalMap transform
 			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
+
+			// clearcoatMap transform
+			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
+
+			// clearcoatNormalMap transform
+			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
+
+			// clearcoatRoughnessMap transform
+			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
 
 		}
 
