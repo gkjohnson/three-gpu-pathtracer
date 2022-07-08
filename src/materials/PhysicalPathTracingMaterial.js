@@ -404,6 +404,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// path tracing state
 					float accumulatedRoughness = 0.0;
+					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
 					vec3 throughputColor = vec3( 1.0 );
@@ -594,6 +595,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						// normal
+						vec3 baseNormal = normal;
 						if ( material.normalMap != - 1 ) {
 
 							vec4 tangentSample = textureSampleBarycoord(
@@ -621,6 +623,53 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						normal *= side;
 
+						// clearcoat
+						float clearcoat = material.clearcoat;
+						if ( material.clearcoatMap != - 1 ) {
+
+							vec3 uvPrime = material.clearcoatMapTransform * vec3( uv, 1 );
+							clearcoat *= texture2D( textures, vec3( uvPrime.xy, material.clearcoatMap ) ).r;
+
+						}
+
+						// clearcoat
+						float clearcoatRoughness = material.clearcoatRoughness;
+						if ( material.clearcoatRoughnessMap != - 1 ) {
+
+							vec3 uvPrime = material.clearcoatRoughnessMapTransform * vec3( uv, 1 );
+							clearcoat *= texture2D( textures, vec3( uvPrime.xy, material.clearcoatRoughnessMap ) ).g;
+
+						}
+
+						// clearcoatNormal
+						vec3 clearcoatNormal = baseNormal;
+						if ( material.clearcoatNormalMap != - 1 ) {
+
+							vec4 tangentSample = textureSampleBarycoord(
+								tangentAttribute,
+								barycoord,
+								faceIndices.xyz
+							);
+
+							// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+							// resulting in NaNs and slow path tracing.
+							if ( length( tangentSample.xyz ) > 0.0 ) {
+
+								vec3 tangent = normalize( tangentSample.xyz );
+								vec3 bitangent = normalize( cross( clearcoatNormal, tangent ) * tangentSample.w );
+								mat3 vTBN = mat3( tangent, bitangent, clearcoatNormal );
+
+								vec3 uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1 );
+								vec3 texNormal = texture2D( textures, vec3( uvPrime.xy, material.clearcoatNormalMap ) ).xyz * 2.0 - 1.0;
+								texNormal.xy *= material.clearcoatNormalScale;
+								clearcoatNormal = vTBN * texNormal;
+
+							}
+
+						}
+
+						clearcoatNormal *= side;
+
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
@@ -630,6 +679,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.roughness = roughness;
+						surfaceRec.clearcoat = clearcoat;
+						surfaceRec.clearcoatRoughness = clearcoatRoughness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
@@ -640,12 +691,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
 						surfaceRec.filteredRoughness = clamp( max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
+						surfaceRec.filteredClearcoatRoughness = clamp( max( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
 
 						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
 						mat3 invBasis = inverse( normalBasis );
 
+						mat3 clearcoatNormalBasis = getBasisFromNormal( clearcoatNormal );
+						mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
+
 						vec3 outgoing = - normalize( invBasis * rayDirection );
-						sampleRec = bsdfSample( outgoing, surfaceRec );
+						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
+						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
 						isShadowRay = sampleRec.specularPdf < rand();
 
@@ -685,7 +741,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, normalize( invBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -725,7 +781,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, normalize( invBasis * envDirection ), surfaceRec, sampleColor );
+								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surfaceRec, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -748,6 +804,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
 							accumulatedRoughness += sin( acosApprox( halfVector.z ) );
+
+							vec3 clearcoatHalfVector = normalize( clearcoatOutgoing + sampleRec.clearcoatDirection );
+							accumulatedClearcoatRoughness += sin( acosApprox( clearcoatHalfVector.z ) );
+
 							transmissiveRay = false;
 
 						}

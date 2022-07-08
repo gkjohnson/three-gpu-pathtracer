@@ -41,6 +41,13 @@ export const shaderMaterialStructs = /* glsl */ `
 		int normalMap;
 		vec2 normalScale;
 
+		float clearcoat;
+		int clearcoatMap;
+		int clearcoatNormalMap;
+		vec2 clearcoatNormalScale;
+		float clearcoatRoughness;
+		int clearcoatRoughnessMap;
+
 		int alphaMap;
 
 		bool castShadow;
@@ -56,6 +63,9 @@ export const shaderMaterialStructs = /* glsl */ `
 		mat3 transmissionMapTransform;
 		mat3 emissiveMapTransform;
 		mat3 normalMapTransform;
+		mat3 clearcoatMapTransform;
+		mat3 clearcoatNormalMapTransform;
+		mat3 clearcoatRoughnessMapTransform;
 
 	};
 
@@ -76,7 +86,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 19u;
+		uint i = index * 26u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -85,6 +95,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s4 = texelFetch1D( tex, i + 4u );
 		vec4 s5 = texelFetch1D( tex, i + 5u );
 		vec4 s6 = texelFetch1D( tex, i + 6u );
+		vec4 s7 = texelFetch1D( tex, i + 7u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -106,16 +117,23 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.normalMap = int( round( s4.r ) );
 		m.normalScale = s4.gb;
 
-		m.alphaMap = int( round( s4.a ) );
+		m.clearcoat = s4.a;
+		m.clearcoatMap = int( round( s5.r ) );
+		m.clearcoatRoughness = s5.g;
+		m.clearcoatRoughnessMap = int( round( s5.b ) );
+		m.clearcoatNormalMap = int( round( s5.a ) );
+		m.clearcoatNormalScale = s6.rg;
 
-		m.opacity = s5.r;
-		m.alphaTest = s5.g;
-		m.side = s5.b;
-		m.matte = bool( s5.a );
+		m.alphaMap = int( round( s6.b ) );
 
-		m.castShadow = ! bool( s6.r );
+		m.opacity = s6.a;
+		m.alphaTest = s7.r;
+		m.side = s7.g;
+		m.matte = bool( s7.b );
 
-		uint firstTextureTransformIdx = i + 7u;
+		m.castShadow = ! bool( s7.a );
+
+		uint firstTextureTransformIdx = i + 8u;
 
 		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx);
 		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
@@ -123,6 +141,9 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.transmissionMapTransform = m.transmissionMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 6u );
 		m.emissiveMapTransform = m.emissiveMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 8u );
 		m.normalMapTransform = m.normalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 10u );
+		m.clearcoatMapTransform = m.clearcoatMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 12u );
+		m.clearcoatNormalMapTransform = m.clearcoatNormalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 14u );
+		m.clearcoatRoughnessMapTransform = m.clearcoatRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 16u );
 
 		return m;
 
