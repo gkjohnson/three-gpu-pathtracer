@@ -284,4 +284,10 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	float saturateCos( float val ) {
+
+		return clamp( val, 0.001, 1.0 );
+
+	}
+
 `;

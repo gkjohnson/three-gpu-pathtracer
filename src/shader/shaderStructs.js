@@ -57,6 +57,11 @@ export const shaderMaterialStructs = /* glsl */ `
 		float side;
 		bool matte;
 
+		vec3 sheenColor;
+		int sheenColorMap;
+		float sheenRoughness;
+		int sheenRoughnessMap;
+
 		mat3 mapTransform;
 		mat3 metalnessMapTransform;
 		mat3 roughnessMapTransform;
@@ -66,6 +71,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		mat3 clearcoatMapTransform;
 		mat3 clearcoatNormalMapTransform;
 		mat3 clearcoatRoughnessMapTransform;
+		mat3 sheenColorMapTransform;
+		mat3 sheenRoughnessMapTransform;
 
 	};
 
@@ -86,7 +93,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 26u;
+		uint i = index * 32u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -96,6 +103,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s5 = texelFetch1D( tex, i + 5u );
 		vec4 s6 = texelFetch1D( tex, i + 6u );
 		vec4 s7 = texelFetch1D( tex, i + 7u );
+		vec4 s8 = texelFetch1D( tex, i + 8u );
+		vec4 s9 = texelFetch1D( tex, i + 9u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -133,9 +142,15 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		m.castShadow = ! bool( s7.a );
 
-		uint firstTextureTransformIdx = i + 8u;
+		m.sheenColor = s8.rgb;
+		m.sheenColorMap = int( round( s8.a ) );
 
-		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx);
+		m.sheenRoughness = s9.r;
+		m.sheenRoughnessMap = int( round( s9.g ) );
+
+		uint firstTextureTransformIdx = i + 10u;
+
+		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx );
 		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
 		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
 		m.transmissionMapTransform = m.transmissionMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 6u );
@@ -144,6 +159,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.clearcoatMapTransform = m.clearcoatMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 12u );
 		m.clearcoatNormalMapTransform = m.clearcoatNormalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 14u );
 		m.clearcoatRoughnessMapTransform = m.clearcoatRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 16u );
+		m.sheenColorMapTransform = m.sheenColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 18u );
+		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
 
 		return m;
 

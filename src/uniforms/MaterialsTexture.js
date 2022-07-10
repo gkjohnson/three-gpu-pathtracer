@@ -1,6 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 26;
+const MATERIAL_PIXELS = 32;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 export class MaterialsTexture extends DataTexture {
@@ -279,6 +279,29 @@ export class MaterialsTexture extends DataTexture {
 
 			index ++; // shadow
 
+			// sheen
+			if ( 'sheenColor' in m ) {
+
+				floatArray[ index ++ ] = m.sheenColor.r;
+				floatArray[ index ++ ] = m.sheenColor.g;
+				floatArray[ index ++ ] = m.sheenColor.b;
+
+			} else {
+
+				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 0.0;
+
+			}
+
+			floatArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
+
+			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
+			floatArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
+
+			index ++;
+			index ++;
+
 			// map transform
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
 
@@ -305,6 +328,12 @@ export class MaterialsTexture extends DataTexture {
 
 			// clearcoatRoughnessMap transform
 			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
+
+			// sheenColorMap transform
+			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
+
+			// sheenRoughnessMap transform
+			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
 
 		}
 
