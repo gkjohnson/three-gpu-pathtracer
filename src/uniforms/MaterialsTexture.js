@@ -1,11 +1,11 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 32;
+const MATERIAL_PIXELS = 38;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
-const SIDE_OFFSET = 7 * 4 + 1;
-const MATTE_OFFSET = 7 * 4 + 2;
-const SHADOW_OFFSET = 7 * 4 + 3;
+const SIDE_OFFSET = 10 * 4 + 3; // s10.a
+const MATTE_OFFSET = 11 * 4 + 0; // s11.r
+const SHADOW_OFFSET = 11 * 4 + 1; // s11.g
 
 export class MaterialsTexture extends DataTexture {
 
@@ -253,11 +253,9 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
 
-			// clearcoatRoughness
 			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
 
-			// clearcoatNormal
 			floatArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
 
 			if ( 'clearcoatNormalScale' in m ) {
@@ -272,16 +270,8 @@ export class MaterialsTexture extends DataTexture {
 
 			}
 
-			// alphaMap
-			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
-
-			// side & matte
-			floatArray[ index ++ ] = m.opacity;
-			floatArray[ index ++ ] = m.alphaTest;
-			index ++; // side
-			index ++; // matte
-
-			index ++; // shadow
+			index ++;
+			index ++;
 
 			// sheen
 			if ( 'sheenColor' in m ) {
@@ -302,6 +292,28 @@ export class MaterialsTexture extends DataTexture {
 
 			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
+
+			// iridescence
+			floatArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
+			floatArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
+
+			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
+			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
+
+			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );
+			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
+			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
+
+			// alphaMap
+			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
+
+			// side & matte
+			floatArray[ index ++ ] = m.opacity;
+			floatArray[ index ++ ] = m.alphaTest;
+			index ++; // side
+			index ++; // matte
+
+			index ++; // shadow
 
 			index ++;
 			index ++;
@@ -338,6 +350,12 @@ export class MaterialsTexture extends DataTexture {
 
 			// sheenRoughnessMap transform
 			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
+
+			// iridescenceMap transform
+			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
+
+			// iridescenceThicknessMap transform
+			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
 
 		}
 

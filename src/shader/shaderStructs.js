@@ -48,6 +48,13 @@ export const shaderMaterialStructs = /* glsl */ `
 		float clearcoatRoughness;
 		int clearcoatRoughnessMap;
 
+		int iridescenceMap;
+		int iridescenceThicknessMap;
+		float iridescence;
+		float iridescenceIor;
+		float iridescenceThicknessMinimum;
+		float iridescenceThicknessMaximum;
+
 		int alphaMap;
 
 		bool castShadow;
@@ -73,6 +80,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		mat3 clearcoatRoughnessMapTransform;
 		mat3 sheenColorMapTransform;
 		mat3 sheenRoughnessMapTransform;
+		mat3 iridescenceMapTransform;
+		mat3 iridescenceThicknessMapTransform;
 
 	};
 
@@ -93,7 +102,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 32u;
+		uint i = index * 38u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -105,6 +114,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s7 = texelFetch1D( tex, i + 7u );
 		vec4 s8 = texelFetch1D( tex, i + 8u );
 		vec4 s9 = texelFetch1D( tex, i + 9u );
+		vec4 s10 = texelFetch1D( tex, i + 10u );
+		vec4 s11 = texelFetch1D( tex, i + 11u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -133,22 +144,28 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.clearcoatNormalMap = int( round( s5.a ) );
 		m.clearcoatNormalScale = s6.rg;
 
-		m.alphaMap = int( round( s6.b ) );
+		m.sheenColor = s7.rgb;
+		m.sheenColorMap = int( round( s7.a ) );
+		m.sheenRoughness = s8.r;
+		m.sheenRoughnessMap = int( round( s8.g ) );
 
-		m.opacity = s6.a;
-		m.alphaTest = s7.r;
-		m.side = s7.g;
-		m.matte = bool( s7.b );
+		m.iridescenceMap = int( round( s8.b ) );
+		m.iridescenceThicknessMap = int( round( s8.a ) );
+		m.iridescence = s9.r;
+		m.iridescenceIor = s9.g;
+		m.iridescenceThicknessMinimum = s9.b;
+		m.iridescenceThicknessMaximum = s9.a;
 
-		m.castShadow = ! bool( s7.a );
+		m.alphaMap = int( round( s10.r ) );
 
-		m.sheenColor = s8.rgb;
-		m.sheenColorMap = int( round( s8.a ) );
+		m.opacity = s10.g;
+		m.alphaTest = s10.b;
+		m.side = s10.a;
+		m.matte = bool( s11.r );
 
-		m.sheenRoughness = s9.r;
-		m.sheenRoughnessMap = int( round( s9.g ) );
+		m.castShadow = ! bool( s11.g );
 
-		uint firstTextureTransformIdx = i + 10u;
+		uint firstTextureTransformIdx = i + 12u;
 
 		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx );
 		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
@@ -161,6 +178,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.clearcoatRoughnessMapTransform = m.clearcoatRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 16u );
 		m.sheenColorMapTransform = m.sheenColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 18u );
 		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
+		m.iridescenceMapTransform = m.iridescenceMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 22u );
+		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
 
 		return m;
 

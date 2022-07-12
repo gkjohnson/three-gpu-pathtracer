@@ -1,5 +1,6 @@
 import { shaderGGXFunctions } from './shaderGGXFunctions.js';
 import { shaderSheenFunctions } from './shaderSheenFunctions.js';
+import { shaderIridescenceFunctions } from './shaderIridescenceFunctions.js';
 
 export const shaderMaterialSampling = /* glsl */`
 
@@ -19,6 +20,9 @@ struct SurfaceRec {
 	float filteredClearcoatRoughness;
 	vec3 sheenColor;
 	float sheenRoughness;
+	float iridescence;
+	float iridescenceIor;
+	float iridescenceThickness;
 };
 
 struct SampleRec {
@@ -31,6 +35,7 @@ struct SampleRec {
 
 ${ shaderGGXFunctions }
 ${ shaderSheenFunctions }
+${ shaderIridescenceFunctions }
 
 // diffuse
 float diffusePDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
@@ -101,21 +106,25 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	float iorRatio = frontFace ? 1.0 / ior : ior;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
+	vec3 F = vec3( schlickFresnelFromIor( dot( wi, halfVector ), iorRatio ) );
 
-	float F = schlickFresnelFromIor( dot( wi, halfVector ), iorRatio );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		F = 1.0;
+		F = vec3( 1.0 );
 
 	}
+
+	float f0 = pow( ( iorRatio - 1.0 ) / ( iorRatio + 1.0 ), 2.0 );
+	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
+	F = mix( F, iridescenceFresnel, surf.iridescence );
 
 	vec3 color = mix( vec3( 1.0 ), surf.color, metalness );
 	color = mix( color, vec3( 1.0 ), F );
 	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
-	color *= mix( F, 1.0, metalness );
+	color *= mix( F, vec3( 1.0 ), metalness );
 	color *= wi.z; // scale the light by the direction the light is coming in from
 
 	return color;

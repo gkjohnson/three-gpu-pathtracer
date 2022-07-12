@@ -688,6 +688,27 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						// iridescence
+						float iridescence = material.iridescence;
+						if ( material.iridescenceMap != - 1 ) {
+
+							vec3 uvPrime = material.iridescenceMapTransform * vec3( uv, 1 );
+							iridescence *= texture2D( textures, vec3( uvPrime.xy, material.iridescenceMap ) ).r;
+
+						}
+
+						// iridescence thickness
+						float iridescenceThickness = material.iridescenceThicknessMaximum;
+						if ( material.iridescenceThicknessMap != - 1 ) {
+
+							vec3 uvPrime = material.iridescenceThicknessMapTransform * vec3( uv, 1 );
+							float iridescenceThicknessSampled = texture2D( textures, vec3( uvPrime.xy, material.iridescenceThicknessMap ) ).g;
+							iridescenceThickness = mix( material.iridescenceThicknessMinimum, material.iridescenceThicknessMaximum, iridescenceThicknessSampled );
+
+						}
+
+						iridescence = iridescenceThickness == 0.0 ? 0.0 : iridescence;
+
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
@@ -701,6 +722,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.clearcoatRoughness = clearcoatRoughness;
 						surfaceRec.sheenColor = sheenColor;
 						surfaceRec.sheenRoughness = sheenRoughness;
+						surfaceRec.iridescence = iridescence;
+						surfaceRec.iridescenceIor = material.iridescenceIor;
+						surfaceRec.iridescenceThickness = iridescenceThickness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
