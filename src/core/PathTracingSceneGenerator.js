@@ -1,4 +1,4 @@
-import { Mesh } from 'three';
+import { Mesh, Object3D } from 'three';
 import { SAH, MeshBVH, StaticGeometryGenerator } from 'three-mesh-bvh';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 
@@ -8,7 +8,8 @@ export class PathTracingSceneGenerator {
 
 		const meshes = [];
 		const lights = [];
-		scene.traverse( c => {
+
+		function checkObject( c ) {
 
 			if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
 
@@ -33,7 +34,21 @@ export class PathTracingSceneGenerator {
 
 			}
 
-		} );
+		}
+
+		if ( scene instanceof Object3D ) {
+
+			scene.traverse( c => {
+
+				checkObject( c );
+
+			} );
+
+		} else if ( scene instanceof Array ) {
+
+			scene.forEach( checkObject );
+
+		}
 
 		return {
 			...mergeMeshes( meshes, {
