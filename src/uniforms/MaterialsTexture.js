@@ -3,6 +3,10 @@ import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, Bac
 const MATERIAL_PIXELS = 26;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
+const SIDE_OFFSET = 7 * 4 + 1;
+const MATTE_OFFSET = 7 * 4 + 2;
+const SHADOW_OFFSET = 7 * 4 + 3;
+
 export class MaterialsTexture extends DataTexture {
 
 	constructor() {
@@ -22,7 +26,7 @@ export class MaterialsTexture extends DataTexture {
 
 		// invert the shadow value so we default to "true" when initializing a material
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 6 * 4 + 0;
+		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
 		array[ index ] = ! cast ? 1 : 0;
 
 	}
@@ -30,7 +34,7 @@ export class MaterialsTexture extends DataTexture {
 	getCastShadow( materialIndex ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 6 * 4 + 0;
+		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
 		return ! Boolean( array[ index ] );
 
 	}
@@ -38,7 +42,7 @@ export class MaterialsTexture extends DataTexture {
 	setSide( materialIndex, side ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 2;
+		const index = materialIndex * MATERIAL_STRIDE + SIDE_OFFSET;
 		switch ( side ) {
 
 		case FrontSide:
@@ -58,7 +62,7 @@ export class MaterialsTexture extends DataTexture {
 	getSide( materialIndex ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 2;
+		const index = materialIndex * MATERIAL_STRIDE + SIDE_OFFSET;
 		switch ( array[ index ] ) {
 
 		case 0:
@@ -77,7 +81,7 @@ export class MaterialsTexture extends DataTexture {
 	setMatte( materialIndex, matte ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 3;
+		const index = materialIndex * MATERIAL_STRIDE + MATTE_OFFSET;
 		array[ index ] = matte ? 1 : 0;
 
 	}
@@ -85,7 +89,7 @@ export class MaterialsTexture extends DataTexture {
 	getMatte( materialIndex ) {
 
 		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + 5 * 4 + 3;
+		const index = materialIndex * MATERIAL_STRIDE + MATTE_OFFSET;
 		return Boolean( array[ index ] );
 
 	}
