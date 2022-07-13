@@ -1,4 +1,4 @@
-import { BufferGeometry } from 'three';
+import { BufferGeometry, Object3D } from 'three';
 import { StaticGeometryGenerator, MeshBVH } from 'three-mesh-bvh';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
 
@@ -40,7 +40,8 @@ export class DynamicPathTracingSceneGenerator {
 		if ( this.bvh === null ) {
 
 			const attributes = [ 'position', 'normal', 'tangent', 'uv' ];
-			scene.traverse( c => {
+
+			function checkObject( c ) {
 
 				if ( c.isMesh ) {
 
@@ -49,7 +50,17 @@ export class DynamicPathTracingSceneGenerator {
 
 				}
 
-			} );
+			}
+
+			if ( scene instanceof Object3D ) {
+
+				scene.traverse( checkObject );
+
+			} else if ( scene instanceof Array ) {
+
+				scene.forEach( checkObject );
+
+			}
 
 			const textureSet = new Set();
 			const materials = staticGeometryGenerator.getMaterials();

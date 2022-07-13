@@ -38,11 +38,7 @@ export class PathTracingSceneGenerator {
 
 		if ( scene instanceof Object3D ) {
 
-			scene.traverse( c => {
-
-				checkObject( c );
-
-			} );
+			scene.traverse( checkObject );
 
 		} else if ( scene instanceof Array ) {
 
