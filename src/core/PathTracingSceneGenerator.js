@@ -6,45 +6,43 @@ export class PathTracingSceneGenerator {
 
 	prepScene( scene ) {
 
+		scene = Array.isArray( scene ) ? scene : [ scene ];
+
 		const meshes = [];
 		const lights = [];
 
-		function checkObject( c ) {
+		function checkObject( checkObject ) {
 
-			if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
+			checkObject.traverse( ( c ) => {
 
-				const generator = new StaticGeometryGenerator( c );
-				generator.applyWorldTransforms = false;
-				const mesh = new Mesh(
-					generator.generate(),
-					c.material,
-				);
-				mesh.matrixWorld.copy( c.matrixWorld );
-				mesh.matrix.copy( c.matrixWorld );
-				mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
-				meshes.push( mesh );
+				if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
 
-			} else if ( c.isMesh ) {
+					const generator = new StaticGeometryGenerator( c );
+					generator.applyWorldTransforms = false;
+					const mesh = new Mesh(
+						generator.generate(),
+						c.material,
+					);
+					mesh.matrixWorld.copy( c.matrixWorld );
+					mesh.matrix.copy( c.matrixWorld );
+					mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
+					meshes.push( mesh );
 
-				meshes.push( c );
+				} else if ( c.isMesh ) {
 
-			} else if ( c.isRectAreaLight ) {
+					meshes.push( c );
 
-				lights.push( c );
+				} else if ( c.isRectAreaLight ) {
 
-			}
+					lights.push( c );
 
-		}
+				}
 
-		if ( scene instanceof Object3D ) {
-
-			scene.traverse( checkObject );
-
-		} else if ( scene instanceof Array ) {
-
-			scene.forEach( checkObject );
+			} );
 
 		}
+
+		scene.forEach( checkObject );
 
 		return {
 			...mergeMeshes( meshes, {
