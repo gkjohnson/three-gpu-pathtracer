@@ -1,4 +1,4 @@
-import { BufferGeometry, Object3D } from 'three';
+import { BufferGeometry } from 'three';
 import { StaticGeometryGenerator, MeshBVH } from 'three-mesh-bvh';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
 

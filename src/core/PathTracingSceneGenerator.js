@@ -1,4 +1,4 @@
-import { Mesh, Object3D } from 'three';
+import { Mesh } from 'three';
 import { SAH, MeshBVH, StaticGeometryGenerator } from 'three-mesh-bvh';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
 
