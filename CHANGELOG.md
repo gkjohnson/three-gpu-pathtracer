@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for equirect rendering with EquirectCamera.
 - Support for area lights.
-- Support for spotlights.
 - Support for threejs compatible texture transforms.
 - Support for Clearcoat properties.
 
