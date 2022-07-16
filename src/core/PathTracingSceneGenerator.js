@@ -11,9 +11,9 @@ export class PathTracingSceneGenerator {
 		const meshes = [];
 		const lights = [];
 
-		function checkObject( checkObject ) {
+		for ( let i = 0, l = scene.length; i < l; i ++ ) {
 
-			checkObject.traverse( ( c ) => {
+			scene[ i ].traverse( ( c ) => {
 
 				if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
 
@@ -41,8 +41,6 @@ export class PathTracingSceneGenerator {
 			} );
 
 		}
-
-		scene.forEach( checkObject );
 
 		return {
 			...mergeMeshes( meshes, {

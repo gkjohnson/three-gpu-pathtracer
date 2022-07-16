@@ -41,26 +41,20 @@ export class DynamicPathTracingSceneGenerator {
 
 			const attributes = [ 'position', 'normal', 'tangent', 'uv' ];
 
-			function checkObject( c ) {
+			for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
-				if ( c.isMesh ) {
+				objects[ i ].traverse( ( c ) => {
 
-					c.traverse( ( cTrav ) => {
+					if ( c.isMesh ) {
 
-						if ( cTrav.isMesh ) {
+						const normalMapRequired = ! ! c.material.normalMap;
+						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
 
-							const normalMapRequired = ! ! c.material.normalMap;
-							setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+					}
 
-						}
-
-					} );
-
-				}
+				} );
 
 			}
-
-			objects.forEach( checkObject );
 
 			const textureSet = new Set();
 			const materials = staticGeometryGenerator.getMaterials();
