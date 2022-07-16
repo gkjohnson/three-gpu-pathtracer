@@ -43,7 +43,7 @@ export class DynamicPathTracingSceneGenerator {
 
 			for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
-				objects[ i ].traverse( ( c ) => {
+				objects[ i ].traverse( c => {
 
 					if ( c.isMesh ) {
 
