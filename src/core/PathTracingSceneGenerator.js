@@ -13,7 +13,7 @@ export class PathTracingSceneGenerator {
 
 		for ( let i = 0, l = scene.length; i < l; i ++ ) {
 
-			scene[ i ].traverse( ( c ) => {
+			scene[ i ].traverse( c => {
 
 				if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
 
