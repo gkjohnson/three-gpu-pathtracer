@@ -4,12 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.0.5] - 2022-07-16
 ### Added
 - Support for equirect rendering with EquirectCamera.
 - Support for area lights.
 - Support for threejs compatible texture transforms.
 - Support for Clearcoat properties.
+- Support for arrays of objects passed to pathtracer scene generator.
 
 ### Fixed
 - Black renders on M1 Safari devices.
