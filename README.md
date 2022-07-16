@@ -276,7 +276,7 @@ Utility class for generating the set of data required for initializing the path 
 ### .generate
 
 ```js
-generate( scene : Object3D, options = {} : Object ) : {
+generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
 	textures : Array<Texture>,
@@ -295,7 +295,7 @@ See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
 ### .generate
 
 ```js
-async generate( scene : Object3D, options = {} : Object ) : {
+async generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
 	textures : Array<Texture>,
@@ -380,7 +380,7 @@ If geometry or materials are added or removed from the scene then `reset` must b
 ### constructor
 
 ```js
-constructor( scene : Object3D )
+constructor( scene : Object3D | Array<Object3D> )
 ```
 
 Takes the scene to convert.
