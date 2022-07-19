@@ -1,7 +1,9 @@
 import yargs from 'yargs';
 import puppeteer from 'puppeteer';
 import path from 'path';
+import fs from 'fs';
 import fetch from 'node-fetch';
+import { exec } from 'child_process';
 
 const SAMPLES = 100;
 const argv = yargs( process.argv.slice( 2 ) )
@@ -10,7 +12,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 		describe: 'Output directory for the files.',
 		alias: 'o',
 		type: 'string',
-		default: './screenshots/',
+		default: './screenshots/golden/',
 	} )
 	.option( 'scenario', {
 		describe: 'The name of one scenario to run.',
@@ -27,13 +29,15 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 ( async () => {
 
-
 	const req = await fetch( 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json' );
 	const { scenarios } = await req.json();
 	const folderPath = path.resolve( process.cwd(), argv[ 'output-path' ] );
 	console.log( `Saving to "${ folderPath }"\n` );
 
-	// TODO: start the service build service with a child service
+	console.log( 'Running test page service' );
+	exec( 'npm run start' );
+
+	fs.mkdirSync( folderPath );
 
 	try {
 
@@ -62,6 +66,8 @@ const argv = yargs( process.argv.slice( 2 ) )
 			}
 
 		}
+
+		process.exit( 0 );
 
 	} catch ( e ) {
 
