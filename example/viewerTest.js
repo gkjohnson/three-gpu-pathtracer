@@ -24,12 +24,17 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
 
+const urlParams = new URLSearchParams( window.location.search );
+const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
+const hideUI = urlParams.get( 'hideUI' ) === 'true';
+const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
+
 const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	tilesX: 2,
-	tilesY: 2,
+	tilesX: tiles,
+	tilesY: tiles,
 	samplesPerFrame: 1,
 	scale: 1 / window.devicePixelRatio,
 
@@ -102,7 +107,16 @@ async function init() {
 
 	// init stats
 	stats = new Stats();
-	containerEl.appendChild( stats.dom );
+	if ( ! hideUI ) {
+
+		containerEl.appendChild( stats.dom );
+
+	} else {
+
+		creditEl.remove();
+		samplesEl.remove();
+
+	}
 
 	// init models
 	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
@@ -136,6 +150,12 @@ async function init() {
 function animate() {
 
 	requestAnimationFrame( animate );
+
+	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+
+		return;
+
+	}
 
 	stats.update();
 
@@ -191,6 +211,16 @@ function animate() {
 
 	}
 
+	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+
+		requestAnimationFrame( () => {
+
+			window.dispatchEvent( new Event( 'render-complete' ) );
+
+		} );
+
+	}
+
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
@@ -208,6 +238,12 @@ function resetRenderer() {
 }
 
 function buildGui() {
+
+	if ( hideUI ) {
+
+		return;
+
+	}
 
 	if ( gui ) {
 
