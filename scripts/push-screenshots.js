@@ -26,20 +26,20 @@ import { execSync } from 'child_process';
 	await git.checkout( 'screenshots' );
 
 	console.log( 'Rebasing onto "main".' );
-	await git.rebase( 'main', 'screenshots' );
+	await git.rebase( [ 'main', 'screenshots' ] );
 
 	// execSync( 'node ./scripts/update-screenshots.js' );
 
-	console.log( 'Committing all screenshots.' );
-	await git
-		.add( './screenshots/goldens/*' )
-		.commit( 'update screenshots' );
+	// console.log( 'Committing all screenshots.' );
+	// await git
+	// 	.add( './screenshots/goldens/*' )
+	// 	.commit( 'update screenshots' );
 
-	console.log( 'Pushing commit.' );
-	await git.push( 'origin', 'screenshots' );
+	// console.log( 'Pushing commit.' );
+	// await git.push( 'origin', 'screenshots' );
 
-	console.log( `Switching back to "${ currentBranch }" branch.` );
-	await git.checkout( currentBranch );
+	// console.log( `Switching back to "${ currentBranch }" branch.` );
+	// await git.checkout( currentBranch );
 
 	process.exit();
 
