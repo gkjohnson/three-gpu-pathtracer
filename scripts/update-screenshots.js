@@ -102,6 +102,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	try {
 
+		const startTime = performance.now();
 		await page.evaluate( () => {
 
 			return new Promise( ( resolve, reject ) => {
@@ -123,6 +124,9 @@ async function saveScreenshot( scenario, targetFolder ) {
 			} );
 
 		} );
+
+		const deltaTime = performance.now() - startTime;
+		console.log( `\tin ${ deltaTime }ms` );
 
 	} catch ( e ) {
 
