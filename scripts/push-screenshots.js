@@ -1,19 +1,18 @@
 import simpleGit from 'simple-git';
 import { execSync } from 'child_process';
 
-
 ( async() => {
 
 	const git = simpleGit();
 	const status = await git.status();
 	const currentBranch = status.current;
 
-	if ( currentBranch !== 'main' ) {
+	// if ( currentBranch !== 'main' ) {
 
-		console.error( 'Current branch is not set to main.' );
-		process.exit( 1 );
+	// 	console.error( 'Current branch is not set to main.' );
+	// 	process.exit( 1 );
 
-	}
+	// }
 
 	const modified = status.modified.length + status.created.length + status.renamed.length + status.deleted.length;
 	if ( modified !== 0 ) {
