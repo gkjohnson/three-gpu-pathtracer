@@ -37,7 +37,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 	console.log( 'Running test page service' );
 	exec( 'npm run start' );
 
-	fs.mkdirSync( folderPath );
+	fs.mkdirSync( folderPath, { recursive: true } );
 
 	try {
 
@@ -100,27 +100,37 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&tiles=1&samples=${ SAMPLES }#${ name }` );
 
-	await page.evaluate( () => {
+	try {
 
-		return new Promise( ( resolve, reject ) => {
+		await page.evaluate( () => {
 
-			const TIMEOUT = 60000;
-			const handle = setTimeout( () => {
+			return new Promise( ( resolve, reject ) => {
 
-				reject( new Error( `Failed to render in ${ TIMEOUT }ms.` ) );
+				const TIMEOUT = 60000;
+				const handle = setTimeout( () => {
 
-			}, TIMEOUT );
+					reject( new Error( `Failed to render in ${ TIMEOUT }ms.` ) );
 
-			self.addEventListener( 'render-complete', () => {
+				}, TIMEOUT );
 
-				clearTimeout( handle );
-				resolve();
+				self.addEventListener( 'render-complete', () => {
 
-			}, { once: true } );
+					clearTimeout( handle );
+					resolve();
+
+				}, { once: true } );
+
+			} );
 
 		} );
 
-	} );
+	} catch ( e ) {
+
+		console.error( e.message );
+		await browser.close();
+		return;
+
+	}
 
 	await page.screenshot( { path: `${ targetFolder }/${ name }.png`, omitBackground: true } );
 
