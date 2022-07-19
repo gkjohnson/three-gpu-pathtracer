@@ -28,7 +28,7 @@ import { execSync } from 'child_process';
 	console.log( 'Rebasing onto "main".' );
 	await git.rebase( 'main', 'screenshots' );
 
-	execSync( 'node ./scripts/update-screenshots.js' );
+	// execSync( 'node ./scripts/update-screenshots.js' );
 
 	console.log( 'Committing all screenshots.' );
 	await git
