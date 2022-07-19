@@ -42,7 +42,7 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 5,
+	bounces: 10,
 	pause: false,
 
 	imageMode: 'hidden',
@@ -69,6 +69,13 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 	containerEl = document.getElementById( 'container' );
 	imgEl = document.querySelector( 'img' );
+
+	if ( hideUI ) {
+
+		containerEl.style.background = 'transparent';
+		document.body.style.background = 'transparent';
+
+	}
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );

@@ -1,70 +1,98 @@
 import yargs from 'yargs';
 import puppeteer from 'puppeteer';
 import path from 'path';
-import url from 'url';
+import fetch from 'node-fetch';
+
+const SAMPLES = 100;
+const argv = yargs( process.argv.slice( 2 ) )
+	.usage( 'Usage: $0 <command> [options]' )
+	.option( 'output-path', {
+		describe: 'Output directory for the files.',
+		alias: 'o',
+		type: 'string',
+		default: './screenshots/',
+	} )
+	.option( 'scenario', {
+		describe: 'The name of one scenario to run.',
+		alias: 's',
+		type: 'string'
+	} )
+	.option( 'headless', {
+		describe: 'Whether to run in a headless mode.',
+		alias: 'h',
+		type: 'boolean',
+		default: false
+	} )
+	.argv;
 
 ( async () => {
 
-	const argv = yargs( process.argv.slice( 2 ) )
-		.usage( 'Usage: $0 <command> [options]' )
-		.option( 'output-path', {
-			describe: 'Output directory for the files.',
-			alias: 'o',
-			type: 'string'
-		} )
-		.option( 'scenario', {
-			describe: 'The name of one scenario to run.',
-			alias: 's',
-			type: 'string'
-		} )
-		.argv;
 
 	const req = await fetch( 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json' );
-	const { models } = await req.json();
-	const folderPath = path.resolve( url.fileURLToPath( import.meta.url ), './screenshots/' );
+	const { scenarios } = await req.json();
+	const folderPath = path.resolve( process.cwd(), argv[ 'output-path' ] );
+	console.log( `Saving to "${ folderPath }"\n` );
 
 	// TODO: start the service build service with a child service
 
-	if ( argv.scenario ) {
+	try {
 
-		if ( ! argv.scenario in models ) {
+		if ( argv.scenario ) {
 
-			console.error( `Scenario "${ argv.scenario }" does not exist.` );
-			process.exit( 1 );
+			const scenario = scenarios.find( s => s.name === argv.scenario );
+			if ( ! scenario ) {
+
+				console.error( `Scenario "${ argv.scenario }" does not exist.` );
+				process.exit( 1 );
+
+			} else {
+
+				await saveScreenshot( scenario, folderPath );
+
+			}
 
 		} else {
 
-			await saveScreenshot( argv.scenario, models[ argv.scenario ], folderPath );
+			for ( const key in scenarios ) {
+
+				const scenario = scenarios[ key ];
+				console.log( `Rendering ${ scenario.name }` );
+				await saveScreenshot( scenario, folderPath );
+
+			}
 
 		}
 
-	} else {
+	} catch ( e ) {
 
-		for ( const key in models ) {
-
-			saveScreenshot( key, models[ key ], folderPath );
-
-		}
+		console.error( e );
+		process.exit( 1 );
 
 	}
 
 } )();
 
-async function saveScreenshot( name, scenario, targetFolder ) {
+async function saveScreenshot( scenario, targetFolder ) {
 
+	const name = scenario.name;
+	const dimensions = Object.assign( { width: 768, height: 768 }, scenario.dimensions );
+
+	const args = argv.headless ? [ '--use-gl=egl', '--headless' ] : [];
 	const browser = await puppeteer.launch( {
 
 		defaultViewport: {
-			width: scenario.dimensions.width,
-			height: scenario.dimensions.height,
+			width: dimensions.width,
+			height: dimensions.height,
 			deviceScaleFactor: 1
 		},
-		args: [ '--use-gl=egl', '--headless' ],
+		args,
+		headless: argv.headless,
 
 	} );
 
 	const page = await browser.newPage();
-	await page.goto( `https://localhost:1234/viewerTest.html?hideUI=1&tiles=1&samples=5#${ name }` );
+
+	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&tiles=1&samples=${ SAMPLES }#${ name }` );
 
 	await page.evaluate( () => {
 
