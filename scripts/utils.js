@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import fs from 'fs';
+import path from 'path';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
@@ -20,12 +21,49 @@ export function runScript( command ) {
 
 }
 
-export function compareImageDirectories( path1, path2, threshold = 0.1 ) {
+export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, diffThreshold ) {
 
-	// TODO: get files from path1
-	// TODO: ensure files are in both places
-	// TODO: iterate over all and check results from both
-	// TODO: return a message and whether it passes or fails
+	let failures = 0;
+	let total = 0;
+	const files = fs.readdirSync( path1 );
+	for ( const key in files ) {
+
+		const f = files[ key ];
+		const fileName = path.basename( f );
+		total ++;
+
+		if ( fs.existsSync( path.resolve( path2, fileName ) ) ) {
+
+			console.log( `Comparing "${ fileName }" screenshots.`)
+			const diff =
+				compareImages(
+					path.resolve( path1, fileName ),
+					path.resolve( path2, fileName ),
+					pixelThreshold,
+				);
+
+
+			let status = 'Pass';
+			if ( diff > diffThreshold ) {
+
+				status = 'Fail';
+				failures ++;
+
+			}
+
+			console.log( `\t${ status }: Images are ${ ( 100 * diff ).toFixed( 2 ) }% different` );
+
+		} else {
+
+			console.error( `File "${ fileName }" does not not exist in both directories.` );
+
+		}
+
+	}
+
+	console.log( `${ failures } out of ${ total } comparisons failed.` );
+
+	return failures !== 0;
 
 }
 
