@@ -59,7 +59,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
 				backgroundBlur: { value: 0.0 },
-				environmentIntensity: { value: 2.0 },
+				environmentIntensity: { value: 1.0 },
 				environmentRotation: { value: new Matrix3() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
 
