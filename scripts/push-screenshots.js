@@ -1,5 +1,23 @@
 import simpleGit from 'simple-git';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+
+function runScript( command ) {
+
+	return new Promise( resolve => {
+
+		const proc = exec( command );
+		proc.stderr.pipe( process.stderr );
+		proc.stdout.pipe( process.stdout );
+		proc.on( 'exit', () => {
+
+			resolve();
+
+		} );
+
+	} );
+
+}
+
 
 ( async() => {
 
@@ -30,7 +48,7 @@ import { execSync } from 'child_process';
 	await git.rebase( [ 'main', 'screenshots' ] );
 
 	// rebuild the screenshots
-	execSync( 'node ./scripts/update-screenshots.js' );
+	await runScript( 'node ./scripts/update-screenshots.js' );
 
 	// commit and push the screenshots
 	console.log( 'Committing all screenshots.' );
