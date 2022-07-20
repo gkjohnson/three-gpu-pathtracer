@@ -1,4 +1,5 @@
 import { shaderGGXFunctions } from './shaderGGXFunctions.js';
+import { shaderSheenFunctions } from './shaderSheenFunctions.js';
 
 export const shaderMaterialSampling = /* glsl */`
 
@@ -16,6 +17,8 @@ struct SurfaceRec {
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
+	vec3 sheenColor;
+	float sheenRoughness;
 };
 
 struct SampleRec {
@@ -27,6 +30,7 @@ struct SampleRec {
 };
 
 ${ shaderGGXFunctions }
+${ shaderSheenFunctions }
 
 // diffuse
 float diffusePDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
@@ -272,6 +276,28 @@ void clearcoatColor( inout vec3 color, vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 }
 
+// sheen
+vec3 sheenColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
+
+	vec3 halfVector = getHalfVector( wo, wi );
+
+	float cosThetaO = saturateCos( wo.z );
+	float cosThetaI = saturateCos( wi.z );
+	float cosThetaH = halfVector.z;
+
+	float D = velvetD( cosThetaH, surf.sheenRoughness );
+	float G = velvetG( cosThetaO, cosThetaI, surf.sheenRoughness );
+
+	// See equation (1) in http://www.aconty.com/pdf/s2017_pbs_imageworks_sheen.pdf
+	vec3 color = surf.sheenColor;
+	color *= D * G / ( 4.0 * abs( cosThetaO * cosThetaI ) );
+	color *= wi.z;
+
+	return color;
+
+}
+
+// bsdf
 void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight ) {
 
 	float ior = surf.ior;
@@ -399,6 +425,9 @@ vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 			color += specularColor( wo, wi, surf );
 
 		}
+
+		color *= sheenAlbedoScaling( wo, wi, surf );
+		color += sheenColor( wo, wi, surf );
 
 	}
 

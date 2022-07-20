@@ -632,7 +632,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						// clearcoat
+						// clearcoatRoughness
 						float clearcoatRoughness = material.clearcoatRoughness;
 						if ( material.clearcoatRoughnessMap != - 1 ) {
 
@@ -670,6 +670,24 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						clearcoatNormal *= side;
 
+						// sheenColor
+						vec3 sheenColor = material.sheenColor;
+						if ( material.sheenColorMap != - 1 ) {
+
+							vec3 uvPrime = material.sheenColorMapTransform * vec3( uv, 1 );
+							sheenColor *= texture2D( textures, vec3( uvPrime.xy, material.sheenColorMap ) ).rgb;
+
+						}
+
+						// sheenRoughness
+						float sheenRoughness = material.sheenRoughness;
+						if ( material.sheenRoughnessMap != - 1 ) {
+
+							vec3 uvPrime = material.sheenRoughnessMapTransform * vec3( uv, 1 );
+							sheenRoughness *= texture2D( textures, vec3( uvPrime.xy, material.sheenRoughnessMap ) ).a;
+
+						}
+
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
@@ -681,6 +699,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.roughness = roughness;
 						surfaceRec.clearcoat = clearcoat;
 						surfaceRec.clearcoatRoughness = clearcoatRoughness;
+						surfaceRec.sheenColor = sheenColor;
+						surfaceRec.sheenRoughness = sheenRoughness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
