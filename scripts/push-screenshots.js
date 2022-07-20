@@ -18,7 +18,6 @@ function runScript( command ) {
 
 }
 
-
 ( async() => {
 
 	const git = simpleGit();
