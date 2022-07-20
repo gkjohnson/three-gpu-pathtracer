@@ -71,8 +71,9 @@ function compareImages( path1, path2, threshold = 0.1, diffPath = null ) {
 
 	const img1 = PNG.sync.read( fs.readFileSync( path1 ) );
 	const img2 = PNG.sync.read( fs.readFileSync( path2 ) );
-	const diff = new PNG( { width, height } );
+
 	const { width, height } = img1;
+	const diff = new PNG( { width, height } );
 
 	const diffPixels = pixelmatch( img1.data, img2.data, diff.data, width, height, { threshold } );
 	if ( diffPath ) {
