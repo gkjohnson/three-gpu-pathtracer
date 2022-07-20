@@ -28,7 +28,7 @@ function runScript( command ) {
 	if ( currentBranch !== 'main' ) {
 
 		console.error( 'Current branch is not set to main' );
-		process.exit( 1 );
+		// process.exit( 1 );
 
 	}
 
