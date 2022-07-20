@@ -369,6 +369,9 @@ async function updateModel() {
 	target = Object.assign( {}, { x: 0, y: 0, z: 0 }, target );
 	dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
 
+	// add a minimal radius so the camera orientation is correct when radius is 0
+	orbit.radius = Math.max( orbit.radius, 1e-5 );
+
 	loadingModel = true;
 	containerEl.style.display = 'none';
 	samplesEl.innerText = '--';
