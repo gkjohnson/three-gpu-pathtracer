@@ -75,7 +75,6 @@ function compareImages( path1, path2, threshold = 0.1, diffPath = null ) {
 	const { width, height } = img1;
 
 	const diffPixels = pixelmatch( img1.data, img2.data, diff.data, width, height, { threshold } );
-
 	if ( diffPath ) {
 
 		const buffer = PNG.sync.write( diff, { colorType: 6 } );

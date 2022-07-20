@@ -23,27 +23,6 @@ import { runScript } from './utils.js';
 	console.log( 'Switching to "screenshots" branch' );
 	await git.checkout( 'screenshots' );
 
-	console.log( 'Rebasing onto "main"' );
-	await git.rebase( [ 'main', 'screenshots' ] );
-
-	// commit and push the screenshots
-	console.log( 'Committing all screenshots.' );
-	try {
-
-		await git
-			.add( './screenshots/golden/' )
-			.commit( 'update screenshots' );
-
-		console.log( 'Pushing commit.' );
-		await git.push( 'origin', 'screenshots' );
-
-	} catch ( e ) {
-
-		console.error( 'Could not find any new files to commit' );
-		console.error( e.message );
-
-	}
-
 	// reset git
 	console.log( `Switching back to "${ currentBranch }" branch` );
 	await git.checkout( currentBranch );
