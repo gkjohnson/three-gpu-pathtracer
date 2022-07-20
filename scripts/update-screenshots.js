@@ -5,6 +5,7 @@ import fs from 'fs';
 import fetch from 'node-fetch';
 import { exec } from 'child_process';
 
+let totalTime = 0;
 const SAMPLES = 100;
 const argv = yargs( process.argv.slice( 2 ) )
 	.usage( 'Usage: $0 <command> [options]' )
@@ -67,6 +68,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 		}
 
+		console.log( `\nTotal Time: ${ ( 1e-3 * totalTime ).toFixed( 2 ) }s` );
 		process.exit( 0 );
 
 	} catch ( e ) {
@@ -126,7 +128,8 @@ async function saveScreenshot( scenario, targetFolder ) {
 		} );
 
 		const deltaTime = performance.now() - startTime;
-		console.log( `\tin ${ deltaTime }ms` );
+		console.log( `\tin ${ ( 1e-3 * deltaTime ).toFixed( 2 ) }s` );
+		totalTime += deltaTime;
 
 	} catch ( e ) {
 
