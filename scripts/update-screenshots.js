@@ -6,7 +6,7 @@ import fetch from 'node-fetch';
 import { exec } from 'child_process';
 
 let totalTime = 0;
-const SAMPLES = 100;
+const SAMPLES = 200;
 const argv = yargs( process.argv.slice( 2 ) )
 	.usage( 'Usage: $0 <command> [options]' )
 	.option( 'output-path', {
