@@ -31,6 +31,7 @@ const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
 
 const params = {
 
+	environmentIntensity: 1.0,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	tilesX: tiles,
@@ -193,6 +194,7 @@ function animate() {
 		ptRenderer.material.filterGlossyFactor = 0.5;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
+		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 
 		camera.updateMatrixWorld();
 
@@ -288,6 +290,11 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( () => {
 
 		ptRenderer.reset();
 
