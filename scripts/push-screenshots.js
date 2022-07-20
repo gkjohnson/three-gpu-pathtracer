@@ -55,7 +55,7 @@ function runScript( command ) {
 	try {
 
 		await git
-			.add( './screenshots/goldens/' )
+			.add( './screenshots/golden/' )
 			.commit( 'update screenshots' );
 
 		console.log( 'Pushing commit.' );
