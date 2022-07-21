@@ -7,6 +7,12 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	vec3 schlickFresnel( float cosine, vec3 f0 ) {
+
+		return f0 + ( 1.0 - f0 ) * pow( 1.0 - cosine, 5.0 );
+
+	}
+
 	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
 	float schlickFresnelFromIor( float cosine, float iorRatio ) {
 
@@ -287,6 +293,30 @@ export const shaderUtils = /* glsl */`
 	float saturateCos( float val ) {
 
 		return clamp( val, 0.001, 1.0 );
+
+	}
+
+	float square( float t ) {
+
+		return t * t;
+
+	}
+
+	vec2 square( vec2 t) {
+
+		return t * t;
+
+	}
+
+	vec3 square( vec3 t ) {
+
+		return t * t;
+
+	}
+
+	vec4 square( vec4 t ) {
+
+		return t * t;
 
 	}
 
