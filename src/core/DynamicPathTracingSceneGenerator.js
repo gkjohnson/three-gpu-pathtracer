@@ -17,6 +17,7 @@ export class DynamicPathTracingSceneGenerator {
 		this.geometry = new BufferGeometry();
 		this.materials = null;
 		this.textures = null;
+		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( scene );
 
 	}
@@ -28,6 +29,7 @@ export class DynamicPathTracingSceneGenerator {
 		this.geometry = new BufferGeometry();
 		this.materials = null;
 		this.textures = null;
+		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
@@ -49,6 +51,10 @@ export class DynamicPathTracingSceneGenerator {
 
 						const normalMapRequired = ! ! c.material.normalMap;
 						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+
+					} else if ( c.isRectAreaLight ) {
+
+						this.lights.push( c );
 
 					}
 
@@ -85,6 +91,7 @@ export class DynamicPathTracingSceneGenerator {
 			this.textures = Array.from( textureSet );
 
 			return {
+				lights: this.lights,
 				bvh: this.bvh,
 				materials: this.materials,
 				textures: this.textures,
@@ -97,6 +104,7 @@ export class DynamicPathTracingSceneGenerator {
 			staticGeometryGenerator.generate( geometry );
 			bvh.refit();
 			return {
+				lights: this.lights,
 				bvh: this.bvh,
 				materials: this.materials,
 				textures: this.textures,
