@@ -6,7 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
-- Support for Sheen Material Support
+- Support for sheen parameter support
+- Support for iridescence parameter support
 
 ### Changed
 - PhysicalPathTracingMaterial: Default "environment intensity" from 2.0 to 1.0.
