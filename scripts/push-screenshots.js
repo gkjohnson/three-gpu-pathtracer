@@ -1,22 +1,5 @@
 import simpleGit from 'simple-git';
-import { exec } from 'child_process';
-
-function runScript( command ) {
-
-	return new Promise( resolve => {
-
-		const proc = exec( command );
-		proc.stderr.pipe( process.stderr );
-		proc.stdout.pipe( process.stdout );
-		proc.on( 'exit', () => {
-
-			resolve();
-
-		} );
-
-	} );
-
-}
+import { runScript } from './utils.js';
 
 ( async() => {
 
