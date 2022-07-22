@@ -45,6 +45,19 @@ _More features and capabilities in progress!_
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
+
+## Running examples locally
+
+To run and modify the examples locally, make sure you have Node and NPM installed.  Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
+
+In order to install dependencies, you will need `make` and a C++ compiler available.
+
+On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just work on MacOS.
+
+- To install dependencies, run `npm install`
+- To start the demos run `npm start`
+- Visit "http://localhost:1234/<demo-name.html>"
+
 # Use
 
 **Basic Renderer**
