@@ -68,6 +68,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 	let failed = false;
 	if ( scenario ) {
 
+		// if there's only one scenario then diff the one file
 		console.log( `Comparing "${ scenario }" screenshots.` );
 
 		const diffPath = argv[ 'diff-path' ] ? path.resolve( process.cwd(), argv[ 'diff-path' ] ) : null;
@@ -88,6 +89,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 	} else {
 
+		// diff the set of images in both folders
 		failed = compareImages(
 			path.resolve( rootPath, './golden/' ),
 			path.resolve( rootPath, './current/' ),
@@ -96,7 +98,6 @@ const argv = yargs( process.argv.slice( 2 ) )
 		);
 
 	}
-
 
 	// reset git
 	console.log( `Switching back to "${ currentBranch }" branch` );

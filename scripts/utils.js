@@ -4,6 +4,7 @@ import path from 'path';
 import pixelmatch from 'pixelmatch';
 import { PNG } from 'pngjs';
 
+// runs a given command with stdio output and errors thrown
 export function runScript( command ) {
 
 	return new Promise( ( resolve, reject ) => {
@@ -22,6 +23,7 @@ export function runScript( command ) {
 
 }
 
+// Compare the images in two directories and compare results
 export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, diffThreshold = 0.1 ) {
 
 	let failures = 0;
@@ -68,21 +70,27 @@ export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, dif
 
 }
 
+// Compares images at the given path
 export function compareImages( path1, path2, threshold = 0.1, diffPath = null ) {
 
+	// Checks if two files exist before diffing
 	if ( ! fs.existsSync( path1 ) || ! fs.existsSync( path2 ) ) {
 
 		throw new Error( `File "${ path.basename( path1 ) }" does not not exist in both directories.` );
 
 	}
 
+	// Reads the two files
 	const img1 = PNG.sync.read( fs.readFileSync( path1 ) );
 	const img2 = PNG.sync.read( fs.readFileSync( path2 ) );
 
 	const { width, height } = img1;
 	const diff = new PNG( { width, height } );
 
+	// checks the diff
 	const diffPixels = pixelmatch( img1.data, img2.data, diff.data, width, height, { threshold } );
+
+	// writes the pixels out if path is provided.
 	if ( diffPath ) {
 
 		const buffer = PNG.sync.write( diff, { colorType: 6 } );
@@ -90,6 +98,7 @@ export function compareImages( path1, path2, threshold = 0.1, diffPath = null ) 
 
 	}
 
+	// returns the ratio of different pixels
 	return diffPixels / ( width * height );
 
 }
