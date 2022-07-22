@@ -21,7 +21,7 @@ export function runScript( command ) {
 
 }
 
-export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, diffThreshold ) {
+export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, diffThreshold = 0.1 ) {
 
 	let failures = 0;
 	let total = 0;
@@ -34,7 +34,7 @@ export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, dif
 
 		if ( fs.existsSync( path.resolve( path2, fileName ) ) ) {
 
-			console.log( `Comparing "${ fileName }" screenshots.`)
+			console.log( `Comparing "${ fileName }" screenshots.`);
 			const diff =
 				compareImages(
 					path.resolve( path1, fileName ),
@@ -67,7 +67,7 @@ export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, dif
 
 }
 
-function compareImages( path1, path2, threshold = 0.1, diffPath = null ) {
+export function compareImages( path1, path2, threshold = 0.1, diffPath = null ) {
 
 	const img1 = PNG.sync.read( fs.readFileSync( path1 ) );
 	const img2 = PNG.sync.read( fs.readFileSync( path2 ) );
