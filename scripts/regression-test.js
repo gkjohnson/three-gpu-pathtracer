@@ -50,7 +50,15 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 	}
 
-	await runScript( `node ./scripts/update-screenshots.js ${ options }` );
+	try {
+
+		await runScript( `node ./scripts/update-screenshots.js ${ options }` );
+
+	} catch {
+
+		process.exit( 1 );
+
+	}
 
 	// // switch and rebase branches
 	// console.log( 'Switching to "screenshots" branch' );
