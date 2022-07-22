@@ -50,48 +50,50 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 	}
 
-	await runScript( `node ./scripts/update-screenshots.js ${ options }` );
+	console.log( options );
 
-	// switch and rebase branches
-	console.log( 'Switching to "screenshots" branch' );
-	await git.checkout( 'screenshots' );
+	// await runScript( `node ./scripts/update-screenshots.js ${ options }` );
 
-	const rootPath = path.resolve( process.cwd(), './screenshots/' );
-	let failed = false;
-	if ( scenario ) {
+	// // switch and rebase branches
+	// console.log( 'Switching to "screenshots" branch' );
+	// await git.checkout( 'screenshots' );
 
-		console.log( `Comparing "${ scenario }" screenshots.`);
-		const diff = compareImages(
-			path.resolve( rootPath, `./golden/${ scenario }.png` ),
-			path.resolve( rootPath, `./current/${ scenario }.png` ),
-			PIXEL_THRESHOLD,
-			argv[ 'diff-path' ]
-		);
+	// const rootPath = path.resolve( process.cwd(), './screenshots/' );
+	// let failed = false;
+	// if ( scenario ) {
 
-		if ( diff > PIXEL_THRESHOLD ) {
+	// 	console.log( `Comparing "${ scenario }" screenshots.`);
+	// 	const diff = compareImages(
+	// 		path.resolve( rootPath, `./golden/${ scenario }.png` ),
+	// 		path.resolve( rootPath, `./current/${ scenario }.png` ),
+	// 		PIXEL_THRESHOLD,
+	// 		argv[ 'diff-path' ]
+	// 	);
 
-			failed = true;
+	// 	if ( diff > PIXEL_THRESHOLD ) {
 
-		}
+	// 		failed = true;
 
-		console.log( `\t${ failed ? 'Fail' : 'Pass' }: Images are ${ ( 100 * diff ).toFixed( 2 ) }% different` );
+	// 	}
 
-	} else {
+	// 	console.log( `\t${ failed ? 'Fail' : 'Pass' }: Images are ${ ( 100 * diff ).toFixed( 2 ) }% different` );
 
-		failed = compareImages(
-			path.resolve( rootPath, './golden/' ),
-			path.resolve( rootPath, './current/' ),
-			PIXEL_THRESHOLD,
-			DIFF_THRESHOLD,
-		);
+	// } else {
 
-	}
+	// 	failed = compareImages(
+	// 		path.resolve( rootPath, './golden/' ),
+	// 		path.resolve( rootPath, './current/' ),
+	// 		PIXEL_THRESHOLD,
+	// 		DIFF_THRESHOLD,
+	// 	);
+
+	// }
 
 
-	// reset git
-	console.log( `Switching back to "${ currentBranch }" branch` );
-	await git.checkout( currentBranch );
+	// // reset git
+	// console.log( `Switching back to "${ currentBranch }" branch` );
+	// await git.checkout( currentBranch );
 
-	process.exit( failed ? 1 : 0 );
+	// process.exit( failed ? 1 : 0 );
 
 } )();
