@@ -6,14 +6,15 @@ import { PNG } from 'pngjs';
 
 export function runScript( command ) {
 
-	return new Promise( resolve => {
+	return new Promise( ( resolve, reject ) => {
 
 		const proc = exec( command );
 		proc.stderr.pipe( process.stderr );
 		proc.stdout.pipe( process.stdout );
-		proc.on( 'exit', () => {
+		proc.on( 'exit', code => {
 
-			resolve();
+			if ( code === 0 ) resolve();
+			else reject();
 
 		} );
 
