@@ -3,8 +3,8 @@ import { compareImages, runScript } from './utils.js';
 import yargs from 'yargs';
 import path from 'path';
 
-const DIFF_THRESHOLD = 0.1;
-const PIXEL_THRESHOLD = 0.1;
+const DIFF_THRESHOLD = 0.01;
+const PIXEL_THRESHOLD = 0.01;
 const argv = yargs( process.argv.slice( 2 ) )
 	.usage( 'Usage: $0 <command> [options]' )
 	.option( 'diff-path', {
