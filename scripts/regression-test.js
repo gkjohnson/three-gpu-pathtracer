@@ -9,7 +9,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 	.usage( 'Usage: $0 <command> [options]' )
 	.option( 'diff-path', {
 		describe: 'Output file for saving out an image diff.',
-		alias: 'dp',
+		alias: 'd',
 		type: 'string',
 	} )
 	.option( 'scenario', {
@@ -60,46 +60,48 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 	}
 
-	// // switch and rebase branches
-	// console.log( 'Switching to "screenshots" branch' );
-	// await git.checkout( 'screenshots' );
+	// switch and rebase branches
+	console.log( 'Switching to "screenshots" branch' );
+	await git.checkout( 'screenshots' );
 
-	// const rootPath = path.resolve( process.cwd(), './screenshots/' );
-	// let failed = false;
-	// if ( scenario ) {
+	const rootPath = path.resolve( process.cwd(), './screenshots/' );
+	let failed = false;
+	if ( scenario ) {
 
-	// 	console.log( `Comparing "${ scenario }" screenshots.`);
-	// 	const diff = compareImages(
-	// 		path.resolve( rootPath, `./golden/${ scenario }.png` ),
-	// 		path.resolve( rootPath, `./current/${ scenario }.png` ),
-	// 		PIXEL_THRESHOLD,
-	// 		argv[ 'diff-path' ]
-	// 	);
+		console.log( `Comparing "${ scenario }" screenshots.` );
 
-	// 	if ( diff > PIXEL_THRESHOLD ) {
+		const diffPath = argv[ 'diff-path' ] ? path.resolve( process.cwd(), argv[ 'diff-path' ] ) : null;
+		const diff = compareImages(
+			path.resolve( rootPath, `./golden/${ scenario }.png` ),
+			path.resolve( rootPath, `./current/${ scenario }.png` ),
+			PIXEL_THRESHOLD,
+			diffPath
+		);
 
-	// 		failed = true;
+		if ( diff > PIXEL_THRESHOLD ) {
 
-	// 	}
+			failed = true;
 
-	// 	console.log( `\t${ failed ? 'Fail' : 'Pass' }: Images are ${ ( 100 * diff ).toFixed( 2 ) }% different` );
+		}
 
-	// } else {
+		console.log( `\t${ failed ? 'Fail' : 'Pass' }: Images are ${ ( 100 * diff ).toFixed( 2 ) }% different` );
 
-	// 	failed = compareImages(
-	// 		path.resolve( rootPath, './golden/' ),
-	// 		path.resolve( rootPath, './current/' ),
-	// 		PIXEL_THRESHOLD,
-	// 		DIFF_THRESHOLD,
-	// 	);
+	} else {
 
-	// }
+		failed = compareImages(
+			path.resolve( rootPath, './golden/' ),
+			path.resolve( rootPath, './current/' ),
+			PIXEL_THRESHOLD,
+			DIFF_THRESHOLD,
+		);
+
+	}
 
 
-	// // reset git
-	// console.log( `Switching back to "${ currentBranch }" branch` );
-	// await git.checkout( currentBranch );
+	// reset git
+	console.log( `Switching back to "${ currentBranch }" branch` );
+	await git.checkout( currentBranch );
 
-	// process.exit( failed ? 1 : 0 );
+	process.exit( failed ? 1 : 0 );
 
 } )();

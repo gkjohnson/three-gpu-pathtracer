@@ -35,7 +35,7 @@ export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, dif
 
 		if ( fs.existsSync( path.resolve( path2, fileName ) ) ) {
 
-			console.log( `Comparing "${ fileName }" screenshots.`);
+			console.log( `Comparing "${ fileName }" screenshots.` );
 			const diff =
 				compareImages(
 					path.resolve( path1, fileName ),
@@ -69,6 +69,12 @@ export function compareImageDirectories( path1, path2, pixelThreshold = 0.1, dif
 }
 
 export function compareImages( path1, path2, threshold = 0.1, diffPath = null ) {
+
+	if ( ! fs.existsSync( path1 ) || ! fs.existsSync( path2 ) ) {
+
+		throw new Error( `File "${ path.basename( path1 ) }" does not not exist in both directories.` );
+
+	}
 
 	const img1 = PNG.sync.read( fs.readFileSync( path1 ) );
 	const img2 = PNG.sync.read( fs.readFileSync( path2 ) );
