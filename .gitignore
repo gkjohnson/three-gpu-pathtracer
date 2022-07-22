@@ -106,3 +106,4 @@ dist
 .parcel-cache
 example/dev-bundle
 .vscode/
+screenshots/current/
