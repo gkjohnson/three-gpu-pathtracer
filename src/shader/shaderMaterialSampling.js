@@ -73,9 +73,6 @@ float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = getHalfVector( wi, wo );
-	if ( wi.z * wo.z < 0.0 ) {
-		return 0.0;
-	}
 
 	float incidentTheta = acos( wo.z );
 	float D = ggxDistribution( halfVector, filteredRoughness );
