@@ -9,7 +9,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-let renderer, controls, transformControlsScene, spotLight1, lights, spotLightHelpers, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
+let renderer, controls, transformControlsScene, spotLight1, lights, spotLights, spotLightHelpers, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
 let perspectiveCamera, orthoCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -272,6 +272,7 @@ async function init() {
 			// spot lights
 			spotLightHelpers = [ ];
 			lights = [ ];
+			spotLights = [ ];
 
 			const decays = [ 0, 1.5, 0, 0.25, 0 ];
 			for ( let i = 0; i < 5; ++ i ) {
@@ -283,8 +284,7 @@ async function init() {
 				spotLight.penumbra = 0.0;
 				spotLight.decay = decays[ i ];
 				spotLight.distance = 0.0;
-				spotLight.intensity = 50.0;
-				spotLight.lampIntensityScale = 0.0;
+				spotLight.intensity = 150.0;
 				spotLight.radius = 0.5;
 				spotLight.iesProfile = - 1 + i;
 
@@ -295,6 +295,7 @@ async function init() {
 				spotLight.shadow.focus = 1.0;
 				spotLight.castShadow = true;
 
+				spotLights.push( spotLight );
 				lights.push( spotLight );
 
 				const targetObject = new THREE.Object3D();
@@ -373,7 +374,7 @@ async function init() {
 
 			scene.add( result.scene );
 
-			const { bvh, textures, materials, lights } = result;
+			const { bvh, textures, materials, lights, spotLights } = result;
 			const geometry = bvh.geometry;
 			const material = ptRenderer.material;
 
@@ -387,6 +388,8 @@ async function init() {
 			material.iesProfiles.updateFrom( renderer, iesProfileURLs );
 			material.lights.updateFrom( lights );
 			material.lightCount = lights.length;
+			material.spotLights.updateFrom( spotLights );
+			material.spotLightCount = spotLights.length;
 
 			generator.dispose();
 
@@ -550,7 +553,7 @@ async function init() {
 	matFolder3.add( params.material3, 'castShadow' ).onChange( reset );
 	matFolder3.close();
 
-	const matFolder4 = gui.addFolder( 'Floor Material' );
+	const matFolder4 = gui.addFolder( 'Wall Material' );
 	matFolder4.addColor( params.material4, 'color' ).onChange( reset );
 	matFolder4.add( params.material4, 'roughness', 0, 1 ).onChange( reset );
 	matFolder4.add( params.material4, 'metalness', 0, 1 ).onChange( reset );
@@ -570,7 +573,6 @@ async function init() {
 	matFolder5.add( spotLight1, 'distance', 0.0, 20.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'lampIntensityScale', 0.0, 1.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( reset );
 
 	animate();
@@ -706,6 +708,7 @@ function animate() {
 	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 
 	ptRenderer.material.lights.updateFrom( lights );
+	ptRenderer.material.spotLights.updateFrom( spotLights );
 
 	activeCamera.updateMatrixWorld();
 

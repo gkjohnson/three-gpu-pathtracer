@@ -10,6 +10,7 @@ export class PathTracingSceneGenerator {
 
 		const meshes = [];
 		const lights = [];
+		const spotLights = [];
 
 		for ( let i = 0, l = scene.length; i < l; i ++ ) {
 
@@ -32,9 +33,13 @@ export class PathTracingSceneGenerator {
 
 					meshes.push( c );
 
-				} else if ( c.isRectAreaLight || c.isSpotLight ) {
+				} else if ( c.isRectAreaLight ) {
 
 					lights.push( c );
+
+				} else if ( c.isSpotLight ) {
+
+					spotLights.push( c );
 
 				}
 
@@ -46,20 +51,22 @@ export class PathTracingSceneGenerator {
 			...mergeMeshes( meshes, {
 				attributes: [ 'position', 'normal', 'tangent', 'uv' ],
 			} ),
-			lights
+			lights,
+			spotLights
 		};
 
 	}
 
 	generate( scene, options = {} ) {
 
-		const { materials, textures, geometry, lights } = this.prepScene( scene );
+		const { materials, textures, geometry, lights, spotLights } = this.prepScene( scene );
 		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
 		return {
 			scene,
 			materials,
 			textures,
 			lights,
+			spotLights,
 			bvh: new MeshBVH( geometry, bvhOptions ),
 		};
 

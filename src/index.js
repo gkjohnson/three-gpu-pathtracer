@@ -12,6 +12,7 @@ export * from './uniforms/RenderTarget2DArray.js';
 export * from './uniforms/EquirectHdrInfoUniform.js';
 export * from './uniforms/PhysicalCameraUniform.js';
 export * from './uniforms/LightsTexture.js';
+export * from './uniforms/SpotLightsTexture.js';
 export * from './uniforms/IESProfilesTexture.js';
 
 // utils

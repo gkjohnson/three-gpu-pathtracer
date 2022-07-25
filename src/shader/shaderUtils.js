@@ -313,7 +313,7 @@ export const shaderUtils = /* glsl */`
 
 	// Finds the point where the ray intersects the plane defined by u and v and checks if this point
 	// falls in the bounds of the circle on that same plane. See above URL for a description of the plane intersection algorithm.
-	bool intersectsCircle( vec3 position, vec3 normal, vec3 u, vec3 v, float radius, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
+	bool intersectsCircle( vec3 position, vec3 normal, vec3 u, vec3 v, vec3 rayOrigin, vec3 rayDirection, out float dist ) {
 
 		float t = dot( position - rayOrigin, normal ) / dot( rayDirection, normal );
 
@@ -325,7 +325,7 @@ export const shaderUtils = /* glsl */`
 			float a1 = dot( u, vi );
 			float a2 = dot( v, vi );
 
-			if( length( vec2( a1, a2 ) ) <= radius ) {
+			if( length( vec2( a1, a2 ) ) <= 0.5 ) {
 
 				dist = t;
 				return true;
