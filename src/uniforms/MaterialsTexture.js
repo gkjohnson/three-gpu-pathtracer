@@ -3,9 +3,9 @@ import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, Bac
 const MATERIAL_PIXELS = 38;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
-const SIDE_OFFSET = 10 * 4 + 3; // s10.a
-const MATTE_OFFSET = 11 * 4 + 0; // s11.r
-const SHADOW_OFFSET = 11 * 4 + 1; // s11.g
+const SIDE_OFFSET = 12 * 4 + 3; // s12.a
+const MATTE_OFFSET = 13 * 4 + 0; // s13.r
+const SHADOW_OFFSET = 13 * 4 + 1; // s13.g
 
 export class MaterialsTexture extends DataTexture {
 
@@ -200,24 +200,28 @@ export class MaterialsTexture extends DataTexture {
 
 			const m = materials[ i ];
 
+			// sample 0
 			// color
 			floatArray[ index ++ ] = m.color.r;
 			floatArray[ index ++ ] = m.color.g;
 			floatArray[ index ++ ] = m.color.b;
 			floatArray[ index ++ ] = getTexture( m, 'map' );
 
+			// sample 1
 			// metalness & roughness
 			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
 			floatArray[ index ++ ] = textures.indexOf( m.metalnessMap );
 			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
 			floatArray[ index ++ ] = textures.indexOf( m.roughnessMap );
 
+			// sample 2
 			// transmission & emissiveIntensity
 			floatArray[ index ++ ] = getField( m, 'ior', 1.0 );
 			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'transmissionMap' );
 			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
 
+			// sample 3
 			// emission
 			if ( 'emissive' in m ) {
 
@@ -235,6 +239,7 @@ export class MaterialsTexture extends DataTexture {
 
 			floatArray[ index ++ ] = getTexture( m, 'emissiveMap' );
 
+			// sample 4
 			// normals
 			floatArray[ index ++ ] = getTexture( m, 'normalMap' );
 			if ( 'normalScale' in m ) {
@@ -251,13 +256,14 @@ export class MaterialsTexture extends DataTexture {
 
 			// clearcoat
 			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
+			floatArray[ index ++ ] = getTexture( m, 'clearcoatMap' ); // sample 5
 
 			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
 
 			floatArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
 
+			// sample 6
 			if ( 'clearcoatNormalScale' in m ) {
 
 				floatArray[ index ++ ] = m.clearcoatNormalScale.x;
@@ -273,6 +279,7 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 			index ++;
 
+			// sample 7
 			// sheen
 			if ( 'sheenColor' in m ) {
 
@@ -290,6 +297,7 @@ export class MaterialsTexture extends DataTexture {
 
 			floatArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
 
+			// sample 8
 			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
 
@@ -297,13 +305,39 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
 			floatArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
 
-			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
+			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 ); // sample 9
 			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
 
 			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );
 			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
 			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
 
+			// sample 10
+			// specular color
+			if ( 'specularColor' in m ) {
+
+				floatArray[ index ++ ] = m.specularColor.r;
+				floatArray[ index ++ ] = m.specularColor.g;
+				floatArray[ index ++ ] = m.specularColor.b;
+
+			} else {
+
+				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 0.0;
+
+			}
+
+			floatArray[ index ++ ] = getTexture( m, 'specularColorMap' );
+
+			// sample 11
+			// specular intensity
+			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
+			floatArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
+			index ++;
+			index ++;
+
+			// sample 12
 			// alphaMap
 			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
 
@@ -311,10 +345,10 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 			index ++; // side
+
+			// sample 13
 			index ++; // matte
-
 			index ++; // shadow
-
 			index ++;
 			index ++;
 
