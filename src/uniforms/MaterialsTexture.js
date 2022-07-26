@@ -1,6 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 38;
+const MATERIAL_PIXELS = 40;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 const SIDE_OFFSET = 12 * 4 + 3; // s12.a
