@@ -33,6 +33,8 @@ const params = {
 		iridescence: 0.0,
 		iridescenceIOR: 1.5,
 		iridescenceThickness: 400,
+		specularColor: '#ffffff',
+		specularIntensity: 1.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -52,6 +54,8 @@ const params = {
 		iridescence: 0.0,
 		iridescenceIOR: 1.5,
 		iridescenceThickness: 400,
+		specularColor: '#ffffff',
+		specularIntensity: 1.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -66,6 +70,8 @@ const params = {
 		iridescence: 0.0,
 		iridescenceIOR: 1.5,
 		iridescenceThickness: 400,
+		specularColor: '#ffffff',
+		specularIntensity: 1.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -391,6 +397,8 @@ async function init() {
 	matFolder1.add( params.material1, 'iridescence', 0.0, 1.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
+	matFolder1.addColor( params.material1, 'specularColor' ).onChange( reset );
+	matFolder1.add( params.material1, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'matte' ).onChange( reset );
 	matFolder1.add( params.material1, 'castShadow' ).onChange( reset );
 	matFolder1.close();
@@ -411,6 +419,8 @@ async function init() {
 	matFolder2.add( params.material2, 'iridescence', 0.0, 1.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
+	matFolder2.addColor( params.material2, 'specularColor' ).onChange( reset );
+	matFolder2.add( params.material2, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'matte' ).onChange( reset );
 	matFolder2.add( params.material2, 'castShadow' ).onChange( reset );
 	matFolder2.close();
@@ -428,6 +438,8 @@ async function init() {
 	matFolder3.add( params.material3, 'iridescence', 0.0, 1.0 ).onChange( reset );
 	matFolder3.add( params.material3, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
 	matFolder3.add( params.material3, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
+	matFolder3.addColor( params.material3, 'specularColor' ).onChange( reset );
+	matFolder3.add( params.material3, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder3.close();
 
 	animate();
@@ -537,6 +549,8 @@ function animate() {
 	m1.iridescence = params.material1.iridescence;
 	m1.iridescenceIOR = params.material1.iridescenceIOR;
 	m1.iridescenceThicknessRange = [ 0, params.material1.iridescenceThickness ];
+	m1.specularColor.set( params.material1.specularColor ).convertSRGBToLinear();
+	m1.specularIntensity = params.material1.specularIntensity;
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
@@ -554,6 +568,8 @@ function animate() {
 	m2.iridescence = params.material2.iridescence;
 	m2.iridescenceIOR = params.material2.iridescenceIOR;
 	m2.iridescenceThicknessRange = [ 0, params.material2.iridescenceThickness ];
+	m2.specularColor.set( params.material2.specularColor ).convertSRGBToLinear();
+	m2.specularIntensity = params.material2.specularIntensity;
 
 	const m3 = materials[ 2 ];
 	m3.color.set( params.material3.color ).convertSRGBToLinear();
@@ -566,6 +582,8 @@ function animate() {
 	m3.iridescence = params.material3.iridescence;
 	m3.iridescenceIOR = params.material3.iridescenceIOR;
 	m3.iridescenceThicknessRange = [ 0, params.material3.iridescenceThickness ];
+	m3.specularColor.set( params.material3.specularColor ).convertSRGBToLinear();
+	m3.specularIntensity = params.material3.specularIntensity;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
