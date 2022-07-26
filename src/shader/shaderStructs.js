@@ -88,6 +88,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		mat3 sheenRoughnessMapTransform;
 		mat3 iridescenceMapTransform;
 		mat3 iridescenceThicknessMapTransform;
+		mat3 specularColorMapTransform;
+		mat3 specularIntensityMapTransform;
 
 	};
 
@@ -108,7 +110,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 40u;
+		uint i = index * 44u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -194,6 +196,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
 		m.iridescenceMapTransform = m.iridescenceMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 22u );
 		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
+		m.specularColorMapTransform = m.specularColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 26u );
+		m.specularIntensityMapTransform = m.specularIntensityMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 28u );
 
 		return m;
 

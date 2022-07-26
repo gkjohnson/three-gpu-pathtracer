@@ -1,6 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 40;
+const MATERIAL_PIXELS = 44;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 const SIDE_OFFSET = 12 * 4 + 3; // s12.a
@@ -390,6 +390,12 @@ export class MaterialsTexture extends DataTexture {
 
 			// iridescenceThicknessMap transform
 			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
+
+			// specularColorMap transform
+			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
+
+			// specularIntensityMap transform
+			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
 
 		}
 
