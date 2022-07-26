@@ -117,7 +117,7 @@ LightSampleRec randomCircularAreaLightSample( Light light, vec3 rayOrigin ) {
 
 	lightSampleRec.emission = light.color * light.intensity;
 
-	float r = 2.0 * sqrt( rand() );
+	float r = 0.5 * sqrt( rand() );
 	float theta = rand() * 2.0 * PI;
 	float x = r * cos( theta );
 	float y = r * sin( theta );
@@ -142,7 +142,7 @@ LightSampleRec randomSpotLightSample( SpotLight spotLight, sampler2DArray iesPro
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
 
-	float r = 2.0 * spotLight.radius * sqrt( rand() );
+	float r = spotLight.radius * sqrt( rand() );
 	float theta = rand() * 2.0 * PI;
 	float x = r * cos( theta );
 	float y = r * sin( theta );
