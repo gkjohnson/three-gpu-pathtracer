@@ -88,41 +88,31 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 }
 
-LightSampleRec randomRectAreaLightSample( Light light, vec3 rayOrigin ) {
+LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
 
 	lightSampleRec.emission = light.color * light.intensity;
 
-	vec3 randomPos = light.position + light.u * ( rand() - 0.5 ) + light.v * ( rand() - 0.5 );
-	vec3 toLight = randomPos - rayOrigin;
-	float lightDistSq = dot( toLight, toLight );
-	lightSampleRec.dist = sqrt( lightDistSq );
+	vec3 randomPos;
+	if( light.type == 0 ) {
 
-	vec3 direction = toLight / lightSampleRec.dist;
-	lightSampleRec.direction = direction;
+		// rectangular area light
+		randomPos = light.position + light.u * ( rand() - 0.5 ) + light.v * ( rand() - 0.5 );
 
-	vec3 lightNormal = normalize( cross( light.u, light.v ) );
-	lightSampleRec.pdf = lightDistSq / ( light.area * dot( direction, lightNormal ) );
+	} else if( light.type == 1 ) {
 
-	return lightSampleRec;
+		// circular area light
+		float r = 0.5 * sqrt( rand() );
+		float theta = rand() * 2.0 * PI;
+		float x = r * cos( theta );
+		float y = r * sin( theta );
 
-}
+		randomPos = light.position + light.u * x + light.v * y;
 
-LightSampleRec randomCircularAreaLightSample( Light light, vec3 rayOrigin ) {
+	}
 
-	LightSampleRec lightSampleRec;
-	lightSampleRec.hit = true;
-
-	lightSampleRec.emission = light.color * light.intensity;
-
-	float r = 0.5 * sqrt( rand() );
-	float theta = rand() * 2.0 * PI;
-	float x = r * cos( theta );
-	float y = r * sin( theta );
-
-	vec3 randomPos = light.position + light.u * x + light.v * y;
 	vec3 toLight = randomPos - rayOrigin;
 	float lightDistSq = dot( toLight, toLight );
 	lightSampleRec.dist = sqrt( lightDistSq );
@@ -153,7 +143,7 @@ LightSampleRec randomSpotLightSample( SpotLight spotLight, sampler2DArray iesPro
 
 	float angle = acos( spotLight.coneCos );
 	float angleTan = tan( angle );
-	float startDistance = spotLight.radius / angleTan;
+	float startDistance = spotLight.radius / max( angleTan, EPSILON );
 
 	vec3 randomPos = spotLight.position - lightNormal * startDistance + u * x + v * y;
 	vec3 toLight = randomPos - rayOrigin;
@@ -186,17 +176,7 @@ LightSampleRec randomLightSample( sampler2D lights, uint lightCount, vec3 rayOri
 	Light light = readLightInfo( lights, l );
 
 	// sample the light
-	if( light.type == 0 ) {
-
-		// rectangular area light
-		return randomRectAreaLightSample( light, rayOrigin );
-
-	} else if( light.type == 1 ) {
-
-		// circual area light
-		return randomCircularAreaLightSample( light, rayOrigin );
-
-	}
+	return randomAreaLightSample( light, rayOrigin );
 
 }
 
