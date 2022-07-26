@@ -129,7 +129,7 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	color *= mix( F, vec3( 1.0 ), metalness );
 	color *= wi.z; // scale the light by the direction the light is coming in from
 
-	return color;
+	return color * surf.specularColor * surf.specularIntensity;
 
 }
 
