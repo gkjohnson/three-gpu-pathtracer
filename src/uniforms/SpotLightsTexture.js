@@ -112,7 +112,6 @@ export class SpotLightsTexture extends DataTexture {
 			// penumbraCos
 			floatArray[ baseIndex + ( index ++ ) ] = Math.cos( sl.angle * ( 1 - sl.penumbra ) );
 
-			console.log( iesTextures );
 			// iesProfile
 			floatArray[ baseIndex + ( index ++ ) ] = iesTextures.indexOf( sl.iesTexture );
 

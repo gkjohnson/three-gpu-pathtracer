@@ -88,6 +88,7 @@ const params = {
 	checkerboardTransparency: true,
 	showTransformControls: true,
 	cameraProjection: 'Perspective',
+	iesProfile: - 1,
 };
 
 if ( window.location.hash.includes( 'transmission' ) ) {
@@ -288,7 +289,6 @@ async function init() {
 
 						new IESLoader().load( iesProfileURLs[ iesIndex ], tex => {
 
-							console.log('GOT HERE', tex)
 							spotLight.iesTexture = tex;
 							resolve( tex );
 
@@ -593,7 +593,12 @@ async function init() {
 	matFolder5.add( spotLight1, 'distance', 0.0, 20.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
-	// matFolder5.add( spotLight1, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( reset );
+	matFolder5.add( params, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( v => {
+
+		spotLight1.iesTexture = v === - 1 ? null : iesTextures[ v ];
+		reset();
+
+	} );
 
 	animate();
 
