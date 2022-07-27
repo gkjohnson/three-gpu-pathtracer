@@ -5,6 +5,7 @@ export * from './core/DynamicPathTracingSceneGenerator.js';
 export * from './core/MaterialReducer.js';
 export * from './core/PhysicalCamera.js';
 export * from './core/EquirectCamera.js';
+export * from './core/PhysicalSpotLight.js';
 
 // uniforms
 export * from './uniforms/MaterialsTexture.js';

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, PhysicalSpotLight, IESLoader } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -12,6 +12,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 let renderer, controls, transformControlsScene, spotLight1, lights, spotLights, spotLightHelpers, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
 let perspectiveCamera, orthoCamera;
 let envMap, envMapGenerator, scene;
+let iesTextures;
 let samplesEl;
 
 const orthoWidth = 5;
@@ -273,11 +274,30 @@ async function init() {
 			spotLightHelpers = [ ];
 			lights = [ ];
 			spotLights = [ ];
+			const iesPromises = [];
 
 			const decays = [ 0, 1.5, 0, 0.25, 0 ];
 			for ( let i = 0; i < 5; ++ i ) {
 
-				const spotLight = new THREE.SpotLight( 0xffffff );
+				const spotLight = new PhysicalSpotLight( 0xffffff );
+
+				const iesIndex = - 1 + i;
+				if ( iesIndex !== - 1 ) {
+
+					const iesPromise = new Promise( ( resolve, reject ) => {
+
+						new IESLoader().load( iesProfileURLs[ iesIndex ], tex => {
+
+							console.log('GOT HERE', tex)
+							spotLight.iesTexture = tex;
+							resolve( tex );
+
+						}, null, reject );
+
+					} );
+					iesPromises.push( iesPromise );
+
+				}
 
 				spotLight.position.set( i * 8, 7.0, 0.005 );
 				spotLight.angle = Math.PI / 8.0;
@@ -286,7 +306,6 @@ async function init() {
 				spotLight.distance = 0.0;
 				spotLight.intensity = 150.0;
 				spotLight.radius = 0.5;
-				spotLight.iesProfile = - 1 + i;
 
 				spotLight.shadow.mapSize.width = 512;
 				spotLight.shadow.mapSize.height = 512;
@@ -365,11 +384,12 @@ async function init() {
 
 			materials = [ material1, material2, floor.material, wall.material ];
 
-			return generator.generate( group );
+			return Promise.all( [ generator.generate( group ), Promise.all( iesPromises ) ] );
 
 		} )
-		.then( result => {
+		.then( ( [ result, _iesTextures ] ) => {
 
+			iesTextures = _iesTextures;
 			sceneInfo = result;
 
 			scene.add( result.scene );
@@ -385,10 +405,10 @@ async function init() {
 			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 			material.textures.setTextures( renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );
-			material.iesProfiles.updateFrom( renderer, iesProfileURLs );
+			material.iesProfiles.updateFrom( renderer, iesTextures );
 			material.lights.updateFrom( lights );
 			material.lightCount = lights.length;
-			material.spotLights.updateFrom( spotLights );
+			material.spotLights.updateFrom( spotLights, iesTextures );
 			material.spotLightCount = spotLights.length;
 
 			generator.dispose();
@@ -573,7 +593,7 @@ async function init() {
 	matFolder5.add( spotLight1, 'distance', 0.0, 20.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
 	matFolder5.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( reset );
+	// matFolder5.add( spotLight1, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( reset );
 
 	animate();
 
@@ -708,7 +728,7 @@ function animate() {
 	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 
 	ptRenderer.material.lights.updateFrom( lights );
-	ptRenderer.material.spotLights.updateFrom( spotLights );
+	ptRenderer.material.spotLights.updateFrom( spotLights, iesTextures );
 
 	activeCamera.updateMatrixWorld();
 

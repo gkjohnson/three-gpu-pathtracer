@@ -40,34 +40,7 @@ export class IESProfilesTexture extends WebGLArrayRenderTarget {
 
 	}
 
-	async updateFrom( renderer, iesProfiles ) {
-
-		const textures = [ ];
-		const promises = [ ];
-
-		iesProfiles.forEach( iesProfileURL => {
-
-			promises.push( new Promise( resolve => {
-
-				this.iesLoader
-					.load( iesProfileURL, texture => {
-
-						textures.push( texture );
-						resolve();
-
-					} );
-
-			} ) );
-
-		} );
-
-		await Promise.all( promises );
-
-		this._setTextures( renderer, textures );
-
-	}
-
-	_setTextures( renderer, textures ) {
+	async updateFrom( renderer, textures ) {
 
 		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
