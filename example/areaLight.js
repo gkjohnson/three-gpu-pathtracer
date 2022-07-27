@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, ShapedAreaLight } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -140,7 +140,7 @@ async function init() {
 
 	group.updateMatrixWorld();
 
-	const areaLight1 = new THREE.RectAreaLight( new THREE.Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
+	const areaLight1 = new ShapedAreaLight( new THREE.Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
 	areaLight1.position.x = 1.5;
 	areaLight1.position.y = 1.0;
 	areaLight1.position.z = - 0.5;
@@ -149,7 +149,7 @@ async function init() {
 	areaLight1.isCircular = false;
 	group.add( areaLight1 );
 
-	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
+	const areaLight2 = new ShapedAreaLight( new THREE.Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
 	areaLight2.position.y = 1.25;
 	areaLight2.position.z = - 1.5;
 	areaLight2.rotateX( Math.PI );
@@ -192,7 +192,7 @@ async function init() {
 	const generatorPromise = generator.generate( group, {
 		onProgress( v ) {
 
-			loadingEl.innerText = `Generating BVH ${ ( 100 * v ).toFixed( 2 ) }%`;
+			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
 
 		}
 	} ).then( result => {

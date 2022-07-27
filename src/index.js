@@ -3,9 +3,12 @@ export * from './core/PathTracingRenderer.js';
 export * from './core/PathTracingSceneGenerator.js';
 export * from './core/DynamicPathTracingSceneGenerator.js';
 export * from './core/MaterialReducer.js';
-export * from './core/PhysicalCamera.js';
-export * from './core/EquirectCamera.js';
-export * from './core/PhysicalSpotLight.js';
+
+// objects
+export * from './objects/PhysicalCamera.js';
+export * from './objects/EquirectCamera.js';
+export * from './objects/PhysicalSpotLight.js';
+export * from './objects/ShapedAreaLight.js';
 
 // uniforms
 export * from './uniforms/MaterialsTexture.js';
