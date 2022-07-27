@@ -384,9 +384,33 @@ A class indicating that the path tracer should render an equirectangular view. D
 
 ## PhysicalSpotLight
 
+_extends THREE.SpotLight_
+
+### .radius
+
+```js
+radius = 0 : Number
+```
+
+TODO
+
+### .iesTexture
+
+```js
+iesTexture = null : Texture
+```
+
 TODO
 
 ## ShapedAreaLight
+
+_extends THREE.RectAreaLight_
+
+### .isCircular
+
+```js
+isCircular = false : Boolean
+```
 
 TODO
 
@@ -427,6 +451,20 @@ reset() : void
 Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
 
 ## IESLoader
+
+### constructor
+
+```js
+constructor( manager : LoadingManager )
+```
+
+TODO
+
+### .load
+
+```js
+load( url : string, onComplete, onProgress, onError ) : Texture
+```
 
 TODO
 
@@ -633,6 +671,14 @@ updateFrom( lights : Array<Light> ) : void
 Updates the size and values of the texture to align with the provided set of lights.
 
 ## SpotLightsTexture
+
+TODO
+
+### .updateFrom
+
+```js
+updateFrom( lights : Array<SpotLight>, iesTextures = [] : Array<Texture> ) : void
+```
 
 TODO
 
