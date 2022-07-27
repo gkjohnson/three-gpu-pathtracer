@@ -1,11 +1,11 @@
 import { RectAreaLight } from 'three';
 
-export class CircularAreaLight extends RectAreaLight {
+export class ShapedAreaLight extends RectAreaLight {
 
 	constructor( ...args ) {
 
 		super( ...args );
-		this.isCircularAreaLight = true;
+		this.isCircular = false;
 
 	}
 

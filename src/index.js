@@ -6,6 +6,7 @@ export * from './core/MaterialReducer.js';
 export * from './core/PhysicalCamera.js';
 export * from './core/EquirectCamera.js';
 export * from './core/PhysicalSpotLight.js';
+export * from './core/ShapedAreaLight.js';
 
 // uniforms
 export * from './uniforms/MaterialsTexture.js';
