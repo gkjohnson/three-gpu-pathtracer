@@ -16,7 +16,7 @@ export class SpotLightsTexture extends DataTexture {
 
 	}
 
-	updateFrom( spotLights ) {
+	updateFrom( spotLights, iesTextures = [] ) {
 
 		const pixelCount = spotLights.length * SPOT_LIGHT_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
@@ -113,7 +113,7 @@ export class SpotLightsTexture extends DataTexture {
 			floatArray[ baseIndex + ( index ++ ) ] = Math.cos( sl.angle * ( 1 - sl.penumbra ) );
 
 			// iesProfile
-			floatArray[ baseIndex + ( index ++ ) ] = sl.iesProfile;
+			floatArray[ baseIndex + ( index ++ ) ] = iesTextures.indexOf( sl.iesTexture );
 
 		}
 
