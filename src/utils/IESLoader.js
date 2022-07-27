@@ -193,20 +193,11 @@ function IESLamp( text ) {
 
 }
 
-
 export class IESLoader {
 
 	constructor( manager ) {
 
 		this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-
-	}
-
-	_parseIESData( text ) {
-
-		const iesLamp = new IESLamp( text );
-
-		return iesLamp;
 
 	}
 
@@ -297,17 +288,15 @@ export class IESLoader {
 		const loader = new FileLoader( this.manager );
 		loader.setResponseType( 'text' );
 
-		const _self = this;
-
 		const texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
 		texture.minFilter = LinearFilter;
 		texture.magFilter = LinearFilter;
 
-		loader.load( url, function ( text ) {
+		loader.load( url, text => {
 
-			const iesLamp = _self._parseIESData( text );
+			const iesLamp = new IESLamp( text );
 
-			texture.image.data = _self._getIESValues( iesLamp );
+			texture.image.data = this._getIESValues( iesLamp );
 			texture.needsUpdate = true;
 
 			if ( onLoad !== undefined ) {
