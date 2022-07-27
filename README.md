@@ -382,6 +382,14 @@ _extends THREE.Camera_
 
 A class indicating that the path tracer should render an equirectangular view. Does not work with three.js raster rendering.
 
+## PhysicalSpotLight
+
+TODO
+
+## ShapedAreaLight
+
+TODO
+
 ## DynamicPathTracingSceneGenerator
 
 A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
@@ -417,6 +425,10 @@ reset() : void
 ```
 
 Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
+
+## IESLoader
+
+TODO
 
 ## BlurredEnvMapGenerator
 
@@ -619,6 +631,10 @@ updateFrom( lights : Array<Light> ) : void
 ```
 
 Updates the size and values of the texture to align with the provided set of lights.
+
+## SpotLightsTexture
+
+TODO
 
 ## EquirectHdrInfoUniform
 
