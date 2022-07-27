@@ -16,12 +16,14 @@ const params = {
 	controls: true,
 
 	areaLight1Enabled: true,
-	areaLight2Enabled: true,
+	areaLight1IsCircular: false,
 	areaLight1Intensity: 5,
 	areaLight1Color: '#ffffff',
 	areaLight1Width: 1,
 	areaLight1Height: 1,
 
+	areaLight2Enabled: true,
+	areaLight2IsCircular: false,
 	areaLight2Intensity: 20,
 	areaLight2Color: '#ff0000',
 	areaLight2Width: 1.25,
@@ -144,12 +146,14 @@ async function init() {
 	areaLight1.position.z = - 0.5;
 	areaLight1.rotateZ( - Math.PI / 4 );
 	areaLight1.rotateX( - Math.PI / 2 );
+	areaLight1.isCircular = false;
 	group.add( areaLight1 );
 
-	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0xff0000 ), 15.0, 1.25, 2.75 );
+	const areaLight2 = new THREE.RectAreaLight( new THREE.Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
 	areaLight2.position.y = 1.25;
 	areaLight2.position.z = - 1.5;
 	areaLight2.rotateX( Math.PI );
+	areaLight2.isCircular = false;
 	group.add( areaLight2 );
 
 	areaLights = [ areaLight1, areaLight2 ];
@@ -274,6 +278,7 @@ async function init() {
 
 	const areaLight1Folder = gui.addFolder( 'Area Light 1' );
 	areaLight1Folder.add( params, 'areaLight1Enabled' ).name( 'enable' ).onChange( updateLights );
+	areaLight1Folder.add( params, 'areaLight1IsCircular' ).name( 'isCircular' ).onChange( updateLights );
 	areaLight1Folder.add( params, 'areaLight1Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
 	areaLight1Folder.addColor( params, 'areaLight1Color' ).name( 'color' ).onChange( updateLights );
 	areaLight1Folder.add( params, 'areaLight1Width', 0, 5 ).name( 'width' ).onChange( updateLights );
@@ -281,6 +286,7 @@ async function init() {
 
 	const areaLight2Folder = gui.addFolder( 'Area Light 2' );
 	areaLight2Folder.add( params, 'areaLight2Enabled' ).name( 'enable' ).onChange( updateLights );
+	areaLight2Folder.add( params, 'areaLight2IsCircular' ).name( 'isCircular' ).onChange( updateLights );
 	areaLight2Folder.add( params, 'areaLight2Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
 	areaLight2Folder.addColor( params, 'areaLight2Color' ).name( 'color' ).onChange( updateLights );
 	areaLight2Folder.add( params, 'areaLight2Width', 0, 5 ).name( 'width' ).onChange( updateLights );
@@ -294,11 +300,13 @@ async function init() {
 
 function updateLights() {
 
+	areaLights[ 0 ].isCircular = params.areaLight1IsCircular;
 	areaLights[ 0 ].intensity = params.areaLight1Intensity;
 	areaLights[ 0 ].width = params.areaLight1Width;
 	areaLights[ 0 ].height = params.areaLight1Height;
 	areaLights[ 0 ].color.set( params.areaLight1Color ).convertSRGBToLinear();
 
+	areaLights[ 1 ].isCircular = params.areaLight2IsCircular;
 	areaLights[ 1 ].intensity = params.areaLight2Intensity;
 	areaLights[ 1 ].width = params.areaLight2Width;
 	areaLights[ 1 ].height = params.areaLight2Height;
@@ -335,6 +343,7 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.lights.updateFrom( areaLights );
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
@@ -357,7 +366,3 @@ function animate() {
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
-
-
-
-

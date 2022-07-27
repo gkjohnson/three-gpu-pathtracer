@@ -111,19 +111,14 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.magFilter = LinearFilter;
 		conditionalWeights.generateMipmaps = false;
 
-		// store the total sum in a 1x1 tex since some android mobile devices have issues
-		// storing large values in structs.
-		const totalSumTex = new DataTexture();
-		totalSumTex.type = FloatType;
-		totalSumTex.format = RedFormat;
-		totalSumTex.minFilter = LinearFilter;
-		totalSumTex.magFilter = LinearFilter;
-		totalSumTex.generateMipmaps = false;
-
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
-		this.totalSum = totalSumTex;
 		this.map = null;
+
+		// the total sum value is separated into two values to work around low precision
+		// storage of floating values in structs
+		this.totalSumWhole = 0;
+		this.totalSumDecimal = 0;
 
 	}
 
@@ -131,7 +126,6 @@ export class EquirectHdrInfoUniform {
 
 		this.marginalWeights.dispose();
 		this.conditionalWeights.dispose();
-		this.totalSum.dispose();
 		if ( this.map ) this.map.dispose();
 
 	}
@@ -246,15 +240,17 @@ export class EquirectHdrInfoUniform {
 
 		this.dispose();
 
-		const { marginalWeights, conditionalWeights, totalSum } = this;
+		const { marginalWeights, conditionalWeights } = this;
 		marginalWeights.image = { width: height, height: 1, data: marginalDataArray };
 		marginalWeights.needsUpdate = true;
 
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
 
-		totalSum.image = { width: 1, height: 1, data: new Float32Array( [ totalSumValue ] ) };
-		totalSum.needsUpdate = true;
+		const totalSumWhole = ~ ~ totalSumValue;
+		const totalSumDecimal = ( totalSumValue - totalSumWhole );
+		this.totalSumWhole = totalSumWhole;
+		this.totalSumDecimal = totalSumDecimal;
 
 		this.map = map;
 
