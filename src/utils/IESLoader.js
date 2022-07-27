@@ -1,11 +1,11 @@
 import {
 	DataTexture,
-	DefaultLoadingManager,
 	FileLoader,
 	FloatType,
 	LinearFilter,
 	RedFormat,
-	MathUtils
+	MathUtils,
+	Loader,
 } from 'three';
 
 function IESLamp( text ) {
@@ -193,13 +193,7 @@ function IESLamp( text ) {
 
 }
 
-export class IESLoader {
-
-	constructor( manager ) {
-
-		this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-
-	}
+export class IESLoader extends Loader {
 
 	_getIESValues( iesLamp ) {
 
@@ -287,6 +281,10 @@ export class IESLoader {
 
 		const loader = new FileLoader( this.manager );
 		loader.setResponseType( 'text' );
+		loader.setCrossOrigin( this.crossOrigin );
+		loader.setWithCredentials( this.withCredentials );
+		loader.setPath( this.path );
+		loader.setRequestHeader( this.requestHeader );
 
 		const texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
 		texture.minFilter = LinearFilter;
@@ -306,6 +304,19 @@ export class IESLoader {
 			}
 
 		}, onProgress, onError );
+
+		return texture;
+
+	}
+
+	parse( text ) {
+
+		const iesLamp = new IESLamp( text );
+		const texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
+		texture.minFilter = LinearFilter;
+		texture.magFilter = LinearFilter;
+		texture.image.data = this._getIESValues( iesLamp );
+		texture.needsUpdate = true;
 
 		return texture;
 

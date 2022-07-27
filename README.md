@@ -392,7 +392,7 @@ _extends THREE.SpotLight_
 radius = 0 : Number
 ```
 
-TODO
+The radius of the spotlight surface. Increase this value to add softness to shadows.
 
 ### .iesTexture
 
@@ -400,7 +400,9 @@ TODO
 iesTexture = null : Texture
 ```
 
-TODO
+The loaded IES texture describing directional light intensity. These can be loaded with the `IESLoader`.
+
+Premade IES profiles can be downloaded from [ieslibrary.com]. And custom profiles can be generated using [CNDL](https://cndl.io/).
 
 ## ShapedAreaLight
 
@@ -412,7 +414,7 @@ _extends THREE.RectAreaLight_
 isCircular = false : Boolean
 ```
 
-TODO
+Whether the area light should be rendered as a circle or a rectangle.
 
 ## DynamicPathTracingSceneGenerator
 
@@ -452,21 +454,9 @@ Resets the generator so a new BVH is generated. This must be called when geometr
 
 ## IESLoader
 
-### constructor
+_extends Loader_
 
-```js
-constructor( manager : LoadingManager )
-```
-
-TODO
-
-### .load
-
-```js
-load( url : string, onComplete, onProgress, onError ) : Texture
-```
-
-TODO
+Loader for loading and parsing IES profile data. Load and parse functions return a `DataTexture` with the profile contents.
 
 ## BlurredEnvMapGenerator
 
@@ -534,6 +524,11 @@ _extends MaterialBase_
 	// Light information
 	lights: LightsTexture,
 	lightCount = 0: Number,
+
+	// Spotlight information
+	spotLights: SpotLightsTexture,
+	spotLightCount: Number,
+	iesProfiles: IESProfilesTexture,
 
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
@@ -672,7 +667,9 @@ Updates the size and values of the texture to align with the provided set of lig
 
 ## SpotLightsTexture
 
-TODO
+_extends DataTexture_
+
+Helper texture uniform for encoding spot lights as texture data.
 
 ### .updateFrom
 
@@ -680,7 +677,7 @@ TODO
 updateFrom( lights : Array<SpotLight>, iesTextures = [] : Array<Texture> ) : void
 ```
 
-TODO
+Updates the values of the texture to align with the provided set of lights and ies textures.
 
 ## EquirectHdrInfoUniform
 
