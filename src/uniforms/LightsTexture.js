@@ -18,7 +18,6 @@ export class LightsTexture extends DataTexture {
 
 	updateFrom( lights ) {
 
-		let index = 0;
 		const pixelCount = lights.length * LIGHT_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
 
@@ -42,37 +41,45 @@ export class LightsTexture extends DataTexture {
 
 			const l = lights[ i ];
 
-			// position
+			const baseIndex = i * LIGHT_PIXELS * 4;
+			let index = 0;
+
+		    // position
 			l.getWorldPosition( v );
-			floatArray[ index ++ ] = v.x;
-			floatArray[ index ++ ] = v.y;
-			floatArray[ index ++ ] = v.z;
-			index ++;
+			floatArray[ baseIndex + ( index ++ ) ] = v.x;
+			floatArray[ baseIndex + ( index ++ ) ] = v.y;
+			floatArray[ baseIndex + ( index ++ ) ] = v.z;
+
+			// type
+			floatArray[ baseIndex + ( index ++ ) ] = l.isCircular ? 1 : 0;
 
 			// color
-			floatArray[ index ++ ] = l.color.r;
-			floatArray[ index ++ ] = l.color.g;
-			floatArray[ index ++ ] = l.color.b;
+			floatArray[ baseIndex + ( index ++ ) ] = l.color.r;
+			floatArray[ baseIndex + ( index ++ ) ] = l.color.g;
+			floatArray[ baseIndex + ( index ++ ) ] = l.color.b;
 
 			// intensity
-			floatArray[ index ++ ] = l.intensity;
+			floatArray[ baseIndex + ( index ++ ) ] = l.intensity;
+
+			l.getWorldQuaternion( worldQuaternion );
 
 			// u vector
-			l.getWorldQuaternion( worldQuaternion );
 			u.set( l.width, 0, 0 ).applyQuaternion( worldQuaternion );
-			floatArray[ index ++ ] = u.x;
-			floatArray[ index ++ ] = u.y;
-			floatArray[ index ++ ] = u.z;
+
+			floatArray[ baseIndex + ( index ++ ) ] = u.x;
+			floatArray[ baseIndex + ( index ++ ) ] = u.y;
+			floatArray[ baseIndex + ( index ++ ) ] = u.z;
 			index ++;
 
 			// v vector
 			v.set( 0, l.height, 0 ).applyQuaternion( worldQuaternion );
-			floatArray[ index ++ ] = v.x;
-			floatArray[ index ++ ] = v.y;
-			floatArray[ index ++ ] = v.z;
+
+			floatArray[ baseIndex + ( index ++ ) ] = v.x;
+			floatArray[ baseIndex + ( index ++ ) ] = v.y;
+			floatArray[ baseIndex + ( index ++ ) ] = v.z;
 
 			// area
-			floatArray[ index ++ ] = u.cross( v ).length();
+			floatArray[ baseIndex + ( index ++ ) ] = u.cross( v ).length() * ( l.isCircular ? ( Math.PI / 4.0 ) : 1.0 );
 
 		}
 

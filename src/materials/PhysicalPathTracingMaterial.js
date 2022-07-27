@@ -14,6 +14,8 @@ import { shaderUtils } from '../shader/shaderUtils.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsTexture } from '../uniforms/LightsTexture.js';
+import { SpotLightsTexture } from '../uniforms/SpotLightsTexture.js';
+import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -56,6 +58,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				textures: { value: new RenderTarget2DArray().texture },
 				lights: { value: new LightsTexture() },
 				lightCount: { value: 0 },
+				spotLights: { value: new SpotLightsTexture() },
+				spotLightCount: { value: 0 },
+				iesProfiles: { value: new IESProfilesTexture().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
 				backgroundBlur: { value: 0.0 },
@@ -104,7 +109,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderUtils }
 				${ shaderMaterialSampling }
 				${ shaderEnvMapSampling }
-				${ shaderLightSampling }
 
 				uniform mat3 environmentRotation;
 				uniform float backgroundBlur;
@@ -139,6 +143,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform sampler2D materials;
 				uniform sampler2D lights;
 				uniform uint lightCount;
+				uniform sampler2D spotLights;
+				uniform uint spotLightCount;
+				uniform sampler2DArray iesProfiles;
+
+				${ shaderLightSampling }
 
 				uniform EquirectHdrInfo envMapInfo;
 
@@ -779,6 +788,49 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+						// spot light sampling
+						LightSampleRec lightSampleRec = randomSpotLightSample( spotLights, iesProfiles, spotLightCount, rayOrigin );
+
+						bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
+						if ( isSampleBelowSurface ) {
+
+							lightSampleRec.pdf = 0.0;
+
+						}
+
+						// check if a ray could even reach the light area
+						if (
+							lightSampleRec.pdf > 0.0 &&
+							isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
+							! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
+						) {
+
+							// get the material pdf
+							vec3 sampleColor;
+							float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+							bool isValidSampleColor = any( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
+							if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
+
+								#if FEATURE_MIS
+
+								// weight the direct light contribution
+								float lightPdf = lightSampleRec.pdf;// / float( spotLightCount );
+								float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
+								gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
+
+								#else
+
+								gl_FragColor.rgb +=
+									lightSampleRec.emission *
+									throughputColor *
+									sampleColor;
+
+								#endif
+
+							}
+
+						}
 
 						// direct env map sampling
 						#if FEATURE_MIS
