@@ -272,9 +272,9 @@ async function init() {
 			}
 
 			// spot lights
-			spotLightHelpers = [ ];
-			lights = [ ];
-			spotLights = [ ];
+			spotLightHelpers = [];
+			lights = [];
+			spotLights = [];
 			const iesPromises = [];
 
 			const decays = [ 0, 1.5, 0, 0.25, 0 ];
@@ -285,16 +285,13 @@ async function init() {
 				const iesIndex = - 1 + i;
 				if ( iesIndex !== - 1 ) {
 
-					const iesPromise = new Promise( ( resolve, reject ) => {
+					const iesPromise = new IESLoader().loadAsync( iesProfileURLs[ iesIndex ] ).then( tex => {
 
-						new IESLoader().load( iesProfileURLs[ iesIndex ], tex => {
-
-							spotLight.iesTexture = tex;
-							resolve( tex );
-
-						}, null, reject );
+						spotLight.iesTexture = tex;
+						return tex;
 
 					} );
+
 					iesPromises.push( iesPromise );
 
 				}
