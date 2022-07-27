@@ -30,7 +30,7 @@ function IESLamp( text ) {
 
 		text = text.replace( /^\s+|\s+$/g, '' ); // remove leading or trailing spaces
 		text = text.replace( /,/g, ' ' ); // replace commas with spaces
-		text = text.replace( /\s\s+/g, ' ' ); // Replcae white space/tabs etc by single whitespace
+		text = text.replace( /\s\s+/g, ' ' ); // replace white space/tabs etc by single whitespace
 
 		const array = text.split( ' ' );
 
