@@ -8,12 +8,6 @@ import {
 	MathUtils
 } from 'three';
 
-function IESLoader( manager ) {
-
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-
-}
-
 function IESLamp( text ) {
 
 	var _self = this;
@@ -199,17 +193,24 @@ function IESLamp( text ) {
 
 }
 
-Object.assign( IESLoader.prototype, {
 
-	_parseIESData: function ( text ) {
+export class IESLoader {
+
+	constructor( manager ) {
+
+		this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
+
+	}
+
+	_parseIESData( text ) {
 
 		var iesLamp = new IESLamp( text );
 
 		return iesLamp;
 
-	},
+	}
 
-	_getIESValues: function ( iesLamp ) {
+	_getIESValues( iesLamp ) {
 
 		var width = 360;
 		var height = 180;
@@ -289,9 +290,9 @@ Object.assign( IESLoader.prototype, {
 
 		return data;
 
-	},
+	}
 
-	load: function ( url, onLoad, onProgress, onError ) {
+	load( url, onLoad, onProgress, onError ) {
 
 		var loader = new FileLoader( this.manager );
 		loader.setResponseType( 'text' );
@@ -321,6 +322,4 @@ Object.assign( IESLoader.prototype, {
 
 	}
 
-} );
-
-export { IESLoader };
+}
