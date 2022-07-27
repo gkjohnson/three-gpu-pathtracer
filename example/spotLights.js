@@ -18,11 +18,11 @@ let samplesEl;
 const orthoWidth = 5;
 
 const iesProfileURLs = [
-	'https://gist.githubusercontent.com/richardassar/0241a4c03091fc61d7d727d61480f1ed/raw/780409421bf8efe6cc828314d456aa2c8803976c/108b32f07d6d38a7a6528a6d307440df.ies',
-	'https://gist.githubusercontent.com/richardassar/80a5be46f3bf2e91c98cba093f60a443/raw/8650c0c019bfdb120ecc07917c97de9e86c0438d/1aec5958092c236d005093ca27ebe378.ies',
-	'https://gist.githubusercontent.com/richardassar/a5f4362935b59bb8c5ea822f17b178bc/raw/bd03ff9716a0217577d5b0f91c9ee06b363b87d0/02a7562c650498ebb301153dbbf59207.ies',
-	'https://gist.githubusercontent.com/richardassar/8a712f70b99da706a13f4e902b5508e9/raw/d0d469e128b5cdec23cfe1dd10854846f8a6a1c4/1a936937a49c63374e6d4fbed9252b29.ies',
-	'https://gist.githubusercontent.com/richardassar/6cbb7abf80f73a2ca10d39f7d7587556/raw/a459770128719d0af76eac8076376dd4b708e834/00c6ce79e1d2cdf3a1fb491aaaa47ae0.ies'
+	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/108b32f07d6d38a7a6528a6d307440df.ies',
+	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/1aec5958092c236d005093ca27ebe378.ies',
+	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/02a7562c650498ebb301153dbbf59207.ies',
+	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/1a936937a49c63374e6d4fbed9252b29.ies',
+	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/00c6ce79e1d2cdf3a1fb491aaaa47ae0.ies'
 ];
 
 const params = {
