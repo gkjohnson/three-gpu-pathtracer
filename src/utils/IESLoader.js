@@ -155,7 +155,7 @@ function IESLamp( text ) {
 	// Calculate actual candela values, and normalize.
 	for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
-		for ( var j = 0; j < _self.numVerAngles; ++ j ) {
+		for ( let j = 0; j < _self.numVerAngles; ++ j ) {
 
 			_self.candelaValues[ i ][ j ] *= _self.candelaValues[ i ][ j ] * _self.multiplier
 				* _self.ballFactor * _self.blpFactor;
@@ -167,7 +167,7 @@ function IESLamp( text ) {
 	let maxVal = - 1;
 	for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
-		for ( var j = 0; j < _self.numVerAngles; ++ j ) {
+		for ( let j = 0; j < _self.numVerAngles; ++ j ) {
 
 			const value = _self.candelaValues[ i ][ j ];
 			maxVal = maxVal < value ? value : maxVal;
@@ -181,7 +181,7 @@ function IESLamp( text ) {
 
 		for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
-			for ( var j = 0; j < _self.numVerAngles; ++ j ) {
+			for ( let j = 0; j < _self.numVerAngles; ++ j ) {
 
 				_self.candelaValues[ i ][ j ] /= maxVal;
 
