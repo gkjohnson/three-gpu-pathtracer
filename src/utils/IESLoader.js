@@ -8,20 +8,14 @@ import {
 	MathUtils
 } from 'three';
 
-function IESLoader( manager ) {
-
-	this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
-
-}
-
 function IESLamp( text ) {
 
-	var _self = this;
+	const _self = this;
 
-	var textArray = text.split( '\n' );
+	const textArray = text.split( '\n' );
 
-	var lineNumber = 0;
-	var line;
+	let lineNumber = 0;
+	let line;
 
 	_self.verAngles = [ ];
 	_self.horAngles = [ ];
@@ -38,7 +32,7 @@ function IESLamp( text ) {
 		text = text.replace( /,/g, ' ' ); // replace commas with spaces
 		text = text.replace( /\s\s+/g, ' ' ); // Replcae white space/tabs etc by single whitespace
 
-		var array = text.split( ' ' );
+		const array = text.split( ' ' );
 
 		return array;
 
@@ -48,10 +42,10 @@ function IESLamp( text ) {
 
 		while ( true ) {
 
-			var line = textArray[ lineNumber ++ ];
-			var lineData = textToArray( line );
+			const line = textArray[ lineNumber ++ ];
+			const lineData = textToArray( line );
 
-			for ( var i = 0; i < lineData.length; ++ i ) {
+			for ( let i = 0; i < lineData.length; ++ i ) {
 
 				array.push( Number( lineData[ i ] ) );
 
@@ -66,8 +60,8 @@ function IESLamp( text ) {
 
 	function readTilt() {
 
-		var line = textArray[ lineNumber ++ ];
-		var lineData = textToArray( line );
+		let line = textArray[ lineNumber ++ ];
+		let lineData = textToArray( line );
 
 		_self.tiltData.lampToLumGeometry = Number( lineData[ 0 ] );
 
@@ -83,7 +77,7 @@ function IESLamp( text ) {
 
 	function readLampValues() {
 
-		var values = [ ];
+		const values = [ ];
 		readArray( 10, values );
 
 		_self.count = Number( values[ 0 ] );
@@ -101,7 +95,7 @@ function IESLamp( text ) {
 
 	function readLampFactors() {
 
-		var values = [ ];
+		const values = [ ];
 		readArray( 3, values );
 
 		_self.ballFactor = Number( values[ 0 ] );
@@ -141,7 +135,7 @@ function IESLamp( text ) {
 	readLampFactors();
 
 	// Initialize candela value array
-	for ( var i = 0; i < _self.numHorAngles; ++ i ) {
+	for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
 		_self.candelaValues.push( [ ] );
 
@@ -152,16 +146,16 @@ function IESLamp( text ) {
 	readArray( _self.numHorAngles, _self.horAngles );
 
 	// Parse Candela values
-	for ( var i = 0; i < _self.numHorAngles; ++ i ) {
+	for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
 		readArray( _self.numVerAngles, _self.candelaValues[ i ] );
 
 	}
 
 	// Calculate actual candela values, and normalize.
-	for ( var i = 0; i < _self.numHorAngles; ++ i ) {
+	for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
-		for ( var j = 0; j < _self.numVerAngles; ++ j ) {
+		for ( let j = 0; j < _self.numVerAngles; ++ j ) {
 
 			_self.candelaValues[ i ][ j ] *= _self.candelaValues[ i ][ j ] * _self.multiplier
 				* _self.ballFactor * _self.blpFactor;
@@ -170,24 +164,24 @@ function IESLamp( text ) {
 
 	}
 
-	var maxVal = - 1;
-	for ( var i = 0; i < _self.numHorAngles; ++ i ) {
+	let maxVal = - 1;
+	for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
-		for ( var j = 0; j < _self.numVerAngles; ++ j ) {
+		for ( let j = 0; j < _self.numVerAngles; ++ j ) {
 
-			var value = _self.candelaValues[ i ][ j ];
+			const value = _self.candelaValues[ i ][ j ];
 			maxVal = maxVal < value ? value : maxVal;
 
 		}
 
 	}
 
-	var bNormalize = true;
+	const bNormalize = true;
 	if ( bNormalize && maxVal > 0 ) {
 
-		for ( var i = 0; i < _self.numHorAngles; ++ i ) {
+		for ( let i = 0; i < _self.numHorAngles; ++ i ) {
 
-			for ( var j = 0; j < _self.numVerAngles; ++ j ) {
+			for ( let j = 0; j < _self.numVerAngles; ++ j ) {
 
 				_self.candelaValues[ i ][ j ] /= maxVal;
 
@@ -199,30 +193,28 @@ function IESLamp( text ) {
 
 }
 
-Object.assign( IESLoader.prototype, {
+export class IESLoader {
 
-	_parseIESData: function ( text ) {
+	constructor( manager ) {
 
-		var iesLamp = new IESLamp( text );
+		this.manager = ( manager !== undefined ) ? manager : DefaultLoadingManager;
 
-		return iesLamp;
+	}
 
-	},
+	_getIESValues( iesLamp ) {
 
-	_getIESValues: function ( iesLamp ) {
+		const width = 360;
+		const height = 180;
+		const size = width * height;
 
-		var width = 360;
-		var height = 180;
-		var size = width * height;
-
-		var data = new Float32Array( size );
+		const data = new Float32Array( size );
 
 		function interpolateCandelaValues( phi, theta ) {
 
-			var phiIndex = 0, thetaIndex = 0;
-			var startTheta = 0, endTheta = 0, startPhi = 0, endPhi = 0;
+			let phiIndex = 0, thetaIndex = 0;
+			let startTheta = 0, endTheta = 0, startPhi = 0, endPhi = 0;
 
-			for ( var i = 0; i < iesLamp.numHorAngles - 1; ++ i ) { // numHorAngles = horAngles.length-1 because of extra padding, so this wont cause an out of bounds error
+			for ( let i = 0; i < iesLamp.numHorAngles - 1; ++ i ) { // numHorAngles = horAngles.length-1 because of extra padding, so this wont cause an out of bounds error
 
 				if ( theta < iesLamp.horAngles[ i + 1 ] || i == iesLamp.numHorAngles - 2 ) {
 
@@ -236,7 +228,7 @@ Object.assign( IESLoader.prototype, {
 
 			}
 
-			for ( var i = 0; i < iesLamp.numVerAngles - 1; ++ i ) {
+			for ( let i = 0; i < iesLamp.numVerAngles - 1; ++ i ) {
 
 				if ( phi < iesLamp.verAngles[ i + 1 ] || i == iesLamp.numVerAngles - 2 ) {
 
@@ -250,30 +242,30 @@ Object.assign( IESLoader.prototype, {
 
 			}
 
-			var deltaTheta = endTheta - startTheta;
-			var deltaPhi = endPhi - startPhi;
+			const deltaTheta = endTheta - startTheta;
+			const deltaPhi = endPhi - startPhi;
 
 			if ( deltaPhi === 0 ) // Outside range
 				return 0;
 
-			var t1 = deltaTheta === 0 ? 0 : ( theta - startTheta ) / deltaTheta;
-			var t2 = ( phi - startPhi ) / deltaPhi;
+			const t1 = deltaTheta === 0 ? 0 : ( theta - startTheta ) / deltaTheta;
+			const t2 = ( phi - startPhi ) / deltaPhi;
 
-			var nextThetaIndex = deltaTheta === 0 ? thetaIndex : thetaIndex + 1;
+			const nextThetaIndex = deltaTheta === 0 ? thetaIndex : thetaIndex + 1;
 
-			var v1 = MathUtils.lerp( iesLamp.candelaValues[ thetaIndex ][ phiIndex ], iesLamp.candelaValues[ nextThetaIndex ][ phiIndex ], t1 );
-			var v2 = MathUtils.lerp( iesLamp.candelaValues[ thetaIndex ][ phiIndex + 1 ], iesLamp.candelaValues[ nextThetaIndex ][ phiIndex + 1 ], t1 );
-			var v = MathUtils.lerp( v1, v2, t2 );
+			const v1 = MathUtils.lerp( iesLamp.candelaValues[ thetaIndex ][ phiIndex ], iesLamp.candelaValues[ nextThetaIndex ][ phiIndex ], t1 );
+			const v2 = MathUtils.lerp( iesLamp.candelaValues[ thetaIndex ][ phiIndex + 1 ], iesLamp.candelaValues[ nextThetaIndex ][ phiIndex + 1 ], t1 );
+			const v = MathUtils.lerp( v1, v2, t2 );
 
 			return v;
 
 		}
 
-		var startTheta = iesLamp.horAngles[ 0 ], endTheta = iesLamp.horAngles[ iesLamp.numHorAngles - 1 ];
-		for ( var i = 0; i < size; ++ i ) {
+		const startTheta = iesLamp.horAngles[ 0 ], endTheta = iesLamp.horAngles[ iesLamp.numHorAngles - 1 ];
+		for ( let i = 0; i < size; ++ i ) {
 
-			var theta = i % width;
-			var phi = Math.floor( i / width );
+			let theta = i % width;
+			const phi = Math.floor( i / width );
 
 			if ( endTheta - startTheta !== 0 && ( theta < startTheta || theta >= endTheta ) ) { // Handle symmetry for hor angles
 
@@ -289,24 +281,22 @@ Object.assign( IESLoader.prototype, {
 
 		return data;
 
-	},
+	}
 
-	load: function ( url, onLoad, onProgress, onError ) {
+	load( url, onLoad, onProgress, onError ) {
 
-		var loader = new FileLoader( this.manager );
+		const loader = new FileLoader( this.manager );
 		loader.setResponseType( 'text' );
 
-		var _self = this;
-
-		var texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
+		const texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
 		texture.minFilter = LinearFilter;
 		texture.magFilter = LinearFilter;
 
-		loader.load( url, function ( text ) {
+		loader.load( url, text => {
 
-			var iesLamp = _self._parseIESData( text );
+			const iesLamp = new IESLamp( text );
 
-			texture.image.data = _self._getIESValues( iesLamp );
+			texture.image.data = this._getIESValues( iesLamp );
 			texture.needsUpdate = true;
 
 			if ( onLoad !== undefined ) {
@@ -321,6 +311,4 @@ Object.assign( IESLoader.prototype, {
 
 	}
 
-} );
-
-export { IESLoader };
+}
