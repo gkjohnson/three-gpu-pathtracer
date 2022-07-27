@@ -69,7 +69,7 @@ export class SpotLightsTexture extends DataTexture {
 
 			const up = new Vector3();
 
-			var m = new Matrix4();
+			const m = new Matrix4();
 			m.lookAt( eye, target, up );
 
 			worldQuaternion.setFromRotationMatrix( m );
