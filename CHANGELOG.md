@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Support for circular area lights
 - Support for spot lights
 - Support for IES Profiles on the new "PhysicalSpotLight" class
+- IESLoader for loading IES profiles as textures
 
 ### Changed
 - PhysicalPathTracingMaterial: Default "environment intensity" from 2.0 to 1.0.
