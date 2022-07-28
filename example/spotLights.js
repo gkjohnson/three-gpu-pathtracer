@@ -365,27 +365,27 @@ async function init() {
 
 	} ).listen();
 
-	const matFolder3 = gui.addFolder( 'Floor Material' );
-	matFolder3.addColor( params.floorMaterial, 'color' ).onChange( reset );
-	matFolder3.add( params.floorMaterial, 'roughness', 0, 1 ).onChange( reset );
-	matFolder3.add( params.floorMaterial, 'metalness', 0, 1 ).onChange( reset );
-	matFolder3.close();
+	const matFolder1 = gui.addFolder( 'Floor Material' );
+	matFolder1.addColor( params.floorMaterial, 'color' ).onChange( reset );
+	matFolder1.add( params.floorMaterial, 'roughness', 0, 1 ).onChange( reset );
+	matFolder1.add( params.floorMaterial, 'metalness', 0, 1 ).onChange( reset );
+	matFolder1.close();
 
-	const matFolder4 = gui.addFolder( 'Wall Material' );
-	matFolder4.addColor( params.wallMaterial, 'color' ).onChange( reset );
-	matFolder4.add( params.wallMaterial, 'roughness', 0, 1 ).onChange( reset );
-	matFolder4.add( params.wallMaterial, 'metalness', 0, 1 ).onChange( reset );
-	matFolder4.close();
+	const matFolder2 = gui.addFolder( 'Wall Material' );
+	matFolder2.addColor( params.wallMaterial, 'color' ).onChange( reset );
+	matFolder2.add( params.wallMaterial, 'roughness', 0, 1 ).onChange( reset );
+	matFolder2.add( params.wallMaterial, 'metalness', 0, 1 ).onChange( reset );
+	matFolder2.close();
 
-	const matFolder5 = gui.addFolder( 'Spot Light' );
-	matFolder5.addColor( spotLight1, 'color' ).onChange( reset );
-	matFolder5.add( spotLight1, 'intensity', 0.0, 200.0, 0.01 ).onChange( reset );
-	matFolder5.add( spotLight1, 'radius', 0.0, 10.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'decay', 0.0, 2.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'distance', 0.0, 20.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
-	matFolder5.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
-	matFolder5.add( params, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( v => {
+	const lightFolder = gui.addFolder( 'Spot Light' );
+	lightFolder.addColor( spotLight1, 'color' ).onChange( reset );
+	lightFolder.add( spotLight1, 'intensity', 0.0, 200.0, 0.01 ).onChange( reset );
+	lightFolder.add( spotLight1, 'radius', 0.0, 10.0 ).onChange( reset );
+	lightFolder.add( spotLight1, 'decay', 0.0, 2.0 ).onChange( reset );
+	lightFolder.add( spotLight1, 'distance', 0.0, 20.0 ).onChange( reset );
+	lightFolder.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
+	lightFolder.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
+	lightFolder.add( params, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( v => {
 
 		spotLight1.iesTexture = v === - 1 ? null : iesTextures[ v ];
 		reset();
@@ -426,15 +426,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const m3 = materials[ 0 ];
-	m3.color.set( params.floorMaterial.color ).convertSRGBToLinear();
-	m3.metalness = params.floorMaterial.metalness;
-	m3.roughness = params.floorMaterial.roughness;
+	const m0 = materials[ 0 ];
+	m0.color.set( params.floorMaterial.color ).convertSRGBToLinear();
+	m0.metalness = params.floorMaterial.metalness;
+	m0.roughness = params.floorMaterial.roughness;
 
-	const m4 = materials[ 1 ];
-	m4.color.set( params.wallMaterial.color ).convertSRGBToLinear();
-	m4.metalness = params.wallMaterial.metalness;
-	m4.roughness = params.wallMaterial.roughness;
+	const m1 = materials[ 1 ];
+	m1.color.set( params.wallMaterial.color ).convertSRGBToLinear();
+	m1.metalness = params.wallMaterial.metalness;
+	m1.roughness = params.wallMaterial.roughness;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
