@@ -718,6 +718,24 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						iridescence = iridescenceThickness == 0.0 ? 0.0 : iridescence;
 
+						// specular color
+						vec3 specularColor = material.specularColor;
+						if ( material.specularColorMap != - 1 ) {
+
+							vec3 uvPrime = material.specularColorMapTransform * vec3( uv, 1 );
+							specularColor *= texture2D( textures, vec3( uvPrime.xy, material.specularColorMap ) ).rgb;
+
+						}
+
+						// specular intensity
+						float specularIntensity = material.specularIntensity;
+						if ( material.specularIntensityMap != - 1 ) {
+
+							vec3 uvPrime = material.specularIntensityMapTransform * vec3( uv, 1 );
+							specularIntensity *= texture2D( textures, vec3( uvPrime.xy, material.specularIntensityMap ) ).a;
+
+						}
+
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
@@ -734,6 +752,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.iridescence = iridescence;
 						surfaceRec.iridescenceIor = material.iridescenceIor;
 						surfaceRec.iridescenceThickness = iridescenceThickness;
+						surfaceRec.specularColor = specularColor;
+						surfaceRec.specularIntensity = specularIntensity;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.

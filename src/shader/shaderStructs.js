@@ -57,6 +57,12 @@ export const shaderMaterialStructs = /* glsl */ `
 		float iridescenceThicknessMinimum;
 		float iridescenceThicknessMaximum;
 
+		vec3 specularColor;
+		int specularColorMap;
+
+		float specularIntensity;
+		int specularIntensityMap;
+
 		int alphaMap;
 
 		bool castShadow;
@@ -84,6 +90,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		mat3 sheenRoughnessMapTransform;
 		mat3 iridescenceMapTransform;
 		mat3 iridescenceThicknessMapTransform;
+		mat3 specularColorMapTransform;
+		mat3 specularIntensityMapTransform;
 
 	};
 
@@ -104,7 +112,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 38u;
+		uint i = index * 44u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -118,6 +126,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s9 = texelFetch1D( tex, i + 9u );
 		vec4 s10 = texelFetch1D( tex, i + 10u );
 		vec4 s11 = texelFetch1D( tex, i + 11u );
+		vec4 s12 = texelFetch1D( tex, i + 12u );
+		vec4 s13 = texelFetch1D( tex, i + 13u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -158,14 +168,20 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.iridescenceThicknessMinimum = s9.b;
 		m.iridescenceThicknessMaximum = s9.a;
 
-		m.alphaMap = int( round( s10.r ) );
+		m.specularColor = s10.rgb;
+		m.specularColorMap = int( round( s10.a ) );
 
-		m.opacity = s10.g;
-		m.alphaTest = s10.b;
-		m.side = s10.a;
-		m.matte = bool( s11.r );
+		m.specularIntensity = s11.r;
+		m.specularIntensityMap = int( round( s11.g ) );
 
-		m.castShadow = ! bool( s11.g );
+		m.alphaMap = int( round( s12.r ) );
+
+		m.opacity = s12.g;
+		m.alphaTest = s12.b;
+		m.side = s12.a;
+
+		m.matte = bool( s13.r );
+		m.castShadow = ! bool( s13.g );
 
 		uint firstTextureTransformIdx = i + 12u;
 
@@ -182,6 +198,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
 		m.iridescenceMapTransform = m.iridescenceMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 22u );
 		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
+		m.specularColorMapTransform = m.specularColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 26u );
+		m.specularIntensityMapTransform = m.specularIntensityMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 28u );
 
 		return m;
 

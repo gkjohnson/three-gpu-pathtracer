@@ -23,6 +23,8 @@ struct SurfaceRec {
 	float iridescence;
 	float iridescenceIor;
 	float iridescenceThickness;
+	vec3 specularColor;
+	float specularIntensity;
 };
 
 struct SampleRec {
@@ -106,7 +108,7 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	float iorRatio = frontFace ? 1.0 / ior : ior;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
-	vec3 F = vec3( schlickFresnelFromIor( dot( wi, halfVector ), iorRatio ) );
+	vec3 F = vec3( schlickFresnelFromIor( dot( wi, halfVector ), iorRatio ) ) * surf.specularColor * surf.specularIntensity;
 
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
