@@ -125,17 +125,17 @@ async function init() {
 			box.setFromObject( gltf.scene );
 
 			const floor = new THREE.Mesh(
-				new THREE.CylinderBufferGeometry( 15, 15, 0.05, 200 ),
+				new THREE.CylinderBufferGeometry( 8, 8, 0.5, 200 ),
 				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0.5, metalness: 0.2 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
-			floor.position.y = box.min.y - 0.05;
+			floor.position.y = box.min.y - 0.25;
 			floor.receiveShadow = true;
 			group.add( floor );
 
 			const wall = new THREE.Mesh(
-				new THREE.BoxGeometry( 15, 10, 1 ),
+				new THREE.BoxGeometry( 12, 6, 0.5 ),
 				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0, metalness: 1.0 } ),
 			);
 			wall.castShadow = true;
@@ -143,7 +143,7 @@ async function init() {
 			wall.geometry = wall.geometry.toNonIndexed();
 			wall.geometry.clearGroups();
 			wall.position.x = 0.0;
-			wall.position.y = box.min.y + 0.05 + 5;
+			wall.position.y = box.min.y + 3;
 			wall.position.z = box.min.z - 0.5;
 			group.add( wall );
 
@@ -201,11 +201,11 @@ async function init() {
 				}
 
 				spotLight.position.set( i * 8, 7.0, 0.005 );
-				spotLight.angle = Math.PI / 8.0;
-				spotLight.penumbra = 0.0;
+				spotLight.angle = Math.PI / 4.5;
+				spotLight.penumbra = 1.0;
 				spotLight.decay = decays[ i ];
 				spotLight.distance = 0.0;
-				spotLight.intensity = 150.0;
+				spotLight.intensity = 50.0;
 				spotLight.radius = 0.5;
 
 				spotLight.shadow.mapSize.width = 512;
