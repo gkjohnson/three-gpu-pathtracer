@@ -9,7 +9,7 @@ uniform sampler2D lastDepthTexture;
 uniform float samples;
 
 uniform float temporalResolveMix;
-uniform int clampRing;
+uniform int clampRadius;
 uniform float newSamplesSmoothing;
 uniform float newSamplesCorrection;
 
@@ -95,7 +95,7 @@ void main() {
 		vec3 totalColor;
 
 		// use a small ring if there is a lot of movement otherwise there will be more smearing
-		int ring = movement > 1. ? 1 : clampRing;
+		int ring = movement > 1. ? 1 : clampRadius;
 		
 		for(int x = -ring; x <= ring; x++){
 			for(int y = -ring; y <= ring; y++){

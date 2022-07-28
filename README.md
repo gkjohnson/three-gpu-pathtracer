@@ -45,14 +45,13 @@ _More features and capabilities in progress!_
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
-
 ## Running examples locally
 
-To run and modify the examples locally, make sure you have Node and NPM installed.  Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
+To run and modify the examples locally, make sure you have Node and NPM installed. Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
 
 In order to install dependencies, you will need `make` and a C++ compiler available.
 
-On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just work on MacOS.
+On Debian or Ubuntu, run `sudo apt install build-essential`. It should just work on MacOS.
 
 - To install dependencies, run `npm install`
 - To start the demos run `npm start`
@@ -63,13 +62,13 @@ On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just wor
 **Basic Renderer**
 
 ```js
-import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import * as THREE from "three";
+import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js";
 import {
 	PathTracingSceneGenerator,
 	PathTracingRenderer,
 	PhysicalPathTracingMaterial,
-} from 'three-gpu-pathtracer';
+} from "three-gpu-pathtracer";
 
 // init scene, renderer, camera, controls, etc
 
@@ -78,8 +77,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 // initialize the path tracing material and renderer
 const ptMaterial = new PhysicalPathTracingMaterial();
-const ptRenderer = new PathTracingRenderer( renderer );
-ptRenderer.setSize( window.innerWidth, window.innerHeight );
+const ptRenderer = new PathTracingRenderer(renderer);
+ptRenderer.setSize(window.innerWidth, window.innerHeight);
 ptRenderer.camera = camera;
 ptRenderer.material = ptMaterial;
 
@@ -87,45 +86,46 @@ ptRenderer.material = ptMaterial;
 ptRenderer.alpha = true;
 
 // init quad for rendering to the canvas
-const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-	map: ptRenderer.target.texture,
+const fsQuad = new FullScreenQuad(
+	new THREE.MeshBasicMaterial({
+		map: ptRenderer.target.texture,
 
-	// if rendering transparent background
-	blending: THREE.CustomBlending,
-} ) );
+		// if rendering transparent background
+		blending: THREE.CustomBlending,
+	})
+);
 
 // ensure scene matrices are up to date
 scene.updateMatrixWorld();
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials, lights } = generator.generate( scene );
+const { bvh, textures, materials, lights } = generator.generate(scene);
 
 // update bvh and geometry attribute textures
-ptMaterial.bvh.updateFrom( bvh );
-ptMaterial.normalAttribute.updateFrom( geometry.attributes.normal );
-ptMaterial.tangentAttribute.updateFrom( geometry.attributes.tangent );
-ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
+ptMaterial.bvh.updateFrom(bvh);
+ptMaterial.normalAttribute.updateFrom(geometry.attributes.normal);
+ptMaterial.tangentAttribute.updateFrom(geometry.attributes.tangent);
+ptMaterial.uvAttribute.updateFrom(geometry.attributes.uv);
 
 // update materials and texture arrays
-ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
-ptMaterial.materials.updateFrom( materials, textures );
+ptMaterial.materialIndexAttribute.updateFrom(geometry.attributes.materialIndex);
+ptMaterial.textures.setTextures(renderer, 2048, 2048, textures);
+ptMaterial.materials.updateFrom(materials, textures);
 
 // update the lights
-ptMaterial.lights.updateFrom( lights );
+ptMaterial.lights.updateFrom(lights);
 ptMaterial.lightCount = lights.length;
 
 // set the environment map
-const texture = await new RGBELoader().loadAsync( envMapUrl );
-ptRenderer.material.envMapInfo.updateFrom( texture );
+const texture = await new RGBELoader().loadAsync(envMapUrl);
+ptRenderer.material.envMapInfo.updateFrom(texture);
 
 animate();
 
 // ...
 
 function animate() {
-
 	// if the camera position changes call "ptRenderer.reset()"
 
 	// update the camera and render one sample
@@ -137,8 +137,7 @@ function animate() {
 	fsQuad.material.map = ptRenderer.target.texture;
 
 	// copy the current state of the path tracer to canvas to display
-	fsQuad.render( renderer );
-
+	fsQuad.render(renderer);
 }
 ```
 
@@ -147,16 +146,15 @@ function animate() {
 Using a pre blurred envioronment map can help improve frame convergence time at the cost of sharp environment reflections. If performance is concern then multiple importance sampling can be disabled and blurred environment map used.
 
 ```js
-import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
+import { BlurredEnvMapGenerator } from "three-gpu-pathtracer";
 
 // ...
 
-const envMap = await new RGBELoader().loadAsync( envMapUrl );
-const generator = new BlurredEnvMapGenerator( renderer );
-const blurredEnvMap = generator.generate( envMap, 0.35 );
+const envMap = await new RGBELoader().loadAsync(envMapUrl);
+const generator = new BlurredEnvMapGenerator(renderer);
+const blurredEnvMap = generator.generate(envMap, 0.35);
 
 // render!
-
 ```
 
 ## Dynamic Scenes
@@ -164,12 +162,12 @@ const blurredEnvMap = generator.generate( envMap, 0.35 );
 Using the dynamic scene generator the same, frequently updated scene can be converted into a single reusable geometry multiple times and BVH refit which greatly improves subsequent scene updates. See `DynamicPathTracingSceneGenerator` docs for more info.
 
 ```js
-import { DynamicPathTracingSceneGenerator } from 'three-gpu-pathtracer';
+import { DynamicPathTracingSceneGenerator } from "three-gpu-pathtracer";
 
 // ... initialize scene etc
 
-const generator = new DynamicPathTracingSceneGenerator( scene );
-const { bvh, textures, materials } = generator.generate( scene );
+const generator = new DynamicPathTracingSceneGenerator(scene);
+const { bvh, textures, materials } = generator.generate(scene);
 
 // ... update path tracer and render
 ```
@@ -179,13 +177,13 @@ const { bvh, textures, materials } = generator.generate( scene );
 _NOTE WebWorker syntax is inconsistently supported across bundlers and sometimes not supported at all so the PathTracingSceneWorker class is not exported from the package root. If needed the code from src/worker can be copied and modified to accomodate a particular build process._
 
 ```js
-import { PathTracingSceneWorker } from 'three-gpu-pathtracer/src/workers/PathTracingSceneWorker.js';
+import { PathTracingSceneWorker } from "three-gpu-pathtracer/src/workers/PathTracingSceneWorker.js";
 
 // ...
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneWorker();
-const { bvh, textures, materials, lights } = await generator.generate( scene );
+const { bvh, textures, materials, lights } = await generator.generate(scene);
 
 // ...
 ```
@@ -269,7 +267,7 @@ Sets the size of the target to render to.
 ### .update
 
 ```js
-update()
+update();
 ```
 
 Renders a single sample to the target.
@@ -347,7 +345,7 @@ The fstop value of the camera. If this is changed then the `bokehSize` field is 
 ### .bokehSize
 
 ```js
-bokehSize : Number
+bokehSize: Number;
 ```
 
 The bokeh size as derived from the fStop and focal length in millimeters. If this is set then the fStop is implicitly updated.
@@ -394,10 +392,10 @@ temporalResolveMix = 0.75 : Number
 
 How much the last frame should be blended into the current one. Higher values will result in a less noisy look at the cost of more smearing.
 
-### .clampRing
+### .clampRadius
 
 ```javascript
-clampRing = 1 : Number
+clampRadius = 1 : Number
 ```
 
 An integer to set the radius of pixels to be used for neighborhood clamping. Higher values will result in a less noisy look at the cost of more blurring.
@@ -830,11 +828,13 @@ Set of randomness and other light transport utilities for use in a shader. See t
 </p>
 
 ![](https://user-images.githubusercontent.com/734200/173212652-de6a83e5-dd2c-49b5-8ed7-484ff8969b5b.png)
+
 <p align="center">
 <i>Botanists Study model by <a href="https://sketchfab.com/3d-models/the-botanists-study-8b7b5743b1c848ed8ea58f5518c44e7e">riikkakilpelainen</a></i>
 </p>
 
 ![](https://user-images.githubusercontent.com/734200/173170459-849b9343-efe3-4635-8719-346511472965.png)
+
 <p align="center">
 <i>Japanese Bridge Garden model by <a href="https://sketchfab.com/3d-models/japanese-bridge-garden-d122e17593eb4012913cde927486d15a">kristenlee</a></i>
 </p>
@@ -846,5 +846,3 @@ Set of randomness and other light transport utilities for use in a shader. See t
 [PBR Book](https://pbr-book.org/)
 
 [knightcrawler25/GLSL-PathTracer](https://github.com/knightcrawler25/GLSL-PathTracer/)
-
-

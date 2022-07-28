@@ -1,13 +1,11 @@
-﻿import { Matrix4, ShaderMaterial } from 'three';
-import { fragmentShader } from './shaders/temporalResolveFragment';
-import { vertexShader } from './shaders/temporalResolveVertex';
+﻿import { Matrix4, ShaderMaterial } from "three";
+import { fragmentShader } from "./shaders/temporalResolveFragment";
+import { vertexShader } from "./shaders/temporalResolveVertex";
 
 export class TemporalResolveMaterial extends ShaderMaterial {
-
 	constructor() {
-
-		super( {
-			type: 'TemporalResolveMaterial',
+		super({
+			type: "TemporalResolveMaterial",
 			uniforms: {
 				inputTexture: { value: null },
 				samplesTexture: { value: null },
@@ -17,7 +15,7 @@ export class TemporalResolveMaterial extends ShaderMaterial {
 				lastDepthTexture: { value: null },
 				samples: { value: 0 },
 				temporalResolveMix: { value: 0 },
-				clampRing: { value: 0 },
+				clampRadius: { value: 0 },
 				newSamplesSmoothing: { value: 0 },
 				newSamplesCorrection: { value: 0 },
 				curInverseProjectionMatrix: { value: new Matrix4() },
@@ -29,8 +27,6 @@ export class TemporalResolveMaterial extends ShaderMaterial {
 			},
 			vertexShader,
 			fragmentShader,
-		} );
-
+		});
 	}
-
 }
