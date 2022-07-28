@@ -1,10 +1,12 @@
-﻿import { HalfFloatType, LinearFilter, WebGLRenderTarget } from "three";
-import { FullScreenQuad } from "three/examples/jsm/postprocessing/Pass";
-import { ComposeTemporalResolveMaterial } from "./materials/ComposeTemporalResolveMaterial";
-import { TemporalResolvePass } from "./passes/TemporalResolvePass";
+﻿import { HalfFloatType, LinearFilter, WebGLRenderTarget } from 'three';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass';
+import { ComposeTemporalResolveMaterial } from './materials/ComposeTemporalResolveMaterial';
+import { TemporalResolvePass } from './passes/TemporalResolvePass';
 
 export class TemporalResolve {
-	constructor(ptRenderer, scene, camera) {
+
+	constructor( ptRenderer, scene, camera ) {
+
 		this.ptRenderer = ptRenderer;
 		this.scene = scene;
 
@@ -15,11 +17,11 @@ export class TemporalResolve {
 
 		this.fullscreenMaterial = new ComposeTemporalResolveMaterial();
 
-		this.fsQuad = new FullScreenQuad(this.fullscreenMaterial);
+		this.fsQuad = new FullScreenQuad( this.fullscreenMaterial );
 
 		this.renderTarget = new WebGLRenderTarget(
-			typeof window !== "undefined" ? window.innerWidth : 2000,
-			typeof window !== "undefined" ? window.innerHeight : 1000,
+			typeof window !== 'undefined' ? window.innerWidth : 2000,
+			typeof window !== 'undefined' ? window.innerHeight : 1000,
 			{
 				minFilter: LinearFilter,
 				magFilter: LinearFilter,
@@ -30,11 +32,13 @@ export class TemporalResolve {
 
 		this.lastSize = { width: 0, height: 0 };
 
-		this.initNewCamera(camera);
-		this.initNewSize(window.innerWidth, window.innerHeight);
+		this.initNewCamera( camera );
+		this.initNewSize( window.innerWidth, window.innerHeight );
+
 	}
 
-	initNewCamera(camera) {
+	initNewCamera( camera ) {
+
 		this.activeCamera = camera;
 
 		this.temporalResolvePass = new TemporalResolvePass(
@@ -47,44 +51,56 @@ export class TemporalResolve {
 
 		this.fullscreenMaterial.uniforms.temporalResolveTexture.value =
 			this.temporalResolvePass.renderTarget.texture;
+
 	}
 
-	initNewSize(width, height) {
+	initNewSize( width, height ) {
+
 		this.lastSize.width = width;
 		this.lastSize.height = height;
 
-		this.temporalResolvePass.setSize(width, height);
+		this.temporalResolvePass.setSize( width, height );
+
 	}
 
 	get target() {
+
 		return this.renderTarget;
+
 	}
 
 	update() {
+
 		const renderer = this.ptRenderer._renderer;
 
 		const origRenderTarget = renderer.getRenderTarget();
 
 		const { camera } = this.ptRenderer;
-		if (camera !== this.activeCamera) {
-			this.initNewCamera(camera);
+		if ( camera !== this.activeCamera ) {
+
+			this.initNewCamera( camera );
+
 		}
 
 		const { width, height } = this.ptRenderer.target;
-		if (width !== this.lastSize.width || height !== this.lastSize.height) {
-			this.initNewSize(width, height);
+		if ( width !== this.lastSize.width || height !== this.lastSize.height ) {
+
+			this.initNewSize( width, height );
+
 		}
 
 		// ensure that the scene's objects' matrices are updated for the VelocityPass
 		this.scene.updateMatrixWorld();
 
-		this.scene.traverse((c) => {
+		this.scene.traverse( ( c ) => {
+
 			// update the modelViewMatrix which is used by the VelocityPass
 			c.modelViewMatrix.multiplyMatrices(
 				this.activeCamera.matrixWorldInverse,
 				c.matrixWorld
 			);
-		});
+
+		} );
 
 		// keep uniforms updated
 		this.temporalResolvePass.fullscreenMaterial.uniforms.samples.value =
@@ -94,7 +110,7 @@ export class TemporalResolve {
 			this.temporalResolveMix;
 
 		this.temporalResolvePass.fullscreenMaterial.uniforms.clampRadius.value =
-			parseInt(this.clampRadius);
+			parseInt( this.clampRadius );
 
 		this.temporalResolvePass.fullscreenMaterial.uniforms.newSamplesSmoothing.value =
 			this.newSamplesSmoothing;
@@ -102,11 +118,13 @@ export class TemporalResolve {
 		this.temporalResolvePass.fullscreenMaterial.uniforms.newSamplesCorrection.value =
 			this.newSamplesCorrection;
 
-		this.temporalResolvePass.render(renderer);
+		this.temporalResolvePass.render( renderer );
 
-		renderer.setRenderTarget(this.renderTarget);
-		this.fsQuad.render(renderer);
+		renderer.setRenderTarget( this.renderTarget );
+		this.fsQuad.render( renderer );
 
-		renderer.setRenderTarget(origRenderTarget);
+		renderer.setRenderTarget( origRenderTarget );
+
 	}
+
 }
