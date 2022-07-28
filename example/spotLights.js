@@ -11,7 +11,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 
 let renderer, controls, transformControlsScene, spotLight1, lights, spotLights, spotLightHelpers, sceneInfo, ptRenderer, fsQuad, materials;
 let perspectiveCamera;
-let envMap, envMapGenerator, scene;
+let scene;
 let iesTextures;
 let samplesEl;
 
@@ -25,24 +25,15 @@ const iesProfileURLs = [
 
 const params = {
 
-	material3: {
+	floorMaterial: {
 		color: '#3465a4',
 		roughness: 0.4,
 		metalness: 0.4,
-		matte: false,
-		castShadow: false,
-		receiveShadow: true
 	},
-	material4: {
+	wallMaterial: {
 		color: '#FFFFFF',
-		emissive: '#FFFFFF',
-		emissiveIntensity: 0.0,
 		roughness: 0.4,
 		metalness: 0.1,
-		matte: false,
-		castShadow: false,
-		transmission: 0.0,
-		opacity: 1.0,
 	},
 
 	multipleImportanceSampling: true,
@@ -58,7 +49,6 @@ const params = {
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
-	backgroundAlpha: 1,
 	checkerboardTransparency: true,
 	showTransformControls: true,
 	cameraProjection: 'Perspective',
@@ -110,16 +100,13 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
-
 	const envMapPromise = new Promise( resolve => {
 
 		new RGBELoader()
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
-				envMap = texture;
+				scene.environment = texture;
 
-				updateEnvBlur();
 				resolve();
 
 			} );
@@ -301,6 +288,7 @@ async function init() {
 			material.lightCount = lights.length;
 			material.spotLights.updateFrom( spotLights, iesTextures );
 			material.spotLightCount = spotLights.length;
+			ptRenderer.material.envMapInfo.updateFrom( scene.environment );
 
 			generator.dispose();
 
@@ -355,21 +343,6 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
-
-		updateEnvBlur();
-
-	} );
-	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
 	envFolder.add( params, 'showTransformControls' );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
@@ -393,23 +366,15 @@ async function init() {
 	} ).listen();
 
 	const matFolder3 = gui.addFolder( 'Floor Material' );
-	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
-	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
-	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
-	matFolder3.add( params.material3, 'matte' ).onChange( reset );
-	matFolder3.add( params.material3, 'castShadow' ).onChange( reset );
+	matFolder3.addColor( params.floorMaterial, 'color' ).onChange( reset );
+	matFolder3.add( params.floorMaterial, 'roughness', 0, 1 ).onChange( reset );
+	matFolder3.add( params.floorMaterial, 'metalness', 0, 1 ).onChange( reset );
 	matFolder3.close();
 
 	const matFolder4 = gui.addFolder( 'Wall Material' );
-	matFolder4.addColor( params.material4, 'color' ).onChange( reset );
-	matFolder4.add( params.material4, 'roughness', 0, 1 ).onChange( reset );
-	matFolder4.add( params.material4, 'metalness', 0, 1 ).onChange( reset );
-	matFolder4.add( params.material4, 'matte' ).onChange( reset );
-	matFolder4.add( params.material4, 'castShadow' ).onChange( reset );
-	matFolder4.addColor( params.material4, 'emissive' ).onChange( reset );
-	matFolder4.add( params.material4, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( reset );
-	matFolder4.add( params.material4, 'transmission', 0, 1 ).onChange( reset );
-	matFolder4.add( params.material4, 'opacity', 0, 1 ).onChange( reset );
+	matFolder4.addColor( params.wallMaterial, 'color' ).onChange( reset );
+	matFolder4.add( params.wallMaterial, 'roughness', 0, 1 ).onChange( reset );
+	matFolder4.add( params.wallMaterial, 'metalness', 0, 1 ).onChange( reset );
 	matFolder4.close();
 
 	const matFolder5 = gui.addFolder( 'Spot Light' );
@@ -457,32 +422,19 @@ function reset() {
 
 }
 
-function updateEnvBlur() {
-
-	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-	scene.environment = blurredTex;
-	ptRenderer.reset();
-
-}
-
 function animate() {
 
 	requestAnimationFrame( animate );
 
 	const m3 = materials[ 0 ];
-	m3.color.set( params.material3.color ).convertSRGBToLinear();
-	m3.metalness = params.material3.metalness;
-	m3.roughness = params.material3.roughness;
+	m3.color.set( params.floorMaterial.color ).convertSRGBToLinear();
+	m3.metalness = params.floorMaterial.metalness;
+	m3.roughness = params.floorMaterial.roughness;
 
 	const m4 = materials[ 1 ];
-	m4.color.set( params.material4.color ).convertSRGBToLinear();
-	m4.metalness = params.material4.metalness;
-	m4.roughness = params.material4.roughness;
-	m4.emissive.set( params.material4.emissive ).convertSRGBToLinear();
-	m4.emissiveIntensity = params.material4.emissiveIntensity;
-	m4.transmission = params.material4.transmission;
-	m4.opacity = params.material4.opacity;
+	m4.color.set( params.wallMaterial.color ).convertSRGBToLinear();
+	m4.metalness = params.wallMaterial.metalness;
+	m4.roughness = params.wallMaterial.roughness;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
