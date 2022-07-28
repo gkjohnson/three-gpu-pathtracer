@@ -179,26 +179,16 @@ async function init() {
 			spotLightHelpers = [];
 			lights = [];
 			spotLights = [];
-			const iesPromises = [];
+			const iesPromises = iesProfileURLs.map( url => {
+
+				return new IESLoader().loadAsync( url );
+
+			} );
 
 			const decays = [ 0, 1.5, 0, 0.25, 0 ];
 			for ( let i = 0; i < 1; ++ i ) {
 
 				const spotLight = new PhysicalSpotLight( 0xffffff );
-
-				const iesIndex = - 1 + i;
-				if ( iesIndex !== - 1 ) {
-
-					const iesPromise = new IESLoader().loadAsync( iesProfileURLs[ iesIndex ] ).then( tex => {
-
-						spotLight.iesTexture = tex;
-						return tex;
-
-					} );
-
-					iesPromises.push( iesPromise );
-
-				}
 
 				spotLight.position.set( i * 8, 7.0, 0.005 );
 				spotLight.angle = Math.PI / 4.5;
@@ -325,26 +315,6 @@ async function init() {
 
 	} );
 	envFolder.add( params, 'showTransformControls' );
-
-	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( perspectiveCamera, 'focusDistance', 1, 100 ).onChange( reset );
-	cameraFolder.add( perspectiveCamera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
-
-		perspectiveCamera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
-		this.updateDisplay();
-		reset();
-
-	} );
-	cameraFolder.add( perspectiveCamera, 'apertureRotation', 0, 12.5 ).onChange( reset );
-	cameraFolder.add( perspectiveCamera, 'anamorphicRatio', 0.1, 10.0 ).onChange( reset );
-	cameraFolder.add( perspectiveCamera, 'bokehSize', 0, 50 ).onChange( reset ).listen();
-	cameraFolder.add( perspectiveCamera, 'fStop', 0.3, 20 ).onChange( reset ).listen();
-	cameraFolder.add( perspectiveCamera, 'fov', 25, 100 ).onChange( () => {
-
-		perspectiveCamera.updateProjectionMatrix();
-		reset();
-
-	} ).listen();
 
 	const matFolder1 = gui.addFolder( 'Floor Material' );
 	matFolder1.addColor( params.floorMaterial, 'color' ).onChange( reset );
