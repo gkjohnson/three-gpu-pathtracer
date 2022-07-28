@@ -8,12 +8,13 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-let renderer, controls, transformControlsScene, spotLight1, lights, spotLights, spotLightHelpers, sceneInfo, ptRenderer, fsQuad, materials;
+let renderer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, sceneInfo, ptRenderer, fsQuad, materials;
 let perspectiveCamera;
 let scene;
 let iesTextures;
 let samplesEl;
 
+// ies library profiles
 const iesProfileURLs = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/108b32f07d6d38a7a6528a6d307440df.ies',
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/1aec5958092c236d005093ca27ebe378.ies',
@@ -22,6 +23,7 @@ const iesProfileURLs = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/00c6ce79e1d2cdf3a1fb491aaaa47ae0.ies'
 ];
 
+// gui parameters
 const params = {
 
 	floorMaterial: {
@@ -39,7 +41,7 @@ const params = {
 	environmentIntensity: 0.1,
 	bounces: 3,
 	samplesPerFrame: 1,
-	resolutionScale: 1 / window.devicePixelRatio, // TODO: remove before commit
+	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
 	tiles: 2,
 	iesProfile: - 1,
@@ -60,16 +62,19 @@ init();
 
 async function init() {
 
+	// init renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
 	renderer.shadowMap.enabled = true;
 	document.body.appendChild( renderer.domElement );
 
+	// init camera
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 2, 4, 8 ).multiplyScalar( 0.8 );
 
+	// init path traer
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.backgroundBlur = 0.2;
@@ -77,11 +82,13 @@ async function init() {
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = perspectiveCamera;
 
+	// init copy quad
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
 	} ) );
 
+	// init controls
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.target.y = 1.5;
 	controls.update();
@@ -92,25 +99,22 @@ async function init() {
 	} );
 
 	scene = new THREE.Scene();
+	transformControlsScene = new THREE.Scene();
 
 	samplesEl = document.getElementById( 'samples' );
 
-	const envMapPromise = new Promise( resolve => {
+	// load the env map
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' ).then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			scene.environment = texture;
+			scene.background = texture;
 
-				scene.environment = texture;
-				scene.background = texture;
+			return texture;
 
-				resolve();
+		} );
 
-			} );
-
-	} );
-
-	transformControlsScene = new THREE.Scene();
-
+	// load the geometry
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf' )
@@ -137,6 +141,7 @@ async function init() {
 			const box = new THREE.Box3();
 			box.setFromObject( gltf.scene );
 
+			// init environment
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 8, 8, 0.5, 200 ),
 				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0.5, metalness: 0.2 } ),
@@ -161,25 +166,18 @@ async function init() {
 			group.add( wall );
 
 			// transform controls
-			let draggingSpotLight = false;
-
 			function makeTransformControls( object ) {
 
 				const transformControls = new TransformControls( perspectiveCamera, renderer.domElement );
-				transformControls.addEventListener( 'change', () => {
+				transformControls.addEventListener( 'objectChange', () => {
 
-					if ( draggingSpotLight ) {
-
-						ptRenderer.reset();
-
-					}
+					ptRenderer.reset();
 
 				} );
 
 				transformControls.addEventListener( 'dragging-changed', ( e ) => {
 
-					draggingSpotLight = e.value;
-					return controls.enabled = ! e.value;
+					controls.enabled = ! e.value;
 
 				} );
 
@@ -188,68 +186,50 @@ async function init() {
 
 			}
 
-			// spot lights
-			spotLightHelpers = [];
+			// spot light
 			lights = [];
 			spotLights = [];
+
+			spotLight = new PhysicalSpotLight( 0xffffff );
+			spotLight.position.set( 0, 7.0, 4 );
+			spotLight.angle = Math.PI / 4.5;
+			spotLight.decay = 0;
+			spotLight.penumbra = 1.0;
+			spotLight.distance = 0.0;
+			spotLight.intensity = 50.0;
+			spotLight.radius = 0.5;
+
+			spotLight.shadow.mapSize.width = 512;
+			spotLight.shadow.mapSize.height = 512;
+			spotLight.shadow.camera.near = 0.1;
+			spotLight.shadow.camera.far = 10.0;
+			spotLight.shadow.focus = 1.0;
+			spotLight.castShadow = true;
+			group.add( spotLight );
+
+			spotLights.push( spotLight );
+			lights.push( spotLight );
+
+			const targetObject = spotLight.target;
+			targetObject.position.x = 0;
+			targetObject.position.y = floor.position.y + 2;
+			targetObject.position.z = 0.05;
+			targetObject.updateMatrixWorld();
+			spotLight.updateMatrixWorld();
+			group.add( targetObject );
+
+			spotLightHelper = new THREE.SpotLightHelper( spotLight );
+			transformControlsScene.add( spotLightHelper );
+
+			makeTransformControls( spotLight );
+			makeTransformControls( targetObject );
+
+			// ies textures
 			const iesPromises = iesProfileURLs.map( url => {
 
 				return new IESLoader().loadAsync( url );
 
 			} );
-
-			const decays = [ 0, 1.5, 0, 0.25, 0 ];
-			for ( let i = 0; i < 1; ++ i ) {
-
-				const spotLight = new PhysicalSpotLight( 0xffffff );
-
-				spotLight.position.set( i * 8, 7.0, 0.005 );
-				spotLight.angle = Math.PI / 4.5;
-				spotLight.penumbra = 1.0;
-				spotLight.decay = decays[ i ];
-				spotLight.distance = 0.0;
-				spotLight.intensity = 50.0;
-				spotLight.radius = 0.5;
-
-				spotLight.shadow.mapSize.width = 512;
-				spotLight.shadow.mapSize.height = 512;
-				spotLight.shadow.camera.near = 0.1;
-				spotLight.shadow.camera.far = 10.0;
-				spotLight.shadow.focus = 1.0;
-				spotLight.castShadow = true;
-
-				spotLights.push( spotLight );
-				lights.push( spotLight );
-
-				const targetObject = new THREE.Object3D();
-				targetObject.position.x = i * 8.0;
-				targetObject.position.y = floor.position.y + 2;
-				targetObject.position.z = 0.05;
-				targetObject.updateMatrixWorld();
-				spotLight.updateMatrixWorld();
-				group.add( targetObject );
-
-				spotLight.target = targetObject;
-
-				group.add( spotLight );
-
-				if ( i == 0 ) {
-
-					const spotLightHelper = new THREE.SpotLightHelper( spotLight );
-					spotLight.add( spotLightHelper );
-					transformControlsScene.add( spotLightHelper );
-
-					spotLightHelpers.push( spotLightHelper );
-
-					spotLight1 = spotLight;
-					spotLight1.position.z = 4;
-
-					makeTransformControls( spotLight );
-					makeTransformControls( targetObject );
-
-				}
-
-			}
 
 			materials = [ floor.material, wall.material ];
 
@@ -289,6 +269,7 @@ async function init() {
 
 	document.getElementById( 'loading' ).remove();
 
+	// gui
 	onResize();
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
@@ -345,16 +326,16 @@ async function init() {
 	matFolder2.close();
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
-	lightFolder.addColor( spotLight1, 'color' ).onChange( reset );
-	lightFolder.add( spotLight1, 'intensity', 0.0, 200.0, 0.01 ).onChange( reset );
-	lightFolder.add( spotLight1, 'radius', 0.0, 10.0 ).onChange( reset );
-	lightFolder.add( spotLight1, 'decay', 0.0, 2.0 ).onChange( reset );
-	lightFolder.add( spotLight1, 'distance', 0.0, 20.0 ).onChange( reset );
-	lightFolder.add( spotLight1, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
-	lightFolder.add( spotLight1, 'penumbra', 0.0, 1.0 ).onChange( reset );
+	lightFolder.addColor( spotLight, 'color' ).onChange( reset );
+	lightFolder.add( spotLight, 'intensity', 0.0, 200.0, 0.01 ).onChange( reset );
+	lightFolder.add( spotLight, 'radius', 0.0, 10.0 ).onChange( reset );
+	lightFolder.add( spotLight, 'decay', 0.0, 2.0 ).onChange( reset );
+	lightFolder.add( spotLight, 'distance', 0.0, 20.0 ).onChange( reset );
+	lightFolder.add( spotLight, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
+	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( reset );
 	lightFolder.add( params, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( v => {
 
-		spotLight1.iesTexture = v === - 1 ? null : iesTextures[ v ];
+		spotLight.iesTexture = v === - 1 ? null : iesTextures[ v ];
 		reset();
 
 	} );
@@ -393,6 +374,7 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	// update materials
 	const m0 = materials[ 0 ];
 	m0.color.set( params.floorMaterial.color ).convertSRGBToLinear();
 	m0.metalness = params.floorMaterial.metalness;
@@ -403,6 +385,7 @@ function animate() {
 	m1.metalness = params.wallMaterial.metalness;
 	m1.roughness = params.wallMaterial.roughness;
 
+	// update path tracer
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
@@ -413,14 +396,11 @@ function animate() {
 	ptRenderer.material.lights.updateFrom( lights );
 	ptRenderer.material.spotLights.updateFrom( spotLights, iesTextures );
 
+	// update objects
 	perspectiveCamera.updateMatrixWorld();
+	spotLightHelper.update();
 
-	spotLightHelpers.forEach( spotLightHelper => {
-
-		spotLightHelper.update();
-
-	} );
-
+	// render
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
 		ptRenderer.update();
@@ -442,7 +422,7 @@ function animate() {
 	transformControlsScene.children.forEach( c => {
 
 		c.visible = c instanceof THREE.SpotLightHelper ? params.showLightHelper : params.showTransformControls;
-		if ( c.enabled ) c.enabled = params.showTransformControls;
+		if ( 'enabled' in c ) c.enabled = params.showTransformControls;
 
 	} );
 
