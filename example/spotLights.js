@@ -131,7 +131,7 @@ async function init() {
 				c.receiveShadow = true;
 				if ( c.material ) {
 
-					c.material.roughness = 0.2;
+					c.material.roughness = 0.4;
 
 				}
 
