@@ -25,25 +25,26 @@ const iesProfileURLs = [
 const params = {
 
 	floorMaterial: {
-		color: '#3465a4',
+		color: '#dddddd',
 		roughness: 0.4,
 		metalness: 0.4,
 	},
 	wallMaterial: {
-		color: '#FFFFFF',
+		color: '#a06464',
 		roughness: 0.4,
 		metalness: 0.1,
 	},
 
 	multipleImportanceSampling: true,
-	environmentIntensity: 2.5,
+	environmentIntensity: 0.1,
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio, // TODO: remove before commit
 	filterGlossyFactor: 0.5,
-	tiles: 1,
-	showTransformControls: true,
+	tiles: 2,
 	iesProfile: - 1,
+	showTransformControls: false,
+	showLightHelper: false,
 };
 
 // adjust performance parameters for mobile
@@ -67,10 +68,11 @@ async function init() {
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( 0, 2, 15 );
+	perspectiveCamera.position.set( - 2, 4, 8 ).multiplyScalar( 0.8 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.material = new PhysicalPathTracingMaterial();
+	ptRenderer.material.backgroundBlur = 0.2;
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = perspectiveCamera;
@@ -81,6 +83,8 @@ async function init() {
 	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls.target.y = 1.5;
+	controls.update();
 	controls.addEventListener( 'change', () => {
 
 		ptRenderer.reset();
@@ -97,6 +101,7 @@ async function init() {
 			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
 
 				scene.environment = texture;
+				scene.background = texture;
 
 				resolve();
 
@@ -115,10 +120,18 @@ async function init() {
 
 			// objects
 			gltf.scene.scale.setScalar( 1 );
-			gltf.scene.position.x = 0;
 			gltf.scene.updateMatrixWorld();
-			gltf.castShadow = true;
-			gltf.receiveShadow = true;
+			gltf.scene.traverse( c => {
+
+				c.castShadow = true;
+				c.receiveShadow = true;
+				if ( c.material ) {
+
+					c.material.roughness = 0.2;
+
+				}
+
+			} );
 			group.add( gltf.scene );
 
 			const box = new THREE.Box3();
@@ -135,7 +148,7 @@ async function init() {
 			group.add( floor );
 
 			const wall = new THREE.Mesh(
-				new THREE.BoxGeometry( 12, 6, 0.5 ),
+				new THREE.BoxGeometry( 14, 6, 0.5 ),
 				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0, metalness: 1.0 } ),
 			);
 			wall.castShadow = true;
@@ -210,7 +223,7 @@ async function init() {
 
 				const targetObject = new THREE.Object3D();
 				targetObject.position.x = i * 8.0;
-				targetObject.position.y = floor.position.y + 0.05;
+				targetObject.position.y = floor.position.y + 2;
 				targetObject.position.z = 0.05;
 				targetObject.updateMatrixWorld();
 				spotLight.updateMatrixWorld();
@@ -229,6 +242,7 @@ async function init() {
 					spotLightHelpers.push( spotLightHelper );
 
 					spotLight1 = spotLight;
+					spotLight1.position.z = 4;
 
 					makeTransformControls( spotLight );
 					makeTransformControls( targetObject );
@@ -279,6 +293,7 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
 	gui.add( params, 'showTransformControls' );
+	gui.add( params, 'showLightHelper' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
@@ -308,6 +323,7 @@ async function init() {
 		onResize();
 
 	} );
+	ptFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
@@ -423,8 +439,14 @@ function animate() {
 	fsQuad.material.depthWrite = false;
 	fsQuad.render( renderer );
 
-	if ( params.showTransformControls )
-		renderer.render( transformControlsScene, perspectiveCamera );
+	transformControlsScene.children.forEach( c => {
+
+		c.visible = c instanceof THREE.SpotLightHelper ? params.showLightHelper : params.showTransformControls;
+		if ( c.enabled ) c.enabled = params.showTransformControls;
+
+	} );
+
+	renderer.render( transformControlsScene, perspectiveCamera );
 
 	renderer.autoClear = true;
 
