@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, PhysicalSpotLight, IESLoader } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera , PhysicalSpotLight, IESLoader } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -123,8 +123,6 @@ async function init() {
 
 			const group = new THREE.Group();
 
-			const gltfScenes = [ ];
-
 			// objects
 			gltf.scene.scale.setScalar( 1 );
 			gltf.scene.position.x = 0;
@@ -132,7 +130,6 @@ async function init() {
 			gltf.castShadow = true;
 			gltf.receiveShadow = true;
 			group.add( gltf.scene );
-			gltfScenes.push( gltf.scene );
 
 			const box = new THREE.Box3();
 			box.setFromObject( gltf.scene );
