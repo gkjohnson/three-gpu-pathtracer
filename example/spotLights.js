@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera , PhysicalSpotLight, IESLoader } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, IESLoader } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
