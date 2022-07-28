@@ -304,7 +304,6 @@ async function init() {
 		onResize();
 
 	} );
-	ptFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
