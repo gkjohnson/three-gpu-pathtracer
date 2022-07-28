@@ -5,7 +5,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera , PhysicalSpotLight, IESLoader } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
@@ -37,21 +36,13 @@ const params = {
 	},
 
 	multipleImportanceSampling: true,
-	stableNoise: false,
-	environmentIntensity: 0.5,
-	environmentRotation: 0,
-	environmentBlur: 0.0,
-	backgroundBlur: 0.05,
+	environmentIntensity: 2.5,
 	bounces: 3,
 	samplesPerFrame: 1,
-	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio, // TODO: remove before commit
-	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
-	checkerboardTransparency: true,
 	showTransformControls: true,
-	cameraProjection: 'Perspective',
 	iesProfile: - 1,
 };
 
@@ -117,7 +108,6 @@ async function init() {
 
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf' )
 		.then( gltf => {
 
@@ -294,18 +284,12 @@ async function init() {
 	await Promise.all( [ gltfPromise, envMapPromise ] );
 
 	document.getElementById( 'loading' ).remove();
-	document.body.classList.add( 'checkerboard' );
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
-	ptFolder.add( params, 'stableNoise' ).onChange( value => {
-
-		ptRenderer.stableNoise = value;
-
-	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
@@ -437,7 +421,6 @@ function animate() {
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.backgroundBlur = params.backgroundBlur;
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( perspectiveCamera );
 
