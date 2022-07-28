@@ -72,10 +72,15 @@ vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 // specular
 float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	// See equation (27) in http://jcgt.org/published/0003/02/03/
+	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = getHalfVector( wi, wo );
-	return ggxPDF( wo, halfVector, filteredRoughness ) / ( 4.0 * dot( wi, halfVector ) );
+
+	float incidentTheta = acos( wo.z );
+	float D = ggxDistribution( halfVector, filteredRoughness );
+	float G1 = ggxShadowMaskG1( incidentTheta, filteredRoughness );
+	float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, halfVector ) ) ) / abs ( wo.z );
+	return ggxPdf / ( 4.0 * dot( wo, halfVector ) );
 
 }
 
