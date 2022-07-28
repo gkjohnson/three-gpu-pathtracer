@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - PhysicalPathTracingMaterial: Default "environment intensity" from 2.0 to 1.0.
 
+### Fixed
+- White hotspots at some glancing angles.
+
 ## [0.0.5] - 2022-07-16
 ### Added
 - Support for equirect rendering with EquirectCamera.
