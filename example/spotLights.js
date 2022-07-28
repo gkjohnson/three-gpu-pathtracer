@@ -278,6 +278,7 @@ async function init() {
 	onResize();
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
+	gui.add( params, 'showTransformControls' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
@@ -314,7 +315,6 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	envFolder.add( params, 'showTransformControls' );
 
 	const matFolder1 = gui.addFolder( 'Floor Material' );
 	matFolder1.addColor( params.floorMaterial, 'color' ).onChange( reset );
