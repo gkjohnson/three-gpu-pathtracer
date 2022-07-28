@@ -183,7 +183,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.matte = bool( s13.r );
 		m.castShadow = ! bool( s13.g );
 
-		uint firstTextureTransformIdx = i + 12u;
+		uint firstTextureTransformIdx = i + 14u;
 
 		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx );
 		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
