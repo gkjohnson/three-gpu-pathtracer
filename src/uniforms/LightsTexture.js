@@ -1,7 +1,9 @@
-import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quaternion } from 'three';
+import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quaternion, Matrix4 } from 'three';
 
-const LIGHT_PIXELS = 4;
-
+const LIGHT_PIXELS = 6;
+const RECT_AREA_LIGHT = 0;
+const CIRC_AREA_LIGHT = 1;
+const SPOT_LIGHT = 2;
 export class LightsTexture extends DataTexture {
 
 	constructor() {
@@ -16,7 +18,7 @@ export class LightsTexture extends DataTexture {
 
 	}
 
-	updateFrom( lights ) {
+	updateFrom( lights, iesTextures = [] ) {
 
 		const pixelCount = lights.length * LIGHT_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
@@ -35,7 +37,11 @@ export class LightsTexture extends DataTexture {
 
 		const u = new Vector3();
 		const v = new Vector3();
+		const m = new Matrix4();
 		const worldQuaternion = new Quaternion();
+		const eye = new Vector3();
+		const target = new Vector3();
+		const up = new Vector3();
 
 		for ( let i = 0, l = lights.length; i < l; i ++ ) {
 
@@ -44,6 +50,7 @@ export class LightsTexture extends DataTexture {
 			const baseIndex = i * LIGHT_PIXELS * 4;
 			let index = 0;
 
+			// sample 1
 		    // position
 			l.getWorldPosition( v );
 			floatArray[ baseIndex + ( index ++ ) ] = v.x;
@@ -51,8 +58,12 @@ export class LightsTexture extends DataTexture {
 			floatArray[ baseIndex + ( index ++ ) ] = v.z;
 
 			// type
-			floatArray[ baseIndex + ( index ++ ) ] = l.isCircular ? 1 : 0;
+			let type = RECT_AREA_LIGHT;
+			if ( l.isRectAreaLight && l.isCircular ) type = CIRC_AREA_LIGHT;
+			else if ( l.isSpotLight ) type = SPOT_LIGHT;
+			floatArray[ baseIndex + ( index ++ ) ] = type;
 
+			// sample 2
 			// color
 			floatArray[ baseIndex + ( index ++ ) ] = l.color.r;
 			floatArray[ baseIndex + ( index ++ ) ] = l.color.g;
@@ -63,23 +74,77 @@ export class LightsTexture extends DataTexture {
 
 			l.getWorldQuaternion( worldQuaternion );
 
-			// u vector
-			u.set( l.width, 0, 0 ).applyQuaternion( worldQuaternion );
+			if ( l.isRectAreaLight ) {
 
-			floatArray[ baseIndex + ( index ++ ) ] = u.x;
-			floatArray[ baseIndex + ( index ++ ) ] = u.y;
-			floatArray[ baseIndex + ( index ++ ) ] = u.z;
-			index ++;
+				// sample 3
+				// u vector
+				u.set( l.width, 0, 0 ).applyQuaternion( worldQuaternion );
 
-			// v vector
-			v.set( 0, l.height, 0 ).applyQuaternion( worldQuaternion );
+				floatArray[ baseIndex + ( index ++ ) ] = u.x;
+				floatArray[ baseIndex + ( index ++ ) ] = u.y;
+				floatArray[ baseIndex + ( index ++ ) ] = u.z;
+				index ++;
 
-			floatArray[ baseIndex + ( index ++ ) ] = v.x;
-			floatArray[ baseIndex + ( index ++ ) ] = v.y;
-			floatArray[ baseIndex + ( index ++ ) ] = v.z;
+				// sample 4
+				// v vector
+				v.set( 0, l.height, 0 ).applyQuaternion( worldQuaternion );
 
-			// area
-			floatArray[ baseIndex + ( index ++ ) ] = u.cross( v ).length() * ( l.isCircular ? ( Math.PI / 4.0 ) : 1.0 );
+				floatArray[ baseIndex + ( index ++ ) ] = v.x;
+				floatArray[ baseIndex + ( index ++ ) ] = v.y;
+				floatArray[ baseIndex + ( index ++ ) ] = v.z;
+
+				// area
+				floatArray[ baseIndex + ( index ++ ) ] = u.cross( v ).length() * ( l.isCircular ? ( Math.PI / 4.0 ) : 1.0 );
+
+			} else if ( l.isSpotLight ) {
+
+				const radius = l.radius;
+				eye.setFromMatrixPosition( l.matrixWorld );
+				target.setFromMatrixPosition( l.target.matrixWorld );
+				m.lookAt( eye, target, up );
+				worldQuaternion.setFromRotationMatrix( m );
+
+				// sample 3
+				// u vector
+				u.set( 1, 0, 0 ).applyQuaternion( worldQuaternion );
+
+				floatArray[ baseIndex + ( index ++ ) ] = u.x;
+				floatArray[ baseIndex + ( index ++ ) ] = u.y;
+				floatArray[ baseIndex + ( index ++ ) ] = u.z;
+				index ++;
+
+				// sample 4
+				// v vector
+				v.set( 0, 1, 0 ).applyQuaternion( worldQuaternion );
+
+				floatArray[ baseIndex + ( index ++ ) ] = v.x;
+				floatArray[ baseIndex + ( index ++ ) ] = v.y;
+				floatArray[ baseIndex + ( index ++ ) ] = v.z;
+
+				// area
+				floatArray[ baseIndex + ( index ++ ) ] = Math.PI * radius * radius;
+
+				// sample 5
+				// near
+				floatArray[ baseIndex + ( index ++ ) ] = l.shadow.camera.near;
+
+				// decay
+				floatArray[ baseIndex + ( index ++ ) ] = l.decay;
+
+				// distance
+				floatArray[ baseIndex + ( index ++ ) ] = l.distance;
+
+				// coneCos
+				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle );
+
+				// sample 6
+				// penumbraCos
+				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle * ( 1 - l.penumbra ) );
+
+				// iesProfile
+				floatArray[ baseIndex + ( index ++ ) ] = iesTextures.indexOf( l.iesTexture );
+
+			}
 
 		}
 

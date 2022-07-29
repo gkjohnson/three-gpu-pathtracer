@@ -224,7 +224,7 @@ export const shaderLightStruct = /* glsl */ `
 
 	Light readLightInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 4u;
+		uint i = index * 6u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
