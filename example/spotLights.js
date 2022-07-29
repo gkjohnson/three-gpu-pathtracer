@@ -31,7 +31,7 @@ const iesProfileURLs = [
 const params = {
 
 	floorMaterial: {
-		color: '#333333',
+		color: '#555555',
 		roughness: 0.05,
 		metalness: 0.4,
 	},
