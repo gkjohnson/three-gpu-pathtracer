@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Support for lights to the DynamicPathTracingGenerator
 - Support for circular area lights
 - Support for spot lights
+- Add support for specular color and intensity control
 - Support for IES Profiles on the new "PhysicalSpotLight" class
 - IESLoader for loading IES profiles as textures
 
