@@ -208,6 +208,10 @@ export const shaderMaterialStructs = /* glsl */ `
 `;
 
 export const shaderLightStruct = /* glsl */ `
+
+	#define RECT_AREA_LIGHT_TYPE 0
+	#define CIRC_AREA_LIGHT_TYPE 1
+	#define SPOT_LIGHT_TYPE 2
 	struct Light {
 
 		vec3 position;
@@ -219,6 +223,15 @@ export const shaderLightStruct = /* glsl */ `
 		vec3 u;
 		vec3 v;
 		float area;
+
+		// spot light fields
+		float radius;
+		float near;
+		float decay;
+		float distance;
+		float coneCos;
+		float penumbraCos;
+		int iesProfile;
 
 	};
 
@@ -241,6 +254,21 @@ export const shaderLightStruct = /* glsl */ `
 		l.u = s2.rgb;
 		l.v = s3.rgb;
 		l.area = s3.a;
+
+		if ( l.type === SPOT_LIGHT_TYPE ) {
+
+			vec4 s4 = texelFetch1D( tex, i + 4u );
+			vec4 s5 = texelFetch1D( tex, i + 5u );
+			sl.radius = s4.r;
+			sl.near = s4.g;
+			sl.decay = s4.b;
+			sl.distance = s4.a;
+
+			sl.coneCos = s5.r;
+			sl.penumbraCos = s5.g;
+			sl.iesProfile = int( round ( s5.b ) );
+
+		}
 
 		return l;
 
