@@ -1,6 +1,7 @@
 import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
+import { DenoiseMaterial } from '../materials/DenoiseMaterial.js';
 
 function* renderTask() {
 
@@ -8,15 +9,20 @@ function* renderTask() {
 		_renderer,
 		_fsQuad,
 		_blendQuad,
+		_denoiseQuad,
 		_primaryTarget,
 		_blendTargets,
+		_denoiseTarget,
 		alpha,
+		denoise,
 		camera,
 		material,
 	} = this;
 
 	const blendMaterial = _blendQuad.material;
 	let [ blendTarget1, blendTarget2 ] = _blendTargets;
+
+	const denoiseMaterial = _denoiseQuad.material;
 
 	while ( true ) {
 
@@ -99,6 +105,16 @@ function* renderTask() {
 
 				}
 
+				if ( denoise ) {
+
+					denoiseMaterial.map = alpha ? blendTarget2.texture : _primaryTarget.texture;
+
+					_renderer.setRenderTarget( _denoiseTarget );
+					_denoiseQuad.render( _renderer );
+					_renderer.setRenderTarget( ogRenderTarget );
+
+				}
+
 				this.samples += ( 1 / totalTiles );
 
 				yield;
@@ -132,7 +148,7 @@ export class PathTracingRenderer {
 
 	get target() {
 
-		return this._alpha ? this._blendTargets[ 1 ] : this._primaryTarget;
+		return this._denoise ? this._denoiseTarget : ( this._alpha ? this._blendTargets[ 1 ] : this._primaryTarget );
 
 	}
 
@@ -156,6 +172,24 @@ export class PathTracingRenderer {
 
 	}
 
+	set denoise( v ) {
+
+		if ( ! v ) {
+
+			this._denoiseTarget.dispose;
+
+		}
+
+		this._denoise = v;
+
+	}
+
+	get denoise() {
+
+		return this._denoise;
+
+	}
+
 	constructor( renderer ) {
 
 		this.camera = null;
@@ -167,6 +201,8 @@ export class PathTracingRenderer {
 		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
+		this.denoiser = new DenoiseMaterial();
+		this._denoiseQuad = new FullScreenQuad( this.denoiser );
 		this._task = null;
 
 		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
@@ -183,6 +219,10 @@ export class PathTracingRenderer {
 				type: FloatType,
 			} ),
 		];
+		this._denoiseTarget = new WebGLRenderTarget( 1, 1, {
+			format: RGBAFormat,
+			type: FloatType,
+		} );
 
 	}
 
@@ -191,6 +231,7 @@ export class PathTracingRenderer {
 		this._primaryTarget.setSize( w, h );
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );
+		this._denoiseTarget.setSize( w, h );
 		this.reset();
 
 	}
@@ -200,6 +241,7 @@ export class PathTracingRenderer {
 		this._primaryTarget.dispose();
 		this._blendTargets[ 0 ].dispose();
 		this._blendTargets[ 1 ].dispose();
+		this._denoiseTarget.dispose();
 
 		this._fsQuad.dispose();
 		this._blendQuad.dispose();
@@ -209,7 +251,7 @@ export class PathTracingRenderer {
 
 	reset() {
 
-		const { _renderer, _primaryTarget, _blendTargets } = this;
+		const { _renderer, _primaryTarget, _blendTargets, _denoiseTarget } = this;
 		const ogRenderTarget = _renderer.getRenderTarget();
 		const ogClearAlpha = _renderer.getClearAlpha();
 		_renderer.getClearColor( ogClearColor );
@@ -223,6 +265,10 @@ export class PathTracingRenderer {
 		_renderer.clearColor();
 
 		_renderer.setRenderTarget( _blendTargets[ 1 ] );
+		_renderer.setClearColor( 0, 0 );
+		_renderer.clearColor();
+
+		_renderer.setRenderTarget( _denoiseTarget );
 		_renderer.setClearColor( 0, 0 );
 		_renderer.clearColor();
 

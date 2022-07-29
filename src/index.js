@@ -25,6 +25,7 @@ export * from './utils/BlurredEnvMapGenerator.js';
 export * from './utils/IESLoader.js';
 
 // materials
+export * from './materials/DenoiseMaterial';
 export * from './materials/MaterialBase.js';
 export * from './materials/PhysicalPathTracingMaterial.js';
 
