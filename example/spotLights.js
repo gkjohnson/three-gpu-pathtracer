@@ -31,8 +31,8 @@ const iesProfileURLs = [
 const params = {
 
 	floorMaterial: {
-		color: '#dddddd',
-		roughness: 0.4,
+		color: '#333333',
+		roughness: 0.05,
 		metalness: 0.4,
 	},
 	wallMaterial: {
@@ -77,6 +77,7 @@ async function init() {
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 2, 4, 8 ).multiplyScalar( 0.8 );
+	perspectiveCamera.bokehSize = 0;
 
 	// init path traer
 	ptRenderer = new PathTracingRenderer( renderer );
