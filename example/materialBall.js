@@ -7,8 +7,9 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { TemporalResolve } from '../src/temporal-resolve/TemporalResolve.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials, temporalResolve;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -75,7 +76,6 @@ const params = {
 		matte: false,
 		castShadow: true,
 	},
-
 	multipleImportanceSampling: true,
 	stableNoise: false,
 	environmentIntensity: 1,
@@ -86,6 +86,11 @@ const params = {
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
+	temporalResolve: true,
+	temporalResolveMix: 0.875,
+	clampRadius: 2,
+	newSamplesSmoothing: 0.5,
+	newSamplesCorrection: 0.75,
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
@@ -157,6 +162,12 @@ async function init() {
 	} );
 
 	scene = new THREE.Scene();
+
+	temporalResolve = new TemporalResolve( ptRenderer, scene, activeCamera );
+	temporalResolve.temporalResolveMix = 0.875;
+	temporalResolve.clampRadius = 2;
+	temporalResolve.newSamplesSmoothing = 0.5;
+	temporalResolve.newSamplesCorrection = 0.75;
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -314,6 +325,21 @@ async function init() {
 		onResize();
 
 	} );
+
+	const trFolder = gui.addFolder( 'Temporal Resolve' );
+	trFolder.add( params, 'temporalResolve' );
+	trFolder
+		.add( params, 'temporalResolveMix', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.temporalResolveMix = value ) );
+	trFolder
+		.add( params, 'clampRadius', 1, 8, 1 )
+		.onChange( ( value ) => ( temporalResolve.clampRadius = value ) );
+	trFolder
+		.add( params, 'newSamplesSmoothing', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.newSamplesSmoothing = value ) );
+	trFolder
+		.add( params, 'newSamplesCorrection', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.newSamplesCorrection = value ) );
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
@@ -618,21 +644,30 @@ function animate() {
 
 	}
 
-	if ( ptRenderer.samples < 1 ) {
+	if ( ! params.temporalResolve && ptRenderer.samples < 1 ) {
 
 		renderer.render( scene, activeCamera );
 
 	}
 
 	renderer.autoClear = false;
-	fsQuad.material.map = ptRenderer.target.texture;
+	if ( params.temporalResolve ) {
+
+		temporalResolve.update();
+		fsQuad.material.map = temporalResolve.target.texture;
+
+	} else {
+
+		fsQuad.material.map = ptRenderer.target.texture;
+
+	}
+
 	fsQuad.render( renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
-
 
 
 
