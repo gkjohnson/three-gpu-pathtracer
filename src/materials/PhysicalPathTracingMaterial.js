@@ -789,49 +789,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
-						// spot light sampling
-						LightSampleRec lightSampleRec = randomSpotLightSample_OLD( spotLights, iesProfiles, spotLightCount, rayOrigin );
-
-						bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
-						if ( isSampleBelowSurface ) {
-
-							lightSampleRec.pdf = 0.0;
-
-						}
-
-						// check if a ray could even reach the light area
-						if (
-							lightSampleRec.pdf > 0.0 &&
-							isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
-							! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
-						) {
-
-							// get the material pdf
-							vec3 sampleColor;
-							float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
-							bool isValidSampleColor = any( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-							if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
-
-								#if FEATURE_MIS
-
-								// weight the direct light contribution
-								float lightPdf = lightSampleRec.pdf;// / float( spotLightCount );
-								float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
-								gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
-
-								#else
-
-								gl_FragColor.rgb +=
-									lightSampleRec.emission *
-									throughputColor *
-									sampleColor;
-
-								#endif
-
-							}
-
-						}
-
 						// direct env map sampling
 						#if FEATURE_MIS
 
