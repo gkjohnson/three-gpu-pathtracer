@@ -125,6 +125,9 @@ export class LightsTexture extends DataTexture {
 				floatArray[ baseIndex + ( index ++ ) ] = Math.PI * radius * radius;
 
 				// sample 5
+				// radius
+				floatArray[ baseIndex + ( index ++ ) ] = radius;
+
 				// near
 				floatArray[ baseIndex + ( index ++ ) ] = l.shadow.camera.near;
 
@@ -134,10 +137,10 @@ export class LightsTexture extends DataTexture {
 				// distance
 				floatArray[ baseIndex + ( index ++ ) ] = l.distance;
 
+				// sample 6
 				// coneCos
 				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle );
 
-				// sample 6
 				// penumbraCos
 				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle * ( 1 - l.penumbra ) );
 
@@ -147,6 +150,8 @@ export class LightsTexture extends DataTexture {
 			}
 
 		}
+
+		window.LIGHT_ARRAY = floatArray;
 
 		this.needsUpdate = true;
 
