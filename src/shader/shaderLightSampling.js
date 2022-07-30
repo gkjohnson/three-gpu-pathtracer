@@ -86,6 +86,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 		} else if ( light.type == SPOT_LIGHT_TYPE ) {
 
+			// TODO: is dividing by radius here correct?
 			float r = light.radius;
 			u = light.u / r;
 			v = light.v / r;
