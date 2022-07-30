@@ -61,6 +61,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 			continue;
 		}
 
+		// TODO: why are u and v and divided by their length here?
 		u *= 1.0 / dot( u, u );
 		v *= 1.0 / dot( v, v );
 
@@ -71,7 +72,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 			( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
 		) {
 
-			if ( dist < lightSampleRec.dist || !lightSampleRec.hit ) {
+			if ( dist < lightSampleRec.dist || ! lightSampleRec.hit ) {
 
 				float cosTheta = dot( rayDirection, normal );
 
@@ -85,24 +86,34 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 		} else if ( light.type == SPOT_LIGHT_TYPE ) {
 
-			// TODO: check for disc hit
-			// float angle = acos( light.coneCos );
-			// float angleTan = tan( angle );
-			// float startDistance = light.radius / max( angleTan, EPSILON );
+			float r = light.radius;
+			u = light.u / r;
+			v = light.v / r;
 
-			// float cosTheta = dot( rayDirection, normal );
-			// float spotAttenuation = light.iesProfile != -1 ?
-			// 	getPhotometricAttenuation( iesProfiles, light.iesProfile, rayDirection, normal, u, v )
-			// 	: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
+			vec3 lightNormal = normalize( cross( u, v ) );
+			float angle = acos( light.coneCos );
+			float angleTan = tan( angle );
+			float startDistance = light.radius / max( angleTan, EPSILON );
 
-			// float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
+			if (
+				intersectsCircle( light.position - normal * startDistance, normal, u * r, v * r, rayOrigin, rayDirection, dist ) &&
+				( dist < lightSampleRec.dist || ! lightSampleRec.hit )
+			) {
 
-			// lightSampleRec.hit = true;
-			// lightSampleRec.dist = dist;
-			// lightSampleRec.direction = rayDirection;
-			// lightSampleRec.emission = light.color * light.intensity * max( distanceAttenuation * spotAttenuation, EPSILON );
-			// lightSampleRec.pdf = 1.0;
+				float cosTheta = dot( rayDirection, normal );
+				float spotAttenuation = light.iesProfile != -1 ?
+					getPhotometricAttenuation( iesProfiles, light.iesProfile, rayDirection, normal, u, v )
+					: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 
+				float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
+
+				lightSampleRec.hit = true;
+				lightSampleRec.dist = dist;
+				lightSampleRec.direction = rayDirection;
+				lightSampleRec.emission = light.color * light.intensity * max( distanceAttenuation * spotAttenuation, EPSILON );
+				lightSampleRec.pdf = 1.0;
+
+			}
 
 		}
 
