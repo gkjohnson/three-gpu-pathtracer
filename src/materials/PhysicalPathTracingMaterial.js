@@ -13,7 +13,7 @@ import { shaderLightSampling } from '../shader/shaderLightSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
-import { LightsTexture } from '../uniforms/LightsTexture.js';
+import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
@@ -55,8 +55,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
-				lights: { value: new LightsTexture() },
-				lightCount: { value: 0 },
+				lights: { value: new LightsInfoUniformStruct() },
 				iesProfiles: { value: new IESProfilesTexture().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
@@ -138,8 +137,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int seed;
 				uniform float opacity;
 				uniform sampler2D materials;
-				uniform sampler2D lights;
-				uniform uint lightCount;
+				uniform LightsInfo lights;
 				uniform sampler2DArray iesProfiles;
 
 				${ shaderLightSampling }
@@ -420,7 +418,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 
-						LightSampleRec lightHit = lightsClosestHit( lights, lightCount, rayOrigin, rayDirection );
+						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
 
 						if ( lightHit.hit && ( lightHit.dist < dist || !hit ) ) {
 
@@ -433,7 +431,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								#if FEATURE_MIS
 
 								// weight the contribution
-								float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lightCount + 1u ) );
+								float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lights.count + 1u ) );
 								gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
 
 								#else
@@ -463,7 +461,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
-								envPdf /= float( lightCount + 1u );
+								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
@@ -788,10 +786,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if FEATURE_MIS
 
 						// uniformly pick a light or environment map
-						if( rand() > 1.0 / float( lightCount + 1u ) ) {
+						if( rand() > 1.0 / float( lights.count + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights, iesProfiles, lightCount, rayOrigin );
+							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
@@ -814,7 +812,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
-									float lightPdf = lightSampleRec.pdf / float( lightCount + 1u );
+									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
 									float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
 									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
@@ -854,7 +852,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
-									envPdf /= float( lightCount + 1u );
+									envPdf /= float( lights.count + 1u );
 									float misWeight = misHeuristic( envPdf, envMaterialPdf );
 									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
 

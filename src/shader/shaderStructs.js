@@ -212,6 +212,14 @@ export const shaderLightStruct = /* glsl */ `
 	#define RECT_AREA_LIGHT_TYPE 0
 	#define CIRC_AREA_LIGHT_TYPE 1
 	#define SPOT_LIGHT_TYPE 2
+
+	struct LightsInfo {
+
+		sampler2D tex;
+		uint count;
+
+	};
+
 	struct Light {
 
 		vec3 position;

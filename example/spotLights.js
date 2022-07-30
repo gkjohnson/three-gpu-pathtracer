@@ -261,7 +261,6 @@ async function init() {
 			material.materials.updateFrom( materials, textures );
 			material.iesProfiles.updateFrom( renderer, iesTextures );
 			material.lights.updateFrom( lights );
-			material.lightCount = lights.length;
 			ptRenderer.material.envMapInfo.updateFrom( scene.environment );
 
 			generator.dispose();

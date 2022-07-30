@@ -4,36 +4,39 @@ const LIGHT_PIXELS = 6;
 const RECT_AREA_LIGHT = 0;
 const CIRC_AREA_LIGHT = 1;
 const SPOT_LIGHT = 2;
-export class LightsTexture extends DataTexture {
+export class LightsInfoUniformStruct {
 
 	constructor() {
 
-		super( new Float32Array( 4 ), 1, 1 );
+		const tex = new DataTexture( new Float32Array( 4 ), 1, 1 );
+		tex.format = RGBAFormat;
+		tex.type = FloatType;
+		tex.wrapS = ClampToEdgeWrapping;
+		tex.wrapT = ClampToEdgeWrapping;
+		tex.generateMipmaps = false;
 
-		this.format = RGBAFormat;
-		this.type = FloatType;
-		this.wrapS = ClampToEdgeWrapping;
-		this.wrapT = ClampToEdgeWrapping;
-		this.generateMipmaps = false;
+		this.tex = tex;
+		this.count = 0;
 
 	}
 
 	updateFrom( lights, iesTextures = [] ) {
 
-		const pixelCount = lights.length * LIGHT_PIXELS;
+		const tex = this.tex;
+		const pixelCount = Math.max( lights.length * LIGHT_PIXELS, 1 );
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
 
-		if ( this.image.width !== dimension ) {
+		if ( tex.image.width !== dimension ) {
 
-			this.dispose();
+			tex.dispose();
 
-			this.image.data = new Float32Array( dimension * dimension * 4 );
-			this.image.width = dimension;
-			this.image.height = dimension;
+			tex.image.data = new Float32Array( dimension * dimension * 4 );
+			tex.image.width = dimension;
+			tex.image.height = dimension;
 
 		}
 
-		const floatArray = this.image.data;
+		const floatArray = tex.image.data;
 
 		const u = new Vector3();
 		const v = new Vector3();
@@ -151,9 +154,8 @@ export class LightsTexture extends DataTexture {
 
 		}
 
-		window.LIGHT_ARRAY = floatArray;
-
-		this.needsUpdate = true;
+		tex.needsUpdate = true;
+		this.count = lights.length;
 
 	}
 

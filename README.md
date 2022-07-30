@@ -116,7 +116,6 @@ ptMaterial.materials.updateFrom( materials, textures );
 
 // update the lights
 ptMaterial.lights.updateFrom( lights );
-ptMaterial.lightCount = lights.length;
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -524,8 +523,7 @@ _extends MaterialBase_
 	textures: RenderTarget2DArray,
 
 	// Light information
-	lights: LightsTexture,
-	lightCount = 0: Number,
+	lights: LightsInfoUniformStruct,
 	iesProfiles: IESProfilesTexture,
 
 	// Environment Map information
@@ -649,11 +647,9 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
-## LightsTexture
+## LightsInfoUniformStruct
 
-_extends DataTexture_
-
-Helper texture uniform for encoding lights as texture data.
+Helper uniform for encoding lights as texture data with count.
 
 ### .updateFrom
 
