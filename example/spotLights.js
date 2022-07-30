@@ -262,8 +262,6 @@ async function init() {
 			material.iesProfiles.updateFrom( renderer, iesTextures );
 			material.lights.updateFrom( lights );
 			material.lightCount = lights.length;
-			material.spotLights.updateFrom( spotLights, iesTextures );
-			material.spotLightCount = spotLights.length;
 			ptRenderer.material.envMapInfo.updateFrom( scene.environment );
 
 			generator.dispose();
@@ -398,7 +396,6 @@ function animate() {
 	ptRenderer.material.physicalCamera.updateFrom( perspectiveCamera );
 
 	ptRenderer.material.lights.updateFrom( lights );
-	ptRenderer.material.spotLights.updateFrom( spotLights, iesTextures );
 
 	// update objects
 	perspectiveCamera.updateMatrixWorld();
