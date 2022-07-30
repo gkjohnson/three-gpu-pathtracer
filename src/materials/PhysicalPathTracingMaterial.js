@@ -790,7 +790,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
 						// spot light sampling
-						LightSampleRec lightSampleRec = randomSpotLightSample( spotLights, iesProfiles, spotLightCount, rayOrigin );
+						LightSampleRec lightSampleRec = randomSpotLightSample_OLD( spotLights, iesProfiles, spotLightCount, rayOrigin );
 
 						bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 						if ( isSampleBelowSurface ) {
@@ -839,7 +839,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if( rand() > 1.0 / float( lightCount + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights, lightCount, rayOrigin );
+							LightSampleRec lightSampleRec = randomLightSample( lights, iesProfiles, lightCount, rayOrigin );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {

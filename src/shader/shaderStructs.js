@@ -255,18 +255,18 @@ export const shaderLightStruct = /* glsl */ `
 		l.v = s3.rgb;
 		l.area = s3.a;
 
-		if ( l.type === SPOT_LIGHT_TYPE ) {
+		if ( l.type == SPOT_LIGHT_TYPE ) {
 
 			vec4 s4 = texelFetch1D( tex, i + 4u );
 			vec4 s5 = texelFetch1D( tex, i + 5u );
-			sl.radius = s4.r;
-			sl.near = s4.g;
-			sl.decay = s4.b;
-			sl.distance = s4.a;
+			l.radius = s4.r;
+			l.near = s4.g;
+			l.decay = s4.b;
+			l.distance = s4.a;
 
-			sl.coneCos = s5.r;
-			sl.penumbraCos = s5.g;
-			sl.iesProfile = int( round ( s5.b ) );
+			l.coneCos = s5.r;
+			l.penumbraCos = s5.g;
+			l.iesProfile = int( round ( s5.b ) );
 
 		}
 

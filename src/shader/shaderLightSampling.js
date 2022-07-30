@@ -127,7 +127,7 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 }
 
-LightSampleRec randomSpotLightSample( SpotLight spotLight, sampler2DArray iesProfiles, vec3 rayOrigin ) {
+LightSampleRec randomSpotLightSample_OLD( SpotLight spotLight, sampler2DArray iesProfiles, vec3 rayOrigin ) {
 
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
@@ -169,24 +169,74 @@ LightSampleRec randomSpotLightSample( SpotLight spotLight, sampler2DArray iesPro
 
 }
 
-LightSampleRec randomLightSample( sampler2D lights, uint lightCount, vec3 rayOrigin ) {
+LightSampleRec randomSpotLightSample( Light spotLight, sampler2DArray iesProfiles, vec3 rayOrigin ) {
+
+	LightSampleRec lightSampleRec;
+	lightSampleRec.hit = true;
+
+	float r = spotLight.radius * sqrt( rand() );
+	float theta = rand() * 2.0 * PI;
+	float x = r * cos( theta );
+	float y = r * sin( theta );
+
+	vec3 u = spotLight.u;
+	vec3 v = spotLight.v;
+	vec3 lightNormal = normalize( cross( u, v ) );
+
+	float angle = acos( spotLight.coneCos );
+	float angleTan = tan( angle );
+	float startDistance = spotLight.radius / max( angleTan, EPSILON );
+
+	vec3 randomPos = spotLight.position - lightNormal * startDistance + u * x + v * y;
+	vec3 toLight = randomPos - rayOrigin;
+	float lightDistSq = dot( toLight, toLight );
+	lightSampleRec.dist = sqrt( lightDistSq );
+
+	vec3 direction = toLight / max( lightSampleRec.dist, EPSILON );
+	lightSampleRec.direction = direction;
+
+	float cosTheta = dot( direction, lightNormal );
+
+	float spotAttenuation = spotLight.iesProfile != -1 ?
+		  getPhotometricAttenuation( iesProfiles, spotLight.iesProfile, direction, lightNormal, u, v )
+		: getSpotAttenuation( spotLight.coneCos, spotLight.penumbraCos, cosTheta );
+
+	float distanceAttenuation = getDistanceAttenuation( lightSampleRec.dist, spotLight.distance, spotLight.decay );
+
+	lightSampleRec.emission = spotLight.color * spotLight.intensity * max( distanceAttenuation * spotAttenuation, EPSILON );
+
+	lightSampleRec.pdf = 1.0;
+
+	return lightSampleRec;
+
+}
+
+LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin ) {
 
 	// pick a random light
 	uint l = uint( rand() * float( lightCount ) );
 	Light light = readLightInfo( lights, l );
 
-	// sample the light
-	return randomAreaLightSample( light, rayOrigin );
+	if ( light.type == SPOT_LIGHT_TYPE ) {
+
+		return randomSpotLightSample( light, iesProfiles, rayOrigin );
+
+	} else {
+
+		// sample the light
+		return randomAreaLightSample( light, rayOrigin );
+
+	}
 
 }
 
-LightSampleRec randomSpotLightSample( sampler2D spotLights, sampler2DArray iesProfiles, uint spotLightCount, vec3 rayOrigin ) {
+LightSampleRec randomSpotLightSample_OLD( sampler2D spotLights, sampler2DArray iesProfiles, uint spotLightCount, vec3 rayOrigin ) {
 
 	// pick a random light
 	uint l = uint( rand() * float( spotLightCount ) );
 	SpotLight spotLight = readSpotLightInfo( spotLights, l );
 
-	return randomSpotLightSample( spotLight, iesProfiles, rayOrigin );
+	return randomSpotLightSample_OLD( spotLight, iesProfiles, rayOrigin );
 
 }
 
