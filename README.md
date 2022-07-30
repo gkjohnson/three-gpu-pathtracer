@@ -526,10 +526,6 @@ _extends MaterialBase_
 	// Light information
 	lights: LightsTexture,
 	lightCount = 0: Number,
-
-	// Spotlight information
-	spotLights: SpotLightsTexture,
-	spotLightCount: Number,
 	iesProfiles: IESProfilesTexture,
 
 	// Environment Map information
@@ -662,24 +658,10 @@ Helper texture uniform for encoding lights as texture data.
 ### .updateFrom
 
 ```js
-updateFrom( lights : Array<Light> ) : void
+updateFrom( lights : Array<Light>, iesTextures = [] : Array<Texture> ) : void
 ```
 
-Updates the size and values of the texture to align with the provided set of lights.
-
-## SpotLightsTexture
-
-_extends DataTexture_
-
-Helper texture uniform for encoding spot lights as texture data.
-
-### .updateFrom
-
-```js
-updateFrom( lights : Array<SpotLight>, iesTextures = [] : Array<Texture> ) : void
-```
-
-Updates the values of the texture to align with the provided set of lights and ies textures.
+Updates the size and values of the texture to align with the provided set of lights and IES textures.
 
 ## EquirectHdrInfoUniform
 
