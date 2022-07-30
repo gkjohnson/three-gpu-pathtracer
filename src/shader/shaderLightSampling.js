@@ -112,10 +112,10 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 				lightSampleRec.hit = true;
 				lightSampleRec.dist = dist;
 				lightSampleRec.direction = rayDirection;
-				lightSampleRec.emission = light.color * light.intensity * max( distanceAttenuation * spotAttenuation, EPSILON );
 
 				// TODO: fix PDF
 				lightSampleRec.pdf = 1.0;
+				lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
 
 			}
 
@@ -199,7 +199,7 @@ LightSampleRec randomSpotLightSample( Light spotLight, sampler2DArray iesProfile
 	lightSampleRec.hit = true;
 	lightSampleRec.dist = dist;
 	lightSampleRec.direction = direction;
-	lightSampleRec.emission = spotLight.color * spotLight.intensity * max( distanceAttenuation * spotAttenuation, EPSILON );
+	lightSampleRec.emission = spotLight.color * spotLight.intensity * distanceAttenuation * spotAttenuation;
 	lightSampleRec.pdf = 1.0;
 
 	return lightSampleRec;
