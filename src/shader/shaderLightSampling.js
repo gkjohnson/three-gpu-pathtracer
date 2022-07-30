@@ -61,7 +61,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 			continue;
 		}
 
-		// TODO: why are u and v and divided by their length here?
+		// TODO: why are u and v and divided by their length sq here?
 		u *= 1.0 / dot( u, u );
 		v *= 1.0 / dot( v, v );
 
@@ -78,7 +78,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 				lightSampleRec.hit = true;
 				lightSampleRec.dist = dist;
-				lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
+				lightSampleRec.pdf = 1.0;
 				lightSampleRec.emission = light.color * light.intensity;
 				lightSampleRec.direction = rayDirection;
 
