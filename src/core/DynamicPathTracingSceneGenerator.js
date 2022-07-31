@@ -52,7 +52,7 @@ export class DynamicPathTracingSceneGenerator {
 						const normalMapRequired = ! ! c.material.normalMap;
 						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
 
-					} else if ( c.isRectAreaLight ) {
+					} else if ( c.isRectAreaLight || c.isSpotLight ) {
 
 						this.lights.push( c );
 

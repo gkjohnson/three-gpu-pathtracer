@@ -248,7 +248,7 @@ async function init() {
 
 			scene.add( result.scene );
 
-			const { bvh, textures, materials, lights, spotLights } = result;
+			const { bvh, textures, materials, lights } = result;
 			const geometry = bvh.geometry;
 			const material = ptRenderer.material;
 
@@ -260,10 +260,7 @@ async function init() {
 			material.textures.setTextures( renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );
 			material.iesProfiles.updateFrom( renderer, iesTextures );
-			material.lights.updateFrom( lights );
-			material.lightCount = lights.length;
-			material.spotLights.updateFrom( spotLights, iesTextures );
-			material.spotLightCount = spotLights.length;
+			material.lights.updateFrom( lights, iesTextures );
 			ptRenderer.material.envMapInfo.updateFrom( scene.environment );
 
 			generator.dispose();
@@ -397,8 +394,7 @@ function animate() {
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( perspectiveCamera );
 
-	ptRenderer.material.lights.updateFrom( lights );
-	ptRenderer.material.spotLights.updateFrom( spotLights, iesTextures );
+	ptRenderer.material.lights.updateFrom( lights, iesTextures );
 
 	// update objects
 	perspectiveCamera.updateMatrixWorld();
