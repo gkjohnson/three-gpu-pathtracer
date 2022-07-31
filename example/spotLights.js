@@ -260,7 +260,7 @@ async function init() {
 			material.textures.setTextures( renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );
 			material.iesProfiles.updateFrom( renderer, iesTextures );
-			material.lights.updateFrom( lights );
+			material.lights.updateFrom( lights, iesTextures );
 			ptRenderer.material.envMapInfo.updateFrom( scene.environment );
 
 			generator.dispose();
@@ -394,7 +394,7 @@ function animate() {
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( perspectiveCamera );
 
-	ptRenderer.material.lights.updateFrom( lights );
+	ptRenderer.material.lights.updateFrom( lights, iesTextures );
 
 	// update objects
 	perspectiveCamera.updateMatrixWorld();
