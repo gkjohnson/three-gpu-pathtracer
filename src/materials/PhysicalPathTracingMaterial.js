@@ -436,9 +436,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#else
 
-								gl_FragColor.rgb +=
-									lightHit.emission *
-									throughputColor;
+								gl_FragColor.rgb += lightHit.emission * throughputColor;
 
 								#endif
 
