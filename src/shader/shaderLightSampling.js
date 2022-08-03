@@ -39,6 +39,7 @@ struct LightSampleRec {
 	vec3 direction;
 	float pdf;
 	vec3 emission;
+	int type;
 
 };
 
@@ -80,39 +81,41 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 				lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
 				lightSampleRec.emission = light.color * light.intensity;
 				lightSampleRec.direction = rayDirection;
+				lightSampleRec.type = light.type;
 
 			}
 
 		} else if ( light.type == SPOT_LIGHT_TYPE ) {
 
-			float radius = light.radius;
-			vec3 lightNormal = normalize( cross( light.u, light.v ) );
-			float angle = acos( light.coneCos );
-			float angleTan = tan( angle );
-			float startDistance = radius / max( angleTan, EPSILON );
+			// TODO: forward path tracing sampling needs to be made consistent with direct light sampling logic
+			// float radius = light.radius;
+			// vec3 lightNormal = normalize( cross( light.u, light.v ) );
+			// float angle = acos( light.coneCos );
+			// float angleTan = tan( angle );
+			// float startDistance = radius / max( angleTan, EPSILON );
 
-			u = light.u / radius;
-			v = light.v / radius;
+			// u = light.u / radius;
+			// v = light.v / radius;
 
-			if (
-				intersectsCircle( light.position - normal * startDistance, normal, u, v, rayOrigin, rayDirection, dist ) &&
-				( dist < lightSampleRec.dist || ! lightSampleRec.hit )
-			) {
+			// if (
+			// 	intersectsCircle( light.position - normal * startDistance, normal, u, v, rayOrigin, rayDirection, dist ) &&
+			// 	( dist < lightSampleRec.dist || ! lightSampleRec.hit )
+			// ) {
 
-				float cosTheta = dot( rayDirection, normal );
-				float spotAttenuation = light.iesProfile != - 1 ?
-					getPhotometricAttenuation( iesProfiles, light.iesProfile, rayDirection, normal, u, v )
-					: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
+			// 	float cosTheta = dot( rayDirection, normal );
+			// 	float spotAttenuation = light.iesProfile != - 1 ?
+			// 		getPhotometricAttenuation( iesProfiles, light.iesProfile, rayDirection, normal, u, v )
+			// 		: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 
-				float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
+			// 	float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 
-				lightSampleRec.hit = true;
-				lightSampleRec.dist = dist;
-				lightSampleRec.direction = rayDirection;
-				lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
-				lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
+			// 	lightSampleRec.hit = true;
+			// 	lightSampleRec.dist = dist;
+			// 	lightSampleRec.direction = rayDirection;
+			// 	lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
+			// 	lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
 
-			}
+			// }
 
 		}
 
@@ -126,6 +129,7 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
+	lightSampleRec.type = light.type;
 
 	lightSampleRec.emission = light.color * light.intensity;
 
@@ -191,6 +195,7 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 	float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
+	lightSampleRec.type = light.type;
 	lightSampleRec.dist = dist;
 	lightSampleRec.direction = direction;
 	lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
@@ -199,7 +204,6 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 	// and the intensity of the light is not correct
 	lightSampleRec.pdf = 1.0;
 	// lightSampleRec.pdf = lightDistSq / ( light.area * cosTheta );
-
 
 	return lightSampleRec;
 

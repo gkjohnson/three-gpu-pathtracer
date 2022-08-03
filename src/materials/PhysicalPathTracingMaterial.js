@@ -430,9 +430,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#if FEATURE_MIS
 
-								// weight the contribution
-								float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lights.count + 1u ) );
-								gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
+								// NOTE: we skip MIS for spotlights since we haven't fixed the forward
+								// path tracing code path, yet
+								if ( lightHit.type == SPOT_LIGHT_TYPE ) {
+
+									gl_FragColor.rgb += lightHit.emission * throughputColor;
+
+								} else {
+
+									// weight the contribution
+									float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lights.count + 1u ) );
+									gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
+
+								}
 
 								#else
 
