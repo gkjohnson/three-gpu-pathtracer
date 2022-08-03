@@ -707,6 +707,7 @@ Set of randomness and other light transport utilities for use in a shader. See t
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
+- Spotlights are not supported in non-MIS rendering currently.
 
 # Screenshots
 
