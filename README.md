@@ -116,7 +116,6 @@ ptMaterial.materials.updateFrom( materials, textures );
 
 // update the lights
 ptMaterial.lights.updateFrom( lights );
-ptMaterial.lightCount = lights.length;
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -524,12 +523,7 @@ _extends MaterialBase_
 	textures: RenderTarget2DArray,
 
 	// Light information
-	lights: LightsTexture,
-	lightCount = 0: Number,
-
-	// Spotlight information
-	spotLights: SpotLightsTexture,
-	spotLightCount: Number,
+	lights: LightsInfoUniformStruct,
 	iesProfiles: IESProfilesTexture,
 
 	// Environment Map information
@@ -653,33 +647,17 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
-## LightsTexture
+## LightsInfoUniformStruct
 
-_extends DataTexture_
-
-Helper texture uniform for encoding lights as texture data.
+Helper uniform for encoding lights as texture data with count.
 
 ### .updateFrom
 
 ```js
-updateFrom( lights : Array<Light> ) : void
+updateFrom( lights : Array<Light>, iesTextures = [] : Array<Texture> ) : void
 ```
 
-Updates the size and values of the texture to align with the provided set of lights.
-
-## SpotLightsTexture
-
-_extends DataTexture_
-
-Helper texture uniform for encoding spot lights as texture data.
-
-### .updateFrom
-
-```js
-updateFrom( lights : Array<SpotLight>, iesTextures = [] : Array<Texture> ) : void
-```
-
-Updates the values of the texture to align with the provided set of lights and ies textures.
+Updates the size and values of the texture to align with the provided set of lights and IES textures.
 
 ## EquirectHdrInfoUniform
 
@@ -729,6 +707,7 @@ Set of randomness and other light transport utilities for use in a shader. See t
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
+- Spotlights are not supported in non-MIS rendering currently.
 
 # Screenshots
 

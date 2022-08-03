@@ -13,8 +13,7 @@ import { shaderLightSampling } from '../shader/shaderLightSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
-import { LightsTexture } from '../uniforms/LightsTexture.js';
-import { SpotLightsTexture } from '../uniforms/SpotLightsTexture.js';
+import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
@@ -56,10 +55,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
-				lights: { value: new LightsTexture() },
-				lightCount: { value: 0 },
-				spotLights: { value: new SpotLightsTexture() },
-				spotLightCount: { value: 0 },
+				lights: { value: new LightsInfoUniformStruct() },
 				iesProfiles: { value: new IESProfilesTexture().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
@@ -141,10 +137,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int seed;
 				uniform float opacity;
 				uniform sampler2D materials;
-				uniform sampler2D lights;
-				uniform uint lightCount;
-				uniform sampler2D spotLights;
-				uniform uint spotLightCount;
+				uniform LightsInfo lights;
 				uniform sampler2DArray iesProfiles;
 
 				${ shaderLightSampling }
@@ -425,7 +418,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 
-						LightSampleRec lightHit = lightsClosestHit( lights, lightCount, rayOrigin, rayDirection );
+						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
 
 						if ( lightHit.hit && ( lightHit.dist < dist || !hit ) ) {
 
@@ -437,15 +430,23 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#if FEATURE_MIS
 
-								// weight the contribution
-								float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lightCount + 1u ) );
-								gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
+								// NOTE: we skip MIS for spotlights since we haven't fixed the forward
+								// path tracing code path, yet
+								if ( lightHit.type == SPOT_LIGHT_TYPE ) {
+
+									gl_FragColor.rgb += lightHit.emission * throughputColor;
+
+								} else {
+
+									// weight the contribution
+									float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lights.count + 1u ) );
+									gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
+
+								}
 
 								#else
 
-								gl_FragColor.rgb +=
-									lightHit.emission *
-									throughputColor;
+								gl_FragColor.rgb += lightHit.emission * throughputColor;
 
 								#endif
 
@@ -468,7 +469,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
-								envPdf /= float( lightCount + 1u );
+								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
@@ -789,57 +790,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
 
-						// spot light sampling
-						LightSampleRec lightSampleRec = randomSpotLightSample( spotLights, iesProfiles, spotLightCount, rayOrigin );
-
-						bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
-						if ( isSampleBelowSurface ) {
-
-							lightSampleRec.pdf = 0.0;
-
-						}
-
-						// check if a ray could even reach the light area
-						if (
-							lightSampleRec.pdf > 0.0 &&
-							isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
-							! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
-						) {
-
-							// get the material pdf
-							vec3 sampleColor;
-							float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
-							bool isValidSampleColor = any( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-							if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
-
-								#if FEATURE_MIS
-
-								// weight the direct light contribution
-								float lightPdf = lightSampleRec.pdf;// / float( spotLightCount );
-								float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
-								gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
-
-								#else
-
-								gl_FragColor.rgb +=
-									lightSampleRec.emission *
-									throughputColor *
-									sampleColor;
-
-								#endif
-
-							}
-
-						}
-
 						// direct env map sampling
 						#if FEATURE_MIS
 
 						// uniformly pick a light or environment map
-						if( rand() > 1.0 / float( lightCount + 1u ) ) {
+						if( rand() > 1.0 / float( lights.count + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights, lightCount, rayOrigin );
+							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
@@ -862,7 +820,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
-									float lightPdf = lightSampleRec.pdf / float( lightCount + 1u );
+									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
 									float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
 									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
@@ -902,7 +860,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
-									envPdf /= float( lightCount + 1u );
+									envPdf /= float( lights.count + 1u );
 									float misWeight = misHeuristic( envPdf, envMaterialPdf );
 									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
 
