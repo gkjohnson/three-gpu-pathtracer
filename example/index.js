@@ -73,10 +73,11 @@ const params = {
 	samplesPerFrame: 1,
 
 	temporalResolve: true,
-	temporalResolveMix: 0.75,
+	temporalResolveMix: 0.9,
 	clampRadius: 1,
-	newSamplesSmoothing: 0.5,
-	newSamplesCorrection: 0.75,
+	newSamplesSmoothing: 0.675,
+	newSamplesCorrection: 1,
+	weightTransform: 0,
 
 	model: initialModel,
 
@@ -151,10 +152,11 @@ async function init() {
 	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
 	temporalResolve = new TemporalResolve( ptRenderer, scene, activeCamera );
-	temporalResolve.temporalResolveMix = 0.75;
+	temporalResolve.temporalResolveMix = 0.9;
 	temporalResolve.clampRadius = 1;
 	temporalResolve.newSamplesSmoothing = 0.5;
 	temporalResolve.newSamplesCorrection = 0.75;
+	temporalResolve.weightTransform = 0;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -211,7 +213,7 @@ function animate() {
 
 	}
 
-	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
+	if ( ( ! params.temporalResolve && ptRenderer.samples < 1.0 ) || ! params.enable ) {
 
 		renderer.render( scene, activeCamera );
 
@@ -269,7 +271,7 @@ function animate() {
 
 function resetRenderer() {
 
-	if ( params.tilesX * params.tilesY !== 1.0 ) {
+	if ( ! params.temporalResolve && params.tilesX * params.tilesY !== 1.0 ) {
 
 		delaySamples = 1;
 
@@ -349,6 +351,9 @@ function buildGui() {
 	trFolder
 		.add( params, 'newSamplesCorrection', 0, 1, 0.025 )
 		.onChange( ( value ) => ( temporalResolve.newSamplesCorrection = value ) );
+	trFolder
+		.add( params, 'weightTransform', 0, 0.5, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.weightTransform = value ) );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {

@@ -4,7 +4,6 @@
 	HalfFloatType,
 	LinearFilter,
 	MeshDepthMaterial,
-	NearestFilter,
 	RGBADepthPacking,
 	RGBAFormat,
 	Vector2,
@@ -52,8 +51,8 @@ export class TemporalResolvePass {
 			typeof window !== 'undefined' ? window.innerWidth : 2000,
 			typeof window !== 'undefined' ? window.innerHeight : 1000,
 			{
-				minFilter: NearestFilter,
-				magFilter: NearestFilter,
+				minFilter: LinearFilter,
+				magFilter: LinearFilter,
 			}
 		);
 
@@ -63,10 +62,9 @@ export class TemporalResolvePass {
 
 		this.fullscreenMaterial.uniforms.velocityTexture.value =
 			this.velocityPass.renderTarget.texture;
+
 		this.fullscreenMaterial.uniforms.depthTexture.value =
 			this.depthRenderTarget.texture;
-		this.fullscreenMaterial.uniforms.lastDepthTexture.value =
-			this.lastDepthTexture;
 
 		this.fsQuad = new FullScreenQuad( null );
 		this.fsQuad.material = this.fullscreenMaterial;
@@ -106,14 +104,13 @@ export class TemporalResolvePass {
 			height,
 			RGBAFormat
 		);
-
 		this.accumulatedSamplesTexture.minFilter = LinearFilter;
 		this.accumulatedSamplesTexture.magFilter = LinearFilter;
 		this.accumulatedSamplesTexture.type = HalfFloatType;
 
 		this.lastDepthTexture = new FramebufferTexture( width, height, RGBAFormat );
-		this.lastDepthTexture.minFilter = NearestFilter;
-		this.lastDepthTexture.magFilter = NearestFilter;
+		this.lastDepthTexture.minFilter = LinearFilter;
+		this.lastDepthTexture.magFilter = LinearFilter;
 
 		this.fullscreenMaterial.uniforms.accumulatedSamplesTexture.value =
 			this.accumulatedSamplesTexture;
@@ -130,34 +127,21 @@ export class TemporalResolvePass {
 		this.scene.overrideMaterial = meshDepthMaterial;
 		renderer.setRenderTarget( this.depthRenderTarget );
 		renderer.clear();
-		const { background } = this.scene;
 
+		const { background } = this.scene;
 		this.scene.background = blackColor;
+
 		renderer.render( this.scene, this.camera );
+
 		this.scene.background = background;
 		this.scene.overrideMaterial = null;
 
 		// render velocity
 		this.velocityPass.render( renderer );
 
-		if ( this.ptRenderer.tiles.x !== 1 || this.ptRenderer.tiles.y !== 1 ) {
-
-			if ( this.ptRenderer.samples < 1 ) {
-
-				renderer.setRenderTarget( this.sceneRenderTarget );
-				renderer.clear();
-				renderer.render( this.scene, this.camera );
-
-				this.fullscreenMaterial.uniforms.inputTexture.value =
-					this.sceneRenderTarget.texture;
-
-			}
-
-		} else {
-
-			delete this.fullscreenMaterial.uniforms.inputTexture.value;
-
-		}
+		renderer.setRenderTarget( this.sceneRenderTarget );
+		renderer.clear();
+		renderer.render( this.scene, this.camera );
 
 		// update uniforms of this pass
 		this.fullscreenMaterial.uniforms.curInverseProjectionMatrix.value.copy(

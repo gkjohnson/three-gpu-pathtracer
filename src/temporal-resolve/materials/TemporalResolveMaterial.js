@@ -9,10 +9,10 @@ export class TemporalResolveMaterial extends ShaderMaterial {
 		super( {
 			type: 'TemporalResolveMaterial',
 			uniforms: {
-				inputTexture: { value: null },
 				samplesTexture: { value: null },
 				accumulatedSamplesTexture: { value: null },
 				velocityTexture: { value: null },
+				lastVelocityTexture: { value: null },
 				depthTexture: { value: null },
 				lastDepthTexture: { value: null },
 				samples: { value: 0 },
@@ -26,6 +26,10 @@ export class TemporalResolveMaterial extends ShaderMaterial {
 				prevCameraMatrixWorld: { value: new Matrix4() },
 				cameraNear: { value: 0 },
 				cameraFar: { value: 0 },
+			},
+			defines: {
+				DILATION: '',
+				WEIGHT_TRANSFORM: '1.0'
 			},
 			vertexShader,
 			fragmentShader,

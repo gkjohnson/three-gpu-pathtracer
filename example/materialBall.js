@@ -87,10 +87,11 @@ const params = {
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
 	temporalResolve: true,
-	temporalResolveMix: 0.875,
+	temporalResolveMix: 0.925,
 	clampRadius: 2,
-	newSamplesSmoothing: 0.5,
-	newSamplesCorrection: 0.75,
+	newSamplesSmoothing: 0.675,
+	newSamplesCorrection: 1,
+	weightTransform: 0,
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
@@ -133,7 +134,7 @@ async function init() {
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 4, 2, 3 );
+	perspectiveCamera.position.set( - 4, 2, 7 );
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
@@ -164,10 +165,11 @@ async function init() {
 	scene = new THREE.Scene();
 
 	temporalResolve = new TemporalResolve( ptRenderer, scene, activeCamera );
-	temporalResolve.temporalResolveMix = 0.875;
+	temporalResolve.temporalResolveMix = 0.925;
 	temporalResolve.clampRadius = 2;
-	temporalResolve.newSamplesSmoothing = 0.5;
-	temporalResolve.newSamplesCorrection = 0.75;
+	temporalResolve.newSamplesSmoothing = 0.675;
+	temporalResolve.newSamplesCorrection = 1;
+	temporalResolve.weightTransform = 0;
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -340,6 +342,9 @@ async function init() {
 	trFolder
 		.add( params, 'newSamplesCorrection', 0, 1, 0.025 )
 		.onChange( ( value ) => ( temporalResolve.newSamplesCorrection = value ) );
+	trFolder
+		.add( params, 'weightTransform', 0, 0.5, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.weightTransform = value ) );
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {

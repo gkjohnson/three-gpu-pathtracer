@@ -10,10 +10,10 @@ export class TemporalResolve {
 		this.ptRenderer = ptRenderer;
 		this.scene = scene;
 
-		this.temporalResolveMix = 0.75;
+		this.temporalResolveMix = 0.9;
 		this.clampRadius = 1;
-		this.newSamplesSmoothing = 0.5;
-		this.newSamplesCorrection = 0.75;
+		this.newSamplesSmoothing = 0.675;
+		this.newSamplesCorrection = 1;
 
 		this.fullscreenMaterial = new ComposeTemporalResolveMaterial();
 
@@ -34,6 +34,23 @@ export class TemporalResolve {
 
 		this.initNewCamera( camera );
 		this.initNewSize( window.innerWidth, window.innerHeight );
+
+		let weightTransform = 0;
+		Object.defineProperty( this, 'weightTransform', {
+			set( value ) {
+
+				weightTransform = value;
+
+				this.temporalResolvePass.fullscreenMaterial.defines.WEIGHT_TRANSFORM = ( 1 - value ).toFixed( 5 );
+				this.temporalResolvePass.fullscreenMaterial.needsUpdate = true;
+
+			},
+			get() {
+
+				return weightTransform;
+
+			}
+		} );
 
 	}
 
@@ -70,6 +87,8 @@ export class TemporalResolve {
 	}
 
 	update() {
+
+		while ( this.ptRenderer.samples < 1 ) this.ptRenderer.update();
 
 		const renderer = this.ptRenderer._renderer;
 

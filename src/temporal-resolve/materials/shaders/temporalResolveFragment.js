@@ -1,5 +1,4 @@
 ﻿export const fragmentShader = /* glsl */ `
-uniform sampler2D inputTexture;
 uniform sampler2D samplesTexture;
 uniform sampler2D accumulatedSamplesTexture;
 uniform sampler2D velocityTexture;
@@ -9,7 +8,7 @@ uniform sampler2D lastDepthTexture;
 uniform float samples;
 
 uniform float temporalResolveMix;
-uniform int clampRadius;
+uniform float clampRadius;
 uniform float newSamplesSmoothing;
 uniform float newSamplesCorrection;
 
@@ -26,6 +25,9 @@ varying vec2 vUv;
 
 #include <packing>
 
+#define FLOAT_EPSILON 0.00001
+#define BLUR_EXPONENT 0.25
+
 // credits for transforming screen position to world position: https://discourse.threejs.org/t/reconstruct-world-position-in-screen-space-from-depth-buffer/5532/2
 vec3 screenSpaceToWorldSpace(const vec2 uv, const float depth, mat4 inverseProjectionMatrix, mat4 cameraMatrixWorld) {
     vec4 ndc = vec4(
@@ -40,88 +42,136 @@ vec3 screenSpaceToWorldSpace(const vec2 uv, const float depth, mat4 inverseProje
     return view.xyz;
 }
 
+#ifdef DILATION
+// source: https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/ (modified to GLSL)
+vec4 getDilatedTexture(sampler2D tex, vec2 uv, vec2 texSize) {
+    float closestDepth = 0.;
+    vec2 closestUVOffset;
+
+    for (int j = -1; j <= 1; ++j) {
+        for (int i = -1; i <= 1; ++i) {
+            vec2 uvOffset = vec2(i, j) / texSize;
+
+            float neighborDepth = textureLod(tex, vUv + uvOffset, 0.).b;
+
+            if (neighborDepth > closestDepth) {
+                closestUVOffset = uvOffset;
+                closestDepth = neighborDepth;
+            }
+        }
+    }
+
+    return textureLod(tex, vUv + closestUVOffset, 0.);
+}
+#endif
+
+// idea from: https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/
+vec3 transformColor(vec3 color) {
+    return pow(color, vec3(WEIGHT_TRANSFORM));
+}
+
+vec3 undoColorTransform(vec3 color) {
+	return pow(color, vec3(1. / WEIGHT_TRANSFORM));
+}
+
 void main() {
 	vec4 samplesTexel = texture2D(samplesTexture, vUv);
+	samplesTexel.rgb = transformColor(samplesTexel.rgb);
 
-	// in case this pixel is from a tile that wasn't rendered yet
-	if(samplesTexel.a == 0.){
-		gl_FragColor = vec4(texture2D(inputTexture, vUv).rgb, 0.);
-		return;
-	}
+	ivec2 size = textureSize(samplesTexture, 0);
+	vec2 pxSize = vec2(size.x, size.y);
 
-	vec4 depthTexel = texture2D(depthTexture, vUv);
-		
+#ifdef DILATION
+    vec4 velocity = getDilatedTexture(velocityTexture, vUv, pxSize);
+
+	vec2 velUv = velocity.xy;
+    vec2 reprojectedUv = vUv - velUv;
+#else
+    vec4 velocity = textureLod(velocityTexture, vUv, 0.);
+
+	vec2 velUv = velocity.xy;
+    vec2 reprojectedUv = vUv - velUv;
+#endif
+
 	// background doesn't need reprojection
-	if(length(depthTexel.xyz) == 0.){
+	if(velocity.a == 1.){
+		samplesTexel.rgb = undoColorTransform(samplesTexel.rgb);
 		gl_FragColor = samplesTexel;
 		return;
 	}
 
-	float unpackedDepth = unpackRGBAToDepth(depthTexel);
-	vec3 curWorldPos = screenSpaceToWorldSpace(vUv, unpackedDepth, curInverseProjectionMatrix, curCameraMatrixWorld);
+	// depth textures should not be dilated
+	float unpackedDepth = unpackRGBAToDepth(textureLod(depthTexture, vUv, 0.));
+	float lastUnpackedDepth = unpackRGBAToDepth(textureLod(lastDepthTexture, reprojectedUv, 0.));
 
-
-	ivec2 size = textureSize(samplesTexture, 0);
-	vec2 pxSize = vec2(float(size.x), float(size.y));
-
-    vec4 velocityTexel = texture2D(velocityTexture, vUv);
-
-    vec2 velUv = velocityTexel.xy;
     float movement = length(velUv) * 100.;
 
-    vec2 reprojectedUv = vUv - velUv;
-
-	float lastUnpackedDepth = unpackRGBAToDepth(texture2D(lastDepthTexture, reprojectedUv));
-
+	vec3 curWorldPos = screenSpaceToWorldSpace(vUv, unpackedDepth, curInverseProjectionMatrix, curCameraMatrixWorld);
 	vec3 lastWorldPos = screenSpaceToWorldSpace(vUv, lastUnpackedDepth, prevInverseProjectionMatrix, prevCameraMatrixWorld);
-
-	float distToLastFrame = pow(distance(curWorldPos, lastWorldPos), 2.) * 0.25;
+	float distToLastFrame = length(curWorldPos - lastWorldPos) * 0.25;
 
 	vec4 accumulatedSamplesTexel;
-    vec3 newColor;
+    vec3 outputColor;
 	float alpha;
 
+	bool canReproject = reprojectedUv.x >= 0. && reprojectedUv.x <= 1. && reprojectedUv.y >= 0. && reprojectedUv.y <= 1.;
+
 	// check that the reprojected UV is valid
-	if (reprojectedUv.x >= 0. && reprojectedUv.x <= 1. && reprojectedUv.y >= 0. && reprojectedUv.y <= 1.) {
-		accumulatedSamplesTexel = texture2D(accumulatedSamplesTexture, reprojectedUv);
-		alpha = accumulatedSamplesTexel.a;
-        alpha = distToLastFrame < 0.05 ? (0.1 + alpha) : 0.;
+	if (canReproject) {
+		accumulatedSamplesTexel = textureLod(accumulatedSamplesTexture, reprojectedUv, 0.);
+		accumulatedSamplesTexel.rgb = transformColor(accumulatedSamplesTexel.rgb);
 		
-		vec2 px = 1. / pxSize;
+        alpha = distToLastFrame < 0.05 ? (accumulatedSamplesTexel.a + 0.05) : 0.;
+		alpha = clamp(alpha, 0., 1.);
 
-		vec3 minNeighborColor = vec3(1., 1., 1.);
-		vec3 maxNeighborColor = vec3(0., 0., 0.);
+		if(samplesTexel.a != 0.){
+			vec2 px = 1. / pxSize;
 
-		vec3 totalColor;
+			vec3 boxBlurredColor;
+			float totalWeight;
 
-		// use a small ring if there is a lot of movement otherwise there will be more smearing
-		int ring = movement > 1. ? 1 : clampRadius;
-		
-		for(int x = -ring; x <= ring; x++){
-			for(int y = -ring; y <= ring; y++){
-				vec3 col;
+			vec3 minNeighborColor = vec3(1., 1., 1.);
+			vec3 maxNeighborColor = vec3(0., 0., 0.);
 
-				if(x == 0 && y == 0){
-					col = samplesTexel.rgb;
-				}else{
-					vec2 curOffset = vec2(float(x), float(y));
+			// use a small ring if there is a lot of movement otherwise there will be more smearing
+			float radius = movement > 1. ? 1. : clampRadius;
 
-					col = textureLod(samplesTexture, vUv + px * curOffset, 0.).rgb;
+			vec3 col;
+			float weight;
+			vec2 neighborUv;
+			bool neighborUvValid;
+			
+			for(float x = -radius; x <= radius; x++){
+				for(float y = -radius; y <= radius; y++){
+					neighborUv = vUv + px * vec2(x, y);
+					neighborUvValid = neighborUv.x >= 0. && neighborUv.x <= 1. && neighborUv.y >= 0. && neighborUv.y <= 1.;
+
+					if(!neighborUvValid) continue;
+
+					col = textureLod(samplesTexture, neighborUv, 0.).rgb;
+					col = transformColor(col);
+
+					// box blur
+					if(abs(x) <= 1. && abs(y) <= 1.){
+						weight = 1.0 - abs(dot(col - samplesTexel.rgb, vec3(0.25)));
+						weight = pow(weight, BLUR_EXPONENT);
+						boxBlurredColor += col * weight;
+						totalWeight += weight;
+					}
+
+					minNeighborColor = min(col, minNeighborColor);
+					maxNeighborColor = max(col, maxNeighborColor);
 				}
-
-				minNeighborColor = min(col, minNeighborColor);
-				maxNeighborColor = max(col, maxNeighborColor);
-
-				if(x <= 1 && x >= -1 && y <= 1 && y >= -1) totalColor += col;
 			}
-		}
 
-		// clamp the reprojected frame (neighborhood clamping)
-		accumulatedSamplesTexel.rgb = clamp(accumulatedSamplesTexel.rgb, minNeighborColor, maxNeighborColor);
+			// clamp the reprojected frame (neighborhood clamping)
+			accumulatedSamplesTexel.rgb = clamp(accumulatedSamplesTexel.rgb, minNeighborColor, maxNeighborColor);
 
-		if(newSamplesSmoothing != 0. && alpha < 1.){
-			totalColor /= 9.;
-			samplesTexel.rgb = mix(samplesTexel.rgb, totalColor, newSamplesSmoothing);
+			// let's blur the input color to reduce noise for new samples
+			if(newSamplesSmoothing != 0. && alpha < 1. && totalWeight > FLOAT_EPSILON){
+				boxBlurredColor /= totalWeight;
+				samplesTexel.rgb = mix(samplesTexel.rgb, boxBlurredColor, newSamplesSmoothing);
+			}
 		}
 	} else {
 		// reprojected UV coordinates are outside of screen, so just use the current frame for it
@@ -129,20 +179,24 @@ void main() {
 		accumulatedSamplesTexel.rgb = samplesTexel.rgb;
 	}
 
-	float m = (1. - min(movement * 2., 1.) * (1. - temporalResolveMix)) - (samples - 1.) * 0.01 - 0.025;
-	
+	float m = temporalResolveMix - (samples - 1.) * 0.00675;
 	m = clamp(m, 0., 1.);
 	
-	newColor = accumulatedSamplesTexel.rgb * m + samplesTexel.rgb * (1. - m);
+	outputColor = accumulatedSamplesTexel.rgb * m + samplesTexel.rgb * (1. - m);
 
 	// alpha will be below 1 if the pixel is "new" (e.g. it became disoccluded recently)
-	// so make the final color blend more towards the new pixel
+	// so make the final color blend more towards the new pixel	
 	if(alpha < 1.){
-		float correctionMix = min(movement, 0.5) * newSamplesCorrection;
+		m = (distToLastFrame * distToLastFrame - 0.01) * 50.;
+		m = clamp(m, 0.2, 0.6);
 
-		newColor = mix(newColor, samplesTexel.rgb, correctionMix);
+		outputColor = mix(accumulatedSamplesTexel.rgb, samplesTexel.rgb, m);
 	}
 
-    gl_FragColor = vec4(newColor, alpha);
+	if(movement > 3.) outputColor = mix(accumulatedSamplesTexel.rgb, samplesTexel.rgb, 0.6);
+
+	outputColor = undoColorTransform(outputColor);
+
+    gl_FragColor = vec4(outputColor, alpha);
 }
 `;

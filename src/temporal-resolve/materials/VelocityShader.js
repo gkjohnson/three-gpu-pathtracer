@@ -1,4 +1,7 @@
-import { Matrix4, ShaderChunk } from 'three';
+// this shader is from: https://github.com/gkjohnson/threejs-sandbox
+
+/* eslint-disable camelcase */
+import { ShaderChunk, Matrix4 } from 'three';
 
 // Modified ShaderChunk.skinning_pars_vertex to handle
 // a second set of bone information from the previou frame
@@ -48,9 +51,7 @@ export const velocity_vertex = /* glsl */ `
 
 		// Get the previous vertex position
 		transformed = vec3( position );
-		${ShaderChunk.skinbase_vertex
-		.replace( /mat4 /g, '' )
-		.replace( /getBoneMatrix/g, 'getPrevBoneMatrix' )}
+		${ShaderChunk.skinbase_vertex.replace( /mat4 /g, '' ).replace( /getBoneMatrix/g, 'getPrevBoneMatrix' )}
 		${ShaderChunk.skinning_vertex.replace( /vec4 /g, '' )}
 		prevPosition = prevVelocityMatrix * vec4( transformed, 1.0 );
 
@@ -70,10 +71,12 @@ export const VelocityShader = {
 		alphaTest: { value: 0.0 },
 		map: { value: null },
 		alphaMap: { value: null },
-		opacity: { value: 1.0 },
+		opacity: { value: 1.0 }
 	},
 
 	vertexShader: /* glsl */ `
+			#define MAX_BONES 1024
+			
 			${ShaderChunk.skinning_pars_vertex}
 			${prev_skinning_pars_vertex}
 
@@ -101,11 +104,8 @@ export const VelocityShader = {
 
 				vec2 vel = pos1 - pos0;
 				
-				gl_FragColor = vec4( vel, 0., 1. );
+				gl_FragColor = vec4( vel, 1. - gl_FragCoord.z, 0. );
 
 			}
-		`,
-	defines: {
-		MAX_BONES: 256,
-	},
+		`
 };
