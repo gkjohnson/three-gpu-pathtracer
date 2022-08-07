@@ -323,21 +323,9 @@ async function init() {
 
 	const denoiseFolder = gui.addFolder( 'Denoising' );
 	denoiseFolder.add( params, 'denoiseEnabled' );
-	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 ).onChange( value => {
-
-		denoiseQuad.material.sigma = value;
-
-	} );
-	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 ).onChange( value => {
-
-		denoiseQuad.material.threshold = value;
-
-	} );
-	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 ).onChange( value => {
-
-		denoiseQuad.material.kSigma = value;
-
-	} );
+	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 );
+	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 );
+	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
@@ -647,6 +635,10 @@ function animate() {
 		renderer.render( scene, activeCamera );
 
 	}
+
+	denoiseQuad.material.sigma = params.denoiseSigma;
+	denoiseQuad.material.threshold = params.denoiseThreshold;
+	denoiseQuad.material.kSigma = params.denoiseKSigma;
 
 	const quad = params.denoiseEnabled ? denoiseQuad : blitQuad;
 
