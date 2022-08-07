@@ -1,7 +1,6 @@
 import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
-import { DenoiseMaterial } from '../materials/DenoiseMaterial.js';
 
 function* renderTask() {
 
@@ -105,16 +104,6 @@ function* renderTask() {
 
 				}
 
-				if ( denoise ) {
-
-					denoiseMaterial.map = alpha ? blendTarget2.texture : _primaryTarget.texture;
-
-					_renderer.setRenderTarget( _denoiseTarget );
-					_denoiseQuad.render( _renderer );
-					_renderer.setRenderTarget( ogRenderTarget );
-
-				}
-
 				this.samples += ( 1 / totalTiles );
 
 				yield;
@@ -148,7 +137,7 @@ export class PathTracingRenderer {
 
 	get target() {
 
-		return this._denoise ? this._denoiseTarget : ( this._alpha ? this._blendTargets[ 1 ] : this._primaryTarget );
+		return this._alpha ? this._blendTargets[ 1 ] : this._primaryTarget;
 
 	}
 
@@ -172,24 +161,6 @@ export class PathTracingRenderer {
 
 	}
 
-	set denoise( v ) {
-
-		if ( ! v ) {
-
-			this._denoiseTarget.dispose;
-
-		}
-
-		this._denoise = v;
-
-	}
-
-	get denoise() {
-
-		return this._denoise;
-
-	}
-
 	constructor( renderer ) {
 
 		this.camera = null;
@@ -201,8 +172,6 @@ export class PathTracingRenderer {
 		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
-		this.denoiser = new DenoiseMaterial();
-		this._denoiseQuad = new FullScreenQuad( this.denoiser );
 		this._task = null;
 
 		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
@@ -219,10 +188,6 @@ export class PathTracingRenderer {
 				type: FloatType,
 			} ),
 		];
-		this._denoiseTarget = new WebGLRenderTarget( 1, 1, {
-			format: RGBAFormat,
-			type: FloatType,
-		} );
 
 	}
 

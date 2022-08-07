@@ -8,7 +8,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -147,9 +147,8 @@ async function init() {
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.denoise = params.denoiseEnabled;
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
 	} ) );
@@ -278,7 +277,7 @@ async function init() {
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
 		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-		fsQuad.material.needsUpdate = true;
+		blitQuad.material.needsUpdate = true;
 
 	} );
 	ptFolder.add( params, 'stableNoise' ).onChange( value => {
@@ -652,8 +651,8 @@ function animate() {
 	}
 
 	renderer.autoClear = false;
-	fsQuad.material.map = ptRenderer.target.texture;
-	fsQuad.render( renderer );
+	blitQuad.material.map = ptRenderer.target.texture;
+	blitQuad.render( renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
