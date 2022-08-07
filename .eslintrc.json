@@ -13,6 +13,7 @@
 			}
 		],
 		"quotes": [ "error", "single" ],
-		"indent": [ "error", "tab" ]
+		"indent": [ "error", "tab" ],
+		"no-var": [ "error" ]
 	}
 }

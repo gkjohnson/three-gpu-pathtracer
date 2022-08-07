@@ -9,7 +9,7 @@ import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMater
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
 import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
-import { mergeVertices, computeTangents } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeVertices, computeMikkTSpaceTangents } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let renderer, controls, camera, scene, stats;
 let fsQuad, target1, target2, materials;
@@ -98,7 +98,7 @@ async function init() {
 
 					if ( ! ( 'tangent' in geometry.attributes ) && 'normal' in geometry.attributes && 'uv' in geometry.attributes ) {
 
-						c.geometry = computeTangents( geometry, MikkTSpace );
+						c.geometry = computeMikkTSpaceTangents( geometry, MikkTSpace );
 						c.geometry = mergeVertices( geometry );
 
 					}

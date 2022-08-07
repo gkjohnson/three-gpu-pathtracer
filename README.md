@@ -33,15 +33,32 @@ _More features and capabilities in progress!_
 
 [Area Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/areaLight.html)
 
+[Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
 
 [Transmission Preset Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)
 
+[Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html#khronos-DragonAttenuation)
+
 **Light Baking**
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
+
+
+## Running examples locally
+
+To run and modify the examples locally, make sure you have Node and NPM installed.  Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
+
+In order to install dependencies, you will need `make` and a C++ compiler available.
+
+On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just work on MacOS.
+
+- To install dependencies, run `npm install`
+- To start the demos run `npm start`
+- Visit `http://localhost:1234/<demo-name.html>`
 
 # Use
 
@@ -99,7 +116,6 @@ ptMaterial.materials.updateFrom( materials, textures );
 
 // update the lights
 ptMaterial.lights.updateFrom( lights );
-ptMaterial.lightCount = lights.length;
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -274,7 +290,7 @@ Utility class for generating the set of data required for initializing the path 
 ### .generate
 
 ```js
-generate( scene : Object3D, options = {} : Object ) : {
+generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
 	textures : Array<Texture>,
@@ -293,7 +309,7 @@ See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
 ### .generate
 
 ```js
-async generate( scene : Object3D, options = {} : Object ) : {
+async generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
 	textures : Array<Texture>,
@@ -367,6 +383,40 @@ _extends THREE.Camera_
 
 A class indicating that the path tracer should render an equirectangular view. Does not work with three.js raster rendering.
 
+## PhysicalSpotLight
+
+_extends THREE.SpotLight_
+
+### .radius
+
+```js
+radius = 0 : Number
+```
+
+The radius of the spotlight surface. Increase this value to add softness to shadows.
+
+### .iesTexture
+
+```js
+iesTexture = null : Texture
+```
+
+The loaded IES texture describing directional light intensity. These can be loaded with the `IESLoader`.
+
+Premade IES profiles can be downloaded from [ieslibrary.com]. And custom profiles can be generated using [CNDL](https://cndl.io/).
+
+## ShapedAreaLight
+
+_extends THREE.RectAreaLight_
+
+### .isCircular
+
+```js
+isCircular = false : Boolean
+```
+
+Whether the area light should be rendered as a circle or a rectangle.
+
 ## DynamicPathTracingSceneGenerator
 
 A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
@@ -378,7 +428,7 @@ If geometry or materials are added or removed from the scene then `reset` must b
 ### constructor
 
 ```js
-constructor( scene : Object3D )
+constructor( scene : Object3D | Array<Object3D> )
 ```
 
 Takes the scene to convert.
@@ -402,6 +452,12 @@ reset() : void
 ```
 
 Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
+
+## IESLoader
+
+_extends Loader_
+
+Loader for loading and parsing IES profile data. Load and parse functions return a `DataTexture` with the profile contents.
 
 ## BlurredEnvMapGenerator
 
@@ -467,8 +523,8 @@ _extends MaterialBase_
 	textures: RenderTarget2DArray,
 
 	// Light information
-	lights: LightsTexture,
-	lightCount = 0: Number,
+	lights: LightsInfoUniformStruct,
+	iesProfiles: IESProfilesTexture,
 
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
@@ -506,7 +562,6 @@ _extends MaterialBase_
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
-
 
 }
 ```
@@ -548,6 +603,16 @@ _extends DataTexture_
 
 Helper texture uniform for encoding materials as texture data.
 
+### .threeCompatibilityTransforms
+
+```js
+threeCompatibilityTransforms = false : Boolean
+```
+
+Three.js materials support only a single set of UV transforms in a certain fallback priority while the pathtracer supports a unique set of transforms per texture. Set this field to true in order to use the same uv transform handling as three.js materials.
+
+See fallback order documentation [here](https://threejs.org/docs/#api/en/textures/Texture.offset).
+
 ### .setSide
 
 ```js
@@ -582,19 +647,17 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
-## LightsTexture
+## LightsInfoUniformStruct
 
-_extends DataTexture_
-
-Helper texture uniform for encoding lights as texture data.
+Helper uniform for encoding lights as texture data with count.
 
 ### .updateFrom
 
 ```js
-updateFrom( lights : Array<Light> ) : void
+updateFrom( lights : Array<Light>, iesTextures = [] : Array<Texture> ) : void
 ```
 
-Updates the size and values of the texture to align with the provided set of lights.
+Updates the size and values of the texture to align with the provided set of lights and IES textures.
 
 ## EquirectHdrInfoUniform
 
@@ -644,6 +707,7 @@ Set of randomness and other light transport utilities for use in a shader. See t
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
+- Spotlights are not supported in non-MIS rendering currently.
 
 # Screenshots
 

@@ -4,11 +4,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.0.6] - 2022-08-06
+### Added
+- Support for sheen parameter support
+- Support for iridescence parameter support
+- Support for lights to the DynamicPathTracingGenerator
+- Support for circular area lights
+- Support for spot lights
+- Add support for specular color and intensity control
+- Support for IES Profiles on the new "PhysicalSpotLight" class
+- IESLoader for loading IES profiles as textures
+
+### Changed
+- PhysicalPathTracingMaterial: Default "environment intensity" from 2.0 to 1.0.
+
+### Fixed
+- White hotspots at some glancing angles.
+
+## [0.0.5] - 2022-07-16
 ### Added
 - Support for equirect rendering with EquirectCamera.
 - Support for area lights.
-- Support for spotlights.
+- Support for threejs compatible texture transforms.
+- Support for Clearcoat properties.
+- Support for arrays of objects passed to pathtracer scene generator.
 
 ### Fixed
 - Black renders on M1 Safari devices.

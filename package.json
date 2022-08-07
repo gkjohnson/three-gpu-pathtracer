@@ -1,6 +1,6 @@
 {
   "name": "three-gpu-pathtracer",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "Path tracing renderer and utilities for three.js built on top of three-mesh-bvh.",
   "module": "src/index.js",
   "main": "build/index.umd.cjs",
@@ -31,10 +31,16 @@
   "devDependencies": {
     "eslint": "^7.32.0",
     "eslint-config-mdcs": "^5.0.0",
+    "node-fetch": "^3.2.9",
     "parcel": "^2.4.0",
+    "pixelmatch": "^5.3.0",
+    "pngjs": "^6.0.0",
     "process": "^0.11.10",
+    "puppeteer": "^15.4.0",
     "rollup": "^2.70.0",
-    "three": "^0.141.0"
+    "simple-git": "^3.10.0",
+    "three": "^0.141.0",
+    "yargs": "^17.5.1"
   },
   "peerDependencies": {
     "three": "^0.139.2",
@@ -43,6 +49,8 @@
   "scripts": {
     "start": "cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr",
     "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash",
+    "update-screenshots": "node ./scripts/push-screenshots.js",
+    "screenshot-diff": "node ./scripts/regression-test.js",
     "build": "rollup -c",
     "lint": "eslint \"./src/**/*.{js,ts}\" \"./example/*.js\"",
     "prepublishOnly": "npm run build"
