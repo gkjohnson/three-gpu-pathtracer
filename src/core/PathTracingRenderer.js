@@ -8,20 +8,15 @@ function* renderTask() {
 		_renderer,
 		_fsQuad,
 		_blendQuad,
-		_denoiseQuad,
 		_primaryTarget,
 		_blendTargets,
-		_denoiseTarget,
 		alpha,
-		denoise,
 		camera,
 		material,
 	} = this;
 
 	const blendMaterial = _blendQuad.material;
 	let [ blendTarget1, blendTarget2 ] = _blendTargets;
-
-	const denoiseMaterial = _denoiseQuad.material;
 
 	while ( true ) {
 
@@ -196,7 +191,6 @@ export class PathTracingRenderer {
 		this._primaryTarget.setSize( w, h );
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );
-		this._denoiseTarget.setSize( w, h );
 		this.reset();
 
 	}
@@ -206,7 +200,6 @@ export class PathTracingRenderer {
 		this._primaryTarget.dispose();
 		this._blendTargets[ 0 ].dispose();
 		this._blendTargets[ 1 ].dispose();
-		this._denoiseTarget.dispose();
 
 		this._fsQuad.dispose();
 		this._blendQuad.dispose();
@@ -216,7 +209,7 @@ export class PathTracingRenderer {
 
 	reset() {
 
-		const { _renderer, _primaryTarget, _blendTargets, _denoiseTarget } = this;
+		const { _renderer, _primaryTarget, _blendTargets } = this;
 		const ogRenderTarget = _renderer.getRenderTarget();
 		const ogClearAlpha = _renderer.getClearAlpha();
 		_renderer.getClearColor( ogClearColor );
@@ -230,10 +223,6 @@ export class PathTracingRenderer {
 		_renderer.clearColor();
 
 		_renderer.setRenderTarget( _blendTargets[ 1 ] );
-		_renderer.setClearColor( 0, 0 );
-		_renderer.clearColor();
-
-		_renderer.setRenderTarget( _denoiseTarget );
 		_renderer.setClearColor( 0, 0 );
 		_renderer.clearColor();
 

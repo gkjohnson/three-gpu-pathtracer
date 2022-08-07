@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, materials;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -152,6 +152,8 @@ async function init() {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
 	} ) );
+
+	denoiseQuad = new FullScreenQuad( new DenoiseMaterial() );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -320,24 +322,20 @@ async function init() {
 	} );
 
 	const denoiseFolder = gui.addFolder( 'Denoising' );
-	denoiseFolder.add( params, 'denoiseEnabled' ).onChange( value => {
-
-		ptRenderer.denoise = value;
-
-	} );
+	denoiseFolder.add( params, 'denoiseEnabled' );
 	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 ).onChange( value => {
 
-		ptRenderer.denoiser.sigma = value;
+		denoiseQuad.material.sigma = value;
 
 	} );
 	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 ).onChange( value => {
 
-		ptRenderer.denoiser.threshold = value;
+		denoiseQuad.material.threshold = value;
 
 	} );
 	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 ).onChange( value => {
 
-		ptRenderer.denoiser.kSigma = value;
+		denoiseQuad.material.kSigma = value;
 
 	} );
 
@@ -650,9 +648,11 @@ function animate() {
 
 	}
 
+	const quad = params.denoiseEnabled ? denoiseQuad : blitQuad;
+
 	renderer.autoClear = false;
-	blitQuad.material.map = ptRenderer.target.texture;
-	blitQuad.render( renderer );
+	quad.material.map = ptRenderer.target.texture;
+	quad.render( renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
