@@ -566,6 +566,29 @@ _extends MaterialBase_
 }
 ```
 
+## DenoiseMaterial
+
+_extends MaterialBase_
+
+Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPitt/glslSmartDeNoise) intended to be the final pass to the screen. Includes tonemapping and color space conversions.
+
+**Uniforms**
+
+```js
+{
+
+	// sigma - sigma Standard Deviation
+	// kSigma - sigma coefficient
+	// kSigma * sigma = radius of the circular kernel
+	sigma = 5.0 : Number,
+	kSigma = 1.0 : Number,
+
+	// edge sharpening threshold
+	threshold = 0.03 : Number,
+
+}
+```
+
 ## RenderTarget2DArray
 
 _extends WebGLArrayRenderTarget_
