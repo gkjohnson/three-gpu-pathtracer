@@ -570,7 +570,7 @@ _extends MaterialBase_
 
 _extends MaterialBase_
 
-Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPitt/glslSmartDeNoise)
+Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPitt/glslSmartDeNoise) intended to be the final pass to the screen. Includes tonemapping and color space conversions.
 
 **Uniforms**
 
