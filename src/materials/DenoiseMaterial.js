@@ -27,13 +27,11 @@ export class DenoiseMaterial extends MaterialBase {
 				threshold: { value: 0.03 },
 				kSigma: { value: 1.0 },
 
-				slider: { value: 0.0 },
-
 				map: { value: null },
 
 			},
 
-			vertexShader: `
+			vertexShader: /* glsl */`
 
 				varying vec2 vUv;
 
@@ -46,7 +44,7 @@ export class DenoiseMaterial extends MaterialBase {
 
 			`,
 
-			fragmentShader: `
+			fragmentShader: /* glsl */`
 
 				//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 				//  Copyright (c) 2018-2019 Michele Morrone
@@ -67,8 +65,6 @@ export class DenoiseMaterial extends MaterialBase {
 				uniform float sigma;
 				uniform float threshold;
 				uniform float kSigma;
-
-				uniform float slider;
 
 				varying vec2 vUv;
 
@@ -128,20 +124,7 @@ export class DenoiseMaterial extends MaterialBase {
 
 				void main() {
 
-					vec4 denoised = smartDeNoise( map, vec2( vUv.x, vUv.y ), sigma, kSigma, threshold );
-
-					#if USE_SLIDER
-
-					float slide = slider * 0.5 + 0.5;
-					float szSlide = max( 0.001, 1.0 / float( textureSize( map, 0 ).x ) );
-
-					gl_FragColor = ( vUv.x < slide - szSlide ) ? texture2D( map, vec2( vUv.x, vUv.y ) ) : ( ( vUv.x > slide + szSlide ) ? denoised : vec4( 1.0 ) );
-
-					#else
-
-					gl_FragColor = denoised;
-
-					#endif
+					gl_FragColor = smartDeNoise( map, vec2( vUv.x, vUv.y ), sigma, kSigma, threshold );
 
 				}
 
