@@ -26,12 +26,16 @@ export class TemporalResolve {
 
 		this.fsQuad = new FullScreenQuad( this.fullscreenMaterial );
 
-		this.renderTarget = new WebGLRenderTarget( 1, 1, {
-			minFilter: LinearFilter,
-			magFilter: LinearFilter,
-			type: HalfFloatType,
-			depthBuffer: false,
-		} );
+		this.renderTarget = new WebGLRenderTarget(
+			typeof window !== 'undefined' ? window.innerWidth : 2000,
+			typeof window !== 'undefined' ? window.innerHeight : 1000,
+			{
+				minFilter: LinearFilter,
+				magFilter: LinearFilter,
+				type: HalfFloatType,
+				depthBuffer: false,
+			}
+		);
 
 		this.lastSize = { width: 0, height: 0 };
 
@@ -66,10 +70,10 @@ export class TemporalResolve {
 			this.scene,
 			camera
 		);
-		this.temporalResolvePass.fullscreenMaterial.samplesTexture =
+		this.temporalResolvePass.fullscreenMaterial.uniforms.samplesTexture.value =
 			this.ptRenderer.target.texture;
 
-		this.fullscreenMaterial.temporalResolveTexture =
+		this.fullscreenMaterial.uniforms.temporalResolveTexture.value =
 			this.temporalResolvePass.renderTarget.texture;
 
 	}

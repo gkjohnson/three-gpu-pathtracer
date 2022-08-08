@@ -1,4 +1,5 @@
 // this shader is from: https://github.com/gkjohnson/threejs-sandbox
+
 import { ShaderChunk, Matrix4 } from 'three';
 
 // Modified ShaderChunk.skinning_pars_vertex to handle
@@ -8,6 +9,7 @@ export const prev_skinning_pars_vertex = /* glsl */ `
 		#ifdef BONE_TEXTURE
 			uniform sampler2D prevBoneTexture;
 			mat4 getPrevBoneMatrix( const in float i ) {
+
 				float j = i * 4.0;
 				float x = mod( j, float( boneTextureSize ) );
 				float y = floor( j / float( boneTextureSize ) );
@@ -20,12 +22,15 @@ export const prev_skinning_pars_vertex = /* glsl */ `
 				vec4 v4 = texture2D( prevBoneTexture, vec2( dx * ( x + 3.5 ), y ) );
 				mat4 bone = mat4( v1, v2, v3, v4 );
 				return bone;
+
 			}
 		#else
 			uniform mat4 prevBoneMatrices[ MAX_BONES ];
 			mat4 getPrevBoneMatrix( const in float i ) {
+
 				mat4 bone = prevBoneMatrices[ int(i) ];
 				return bone;
+
 			}
 		#endif
 		#endif
@@ -37,20 +42,20 @@ export const velocity_vertex = /* glsl */ `
 		vec3 transformed;
 
 		// Get the normal
-		${ShaderChunk.skinbase_vertex}
-		${ShaderChunk.beginnormal_vertex}
-		${ShaderChunk.skinnormal_vertex}
-		${ShaderChunk.defaultnormal_vertex}
+		${ ShaderChunk.skinbase_vertex }
+		${ ShaderChunk.beginnormal_vertex }
+		${ ShaderChunk.skinnormal_vertex }
+		${ ShaderChunk.defaultnormal_vertex }
 
 		// Get the current vertex position
 		transformed = vec3( position );
-		${ShaderChunk.skinning_vertex}
+		${ ShaderChunk.skinning_vertex }
 		newPosition = velocityMatrix * vec4( transformed, 1.0 );
 
 		// Get the previous vertex position
 		transformed = vec3( position );
-		${ShaderChunk.skinbase_vertex.replace( /mat4 /g, '' ).replace( /getBoneMatrix/g, 'getPrevBoneMatrix' )}
-		${ShaderChunk.skinning_vertex.replace( /vec4 /g, '' )}
+		${ ShaderChunk.skinbase_vertex.replace( /mat4 /g, '' ).replace( /getBoneMatrix/g, 'getPrevBoneMatrix' ) }
+		${ ShaderChunk.skinning_vertex.replace( /vec4 /g, '' ) }
 		prevPosition = prevVelocityMatrix * vec4( transformed, 1.0 );
 
 		gl_Position = newPosition;
@@ -86,7 +91,7 @@ export const VelocityShader = {
 
 			void main() {
 
-				${velocity_vertex}
+				${ velocity_vertex }
 
 			}
 		`,
@@ -97,12 +102,13 @@ export const VelocityShader = {
 			varying vec4 newPosition;
 
 			void main() {
-				vec2 pos0 = (prevPosition.xy / prevPosition.w) * 0.5 + 0.5;
-				vec2 pos1 = (newPosition.xy / newPosition.w) * 0.5 + 0.5;
+
+				vec2 pos0 = ( prevPosition.xy / prevPosition.w ) * 0.5 + 0.5;
+				vec2 pos1 = ( newPosition.xy / newPosition.w ) * 0.5 + 0.5;
 
 				vec2 vel = pos1 - pos0;
 
-				gl_FragColor = vec4( vel, 1. - gl_FragCoord.z, 0. );
+				gl_FragColor = vec4( vel, 1. - gl_FragCoord.z, 0.0 );
 
 			}
 		`
