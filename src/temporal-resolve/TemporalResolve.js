@@ -5,6 +5,12 @@ import { TemporalResolvePass } from './passes/TemporalResolvePass.js';
 
 export class TemporalResolve {
 
+	get target() {
+
+		return this.renderTarget;
+
+	}
+
 	constructor( ptRenderer, scene, camera ) {
 
 		this.ptRenderer = ptRenderer;
@@ -80,12 +86,6 @@ export class TemporalResolve {
 
 	}
 
-	get target() {
-
-		return this.renderTarget;
-
-	}
-
 	update() {
 
 		while ( this.ptRenderer.samples < 1 ) this.ptRenderer.update();
@@ -122,19 +122,19 @@ export class TemporalResolve {
 		} );
 
 		// keep uniforms updated
-		this.temporalResolvePass.fullscreenMaterial.uniforms.samples.value =
+		this.temporalResolvePass.fullscreenMaterial.samples =
 			this.ptRenderer.samples;
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.temporalResolveMix.value =
+		this.temporalResolvePass.fullscreenMaterial.temporalResolveMix =
 			this.temporalResolveMix;
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.clampRadius.value =
+		this.temporalResolvePass.fullscreenMaterial.clampRadius =
 			parseInt( this.clampRadius );
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.newSamplesSmoothing.value =
+		this.temporalResolvePass.fullscreenMaterial.newSamplesSmoothing =
 			this.newSamplesSmoothing;
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.newSamplesCorrection.value =
+		this.temporalResolvePass.fullscreenMaterial.newSamplesCorrection =
 			this.newSamplesCorrection;
 
 		this.temporalResolvePass.render( renderer );

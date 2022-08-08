@@ -1,10 +1,8 @@
 // this shader is from: https://github.com/gkjohnson/threejs-sandbox
-
-/* eslint-disable camelcase */
 import { ShaderChunk, Matrix4 } from 'three';
 
 // Modified ShaderChunk.skinning_pars_vertex to handle
-// a second set of bone information from the previou frame
+// a second set of bone information from the previous frame
 export const prev_skinning_pars_vertex = /* glsl */ `
 		#ifdef USE_SKINNING
 		#ifdef BONE_TEXTURE
@@ -76,7 +74,7 @@ export const VelocityShader = {
 
 	vertexShader: /* glsl */ `
 			#define MAX_BONES 1024
-			
+
 			${ShaderChunk.skinning_pars_vertex}
 			${prev_skinning_pars_vertex}
 
@@ -103,7 +101,7 @@ export const VelocityShader = {
 				vec2 pos1 = (newPosition.xy / newPosition.w) * 0.5 + 0.5;
 
 				vec2 vel = pos1 - pos0;
-				
+
 				gl_FragColor = vec4( vel, 1. - gl_FragCoord.z, 0. );
 
 			}
