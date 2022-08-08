@@ -1,4 +1,4 @@
-﻿import { ShaderMaterial } from 'three';
+﻿import { MaterialBase } from '../../materials/MaterialBase.js';
 
 const vertexShader = /* glsl */ `
     varying vec2 vUv;
@@ -23,7 +23,7 @@ const fragmentShader = /* glsl */ `
     }
 `;
 
-export class ComposeTemporalResolveMaterial extends ShaderMaterial {
+export class ComposeTemporalResolveMaterial extends MaterialBase {
 
 	constructor() {
 

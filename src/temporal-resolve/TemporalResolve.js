@@ -42,6 +42,7 @@ export class TemporalResolve {
 		this.initNewCamera( camera );
 		this.initNewSize( window.innerWidth, window.innerHeight );
 
+		// TODO: move this to a getter / setter
 		let weightTransform = 0;
 		Object.defineProperty( this, 'weightTransform', {
 			set( value ) {
@@ -70,11 +71,8 @@ export class TemporalResolve {
 			this.scene,
 			camera
 		);
-		this.temporalResolvePass.fullscreenMaterial.uniforms.samplesTexture.value =
-			this.ptRenderer.target.texture;
-
-		this.fullscreenMaterial.uniforms.temporalResolveTexture.value =
-			this.temporalResolvePass.renderTarget.texture;
+		this.temporalResolvePass.fullscreenMaterial.samplesTexture = this.ptRenderer.target.texture;
+		this.fullscreenMaterial.temporalResolveTexture = this.temporalResolvePass.renderTarget.texture;
 
 	}
 

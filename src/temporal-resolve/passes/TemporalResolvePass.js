@@ -27,44 +27,29 @@ export class TemporalResolvePass {
 		this.scene = scene;
 		this.camera = camera;
 
-		this.renderTarget = new WebGLRenderTarget(
-			typeof window !== 'undefined' ? window.innerWidth : 2000,
-			typeof window !== 'undefined' ? window.innerHeight : 1000,
-			{
-				minFilter: LinearFilter,
-				magFilter: LinearFilter,
-				type: HalfFloatType,
-				depthBuffer: false,
-			}
-		);
+		this.renderTarget = new WebGLRenderTarget( 1, 1, {
+			minFilter: LinearFilter,
+			magFilter: LinearFilter,
+			type: HalfFloatType,
+			depthBuffer: false,
+		} );
 
-		this.sceneRenderTarget = new WebGLRenderTarget(
-			typeof window !== 'undefined' ? window.innerWidth : 2000,
-			typeof window !== 'undefined' ? window.innerHeight : 1000,
-			{
-				minFilter: LinearFilter,
-				magFilter: LinearFilter,
-			}
-		);
+		this.sceneRenderTarget = new WebGLRenderTarget( 1, 1, {
+			minFilter: LinearFilter,
+			magFilter: LinearFilter,
+		} );
 
-		this.depthRenderTarget = new WebGLRenderTarget(
-			typeof window !== 'undefined' ? window.innerWidth : 2000,
-			typeof window !== 'undefined' ? window.innerHeight : 1000,
-			{
-				minFilter: LinearFilter,
-				magFilter: LinearFilter,
-			}
-		);
+		this.depthRenderTarget = new WebGLRenderTarget( 1, 1, {
+			minFilter: LinearFilter,
+			magFilter: LinearFilter,
+		} );
 
 		this.velocityPass = new VelocityPass( scene, camera );
 
 		this.fullscreenMaterial = new TemporalResolveMaterial();
 
-		this.fullscreenMaterial.uniforms.velocityTexture.value =
-			this.velocityPass.renderTarget.texture;
-
-		this.fullscreenMaterial.uniforms.depthTexture.value =
-			this.depthRenderTarget.texture;
+		this.fullscreenMaterial.velocityTexture = this.velocityPass.renderTarget.texture;
+		this.fullscreenMaterial.depthTexture = this.depthRenderTarget.texture;
 
 		this.fsQuad = new FullScreenQuad( null );
 		this.fsQuad.material = this.fullscreenMaterial;
@@ -112,10 +97,8 @@ export class TemporalResolvePass {
 		this.lastDepthTexture.minFilter = LinearFilter;
 		this.lastDepthTexture.magFilter = LinearFilter;
 
-		this.fullscreenMaterial.uniforms.accumulatedSamplesTexture.value =
-			this.accumulatedSamplesTexture;
-		this.fullscreenMaterial.uniforms.lastDepthTexture.value =
-			this.lastDepthTexture;
+		this.fullscreenMaterial.accumulatedSamplesTexture = this.accumulatedSamplesTexture;
+		this.fullscreenMaterial.lastDepthTexture = this.lastDepthTexture;
 
 		this.fullscreenMaterial.needsUpdate = true;
 
@@ -144,14 +127,14 @@ export class TemporalResolvePass {
 		renderer.render( this.scene, this.camera );
 
 		// update uniforms of this pass
-		this.fullscreenMaterial.uniforms.curInverseProjectionMatrix.value.copy(
+		this.fullscreenMaterial.curInverseProjectionMatrix.copy(
 			this.camera.projectionMatrixInverse
 		);
-		this.fullscreenMaterial.uniforms.curCameraMatrixWorld.value.copy(
+		this.fullscreenMaterial.curCameraMatrixWorld.copy(
 			this.camera.matrixWorld
 		);
-		this.fullscreenMaterial.uniforms.cameraNear.value = this.camera.near;
-		this.fullscreenMaterial.uniforms.cameraFar.value = this.camera.far;
+		this.fullscreenMaterial.cameraNear = this.camera.near;
+		this.fullscreenMaterial.cameraFar = this.camera.far;
 
 		// now render this fullscreen pass
 		renderer.setRenderTarget( this.renderTarget );
@@ -163,10 +146,10 @@ export class TemporalResolvePass {
 		renderer.setRenderTarget( this.depthRenderTarget );
 		renderer.copyFramebufferToTexture( zeroVec2, this.lastDepthTexture );
 
-		this.fullscreenMaterial.uniforms.prevInverseProjectionMatrix.value.copy(
+		this.fullscreenMaterial.prevInverseProjectionMatrix.copy(
 			this.camera.projectionMatrixInverse
 		);
-		this.fullscreenMaterial.uniforms.prevCameraMatrixWorld.value.copy(
+		this.fullscreenMaterial.prevCameraMatrixWorld.copy(
 			this.camera.matrixWorld
 		);
 
