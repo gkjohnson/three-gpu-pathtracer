@@ -153,7 +153,10 @@ async function init() {
 		blending: THREE.CustomBlending,
 	} ) );
 
-	denoiseQuad = new FullScreenQuad( new DenoiseMaterial() );
+	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
+		map: ptRenderer.target.texture,
+		blending: THREE.CustomBlending,
+	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
