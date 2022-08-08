@@ -6,11 +6,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
+- DenoiseMaterial based on "glslSmartDenoise" to smooth the final render
+
+## [0.0.6] - 2022-08-06
+### Added
 - Support for sheen parameter support
 - Support for iridescence parameter support
 - Support for lights to the DynamicPathTracingGenerator
 - Support for circular area lights
 - Support for spot lights
+- Add support for specular color and intensity control
 - Support for IES Profiles on the new "PhysicalSpotLight" class
 - IESLoader for loading IES profiles as textures
 

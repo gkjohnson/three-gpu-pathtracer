@@ -33,6 +33,8 @@ _More features and capabilities in progress!_
 
 [Area Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/areaLight.html)
 
+[Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
@@ -114,7 +116,6 @@ ptMaterial.materials.updateFrom( materials, textures );
 
 // update the lights
 ptMaterial.lights.updateFrom( lights );
-ptMaterial.lightCount = lights.length;
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -580,12 +581,7 @@ _extends MaterialBase_
 	textures: RenderTarget2DArray,
 
 	// Light information
-	lights: LightsTexture,
-	lightCount = 0: Number,
-
-	// Spotlight information
-	spotLights: SpotLightsTexture,
-	spotLightCount: Number,
+	lights: LightsInfoUniformStruct,
 	iesProfiles: IESProfilesTexture,
 
 	// Environment Map information
@@ -624,6 +620,29 @@ _extends MaterialBase_
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
+
+}
+```
+
+## DenoiseMaterial
+
+_extends MaterialBase_
+
+Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPitt/glslSmartDeNoise) intended to be the final pass to the screen. Includes tonemapping and color space conversions.
+
+**Uniforms**
+
+```js
+{
+
+	// sigma - sigma Standard Deviation
+	// kSigma - sigma coefficient
+	// kSigma * sigma = radius of the circular kernel
+	sigma = 5.0 : Number,
+	kSigma = 1.0 : Number,
+
+	// edge sharpening threshold
+	threshold = 0.03 : Number,
 
 }
 ```
@@ -709,33 +728,17 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
-## LightsTexture
+## LightsInfoUniformStruct
 
-_extends DataTexture_
-
-Helper texture uniform for encoding lights as texture data.
+Helper uniform for encoding lights as texture data with count.
 
 ### .updateFrom
 
 ```js
-updateFrom( lights : Array<Light> ) : void
+updateFrom( lights : Array<Light>, iesTextures = [] : Array<Texture> ) : void
 ```
 
-Updates the size and values of the texture to align with the provided set of lights.
-
-## SpotLightsTexture
-
-_extends DataTexture_
-
-Helper texture uniform for encoding spot lights as texture data.
-
-### .updateFrom
-
-```js
-updateFrom( lights : Array<SpotLight>, iesTextures = [] : Array<Texture> ) : void
-```
-
-Updates the values of the texture to align with the provided set of lights and ies textures.
+Updates the size and values of the texture to align with the provided set of lights and IES textures.
 
 ## EquirectHdrInfoUniform
 
@@ -785,6 +788,7 @@ Set of randomness and other light transport utilities for use in a shader. See t
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
+- Spotlights are not supported in non-MIS rendering currently.
 
 # Screenshots
 

@@ -352,49 +352,49 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 			index ++;
 
-			// map transform
+			// map transform 14
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
 
-			// metalnessMap transform
+			// metalnessMap transform 16
 			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
 
-			// roughnessMap transform
+			// roughnessMap transform 18
 			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
 
-			// transmissionMap transform
+			// transmissionMap transform 20
 			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
 
-			// emissiveMap transform
+			// emissiveMap transform 22
 			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
 
-			// normalMap transform
+			// normalMap transform 24
 			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
 
-			// clearcoatMap transform
+			// clearcoatMap transform 26
 			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
 
-			// clearcoatNormalMap transform
+			// clearcoatNormalMap transform 28
 			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
 
-			// clearcoatRoughnessMap transform
+			// clearcoatRoughnessMap transform 30
 			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
 
-			// sheenColorMap transform
+			// sheenColorMap transform 32
 			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
 
-			// sheenRoughnessMap transform
+			// sheenRoughnessMap transform 34
 			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
 
-			// iridescenceMap transform
+			// iridescenceMap transform 36
 			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
 
-			// iridescenceThicknessMap transform
+			// iridescenceThicknessMap transform 38
 			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
 
-			// specularColorMap transform
+			// specularColorMap transform 40
 			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
 
-			// specularIntensityMap transform
+			// specularIntensityMap transform 42
 			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
 
 		}

@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TemporalResolve } from '../src/temporal-resolve/TemporalResolve.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials, temporalResolve;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials, temporalResolve;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -78,6 +78,10 @@ const params = {
 	},
 	multipleImportanceSampling: true,
 	stableNoise: false,
+	denoiseEnabled: true,
+	denoiseSigma: 2.5,
+	denoiseThreshold: 0.1,
+	denoiseKSigma: 1.0,
 	environmentIntensity: 1,
 	environmentRotation: 0,
 	environmentBlur: 0.0,
@@ -150,7 +154,12 @@ async function init() {
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+		map: ptRenderer.target.texture,
+		blending: THREE.CustomBlending,
+	} ) );
+
+	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
 	} ) );
@@ -286,7 +295,7 @@ async function init() {
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
 		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-		fsQuad.material.needsUpdate = true;
+		blitQuad.material.needsUpdate = true;
 
 	} );
 	ptFolder.add( params, 'stableNoise' ).onChange( value => {
@@ -345,6 +354,11 @@ async function init() {
 	trFolder
 		.add( params, 'weightTransform', 0, 0.5, 0.025 )
 		.onChange( ( value ) => ( temporalResolve.weightTransform = value ) );
+	const denoiseFolder = gui.addFolder( 'Denoising' );
+	denoiseFolder.add( params, 'denoiseEnabled' );
+	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 );
+	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 );
+	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
@@ -655,19 +669,15 @@ function animate() {
 
 	}
 
+	denoiseQuad.material.sigma = params.denoiseSigma;
+	denoiseQuad.material.threshold = params.denoiseThreshold;
+	denoiseQuad.material.kSigma = params.denoiseKSigma;
+
+	const quad = params.denoiseEnabled ? denoiseQuad : blitQuad;
+
 	renderer.autoClear = false;
-	if ( params.temporalResolve ) {
-
-		temporalResolve.update();
-		fsQuad.material.map = temporalResolve.target.texture;
-
-	} else {
-
-		fsQuad.material.map = ptRenderer.target.texture;
-
-	}
-
-	fsQuad.render( renderer );
+	quad.material.map = ptRenderer.target.texture;
+	quad.render( renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;

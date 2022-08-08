@@ -15,8 +15,7 @@ export * from './uniforms/MaterialsTexture.js';
 export * from './uniforms/RenderTarget2DArray.js';
 export * from './uniforms/EquirectHdrInfoUniform.js';
 export * from './uniforms/PhysicalCameraUniform.js';
-export * from './uniforms/LightsTexture.js';
-export * from './uniforms/SpotLightsTexture.js';
+export * from './uniforms/LightsInfoUniformStruct.js';
 export * from './uniforms/IESProfilesTexture.js';
 
 // utils
@@ -25,6 +24,7 @@ export * from './utils/BlurredEnvMapGenerator.js';
 export * from './utils/IESLoader.js';
 
 // materials
+export * from './materials/DenoiseMaterial';
 export * from './materials/MaterialBase.js';
 export * from './materials/PhysicalPathTracingMaterial.js';
 
