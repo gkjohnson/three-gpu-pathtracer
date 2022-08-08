@@ -677,6 +677,14 @@ function animate() {
 
 	renderer.autoClear = false;
 	quad.material.map = ptRenderer.target.texture;
+
+	if ( params.temporalResolve ) {
+
+		temporalResolve.update();
+		quad.material.map = temporalResolve.target.texture;
+
+	}
+
 	quad.render( renderer );
 	renderer.autoClear = true;
 

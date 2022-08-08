@@ -146,26 +146,26 @@ void main() {
 					neighborUv = vUv + px * vec2(x, y);
 					neighborUvValid = neighborUv.x >= 0. && neighborUv.x <= 1. && neighborUv.y >= 0. && neighborUv.y <= 1.;
 
-					if(!neighborUvValid) continue;
+					if(neighborUvValid){
+						col = textureLod(samplesTexture, neighborUv, 0.).rgb;
+						col = transformColor(col);
 
-					col = textureLod(samplesTexture, neighborUv, 0.).rgb;
-					col = transformColor(col);
+						// box blur
+						if(abs(x) <= 1. && abs(y) <= 1.){
+							weight = 1.0 - abs(dot(col - samplesTexel.rgb, vec3(0.25)));
+							weight = pow(weight, BLUR_EXPONENT);
+							boxBlurredColor += col * weight;
+							totalWeight += weight;
+						}
 
-					// box blur
-					if(abs(x) <= 1. && abs(y) <= 1.){
-						weight = 1.0 - abs(dot(col - samplesTexel.rgb, vec3(0.25)));
-						weight = pow(weight, BLUR_EXPONENT);
-						boxBlurredColor += col * weight;
-						totalWeight += weight;
+						minNeighborColor = min(col, minNeighborColor);
+						maxNeighborColor = max(col, maxNeighborColor);
 					}
-
-					minNeighborColor = min(col, minNeighborColor);
-					maxNeighborColor = max(col, maxNeighborColor);
 				}
 			}
 
 			// clamp the reprojected frame (neighborhood clamping)
-			accumulatedSamplesTexel.rgb = clamp(accumulatedSamplesTexel.rgb, minNeighborColor, maxNeighborColor);
+			accumulatedSamplesTexel.rgb = mix(accumulatedSamplesTexel.rgb, clamp(accumulatedSamplesTexel.rgb, minNeighborColor, maxNeighborColor), newSamplesCorrection);
 
 			// let's blur the input color to reduce noise for new samples
 			if(newSamplesSmoothing != 0. && alpha < 1. && totalWeight > FLOAT_EPSILON){
