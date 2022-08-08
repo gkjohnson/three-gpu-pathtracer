@@ -1,6 +1,6 @@
 ﻿import { MaterialBase } from '../../materials/MaterialBase.js';
 
-const vertexShader = /* glsl */ `
+const vertexShader = /* glsl */`
     varying vec2 vUv;
 
     void main() {
@@ -11,7 +11,7 @@ const vertexShader = /* glsl */ `
     }
 `;
 
-const fragmentShader = /* glsl */ `
+const fragmentShader = /* glsl */`
     varying vec2 vUv;
 
     uniform sampler2D temporalResolveTexture;
