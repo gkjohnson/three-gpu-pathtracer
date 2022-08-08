@@ -1,6 +1,6 @@
 ﻿import { Matrix4, ShaderMaterial } from 'three';
-import { fragmentShader } from './shaders/temporalResolveFragment';
-import { vertexShader } from './shaders/temporalResolveVertex';
+import { fragmentShader } from './shaders/temporalResolveFragment.js';
+import { vertexShader } from './shaders/temporalResolveVertex.js';
 
 export class TemporalResolveMaterial extends ShaderMaterial {
 

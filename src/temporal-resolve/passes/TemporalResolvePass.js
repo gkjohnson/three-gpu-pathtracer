@@ -10,8 +10,8 @@
 	WebGLRenderTarget
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { TemporalResolveMaterial } from '../materials/TemporalResolveMaterial';
-import { VelocityPass } from './VelocityPass';
+import { TemporalResolveMaterial } from '../materials/TemporalResolveMaterial.js';
+import { VelocityPass } from './VelocityPass.js';
 
 const zeroVec2 = new Vector2();
 const meshDepthMaterial = new MeshDepthMaterial( {

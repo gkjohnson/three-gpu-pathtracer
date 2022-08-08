@@ -1,7 +1,7 @@
 ﻿import { HalfFloatType, LinearFilter, WebGLRenderTarget } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass';
-import { ComposeTemporalResolveMaterial } from './materials/ComposeTemporalResolveMaterial';
-import { TemporalResolvePass } from './passes/TemporalResolvePass';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { ComposeTemporalResolveMaterial } from './materials/ComposeTemporalResolveMaterial.js';
+import { TemporalResolvePass } from './passes/TemporalResolvePass.js';
 
 export class TemporalResolve {
 

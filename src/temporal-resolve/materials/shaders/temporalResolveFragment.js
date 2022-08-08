@@ -120,7 +120,7 @@ void main() {
 	if (canReproject) {
 		accumulatedSamplesTexel = textureLod(accumulatedSamplesTexture, reprojectedUv, 0.);
 		accumulatedSamplesTexel.rgb = transformColor(accumulatedSamplesTexel.rgb);
-		
+
         alpha = distToLastFrame < 0.05 ? (accumulatedSamplesTexel.a + 0.05) : 0.;
 		alpha = clamp(alpha, 0., 1.);
 
@@ -140,7 +140,7 @@ void main() {
 			float weight;
 			vec2 neighborUv;
 			bool neighborUvValid;
-			
+
 			for(float x = -radius; x <= radius; x++){
 				for(float y = -radius; y <= radius; y++){
 					neighborUv = vUv + px * vec2(x, y);
@@ -182,7 +182,7 @@ void main() {
 	float m = (1. - min(movement * 2., 1.) * (1. - temporalResolveMix)) - (samples - 1.) * 0.01 - 0.025;
 	
 	m = clamp(m, 0., 1.);
-	
+
 	outputColor = accumulatedSamplesTexel.rgb * m + samplesTexel.rgb * (1. - m);
 	// alpha will be below 1 if the pixel is "new" (e.g. it became disoccluded recently)
 	// so make the final color blend more towards the new pixel
