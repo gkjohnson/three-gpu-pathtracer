@@ -38,13 +38,13 @@ function* renderTask() {
 		material.resolution.set( w, h );
 		material.seed ++;
 
-		const tx = this.tiles.x || 1;
-		const ty = this.tiles.y || 1;
-		const totalTiles = tx * ty;
+		const tilesX = this.tiles.x || 1;
+		const tilesY = this.tiles.y || 1;
+		const totalTiles = tilesX * tilesY;
 		const dprInv = ( 1 / _renderer.getPixelRatio() );
-		for ( let y = 0; y < ty; y ++ ) {
+		for ( let y = 0; y < tilesY; y ++ ) {
 
-			for ( let x = 0; x < tx; x ++ ) {
+			for ( let x = 0; x < tilesX; x ++ ) {
 
 				material.cameraWorldMatrix.copy( camera.matrixWorld );
 				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
@@ -73,14 +73,26 @@ function* renderTask() {
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
 
+				let tx = x;
+				let ty = y;
+				if ( ! this.stableTiles ) {
+
+					const tileIndex = ( this._currentTile ) % ( tilesX * tilesY );
+					tx = tileIndex % tilesX;
+					ty = ~ ~ ( tileIndex / tilesY );
+
+					this._currentTile = tileIndex + 1;
+
+				}
+
 				// three.js renderer takes values relative to the current pixel ratio
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
 				_renderer.setScissor(
-					dprInv * Math.ceil( x * w / tx ),
-					dprInv * Math.ceil( ( ty - y - 1 ) * h / ty ),
-					dprInv * Math.ceil( w / tx ),
-					dprInv * Math.ceil( h / ty ) );
+					dprInv * Math.ceil( tx * w / tilesX ),
+					dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ),
+					dprInv * Math.ceil( w / tilesX ),
+					dprInv * Math.ceil( h / tilesY ) );
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
 
@@ -163,11 +175,14 @@ export class PathTracingRenderer {
 
 		this.samples = 0;
 		this.stableNoise = false;
+		this.stableTiles = true;
+
 		this._renderer = renderer;
 		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
+		this._currentTile = 0;
 
 		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
 			format: RGBAFormat,
