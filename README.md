@@ -245,6 +245,14 @@ stableNoise = false : Boolean
 
 Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
 
+### .stableTiles
+
+```js
+stableTiles = true : Boolean
+```
+
+Whether the initial tile is reset to the top left tile when moving the camera or if it should continue to shift every frame.
+
 ### .alpha
 
 ```js
