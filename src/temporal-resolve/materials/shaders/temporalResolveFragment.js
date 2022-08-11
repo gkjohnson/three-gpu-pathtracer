@@ -27,7 +27,7 @@ varying vec2 vUv;
 #include <packing>
 
 #define FLOAT_EPSILON 0.00001
-#define BLUR_EXPONENT 0.25
+#define BLUR_EXPONENT 0.5
 #define MAX_NEIGHBOR_DEPTH_DIFFERENCE 0.001
 
 // credits for transforming screen position to world position: https://discourse.threejs.org/t/reconstruct-world-position-in-screen-space-from-depth-buffer/5532/2
@@ -52,11 +52,11 @@ vec4 getDilatedTexture( sampler2D tex, vec2 uv, vec2 texSize ) {
     float closestDepth = 0.0;
     vec2 closestUVOffset;
 
-    for ( int j = - 1; j <= 1; ++ j ) {
+    for ( int x = - 1; x <= 1; ++ x ) {
 
-        for ( int i = - 1; i <= 1; ++ i ) {
+        for ( int y = - 1; y <= 1; ++ y ) {
 
-            vec2 uvOffset = vec2( i, j ) / texSize;
+            vec2 uvOffset = vec2( x, y ) / texSize;
             float neighborDepth = textureLod( tex, vUv + uvOffset, 0.0 ).b;
             if ( neighborDepth > closestDepth ) {
 
@@ -141,7 +141,7 @@ void main() {
 		accumulatedSamplesTexel = textureLod( accumulatedSamplesTexture, reprojectedUv, 0.0 );
 		accumulatedSamplesTexel.rgb = transformColor( accumulatedSamplesTexel.rgb );
 
-        alpha = distToLastFrame < 0.05 ? ( accumulatedSamplesTexel.a + 0.05 ) : 0.0;
+        alpha = distToLastFrame < 0.25 ? ( accumulatedSamplesTexel.a + 0.05 ) : 0.0;
 
 		// alpha = 0.0 is reserved for the background (to find out if the tile hasn't been rendered yet)
 		alpha = clamp( alpha, FLOAT_EPSILON, 1.0 );
@@ -239,13 +239,9 @@ void main() {
 	// alpha will be below 1 if the pixel is "new" (e.g. it became disoccluded recently)
 	// so make the final color blend more towards the new pixel
 	if( alpha < 1.0 ) {
-
-		if( distToLastFrame < 0.0 ) {
-			outputColor = accumulatedSamplesTexel.rgb;
-		}else{
-			float correctionMix = min( movement, 0.5 ) * newSamplesCorrection;
-			outputColor = mix( outputColor, samplesTexel.rgb, correctionMix );
-		}
+		
+		float correctionMix = min( movement, 0.5 ) * newSamplesCorrection;
+		outputColor = mix( outputColor, samplesTexel.rgb, correctionMix );
 
 	}
 
