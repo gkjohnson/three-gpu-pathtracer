@@ -79,7 +79,7 @@ function* renderTask() {
 
 					const tileIndex = ( this._currentTile ) % ( tilesX * tilesY );
 					tx = tileIndex % tilesX;
-					ty = ~ ~ ( tileIndex / tilesY );
+					ty = ~ ~ ( tileIndex / tilesX );
 
 					this._currentTile = tileIndex + 1;
 
