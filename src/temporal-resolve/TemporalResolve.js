@@ -81,6 +81,7 @@ export class TemporalResolve {
 		this.lastSize.width = width;
 		this.lastSize.height = height;
 
+		this.renderTarget.setSize( width, height );
 		this.temporalResolvePass.setSize( width, height );
 
 	}

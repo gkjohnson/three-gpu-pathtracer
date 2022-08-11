@@ -34,11 +34,6 @@ export class TemporalResolvePass {
 			depthBuffer: false,
 		} );
 
-		this.sceneRenderTarget = new WebGLRenderTarget( 1, 1, {
-			minFilter: LinearFilter,
-			magFilter: LinearFilter,
-		} );
-
 		this.depthRenderTarget = new WebGLRenderTarget( 1, 1, {
 			minFilter: NearestFilter,
 			magFilter: NearestFilter,
@@ -70,7 +65,6 @@ export class TemporalResolvePass {
 	setSize( width, height ) {
 
 		this.renderTarget.setSize( width, height );
-		this.sceneRenderTarget.setSize( width, height );
 		this.depthRenderTarget.setSize( width, height );
 		this.velocityPass.setSize( width, height );
 
@@ -121,10 +115,6 @@ export class TemporalResolvePass {
 
 		// render velocity
 		this.velocityPass.render( renderer );
-
-		renderer.setRenderTarget( this.sceneRenderTarget );
-		renderer.clear();
-		renderer.render( this.scene, this.camera );
 
 		// update uniforms of this pass
 		this.fullscreenMaterial.tileCount = this.ptRenderer.tiles.x * this.ptRenderer.tiles.y;
