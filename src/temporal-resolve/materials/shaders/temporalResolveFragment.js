@@ -112,8 +112,8 @@ void main() {
 	// background doesn't need reprojection
 	if( velocity.a == 1.0 ) {
 
-		samplesTexel.rgb = undoColorTransform(samplesTexel.rgb);
-		gl_FragColor = vec4(samplesTexel.rgb, isTileRendered ? 1.0 : 0.0);
+		samplesTexel.rgb = undoColorTransform( samplesTexel.rgb );
+		gl_FragColor = vec4( samplesTexel.rgb, isTileRendered ? 1.0 : 0.0 );
 		
 		return;
 
@@ -205,7 +205,7 @@ void main() {
 			if ( newSamplesSmoothing != 0.0 && alpha < 1.0 && totalWeight > FLOAT_EPSILON ) {
 
 				boxBlurredColor /= totalWeight;
-				samplesTexel.rgb = mix(samplesTexel.rgb, boxBlurredColor, newSamplesSmoothing);
+				samplesTexel.rgb = mix( samplesTexel.rgb, boxBlurredColor, newSamplesSmoothing );
 
 			}
 
@@ -228,7 +228,7 @@ void main() {
 
 	}
 
-	float tileFactor = max(0.5, 1.0 - (tileCount - 1.0) * 0.025);
+	float tileFactor = max( 0.5, 1.0 - ( tileCount - 1.0 ) * 0.025 );
 
 	float m = ( 1.0 - min( movement * 2.0, 1.0 ) * ( 1.0 - temporalResolveMix ) ) * tileFactor - ( samples - 1.0 ) * 0.0025 - 0.025;
 
