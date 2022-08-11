@@ -9,7 +9,7 @@
 	UniformsUtils,
 	WebGLRenderTarget
 } from 'three';
-import { VelocityShader } from '../materials/VelocityShader';
+import { VelocityShader } from '../materials/VelocityShader.js';
 
 const backgroundColor = new Color( 0 );
 const updateProperties = [ 'visible', 'wireframe', 'side' ];

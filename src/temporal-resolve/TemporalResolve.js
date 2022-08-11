@@ -1,15 +1,22 @@
 ﻿import { HalfFloatType, LinearFilter, WebGLRenderTarget } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass';
-import { ComposeTemporalResolveMaterial } from './materials/ComposeTemporalResolveMaterial';
-import { TemporalResolvePass } from './passes/TemporalResolvePass';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { ComposeTemporalResolveMaterial } from './materials/ComposeTemporalResolveMaterial.js';
+import { TemporalResolvePass } from './passes/TemporalResolvePass.js';
 
 export class TemporalResolve {
+
+	get target() {
+
+		return this.renderTarget;
+
+	}
 
 	constructor( ptRenderer, scene, camera ) {
 
 		this.ptRenderer = ptRenderer;
 		this.scene = scene;
 
+		// parameters
 		this.temporalResolveMix = 0.9;
 		this.clampRadius = 1;
 		this.newSamplesSmoothing = 0.675;
@@ -35,6 +42,7 @@ export class TemporalResolve {
 		this.initNewCamera( camera );
 		this.initNewSize( window.innerWidth, window.innerHeight );
 
+		// TODO: move this to a getter / setter
 		let weightTransform = 0;
 		Object.defineProperty( this, 'weightTransform', {
 			set( value ) {
@@ -63,11 +71,8 @@ export class TemporalResolve {
 			this.scene,
 			camera
 		);
-		this.temporalResolvePass.fullscreenMaterial.uniforms.samplesTexture.value =
-			this.ptRenderer.target.texture;
-
-		this.fullscreenMaterial.uniforms.temporalResolveTexture.value =
-			this.temporalResolvePass.renderTarget.texture;
+		this.temporalResolvePass.fullscreenMaterial.samplesTexture = this.ptRenderer.target.texture;
+		this.fullscreenMaterial.temporalResolveTexture = this.temporalResolvePass.renderTarget.texture;
 
 	}
 
@@ -77,12 +82,6 @@ export class TemporalResolve {
 		this.lastSize.height = height;
 
 		this.temporalResolvePass.setSize( width, height );
-
-	}
-
-	get target() {
-
-		return this.renderTarget;
 
 	}
 
@@ -122,19 +121,19 @@ export class TemporalResolve {
 		} );
 
 		// keep uniforms updated
-		this.temporalResolvePass.fullscreenMaterial.uniforms.samples.value =
+		this.temporalResolvePass.fullscreenMaterial.samples =
 			this.ptRenderer.samples;
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.temporalResolveMix.value =
+		this.temporalResolvePass.fullscreenMaterial.temporalResolveMix =
 			this.temporalResolveMix;
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.clampRadius.value =
+		this.temporalResolvePass.fullscreenMaterial.clampRadius =
 			parseInt( this.clampRadius );
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.newSamplesSmoothing.value =
+		this.temporalResolvePass.fullscreenMaterial.newSamplesSmoothing =
 			this.newSamplesSmoothing;
 
-		this.temporalResolvePass.fullscreenMaterial.uniforms.newSamplesCorrection.value =
+		this.temporalResolvePass.fullscreenMaterial.newSamplesCorrection =
 			this.newSamplesCorrection;
 
 		this.temporalResolvePass.render( renderer );
