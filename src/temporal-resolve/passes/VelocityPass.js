@@ -54,6 +54,8 @@ export class VelocityPass {
 						fragmentShader: VelocityShader.fragmentShader
 					} );
 
+					c.material = velocityMaterial;
+
 					if ( c.skeleton && c.skeleton.boneTexture ) this.saveBoneTexture( c );
 
 					this.cachedMaterials.set( c, [ originalMaterial, velocityMaterial ] );
