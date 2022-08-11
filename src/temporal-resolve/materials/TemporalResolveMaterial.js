@@ -21,6 +21,7 @@ export class TemporalResolveMaterial extends MaterialBase {
 				clampRadius: { value: 0 },
 				newSamplesSmoothing: { value: 0 },
 				newSamplesCorrection: { value: 0 },
+				tileCount: { value: 0 },
 				curInverseProjectionMatrix: { value: new Matrix4() },
 				curCameraMatrixWorld: { value: new Matrix4() },
 				prevInverseProjectionMatrix: { value: new Matrix4() },

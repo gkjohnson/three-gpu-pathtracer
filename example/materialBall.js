@@ -91,7 +91,7 @@ const params = {
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
 	temporalResolve: true,
-	temporalResolveMix: 0.925,
+	temporalResolveMix: 0.9,
 	clampRadius: 2,
 	newSamplesSmoothing: 0.675,
 	newSamplesCorrection: 1,
@@ -174,7 +174,7 @@ async function init() {
 	scene = new THREE.Scene();
 
 	temporalResolve = new TemporalResolve( ptRenderer, scene, activeCamera );
-	temporalResolve.temporalResolveMix = 0.925;
+	temporalResolve.temporalResolveMix = 0.9;
 	temporalResolve.clampRadius = 2;
 	temporalResolve.newSamplesSmoothing = 0.675;
 	temporalResolve.newSamplesCorrection = 1;
@@ -663,7 +663,7 @@ function animate() {
 
 	}
 
-	if ( ! params.temporalResolve && ptRenderer.samples < 1 ) {
+	if ( ptRenderer.samples < 1 ) {
 
 		renderer.render( scene, activeCamera );
 

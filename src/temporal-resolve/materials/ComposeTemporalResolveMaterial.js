@@ -18,7 +18,11 @@ const fragmentShader = /* glsl */`
 
     void main() {
 
-        gl_FragColor = vec4( texture2D( temporalResolveTexture, vUv ).rgb, 1.0 );
+        vec4 temporalResolveTexel = texture2D( temporalResolveTexture, vUv );
+
+        bool isBackgroundTile = temporalResolveTexel.a == 0.0;
+
+        gl_FragColor = vec4( temporalResolveTexel.rgb, isBackgroundTile ? 0.0 : 1.0 );
 
     }
 `;

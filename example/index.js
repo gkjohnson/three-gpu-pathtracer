@@ -213,7 +213,7 @@ function animate() {
 
 	}
 
-	if ( ( ! params.temporalResolve && ptRenderer.samples < 1.0 ) || ! params.enable ) {
+	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
 
 		renderer.render( scene, activeCamera );
 

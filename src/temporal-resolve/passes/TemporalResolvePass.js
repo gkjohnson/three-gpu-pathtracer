@@ -1,9 +1,9 @@
 ﻿import {
 	Color,
-	FramebufferTexture,
-	HalfFloatType,
-	LinearFilter,
+	FloatType,
+	FramebufferTexture, LinearFilter,
 	MeshDepthMaterial,
+	NearestFilter,
 	RGBADepthPacking,
 	RGBAFormat,
 	Vector2,
@@ -30,7 +30,7 @@ export class TemporalResolvePass {
 		this.renderTarget = new WebGLRenderTarget( 1, 1, {
 			minFilter: LinearFilter,
 			magFilter: LinearFilter,
-			type: HalfFloatType,
+			type: FloatType,
 			depthBuffer: false,
 		} );
 
@@ -40,8 +40,8 @@ export class TemporalResolvePass {
 		} );
 
 		this.depthRenderTarget = new WebGLRenderTarget( 1, 1, {
-			minFilter: LinearFilter,
-			magFilter: LinearFilter,
+			minFilter: NearestFilter,
+			magFilter: NearestFilter,
 		} );
 
 		this.velocityPass = new VelocityPass( scene, camera );
@@ -91,11 +91,11 @@ export class TemporalResolvePass {
 		);
 		this.accumulatedSamplesTexture.minFilter = LinearFilter;
 		this.accumulatedSamplesTexture.magFilter = LinearFilter;
-		this.accumulatedSamplesTexture.type = HalfFloatType;
+		this.accumulatedSamplesTexture.type = FloatType;
 
 		this.lastDepthTexture = new FramebufferTexture( width, height, RGBAFormat );
-		this.lastDepthTexture.minFilter = LinearFilter;
-		this.lastDepthTexture.magFilter = LinearFilter;
+		this.lastDepthTexture.minFilter = NearestFilter;
+		this.lastDepthTexture.magFilter = NearestFilter;
 
 		this.fullscreenMaterial.accumulatedSamplesTexture = this.accumulatedSamplesTexture;
 		this.fullscreenMaterial.lastDepthTexture = this.lastDepthTexture;
@@ -127,6 +127,7 @@ export class TemporalResolvePass {
 		renderer.render( this.scene, this.camera );
 
 		// update uniforms of this pass
+		this.fullscreenMaterial.tileCount = this.ptRenderer.tiles.x * this.ptRenderer.tiles.y;
 		this.fullscreenMaterial.curInverseProjectionMatrix.copy(
 			this.camera.projectionMatrixInverse
 		);

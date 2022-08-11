@@ -11,6 +11,7 @@ uniform float temporalResolveMix;
 uniform float clampRadius;
 uniform float newSamplesSmoothing;
 uniform float newSamplesCorrection;
+uniform float tileCount;
 
 uniform mat4 curInverseProjectionMatrix;
 uniform mat4 curCameraMatrixWorld;
@@ -27,6 +28,7 @@ varying vec2 vUv;
 
 #define FLOAT_EPSILON 0.00001
 #define BLUR_EXPONENT 0.25
+#define MAX_NEIGHBOR_DEPTH_DIFFERENCE 0.001
 
 // credits for transforming screen position to world position: https://discourse.threejs.org/t/reconstruct-world-position-in-screen-space-from-depth-buffer/5532/2
 vec3 screenSpaceToWorldSpace( const vec2 uv, const float depth, mat4 inverseProjectionMatrix, mat4 cameraMatrixWorld ) {
@@ -81,7 +83,7 @@ vec3 transformColor( vec3 color ) {
 
 vec3 undoColorTransform( vec3 color ) {
 
-	return pow( color, vec3( 1. / WEIGHT_TRANSFORM ) );
+	return max( vec3( 0.0 ), pow( color, vec3( 1.0 / WEIGHT_TRANSFORM ) ) );
 
 }
 
@@ -105,11 +107,14 @@ void main() {
     vec2 reprojectedUv = vUv - velUv;
 #endif
 
+	bool isTileRendered = samplesTexel.a != 0.0;
+
 	// background doesn't need reprojection
 	if( velocity.a == 1.0 ) {
 
 		samplesTexel.rgb = undoColorTransform(samplesTexel.rgb);
-		gl_FragColor = samplesTexel;
+		gl_FragColor = vec4(samplesTexel.rgb, isTileRendered ? 1.0 : 0.0);
+		
 		return;
 
 	}
@@ -137,7 +142,9 @@ void main() {
 		accumulatedSamplesTexel.rgb = transformColor( accumulatedSamplesTexel.rgb );
 
         alpha = distToLastFrame < 0.05 ? ( accumulatedSamplesTexel.a + 0.05 ) : 0.0;
-		alpha = clamp( alpha, 0.0, 1.0 );
+
+		// alpha = 0.0 is reserved for the background (to find out if the tile hasn't been rendered yet)
+		alpha = clamp( alpha, FLOAT_EPSILON, 1.0 );
 
 		if( samplesTexel.a != 0.0 ) {
 
@@ -156,6 +163,7 @@ void main() {
 			float weight;
 			vec2 neighborUv;
 			bool neighborUvValid;
+			float neighborUnpackedDepth;
 
 			for( float x = - radius; x <= radius; x ++ ) {
 
@@ -169,8 +177,10 @@ void main() {
 						col = textureLod( samplesTexture, neighborUv, 0.0 ).rgb;
 						col = transformColor( col );
 
+						neighborUnpackedDepth = unpackRGBAToDepth( textureLod( lastDepthTexture, neighborUv, 0.0 ) );
+
 						// box blur
-						if( abs( x ) <= 1.0 && abs( y ) <= 1.0 ) {
+						if( abs( x ) <= 3.0 && abs( y ) <= 3.0 && abs( unpackedDepth - neighborUnpackedDepth ) < MAX_NEIGHBOR_DEPTH_DIFFERENCE ) {
 
 							weight = 1.0 - abs( dot( col - samplesTexel.rgb, vec3( 0.25 ) ) );
 							weight = pow( weight, BLUR_EXPONENT );
@@ -204,12 +214,23 @@ void main() {
 	} else {
 
 		// reprojected UV coordinates are outside of screen, so just use the current frame for it
-		alpha = 0.0;
+		alpha = FLOAT_EPSILON;
 		accumulatedSamplesTexel.rgb = samplesTexel.rgb;
 
 	}
 
-	float m = ( 1.0 - min( movement * 2.0, 1.0 ) * ( 1.0 - temporalResolveMix ) ) - ( samples - 1.0 ) * 0.01 - 0.025;
+	// in case this pixel is from a tile that wasn't rendered yet
+	if( !isTileRendered ) {
+		
+		gl_FragColor = vec4( undoColorTransform( accumulatedSamplesTexel.rgb ), 0.05);
+
+		return;
+
+	}
+
+	float tileFactor = max(0.5, 1.0 - (tileCount - 1.0) * 0.025);
+
+	float m = ( 1.0 - min( movement * 2.0, 1.0 ) * ( 1.0 - temporalResolveMix ) ) * tileFactor - ( samples - 1.0 ) * 0.0025 - 0.025;
 
 	m = clamp( m, 0.0, 1.0 );
 
@@ -219,8 +240,12 @@ void main() {
 	// so make the final color blend more towards the new pixel
 	if( alpha < 1.0 ) {
 
-		float correctionMix = min( movement, 0.5 ) * newSamplesCorrection;
-		outputColor = mix( outputColor, samplesTexel.rgb, correctionMix );
+		if( distToLastFrame < 0.0 ) {
+			outputColor = accumulatedSamplesTexel.rgb;
+		}else{
+			float correctionMix = min( movement, 0.5 ) * newSamplesCorrection;
+			outputColor = mix( outputColor, samplesTexel.rgb, correctionMix );
+		}
 
 	}
 

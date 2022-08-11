@@ -1,4 +1,4 @@
-﻿import { HalfFloatType, LinearFilter, WebGLRenderTarget } from 'three';
+﻿import { FloatType, LinearFilter, WebGLRenderTarget } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { ComposeTemporalResolveMaterial } from './materials/ComposeTemporalResolveMaterial.js';
 import { TemporalResolvePass } from './passes/TemporalResolvePass.js';
@@ -32,7 +32,7 @@ export class TemporalResolve {
 			{
 				minFilter: LinearFilter,
 				magFilter: LinearFilter,
-				type: HalfFloatType,
+				type: FloatType,
 				depthBuffer: false,
 			}
 		);
@@ -87,11 +87,12 @@ export class TemporalResolve {
 
 	update() {
 
-		while ( this.ptRenderer.samples < 1 ) this.ptRenderer.update();
-
 		const renderer = this.ptRenderer._renderer;
 
+		// save original values
 		const origRenderTarget = renderer.getRenderTarget();
+
+		this.ptRenderer.stableTiles = false;
 
 		const { camera } = this.ptRenderer;
 		if ( camera !== this.activeCamera ) {
@@ -141,6 +142,7 @@ export class TemporalResolve {
 		renderer.setRenderTarget( this.renderTarget );
 		this.fsQuad.render( renderer );
 
+		// restore original values
 		renderer.setRenderTarget( origRenderTarget );
 
 	}
