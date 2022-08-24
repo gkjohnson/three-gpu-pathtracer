@@ -63,9 +63,8 @@ vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	// TODO: scale by 1 - F here
 	// note on division by PI
 	// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
-	float metalFactor = ( 1.0 - surf.metalness ) * wi.z / ( PI * PI );
-	float transmissionFactor = 1.0 - surf.transmission;
-	return surf.color * metalFactor * transmissionFactor;
+	float metalFactor = ( 1.0 - surf.metalness );
+	return surf.color * metalFactor * wi.z / PI;
 
 }
 
@@ -227,14 +226,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	float metalness = surf.metalness;
-	float transmission = surf.transmission;
-
-	vec3 color = surf.color;
-	color *= ( 1.0 - metalness );
-	color *= transmission;
-
-	return color;
+	return surf.color;
 
 }
 
