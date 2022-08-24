@@ -63,9 +63,9 @@ vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	// TODO: scale by 1 - F here
 	// note on division by PI
 	// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
-	float metalFactor = ( 1.0 - surf.metalness ) * wi.z / ( PI * PI );
+	float metalFactor = ( 1.0 - surf.metalness );
 	float transmissionFactor = 1.0 - surf.transmission;
-	return surf.color * metalFactor * transmissionFactor;
+	return surf.color * metalFactor * transmissionFactor * wi.z / PI;
 
 }
 
