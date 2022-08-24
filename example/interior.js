@@ -15,7 +15,7 @@ const params = {
 
 	environmentIntensity: 0,
 	environmentRotation: 0,
-	emissiveIntensity: 35,
+	emissiveIntensity: 12,
 	bounces: 20,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -187,7 +187,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'emissiveIntensity', 0, 150 ).onChange( updateIntensity );
+	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( updateIntensity );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();

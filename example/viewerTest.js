@@ -408,6 +408,14 @@ async function updateModel() {
 
 	const onFinish = async () => {
 
+		model.traverse( c => {
+
+			if ( ! c.material ) return
+			c.material.metalness = 0;
+			c.material.roughness = 1;
+
+		} )
+
 		const reducer = new MaterialReducer();
 		reducer.process( model );
 		model.updateMatrixWorld();

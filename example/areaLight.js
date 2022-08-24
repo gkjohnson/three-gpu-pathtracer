@@ -17,19 +17,19 @@ const params = {
 
 	areaLight1Enabled: true,
 	areaLight1IsCircular: false,
-	areaLight1Intensity: 5,
+	areaLight1Intensity: 2,
 	areaLight1Color: '#ffffff',
 	areaLight1Width: 1,
 	areaLight1Height: 1,
 
 	areaLight2Enabled: true,
 	areaLight2IsCircular: false,
-	areaLight2Intensity: 20,
+	areaLight2Intensity: 10,
 	areaLight2Color: '#ff0000',
 	areaLight2Width: 1.25,
 	areaLight2Height: 2.75,
 
-	environmentIntensity: 0.1,
+	environmentIntensity: 0.03,
 	environmentRotation: 0,
 
 	bounces: 3,
