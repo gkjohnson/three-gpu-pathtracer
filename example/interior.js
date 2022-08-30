@@ -2,25 +2,26 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, EquirectCamera } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad;
+let renderer, controls, sphericalControls, sceneInfo, ptRenderer, activeCamera, fsQuad;
+let perspectiveCamera, orthoCamera, equirectCamera;
 let samplesEl;
 const params = {
 
 	environmentIntensity: 0,
 	environmentRotation: 0,
-	emissiveIntensity: 100,
+	emissiveIntensity: 12,
 	bounces: 20,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.25,
 	tiles: 2,
-
+	cameraProjection: 'Perspective'
 
 };
 
@@ -33,6 +34,8 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.bounces = 10;
 
 }
+
+const orthoWidth = 5;
 
 // clamp value for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
@@ -50,13 +53,22 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 0.4, 0.6, 2.65 );
+	perspectiveCamera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
+	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
+
+	const orthoHeight = orthoWidth / aspectRatio;
+	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera.position.copy( perspectiveCamera.position );
+
+	equirectCamera = new EquirectCamera();
+	// Almost, but not quite on top of the control target.
+	// This allows for full rotation without moving the camera very much.
+	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
@@ -64,15 +76,25 @@ async function init() {
 		map: ptRenderer.target.texture,
 	} ) );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
-	camera.lookAt( controls.target );
+	perspectiveCamera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
 		ptRenderer.reset();
 
 	} );
 	controls.update();
+
+	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
+	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
+	equirectCamera.lookAt( sphericalControls.target );
+	sphericalControls.addEventListener( 'change', () => {
+
+		ptRenderer.reset();
+
+	} );
+	sphericalControls.update();
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -133,13 +155,14 @@ async function init() {
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
 
-	window.CAMERA = camera;
 	window.CONTROLS = controls;
 
 	document.getElementById( 'loading' ).remove();
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
+
+	updateCamera( params.cameraProjection );
 
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
@@ -164,7 +187,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'emissiveIntensity', 0, 300 ).onChange( updateIntensity );
+	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( updateIntensity );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -173,6 +196,11 @@ async function init() {
 	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
+
+	} );
+	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
+
+		updateCamera( v );
 
 	} );
 
@@ -194,8 +222,16 @@ function onResize() {
 
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
-	camera.aspect = w / h;
-	camera.updateProjectionMatrix();
+
+	const aspect = w / h;
+
+	perspectiveCamera.aspect = aspect;
+	perspectiveCamera.updateProjectionMatrix();
+
+	const orthoHeight = orthoWidth / aspect;
+	orthoCamera.top = orthoHeight / 2;
+	orthoCamera.bottom = orthoHeight / - 2;
+	orthoCamera.updateProjectionMatrix();
 
 }
 
@@ -206,6 +242,58 @@ function updateIntensity() {
 		material.emissiveIntensity = params.emissiveIntensity;
 
 	} );
+	ptRenderer.reset();
+
+}
+
+function updateCamera( cameraProjection ) {
+
+	if ( cameraProjection === 'Perspective' ) {
+
+		if ( activeCamera === orthoCamera ) {
+
+			perspectiveCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = perspectiveCamera;
+		controls.object = activeCamera;
+
+	} else if ( cameraProjection === 'Orthographic' ) {
+
+		if ( activeCamera === perspectiveCamera ) {
+
+			orthoCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = orthoCamera;
+		controls.object = activeCamera;
+
+	}
+
+	if ( cameraProjection === 'Equirectangular' ) {
+
+		activeCamera = equirectCamera;
+
+		controls.enabled = false;
+		sphericalControls.enabled = true;
+
+		sphericalControls.update();
+
+	} else {
+
+		sphericalControls.enabled = false;
+		controls.enabled = true;
+
+		controls.update();
+
+	}
+
+	ptRenderer.camera = activeCamera;
+
+	window.CAMERA = activeCamera;
+
 	ptRenderer.reset();
 
 }
@@ -221,7 +309,7 @@ function animate() {
 	ptRenderer.material.environmentBlur = 0.35;
 	ptRenderer.material.bounces = params.bounces;
 
-	camera.updateMatrixWorld();
+	activeCamera.updateMatrixWorld();
 
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 

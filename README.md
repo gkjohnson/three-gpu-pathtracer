@@ -31,15 +31,34 @@ _More features and capabilities in progress!_
 
 [Morph Target Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/skinnedMesh.html#morphtarget)
 
+[Area Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/areaLight.html)
+
+[Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
 
 [Transmission Preset Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)
 
+[Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html#khronos-DragonAttenuation)
+
 **Light Baking**
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
+
+
+## Running examples locally
+
+To run and modify the examples locally, make sure you have Node and NPM installed.  Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
+
+In order to install dependencies, you will need `make` and a C++ compiler available.
+
+On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just work on MacOS.
+
+- To install dependencies, run `npm install`
+- To start the demos run `npm start`
+- Visit `http://localhost:1234/<demo-name.html>`
 
 # Use
 
@@ -55,6 +74,9 @@ import {
 } from 'three-gpu-pathtracer';
 
 // init scene, renderer, camera, controls, etc
+
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 // initialize the path tracing material and renderer
 const ptMaterial = new PhysicalPathTracingMaterial();
@@ -79,7 +101,7 @@ scene.updateMatrixWorld();
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials } = generator.generate( scene );
+const { bvh, textures, materials, lights } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
@@ -91,6 +113,9 @@ ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
 ptMaterial.materials.updateFrom( materials, textures );
+
+// update the lights
+ptMaterial.lights.updateFrom( lights );
 
 // set the environment map
 const texture = await new RGBELoader().loadAsync( envMapUrl );
@@ -161,7 +186,7 @@ import { PathTracingSceneWorker } from 'three-gpu-pathtracer/src/workers/PathTra
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneWorker();
-const { bvh, textures, materials } = await generator.generate( scene );
+const { bvh, textures, materials, lights } = await generator.generate( scene );
 
 // ...
 ```
@@ -220,6 +245,14 @@ stableNoise = false : Boolean
 
 Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
 
+### .stableTiles
+
+```js
+stableTiles = true : Boolean
+```
+
+Whether the initial tile is reset to the top left tile when moving the camera or if it should continue to shift every frame.
+
 ### .alpha
 
 ```js
@@ -265,10 +298,11 @@ Utility class for generating the set of data required for initializing the path 
 ### .generate
 
 ```js
-generate( scene : Object3D, options = {} : Object ) : {
+generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
-	textures : Array<Texture>
+	textures : Array<Texture>,
+	lights : Array<Light>
 }
 ```
 
@@ -283,10 +317,11 @@ See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
 ### .generate
 
 ```js
-async generate( scene : Object3D, options = {} : Object ) : {
+async generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
 	bvh : MeshBVH,
 	materials : Array<Material>,
-	textures : Array<Texture>
+	textures : Array<Texture>,
+	lights : Array<Light>
 }
 ```
 
@@ -350,6 +385,46 @@ anamorphicRatio = 1 : Number
 
 The anamorphic ratio of the lens. A higher value will stretch the bokeh effect horizontally.
 
+## EquirectCamera
+
+_extends THREE.Camera_
+
+A class indicating that the path tracer should render an equirectangular view. Does not work with three.js raster rendering.
+
+## PhysicalSpotLight
+
+_extends THREE.SpotLight_
+
+### .radius
+
+```js
+radius = 0 : Number
+```
+
+The radius of the spotlight surface. Increase this value to add softness to shadows.
+
+### .iesTexture
+
+```js
+iesTexture = null : Texture
+```
+
+The loaded IES texture describing directional light intensity. These can be loaded with the `IESLoader`.
+
+Premade IES profiles can be downloaded from [ieslibrary.com]. And custom profiles can be generated using [CNDL](https://cndl.io/).
+
+## ShapedAreaLight
+
+_extends THREE.RectAreaLight_
+
+### .isCircular
+
+```js
+isCircular = false : Boolean
+```
+
+Whether the area light should be rendered as a circle or a rectangle.
+
 ## DynamicPathTracingSceneGenerator
 
 A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
@@ -361,7 +436,7 @@ If geometry or materials are added or removed from the scene then `reset` must b
 ### constructor
 
 ```js
-constructor( scene : Object3D )
+constructor( scene : Object3D | Array<Object3D> )
 ```
 
 Takes the scene to convert.
@@ -385,6 +460,12 @@ reset() : void
 ```
 
 Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
+
+## IESLoader
+
+_extends Loader_
+
+Loader for loading and parsing IES profile data. Load and parse functions return a `DataTexture` with the profile contents.
 
 ## BlurredEnvMapGenerator
 
@@ -449,6 +530,10 @@ _extends MaterialBase_
 	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
 
+	// Light information
+	lights: LightsInfoUniformStruct,
+	iesProfiles: IESProfilesTexture,
+
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
 	environmentRotation: Matrix3,
@@ -486,6 +571,28 @@ _extends MaterialBase_
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
 
+}
+```
+
+## DenoiseMaterial
+
+_extends MaterialBase_
+
+Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPitt/glslSmartDeNoise) intended to be the final pass to the screen. Includes tonemapping and color space conversions.
+
+**Uniforms**
+
+```js
+{
+
+	// sigma - sigma Standard Deviation
+	// kSigma - sigma coefficient
+	// kSigma * sigma = radius of the circular kernel
+	sigma = 5.0 : Number,
+	kSigma = 1.0 : Number,
+
+	// edge sharpening threshold
+	threshold = 0.03 : Number,
 
 }
 ```
@@ -527,6 +634,16 @@ _extends DataTexture_
 
 Helper texture uniform for encoding materials as texture data.
 
+### .threeCompatibilityTransforms
+
+```js
+threeCompatibilityTransforms = false : Boolean
+```
+
+Three.js materials support only a single set of UV transforms in a certain fallback priority while the pathtracer supports a unique set of transforms per texture. Set this field to true in order to use the same uv transform handling as three.js materials.
+
+See fallback order documentation [here](https://threejs.org/docs/#api/en/textures/Texture.offset).
+
 ### .setSide
 
 ```js
@@ -561,6 +678,18 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
+## LightsInfoUniformStruct
+
+Helper uniform for encoding lights as texture data with count.
+
+### .updateFrom
+
+```js
+updateFrom( lights : Array<Light>, iesTextures = [] : Array<Texture> ) : void
+```
+
+Updates the size and values of the texture to align with the provided set of lights and IES textures.
+
 ## EquirectHdrInfoUniform
 
 Stores the environment map contents along with the intensity distribution information to support multiple importance sampling.
@@ -593,19 +722,23 @@ Merges the set of meshes into a single geometry with a `materialIndex` vertex at
 
 Set of functions for performing material scatter and PDF sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderMaterialSampling.js) for full list of functions.
 
+**shaderLightSampling**
+
+Set of functions for performing light sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderLightSampling.js) for full list of functions.
+
 **shaderStructs**
 
-Material struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
+Material and light struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
 
 **shaderUtils**
 
-Set of randomness and other light transmport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
+Set of randomness and other light transport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
 # Gotchas
 
 - The project requires use of WebGL2.
 - All textures must use the same wrap and interpolation flags.
-- Texture repeat, rotation, and center properties are not supported.
+- Spotlights are not supported in non-MIS rendering currently.
 
 # Screenshots
 
@@ -656,6 +789,16 @@ Set of randomness and other light transmport utilities for use in a shader. See 
 <p align="center">
 <i>Octopus Tea model by <a href="https://sketchfab.com/3d-models/cartoon-octopus-takes-a-tea-bath-107260cf0fd24202a67eb037a6c760a5
 ">AzTiZ</a></i>
+</p>
+
+![](https://user-images.githubusercontent.com/734200/173212652-de6a83e5-dd2c-49b5-8ed7-484ff8969b5b.png)
+<p align="center">
+<i>Botanists Study model by <a href="https://sketchfab.com/3d-models/the-botanists-study-8b7b5743b1c848ed8ea58f5518c44e7e">riikkakilpelainen</a></i>
+</p>
+
+![](https://user-images.githubusercontent.com/734200/173170459-849b9343-efe3-4635-8719-346511472965.png)
+<p align="center">
+<i>Japanese Bridge Garden model by <a href="https://sketchfab.com/3d-models/japanese-bridge-garden-d122e17593eb4012913cde927486d15a">kristenlee</a></i>
 </p>
 
 ### Resources

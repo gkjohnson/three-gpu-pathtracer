@@ -1,4 +1,4 @@
-import { PhysicalCamera } from '../core/PhysicalCamera.js';
+import { PhysicalCamera } from '../objects/PhysicalCamera.js';
 export class PhysicalCameraUniform {
 
 	constructor() {

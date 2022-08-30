@@ -6,44 +6,60 @@ export class PathTracingSceneGenerator {
 
 	prepScene( scene ) {
 
+		scene = Array.isArray( scene ) ? scene : [ scene ];
+
 		const meshes = [];
-		scene.traverse( c => {
+		const lights = [];
 
-			if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
+		for ( let i = 0, l = scene.length; i < l; i ++ ) {
 
-				const generator = new StaticGeometryGenerator( c );
-				generator.applyWorldTransforms = false;
-				const mesh = new Mesh(
-					generator.generate(),
-					c.material,
-				);
-				mesh.matrixWorld.copy( c.matrixWorld );
-				mesh.matrix.copy( c.matrixWorld );
-				mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
-				meshes.push( mesh );
+			scene[ i ].traverse( c => {
 
-			} else if ( c.isMesh ) {
+				if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
 
-				meshes.push( c );
+					const generator = new StaticGeometryGenerator( c );
+					generator.applyWorldTransforms = false;
+					const mesh = new Mesh(
+						generator.generate(),
+						c.material,
+					);
+					mesh.matrixWorld.copy( c.matrixWorld );
+					mesh.matrix.copy( c.matrixWorld );
+					mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
+					meshes.push( mesh );
 
-			}
+				} else if ( c.isMesh ) {
 
-		} );
+					meshes.push( c );
 
-		return mergeMeshes( meshes, {
-			attributes: [ 'position', 'normal', 'tangent', 'uv' ],
-		} );
+				} else if ( c.isRectAreaLight || c.isSpotLight ) {
+
+					lights.push( c );
+
+				}
+
+			} );
+
+		}
+
+		return {
+			...mergeMeshes( meshes, {
+				attributes: [ 'position', 'normal', 'tangent', 'uv' ],
+			} ),
+			lights,
+		};
 
 	}
 
 	generate( scene, options = {} ) {
 
-		const { materials, textures, geometry } = this.prepScene( scene );
+		const { materials, textures, geometry, lights } = this.prepScene( scene );
 		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
 		return {
 			scene,
 			materials,
 			textures,
+			lights,
 			bvh: new MeshBVH( geometry, bvhOptions ),
 		};
 

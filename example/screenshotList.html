@@ -1,0 +1,55 @@
+<html>
+	<head>
+		<title>Model Viewer Fidelity Tests</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+		<style>
+			html, body {
+				margin: 0;
+				padding: 0;
+				font-family: 'Roboto', sans-serif;
+			}
+
+			body {
+				background-color: #111;
+				color: white;
+			}
+
+			#container {
+				width: 805px;
+				margin: auto;
+			}
+
+			#container > * {
+				display: inline-block;
+				margin-bottom: 20px;
+				width: 100%;
+			}
+
+			.img-wrapper {
+				display: flex;
+				justify-content: center;
+			}
+
+			img {
+				max-height: 400px;
+				max-width: 400px;
+			}
+
+			img:first-child {
+				margin-right: 5px;
+			}
+
+			h1 {
+				font-size: 15px;
+				font-weight: 300;
+
+			}
+		</style>
+
+	</head>
+	<body>
+		<div id="container"></div>
+		<script src="./screenshotList.js" type="module"></script>
+	</body>
+</html>

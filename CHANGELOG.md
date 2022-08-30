@@ -5,14 +5,53 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- DenoiseMaterial based on "glslSmartDenoise" to smooth the final render.
+
+### Fixed
+- Diffuse materials looking too dark.
+
+## [0.0.6] - 2022-08-06
+### Added
+- Support for sheen parameter support
+- Support for iridescence parameter support
+- Support for lights to the DynamicPathTracingGenerator
+- Support for circular area lights
+- Support for spot lights
+- Add support for specular color and intensity control
+- Support for IES Profiles on the new "PhysicalSpotLight" class
+- IESLoader for loading IES profiles as textures
+
+### Changed
+- PhysicalPathTracingMaterial: Default "environment intensity" from 2.0 to 1.0.
+
+### Fixed
+- White hotspots at some glancing angles.
+
+## [0.0.5] - 2022-07-16
+### Added
+- Support for equirect rendering with EquirectCamera.
+- Support for area lights.
+- Support for threejs compatible texture transforms.
+- Support for Clearcoat properties.
+- Support for arrays of objects passed to pathtracer scene generator.
+
+### Fixed
+- Black renders on M1 Safari devices.
+- Camera ray direction recision issues when scrolling far from the origin.
+
+## [0.0.4] - 2022-06-12
 ### Fixed
 - Textures not working correctly on Pixel 6 due to an issue with `floatBitsToInt`.
 - `PathTracingRenderer.alpha` not being able to be changed after rendering.
+- Improved reflective behavior for perfectly smooth surfaces.
+- Case where partially transparent objects would cast full shadows.
 
 ### Added
 - Support for material alpha map.
 - Ability to disable casting of shadows.
 - Support for rendering with Orthographic cameras.
+- Support for texture transform properties per texture.
 
 ## [0.0.3] - 2022-05-22
 ### Fixed

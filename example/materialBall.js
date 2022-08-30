@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, fsQuad, materials;
-let perspectiveCamera, orthoCamera;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
+let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
 
@@ -26,6 +26,15 @@ const params = {
 		ior: 1.495,
 		transmission: 0.0,
 		opacity: 1.0,
+		clearcoat: 0.0,
+		clearcoatRoughness: 0.0,
+		sheenColor: '#000000',
+		sheenRoughness: 0.0,
+		iridescence: 0.0,
+		iridescenceIOR: 1.5,
+		iridescenceThickness: 400,
+		specularColor: '#ffffff',
+		specularIntensity: 1.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -38,6 +47,15 @@ const params = {
 		transmission: 0.0,
 		ior: 1.495,
 		opacity: 1.0,
+		clearcoat: 0.0,
+		clearcoatRoughness: 0.0,
+		sheenColor: '#000000',
+		sheenRoughness: 0.0,
+		iridescence: 0.0,
+		iridescenceIOR: 1.5,
+		iridescenceThickness: 400,
+		specularColor: '#ffffff',
+		specularIntensity: 1.0,
 		matte: false,
 		castShadow: true,
 	},
@@ -45,16 +63,29 @@ const params = {
 		color: '#000000',
 		roughness: 0.01,
 		metalness: 0.05,
+		clearcoat: 0.0,
+		clearcoatRoughness: 0.0,
+		sheenColor: '#000000',
+		sheenRoughness: 0.0,
+		iridescence: 0.0,
+		iridescenceIOR: 1.5,
+		iridescenceThickness: 400,
+		specularColor: '#ffffff',
+		specularIntensity: 1.0,
 		matte: false,
 		castShadow: true,
 	},
 
 	multipleImportanceSampling: true,
 	stableNoise: false,
-	environmentIntensity: 3,
+	denoiseEnabled: true,
+	denoiseSigma: 2.5,
+	denoiseThreshold: 0.1,
+	denoiseKSigma: 1.0,
+	environmentIntensity: 1,
 	environmentRotation: 0,
 	environmentBlur: 0.0,
-	backgroundBlur: 0.05,
+	backgroundBlur: 0.0,
 	bounces: 5,
 	samplesPerFrame: 1,
 	acesToneMapping: true,
@@ -95,6 +126,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 
@@ -106,6 +138,9 @@ async function init() {
 	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 4, 2, 3 );
 
+	equirectCamera = new EquirectCamera();
+	equirectCamera.position.set( - 4, 2, 3 );
+
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
@@ -113,7 +148,12 @@ async function init() {
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+		map: ptRenderer.target.texture,
+		blending: THREE.CustomBlending,
+	} ) );
+
+	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
 	} ) );
@@ -162,15 +202,15 @@ async function init() {
 
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
-				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
+				new THREE.MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.03;
 			group.add( floor );
 
-			const material1 = new THREE.MeshStandardMaterial();
-			const material2 = new THREE.MeshStandardMaterial();
+			const material1 = new THREE.MeshPhysicalMaterial();
+			const material2 = new THREE.MeshPhysicalMaterial();
 
 			gltf.scene.traverse( c => {
 
@@ -242,7 +282,7 @@ async function init() {
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
 		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-		fsQuad.material.needsUpdate = true;
+		blitQuad.material.needsUpdate = true;
 
 	} );
 	ptFolder.add( params, 'stableNoise' ).onChange( value => {
@@ -283,6 +323,12 @@ async function init() {
 		onResize();
 
 	} );
+
+	const denoiseFolder = gui.addFolder( 'Denoising' );
+	denoiseFolder.add( params, 'denoiseEnabled' );
+	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 );
+	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 );
+	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
@@ -326,7 +372,7 @@ async function init() {
 	} );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
+	cameraFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
 
 		updateCamera( v );
 
@@ -359,6 +405,15 @@ async function init() {
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
+	matFolder1.add( params.material1, 'clearcoat', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'clearcoatRoughness', 0, 1 ).onChange( reset );
+	matFolder1.addColor( params.material1, 'sheenColor' ).onChange( reset );
+	matFolder1.add( params.material1, 'sheenRoughness', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'iridescence', 0.0, 1.0 ).onChange( reset );
+	matFolder1.add( params.material1, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
+	matFolder1.add( params.material1, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
+	matFolder1.addColor( params.material1, 'specularColor' ).onChange( reset );
+	matFolder1.add( params.material1, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'matte' ).onChange( reset );
 	matFolder1.add( params.material1, 'castShadow' ).onChange( reset );
 	matFolder1.close();
@@ -372,6 +427,15 @@ async function init() {
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
+	matFolder2.add( params.material2, 'clearcoat', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'clearcoatRoughness', 0, 1 ).onChange( reset );
+	matFolder2.addColor( params.material2, 'sheenColor' ).onChange( reset );
+	matFolder2.add( params.material2, 'sheenRoughness', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'iridescence', 0.0, 1.0 ).onChange( reset );
+	matFolder2.add( params.material2, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
+	matFolder2.add( params.material2, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
+	matFolder2.addColor( params.material2, 'specularColor' ).onChange( reset );
+	matFolder2.add( params.material2, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'matte' ).onChange( reset );
 	matFolder2.add( params.material2, 'castShadow' ).onChange( reset );
 	matFolder2.close();
@@ -380,8 +444,17 @@ async function init() {
 	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
 	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'clearcoat', 0, 1 ).onChange( reset );
+	matFolder3.add( params.material3, 'clearcoatRoughness', 0, 1 ).onChange( reset );
+	matFolder3.addColor( params.material3, 'sheenColor' ).onChange( reset );
+	matFolder3.add( params.material3, 'sheenRoughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'matte' ).onChange( reset );
 	matFolder3.add( params.material3, 'castShadow' ).onChange( reset );
+	matFolder3.add( params.material3, 'iridescence', 0.0, 1.0 ).onChange( reset );
+	matFolder3.add( params.material3, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
+	matFolder3.add( params.material3, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
+	matFolder3.addColor( params.material3, 'specularColor' ).onChange( reset );
+	matFolder3.add( params.material3, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder3.close();
 
 	animate();
@@ -430,7 +503,7 @@ function updateEnvBlur() {
 
 function updateCamera( cameraProjection ) {
 
-	if ( cameraProjection === "Perspective" ) {
+	if ( cameraProjection === 'Perspective' ) {
 
 		if ( activeCamera ) {
 
@@ -440,7 +513,7 @@ function updateCamera( cameraProjection ) {
 
 		activeCamera = perspectiveCamera;
 
-	} else {
+	} else if ( cameraProjection === 'Orthographic' ) {
 
 		if ( activeCamera ) {
 
@@ -449,6 +522,16 @@ function updateCamera( cameraProjection ) {
 		}
 
 		activeCamera = orthoCamera;
+
+	} else { // Equirect
+
+		if ( activeCamera ) {
+
+			equirectCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = equirectCamera;
 
 	}
 
@@ -474,6 +557,15 @@ function animate() {
 	m1.transmission = params.material1.transmission;
 	m1.ior = params.material1.ior;
 	m1.opacity = params.material1.opacity;
+	m1.clearcoat = params.material1.clearcoat;
+	m1.clearcoatRoughness = params.material1.clearcoatRoughness;
+	m1.sheenColor.set( params.material1.sheenColor ).convertSRGBToLinear();
+	m1.sheenRoughness = params.material1.sheenRoughness;
+	m1.iridescence = params.material1.iridescence;
+	m1.iridescenceIOR = params.material1.iridescenceIOR;
+	m1.iridescenceThicknessRange = [ 0, params.material1.iridescenceThickness ];
+	m1.specularColor.set( params.material1.specularColor ).convertSRGBToLinear();
+	m1.specularIntensity = params.material1.specularIntensity;
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
@@ -484,11 +576,29 @@ function animate() {
 	m2.transmission = params.material2.transmission;
 	m2.ior = params.material2.ior;
 	m2.opacity = params.material2.opacity;
+	m2.clearcoat = params.material2.clearcoat;
+	m2.clearcoatRoughness = params.material2.clearcoatRoughness;
+	m2.sheenColor.set( params.material2.sheenColor ).convertSRGBToLinear();
+	m2.sheenRoughness = params.material2.sheenRoughness;
+	m2.iridescence = params.material2.iridescence;
+	m2.iridescenceIOR = params.material2.iridescenceIOR;
+	m2.iridescenceThicknessRange = [ 0, params.material2.iridescenceThickness ];
+	m2.specularColor.set( params.material2.specularColor ).convertSRGBToLinear();
+	m2.specularIntensity = params.material2.specularIntensity;
 
 	const m3 = materials[ 2 ];
 	m3.color.set( params.material3.color ).convertSRGBToLinear();
 	m3.metalness = params.material3.metalness;
 	m3.roughness = params.material3.roughness;
+	m3.clearcoat = params.material3.clearcoat;
+	m3.clearcoatRoughness = params.material3.clearcoatRoughness;
+	m3.sheenColor.set( params.material3.sheenColor ).convertSRGBToLinear();
+	m3.sheenRoughness = params.material3.sheenRoughness;
+	m3.iridescence = params.material3.iridescence;
+	m3.iridescenceIOR = params.material3.iridescenceIOR;
+	m3.iridescenceThicknessRange = [ 0, params.material3.iridescenceThickness ];
+	m3.specularColor.set( params.material3.specularColor ).convertSRGBToLinear();
+	m3.specularIntensity = params.material3.specularIntensity;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
@@ -529,9 +639,15 @@ function animate() {
 
 	}
 
+	denoiseQuad.material.sigma = params.denoiseSigma;
+	denoiseQuad.material.threshold = params.denoiseThreshold;
+	denoiseQuad.material.kSigma = params.denoiseKSigma;
+
+	const quad = params.denoiseEnabled ? denoiseQuad : blitQuad;
+
 	renderer.autoClear = false;
-	fsQuad.material.map = ptRenderer.target.texture;
-	fsQuad.render( renderer );
+	quad.material.map = ptRenderer.target.texture;
+	quad.render( renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;

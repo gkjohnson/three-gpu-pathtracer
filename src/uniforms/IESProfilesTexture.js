@@ -1,17 +1,18 @@
 import {
-	WebGLArrayRenderTarget,
-	RGBAFormat,
-	UnsignedByteType,
-	MeshBasicMaterial,
+	ClampToEdgeWrapping,
 	Color,
-	RepeatWrapping,
+	FloatType,
 	LinearFilter,
+	MeshBasicMaterial,
 	NoToneMapping,
+	RGBAFormat,
+	WebGLArrayRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { IESLoader } from '../utils/IESLoader.js';
 
 const prevColor = new Color();
-export class RenderTarget2DArray extends WebGLArrayRenderTarget {
+export class IESProfilesTexture extends WebGLArrayRenderTarget {
 
 	constructor( ...args ) {
 
@@ -19,23 +20,27 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 		const tex = this.texture;
 		tex.format = RGBAFormat;
-		tex.type = UnsignedByteType;
+		tex.type = FloatType;
 		tex.minFilter = LinearFilter;
 		tex.magFilter = LinearFilter;
-		tex.wrapS = RepeatWrapping;
-		tex.wrapT = RepeatWrapping;
-		tex.setTextures = ( ...args ) => {
+		tex.wrapS = ClampToEdgeWrapping;
+		tex.wrapT = ClampToEdgeWrapping;
+		tex.generateMipmaps = false;
 
-			this.setTextures( ...args );
+		tex.updateFrom = ( ...args ) => {
+
+			this.updateFrom( ...args );
 
 		};
 
 		const fsQuad = new FullScreenQuad( new MeshBasicMaterial() );
 		this.fsQuad = fsQuad;
 
+		this.iesLoader = new IESLoader();
+
 	}
 
-	setTextures( renderer, width, height, textures ) {
+	async updateFrom( renderer, textures ) {
 
 		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
@@ -46,7 +51,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		// resize the render target and ensure we don't have an empty texture
 		// render target depth must be >= 1 to avoid unbound texture error on android devices
 		const depth = textures.length || 1;
-		this.setSize( width, height, depth );
+		this.setSize( 360, 180, depth );
 		renderer.setClearColor( 0, 0 );
 		renderer.toneMapping = NoToneMapping;
 
@@ -80,6 +85,8 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		renderer.setClearColor( prevColor, prevAlpha );
 		renderer.setRenderTarget( prevRenderTarget );
 		renderer.toneMapping = prevToneMapping;
+
+		fsQuad.dispose();
 
 	}
 

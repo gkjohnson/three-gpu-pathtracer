@@ -15,7 +15,9 @@ export const shaderMaterialStructs = /* glsl */ `
 		sampler2D marginalWeights;
 		sampler2D conditionalWeights;
 		sampler2D map;
-		sampler2D totalSum;
+
+		float totalSumWhole;
+		float totalSumDecimal;
 
 	};
 
@@ -41,6 +43,26 @@ export const shaderMaterialStructs = /* glsl */ `
 		int normalMap;
 		vec2 normalScale;
 
+		float clearcoat;
+		int clearcoatMap;
+		int clearcoatNormalMap;
+		vec2 clearcoatNormalScale;
+		float clearcoatRoughness;
+		int clearcoatRoughnessMap;
+
+		int iridescenceMap;
+		int iridescenceThicknessMap;
+		float iridescence;
+		float iridescenceIor;
+		float iridescenceThicknessMinimum;
+		float iridescenceThicknessMaximum;
+
+		vec3 specularColor;
+		int specularColorMap;
+
+		float specularIntensity;
+		int specularIntensityMap;
+
 		int alphaMap;
 
 		bool castShadow;
@@ -50,11 +72,47 @@ export const shaderMaterialStructs = /* glsl */ `
 		float side;
 		bool matte;
 
+		vec3 sheenColor;
+		int sheenColorMap;
+		float sheenRoughness;
+		int sheenRoughnessMap;
+
+		mat3 mapTransform;
+		mat3 metalnessMapTransform;
+		mat3 roughnessMapTransform;
+		mat3 transmissionMapTransform;
+		mat3 emissiveMapTransform;
+		mat3 normalMapTransform;
+		mat3 clearcoatMapTransform;
+		mat3 clearcoatNormalMapTransform;
+		mat3 clearcoatRoughnessMapTransform;
+		mat3 sheenColorMapTransform;
+		mat3 sheenRoughnessMapTransform;
+		mat3 iridescenceMapTransform;
+		mat3 iridescenceThicknessMapTransform;
+		mat3 specularColorMapTransform;
+		mat3 specularIntensityMapTransform;
+
 	};
+
+	mat3 readTextureTransform( sampler2D tex, uint index ) {
+
+		mat3 textureTransform;
+
+		vec4 row1 = texelFetch1D( tex, index );
+		vec4 row2 = texelFetch1D( tex, index + 1u );
+
+		textureTransform[0] = vec3(row1.r, row2.r, 0.0);
+		textureTransform[1] = vec3(row1.g, row2.g, 0.0);
+		textureTransform[2] = vec3(row1.b, row2.b, 1.0);
+
+		return textureTransform;
+
+	}
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 7u;
+		uint i = index * 44u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -63,6 +121,13 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s4 = texelFetch1D( tex, i + 4u );
 		vec4 s5 = texelFetch1D( tex, i + 5u );
 		vec4 s6 = texelFetch1D( tex, i + 6u );
+		vec4 s7 = texelFetch1D( tex, i + 7u );
+		vec4 s8 = texelFetch1D( tex, i + 8u );
+		vec4 s9 = texelFetch1D( tex, i + 9u );
+		vec4 s10 = texelFetch1D( tex, i + 10u );
+		vec4 s11 = texelFetch1D( tex, i + 11u );
+		vec4 s12 = texelFetch1D( tex, i + 12u );
+		vec4 s13 = texelFetch1D( tex, i + 13u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -84,17 +149,159 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.normalMap = int( round( s4.r ) );
 		m.normalScale = s4.gb;
 
-		m.alphaMap = int( round( s4.a ) );
+		m.clearcoat = s4.a;
+		m.clearcoatMap = int( round( s5.r ) );
+		m.clearcoatRoughness = s5.g;
+		m.clearcoatRoughnessMap = int( round( s5.b ) );
+		m.clearcoatNormalMap = int( round( s5.a ) );
+		m.clearcoatNormalScale = s6.rg;
 
-		m.opacity = s5.r;
-		m.alphaTest = s5.g;
-		m.side = s5.b;
-		m.matte = bool( s5.a );
+		m.sheenColor = s7.rgb;
+		m.sheenColorMap = int( round( s7.a ) );
+		m.sheenRoughness = s8.r;
+		m.sheenRoughnessMap = int( round( s8.g ) );
 
-		m.castShadow = ! bool( s6.r );
+		m.iridescenceMap = int( round( s8.b ) );
+		m.iridescenceThicknessMap = int( round( s8.a ) );
+		m.iridescence = s9.r;
+		m.iridescenceIor = s9.g;
+		m.iridescenceThicknessMinimum = s9.b;
+		m.iridescenceThicknessMaximum = s9.a;
+
+		m.specularColor = s10.rgb;
+		m.specularColorMap = int( round( s10.a ) );
+
+		m.specularIntensity = s11.r;
+		m.specularIntensityMap = int( round( s11.g ) );
+
+		m.alphaMap = int( round( s12.r ) );
+
+		m.opacity = s12.g;
+		m.alphaTest = s12.b;
+		m.side = s12.a;
+
+		m.matte = bool( s13.r );
+		m.castShadow = ! bool( s13.g );
+
+		uint firstTextureTransformIdx = i + 14u;
+
+		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx );
+		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
+		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
+		m.transmissionMapTransform = m.transmissionMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 6u );
+		m.emissiveMapTransform = m.emissiveMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 8u );
+		m.normalMapTransform = m.normalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 10u );
+		m.clearcoatMapTransform = m.clearcoatMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 12u );
+		m.clearcoatNormalMapTransform = m.clearcoatNormalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 14u );
+		m.clearcoatRoughnessMapTransform = m.clearcoatRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 16u );
+		m.sheenColorMapTransform = m.sheenColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 18u );
+		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
+		m.iridescenceMapTransform = m.iridescenceMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 22u );
+		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
+		m.specularColorMapTransform = m.specularColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 26u );
+		m.specularIntensityMapTransform = m.specularIntensityMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 28u );
 
 		return m;
 
 	}
+
+`;
+
+export const shaderLightStruct = /* glsl */ `
+
+	#define RECT_AREA_LIGHT_TYPE 0
+	#define CIRC_AREA_LIGHT_TYPE 1
+	#define SPOT_LIGHT_TYPE 2
+
+	struct LightsInfo {
+
+		sampler2D tex;
+		uint count;
+
+	};
+
+	struct Light {
+
+		vec3 position;
+		int type;
+
+		vec3 color;
+		float intensity;
+
+		vec3 u;
+		vec3 v;
+		float area;
+
+		// spot light fields
+		float radius;
+		float near;
+		float decay;
+		float distance;
+		float coneCos;
+		float penumbraCos;
+		int iesProfile;
+
+	};
+
+	Light readLightInfo( sampler2D tex, uint index ) {
+
+		uint i = index * 6u;
+
+		vec4 s0 = texelFetch1D( tex, i + 0u );
+		vec4 s1 = texelFetch1D( tex, i + 1u );
+		vec4 s2 = texelFetch1D( tex, i + 2u );
+		vec4 s3 = texelFetch1D( tex, i + 3u );
+
+		Light l;
+		l.position = s0.rgb;
+		l.type = int( round( s0.a ) );
+
+		l.color = s1.rgb;
+		l.intensity = s1.a;
+
+		l.u = s2.rgb;
+		l.v = s3.rgb;
+		l.area = s3.a;
+
+		if ( l.type == SPOT_LIGHT_TYPE ) {
+
+			vec4 s4 = texelFetch1D( tex, i + 4u );
+			vec4 s5 = texelFetch1D( tex, i + 5u );
+			l.radius = s4.r;
+			l.near = s4.g;
+			l.decay = s4.b;
+			l.distance = s4.a;
+
+			l.coneCos = s5.r;
+			l.penumbraCos = s5.g;
+			l.iesProfile = int( round ( s5.b ) );
+
+		}
+
+		return l;
+
+	}
+
+	struct SpotLight {
+
+		vec3 position;
+		int type;
+
+		vec3 color;
+		float intensity;
+
+		vec3 u;
+		vec3 v;
+		float area;
+
+		float radius;
+		float near;
+		float decay;
+		float distance;
+		float coneCos;
+		float penumbraCos;
+		int iesProfile;
+
+	};
 
 `;

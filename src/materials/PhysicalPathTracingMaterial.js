@@ -4,14 +4,17 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs } from '../shader/shaderStructs.js';
+import { shaderMaterialStructs, shaderLightStruct } from '../shader/shaderStructs.js';
 import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
+import { shaderLightSampling } from '../shader/shaderLightSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
+import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -33,6 +36,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_DOF: 1,
 				FEATURE_GRADIENT_BG: 0,
 				TRANSPARENT_TRAVERSALS: 5,
+				// 0 = Perspective
+				// 1 = Orthographic
+				// 2 = Equirectangular
+				CAMERA_TYPE: 0,
 			},
 
 			uniforms: {
@@ -48,11 +55,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
+				lights: { value: new LightsInfoUniformStruct() },
+				iesProfiles: { value: new IESProfilesTexture().texture },
 				cameraWorldMatrix: { value: new Matrix4() },
 				invProjectionMatrix: { value: new Matrix4() },
-				isOrthographicCamera: { value: true },
 				backgroundBlur: { value: 0.0 },
-				environmentIntensity: { value: 2.0 },
+				environmentIntensity: { value: 1.0 },
 				environmentRotation: { value: new Matrix3() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
 
@@ -92,6 +100,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
+				${ shaderLightStruct }
 
 				${ shaderUtils }
 				${ shaderMaterialSampling }
@@ -118,7 +127,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int bounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
-				uniform bool isOrthographicCamera;
 				uniform sampler2D normalAttribute;
 				uniform sampler2D tangentAttribute;
 				uniform sampler2D uvAttribute;
@@ -129,6 +137,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int seed;
 				uniform float opacity;
 				uniform sampler2D materials;
+				uniform LightsInfo lights;
+				uniform sampler2DArray iesProfiles;
+
+				${ shaderLightSampling }
 
 				uniform EquirectHdrInfo envMapInfo;
 
@@ -198,7 +210,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec4 albedo = vec4( material.color, material.opacity );
 							if ( material.map != - 1 ) {
 
-								albedo *= texture2D( textures, vec3( uv, material.map ) );
+								vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
+								albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 
 							}
 
@@ -206,14 +219,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if ( material.alphaMap != -1 ) {
 
 								albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-							
+
 							}
 
 							// transmission
 							float transmission = material.transmission;
 							if ( material.transmissionMap != - 1 ) {
 
-								transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+								vec3 uvPrime = material.transmissionMapTransform * vec3( uv, 1 );
+								transmission *= texture2D( textures, vec3( uvPrime.xy, material.transmissionMap ) ).r;
 
 							}
 
@@ -221,7 +235,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							float metalness = material.metalness;
 							if ( material.metalnessMap != - 1 ) {
 
-								metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+								vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
+								metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 							}
 
@@ -248,7 +263,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// only attenuate on the way in
 							if ( isBelowSurface ) {
 
-								color *= albedo.rgb;
+								color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
 
 							}
 
@@ -264,15 +279,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				// returns whether the ray hit anything, not just the first surface. Could be optimized to not check the full hierarchy.
-				bool anyHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection ) {
+				// returns whether the ray hit anything before a certain distance, not just the first surface. Could be optimized to not check the full hierarchy.
+				bool anyCloserHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, float maxDist ) {
 
 					uvec4 faceIndices = uvec4( 0u );
 					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
 					vec3 barycoord = vec3( 0.0 );
 					float side = 1.0;
 					float dist = 0.0;
-					return bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
+					bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
+					return hit && dist < maxDist;
 
 				}
 
@@ -290,38 +306,50 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					return rayOrigin4.xyz / rayOrigin4.w;
 				}
 
-				void main() {
+				void getCameraRay( out vec3 rayDirection, out vec3 rayOrigin ) {
 
-					rng_initialize( gl_FragCoord.xy, seed );
+					vec2 ssd = vec2( 1.0 ) / resolution;
 
-					// get [-1, 1] normalized device coordinates
-					vec2 ndc = 2.0 * vUv - vec2( 1.0 );
+					// Jitter the camera ray by finding a uv coordinate at a random sample
+					// around this pixel's UV coordinate
+					vec2 jitteredUv = vUv + vec2( tentFilter( rand() ) * ssd.x, tentFilter( rand() ) * ssd.y );
 
-					vec3 ss00 = ndcToRayOrigin( vec2( - 1.0, - 1.0 ) );
-					vec3 ss01 = ndcToRayOrigin( vec2( - 1.0, 1.0 ) );
-					vec3 ss10 = ndcToRayOrigin( vec2( 1.0, - 1.0 ) );
+					#if CAMERA_TYPE == 2
 
-					vec3 ssdX = ( ss10 - ss00 ) / resolution.x;
-					vec3 ssdY = ( ss01 - ss00 ) / resolution.y;
+						// Equirectangular projection
 
-					// Jitter the camera ray by finding a new subpixel point to point to from the camera origin
-					// This is better than just jittering the camera position since it actually results in divergent
-					// rays providing better coverage for the pixel
-					vec3 rayOrigin = ndcToRayOrigin( ndc ) + tentFilter( rand() ) * ssdX + tentFilter( rand() ) * ssdY;
+						vec4 rayDirection4 = vec4( equirectUvToDirection( jitteredUv ), 0.0 );
+						vec4 rayOrigin4 = vec4( 0.0, 0.0, 0.0, 1.0 );
 
-					vec3 rayDirection;
+						rayDirection4 = cameraWorldMatrix * rayDirection4;
+						rayOrigin4 = cameraWorldMatrix * rayOrigin4;
 
-					if ( isOrthographicCamera ) {
+						rayDirection = normalize( rayDirection4.xyz );
+						rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
 
-						rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
-						rayDirection = normalize( rayDirection );
+					#else
 
-					} else {
+						// get [-1, 1] normalized device coordinates
+						vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
 
-						vec3 cameraOrigin = ( cameraWorldMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
-						rayDirection = normalize( rayOrigin - cameraOrigin );
+						rayOrigin = ndcToRayOrigin( ndc );
 
-					}
+						#if CAMERA_TYPE == 1
+
+							// Orthographic projection
+
+							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
+							rayDirection = normalize( rayDirection );
+
+						#else
+
+							// Perspective projection
+
+							rayDirection = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
+
+						#endif
+
+					#endif
 
 					#if FEATURE_DOF
 					{
@@ -348,7 +376,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					}
 					#endif
+
 					rayDirection = normalize( rayDirection );
+
+				}
+
+				void main() {
+
+					rng_initialize( gl_FragCoord.xy, seed );
+
+					vec3 rayDirection;
+					vec3 rayOrigin;
+
+					getCameraRay( rayDirection, rayOrigin );
 
 					// inverse environment rotation
 					mat3 invEnvironmentRotation = inverse( environmentRotation );
@@ -366,6 +406,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// path tracing state
 					float accumulatedRoughness = 0.0;
+					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
 					int transparentTraversals = TRANSPARENT_TRAVERSALS;
 					vec3 throughputColor = vec3( 1.0 );
@@ -375,7 +416,46 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					for ( i = 0; i < bounces; i ++ ) {
 
-						if ( ! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
+
+						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
+
+						if ( lightHit.hit && ( lightHit.dist < dist || !hit ) ) {
+
+							if ( i == 0 || transmissiveRay ) {
+
+								gl_FragColor.rgb += lightHit.emission * throughputColor;
+
+							} else {
+
+								#if FEATURE_MIS
+
+								// NOTE: we skip MIS for spotlights since we haven't fixed the forward
+								// path tracing code path, yet
+								if ( lightHit.type == SPOT_LIGHT_TYPE ) {
+
+									gl_FragColor.rgb += lightHit.emission * throughputColor;
+
+								} else {
+
+									// weight the contribution
+									float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lights.count + 1u ) );
+									gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
+
+								}
+
+								#else
+
+								gl_FragColor.rgb += lightHit.emission * throughputColor;
+
+								#endif
+
+							}
+							break;
+
+						}
+
+						if ( ! hit ) {
 
 							if ( i == 0 || transmissiveRay ) {
 
@@ -389,6 +469,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
+								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
@@ -432,20 +513,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
 
-							albedo *= texture2D( textures, vec3( uv, material.map ) );
-
+							vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
+							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
 
 						// alphaMap
 						if ( material.alphaMap != -1 ) {
 
 							albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-						
+
 						}
 
 						// possibly skip this sample if it's transparent, alpha test is enabled, or we hit the wrong material side
@@ -492,7 +572,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float roughness = material.roughness;
 						if ( material.roughnessMap != - 1 ) {
 
-							roughness *= texture2D( textures, vec3( uv, material.roughnessMap ) ).g;
+							vec3 uvPrime = material.roughnessMapTransform * vec3( uv, 1 );
+							roughness *= texture2D( textures, vec3( uvPrime.xy, material.roughnessMap ) ).g;
 
 						}
 
@@ -500,7 +581,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float metalness = material.metalness;
 						if ( material.metalnessMap != - 1 ) {
 
-							metalness *= texture2D( textures, vec3( uv, material.metalnessMap ) ).b;
+							vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
+							metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
 
 						}
 
@@ -508,7 +590,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 emission = material.emissiveIntensity * material.emissive;
 						if ( material.emissiveMap != - 1 ) {
 
-							emission *= texture2D( textures, vec3( uv, material.emissiveMap ) ).xyz;
+							vec3 uvPrime = material.emissiveMapTransform * vec3( uv, 1 );
+							emission *= texture2D( textures, vec3( uvPrime.xy, material.emissiveMap ) ).xyz;
 
 						}
 
@@ -516,11 +599,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float transmission = material.transmission;
 						if ( material.transmissionMap != - 1 ) {
 
-							transmission *= texture2D( textures, vec3( uv, material.transmissionMap ) ).r;
+							vec3 uvPrime = material.transmissionMapTransform * vec3( uv, 1 );
+							transmission *= texture2D( textures, vec3( uvPrime.xy, material.transmissionMap ) ).r;
 
 						}
 
 						// normal
+						vec3 baseNormal = normal;
 						if ( material.normalMap != - 1 ) {
 
 							vec4 tangentSample = textureSampleBarycoord(
@@ -537,7 +622,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
 								mat3 vTBN = mat3( tangent, bitangent, normal );
 
-								vec3 texNormal = texture2D( textures, vec3( uv, material.normalMap ) ).xyz * 2.0 - 1.0;
+								vec3 uvPrime = material.normalMapTransform * vec3( uv, 1 );
+								vec3 texNormal = texture2D( textures, vec3( uvPrime.xy, material.normalMap ) ).xyz * 2.0 - 1.0;
 								texNormal.xy *= material.normalScale;
 								normal = vTBN * texNormal;
 
@@ -546,6 +632,110 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						normal *= side;
+
+						// clearcoat
+						float clearcoat = material.clearcoat;
+						if ( material.clearcoatMap != - 1 ) {
+
+							vec3 uvPrime = material.clearcoatMapTransform * vec3( uv, 1 );
+							clearcoat *= texture2D( textures, vec3( uvPrime.xy, material.clearcoatMap ) ).r;
+
+						}
+
+						// clearcoatRoughness
+						float clearcoatRoughness = material.clearcoatRoughness;
+						if ( material.clearcoatRoughnessMap != - 1 ) {
+
+							vec3 uvPrime = material.clearcoatRoughnessMapTransform * vec3( uv, 1 );
+							clearcoat *= texture2D( textures, vec3( uvPrime.xy, material.clearcoatRoughnessMap ) ).g;
+
+						}
+
+						// clearcoatNormal
+						vec3 clearcoatNormal = baseNormal;
+						if ( material.clearcoatNormalMap != - 1 ) {
+
+							vec4 tangentSample = textureSampleBarycoord(
+								tangentAttribute,
+								barycoord,
+								faceIndices.xyz
+							);
+
+							// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+							// resulting in NaNs and slow path tracing.
+							if ( length( tangentSample.xyz ) > 0.0 ) {
+
+								vec3 tangent = normalize( tangentSample.xyz );
+								vec3 bitangent = normalize( cross( clearcoatNormal, tangent ) * tangentSample.w );
+								mat3 vTBN = mat3( tangent, bitangent, clearcoatNormal );
+
+								vec3 uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1 );
+								vec3 texNormal = texture2D( textures, vec3( uvPrime.xy, material.clearcoatNormalMap ) ).xyz * 2.0 - 1.0;
+								texNormal.xy *= material.clearcoatNormalScale;
+								clearcoatNormal = vTBN * texNormal;
+
+							}
+
+						}
+
+						clearcoatNormal *= side;
+
+						// sheenColor
+						vec3 sheenColor = material.sheenColor;
+						if ( material.sheenColorMap != - 1 ) {
+
+							vec3 uvPrime = material.sheenColorMapTransform * vec3( uv, 1 );
+							sheenColor *= texture2D( textures, vec3( uvPrime.xy, material.sheenColorMap ) ).rgb;
+
+						}
+
+						// sheenRoughness
+						float sheenRoughness = material.sheenRoughness;
+						if ( material.sheenRoughnessMap != - 1 ) {
+
+							vec3 uvPrime = material.sheenRoughnessMapTransform * vec3( uv, 1 );
+							sheenRoughness *= texture2D( textures, vec3( uvPrime.xy, material.sheenRoughnessMap ) ).a;
+
+						}
+
+						// iridescence
+						float iridescence = material.iridescence;
+						if ( material.iridescenceMap != - 1 ) {
+
+							vec3 uvPrime = material.iridescenceMapTransform * vec3( uv, 1 );
+							iridescence *= texture2D( textures, vec3( uvPrime.xy, material.iridescenceMap ) ).r;
+
+						}
+
+						// iridescence thickness
+						float iridescenceThickness = material.iridescenceThicknessMaximum;
+						if ( material.iridescenceThicknessMap != - 1 ) {
+
+							vec3 uvPrime = material.iridescenceThicknessMapTransform * vec3( uv, 1 );
+							float iridescenceThicknessSampled = texture2D( textures, vec3( uvPrime.xy, material.iridescenceThicknessMap ) ).g;
+							iridescenceThickness = mix( material.iridescenceThicknessMinimum, material.iridescenceThicknessMaximum, iridescenceThicknessSampled );
+
+						}
+
+						iridescence = iridescenceThickness == 0.0 ? 0.0 : iridescence;
+
+						// specular color
+						vec3 specularColor = material.specularColor;
+						if ( material.specularColorMap != - 1 ) {
+
+							vec3 uvPrime = material.specularColorMapTransform * vec3( uv, 1 );
+							specularColor *= texture2D( textures, vec3( uvPrime.xy, material.specularColorMap ) ).rgb;
+
+						}
+
+						// specular intensity
+						float specularIntensity = material.specularIntensity;
+						if ( material.specularIntensityMap != - 1 ) {
+
+							vec3 uvPrime = material.specularIntensityMapTransform * vec3( uv, 1 );
+							specularIntensity *= texture2D( textures, vec3( uvPrime.xy, material.specularIntensityMap ) ).a;
+
+						}
 
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
@@ -556,29 +746,37 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.roughness = roughness;
+						surfaceRec.clearcoat = clearcoat;
+						surfaceRec.clearcoatRoughness = clearcoatRoughness;
+						surfaceRec.sheenColor = sheenColor;
+						surfaceRec.sheenRoughness = sheenRoughness;
+						surfaceRec.iridescence = iridescence;
+						surfaceRec.iridescenceIor = material.iridescenceIor;
+						surfaceRec.iridescenceThickness = iridescenceThickness;
+						surfaceRec.specularColor = specularColor;
+						surfaceRec.specularIntensity = specularIntensity;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 
-						// Compute the filtered roughness value to use during specular reflection computations. A minimum
-						// value of 1e-6 is needed because the GGX functions do not work with a roughness value of 0 and
-						// the accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
+						// Compute the filtered roughness value to use during specular reflection computations.
+						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
-						surfaceRec.filteredRoughness = clamp(
-							max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ),
-							1e-3,
-							1.0
-						);
+						surfaceRec.filteredRoughness = clamp( max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
+						surfaceRec.filteredClearcoatRoughness = clamp( max( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
 
 						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
 						mat3 invBasis = inverse( normalBasis );
 
-						vec3 outgoing = - normalize( invBasis * rayDirection );
-						sampleRec = bsdfSample( outgoing, surfaceRec );
+						mat3 clearcoatNormalBasis = getBasisFromNormal( clearcoatNormal );
+						mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
 
-						float specRayPdf = specularPDF( outgoing, sampleRec.direction, surfaceRec );
+						vec3 outgoing = - normalize( invBasis * rayDirection );
+						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
+						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
+
 						isShadowRay = sampleRec.specularPdf < rand();
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
@@ -594,7 +792,43 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// direct env map sampling
 						#if FEATURE_MIS
-						{
+
+						// uniformly pick a light or environment map
+						if( rand() > 1.0 / float( lights.count + 1u ) ) {
+
+							// sample a light or environment
+							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin );
+
+							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
+							if ( isSampleBelowSurface ) {
+
+								lightSampleRec.pdf = 0.0;
+
+							}
+
+							// check if a ray could even reach the light area
+							if (
+								lightSampleRec.pdf > 0.0 &&
+								isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
+								! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
+							) {
+
+								// get the material pdf
+								vec3 sampleColor;
+								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
+								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
+
+									// weight the direct light contribution
+									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
+									float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
+									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
+
+								}
+
+							}
+
+						} else {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
@@ -621,10 +855,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, normalize( invBasis * envDirection ), surfaceRec, sampleColor );
-								if ( envMaterialPdf > 0.0 ) {
+								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surfaceRec, sampleColor );
+								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
+								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
+									envPdf /= float( lights.count + 1u );
 									float misWeight = misHeuristic( envPdf, envMaterialPdf );
 									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
 
@@ -641,7 +877,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
-							accumulatedRoughness += sin( acos( halfVector.z ) );
+							accumulatedRoughness += sin( acosApprox( halfVector.z ) );
+
+							vec3 clearcoatHalfVector = normalize( clearcoatOutgoing + sampleRec.clearcoatDirection );
+							accumulatedClearcoatRoughness += sin( acosApprox( clearcoatHalfVector.z ) );
+
 							transmissiveRay = false;
 
 						}

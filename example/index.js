@@ -78,7 +78,7 @@ const params = {
 	gradientTop: '#bfd8ff',
 	gradientBottom: '#ffffff',
 
-	environmentIntensity: 3.0,
+	environmentIntensity: 1.0,
 	environmentBlur: 0.0,
 	environmentRotation: 0,
 
@@ -463,7 +463,7 @@ function updateEnvBlur() {
 
 function updateCamera( cameraProjection ) {
 
-	if ( cameraProjection === "Perspective" ) {
+	if ( cameraProjection === 'Perspective' ) {
 
 		if ( activeCamera ) {
 

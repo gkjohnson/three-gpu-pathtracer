@@ -1,4 +1,19 @@
 {
 	"root": true,
-	"extends": "./node_modules/eslint-config-mdcs/index.js"
+	"extends": "./node_modules/eslint-config-mdcs/index.js",
+	"rules": {
+		"no-throw-literal": [
+			"error"
+		],
+		"prefer-const": [
+			"error",
+			{
+				"destructuring": "any",
+				"ignoreReadBeforeAssign": false
+			}
+		],
+		"quotes": [ "error", "single" ],
+		"indent": [ "error", "tab" ],
+		"no-var": [ "error" ]
+	}
 }

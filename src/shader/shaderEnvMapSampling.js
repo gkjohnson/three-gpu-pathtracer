@@ -26,7 +26,7 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 	vec2 uv = equirectDirectionToUv( direction );
 	color = texture2D( info.map, uv ).rgb;
 
-	float totalSum = texture2D( info.totalSum, vec2( 0.0 ) ).r;
+	float totalSum = info.totalSumWhole + info.totalSumDecimal;
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
 	float pdf = lum / totalSum;
@@ -47,20 +47,12 @@ float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 directi
 	direction = derivedDirection;
 	color = texture2D( info.map, uv ).rgb;
 
-	float totalSum = texture2D( info.totalSum, vec2( 0.0 ) ).r;
+	float totalSum = info.totalSumWhole + info.totalSumDecimal;
 	float lum = colorToLuminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
 	float pdf = lum / totalSum;
 
 	return float( resolution.x * resolution.y ) * pdf * envMapDirectionPdf( direction );
-
-}
-
-float misHeuristic( float a, float b ) {
-
-	float aa = a * a;
-	float bb = a * b;
-	return aa / ( bb + aa );
 
 }
 

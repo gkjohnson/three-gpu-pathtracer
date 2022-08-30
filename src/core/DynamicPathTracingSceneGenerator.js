@@ -12,11 +12,12 @@ export class DynamicPathTracingSceneGenerator {
 
 	constructor( scene ) {
 
-		this.scene = scene;
+		this.objects = Array.isArray( scene ) ? scene : [ scene ];
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
 		this.materials = null;
 		this.textures = null;
+		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( scene );
 
 	}
@@ -28,7 +29,8 @@ export class DynamicPathTracingSceneGenerator {
 		this.geometry = new BufferGeometry();
 		this.materials = null;
 		this.textures = null;
-		this.staticGeometryGenerator = new StaticGeometryGenerator( this.scene );
+		this.lights = [];
+		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
 
@@ -36,20 +38,29 @@ export class DynamicPathTracingSceneGenerator {
 
 	generate() {
 
-		const { scene, staticGeometryGenerator, geometry } = this;
+		const { objects, staticGeometryGenerator, geometry } = this;
 		if ( this.bvh === null ) {
 
 			const attributes = [ 'position', 'normal', 'tangent', 'uv' ];
-			scene.traverse( c => {
 
-				if ( c.isMesh ) {
+			for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
-					const normalMapRequired = ! ! c.material.normalMap;
-					setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+				objects[ i ].traverse( c => {
 
-				}
+					if ( c.isMesh ) {
 
-			} );
+						const normalMapRequired = ! ! c.material.normalMap;
+						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+
+					} else if ( c.isRectAreaLight || c.isSpotLight ) {
+
+						this.lights.push( c );
+
+					}
+
+				} );
+
+			}
 
 			const textureSet = new Set();
 			const materials = staticGeometryGenerator.getMaterials();
@@ -80,10 +91,11 @@ export class DynamicPathTracingSceneGenerator {
 			this.textures = Array.from( textureSet );
 
 			return {
+				lights: this.lights,
 				bvh: this.bvh,
 				materials: this.materials,
 				textures: this.textures,
-				scene,
+				objects,
 			};
 
 		} else {
@@ -92,10 +104,11 @@ export class DynamicPathTracingSceneGenerator {
 			staticGeometryGenerator.generate( geometry );
 			bvh.refit();
 			return {
+				lights: this.lights,
 				bvh: this.bvh,
 				materials: this.materials,
 				textures: this.textures,
-				scene,
+				objects,
 			};
 
 		}

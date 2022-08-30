@@ -14,7 +14,7 @@ const mouse = new THREE.Vector2();
 const focusPoint = new THREE.Vector3();
 const params = {
 
-	environmentIntensity: 3,
+	environmentIntensity: 1,
 	environmentRotation: 0,
 	bounces: 3,
 	samplesPerFrame: 1,
@@ -41,6 +41,7 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PhysicalCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -58,8 +59,8 @@ async function init() {
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
-	ptRenderer.material.bgGradientTop.set( 0x390f20 );
-	ptRenderer.material.bgGradientBottom.set( 0x151b1f );
+	ptRenderer.material.bgGradientTop.set( 0x390f20 ).convertSRGBToLinear();
+	ptRenderer.material.bgGradientBottom.set( 0x151b1f ).convertSRGBToLinear();
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
