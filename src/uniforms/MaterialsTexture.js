@@ -349,7 +349,7 @@ export class MaterialsTexture extends DataTexture {
 			// sample 13
 			index ++; // matte
 			index ++; // shadow
-			index ++;
+			floatArray[ index ++ ] = + m.vertexColors; // vertexColors
 			index ++;
 
 			// map transform 14
