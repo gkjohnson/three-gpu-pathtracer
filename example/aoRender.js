@@ -35,7 +35,7 @@ async function init() {
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( { transparent: true } ) );
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 200 );
 	camera.position.set( - 4, 2, 3 );
 
 	scene = new THREE.Scene();
