@@ -74,7 +74,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 					vNorm = normalize( modelNormalMatrix * normal );
 					vPos = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
 
-					#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+					#if defined( USE_NORMALMAP ) && defined( USE_TANGENT )
 
 						vUv = uv;
 						vTan = tangent;
@@ -86,7 +86,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 			`,
 
 			fragmentShader: /* glsl */`
-				#define RAY_OFFSET 1e-5
+				#define RAY_OFFSET 1e-4
 
 				precision highp isampler2D;
 				precision highp usampler2D;
@@ -129,7 +129,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 					float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 					vec3 normal = vNorm;
 
-					#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+					#if defined( USE_NORMALMAP ) && defined( USE_TANGENT )
 
 						// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 						// resulting in NaNs and slow path tracing.
