@@ -2,7 +2,7 @@ import { Matrix4, Matrix3, Color, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
-	shaderStructs, shaderIntersectFunction,
+	shaderStructs, shaderIntersectFunction, VertexAttributeTexture,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs, shaderLightStruct } from '../shader/shaderStructs.js';
 import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
@@ -52,7 +52,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				normalAttribute: { value: new FloatVertexAttributeTexture() },
 				tangentAttribute: { value: new FloatVertexAttributeTexture() },
 				uvAttribute: { value: new FloatVertexAttributeTexture() },
-				colorAttribute: { value: new FloatVertexAttributeTexture() },
+				colorAttribute: { value: new VertexAttributeTexture() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
@@ -521,7 +521,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 						vec4 vertexColor = textureSampleBarycoord( colorAttribute, barycoord, faceIndices.xyz);
-						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
 
