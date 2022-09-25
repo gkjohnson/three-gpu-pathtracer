@@ -681,51 +681,6 @@ async function updateModel() {
 		material.tangentAttribute.updateFrom( geometry.attributes.tangent );
 		material.uvAttribute.updateFrom( geometry.attributes.uv );
 		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-
-		// Normalize vertex colors. TODO: where should we put this code?
-		const colorBufferAtr = geometry.attributes.color;
-		const count = colorBufferAtr.count;
-		const finalStride = colorBufferAtr.itemSize;
-		const length = finalStride * count;
-		const dataArray = new Float32Array( length );
-		const originalBufferCons = colorBufferAtr.array.constructor;
-		const normalizeValue = Math.pow( 2, originalBufferCons.BYTES_PER_ELEMENT * 8 ) - 1;
-
-		const itemSize = colorBufferAtr.itemSize;
-
-		for ( let i = 0; i < count; i ++ ) {
-
-			const ii = finalStride * i;
-			dataArray[ ii ] = colorBufferAtr.getX( i ) / normalizeValue;
-
-			if ( itemSize >= 2 ) {
-
-				dataArray[ ii + 1 ] = colorBufferAtr.getY( i ) / normalizeValue;
-
-			}
-
-			if ( itemSize >= 3 ) {
-
-				dataArray[ ii + 2 ] = colorBufferAtr.getZ( i ) / normalizeValue;
-
-				if ( finalStride === 4 ) {
-
-					dataArray[ ii + 3 ] = 1.0;
-
-				}
-
-			}
-
-			if ( itemSize >= 4 ) {
-
-				dataArray[ ii + 3 ] = colorBufferAtr.getW( i ) / normalizeValue;
-
-			}
-
-		}
-
-		colorBufferAtr.array = dataArray;
-
 		material.colorAttribute.updateFrom( geometry.attributes.color );
 
 		material.textures.setTextures( renderer, 2048, 2048, textures );
