@@ -104,7 +104,7 @@ export function setCommonAttributes( geometry, options ) {
 	if ( ! geometry.attributes.color && ( attributes && attributes.includes( 'color' ) ) ) {
 
 		const vertCount = geometry.attributes.position.count;
-		geometry.setAttribute( 'color', new BufferAttribute( new Uint16Array( vertCount * 4 ), 4, true ) );
+		geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( vertCount * 4 ), 4, true ) );
 
 	}
 
