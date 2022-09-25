@@ -218,8 +218,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
-							if( material.vertexColors ){
+							if ( material.vertexColors ) {
+
 								albedo *= vertexColor;
+
 							}
 
 							// alphaMap
@@ -528,8 +530,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
 						}
 
-						if( material.vertexColors ){
+						if ( material.vertexColors ) {
+
 							albedo *= vertexColor;
+
 						}
 
 						// alphaMap
