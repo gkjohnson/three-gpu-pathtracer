@@ -523,6 +523,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
 						vec4 vertexColor = textureSampleBarycoord( colorAttribute, barycoord, faceIndices.xyz);
+						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
 
