@@ -41,7 +41,7 @@ export class DynamicPathTracingSceneGenerator {
 		const { objects, staticGeometryGenerator, geometry } = this;
 		if ( this.bvh === null ) {
 
-			const attributes = [ 'position', 'normal', 'tangent', 'uv' ];
+			const attributes = [ 'position', 'normal', 'tangent', 'uv', 'color' ];
 
 			for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
