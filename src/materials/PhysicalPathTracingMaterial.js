@@ -147,6 +147,18 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform sampler2DArray textures;
 				varying vec2 vUv;
 
+				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
+
+					return clamp(
+						max(
+							roughness,
+							accumulatedRoughness * filterGlossyFactor * 5.0 ),
+						0.0,
+						1.0
+					);
+
+				}
+
 				vec3 sampleBackground( vec3 direction ) {
 
 					#if FEATURE_GRADIENT_BG
@@ -216,7 +228,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// alphaMap
-							if ( material.alphaMap != -1 ) {
+							if ( material.alphaMap != - 1 ) {
 
 								albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
 
@@ -329,7 +341,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#else
 
-						// get [-1, 1] normalized device coordinates
+						// get [- 1, 1] normalized device coordinates
 						vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
 
 						rayOrigin = ndcToRayOrigin( ndc );
@@ -338,7 +350,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// Orthographic projection
 
-							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, -1.0, 0.0 ) ).xyz;
+							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, - 1.0, 0.0 ) ).xyz;
 							rayDirection = normalize( rayDirection );
 
 						#else
@@ -512,7 +524,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						// uv coord for textures
 						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
+
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
 						if ( material.map != - 1 ) {
@@ -522,7 +536,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						// alphaMap
-						if ( material.alphaMap != -1 ) {
+						if ( material.alphaMap != - 1 ) {
 
 							albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
 
@@ -764,8 +778,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
-						surfaceRec.filteredRoughness = clamp( max( surfaceRec.roughness, accumulatedRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
-						surfaceRec.filteredClearcoatRoughness = clamp( max( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness * filterGlossyFactor * 5.0 ), 0.0, 1.0 );
+						surfaceRec.filteredRoughness = applyFilteredGlossy( surfaceRec.roughness, accumulatedRoughness );
+						surfaceRec.filteredClearcoatRoughness = applyFilteredGlossy( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness );
 
 						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
 						mat3 invBasis = inverse( normalBasis );
