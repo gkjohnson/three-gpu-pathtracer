@@ -681,6 +681,7 @@ async function updateModel() {
 		material.tangentAttribute.updateFrom( geometry.attributes.tangent );
 		material.uvAttribute.updateFrom( geometry.attributes.uv );
 		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+		material.colorAttribute.updateFrom( geometry.attributes.color );
 		material.textures.setTextures( renderer, 2048, 2048, textures );
 		material.materials.updateFrom( materials, textures );
 

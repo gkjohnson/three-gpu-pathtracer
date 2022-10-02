@@ -77,6 +77,8 @@ export const shaderMaterialStructs = /* glsl */ `
 		float sheenRoughness;
 		int sheenRoughnessMap;
 
+		bool vertexColors;
+
 		mat3 mapTransform;
 		mat3 metalnessMapTransform;
 		mat3 roughnessMapTransform;
@@ -182,6 +184,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		m.matte = bool( s13.r );
 		m.castShadow = ! bool( s13.g );
+		m.vertexColors = bool( s13.b );
 
 		uint firstTextureTransformIdx = i + 14u;
 
