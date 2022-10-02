@@ -25,11 +25,49 @@
 			text-align: center;
 			width: 100%;
 			padding: 5px;
+			pointer-events: none;
+		}
+
+		#dataContainer {
+			position: fixed;
+			font-family: monospace;
+			color: white;
+			pointer-events: none;
+			width: 0;
+			height: 0;
+			visibility: hidden;
+		}
+
+		#data {
+			margin-top: 10px;
+			transform: translate( -50%, 0 );
+			display: inline-block;
+			white-space: pre;
+		}
+
+		#dataContainer::after {
+			content: '';
+			position: absolute;
+			border: 1px solid white;
+			border-radius: 10px;
+			width: 5px;
+			height: 5px;
+			top: 0;
+			left: 0;
+			display: inline-block;
+			transform: translate( -50%, -50% );
+		}
+
+		canvas {
+			cursor: none;
 		}
     </style>
 </head>
 
 <body>
+	<div id="dataContainer">
+		<div id="data">TEST</div>
+	</div>
 	<div id="info">Utility for graphing shader function outputs.</div>
     <script type="module" src="./graphing.js"></script>
 </body>

@@ -5,23 +5,24 @@ import { shaderGGXFunctions } from '../src/shader/shaderGGXFunctions.js';
 import { shaderUtils } from '../src/shader/shaderUtils.js';
 
 let camera, scene, renderer, plane;
-let xRange, yRange;
 let cameraCenter;
 let zoom = 10;
+let dataEl, dataContainerEl;
 const params = {
 	aspect: 1,
+	reset() {
+		zoom = 10;
+		cameraCenter.set( 0, 0 );
+	}
 };
 
 init();
 
-function getAspect() {
-
-	return params.aspect * window.innerHeight / window.innerWidth;
-
-}
-
 // init
 async function init() {
+
+	dataContainerEl = document.getElementById( 'dataContainer' );
+	dataEl = document.getElementById( 'data' );
 
 	// renderer init
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -38,8 +39,6 @@ async function init() {
 
 	scene = new THREE.Scene();
 
-	xRange = new THREE.Vector2( 0, 1.0 );
-	yRange = new THREE.Vector2( 0, 5.0 );
 	cameraCenter = new THREE.Vector2();
 
 	// image plane
@@ -80,23 +79,28 @@ async function init() {
 
 	const gui = new GUI();
 	gui.add( plane.material, 'dim' );
-	gui.add( plane.material, 'thickness', 0.1, 10.0 );
+	gui.add( plane.material, 'thickness', 0.5, 10.0 );
 	gui.add( plane.material, 'graphCount', 1.0, 4.0, 1.0 );
+	gui.add( params, 'reset' );
 
 	const aspectFolder = gui.addFolder( 'aspect' );
 	aspectFolder.add( params, 'aspect', 0.1, 2 );
 
-	const xAxis = gui.addFolder( 'x axis' );
-	xAxis.add( xRange, 'x', - 20, 20, 0.25 ).name( 'min' );
-	xAxis.add( xRange, 'y', - 20, 20, 0.25 ).name( 'min' );
-
-	const yAxis = gui.addFolder( 'y axis' );
-	yAxis.add( yRange, 'x', - 10, 10, 0.25 ).name( 'min' );
-	yAxis.add( yRange, 'y', - 10, 10, 0.25 ).name( 'min' );
-
 	let clicked = false;
 	let prevX = - 1;
 	let prevY = - 1;
+	renderer.domElement.addEventListener( 'pointerleave', () =>{
+
+		dataContainerEl.style.visibility = 'hidden';
+
+	} );
+
+	renderer.domElement.addEventListener( 'pointerenter', () =>{
+
+		dataContainerEl.style.visibility = 'visible';
+
+	} );
+
 	renderer.domElement.addEventListener( 'pointerdown', e => {
 
 		clicked = true;
@@ -107,7 +111,7 @@ async function init() {
 
 	renderer.domElement.addEventListener( 'pointermove', e => {
 
-		clicked = Boolean( e.buttons & 1 );
+		clicked = clicked && Boolean( e.buttons & 1 );
 		if ( clicked ) {
 
 			const deltaX = e.clientX - prevX;
@@ -126,6 +130,12 @@ async function init() {
 			cameraCenter.y += graphDeltaY;
 
 		}
+
+		dataContainerEl.style.left = `${ e.clientX }px`;
+		dataContainerEl.style.top = `${ e.clientY }px`;
+
+		const data = mouseToGraphValue( e.clientX, e.clientY );
+		dataEl.innerText = `x: ${ data.x.toFixed( 3 ) }\ny: ${ data.y.toFixed( 3 ) }`
 
 	} );
 
@@ -194,5 +204,26 @@ function animation() {
 	);
 
 	renderer.render( scene, camera );
+
+}
+
+function getAspect() {
+
+	return params.aspect * window.innerHeight / window.innerWidth;
+
+}
+
+function mouseToGraphValue( x, y ) {
+
+	const xWidth = 1;
+	const yWidth = getAspect();
+
+	const centerRelX = ( x / window.innerWidth ) - 0.5;
+	const centerRelY = ( y / window.innerHeight ) - 0.5;
+
+	const graphX = zoom * xWidth * centerRelX - cameraCenter.x;
+	const graphY = zoom * yWidth * centerRelY - cameraCenter.y;
+
+	return { x: graphX, y: - graphY };
 
 }
