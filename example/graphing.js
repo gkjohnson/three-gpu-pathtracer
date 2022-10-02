@@ -4,6 +4,27 @@ import { GraphMaterial } from '../src/index.js';
 import { shaderGGXFunctions } from '../src/shader/shaderGGXFunctions.js';
 import { shaderUtils } from '../src/shader/shaderUtils.js';
 
+const graphFunctionSnippet = /* glsl */`
+	#include <common>
+	${ shaderUtils }
+	${ shaderGGXFunctions }
+
+	vec4 graphFunction( float x ) {
+
+		vec3 wi = normalize( vec3( 1.0, 1.0, 1.0 ) );
+		vec3 halfVec = vec3( 0.0, 0.0, 1.0 );
+		float theta = dot( wi, halfVec );
+
+		return vec4(
+			ggxPDF( wi, halfVec, x ),
+			ggxDistribution( halfVec, x ),
+			ggxShadowMaskG1( theta, x ),
+			ggxLamda( theta, x )
+		);
+
+	}
+`
+
 let camera, scene, renderer, plane;
 let cameraCenter;
 let zoom = 10;
@@ -53,26 +74,7 @@ async function init() {
 		new GraphMaterial( {
 			side: THREE.DoubleSide,
 			thickness: 1,
-			functionContent: /* glsl */`
-				#include <common>
-				${ shaderUtils }
-				${ shaderGGXFunctions }
-
-				vec4 callback( float x ) {
-
-					vec3 wi = normalize( vec3( 1.0, 1.0, 1.0 ) );
-					vec3 halfVec = vec3( 0.0, 0.0, 1.0 );
-					float theta = dot( wi, halfVec );
-
-					return vec4(
-						ggxPDF( wi, halfVec, x ),
-						ggxDistribution( halfVec, x ),
-						ggxShadowMaskG1( theta, x ),
-						ggxLamda( theta, x )
-					);
-
-				}
-			`
+			graphFunctionSnippet,
 		} )
 	);
 	plane.scale.setScalar( 2.0 );

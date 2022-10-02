@@ -3,15 +3,15 @@ import { MaterialBase } from './MaterialBase.js';
 
 export class GraphMaterial extends MaterialBase {
 
-	get functionContent() {
+	get graphFunctionSnippet() {
 
-		return this._functionContent;
+		return this._graphFunctionSnippet;
 
 	}
 
-	set functionContent( v ) {
+	set graphFunctionSnippet( v ) {
 
-		this._functionContent = v;
+		this._graphFunctionSnippet = v;
 
 	}
 
@@ -141,7 +141,7 @@ export class GraphMaterial extends MaterialBase {
 					);
 
 					// get the results
-					vec4 result = callback( point.x );
+					vec4 result = graphFunction( point.x );
 					vec4 delta = result - vec4( point.y );
 					vec4 halfDdf = fwidth( delta ) * 0.5;
 					if ( fwidth( point.y ) > yWidth * 0.5 ) {
@@ -207,8 +207,8 @@ export class GraphMaterial extends MaterialBase {
 		} );
 
 
-		this._functionContent = /* glsl */`
-			vec4 callback( float x ) {
+		this._graphFunctionSnippet = /* glsl */`
+			vec4 graphFunctionSnippet( float x ) {
 
 				return vec4(
 					sin( x * 3.1415926535 ),
@@ -228,7 +228,7 @@ export class GraphMaterial extends MaterialBase {
 
 		shader.fragmentShader = shader.fragmentShader.replace(
 			'__FUNCTION_CONTENT__',
-			this._functionContent,
+			this._graphFunctionSnippet,
 		);
 		return shader;
 
@@ -236,7 +236,7 @@ export class GraphMaterial extends MaterialBase {
 
 	customProgramCacheKey() {
 
-		return this._functionContent;
+		return this._graphFunctionSnippet;
 
 	}
 
