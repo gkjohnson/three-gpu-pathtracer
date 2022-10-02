@@ -216,7 +216,7 @@ export class MaterialsTexture extends DataTexture {
 
 			// sample 2
 			// transmission & emissiveIntensity
-			floatArray[ index ++ ] = getField( m, 'ior', 1.0 );
+			floatArray[ index ++ ] = getField( m, 'ior', 1.5 );
 			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'transmissionMap' );
 			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
@@ -322,9 +322,9 @@ export class MaterialsTexture extends DataTexture {
 
 			} else {
 
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
 
 			}
 
