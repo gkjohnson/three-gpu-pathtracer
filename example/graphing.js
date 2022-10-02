@@ -23,7 +23,7 @@ const graphFunctionSnippet = /* glsl */`
 		);
 
 	}
-`
+`;
 
 let camera, scene, renderer, plane;
 let cameraCenter;
