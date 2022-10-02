@@ -40,7 +40,7 @@ vec3 ggxDirection( vec3 incidentDir, float roughnessX, float roughnessY, float r
 
 // Below are PDF and related functions for use in a Monte Carlo path tracer
 // as specified in Appendix B of the following paper
-// See equation (2) from reference [2]
+// See equation (34) from reference [0]
 float ggxLamda( float theta, float roughness ) {
 
 	float tanTheta = tan( theta );
@@ -52,7 +52,7 @@ float ggxLamda( float theta, float roughness ) {
 
 }
 
-// See equation (2) from reference [2]
+// See equation (34) from reference [0]
 float ggxShadowMaskG1( float theta, float roughness ) {
 
 	return 1.0 / ( 1.0 + ggxLamda( theta, roughness ) );
@@ -68,9 +68,9 @@ float ggxShadowMaskG2( vec3 wi, vec3 wo, float roughness ) {
 
 }
 
+// See equation (33) from reference [0]
 float ggxDistribution( vec3 halfVector, float roughness ) {
 
-	// See equation (33) from reference [0]
 	float a2 = roughness * roughness;
 	a2 = max( EPSILON, a2 );
 	float cosTheta = halfVector.z;
@@ -84,14 +84,6 @@ float ggxDistribution( vec3 halfVector, float roughness ) {
 
 	float denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
 	return ( a2 / denom );
-
-	// See equation (1) from reference [2]
-	// const { x, y, z } = halfVector;
-	// const a2 = roughness * roughness;
-	// const mult = x * x / a2 + y * y / a2 + z * z;
-	// const mult2 = mult * mult;
-
-	// return 1.0 / Math.PI * a2 * mult2;
 
 }
 
