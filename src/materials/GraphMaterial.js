@@ -35,6 +35,7 @@ export class GraphMaterial extends MaterialBase {
 
 			uniforms: {
 
+				dim: { value: true },
 				thickness: { value: 1 },
 				graphCount: { value: 4 },
 				overlay: { value: true },
@@ -44,7 +45,7 @@ export class GraphMaterial extends MaterialBase {
 					new Color( 0xe91e63 ).convertSRGBToLinear(),
 					new Color( 0x4caf50 ).convertSRGBToLinear(),
 					new Color( 0x03a9f4 ).convertSRGBToLinear(),
-					new Color( 0x666666 ).convertSRGBToLinear(),
+					new Color( 0xffc107 ).convertSRGBToLinear(),
 				] },
 
 			},
@@ -65,6 +66,7 @@ export class GraphMaterial extends MaterialBase {
 			fragmentShader: /* glsl */`
 				varying vec2 vUv;
 				uniform bool overlay;
+				uniform bool dim;
 				uniform float graphCount;
 				uniform float thickness;
 				uniform vec2 xRange;
@@ -113,8 +115,8 @@ export class GraphMaterial extends MaterialBase {
 					float axisIntensity = 1.0 - min( distToZero.x, distToZero.y );
 					float markerIntensity = 1.0 - min( distToAxis.x, distToAxis.y );
 
-					vec3 markerColor = mix( vec3( 1.0 ), vec3( 0.65 ), markerIntensity );
-					vec3 backgroundColor = mix( markerColor, vec3( 0.25 ), axisIntensity );
+					vec3 markerColor = mix( vec3( 0.005 ), vec3( 0.05 ), markerIntensity );
+					vec3 backgroundColor = mix( markerColor, vec3( 0.2 ), axisIntensity );
 					return backgroundColor;
 
 				}
@@ -152,6 +154,16 @@ export class GraphMaterial extends MaterialBase {
 					// initialize the background
 					gl_FragColor.rgb = getBackground( point, yWidth );
 					gl_FragColor.a = 1.0;
+
+					if ( dim && ( point.x < 0.0 || point.y < 0.0 ) ) {
+
+						graph = mix(
+							vec4( 1.0 ),
+							graph,
+							0.05
+						);
+
+					}
 
 					// color the charts
 					if ( sectionCount > 1.0 ) {
