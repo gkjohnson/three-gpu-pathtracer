@@ -38,7 +38,10 @@ const params = {
 	reset() {
 
 		zoom = 10;
-		cameraCenter.set( 0, 0 );
+		cameraCenter.set(
+			- zoom * 0.5 + zoom * 0.05,
+			getAspect() * zoom * 0.5 - zoom * 0.05,
+		);
 
 	}
 };
@@ -81,8 +84,8 @@ async function init() {
 	scene.add( plane );
 
 	cameraCenter.set(
-		- zoom * 0.45,
-		getAspect() * zoom * 0.4,
+		- zoom * 0.5 + zoom * 0.05,
+		getAspect() * zoom * 0.5 - zoom * 0.05,
 	);
 
 	const gui = new GUI();
