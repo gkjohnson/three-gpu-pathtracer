@@ -333,12 +333,10 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 	transmissionWeight = transmission * ( 1.0 - transSpecularProb ) * ( 1.0 - clearcoatWeight );
 
 	float totalWeight = diffuseWeight + specularWeight + transmissionWeight + clearcoatWeight;
-	float invTotalWeight = 1.0 / totalWeight;
-
-	diffuseWeight *= invTotalWeight;
-	specularWeight *= invTotalWeight;
-	transmissionWeight *= invTotalWeight;
-	clearcoatWeight *= invTotalWeight;
+	diffuseWeight /= totalWeight;
+	specularWeight /= totalWeight;
+	transmissionWeight /= totalWeight;
+	clearcoatWeight /= totalWeight;
 
 }
 
@@ -504,22 +502,22 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	vec3 clearcoatWi;
 
 	float r = rand();
-	if ( r <= cdf[0] ) {
+	if ( r <= cdf[0] ) { // diffuse
 
 		wi = diffuseDirection( wo, surf );
 		clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
 
-	} else if ( r <= cdf[1] ) {
+	} else if ( r <= cdf[1] ) { // specular
 
 		wi = specularDirection( wo, surf );
 		clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
 
-	} else if ( r <= cdf[2] ) {
+	} else if ( r <= cdf[2] ) { // transmission / refraction
 
 		wi = transmissionDirection( wo, surf );
 		clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
 
-	} else if ( r <= cdf[3] ) {
+	} else if ( r <= cdf[3] ) { // clearcoat
 
 		clearcoatWi = clearcoatDirection( clearcoatWo, surf );
 		wi = normalize( invBasis * normalize( clearcoatNormalBasis * clearcoatWi ) );
