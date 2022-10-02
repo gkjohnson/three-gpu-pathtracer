@@ -144,7 +144,7 @@ async function init() {
 		dataContainerEl.style.top = `${ e.clientY }px`;
 
 		const data = mouseToGraphValue( e.clientX, e.clientY );
-		dataEl.innerText = `x: ${ data.x.toFixed( 3 ) }\ny: ${ data.y.toFixed( 3 ) }`
+		dataEl.innerText = `x: ${ data.x.toFixed( 3 ) }\ny: ${ data.y.toFixed( 3 ) }`;
 
 	} );
 
