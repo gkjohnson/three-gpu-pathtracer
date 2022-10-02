@@ -10,9 +10,15 @@ let zoom = 10;
 let dataEl, dataContainerEl;
 const params = {
 	aspect: 1,
+	displayX: true,
+	displayY: true,
+	displayZ: true,
+	displayW: true,
 	reset() {
+
 		zoom = 10;
 		cameraCenter.set( 0, 0 );
+
 	}
 };
 
@@ -80,11 +86,14 @@ async function init() {
 	const gui = new GUI();
 	gui.add( plane.material, 'dim' );
 	gui.add( plane.material, 'thickness', 0.5, 10.0 );
-	gui.add( plane.material, 'graphCount', 1.0, 4.0, 1.0 );
+	gui.add( params, 'aspect', 0.1, 2 );
 	gui.add( params, 'reset' );
 
-	const aspectFolder = gui.addFolder( 'aspect' );
-	aspectFolder.add( params, 'aspect', 0.1, 2 );
+	const graphFolder = gui.addFolder( 'graphs' );
+	graphFolder.add( params, 'displayX' ).name( 'display graph 1' );
+	graphFolder.add( params, 'displayY' ).name( 'display graph 2' );
+	graphFolder.add( params, 'displayZ' ).name( 'display graph 3' );
+	graphFolder.add( params, 'displayW' ).name( 'display graph 4' );
 
 	let clicked = false;
 	let prevX = - 1;
@@ -197,10 +206,16 @@ function animation() {
 		- cameraCenter.x + 0.5 * xWidth * zoom,
 	);
 
-
 	mat.yRange.set(
 		cameraCenter.y - 0.5 * yWidth * zoom,
 		cameraCenter.y + 0.5 * yWidth * zoom,
+	);
+
+	mat.graphDisplay.set(
+		Number( params.displayX ),
+		Number( params.displayY ),
+		Number( params.displayZ ),
+		Number( params.displayW ),
 	);
 
 	renderer.render( scene, camera );

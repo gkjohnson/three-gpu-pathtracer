@@ -1,4 +1,4 @@
-import { NoBlending, Color, Vector2 } from 'three';
+import { NoBlending, Color, Vector2, Vector4 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 
 export class GraphMaterial extends MaterialBase {
@@ -38,6 +38,7 @@ export class GraphMaterial extends MaterialBase {
 				dim: { value: true },
 				thickness: { value: 1 },
 				graphCount: { value: 4 },
+				graphDisplay: { value: new Vector4( 1.0, 1.0, 1.0, 1.0 ) },
 				overlay: { value: true },
 				xRange: { value: new Vector2( - 2.0, 2.0 ) },
 				yRange: { value: new Vector2( - 2.0, 2.0 ) },
@@ -67,6 +68,7 @@ export class GraphMaterial extends MaterialBase {
 				varying vec2 vUv;
 				uniform bool overlay;
 				uniform bool dim;
+				uniform bvec4 graphDisplay;
 				uniform float graphCount;
 				uniform float thickness;
 				uniform vec2 xRange;
@@ -168,21 +170,29 @@ export class GraphMaterial extends MaterialBase {
 					// color the charts
 					if ( sectionCount > 1.0 ) {
 
-						gl_FragColor.rgb = mix(
-							colors[ section ],
-							gl_FragColor.rgb,
-							graph[ section ]
-						);
+						if ( graphDisplay[ section ] ) {
+
+							gl_FragColor.rgb = mix(
+								colors[ section ],
+								gl_FragColor.rgb,
+								graph[ section ]
+							);
+
+						}
 
 					} else {
 
 						for ( int i = 0; i < int( graphCount ); i ++ ) {
 
-							gl_FragColor.rgb = mix(
-								colors[ i ],
-								gl_FragColor.rgb,
-								graph[ i ]
-							);
+							if ( graphDisplay[ i ] ) {
+
+								gl_FragColor.rgb = mix(
+									colors[ i ],
+									gl_FragColor.rgb,
+									graph[ i ]
+								);
+
+							}
 
 						}
 
