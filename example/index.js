@@ -92,6 +92,7 @@ const params = {
 
 	enable: true,
 	bounces: 3,
+	filterGlossyFactor: 0.5,
 	pause: false,
 
 	floorColor: '#080808',
@@ -210,7 +211,7 @@ function animate() {
 		samplesEl.innerText = `samples: ${ samples }`;
 
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.filterGlossyFactor = 0.5;
+		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( activeCamera );
@@ -306,6 +307,11 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
