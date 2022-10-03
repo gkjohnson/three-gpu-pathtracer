@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 - Diffuse materials looking too dark.
+- Specular sampling to use perceptual roughness.
+- Default specular and ior values to match three.js.
 
 ## [0.0.6] - 2022-08-06
 ### Added
