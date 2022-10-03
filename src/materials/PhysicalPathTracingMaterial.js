@@ -775,16 +775,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.emission = emission;
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
-						surfaceRec.roughness = roughness;
 						surfaceRec.clearcoat = clearcoat;
-						surfaceRec.clearcoatRoughness = clearcoatRoughness;
 						surfaceRec.sheenColor = sheenColor;
-						surfaceRec.sheenRoughness = sheenRoughness;
 						surfaceRec.iridescence = iridescence;
 						surfaceRec.iridescenceIor = material.iridescenceIor;
 						surfaceRec.iridescenceThickness = iridescenceThickness;
 						surfaceRec.specularColor = specularColor;
 						surfaceRec.specularIntensity = specularIntensity;
+
+						// apply perceptual roughness factor from gltf
+						// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#microfacet-surfaces
+						surfaceRec.roughness = roughness * roughness;
+						surfaceRec.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
+						surfaceRec.sheenRoughness = sheenRoughness * sheenRoughness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
