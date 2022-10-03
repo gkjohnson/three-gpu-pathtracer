@@ -112,7 +112,9 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	float iorRatio = frontFace ? 1.0 / ior : ior;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
-	vec3 F = vec3( schlickFresnelFromIor( dot( wi, halfVector ), iorRatio ) ) * surf.specularColor * surf.specularIntensity;
+
+	float f0 = iorRatioToF0( iorRatio );
+	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) ) * surf.specularColor * surf.specularIntensity;
 
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -123,7 +125,6 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	}
 
-	float f0 = pow( ( iorRatio - 1.0 ) / ( iorRatio + 1.0 ), 2.0 );
 	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
 	F = mix( F, iridescenceFresnel, surf.iridescence );
 

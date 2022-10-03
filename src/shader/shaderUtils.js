@@ -14,10 +14,16 @@ export const shaderUtils = /* glsl */`
 	}
 
 	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
+	float iorRatioToF0( float iorRatio ) {
+
+		return pow( ( 1.0 - iorRatio ) / ( 1.0 + iorRatio ), 2.0 );
+
+	}
+
 	float schlickFresnelFromIor( float cosine, float iorRatio ) {
 
 		// Schlick approximation
-		float r_0 = pow( ( 1.0 - iorRatio ) / ( 1.0 + iorRatio ), 2.0 );
+		float r_0 = iorRatioToF0( iorRatio );
 		return schlickFresnel( cosine, r_0 );
 
 	}
@@ -261,7 +267,7 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	vec2 square( vec2 t) {
+	vec2 square( vec2 t ) {
 
 		return t * t;
 
