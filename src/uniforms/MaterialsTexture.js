@@ -216,6 +216,7 @@ export class MaterialsTexture extends DataTexture {
 
 			// sample 2
 			// transmission & emissiveIntensity
+			// three.js assumes a default f0 of 0.04 if no ior is provided which equates to an ior of 1.5
 			floatArray[ index ++ ] = getField( m, 'ior', 1.5 );
 			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
 			floatArray[ index ++ ] = getTexture( m, 'transmissionMap' );
