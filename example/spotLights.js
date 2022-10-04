@@ -134,11 +134,6 @@ async function init() {
 
 				c.castShadow = true;
 				c.receiveShadow = true;
-				if ( c.material ) {
-
-					c.material.roughness = 0.4;
-
-				}
 
 			} );
 			group.add( gltf.scene );
