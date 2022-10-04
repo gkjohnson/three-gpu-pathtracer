@@ -46,8 +46,9 @@ const params = {
 	bounces: 10,
 	pause: false,
 
-	imageMode: 'hidden',
-	imageOpacity: 0.5,
+	displayImage: false,
+	imageMode: 'overlay',
+	imageOpacity: 1.0,
 	imageType: 'dspbr-pt',
 
 };
@@ -167,7 +168,7 @@ function animate() {
 
 	stats.update();
 
-	imgEl.style.display = params.imageMode === 'hidden' ? 'none' : 'inline-block';
+	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
 	imgEl.style.width = renderer.domElement.style.width;
@@ -301,7 +302,8 @@ function buildGui() {
 	} );
 
 	const comparisonFolder = gui.addFolder( 'comparison' );
-	comparisonFolder.add( params, 'imageMode', [ 'hidden', 'overlay', 'side-by-side' ] );
+	comparisonFolder.add( params, 'displayImage' );
+	comparisonFolder.add( params, 'imageMode', [ 'overlay', 'side-by-side' ] );
 	comparisonFolder.add( params, 'imageType', [
 		'dspbr-pt',
 		'filament',
