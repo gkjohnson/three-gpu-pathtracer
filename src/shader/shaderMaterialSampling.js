@@ -15,6 +15,7 @@ struct SurfaceRec {
 	vec3 emission;
 	float transmission;
 	float ior;
+	float iorRatio;
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
@@ -104,12 +105,10 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// if roughness is set to 0 then D === NaN which results in black pixels
 	float metalness = surf.metalness;
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
 	float filteredRoughness = surf.filteredRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
-	float iorRatio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
 
@@ -194,14 +193,11 @@ function transmissionColor( wo, wi, material, hit, colorTarget ) {
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
 float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
-
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	bool cannotRefract = ratio * sinTheta > 1.0;
+	float reflectance = schlickFresnelFromIor( cosTheta, iorRatio );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		return 0.0;
@@ -215,11 +211,9 @@ float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 	float roughness = surf.roughness;
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 
-	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), ratio );
+	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), iorRatio );
 	lightDirection += randDirection() * roughness;
 	return normalize( lightDirection );
 
@@ -309,16 +303,14 @@ vec3 sheenColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 // bsdf
 void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight ) {
 
-	float ior = surf.ior;
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
-	bool frontFace = surf.frontFace;
 
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	bool cannotRefract = ratio * sinTheta > 1.0;
+	float reflectance = schlickFresnelFromIor( cosTheta, iorRatio );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		reflectance = 1.0;
@@ -343,16 +335,14 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 
 float bsdfPdf( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight ) {
 
-	float ior = surf.ior;
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
-	bool frontFace = surf.frontFace;
 
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	bool cannotRefract = ratio * sinTheta > 1.0;
+	float reflectance = schlickFresnelFromIor( cosTheta, iorRatio );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		reflectance = 1.0;
