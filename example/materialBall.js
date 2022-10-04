@@ -101,7 +101,7 @@ const params = {
 if ( window.location.hash.includes( 'transmission' ) ) {
 
 	params.material1.metalness = 0.0;
-	params.material1.roughness = 0.05;
+	params.material1.roughness = 0.23;
 	params.material1.transmission = 1.0;
 	params.material1.color = '#ffffff';
 	params.bounces = 10;
