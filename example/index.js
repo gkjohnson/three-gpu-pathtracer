@@ -766,7 +766,7 @@ async function updateModel() {
 
 						if ( c.isMesh ) {
 
-							c.material.roughness *= 0.01;
+							c.material.roughness *= 0.25;
 
 						}
 
