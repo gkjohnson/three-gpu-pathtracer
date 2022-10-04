@@ -21,7 +21,7 @@ const params = {
 		color: '#ffc766',
 		emissive: '#000000',
 		emissiveIntensity: 1,
-		roughness: 0.1,
+		roughness: 0.3,
 		metalness: 0.8,
 		ior: 1.495,
 		transmission: 0.0,
@@ -42,7 +42,7 @@ const params = {
 		color: '#db7157',
 		emissive: '#000000',
 		emissiveIntensity: 1,
-		roughness: 0.8,
+		roughness: 0.9,
 		metalness: 0.1,
 		transmission: 0.0,
 		ior: 1.495,
@@ -61,7 +61,7 @@ const params = {
 	},
 	material3: {
 		color: '#000000',
-		roughness: 0.01,
+		roughness: 0.1,
 		metalness: 0.05,
 		clearcoat: 0.0,
 		clearcoatRoughness: 0.0,
@@ -101,10 +101,17 @@ const params = {
 if ( window.location.hash.includes( 'transmission' ) ) {
 
 	params.material1.metalness = 0.0;
-	params.material1.roughness = 0.05;
+	params.material1.roughness = 0.23;
 	params.material1.transmission = 1.0;
 	params.material1.color = '#ffffff';
 	params.bounces = 10;
+
+} else if ( window.location.hash.includes( 'iridescent' ) ) {
+
+	params.material1.color = '#474747';
+	params.material1.roughness = 0.25;
+	params.material1.metalness = 1.0;
+	params.material1.iridescence = 1.0;
 
 }
 

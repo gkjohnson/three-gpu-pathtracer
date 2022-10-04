@@ -15,6 +15,7 @@ struct SurfaceRec {
 	vec3 emission;
 	float transmission;
 	float ior;
+	float iorRatio;
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
@@ -104,15 +105,15 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// if roughness is set to 0 then D === NaN which results in black pixels
 	float metalness = surf.metalness;
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
 	float filteredRoughness = surf.filteredRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
-	float iorRatio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
-	vec3 F = vec3( schlickFresnelFromIor( dot( wi, halfVector ), iorRatio ) ) * surf.specularColor * surf.specularIntensity;
+
+	float f0 = iorRatioToF0( iorRatio );
+	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) );
 
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -123,11 +124,12 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	}
 
-	float f0 = pow( ( iorRatio - 1.0 ) / ( iorRatio + 1.0 ), 2.0 );
 	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
-	F = mix( F, iridescenceFresnel, surf.iridescence );
+	vec3 metalF = mix( F, iridescenceFresnel, surf.iridescence );
+	vec3 dialectricF = F * surf.specularIntensity;
+	F = mix( dialectricF, metalF, metalness );
 
-	vec3 color = mix( vec3( 1.0 ), surf.color, metalness );
+	vec3 color = mix( surf.specularColor, surf.color, metalness );
 	color = mix( color, vec3( 1.0 ), F );
 	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
 	color *= mix( F, vec3( 1.0 ), metalness );
@@ -193,14 +195,11 @@ function transmissionColor( wo, wi, material, hit, colorTarget ) {
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
 float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
-
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	bool cannotRefract = ratio * sinTheta > 1.0;
+	float reflectance = schlickFresnelFromIor( cosTheta, iorRatio );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		return 0.0;
@@ -214,11 +213,9 @@ float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 	float roughness = surf.roughness;
-	float ior = surf.ior;
-	bool frontFace = surf.frontFace;
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 
-	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), ratio );
+	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), iorRatio );
 	lightDirection += randDirection() * roughness;
 	return normalize( lightDirection );
 
@@ -308,16 +305,14 @@ vec3 sheenColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 // bsdf
 void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight ) {
 
-	float ior = surf.ior;
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
-	bool frontFace = surf.frontFace;
 
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	bool cannotRefract = ratio * sinTheta > 1.0;
+	float reflectance = schlickFresnelFromIor( cosTheta, iorRatio );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		reflectance = 1.0;
@@ -333,27 +328,23 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 	transmissionWeight = transmission * ( 1.0 - transSpecularProb ) * ( 1.0 - clearcoatWeight );
 
 	float totalWeight = diffuseWeight + specularWeight + transmissionWeight + clearcoatWeight;
-	float invTotalWeight = 1.0 / totalWeight;
-
-	diffuseWeight *= invTotalWeight;
-	specularWeight *= invTotalWeight;
-	transmissionWeight *= invTotalWeight;
-	clearcoatWeight *= invTotalWeight;
+	diffuseWeight /= totalWeight;
+	specularWeight /= totalWeight;
+	transmissionWeight /= totalWeight;
+	clearcoatWeight /= totalWeight;
 
 }
 
 float bsdfPdf( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight ) {
 
-	float ior = surf.ior;
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
-	bool frontFace = surf.frontFace;
 
-	float ratio = frontFace ? 1.0 / ior : ior;
+	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnelFromIor( cosTheta, ratio );
-	bool cannotRefract = ratio * sinTheta > 1.0;
+	float reflectance = schlickFresnelFromIor( cosTheta, iorRatio );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		reflectance = 1.0;
@@ -504,22 +495,22 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	vec3 clearcoatWi;
 
 	float r = rand();
-	if ( r <= cdf[0] ) {
+	if ( r <= cdf[0] ) { // diffuse
 
 		wi = diffuseDirection( wo, surf );
 		clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
 
-	} else if ( r <= cdf[1] ) {
+	} else if ( r <= cdf[1] ) { // specular
 
 		wi = specularDirection( wo, surf );
 		clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
 
-	} else if ( r <= cdf[2] ) {
+	} else if ( r <= cdf[2] ) { // transmission / refraction
 
 		wi = transmissionDirection( wo, surf );
 		clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
 
-	} else if ( r <= cdf[3] ) {
+	} else if ( r <= cdf[3] ) { // clearcoat
 
 		clearcoatWi = clearcoatDirection( clearcoatWo, surf );
 		wi = normalize( invBasis * normalize( clearcoatNormalBasis * clearcoatWi ) );
