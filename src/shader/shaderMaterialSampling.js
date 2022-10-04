@@ -113,7 +113,7 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	float D = ggxDistribution( halfVector, filteredRoughness );
 
 	float f0 = iorRatioToF0( iorRatio );
-	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) ) * surf.specularColor * surf.specularIntensity;
+	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) );
 
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -127,8 +127,13 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
 	F = mix( F, iridescenceFresnel, surf.iridescence );
 
-	vec3 color = mix( vec3( 1.0 ), surf.color, metalness );
-	color = mix( color, vec3( 1.0 ), F );
+	vec3 specularColor = mix(
+		mix( surf.specularColor, vec3( 1.0 ), F ) * surf.specularIntensity,
+		surf.color,
+		metalness
+	);
+
+	vec3 color = specularColor;
 	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
 	color *= mix( F, vec3( 1.0 ), metalness );
 	color *= wi.z; // scale the light by the direction the light is coming in from
