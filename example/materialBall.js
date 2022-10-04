@@ -106,6 +106,13 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.color = '#ffffff';
 	params.bounces = 10;
 
+} else if ( window.location.hash.includes( 'iridescent' ) ) {
+
+	params.material1.color = '#474747';
+	params.material1.roughness = 0.25;
+	params.material1.metalness = 1.0;
+	params.material1.iridescence = 1.0;
+
 }
 
 // adjust performance parameters for mobile
