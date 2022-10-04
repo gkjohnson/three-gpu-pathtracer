@@ -87,7 +87,6 @@
 								if ( c.material instanceof MeshPhysicalMaterial ) {
 
 									const material = c.material;
-									material.roughness *= 0.1;
 									material.metalness = 0.0;
 									material.ior = 1.2;
 									material.map = null;
@@ -181,7 +180,6 @@
 
 								const material = c.material;
 								material.metalness = 0.0;
-								material.roughness = 0.005;
 								material.ior = 1.645;
 								material.color.lerp( new Color( 0xffffff ), 0.65 );
 
@@ -207,14 +205,9 @@
 									if ( c.material.transmission === 1.0 ) {
 
 										const material = c.material;
-										material.roughness *= 0.1;
 										material.metalness = 0.0;
 										material.ior = 1.8;
 										material.color.set( 0xffffff );
-
-									} else {
-
-										c.material.roughness *= 0.1;
 
 									}
 
