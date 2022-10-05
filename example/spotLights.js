@@ -41,6 +41,7 @@ const params = {
 		metalness: 0.1,
 	},
 
+	enabled: true,
 	multipleImportanceSampling: true,
 	environmentIntensity: 0.1,
 	bounces: 3,
@@ -69,6 +70,7 @@ async function init() {
 	// init renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.setClearColor( 0, 0 );
 	renderer.shadowMap.enabled = true;
 	document.body.appendChild( renderer.domElement );
@@ -82,7 +84,7 @@ async function init() {
 	// init path traer
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.backgroundBlur = 0.2;
+	ptRenderer.material.backgroundBlur = 0.1;
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = perspectiveCamera;
@@ -112,6 +114,7 @@ async function init() {
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' ).then( texture => {
 
+			texture.mapping = THREE.EquirectangularReflectionMapping;
 			scene.environment = texture;
 			scene.background = texture;
 
@@ -275,6 +278,7 @@ async function init() {
 	onResize();
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
+	gui.add( params, 'enabled' );
 	gui.add( params, 'showTransformControls' );
 	gui.add( params, 'showLightHelper' );
 
@@ -400,36 +404,42 @@ function animate() {
 	perspectiveCamera.updateMatrixWorld();
 	spotLightHelper.update();
 
-	// render
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
-		ptRenderer.update();
-
-	}
-
-	if ( ptRenderer.samples < 1 ) {
+	if ( ! params.enabled || ptRenderer.samples < 1 ) {
 
 		renderer.render( scene, perspectiveCamera );
 
 	}
 
-	renderer.autoClear = false;
+	if ( params.enabled ) {
 
-	fsQuad.material.map = ptRenderer.target.texture;
-	fsQuad.material.depthWrite = false;
-	fsQuad.render( renderer );
+		// render
+		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
-	transformControlsScene.children.forEach( c => {
+			ptRenderer.update();
 
-		c.visible = c instanceof THREE.SpotLightHelper ? params.showLightHelper : params.showTransformControls;
-		if ( 'enabled' in c ) c.enabled = params.showTransformControls;
+		}
 
-	} );
 
-	renderer.render( transformControlsScene, perspectiveCamera );
+		renderer.autoClear = false;
 
-	renderer.autoClear = true;
+		fsQuad.material.map = ptRenderer.target.texture;
+		fsQuad.material.depthWrite = false;
+		fsQuad.render( renderer );
 
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+		transformControlsScene.children.forEach( c => {
+
+			c.visible = c instanceof THREE.SpotLightHelper ? params.showLightHelper : params.showTransformControls;
+			if ( 'enabled' in c ) c.enabled = params.showTransformControls;
+
+		} );
+
+		renderer.render( transformControlsScene, perspectiveCamera );
+
+		renderer.autoClear = true;
+
+		samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+
+	}
 
 }
