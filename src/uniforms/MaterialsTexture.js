@@ -1,11 +1,11 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 
-const MATERIAL_PIXELS = 44;
+const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
-const SIDE_OFFSET = 12 * 4 + 3; // s12.a
-const MATTE_OFFSET = 13 * 4 + 0; // s13.r
-const SHADOW_OFFSET = 13 * 4 + 1; // s13.g
+const SIDE_OFFSET = 13 * 4 + 3; // s12.a
+const MATTE_OFFSET = 14 * 4 + 0; // s14.r
+const SHADOW_OFFSET = 14 * 4 + 1; // s14.g
 
 export class MaterialsTexture extends DataTexture {
 
@@ -339,6 +339,12 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 
 			// sample 12
+			index ++;
+			index ++;
+			index ++;
+			index ++;
+
+			// sample 13
 			// alphaMap
 			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
 
@@ -347,55 +353,55 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = m.alphaTest;
 			index ++; // side
 
-			// sample 13
+			// sample 14
 			index ++; // matte
 			index ++; // shadow
 			floatArray[ index ++ ] = Number( m.vertexColors ); // vertexColors
 			index ++;
 
-			// map transform 14
+			// map transform 15
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
 
-			// metalnessMap transform 16
+			// metalnessMap transform 17
 			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
 
-			// roughnessMap transform 18
+			// roughnessMap transform 19
 			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
 
-			// transmissionMap transform 20
+			// transmissionMap transform 21
 			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
 
 			// emissiveMap transform 22
 			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
 
-			// normalMap transform 24
+			// normalMap transform 25
 			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
 
-			// clearcoatMap transform 26
+			// clearcoatMap transform 27
 			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
 
-			// clearcoatNormalMap transform 28
+			// clearcoatNormalMap transform 29
 			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
 
-			// clearcoatRoughnessMap transform 30
+			// clearcoatRoughnessMap transform 31
 			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
 
-			// sheenColorMap transform 32
+			// sheenColorMap transform 33
 			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
 
-			// sheenRoughnessMap transform 34
+			// sheenRoughnessMap transform 35
 			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
 
-			// iridescenceMap transform 36
+			// iridescenceMap transform 37
 			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
 
-			// iridescenceThicknessMap transform 38
+			// iridescenceThicknessMap transform 39
 			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
 
-			// specularColorMap transform 40
+			// specularColorMap transform 41
 			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
 
-			// specularIntensityMap transform 42
+			// specularIntensityMap transform 43
 			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
 
 		}
