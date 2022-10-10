@@ -339,10 +339,21 @@ export class MaterialsTexture extends DataTexture {
 			index ++;
 
 			// sample 12
-			index ++;
-			index ++;
-			index ++;
-			index ++;
+			if ( 'attenuationColor' in m ) {
+
+				floatArray[ index ++ ] = m.attenuationColor.r;
+				floatArray[ index ++ ] = m.attenuationColor.g;
+				floatArray[ index ++ ] = m.attenuationColor.b;
+
+			} else {
+
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+
+			}
+
+			floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
 
 			// sample 13
 			// alphaMap

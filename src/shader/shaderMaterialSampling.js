@@ -27,6 +27,8 @@ struct SurfaceRec {
 	float iridescenceThickness;
 	vec3 specularColor;
 	float specularIntensity;
+	vec3 attenuationColor;
+	float attenuationDistance;
 };
 
 struct SampleRec {

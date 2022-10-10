@@ -783,6 +783,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.iridescenceThickness = iridescenceThickness;
 						surfaceRec.specularColor = specularColor;
 						surfaceRec.specularIntensity = specularIntensity;
+						surfaceRec.attenuationColor = material.attenuationColor;
+						surfaceRec.attenuationDistance = material.attenuationDistance;
 
 						// apply perceptual roughness factor from gltf
 						// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#microfacet-surfaces
