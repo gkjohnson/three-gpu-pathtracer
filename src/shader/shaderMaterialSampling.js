@@ -8,6 +8,7 @@ struct SurfaceRec {
 	vec3 normal;
 	vec3 faceNormal;
 	bool frontFace;
+	float distance;
 	float roughness;
 	float filteredRoughness;
 	float metalness;

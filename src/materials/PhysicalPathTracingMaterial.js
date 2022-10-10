@@ -770,6 +770,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
+						surfaceRec.distance = hit.dist;
 						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
