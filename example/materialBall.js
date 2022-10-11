@@ -67,17 +67,7 @@ const params = {
 		color: '#000000',
 		roughness: 0.1,
 		metalness: 0.05,
-		clearcoat: 0.0,
-		clearcoatRoughness: 0.0,
-		sheenColor: '#000000',
-		sheenRoughness: 0.0,
-		iridescence: 0.0,
-		iridescenceIOR: 1.5,
-		iridescenceThickness: 400,
-		specularColor: '#ffffff',
-		specularIntensity: 1.0,
 		matte: false,
-		castShadow: true,
 	},
 
 	multipleImportanceSampling: true,
@@ -624,15 +614,6 @@ function animate() {
 	m3.color.set( params.material3.color ).convertSRGBToLinear();
 	m3.metalness = params.material3.metalness;
 	m3.roughness = params.material3.roughness;
-	m3.clearcoat = params.material3.clearcoat;
-	m3.clearcoatRoughness = params.material3.clearcoatRoughness;
-	m3.sheenColor.set( params.material3.sheenColor ).convertSRGBToLinear();
-	m3.sheenRoughness = params.material3.sheenRoughness;
-	m3.iridescence = params.material3.iridescence;
-	m3.iridescenceIOR = params.material3.iridescenceIOR;
-	m3.iridescenceThicknessRange = [ 0, params.material3.iridescenceThickness ];
-	m3.specularColor.set( params.material3.specularColor ).convertSRGBToLinear();
-	m3.specularIntensity = params.material3.specularIntensity;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
@@ -640,7 +621,6 @@ function animate() {
 	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
 	ptRenderer.material.materials.setCastShadow( 0, params.material1.castShadow );
 	ptRenderer.material.materials.setCastShadow( 1, params.material2.castShadow );
-	ptRenderer.material.materials.setCastShadow( 2, params.material3.castShadow );
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
