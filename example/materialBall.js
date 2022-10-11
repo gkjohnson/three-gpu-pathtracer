@@ -25,6 +25,8 @@ const params = {
 		metalness: 0.8,
 		ior: 1.495,
 		transmission: 0.0,
+		attenuationColor: '#ffffff',
+		attenuationDistance: 0.5,
 		opacity: 1.0,
 		clearcoat: 0.0,
 		clearcoatRoughness: 0.0,
@@ -45,6 +47,8 @@ const params = {
 		roughness: 0.9,
 		metalness: 0.1,
 		transmission: 0.0,
+		attenuationColor: '#ffffff',
+		attenuationDistance: 0.5,
 		ior: 1.495,
 		opacity: 1.0,
 		clearcoat: 0.0,
@@ -104,6 +108,7 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.roughness = 0.23;
 	params.material1.transmission = 1.0;
 	params.material1.color = '#ffffff';
+
 	params.bounces = 10;
 
 } else if ( window.location.hash.includes( 'iridescent' ) ) {
@@ -112,6 +117,26 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.roughness = 0.25;
 	params.material1.metalness = 1.0;
 	params.material1.iridescence = 1.0;
+
+} else if ( window.location.hash.includes( 'acrylic' ) ) {
+
+	params.material1.color = '#ffffff';
+	params.material1.roughness = 0;
+	params.material1.metalness = 0;
+	params.material1.transmission = 1.0;
+	params.material1.attenuationDistance = 0.75;
+	params.material1.attenuationColor = '#2a6dc6';
+
+	params.material2.color = '#ffffff';
+	params.material2.roughness = 0.0;
+	params.material2.metalness = 0.975;
+
+	params.material3.color = '#999999';
+	params.material3.roughness = 0.2;
+	params.material3.metalness = 0.0;
+
+
+	params.bounces = 20;
 
 }
 
@@ -336,6 +361,8 @@ async function init() {
 	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 );
 	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 );
 	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
+	denoiseFolder.close();
+
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
@@ -377,6 +404,7 @@ async function init() {
 		}
 
 	} );
+	envFolder.close();
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
@@ -402,6 +430,7 @@ async function init() {
 		reset();
 
 	} ).listen();
+	cameraFolder.close();
 
 	const matFolder1 = gui.addFolder( 'Shell Material' );
 	matFolder1.addColor( params.material1, 'color' ).onChange( reset );
@@ -411,6 +440,8 @@ async function init() {
 	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'attenuationDistance', 0.05, 2.0 ).onChange( reset );
+	matFolder1.addColor( params.material1, 'attenuationColor' ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'clearcoat', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'clearcoatRoughness', 0, 1 ).onChange( reset );
@@ -433,6 +464,8 @@ async function init() {
 	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
+	matFolder2.add( params.material2, 'attenuationDistance', 0.05, 2.0 ).onChange( reset );
+	matFolder2.addColor( params.material2, 'attenuationColor' ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'clearcoat', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'clearcoatRoughness', 0, 1 ).onChange( reset );
@@ -451,17 +484,7 @@ async function init() {
 	matFolder3.addColor( params.material3, 'color' ).onChange( reset );
 	matFolder3.add( params.material3, 'roughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'metalness', 0, 1 ).onChange( reset );
-	matFolder3.add( params.material3, 'clearcoat', 0, 1 ).onChange( reset );
-	matFolder3.add( params.material3, 'clearcoatRoughness', 0, 1 ).onChange( reset );
-	matFolder3.addColor( params.material3, 'sheenColor' ).onChange( reset );
-	matFolder3.add( params.material3, 'sheenRoughness', 0, 1 ).onChange( reset );
 	matFolder3.add( params.material3, 'matte' ).onChange( reset );
-	matFolder3.add( params.material3, 'castShadow' ).onChange( reset );
-	matFolder3.add( params.material3, 'iridescence', 0.0, 1.0 ).onChange( reset );
-	matFolder3.add( params.material3, 'iridescenceIOR', 0.1, 3.0 ).onChange( reset );
-	matFolder3.add( params.material3, 'iridescenceThickness', 0.0, 1200.0 ).onChange( reset );
-	matFolder3.addColor( params.material3, 'specularColor' ).onChange( reset );
-	matFolder3.add( params.material3, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder3.close();
 
 	animate();
@@ -562,6 +585,8 @@ function animate() {
 	m1.metalness = params.material1.metalness;
 	m1.roughness = params.material1.roughness;
 	m1.transmission = params.material1.transmission;
+	m1.attenuationDistance = params.material1.attenuationDistance;
+	m1.attenuationColor.set( params.material1.attenuationColor );
 	m1.ior = params.material1.ior;
 	m1.opacity = params.material1.opacity;
 	m1.clearcoat = params.material1.clearcoat;
@@ -581,6 +606,8 @@ function animate() {
 	m2.metalness = params.material2.metalness;
 	m2.roughness = params.material2.roughness;
 	m2.transmission = params.material2.transmission;
+	m2.attenuationDistance = params.material2.attenuationDistance;
+	m2.attenuationColor.set( params.material2.attenuationColor );
 	m2.ior = params.material2.ior;
 	m2.opacity = params.material2.opacity;
 	m2.clearcoat = params.material2.clearcoat;
