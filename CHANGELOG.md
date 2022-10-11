@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - DenoiseMaterial based on "glslSmartDenoise" to smooth the final render.
 - Support for vertex colors.
+- Support for attenuated transmission.
 
 ### Fixed
 - Diffuse materials looking too dark.
