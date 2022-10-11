@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - DenoiseMaterial based on "glslSmartDenoise" to smooth the final render.
 - Support for vertex colors.
 - Support for attenuated transmission.
+- PathTracingRenderer.alpha: Docs specifying premuliplied alpha behavior.
 
 ### Fixed
 - Diffuse materials looking too dark.
