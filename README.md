@@ -261,6 +261,9 @@ alpha = false : Boolean
 
 Whether to support rendering scenes with transparent backgrounds. When transparent backgrounds are used two extra render targets are used, custom blending is performed, and PathTracingRenderer.target will change on every completed sample.
 
+> **Note**
+> When a transparent background is used then the material used for the final render to the canvas must use the same "premultipliedAlpha" setting as the canvas the final image may look incorrect.
+
 ### constructor
 
 ```js
