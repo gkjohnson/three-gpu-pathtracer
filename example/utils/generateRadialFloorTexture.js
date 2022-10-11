@@ -15,6 +15,7 @@ export function generateRadialFloorTexture( dim ) {
 			const yCent = 2.0 * ( yNorm - 0.5 );
 			let a = Math.max( Math.min( 1.0 - Math.sqrt( xCent ** 2 + yCent ** 2 ), 1.0 ), 0.0 );
 			a = a ** 2;
+			a = a * 1.5;
 			a = Math.min( a, 1.0 );
 
 			const i = y * dim + x;

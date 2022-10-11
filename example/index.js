@@ -219,8 +219,6 @@ function animate() {
 
 		activeCamera.updateMatrixWorld();
 
-
-
 		if ( ! params.pause || ptRenderer.samples < 1 ) {
 
 			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
