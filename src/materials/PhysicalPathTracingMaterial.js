@@ -281,10 +281,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
-							// only attenuate on the way in
-							if ( isBelowSurface ) {
+							if ( side == 1.0 && isBelowSurface ) {
 
+								// only attenuate by surface color on the way in
 								color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
+
+							} else if ( side == - 1.0 ) {
+
+								// attenuate by medium once we hit the opposite side of the model
+								color *= transmissionAttenuation( dist, material.attenuationColor, material.attenuationDistance );
 
 							}
 
@@ -937,9 +942,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// attenuate the throughput color by the medium color
 						if ( side == - 1.0 ) {
 
-							vec3 ot = - log( surfaceRec.attenuationColor ) / surfaceRec.attenuationDistance;
-							vec3 result = exp( - ot * dist );
-							throughputColor *= result;
+							throughputColor *= transmissionAttenuation( dist, surfaceRec.attenuationColor, surfaceRec.attenuationDistance );
 
 						}
 

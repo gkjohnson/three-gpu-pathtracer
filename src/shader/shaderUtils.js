@@ -1,5 +1,13 @@
 export const shaderUtils = /* glsl */`
 
+	// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
+	vec3 transmissionAttenuation( float dist, vec3 attColor, float attDist ) {
+
+		vec3 ot = - log( attColor ) / attDist;
+		return exp( - ot * dist );
+
+	}
+
 	// https://google.github.io/filament/Filament.md.html#materialsystem/diffusebrdf
 	float schlickFresnel( float cosine, float f0 ) {
 
