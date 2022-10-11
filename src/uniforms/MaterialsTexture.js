@@ -368,7 +368,7 @@ export class MaterialsTexture extends DataTexture {
 			index ++; // matte
 			index ++; // shadow
 			floatArray[ index ++ ] = Number( m.vertexColors ); // vertexColors
-			index ++;
+			floatArray[ index ++ ] = Number( m.transparent ); // transparent
 
 			// map transform 15
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );

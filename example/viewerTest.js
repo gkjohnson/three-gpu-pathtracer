@@ -439,10 +439,6 @@ async function updateModel() {
 
 		generator.dispose();
 
-		envMap.mapping = EquirectangularReflectionMapping;
-		scene.environment = envMap;
-		scene.background = envMap;
-
 		loadingEl.style.visibility = 'hidden';
 
 		creditEl.innerHTML = modelInfo.credit || '';
@@ -467,7 +463,20 @@ async function updateModel() {
 		controls.update();
 		camera.updateMatrixWorld();
 
-		ptRenderer.material.backgroundAlpha = renderSkybox ? 1 : 0;
+		envMap.mapping = EquirectangularReflectionMapping;
+		scene.environment = envMap;
+		if ( renderSkybox ) {
+
+			scene.background = envMap;
+			ptRenderer.material.backgroundAlpha = 1;
+
+		} else {
+
+			renderer.setClearAlpha( 0 );
+			scene.background = null;
+			ptRenderer.material.backgroundAlpha = 0;
+
+		}
 
 		ptRenderer.reset();
 

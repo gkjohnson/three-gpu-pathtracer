@@ -589,6 +589,7 @@ function animate() {
 	m1.iridescenceThicknessRange = [ 0, params.material1.iridescenceThickness ];
 	m1.specularColor.set( params.material1.specularColor ).convertSRGBToLinear();
 	m1.specularIntensity = params.material1.specularIntensity;
+	m1.transparent = m1.opacity < 1;
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
@@ -610,11 +611,13 @@ function animate() {
 	m2.iridescenceThicknessRange = [ 0, params.material2.iridescenceThickness ];
 	m2.specularColor.set( params.material2.specularColor ).convertSRGBToLinear();
 	m2.specularIntensity = params.material2.specularIntensity;
+	m2.transparent = m2.opacity < 1;
 
 	const m3 = materials[ 2 ];
 	m3.color.set( params.material3.color ).convertSRGBToLinear();
 	m3.metalness = params.material3.metalness;
 	m3.roughness = params.material3.roughness;
+	m3.transparent = m3.opacity < 1;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );

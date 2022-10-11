@@ -273,7 +273,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									|| useAlphaTest && albedo.a < alphaTest
 
 									// opacity
-									|| ! useAlphaTest && albedo.a < rand()
+									|| material.transparent && ! useAlphaTest && albedo.a < rand()
 								)
 							) {
 
@@ -580,7 +580,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| useAlphaTest && albedo.a < alphaTest
 
 							// opacity
-							|| ! useAlphaTest && albedo.a < rand()
+							|| material.transparent && ! useAlphaTest && albedo.a < rand()
 						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
