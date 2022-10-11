@@ -26,6 +26,8 @@ struct SurfaceRec {
 	float iridescenceThickness;
 	vec3 specularColor;
 	float specularIntensity;
+	vec3 attenuationColor;
+	float attenuationDistance;
 };
 
 struct SampleRec {
@@ -224,7 +226,8 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	return surf.color;
+	// only attenuate the color if it's on the way in
+	return surf.frontFace ? surf.color : vec3( 1.0 );
 
 }
 
