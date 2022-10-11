@@ -127,6 +127,7 @@ export class DenoiseMaterial extends MaterialBase {
 					gl_FragColor = smartDeNoise( map, vec2( vUv.x, vUv.y ), sigma, kSigma, threshold );
 					#include <tonemapping_fragment>
 					#include <encodings_fragment>
+					#include <premultiplied_alpha_fragment>
 
 				}
 

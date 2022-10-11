@@ -174,11 +174,13 @@ async function init() {
 	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
+		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: ptRenderer.target.texture,
 		blending: THREE.CustomBlending,
+		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
