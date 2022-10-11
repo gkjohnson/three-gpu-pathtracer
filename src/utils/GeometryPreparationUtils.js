@@ -2,10 +2,12 @@ import { BufferAttribute } from 'three';
 import { mergeBufferGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
+	// TODO: this material index array could be specified in a more efficient way but it would require generating this
+	// attribute after all geometries have been merged.
 	const indexAttr = geometry.index;
 	const posAttr = geometry.attributes.position;
 	const vertCount = posAttr.count;
-	const materialArray = new Uint8Array( vertCount );
+	const materialArray = new Uint16Array( vertCount );
 	const totalCount = indexAttr ? indexAttr.count : vertCount;
 	let groups = geometry.groups;
 	if ( groups.length === 0 ) {
