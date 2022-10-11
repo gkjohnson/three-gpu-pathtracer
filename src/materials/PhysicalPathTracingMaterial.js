@@ -770,7 +770,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.distance = dist;
 						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
@@ -934,6 +933,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						throughputColor *= sampleRec.color / sampleRec.pdf;
+
+						// attenuate the throughput color by the medium color
+						if ( side == - 1.0 ) {
+
+							vec3 ot = - log( surfaceRec.attenuationColor ) / surfaceRec.attenuationDistance;
+							vec3 result = exp( - ot * dist );
+							throughputColor *= result;
+
+						}
 
 						// discard the sample if there are any NaNs
 						if ( any( isnan( throughputColor ) ) || any( isinf( throughputColor ) ) ) {

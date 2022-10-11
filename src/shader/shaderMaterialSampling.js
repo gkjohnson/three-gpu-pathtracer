@@ -8,7 +8,6 @@ struct SurfaceRec {
 	vec3 normal;
 	vec3 faceNormal;
 	bool frontFace;
-	float distance;
 	float roughness;
 	float filteredRoughness;
 	float metalness;
@@ -227,10 +226,8 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	vec3 ot = - log( surf.attenuationColor ) / surf.attenuationDistance;
-	vec3 result = exp( - ot * surf.distance );
-
-	return surf.frontFace ? surf.color : result;
+	// only attenuate the color if it's on the way in
+	return surf.frontFace ? surf.color : vec3( 1.0 );
 
 }
 
