@@ -39,7 +39,7 @@
     "puppeteer": "^15.4.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "three": "^0.141.0",
+    "three": "^0.145.0",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
