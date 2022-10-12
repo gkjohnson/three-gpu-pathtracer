@@ -200,6 +200,13 @@ function animate() {
 
 	}
 
+	floorPlane.material.color.set( params.floorColor );
+	floorPlane.material.roughness = params.floorRoughness;
+	floorPlane.material.metalness = params.floorMetalness;
+	floorPlane.material.opacity = params.floorOpacity;
+	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
+	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
+
 	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
 
 		renderer.render( scene, activeCamera );
@@ -378,15 +385,13 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
+	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( () => {
 
-		ptRenderer.material.bgGradientTop.set( v );
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
+	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( () => {
 
-		ptRenderer.material.bgGradientBottom.set( v );
 		ptRenderer.reset();
 
 	} );
@@ -404,27 +409,23 @@ function buildGui() {
 	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( v => {
+	floorFolder.addColor( params, 'floorColor' ).onChange( () => {
 
-		floorPlane.material.color.set( v );
 		ptRenderer.reset();
 
 	} );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( v => {
+	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( () => {
 
-		floorPlane.material.roughness = v;
 		ptRenderer.reset();
 
 	} );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( v => {
+	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( () => {
 
-		floorPlane.material.metalness = v;
 		ptRenderer.reset();
 
 	} );
-	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( v => {
+	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( () => {
 
-		floorPlane.material.opacity = v;
 		ptRenderer.reset();
 
 	} );
@@ -697,6 +698,12 @@ async function updateModel() {
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		params.bounces = modelInfo.bounces || 3;
+		params.floorColor = modelInfo.floorColor || '#080808';
+		params.floorRoughness = modelInfo.floorRoughness || 1.0;
+		params.floorMetalness = modelInfo.floorMetalness || 0.0;
+		params.bgGradientTop = modelInfo.gradientTop || '#111111';
+		params.bgGradientBottom = modelInfo.gradientBot || '#000000';
+
 		buildGui();
 
 		loadingModel = false;

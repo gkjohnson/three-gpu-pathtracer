@@ -252,9 +252,34 @@
 					credit: 'Model courtesy of threedscans.com.',
 				},
 				'Crab Sculpture': {
-					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Elbow_Crab.glb',
-					rotation: [ 3.1 * Math.PI / 4, Math.PI, 0 ],
+					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Crab.glb',
+					rotation: [ - 2 * Math.PI / 4, 0, 0 ],
 					credit: 'Model courtesy of threedscans.com.',
+
+					bounces: 15,
+					floorColor: '#eeeeee',
+					floorRoughness: 1.0,
+					floorMetalness: 0.0,
+					gradientTop: '#eeeeee',
+					gradientBot: '#eeeeee',
+
+					postProcess( model ) {
+
+						let mat = new MeshPhysicalMaterial( {
+							roughness: 0.05,
+							transmission: 1,
+							ior: 1.2,
+							attenuationDistance: 0.06,
+							attenuationColor: 0x46dfea
+						} ) ;
+
+						model.traverse( c => {
+
+							if ( c.material ) c.material = mat;
+
+						} );
+
+					}
 				},
 				'Japanese Bridge Garden': {
 					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/japanese-bridge-garden/scene.glb',
