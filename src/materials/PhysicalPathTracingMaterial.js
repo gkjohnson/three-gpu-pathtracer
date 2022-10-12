@@ -52,7 +52,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				normalAttribute: { value: new FloatVertexAttributeTexture() },
 				tangentAttribute: { value: new FloatVertexAttributeTexture() },
 				uvAttribute: { value: new FloatVertexAttributeTexture() },
-				colorAttribute: { value: new VertexAttributeTexture() },
+				colorAttribute: { value: new FloatVertexAttributeTexture() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },

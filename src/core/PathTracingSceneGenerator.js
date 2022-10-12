@@ -18,6 +18,7 @@ export class PathTracingSceneGenerator {
 				if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
 
 					const generator = new StaticGeometryGenerator( c );
+					generator.attributes = [ 'position', 'color', 'normal', 'tangent', 'uv', 'uv2' ];
 					generator.applyWorldTransforms = false;
 					const mesh = new Mesh(
 						generator.generate(),
