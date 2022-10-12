@@ -109,7 +109,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 			return new Promise( ( resolve, reject ) => {
 
-				const TIMEOUT = 120000;
+				const TIMEOUT = 240000;
 				const handle = setTimeout( () => {
 
 					reject( new Error( `Failed to render in ${ ( 1e-3 * TIMEOUT ).toFixed( 2 ) }s.` ) );
