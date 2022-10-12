@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - DenoiseMaterial based on "glslSmartDenoise" to smooth the final render.
 - Support for vertex colors.
+- Support for attenuated transmission.
+- PathTracingRenderer.alpha: Docs specifying premuliplied alpha behavior.
 
 ### Fixed
 - Diffuse materials looking too dark.
 - Specular sampling to use perceptual roughness.
 - Default specular and ior values to match three.js.
+
+### Changed
+- Opacity support now requires setting `material.transparent` to true.
 
 ## [0.0.6] - 2022-08-06
 ### Added

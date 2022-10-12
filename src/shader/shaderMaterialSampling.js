@@ -26,6 +26,8 @@ struct SurfaceRec {
 	float iridescenceThickness;
 	vec3 specularColor;
 	float specularIntensity;
+	vec3 attenuationColor;
+	float attenuationDistance;
 };
 
 struct SampleRec {
@@ -215,15 +217,17 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	float roughness = surf.roughness;
 	float iorRatio = surf.iorRatio;
 
-	vec3 lightDirection = refract( - wo, vec3( 0.0, 0.0, 1.0 ), iorRatio );
-	lightDirection += randDirection() * roughness;
+	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + randDirection() * roughness );
+	vec3 lightDirection = refract( normalize( - wo ), halfVector, iorRatio );
+
 	return normalize( lightDirection );
 
 }
 
 vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-	return surf.color;
+	// only attenuate the color if it's on the way in
+	return surf.frontFace ? surf.color : vec3( 1.0 );
 
 }
 
@@ -308,6 +312,8 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
 
+	// TODO: we should compute a half vector ahead of time and pass it into the sampling functions
+	// so all functions will use the same half vector
 	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );

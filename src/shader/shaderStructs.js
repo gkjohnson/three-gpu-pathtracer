@@ -63,6 +63,9 @@ export const shaderMaterialStructs = /* glsl */ `
 		float specularIntensity;
 		int specularIntensityMap;
 
+		vec3 attenuationColor;
+		float attenuationDistance;
+
 		int alphaMap;
 
 		bool castShadow;
@@ -78,6 +81,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		int sheenRoughnessMap;
 
 		bool vertexColors;
+		bool transparent;
 
 		mat3 mapTransform;
 		mat3 metalnessMapTransform;
@@ -114,7 +118,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 44u;
+		uint i = index * 45u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -130,6 +134,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		vec4 s11 = texelFetch1D( tex, i + 11u );
 		vec4 s12 = texelFetch1D( tex, i + 12u );
 		vec4 s13 = texelFetch1D( tex, i + 13u );
+		vec4 s14 = texelFetch1D( tex, i + 14u );
 
 		Material m;
 		m.color = s0.rgb;
@@ -176,17 +181,21 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.specularIntensity = s11.r;
 		m.specularIntensityMap = int( round( s11.g ) );
 
-		m.alphaMap = int( round( s12.r ) );
+		m.attenuationColor = s12.rgb;
+		m.attenuationDistance = s12.a;
 
-		m.opacity = s12.g;
-		m.alphaTest = s12.b;
-		m.side = s12.a;
+		m.alphaMap = int( round( s13.r ) );
 
-		m.matte = bool( s13.r );
-		m.castShadow = ! bool( s13.g );
-		m.vertexColors = bool( s13.b );
+		m.opacity = s13.g;
+		m.alphaTest = s13.b;
+		m.side = s13.a;
 
-		uint firstTextureTransformIdx = i + 14u;
+		m.matte = bool( s14.r );
+		m.castShadow = ! bool( s14.g );
+		m.vertexColors = bool( s14.b );
+		m.transparent = bool( s14.a );
+
+		uint firstTextureTransformIdx = i + 15u;
 
 		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx );
 		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );

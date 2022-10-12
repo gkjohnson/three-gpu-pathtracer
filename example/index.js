@@ -146,7 +146,8 @@ async function init() {
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
-		blending: CustomBlending
+		blending: CustomBlending,
+		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
@@ -217,8 +218,6 @@ function animate() {
 		ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 
 		activeCamera.updateMatrixWorld();
-
-
 
 		if ( ! params.pause || ptRenderer.samples < 1 ) {
 
