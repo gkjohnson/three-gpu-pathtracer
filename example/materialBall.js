@@ -25,6 +25,7 @@ const params = {
 		metalness: 0.8,
 		ior: 1.495,
 		transmission: 0.0,
+		thinFilm: false,
 		attenuationColor: '#ffffff',
 		attenuationDistance: 0.5,
 		opacity: 1.0,
@@ -47,6 +48,7 @@ const params = {
 		roughness: 0.9,
 		metalness: 0.1,
 		transmission: 0.0,
+		thinFilm: false,
 		attenuationColor: '#ffffff',
 		attenuationDistance: 0.5,
 		ior: 1.495,
@@ -433,6 +435,7 @@ async function init() {
 	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material1, 'thinFilm', 0, 1 ).onChange( reset );
 	matFolder1.add( params.material1, 'attenuationDistance', 0.05, 2.0 ).onChange( reset );
 	matFolder1.addColor( params.material1, 'attenuationColor' ).onChange( reset );
 	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( reset );
@@ -457,6 +460,7 @@ async function init() {
 	matFolder2.add( params.material2, 'metalness', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'opacity', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'transmission', 0, 1 ).onChange( reset );
+	matFolder1.add( params.material2, 'thinFilm', 0, 1 ).onChange( reset );
 	matFolder2.add( params.material2, 'attenuationDistance', 0.05, 2.0 ).onChange( reset );
 	matFolder2.addColor( params.material2, 'attenuationColor' ).onChange( reset );
 	matFolder2.add( params.material2, 'ior', 0.9, 3.0 ).onChange( reset );
@@ -578,7 +582,7 @@ function animate() {
 	m1.metalness = params.material1.metalness;
 	m1.roughness = params.material1.roughness;
 	m1.transmission = params.material1.transmission;
-	m1.attenuationDistance = params.material1.attenuationDistance;
+	m1.attenuationDistance = params.material1.thinFilm ? Infinity : params.material1.attenuationDistance;
 	m1.attenuationColor.set( params.material1.attenuationColor );
 	m1.ior = params.material1.ior;
 	m1.opacity = params.material1.opacity;
@@ -600,7 +604,7 @@ function animate() {
 	m2.metalness = params.material2.metalness;
 	m2.roughness = params.material2.roughness;
 	m2.transmission = params.material2.transmission;
-	m2.attenuationDistance = params.material2.attenuationDistance;
+	m2.attenuationDistance = params.material2.thinFilm ? Infinity : params.material2.attenuationDistance;
 	m2.attenuationColor.set( params.material2.attenuationColor );
 	m2.ior = params.material2.ior;
 	m2.opacity = params.material2.opacity;
