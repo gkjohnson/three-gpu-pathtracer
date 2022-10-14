@@ -445,6 +445,14 @@ async function updateModel() {
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
+		geometry.computeBoundingSphere();
+
+		// mirror the model-viewer near / far planes
+		const radius = geometry.boundingSphere.radius;
+		camera.near = 2 * radius / 1000;
+		camera.far = 2 * radius;
+		camera.updateProjectionMatrix();
+
 		camera.position.setFromSphericalCoords( orbit.radius, MathUtils.DEG2RAD * orbit.phi, MathUtils.DEG2RAD * orbit.theta );
 		camera.position.x += target.x;
 		camera.position.y += target.y;
