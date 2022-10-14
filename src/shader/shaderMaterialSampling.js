@@ -14,6 +14,7 @@ struct SurfaceRec {
 	vec3 color;
 	vec3 emission;
 	float transmission;
+	bool isThinFilm;
 	float ior;
 	float iorRatio;
 	float clearcoat;
