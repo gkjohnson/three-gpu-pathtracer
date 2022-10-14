@@ -800,6 +800,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then we can just always assume this is a front face.
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 						surfaceRec.iorRatio = surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
+						surfaceRec.isThinFilm = isinf( material.attenuationDistance ) && material.thickness == 0.0;
 
 						// Compute the filtered roughness value to use during specular reflection computations.
 						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
