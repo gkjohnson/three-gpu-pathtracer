@@ -2,7 +2,7 @@ import { Matrix4, Matrix3, Color, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
-	shaderStructs, shaderIntersectFunction, VertexAttributeTexture,
+	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs, shaderLightStruct } from '../shader/shaderStructs.js';
 import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
