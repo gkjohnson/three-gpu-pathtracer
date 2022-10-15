@@ -337,7 +337,7 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
 
 			// thickness
-			floatArray[ index ++ ] = getField( m, 'thickness', 0.0 );
+			floatArray[ index ++ ] = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
 			index ++;
 
 			// sample 12
