@@ -98,8 +98,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
 
-				vec3 _GLOBAL;
-
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
@@ -777,10 +775,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRec surfaceRec;
 						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.transmission = material.transmissionMap != - 1 ? saturate( 1.0 ) : 0.0;
+						surfaceRec.transmission = transmission;
 						surfaceRec.ior = material.ior;
 						surfaceRec.emission = emission;
-						surfaceRec.metalness = 0.0;
+						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.clearcoat = clearcoat;
 						surfaceRec.sheenColor = sheenColor;
@@ -794,7 +792,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// apply perceptual roughness factor from gltf
 						// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#microfacet-surfaces
-						surfaceRec.roughness = 1.0; //roughness * roughness;
+						surfaceRec.roughness = roughness * roughness;
 						surfaceRec.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
 						surfaceRec.sheenRoughness = sheenRoughness * sheenRoughness;
 
@@ -820,10 +818,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
-
-						// gl_FragColor.rgb = _GLOBAL;
-						// gl_FragColor.a = 1.0;
-						// return;
 
 						isShadowRay = sampleRec.specularPdf < rand();
 
