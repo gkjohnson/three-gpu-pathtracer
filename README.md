@@ -681,6 +681,9 @@ Updates the size and values of the texture to align with the provided set of mat
 
 The "matte" and "side" values must be updated explicitly.
 
+> **Note**
+> In order for volume transmission to work the "attenuationDistance" must be set to a value less than Infinity or "thickness" must be set to a value greater than 0.
+
 ## LightsInfoUniformStruct
 
 Helper uniform for encoding lights as texture data with count.
