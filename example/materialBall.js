@@ -21,11 +21,11 @@ const params = {
 		color: '#ffc766',
 		emissive: '#000000',
 		emissiveIntensity: 1,
-		roughness: 0.3,
-		metalness: 0.8,
+		roughness: 0,
+		metalness: 0,
 		ior: 1.495,
-		transmission: 0.0,
-		thinFilm: false,
+		transmission: 1.0,
+		thinFilm: true,
 		attenuationColor: '#ffffff',
 		attenuationDistance: 0.5,
 		opacity: 1.0,
@@ -66,15 +66,15 @@ const params = {
 		castShadow: true,
 	},
 	material3: {
-		color: '#000000',
-		roughness: 0.1,
+		color: '#aaaaaa',
+		roughness: 1,
 		metalness: 0.05,
 		matte: false,
 	},
 
 	multipleImportanceSampling: true,
 	stableNoise: false,
-	denoiseEnabled: true,
+	denoiseEnabled: false,
 	denoiseSigma: 2.5,
 	denoiseThreshold: 0.1,
 	denoiseKSigma: 1.0,
@@ -144,6 +144,7 @@ if ( aspectRatio < 0.65 ) {
 	params.environmentBlur = 0.35;
 
 }
+params.multipleImportanceSampling = false;
 
 init();
 
@@ -157,6 +158,7 @@ async function init() {
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
+	perspectiveCamera.bokehSize = 0.0;
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
 	const orthoHeight = orthoWidth / aspect;
@@ -213,19 +215,18 @@ async function init() {
 	} );
 
 	const generator = new PathTracingSceneWorker();
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
-		.then( gltf => {
+	const gltfPromise = Promise.resolve()
+		.then( () => {
 
 			const group = new THREE.Group();
 
-			gltf.scene.scale.setScalar( 0.01 );
-			gltf.scene.updateMatrixWorld();
-			group.add( gltf.scene );
+			// gltf.scene.scale.setScalar( 0.01 );
+			// gltf.scene.updateMatrixWorld();
+			// group.add( gltf.scene );
 
+			const sphere = new THREE.Mesh( new THREE.SphereGeometry( 1, 20, 20 ) );
 			const box = new THREE.Box3();
-			box.setFromObject( gltf.scene );
+			box.setFromObject( sphere );
 
 			const floor = new THREE.Mesh(
 				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
@@ -234,38 +235,41 @@ async function init() {
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.03;
-			group.add( floor );
+			// group.add( floor );
 
 			const material1 = new THREE.MeshPhysicalMaterial();
 			const material2 = new THREE.MeshPhysicalMaterial();
+			sphere.material = material1;
 
-			gltf.scene.traverse( c => {
+			group.add( sphere );
 
-				// the vertex normals on the material ball are off...
-				// TODO: precompute the vertex normals so they are correct on load
-				if ( c.geometry ) {
+			// gltf.scene.traverse( c => {
 
-					c.geometry.computeVertexNormals();
+			// 	// the vertex normals on the material ball are off...
+			// 	// TODO: precompute the vertex normals so they are correct on load
+			// 	if ( c.geometry ) {
 
-				}
+			// 		c.geometry.computeVertexNormals();
 
-				if ( c.name === 'Sphere_1' ) {
+			// 	}
 
-					c.material = material2;
+			// 	if ( c.name === 'Sphere_1' ) {
 
-				} else {
+			// 		c.material = material2;
 
-					c.material = material1;
+			// 	} else {
 
-				}
+			// 		c.material = material1;
 
-				if ( c.name === 'subsphere_1' ) {
+			// 	}
 
-					c.material = material2;
+			// 	if ( c.name === 'subsphere_1' ) {
 
-				}
+			// 		c.material = material2;
 
-			} );
+			// 	}
+
+			// } );
 
 			materials = [ material1, material2, floor.material ];
 
