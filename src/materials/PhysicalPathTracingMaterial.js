@@ -571,10 +571,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// and we're rendering the other then we skip it. Do the opposite on subsequent bounces to get incoming light.
 						float alphaTest = material.alphaTest;
 						bool useAlphaTest = alphaTest != 0.0;
-						bool isFirstHit = i == 0;
 						if (
 							// material sidedness
-							material.side != 0.0 && ( side != material.side ) == isFirstHit
+							material.side != 0.0 && side != material.side
 
 							// alpha test
 							|| useAlphaTest && albedo.a < alphaTest
@@ -799,7 +798,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
-						surfaceRec.iorRatio = surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
+						surfaceRec.iorRatio = material.thinFilm || surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
+						surfaceRec.thinFilm = material.thinFilm;
 
 						// Compute the filtered roughness value to use during specular reflection computations.
 						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.

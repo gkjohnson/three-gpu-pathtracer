@@ -62,6 +62,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		float specularIntensity;
 		int specularIntensityMap;
+		bool thinFilm;
 
 		vec3 attenuationColor;
 		float attenuationDistance;
@@ -180,6 +181,7 @@ export const shaderMaterialStructs = /* glsl */ `
 
 		m.specularIntensity = s11.r;
 		m.specularIntensityMap = int( round( s11.g ) );
+		m.thinFilm = bool( s11.b );
 
 		m.attenuationColor = s12.rgb;
 		m.attenuationDistance = s12.a;

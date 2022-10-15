@@ -116,6 +116,17 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb' )
 		.then( gltf => {
 
+			gltf.scene.traverse( c => {
+
+				if ( c.material ) {
+
+					// set the thickness so volume rendering is used for transmissive objects.
+					c.material.thickness = 1.0;
+
+				}
+
+			} );
+
 			const group = new THREE.Group();
 			group.add( gltf.scene );
 

@@ -14,6 +14,7 @@ struct SurfaceRec {
 	vec3 color;
 	vec3 emission;
 	float transmission;
+	bool thinFilm;
 	float ior;
 	float iorRatio;
 	float clearcoat;
@@ -220,6 +221,11 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + randDirection() * roughness );
 	vec3 lightDirection = refract( normalize( - wo ), halfVector, iorRatio );
 
+	if ( surf.thinFilm ) {
+
+		lightDirection = - refract( normalize( - lightDirection ), - vec3( 0.0, 0.0, 1.0 ), 1.0 / iorRatio );
+
+	}
 	return normalize( lightDirection );
 
 }
@@ -227,7 +233,8 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// only attenuate the color if it's on the way in
-	return surf.frontFace ? surf.color : vec3( 1.0 );
+	vec3 col = surf.thinFilm || surf.frontFace ? surf.color : vec3( 1.0 );
+	return surf.transmission * col;
 
 }
 
