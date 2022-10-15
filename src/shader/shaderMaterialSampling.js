@@ -221,6 +221,11 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + randDirection() * roughness );
 	vec3 lightDirection = refract( normalize( - wo ), halfVector, iorRatio );
 
+	if ( surf.isThinFilm ) {
+
+		lightDirection = - refract( normalize( - lightDirection ), - vec3( 0.0, 0.0, 1.0 ), 1.0 / iorRatio );
+
+	}
 	return normalize( lightDirection );
 
 }
@@ -228,7 +233,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// only attenuate the color if it's on the way in
-	return surf.frontFace ? surf.color : vec3( 1.0 );
+	return surf.isThinFilm || surf.frontFace ? surf.color : vec3( 1.0 );
 
 }
 
