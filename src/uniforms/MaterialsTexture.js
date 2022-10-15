@@ -364,8 +364,7 @@ export class MaterialsTexture extends DataTexture {
 			// side & matte
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
-			floatArray[ index ++ ] = 1;
-			// index ++; // side
+			index ++; // side
 
 			// sample 14
 			index ++; // matte
