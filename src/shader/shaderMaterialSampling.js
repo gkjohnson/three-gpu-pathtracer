@@ -127,6 +127,12 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	}
 
+	// if ( surf.isThinFilm ) {
+
+	// 	F = vec3( 0.5 );
+
+	// }
+
 	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
 	vec3 metalF = mix( F, iridescenceFresnel, surf.iridescence );
 	vec3 dialectricF = F * surf.specularIntensity;
@@ -226,6 +232,11 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 		lightDirection = - refract( normalize( - lightDirection ), - vec3( 0.0, 0.0, 1.0 ), 1.0 / iorRatio );
 
 	}
+
+	_GLOBAL.r = length( lightDirection );
+	// _GLOBAL.rgb =
+
+	// return normalize( - wo );
 	return normalize( lightDirection );
 
 }
@@ -330,6 +341,12 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 		reflectance = 1.0;
 
 	}
+
+	// if ( surf.isThinFilm ) {
+
+	// 	reflectance = 0.5;
+
+	// }
 
 	float transSpecularProb = mix( reflectance, 1.0, metalness );
 	float diffSpecularProb = 0.5 + 0.5 * metalness;
@@ -534,6 +551,9 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	result.color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 	result.direction = wi;
 	result.clearcoatDirection = clearcoatWi;
+
+	_GLOBAL.r = float( result.pdf > 0.0 );
+	_GLOBAL.g = float( transmissionWeight > 0.0 );
 
 	return result;
 
