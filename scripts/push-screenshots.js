@@ -26,8 +26,8 @@ import { runScript } from './utils.js';
 	console.log( 'Switching to "screenshots" branch' );
 	await git.checkout( 'screenshots' );
 
-	console.log( 'Rebasing onto "main"' );
-	await git.rebase( [ 'main', 'screenshots' ] );
+	console.log( 'Merging in "main"' );
+	await git.merge( [ 'main' ] );
 
 	// rebuild the screenshots
 	await runScript( 'node ./scripts/update-screenshots.js' );
