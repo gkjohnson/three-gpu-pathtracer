@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Support for vertex colors.
 - Support for attenuated transmission.
 - PathTracingRenderer.alpha: Docs specifying premuliplied alpha behavior.
+- Support for thin film transmission.
 
 ### Fixed
 - Diffuse materials looking too dark.
