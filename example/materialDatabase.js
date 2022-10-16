@@ -334,9 +334,6 @@ function applyMaterialInfo( info, material ) {
 
 	}
 
-	window.INFO = info;
-	window.MAT = material;
-
 	imgEl.src = `https://physicallybased.info/reference/render/${ info.name.replace( /\s+/g, '-' ) }-cycles.webp`;
 	materialEl.innerText = `${ info.description }`;
 	materialEl.style.display = info.description ? 'inline-block' : 'none';

@@ -28,7 +28,7 @@
 				pointer-events: none;
 			}
 
-			#samples, #materialInfo {
+			#samples, #materialInfo, #reference {
 
 				opacity: 0.5;
 				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
@@ -54,6 +54,10 @@
 
 			}
 
+			a {
+				color: white;
+			}
+
 			img {
 				width: 200px;
 
@@ -66,6 +70,11 @@
 		<div id="info">
 			<div>
 				<img id="materialImage"/>
+			</div>
+			<div>
+				<div id="reference">
+					Materials courtesy of <a href="https://physicallybased.info/">physicallybased.info</a>
+				</div>
 			</div>
 			<div id="materialInfo"></div>
 		</div>
