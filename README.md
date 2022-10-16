@@ -41,12 +41,13 @@ _More features and capabilities in progress!_
 
 [Transmission Preset Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)
 
-[Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html#khronos-DragonAttenuation)
+[Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html)
+
+[Physical Material Database](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialDatabase.html)
 
 **Light Baking**
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
-
 
 ## Running examples locally
 
