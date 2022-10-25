@@ -98,17 +98,13 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	const envMapPromise = new Promise( resolve => {
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			ptRenderer.material.envMapInfo.updateFrom( texture );
 
-				ptRenderer.material.envMapInfo.updateFrom( texture );
-				resolve();
-
-			} );
-
-	} );
+		} );
 
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
@@ -165,8 +161,6 @@ async function init() {
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
-
-	window.CONTROLS = controls;
 
 	document.getElementById( 'loading' ).remove();
 

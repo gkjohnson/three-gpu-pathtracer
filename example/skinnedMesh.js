@@ -73,24 +73,19 @@ async function init() {
 
 	clock = new THREE.Clock();
 
-	const envMapPromise = new Promise( resolve => {
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			const generator = new BlurredEnvMapGenerator( renderer );
+			const blurredTex = generator.generate( texture, 0.35 );
+			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+			generator.dispose();
 
-				const generator = new BlurredEnvMapGenerator( renderer );
-				const blurredTex = generator.generate( texture, 0.35 );
-				ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-				generator.dispose();
+			scene.background = blurredTex;
+			scene.environment = blurredTex;
 
-				scene.background = blurredTex;
-				scene.environment = blurredTex;
-
-				resolve();
-
-			} );
-
-	} );
+		} );
 
 	if ( window.location.hash === '#morphtarget' ) {
 
@@ -196,12 +191,12 @@ function loadModel( url ) {
 
 			const floorTex = generateRadialFloorTexture( 2048 );
 			const floorPlane = new THREE.Mesh(
-				new THREE.PlaneBufferGeometry(),
+				new THREE.PlaneGeometry(),
 				new THREE.MeshStandardMaterial( {
 					map: floorTex,
 					transparent: true,
 					color: 0xdddddd,
-					roughness: 0.025,
+					roughness: 0.15,
 					metalness: 1.0
 				} )
 			);

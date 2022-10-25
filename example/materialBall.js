@@ -198,19 +198,15 @@ async function init() {
 
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
-	const envMapPromise = new Promise( resolve => {
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			envMap = texture;
 
-				envMap = texture;
+			updateEnvBlur();
 
-				updateEnvBlur();
-				resolve();
-
-			} );
-
-	} );
+		} );
 
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
@@ -228,7 +224,7 @@ async function init() {
 			box.setFromObject( gltf.scene );
 
 			const floor = new THREE.Mesh(
-				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
+				new THREE.CylinderGeometry( 3, 3, 0.05, 200 ),
 				new THREE.MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
