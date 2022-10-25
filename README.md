@@ -15,6 +15,8 @@ _More features and capabilities in progress!_
 
 # Examples
 
+**Setup**
+
 [Basic Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
 
 **Beauty Demos**
