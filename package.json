@@ -43,7 +43,7 @@
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
-    "three": "^0.139.2",
+    "three": ">=0.139.2",
     "xatlas-web": "^0.1.0"
   },
   "scripts": {

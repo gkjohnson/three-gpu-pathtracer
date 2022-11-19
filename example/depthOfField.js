@@ -14,7 +14,7 @@ const mouse = new THREE.Vector2();
 const focusPoint = new THREE.Vector3();
 const params = {
 
-	environmentIntensity: 1,
+	environmentIntensity: 0.5,
 	environmentRotation: 0,
 	bounces: 3,
 	samplesPerFrame: 1,
@@ -78,24 +78,20 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	const envMapPromise = new Promise( resolve => {
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			const generator = new BlurredEnvMapGenerator( renderer );
+			const blurredTex = generator.generate( texture, 0.35 );
+			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+			generator.dispose();
+			texture.dispose();
 
-				const generator = new BlurredEnvMapGenerator( renderer );
-				const blurredTex = generator.generate( texture, 0.35 );
-				ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-				generator.dispose();
-				texture.dispose();
+			scene.environment = blurredTex;
 
-				scene.environment = blurredTex;
+		} );
 
-				resolve();
-
-			} );
-
-	} );
 
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
@@ -105,7 +101,7 @@ async function init() {
 
 			const group = new THREE.Group();
 
-			const geometry = new THREE.SphereBufferGeometry( 1, 10, 10 );
+			const geometry = new THREE.SphereGeometry( 1, 10, 10 );
 			const mat = new THREE.MeshStandardMaterial( {
 				emissiveIntensity: 10,
 				emissive: 0xffffff

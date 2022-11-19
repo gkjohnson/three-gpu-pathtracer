@@ -1,0 +1,86 @@
+<html>
+	<head>
+		<title>Physically Based Material Database</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+		<style>
+			html, body {
+				margin: 0;
+				padding: 0;
+				background-color: #111;
+			}
+
+			#info {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				pointer-events: none;
+			}
+
+			#samplesContainer {
+				position: absolute;
+				bottom: 0;
+				right: 0;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				pointer-events: none;
+			}
+
+			#samples, #materialInfo, #reference {
+
+				opacity: 0.5;
+				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
+				padding: 5px;
+				display: inline-block;
+
+			}
+
+			#loading {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				color: white;
+				font-family: 'Courier New', Courier, monospace;
+			}
+
+			#materialInfo {
+
+				display: inline-block;
+				min-width: 200px;
+				max-width: 25%;
+
+			}
+
+			a {
+				color: white;
+			}
+
+			img {
+				width: 200px;
+
+			}
+		</style>
+
+	</head>
+	<body>
+		<div id="loading">LOADING</div>
+		<div id="info">
+			<div>
+				<img id="materialImage"/>
+			</div>
+			<div>
+				<div id="reference">
+					Materials courtesy of <a href="https://physicallybased.info/">physicallybased.info</a>
+				</div>
+			</div>
+			<div id="materialInfo"></div>
+		</div>
+		<div id="samplesContainer">
+			<div id="samples">--</div>
+		</div>
+		<script src="./materialDatabase.js" type="module"></script>
+	</body>
+</html>

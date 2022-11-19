@@ -112,7 +112,8 @@ async function init() {
 
 	// load the env map
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' ).then( texture => {
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
 			texture.mapping = THREE.EquirectangularReflectionMapping;
 			scene.environment = texture;
