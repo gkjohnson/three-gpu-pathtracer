@@ -32,6 +32,7 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TemporalResolve } from '../src/temporal-resolve/TemporalResolve.js';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -71,6 +72,13 @@ const params = {
 	tilesY: 2,
 	samplesPerFrame: 1,
 
+	temporalResolve: true,
+	temporalResolveMix: 0.9,
+	clampRadius: 1,
+	newSamplesSmoothing: 0.675,
+	newSamplesCorrection: 1,
+	weightTransform: 0,
+
 	model: initialModel,
 
 	envMap: envMaps[ 'Royal Esplanade' ],
@@ -105,7 +113,7 @@ const params = {
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
-let ptRenderer, fsQuad, controls, scene;
+let ptRenderer, fsQuad, controls, scene, temporalResolve;
 let envMap, envMapGenerator;
 let loadingModel = false;
 let delaySamples = 0;
@@ -143,6 +151,13 @@ async function init() {
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
 	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
+
+	temporalResolve = new TemporalResolve( ptRenderer, scene, activeCamera );
+	temporalResolve.temporalResolveMix = 0.9;
+	temporalResolve.clampRadius = 1;
+	temporalResolve.newSamplesSmoothing = 0.5;
+	temporalResolve.newSamplesCorrection = 0.75;
+	temporalResolve.weightTransform = 0;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -237,6 +252,17 @@ function animate() {
 		}
 
 		renderer.autoClear = false;
+		if ( params.temporalResolve ) {
+
+			temporalResolve.update();
+			fsQuad.material.map = temporalResolve.target.texture;
+
+		} else {
+
+			fsQuad.material.map = ptRenderer.target.texture;
+
+		}
+
 		fsQuad.render( renderer );
 		renderer.autoClear = true;
 
@@ -252,7 +278,7 @@ function animate() {
 
 function resetRenderer() {
 
-	if ( params.tilesX * params.tilesY !== 1.0 ) {
+	if ( ! params.temporalResolve && params.tilesX * params.tilesY !== 1.0 ) {
 
 		delaySamples = 1;
 
@@ -322,6 +348,24 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
+
+	const trFolder = gui.addFolder( 'Temporal Resolve' );
+	trFolder.add( params, 'temporalResolve' );
+	trFolder
+		.add( params, 'temporalResolveMix', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.temporalResolveMix = value ) );
+	trFolder
+		.add( params, 'clampRadius', 1, 8, 1 )
+		.onChange( ( value ) => ( temporalResolve.clampRadius = value ) );
+	trFolder
+		.add( params, 'newSamplesSmoothing', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.newSamplesSmoothing = value ) );
+	trFolder
+		.add( params, 'newSamplesCorrection', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.newSamplesCorrection = value ) );
+	trFolder
+		.add( params, 'weightTransform', 0, 0.5, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.weightTransform = value ) );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {

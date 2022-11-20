@@ -33,3 +33,6 @@ export * from './materials/PhysicalPathTracingMaterial.js';
 export * from './shader/shaderMaterialSampling.js';
 export * from './shader/shaderUtils.js';
 export * from './shader/shaderStructs.js';
+
+// temporal resolve
+export * from './temporal-resolve/TemporalResolve.js';

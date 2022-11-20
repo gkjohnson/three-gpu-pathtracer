@@ -399,6 +399,64 @@ _extends THREE.Camera_
 
 A class indicating that the path tracer should render an equirectangular view. Does not work with three.js raster rendering.
 
+## TemporalResolve
+
+A class that implements temporal filtering to preserve samples when the camera is moving. This helps reduce noise on camera movement by reprojecting the last frame's samples into the current one.
+
+### .temporalResolveMix
+
+```javascript
+temporalResolveMix = 0.9 : Number
+```
+
+How much the last frame should be blended into the current one. Higher values will result in a less noisy look at the cost of more smearing.
+
+### .clampRadius
+
+```javascript
+clampRadius = 1 : Number
+```
+
+An integer to set the radius of pixels to be used for neighborhood clamping. Higher values will result in a less noisy look at the cost of more blurring.
+
+### .newSamplesSmoothing
+
+```javascript
+newSamplesSmoothing = 0.675 : Number
+```
+
+To reduce noise for pixels that appeared recently, the average of multiple adjacent pixels can be used instead of a pixel itself. This factor determines the influence of the averaged pixel. Higher values will result in less noise but also less sharpness.
+
+### .newSamplesCorrection
+
+```javascript
+newSamplesCorrection = 1 : Number
+```
+
+Higher values will make pixels that appeared recently have a greater influence on the output. This will result in more noise but less smearing.
+
+### .weightTransform
+
+```javascript
+weightTransform = 0 : Number
+```
+
+This will potentiate the input color by `1 / (1 - weightTransform)` resulting in less contrast and noise when moving the camera. Higher values will highlight darker areas more.
+
+### .constructor
+
+```javascript
+constructor( ptRenderer : PathTracingRenderer, scene : Object3D, camera : Camera )
+```
+
+### .update
+
+```javascript
+update() : void
+```
+
+Updates the temporal resolve pass for the current frame.
+
 ## PhysicalSpotLight
 
 _extends THREE.SpotLight_

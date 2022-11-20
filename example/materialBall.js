@@ -7,8 +7,9 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { TemporalResolve } from '../src/temporal-resolve/TemporalResolve.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
+let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials, temporalResolve;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -71,7 +72,6 @@ const params = {
 		metalness: 0.05,
 		matte: false,
 	},
-
 	multipleImportanceSampling: true,
 	stableNoise: false,
 	denoiseEnabled: true,
@@ -86,6 +86,12 @@ const params = {
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
+	temporalResolve: true,
+	temporalResolveMix: 0.9,
+	clampRadius: 2,
+	newSamplesSmoothing: 0.675,
+	newSamplesCorrection: 1,
+	weightTransform: 0,
 	transparentTraversals: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
@@ -157,7 +163,7 @@ async function init() {
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 4, 2, 3 );
+	perspectiveCamera.position.set( - 4, 2, 7 );
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
@@ -193,6 +199,13 @@ async function init() {
 	} );
 
 	scene = new THREE.Scene();
+
+	temporalResolve = new TemporalResolve( ptRenderer, scene, activeCamera );
+	temporalResolve.temporalResolveMix = 0.9;
+	temporalResolve.clampRadius = 2;
+	temporalResolve.newSamplesSmoothing = 0.675;
+	temporalResolve.newSamplesCorrection = 1;
+	temporalResolve.weightTransform = 0;
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -347,6 +360,23 @@ async function init() {
 
 	} );
 
+	const trFolder = gui.addFolder( 'Temporal Resolve' );
+	trFolder.add( params, 'temporalResolve' );
+	trFolder
+		.add( params, 'temporalResolveMix', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.temporalResolveMix = value ) );
+	trFolder
+		.add( params, 'clampRadius', 1, 8, 1 )
+		.onChange( ( value ) => ( temporalResolve.clampRadius = value ) );
+	trFolder
+		.add( params, 'newSamplesSmoothing', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.newSamplesSmoothing = value ) );
+	trFolder
+		.add( params, 'newSamplesCorrection', 0, 1, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.newSamplesCorrection = value ) );
+	trFolder
+		.add( params, 'weightTransform', 0, 0.5, 0.025 )
+		.onChange( ( value ) => ( temporalResolve.weightTransform = value ) );
 	const denoiseFolder = gui.addFolder( 'Denoising' );
 	denoiseFolder.add( params, 'denoiseEnabled' );
 	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 );
@@ -667,13 +697,20 @@ function animate() {
 
 	renderer.autoClear = false;
 	quad.material.map = ptRenderer.target.texture;
+
+	if ( params.temporalResolve ) {
+
+		temporalResolve.update();
+		quad.material.map = temporalResolve.target.texture;
+
+	}
+
 	quad.render( renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
-
 
 
 
