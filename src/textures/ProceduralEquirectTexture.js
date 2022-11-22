@@ -1,10 +1,10 @@
 import {
+	ClampToEdgeWrapping,
 	Color,
 	DataTexture,
 	EquirectangularReflectionMapping,
 	FloatType,
 	LinearFilter,
-	LinearMipMapLinearFilter,
 	RepeatWrapping,
 	RGBAFormat,
 	Spherical,
@@ -22,14 +22,18 @@ export class ProceduralEquirectTexture extends DataTexture {
 		super(
 			new Float32Array( width * height * 4 ),
 			width, height, RGBAFormat, FloatType, EquirectangularReflectionMapping,
-			RepeatWrapping, RepeatWrapping, LinearFilter, LinearMipMapLinearFilter,
+			RepeatWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter,
 		);
 
+		this.flipY = true;
 		this.generationCallback = null;
 
 	}
 
 	update() {
+
+		this.dispose();
+		this.needsUpdate = true;
 
 		const { data, width, height } = this.image;
 		for ( let x = 0; x < width; x ++ ) {
@@ -38,7 +42,7 @@ export class ProceduralEquirectTexture extends DataTexture {
 
 				_coord.set( width, height );
 
-				_uv.set( ( x + 0.5 ) / width, ( y + 0.5 ) / height );
+				_uv.set( x / width, y / height );
 				_uv.x -= 0.5;
 				_uv.y = 1.0 - _uv.y;
 
@@ -58,6 +62,13 @@ export class ProceduralEquirectTexture extends DataTexture {
 			}
 
 		}
+
+	}
+
+	copy( other ) {
+
+		super.copy( other );
+		this.generationCallback = other.generationCallback;
 
 	}
 
