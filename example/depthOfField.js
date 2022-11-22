@@ -150,7 +150,7 @@ async function init() {
 			const material = ptRenderer.material;
 
 			material.bvh.updateFrom( bvh );
-			material.attributeArray.updateFrom(
+			material.attributesArray.updateFrom(
 				geometry.attributes.normal,
 				geometry.attributes.tangent,
 				geometry.attributes.uv,
