@@ -15,7 +15,7 @@ export class GradientEquirectTexture extends ProceduralEquirectTexture {
 			_direction.setFromSpherical( polar );
 
 			const t = _direction.y * 0.5 + 0.5;
-			color.lerpColors( this.bottomColor, this.topColor, t );
+			color.lerpColors( this.bottomColor, this.topColor, t * t );
 
 		};
 

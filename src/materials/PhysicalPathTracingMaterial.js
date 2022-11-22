@@ -21,6 +21,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 	onBeforeRender() {
 
 		this.setDefine( 'FEATURE_DOF', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
+		this.setDefine( 'FEATURE_BACKGROUND_MAP', this.backgroundMap ? 1 : 0 );
 
 	}
 
@@ -34,7 +35,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			defines: {
 				FEATURE_MIS: 1,
 				FEATURE_DOF: 1,
-				FEATURE_GRADIENT_BG: 0,
+				FEATURE_BACKGROUND_MAP: 0,
 				TRANSPARENT_TRAVERSALS: 5,
 				// 0 = Perspective
 				// 1 = Orthographic
@@ -64,13 +65,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				environmentIntensity: { value: 1.0 },
 				environmentRotation: { value: new Matrix3() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
+				backgroundMap: { value: null },
 
 				seed: { value: 0 },
 				opacity: { value: 1 },
 				filterGlossyFactor: { value: 0.0 },
 
-				bgGradientTop: { value: new Color( 0x111111 ) },
-				bgGradientBottom: { value: new Color( 0x000000 ) },
 				backgroundAlpha: { value: 1.0 },
 			},
 
@@ -111,10 +111,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform float backgroundBlur;
 				uniform float backgroundAlpha;
 
-				#if FEATURE_GRADIENT_BG
+				#if FEATURE_BACKGROUND_MAP
 
-				uniform vec3 bgGradientTop;
-				uniform vec3 bgGradientBottom;
+				uniform vec3 backgroundMap;
 
 				#endif
 
@@ -163,18 +162,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				vec3 sampleBackground( vec3 direction ) {
 
-					#if FEATURE_GRADIENT_BG
+					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
 
-					direction = normalize( direction + randDirection() * 0.05 );
+					#if FEATURE_BACKGROUND_MAP
 
-					float value = ( direction.y + 1.0 ) / 2.0;
-					value = pow( value, 2.0 );
-
-					return mix( bgGradientBottom, bgGradientTop, value );
+					return sampleEquirectEnvMapColor( sampleDir, backgroundMap );
 
 					#else
 
-					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
 					return environmentIntensity * sampleEquirectEnvMapColor( sampleDir, envMapInfo.map );
 
 					#endif
