@@ -1,7 +1,7 @@
 import { Matrix4, Matrix3, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
-	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
+	MeshBVHUniformStruct, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
 import { shaderMaterialStructs, shaderLightStruct } from '../shader/shaderStructs.js';
@@ -11,6 +11,7 @@ import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
 import { shaderLightSampling } from '../shader/shaderLightSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
+import { shaderLayerTexelFetchFunctions } from '../shader/shaderLayerTexelFetchFunctions.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
@@ -106,6 +107,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderMaterialStructs }
 				${ shaderLightStruct }
 
+				${ shaderLayerTexelFetchFunctions }
 				${ shaderUtils }
 				${ shaderMaterialSampling }
 				${ shaderEnvMapSampling }
