@@ -38,8 +38,14 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 		const { width, height, data } = this.image;
 		const length = width * height * 4;
 		const offset = length * index;
+		let itemSize = attr.itemSize;
+		if ( itemSize === 3 ) {
 
-		copyArrayToArray( tex.image.data, attr.itemSize, data, offset );
+			itemSize = 4;
+
+		}
+
+		copyArrayToArray( tex.image.data, itemSize, data, offset );
 
 		this.dispose();
 		this.needsUpdate = true;
@@ -100,8 +106,6 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 		}
 
-		// debugger;
-
 		// copy the other texture data into the data array texture
 		for ( let i = 0, l = attrsLength; i < l; i ++ ) {
 
@@ -116,7 +120,6 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 			}
 
-			if ( itemSize === 2 ) debugger;
 			copyArrayToArray( tex.image.data, itemSize, data, offset );
 
 		}
