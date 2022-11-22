@@ -25,7 +25,6 @@ export class ProceduralEquirectTexture extends DataTexture {
 			RepeatWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter,
 		);
 
-		this.flipY = true;
 		this.generationCallback = null;
 
 	}
