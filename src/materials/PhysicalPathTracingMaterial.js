@@ -41,6 +41,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// 1 = Orthographic
 				// 2 = Equirectangular
 				CAMERA_TYPE: 0,
+
+				ATTR_NORMAL: 0,
+				ATTR_TANGENT: 1,
+				ATTR_UV: 2,
+				ATTR_COLOR: 3,
 			},
 
 			uniforms: {
