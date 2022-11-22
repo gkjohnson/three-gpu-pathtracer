@@ -113,7 +113,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#if FEATURE_BACKGROUND_MAP
 
-				uniform vec3 backgroundMap;
+				uniform sampler2D backgroundMap;
 
 				#endif
 
