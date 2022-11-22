@@ -60,7 +60,7 @@
 			</div>
 		</div>
 		<script type="module">
-			import { MeshPhysicalMaterial, Color } from 'three';
+			import { MeshPhysicalMaterial, Color, DoubleSide } from 'three';
 
 			window.MODEL_LIST = {
 				'M2020 Rover': {
@@ -300,6 +300,7 @@
 							roughness: 0.25,
 							transmission: 1,
 							ior: 1.5,
+							side: DoubleSide,
 						} ) ;
 
 						model.traverse( c => {

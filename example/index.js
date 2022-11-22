@@ -166,7 +166,8 @@ async function init() {
 			transparent: true,
 			color: 0x080808,
 			roughness: 0.1,
-			metalness: 0.0
+			metalness: 0.0,
+			side: DoubleSide,
 		} )
 	);
 	floorPlane.scale.setScalar( 3 );

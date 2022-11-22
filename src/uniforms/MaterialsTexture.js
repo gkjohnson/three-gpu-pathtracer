@@ -3,7 +3,6 @@ import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, Bac
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
-const SIDE_OFFSET = 13 * 4 + 3; // s12.a
 const MATTE_OFFSET = 14 * 4 + 0; // s14.r
 const SHADOW_OFFSET = 14 * 4 + 1; // s14.g
 
@@ -36,45 +35,6 @@ export class MaterialsTexture extends DataTexture {
 		const array = this.image.data;
 		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
 		return ! Boolean( array[ index ] );
-
-	}
-
-	setSide( materialIndex, side ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + SIDE_OFFSET;
-		switch ( side ) {
-
-		case FrontSide:
-			array[ index ] = 1;
-			break;
-		case BackSide:
-			array[ index ] = - 1;
-			break;
-		case DoubleSide:
-			array[ index ] = 0;
-			break;
-
-		}
-
-	}
-
-	getSide( materialIndex ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + SIDE_OFFSET;
-		switch ( array[ index ] ) {
-
-		case 0:
-			return DoubleSide;
-		case 1:
-			return FrontSide;
-		case - 1:
-			return BackSide;
-
-		}
-
-		return 0;
 
 	}
 
@@ -336,8 +296,9 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
 			floatArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
 
-			// thickness
-			floatArray[ index ++ ] = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
+			// isThinFilm
+			const isThinFilm = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
+			floatArray[ index ++ ] = Number( isThinFilm );
 			index ++;
 
 			// sample 12
@@ -364,7 +325,27 @@ export class MaterialsTexture extends DataTexture {
 			// side & matte
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
-			index ++; // side
+			if ( ! isThinFilm && m.transmission > 0.0 ) {
+
+				floatArray[ index ++ ] = 0;
+
+			} else {
+
+				switch ( m.side ) {
+
+				case FrontSide:
+					floatArray[ index ++ ] = 1;
+					break;
+				case BackSide:
+					floatArray[ index ++ ] = - 1;
+					break;
+				case DoubleSide:
+					floatArray[ index ++ ] = 0;
+					break;
+
+				}
+
+			}
 
 			// sample 14
 			index ++; // matte
