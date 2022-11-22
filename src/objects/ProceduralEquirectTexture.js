@@ -1,4 +1,15 @@
-import { Color, DataTexture, EquirectangularReflectionMapping, FloatType, LinearFilter, LinearMipMapLinearFilter, RepeatWrapping, RGBAFormat, Spherical, Vector2 } from 'three';
+import {
+	Color,
+	DataTexture,
+	EquirectangularReflectionMapping,
+	FloatType,
+	LinearFilter,
+	LinearMipMapLinearFilter,
+	RepeatWrapping,
+	RGBAFormat,
+	Spherical,
+	Vector2,
+} from 'three';
 
 const _uv = new Vector2();
 const _coord = new Vector2();
