@@ -1,26 +1,26 @@
 import { FloatAttributeTextureArray } from './FloatAttributeTextureArray.js';
 
-export class ComboAttributesTextureArray extends FloatAttributeTextureArray {
+export class AttributesTextureArray extends FloatAttributeTextureArray {
 
-	setNormalAttribute( attr ) {
+	updateNormalAttribute( attr ) {
 
 		this.updateAttribute( 0, attr );
 
 	}
 
-	setTangentAttribute( attr ) {
+	updateTangentAttribute( attr ) {
 
 		this.updateAttribute( 1, attr );
 
 	}
 
-	setUvAttribute( attr ) {
+	updateUvAttribute( attr ) {
 
 		this.updateAttribute( 2, attr );
 
 	}
 
-	setColorAttribute( attr ) {
+	updateColorAttribute( attr ) {
 
 		this.updateAttribute( 3, attr );
 

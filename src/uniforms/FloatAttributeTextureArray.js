@@ -1,17 +1,24 @@
 import { DataArrayTexture, FloatType, RGBAFormat } from 'three';
 import { FloatVertexAttributeTexture } from 'three-mesh-bvh';
 
-function copyArrayToArray( fromArray, fromStride, toArray, offset ) {
+function copyArrayToArray( fromArray, fromStride, toArray, toStride, offset ) {
+
+	if ( fromStride > toStride ) {
+
+		throw new Error();
+
+	}
 
 	const count = fromArray.length / fromStride;
 	for ( let i = 0; i < count; i ++ ) {
 
 		const i4 = 4 * i;
 		const is = fromStride * i;
-		toArray[ offset + i4 + 0 ] = fromArray[ is + 0 ];
-		toArray[ offset + i4 + 1 ] = fromStride >= 2 ? fromArray[ is + 1 ] : 0;
-		toArray[ offset + i4 + 2 ] = fromStride >= 3 ? fromArray[ is + 2 ] : 0;
-		toArray[ offset + i4 + 3 ] = fromStride >= 4 ? fromArray[ is + 3 ] : 0;
+		for ( let j = 0; j < toStride; j ++ ) {
+
+			toArray[ offset + i4 + j ] = fromStride >= j + 1 ? fromArray[ is + j ] : 0;
+
+		}
 
 	}
 
@@ -29,13 +36,23 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 	}
 
-	updateTexture( index, attr ) {
+	updateAttribute( index, attr ) {
 
-		// update all textures
+		// update the texture
 		const tex = this._textures[ index ];
 		tex.updateFrom( attr );
 
-		const { width, height, data } = this.image;
+		// ensure compatibility
+		const baseImage = tex.image;
+		const image = this.image;
+		if ( baseImage.width !== image.width || baseImage.height !== image.height ) {
+
+			throw new Error( 'FloatAttributeTextureArray: Attribute must be the same dimensions when updating single layer.' );
+
+		}
+
+		// update the image
+		const { width, height, data } = image;
 		const length = width * height * 4;
 		const offset = length * index;
 		let itemSize = attr.itemSize;
@@ -45,7 +62,8 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 		}
 
-		copyArrayToArray( tex.image.data, itemSize, data, offset );
+		// copy the data
+		copyArrayToArray( tex.image.data, itemSize, data, 4, offset );
 
 		this.dispose();
 		this.needsUpdate = true;
@@ -90,23 +108,21 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 		}
 
 		// determine if we need to create a new array
-		const rootTexture = textures[ 0 ];
-		let { data, width, depth, height } = this.image;
-		if ( rootTexture.image.width !== width || rootTexture.image.height !== height || depth !== attrsLength ) {
+		const baseTexture = textures[ 0 ];
+		const baseImage = baseTexture.image;
+		const image = this.image;
 
-			width = rootTexture.image.width;
-			height = rootTexture.image.height;
-			depth = attrsLength;
-			data = new Float32Array( width * height * depth * 4 );
+		if ( baseImage.width !== image.width || baseImage.height !== image.height || baseImage.depth !== attrsLength ) {
 
-			this.image.width = width;
-			this.image.height = height;
-			this.image.depth = depth;
-			this.image.data = data;
+			image.width = baseImage.width;
+			image.height = baseImage.height;
+			image.depth = attrsLength;
+			image.data = new Float32Array( image.width * image.height * image.depth * 4 );
 
 		}
 
 		// copy the other texture data into the data array texture
+		const { data, width, height } = image;
 		for ( let i = 0, l = attrsLength; i < l; i ++ ) {
 
 			const tex = textures[ i ];
@@ -120,7 +136,7 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 			}
 
-			copyArrayToArray( tex.image.data, itemSize, data, offset );
+			copyArrayToArray( tex.image.data, itemSize, data, 4, offset );
 
 		}
 

@@ -16,7 +16,7 @@ import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
-import { ComboAttributesTextureArray } from '../uniforms/ComboAttributesTextureArray.js';
+import { AttributesTextureArray } from '../uniforms/AttributesTextureArray.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -57,7 +57,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
-				attributesArray: { value: new ComboAttributesTextureArray() },
+				attributesArray: { value: new AttributesTextureArray() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
