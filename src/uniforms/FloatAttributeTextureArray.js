@@ -1,5 +1,21 @@
-import { DataArrayTexture } from 'three';
+import { DataArrayTexture, FloatType, RGBAFormat } from 'three';
 import { FloatVertexAttributeTexture } from 'three-mesh-bvh';
+
+function copyArrayToArray( fromArray, fromStride, toArray, offset ) {
+
+	const count = fromArray.length / fromStride;
+	for ( let i = 0; i < count; i ++ ) {
+
+		const i4 = 4 * i;
+		const is = fromStride * i;
+		toArray[ offset + i4 + 0 ] = fromArray[ is + 0 ];
+		toArray[ offset + i4 + 1 ] = fromStride >= 2 ? fromArray[ is + 1 ] : 0;
+		toArray[ offset + i4 + 2 ] = fromStride >= 3 ? fromArray[ is + 2 ] : 0;
+		toArray[ offset + i4 + 3 ] = fromStride >= 4 ? fromArray[ is + 3 ] : 0;
+
+	}
+
+}
 
 export class FloatAttributeTextureArray extends DataArrayTexture {
 
@@ -7,6 +23,9 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 		super();
 		this._textures = [];
+		this.type = FloatType;
+		this.format = RGBAFormat;
+		this.internalFormat = 'RGBA32F';
 
 	}
 
@@ -19,8 +38,8 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 		const { width, height, data } = this.image;
 		const length = width * height * 4;
 		const offset = length * index;
-		const floatView = new Float32Array( data.buffer, offset * 4, length );
-		floatView.set( tex.image.data );
+
+		copyArrayToArray( tex.image.data, attr.itemSize, data, offset );
 
 		this.dispose();
 		this.needsUpdate = true;
@@ -47,7 +66,6 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 		while ( textures.length < attrsLength ) {
 
 			const tex = new FloatVertexAttributeTexture();
-			tex.overrideItemSize = 4;
 			textures.push( tex );
 
 		}
@@ -82,14 +100,24 @@ export class FloatAttributeTextureArray extends DataArrayTexture {
 
 		}
 
+		// debugger;
+
 		// copy the other texture data into the data array texture
 		for ( let i = 0, l = attrsLength; i < l; i ++ ) {
 
 			const tex = textures[ i ];
 			const length = width * height * 4;
 			const offset = length * i;
-			const floatView = new Float32Array( data.buffer, offset * 4, length );
-			floatView.set( tex.image.data );
+
+			let itemSize = attrs[ i ].itemSize;
+			if ( itemSize === 3 ) {
+
+				itemSize = 4;
+
+			}
+
+			if ( itemSize === 2 ) debugger;
+			copyArrayToArray( tex.image.data, itemSize, data, offset );
 
 		}
 

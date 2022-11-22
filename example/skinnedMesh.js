@@ -250,9 +250,12 @@ function regenerateScene() {
 	const material = ptRenderer.material;
 
 	material.bvh.updateFrom( bvh );
-	material.normalAttribute.updateFrom( geometry.attributes.normal );
-	material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-	material.uvAttribute.updateFrom( geometry.attributes.uv );
+	material.attributeArray.updateFrom(
+		geometry.attributes.normal,
+		geometry.attributes.tangent,
+		geometry.attributes.uv,
+		geometry.attributes.color,
+	);
 	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 	material.textures.setTextures( renderer, 2048, 2048, textures );
 	material.materials.updateFrom( materials, textures );

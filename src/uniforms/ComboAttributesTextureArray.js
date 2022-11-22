@@ -1,6 +1,6 @@
 import { FloatAttributeTextureArray } from './FloatAttributeTextureArray.js';
 
-export class GeometryAttributesTextureArray extends FloatAttributeTextureArray {
+export class ComboAttributesTextureArray extends FloatAttributeTextureArray {
 
 	setNormalAttribute( attr ) {
 

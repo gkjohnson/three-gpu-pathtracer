@@ -15,6 +15,7 @@ import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
+import { ComboAttributesTextureArray } from '../uniforms/ComboAttributesTextureArray.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -55,10 +56,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
-				normalAttribute: { value: new FloatVertexAttributeTexture() },
-				tangentAttribute: { value: new FloatVertexAttributeTexture() },
-				uvAttribute: { value: new FloatVertexAttributeTexture() },
-				colorAttribute: { value: new FloatVertexAttributeTexture() },
+				attributeArray: { value: new ComboAttributesTextureArray() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
@@ -132,10 +130,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform int bounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
-				uniform sampler2D normalAttribute;
-				uniform sampler2D tangentAttribute;
-				uniform sampler2D uvAttribute;
-				uniform sampler2D colorAttribute;
+				uniform sampler2DArray attributeArray;
 				uniform usampler2D materialIndexAttribute;
 				uniform BVH bvh;
 				uniform float environmentIntensity;
@@ -201,8 +196,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// Should be able to work using the material BSDF functions which will take into account specularity, etc.
 							// TODO: should we account for emissive surfaces here?
 
-							vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-							vec4 vertexColor = textureSampleBarycoord( colorAttribute, barycoord, faceIndices.xyz );
+							vec2 uv = textureSampleBarycoord( attributeArray, ATTR_UV, barycoord, faceIndices.xyz ).xy;
+							vec4 vertexColor = textureSampleBarycoord( attributeArray, ATTR_COLOR, barycoord, faceIndices.xyz );
+
 							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 							Material material = readMaterialInfo( materials, materialIndex );
 
@@ -539,8 +535,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						// uv coord for textures
-						vec2 uv = textureSampleBarycoord( uvAttribute, barycoord, faceIndices.xyz ).xy;
-						vec4 vertexColor = textureSampleBarycoord( colorAttribute, barycoord, faceIndices.xyz );
+						vec2 uv = textureSampleBarycoord( attributeArray, ATTR_UV, barycoord, faceIndices.xyz ).xy;
+						vec4 vertexColor = textureSampleBarycoord( attributeArray, ATTR_COLOR, barycoord, faceIndices.xyz );
 
 						// albedo
 						vec4 albedo = vec4( material.color, material.opacity );
@@ -597,7 +593,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// fetch the interpolated smooth normal
 						vec3 normal = normalize( textureSampleBarycoord(
-							normalAttribute,
+							attributeArray,
+							ATTR_NORMAL,
 							barycoord,
 							faceIndices.xyz
 						).xyz );
@@ -643,7 +640,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( material.normalMap != - 1 ) {
 
 							vec4 tangentSample = textureSampleBarycoord(
-								tangentAttribute,
+								attributeArray,
+								ATTR_TANGENT,
 								barycoord,
 								faceIndices.xyz
 							);
@@ -690,7 +688,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( material.clearcoatNormalMap != - 1 ) {
 
 							vec4 tangentSample = textureSampleBarycoord(
-								tangentAttribute,
+								attributeArray,
+								ATTR_TANGENT,
 								barycoord,
 								faceIndices.xyz
 							);
