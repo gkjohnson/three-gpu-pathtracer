@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -53,14 +53,17 @@ async function init() {
 
 	scene = new THREE.Scene();
 
+	const gradientMap = new GradientEquirectTexture();
+	gradientMap.topColor.set( 0x390f20 ).convertSRGBToLinear();
+	gradientMap.bottomColor.set( 0x151b1f ).convertSRGBToLinear();
+	gradientMap.update();
+
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
-	ptRenderer.material.bgGradientTop.set( 0x390f20 ).convertSRGBToLinear();
-	ptRenderer.material.bgGradientBottom.set( 0x151b1f ).convertSRGBToLinear();
+	ptRenderer.material.backgroundMap = gradientMap;
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -147,9 +150,12 @@ async function init() {
 			const material = ptRenderer.material;
 
 			material.bvh.updateFrom( bvh );
-			material.normalAttribute.updateFrom( geometry.attributes.normal );
-			material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-			material.uvAttribute.updateFrom( geometry.attributes.uv );
+			material.attributesArray.updateFrom(
+				geometry.attributes.normal,
+				geometry.attributes.tangent,
+				geometry.attributes.uv,
+				geometry.attributes.color,
+			);
 			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 			material.textures.setTextures( renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );

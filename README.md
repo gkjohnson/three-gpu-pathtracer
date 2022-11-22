@@ -110,9 +110,12 @@ const { bvh, textures, materials, lights } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
-ptMaterial.normalAttribute.updateFrom( geometry.attributes.normal );
-ptMaterial.tangentAttribute.updateFrom( geometry.attributes.tangent );
-ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
+ptMaterial.attributesArray.updateFrom(
+	geometry.attributes.normal,
+	geometry.attributes.tangent,
+	geometry.attributes.uv,
+	geometry.attributes.color,
+);
 
 // update materials and texture arrays
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
@@ -501,6 +504,38 @@ dispose() : void
 
 Disposes of the temporary files and textures for generation.
 
+## GradientEquirectMap
+
+### .exponent
+
+```js
+exponent = 2 : Number
+```
+
+### .topColor
+
+```js
+topColor = 0xffffff : Color
+```
+
+### .bottomColor
+
+```js
+bottomColor = 0x000000 : Color
+```
+
+### constructor
+
+```js
+constructor( resolution = 512 : Number )
+```
+
+### .update
+
+```js
+update() : void
+```
+
 ## MaterialBase
 
 _extends THREE.ShaderMaterial_
@@ -531,9 +566,7 @@ _extends MaterialBase_
 
 	// Geometry and BVH information
 	bvh: MeshBVHUniformStruct,
-	normalAttribute: FloatVertexAttributeTexture,
-	tangentAttribute: FloatVertexAttributeTexture,
-	uvAttribute: FloatVertexAttributeTexture,
+	attributesArray: AttributesTextureArray,
 	materialIndexAttribute: UIntVertexAttributeTexture,
 	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
@@ -555,9 +588,8 @@ _extends MaterialBase_
 	// specular caustics.
 	filterGlossyFactor = 0: Number,
 
-	// The colors to use for the gradient background when enabled.
-	bgGradientTop: Color,
-	bgGradientBottom: Color,
+	// The equirectangular map to render as the background.
+	backgroundMap = null: Texture,
 
 	// The transparency to render the background with. Note that the "alpha" option
 	// must be set to true on PathTracingRenderer for this field to work properly.
@@ -572,9 +604,6 @@ _extends MaterialBase_
 
 	// Whether to use multiple importance sampling to help the image converge more quickly
 	FEATURE_MIS = 1 : Number,
-
-	// Whether to use the "bg" gradient fields to sample for the background
-	FEATURE_GRADIENT_BG = 0 : Number
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
@@ -622,7 +651,7 @@ setTextures(
 ) : void
 ```
 
-Takes the rendering context to updateh the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
+Takes the rendering context to update the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
 
 ## PhysicalCameraUniform
 
@@ -635,6 +664,47 @@ updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
 ```
 
 Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
+
+## AttributesTextureArray
+
+A combined texture array used to store normal, tangent, uv, and color attributes in the same texture sampler array rather than separate samplers. Necessary to save texture slots.
+
+Normals, tangents, uvs, and color attribute data are stored in the 1st, 2nd, 3rd, and 4th layers of the array respectively.
+
+### .updateNormalAttribute
+
+```js
+updateNormalAttribute( attr : BufferAttribute ) : void
+```
+
+### .updateTangentAttribute
+
+```js
+updateTangentAttribute( attr : BufferAttribute ) : void
+```
+
+### .updateUvAttribute
+
+```js
+updateUvAttribute( attr : BufferAttribute ) : void
+```
+
+### .updateColorAttribute
+
+```js
+updateColorAttribute( attr : BufferAttribute ) : void
+```
+
+### .updateFrom
+
+```js
+updateFrom(
+	normal : BufferAttribute,
+	tangent : BufferAttribute,
+	uv : BufferAttribute,
+	color : BufferAttribute
+) : void
+```
 
 ## MaterialsTexture
 
