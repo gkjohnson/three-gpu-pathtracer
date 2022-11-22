@@ -1,4 +1,4 @@
-import { Matrix4, Matrix3, Color, Vector2 } from 'three';
+import { Matrix4, Matrix3, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,

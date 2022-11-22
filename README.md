@@ -501,6 +501,32 @@ dispose() : void
 
 Disposes of the temporary files and textures for generation.
 
+## GradientEquirectMap
+
+### .topColor
+
+```js
+topColor : Color
+```
+
+### .bottomColor
+
+```js
+bottomColor : Color
+```
+
+### constructor
+
+```js
+constructor( topColor = 0xffffff, bottomColor = 0x000000, resolution = 512 )
+```
+
+### .update
+
+```js
+update() : void
+```
+
 ## MaterialBase
 
 _extends THREE.ShaderMaterial_
