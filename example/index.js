@@ -177,8 +177,7 @@ async function init() {
 	document.body.appendChild( stats.dom );
 	renderer.physicallyCorrectLights = true;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
-	scene.background = new Color( 0x060606 );
+	scene.background = backgroundMap;
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
 	updateCamera( params.cameraProjection );
@@ -375,7 +374,7 @@ function buildGui() {
 
 		if ( v === 'Gradient' ) {
 
-			scene.background = new Color( 0x060606 );
+			scene.background = backgroundMap;
 			ptRenderer.material.backgroundMap = backgroundMap;
 
 		} else {
