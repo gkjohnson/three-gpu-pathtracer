@@ -658,6 +658,38 @@ updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
 
 Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
 
+## GeometryAttributesTextureArray
+
+### .setNormalAttribute
+
+```js
+setNormalAttribute( attr : BufferAttribute ) : void
+```
+
+### .setTangentAttribute
+
+```js
+setTangentAttribute( attr : BufferAttribute ) : void
+```
+
+### .setUvAttribute
+
+```js
+setUvAttribute( attr : BufferAttribute ) : void
+```
+
+### .setColorAttribute
+
+```js
+setColorAttribute( attr : BufferAttribute ) : void
+```
+
+### .updateFrom
+
+```js
+updateFrom( normal : BufferAttribute, tangent : BufferAttribute, uv : BufferAttribute, color : BufferAttribute ) : void
+```
+
 ## MaterialsTexture
 
 _extends DataTexture_
