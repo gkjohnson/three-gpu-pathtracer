@@ -506,22 +506,28 @@ Disposes of the temporary files and textures for generation.
 
 ## GradientEquirectMap
 
+### .exponent
+
+```js
+exponent = 2 : Number
+```
+
 ### .topColor
 
 ```js
-topColor : Color
+topColor = 0xffffff : Color
 ```
 
 ### .bottomColor
 
 ```js
-bottomColor : Color
+bottomColor = 0x000000 : Color
 ```
 
 ### constructor
 
 ```js
-constructor( topColor = 0xffffff, bottomColor = 0x000000, resolution = 512 )
+constructor( resolution = 512 : Number )
 ```
 
 ### .update
@@ -645,7 +651,7 @@ setTextures(
 ) : void
 ```
 
-Takes the rendering context to updateh the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
+Takes the rendering context to update the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
 
 ## PhysicalCameraUniform
 
