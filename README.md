@@ -110,9 +110,12 @@ const { bvh, textures, materials, lights } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
-ptMaterial.normalAttribute.updateFrom( geometry.attributes.normal );
-ptMaterial.tangentAttribute.updateFrom( geometry.attributes.tangent );
-ptMaterial.uvAttribute.updateFrom( geometry.attributes.uv );
+ptMaterial.attributesArray.updateFrom(
+	geometry.attributes.normal,
+	geometry.attributes.tangent,
+	geometry.attributes.uv,
+	geometry.attributes.color,
+);
 
 // update materials and texture arrays
 ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
@@ -557,9 +560,7 @@ _extends MaterialBase_
 
 	// Geometry and BVH information
 	bvh: MeshBVHUniformStruct,
-	normalAttribute: FloatVertexAttributeTexture,
-	tangentAttribute: FloatVertexAttributeTexture,
-	uvAttribute: FloatVertexAttributeTexture,
+	attributesArray: AttributesTextureArray,
 	materialIndexAttribute: UIntVertexAttributeTexture,
 	materials: MaterialsTexture,
 	textures: RenderTarget2DArray,
@@ -658,36 +659,45 @@ updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
 
 Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
 
-## GeometryAttributesTextureArray
+## AttributesTextureArray
 
-### .setNormalAttribute
+A combined texture array used to store normal, tangent, uv, and color attributes in the same texture sampler array rather than separate samplers. Necessary to save texture slots.
+
+Normals, tangents, uvs, and color attribute data are stored in the 1st, 2nd, 3rd, and 4th layers of the array respectively.
+
+### .updateNormalAttribute
 
 ```js
-setNormalAttribute( attr : BufferAttribute ) : void
+updateNormalAttribute( attr : BufferAttribute ) : void
 ```
 
-### .setTangentAttribute
+### .updateTangentAttribute
 
 ```js
-setTangentAttribute( attr : BufferAttribute ) : void
+updateTangentAttribute( attr : BufferAttribute ) : void
 ```
 
-### .setUvAttribute
+### .updateUvAttribute
 
 ```js
-setUvAttribute( attr : BufferAttribute ) : void
+updateUvAttribute( attr : BufferAttribute ) : void
 ```
 
-### .setColorAttribute
+### .updateColorAttribute
 
 ```js
-setColorAttribute( attr : BufferAttribute ) : void
+updateColorAttribute( attr : BufferAttribute ) : void
 ```
 
 ### .updateFrom
 
 ```js
-updateFrom( normal : BufferAttribute, tangent : BufferAttribute, uv : BufferAttribute, color : BufferAttribute ) : void
+updateFrom(
+	normal : BufferAttribute,
+	tangent : BufferAttribute,
+	uv : BufferAttribute,
+	color : BufferAttribute
+) : void
 ```
 
 ## MaterialsTexture
