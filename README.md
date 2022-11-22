@@ -555,9 +555,8 @@ _extends MaterialBase_
 	// specular caustics.
 	filterGlossyFactor = 0: Number,
 
-	// The colors to use for the gradient background when enabled.
-	bgGradientTop: Color,
-	bgGradientBottom: Color,
+	// The equirectangular map to render as the background.
+	backgroundMap = null: Texture,
 
 	// The transparency to render the background with. Note that the "alpha" option
 	// must be set to true on PathTracingRenderer for this field to work properly.
@@ -572,9 +571,6 @@ _extends MaterialBase_
 
 	// Whether to use multiple importance sampling to help the image converge more quickly
 	FEATURE_MIS = 1 : Number,
-
-	// Whether to use the "bg" gradient fields to sample for the background
-	FEATURE_GRADIENT_BG = 0 : Number
 
 	// The number of transparent pixels to allow on top of existing bounces for object transparency.
 	TRANSPARENT_TRAVERSALS = 5 : Number,
