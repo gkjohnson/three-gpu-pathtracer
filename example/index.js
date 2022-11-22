@@ -29,7 +29,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -106,7 +106,7 @@ let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
 let ptRenderer, fsQuad, controls, scene;
-let envMap, envMapGenerator;
+let envMap, envMapGenerator, backgroundMap;
 let loadingModel = false;
 let delaySamples = 0;
 
@@ -135,14 +135,17 @@ async function init() {
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 1, 0.25, 1 );
 
+	backgroundMap = new GradientEquirectTexture();
+	backgroundMap.topColor.set( params.bgGradientTop );
+	backgroundMap.bottomColor.set( params.bgGradientBottom );
+	backgroundMap.update();
+
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
-	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
+	ptRenderer.material.backgroundMap = backgroundMap;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -204,8 +207,6 @@ function animate() {
 	floorPlane.material.roughness = params.floorRoughness;
 	floorPlane.material.metalness = params.floorMetalness;
 	floorPlane.material.opacity = params.floorOpacity;
-	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
-	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
 	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
 
@@ -371,26 +372,33 @@ function buildGui() {
 	const backgroundFolder = gui.addFolder( 'background' );
 	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
 
-		ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', Number( v === 'Gradient' ) );
 		if ( v === 'Gradient' ) {
 
 			scene.background = new Color( 0x060606 );
+			ptRenderer.material.backgroundMap = backgroundMap;
 
 		} else {
 
 			scene.background = scene.environment;
+			ptRenderer.material.backgroundMap = null;
 
 		}
 
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( () => {
+	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
+
+		backgroundMap.topColor.set( v );
+		backgroundMap.update();
 
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( () => {
+	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
+
+		backgroundMap.bottomColor.set( v );
+		backgroundMap.update();
 
 		ptRenderer.reset();
 
@@ -705,6 +713,10 @@ async function updateModel() {
 		params.floorMetalness = modelInfo.floorMetalness || 0.0;
 		params.bgGradientTop = modelInfo.gradientTop || '#111111';
 		params.bgGradientBottom = modelInfo.gradientBot || '#000000';
+
+		backgroundMap.topColor.set( params.bgGradientTop );
+		backgroundMap.bottomColor.set( params.bgGradientBottom );
+		backgroundMap.update();
 
 		buildGui();
 
