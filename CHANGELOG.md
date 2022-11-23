@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - Three.js semver package version.
 - Removed 3 texture sampler units to add room for future features, background map.
+- Texture memory leak in `BlurredEnvMapGenerator`.
 
 ### Added
 - `GradientEquirectTexture` class for generating an equirect background texture with a gradient.
@@ -16,6 +17,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Removed
 - Removed `FEATURE_GRADIENT_BG` define and bgGradientTop, bgGradientBottom uniforms. Use the new GradientEquirectTexture class instead.
 - PhysicalPathTracingMaterial: Removed `normalAttribute`, `tangentAttribute`, `uvAttribute`, and `colorAttribute` uniforms. Use `attributesArray` to store those parameters, instead.
+- `MaterialsTexture.setSide` function.
+
+### Changed
+- `MaterialsTexture` automatically uses the specified material side unless the object is transmissive - in which case double-sided is used.
 
 ## [0.0.7] - 2022-10-15
 ### Added
