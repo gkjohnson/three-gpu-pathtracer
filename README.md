@@ -722,14 +722,6 @@ Three.js materials support only a single set of UV transforms in a certain fallb
 
 See fallback order documentation [here](https://threejs.org/docs/#api/en/textures/Texture.offset).
 
-### .setSide
-
-```js
-setSide( index : Number, side : FrontSide | BackSide | DoubleSide ) : void
-```
-
-Sets the side to render for the given material.
-
 ### .setMatte
 
 ```js

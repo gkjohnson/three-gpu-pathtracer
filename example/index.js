@@ -4,7 +4,6 @@ import {
 	Box3,
 	LoadingManager,
 	Sphere,
-	Color,
 	DoubleSide,
 	Mesh,
 	MeshStandardMaterial,
@@ -166,7 +165,8 @@ async function init() {
 			transparent: true,
 			color: 0x080808,
 			roughness: 0.1,
-			metalness: 0.0
+			metalness: 0.0,
+			side: DoubleSide,
 		} )
 	);
 	floorPlane.scale.setScalar( 3 );
@@ -176,8 +176,7 @@ async function init() {
 	document.body.appendChild( stats.dom );
 	renderer.physicallyCorrectLights = true;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
-	scene.background = new Color( 0x060606 );
+	scene.background = backgroundMap;
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
 	updateCamera( params.cameraProjection );
@@ -374,7 +373,7 @@ function buildGui() {
 
 		if ( v === 'Gradient' ) {
 
-			scene.background = new Color( 0x060606 );
+			scene.background = backgroundMap;
 			ptRenderer.material.backgroundMap = backgroundMap;
 
 		} else {
