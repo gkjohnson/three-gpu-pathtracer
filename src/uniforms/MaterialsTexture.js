@@ -58,7 +58,16 @@ export class MaterialsTexture extends DataTexture {
 
 		function getTexture( material, key, def = - 1 ) {
 
-			return key in material ? textures.indexOf( material[ key ] ) : def;
+			if ( key in material && material[ key ] ) {
+
+				const source = material[ key ].source;
+				return textures.findIndex( tex => tex.source === source );
+
+			} else {
+
+				return def;
+
+			}
 
 		}
 
