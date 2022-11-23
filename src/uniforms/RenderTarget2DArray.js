@@ -9,6 +9,7 @@ import {
 	NoToneMapping,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { reduceTexturesToUniqueSources } from './utils.js';
 
 const prevColor = new Color();
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
@@ -35,7 +36,9 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	}
 
-	setTextures( renderer, width, height, textures ) {
+	setTextures( renderer, width, height, allTextures ) {
+
+		const textures = reduceTexturesToUniqueSources( allTextures );
 
 		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();

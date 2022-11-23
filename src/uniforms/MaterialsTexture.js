@@ -1,4 +1,5 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
+import { reduceTexturesToUniqueSources } from './utils.js';
 
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
@@ -54,7 +55,7 @@ export class MaterialsTexture extends DataTexture {
 
 	}
 
-	updateFrom( materials, textures ) {
+	updateFrom( materials, allTextures ) {
 
 		function getTexture( material, key, def = - 1 ) {
 
@@ -148,6 +149,7 @@ export class MaterialsTexture extends DataTexture {
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
 		const { threeCompatibilityTransforms, image } = this;
+		const textures = reduceTexturesToUniqueSources( allTextures );
 
 		if ( image.width !== dimension ) {
 
