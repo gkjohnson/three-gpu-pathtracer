@@ -4,7 +4,6 @@ import {
 	Box3,
 	LoadingManager,
 	Sphere,
-	Color,
 	DoubleSide,
 	Mesh,
 	MeshStandardMaterial,
