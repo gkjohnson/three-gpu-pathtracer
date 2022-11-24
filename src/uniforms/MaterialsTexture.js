@@ -1,4 +1,5 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
+import { reduceTexturesToUniqueSources } from './utils.js';
 
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
@@ -58,7 +59,16 @@ export class MaterialsTexture extends DataTexture {
 
 		function getTexture( material, key, def = - 1 ) {
 
-			return key in material ? textures.indexOf( material[ key ] ) : def;
+			if ( key in material && material[ key ] ) {
+
+				const source = material[ key ].source;
+				return uniqueTextures.findIndex( tex => tex.source === source );
+
+			} else {
+
+				return def;
+
+			}
 
 		}
 
@@ -140,6 +150,9 @@ export class MaterialsTexture extends DataTexture {
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
 		const { threeCompatibilityTransforms, image } = this;
 
+		// get the list of textures with unique sources
+		const uniqueTextures = reduceTexturesToUniqueSources( textures );
+
 		if ( image.width !== dimension ) {
 
 			this.dispose();
@@ -170,9 +183,9 @@ export class MaterialsTexture extends DataTexture {
 			// sample 1
 			// metalness & roughness
 			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			floatArray[ index ++ ] = textures.indexOf( m.metalnessMap );
+			floatArray[ index ++ ] = uniqueTextures.indexOf( m.metalnessMap );
 			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			floatArray[ index ++ ] = textures.indexOf( m.roughnessMap );
+			floatArray[ index ++ ] = uniqueTextures.indexOf( m.roughnessMap );
 
 			// sample 2
 			// transmission & emissiveIntensity

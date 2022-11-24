@@ -9,6 +9,7 @@ import {
 	NoToneMapping,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { reduceTexturesToUniqueSources } from './utils.js';
 
 const prevColor = new Color();
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
@@ -37,6 +38,9 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	setTextures( renderer, width, height, textures ) {
 
+		// get the list of textures with unique sources
+		const uniqueTextures = reduceTexturesToUniqueSources( textures );
+
 		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
 		const prevToneMapping = renderer.toneMapping;
@@ -45,7 +49,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 		// resize the render target and ensure we don't have an empty texture
 		// render target depth must be >= 1 to avoid unbound texture error on android devices
-		const depth = textures.length || 1;
+		const depth = uniqueTextures.length || 1;
 		this.setSize( width, height, depth );
 		renderer.setClearColor( 0, 0 );
 		renderer.toneMapping = NoToneMapping;
@@ -54,7 +58,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		const fsQuad = this.fsQuad;
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
-			const texture = textures[ i ];
+			const texture = uniqueTextures[ i ];
 			if ( texture ) {
 
 				// revert to default texture transform before rendering
