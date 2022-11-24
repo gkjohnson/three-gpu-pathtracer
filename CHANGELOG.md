@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 - `MaterialsTexture` automatically uses the specified material side unless the object is transmissive - in which case double-sided is used.
+- Used textures are now reduced to just those with unique sources.
 
 ## [0.0.7] - 2022-10-15
 ### Added
