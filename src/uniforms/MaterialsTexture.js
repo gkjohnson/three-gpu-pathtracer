@@ -55,14 +55,14 @@ export class MaterialsTexture extends DataTexture {
 
 	}
 
-	updateFrom( materials, allTextures ) {
+	updateFrom( materials, textures ) {
 
 		function getTexture( material, key, def = - 1 ) {
 
 			if ( key in material && material[ key ] ) {
 
 				const source = material[ key ].source;
-				return textures.findIndex( tex => tex.source === source );
+				return uniqueTextures.findIndex( tex => tex.source === source );
 
 			} else {
 
@@ -149,7 +149,9 @@ export class MaterialsTexture extends DataTexture {
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
 		const { threeCompatibilityTransforms, image } = this;
-		const textures = reduceTexturesToUniqueSources( allTextures );
+
+		// get the list of textures with unique sources
+		const uniqueTextures = reduceTexturesToUniqueSources( textures );
 
 		if ( image.width !== dimension ) {
 
@@ -181,9 +183,9 @@ export class MaterialsTexture extends DataTexture {
 			// sample 1
 			// metalness & roughness
 			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			floatArray[ index ++ ] = textures.indexOf( m.metalnessMap );
+			floatArray[ index ++ ] = uniqueTextures.indexOf( m.metalnessMap );
 			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			floatArray[ index ++ ] = textures.indexOf( m.roughnessMap );
+			floatArray[ index ++ ] = uniqueTextures.indexOf( m.roughnessMap );
 
 			// sample 2
 			// transmission & emissiveIntensity
