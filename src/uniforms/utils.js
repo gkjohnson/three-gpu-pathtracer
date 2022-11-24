@@ -1,3 +1,5 @@
+// reduce the set of textures to just those with a unique source while retaining
+// the order of the textures.
 export function reduceTexturesToUniqueSources( textures ) {
 
 	const sourceSet = new Set();
@@ -7,6 +9,7 @@ export function reduceTexturesToUniqueSources( textures ) {
 		const tex = textures[ i ];
 		if ( ! sourceSet.has( tex.source ) ) {
 
+			sourceSet.add( tex.source );
 			result.push( tex );
 
 		}
