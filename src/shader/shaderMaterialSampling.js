@@ -44,7 +44,7 @@ ${ shaderSheenFunctions }
 ${ shaderIridescenceFunctions }
 
 // diffuse
-float diffusePDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
+float diffuseEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
 	// https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html#lightscattering/thescatteringpdf
 	float cosValue = wi.z;
@@ -73,7 +73,7 @@ vec3 diffuseDirection( vec3 wo, SurfaceRec surf ) {
 }
 
 // specular
-float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
+float specularEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 	float filteredRoughness = surf.filteredRoughness;
@@ -144,7 +144,7 @@ vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 
 /*
 // transmission
-function transmissionPDF( wo, wi, material, surf ) {
+function transmissionEval( wo, wi, material, surf ) {
 
 	// See section 4.2 in https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 
@@ -196,7 +196,7 @@ function transmissionDirection( wo, hit, material, lightDirection ) {
 
 // TODO: This is just using a basic cosine-weighted specular distribution with an
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
-float transmissionPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
+float transmissionEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
 	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
@@ -240,7 +240,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 
 // clearcoat
-float clearcoatPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
+float clearcoatEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
 	// See equation (27) in http://jcgt.org/published/0003/02/03/
 	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
@@ -349,7 +349,7 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 
 }
 
-float bsdfPdf( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight ) {
+float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color, out float specularPdf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight ) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -374,7 +374,7 @@ float bsdfPdf( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec 
 
 		if( transmissionWeight > 0.0 ) {
 
-			tpdf = transmissionPDF( wo, wi, surf );
+			tpdf = transmissionEval( wo, wi, surf );
 
 		}
 
@@ -382,13 +382,13 @@ float bsdfPdf( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec 
 
 		if( diffuseWeight > 0.0 ) {
 
-			dpdf = diffusePDF( wo, wi, surf );
+			dpdf = diffuseEval( wo, wi, surf );
 
 		}
 
 		if( specularWeight > 0.0 ) {
 
-			spdf = specularPDF( wo, wi, surf );
+			spdf = specularEval( wo, wi, surf );
 
 		}
 
@@ -396,7 +396,7 @@ float bsdfPdf( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec 
 
 	if( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
 
-		cpdf = clearcoatPDF( clearcoatWo, clearcoatWi, surf );
+		cpdf = clearcoatEval( clearcoatWo, clearcoatWi, surf );
 
 	}
 
@@ -464,7 +464,7 @@ float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceR
 
 	float specularPdf;
 	color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
-	return bsdfPdf( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 
 }
 
@@ -532,7 +532,7 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	}
 
 	SampleRec result;
-	result.pdf = bsdfPdf( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 	result.color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 	result.direction = wi;
 	result.clearcoatDirection = clearcoatWi;
