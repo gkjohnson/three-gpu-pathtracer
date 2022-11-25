@@ -481,10 +481,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! hit ) {
 
-							if ( i == 0 || transmissiveRay ) {
+							if ( i == 0 || transmissiveRay || i == 1 && ! isShadowRay ) {
 
 								gl_FragColor.rgb += sampleBackground( environmentRotation * rayDirection ) * throughputColor;
-								gl_FragColor.a = backgroundAlpha;
+								gl_FragColor.a = i == 1 && ! isShadowRay ? 1.0 : backgroundAlpha;
 
 							} else {
 
@@ -876,6 +876,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 envColor, envDirection;
 							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
 							envDirection = invEnvironmentRotation * envDirection;
+
+							// TODO: This shadow ray needs to be determined by whether the _new_ evn-sampled direction is a shadow ray
+							// not the last randomly sampled ray direction
+							if ( i <= 1 && ! isShadowRay ) {
+
+								envColor = sampleBackground( envDirection );
+
+							}
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
