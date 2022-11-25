@@ -89,39 +89,39 @@ float specularPDF( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
-// if roughness is set to 0 then D === NaN which results in black pixels
-float metalness = surf.metalness;
-float filteredRoughness = surf.filteredRoughness;
+	// if roughness is set to 0 then D === NaN which results in black pixels
+	float metalness = surf.metalness;
+	float filteredRoughness = surf.filteredRoughness;
 
-vec3 halfVector = getHalfVector( wo, wi );
-float iorRatio = surf.iorRatio;
-float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
-float D = ggxDistribution( halfVector, filteredRoughness );
+	vec3 halfVector = getHalfVector( wo, wi );
+	float iorRatio = surf.iorRatio;
+	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
+	float D = ggxDistribution( halfVector, filteredRoughness );
 
-float f0 = iorRatioToF0( iorRatio );
-vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) );
+	float f0 = iorRatioToF0( iorRatio );
+	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) );
 
-float cosTheta = min( wo.z, 1.0 );
-float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-bool cannotRefract = iorRatio * sinTheta > 1.0;
-if ( cannotRefract ) {
+	float cosTheta = min( wo.z, 1.0 );
+	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+	bool cannotRefract = iorRatio * sinTheta > 1.0;
+	if ( cannotRefract ) {
 
-	F = vec3( 1.0 );
+		F = vec3( 1.0 );
 
-}
+	}
 
-vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
-vec3 metalF = mix( F, iridescenceFresnel, surf.iridescence );
-vec3 dialectricF = F * surf.specularIntensity;
-F = mix( dialectricF, metalF, metalness );
+	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, halfVector ), surf.iridescenceThickness, vec3( f0 ) );
+	vec3 metalF = mix( F, iridescenceFresnel, surf.iridescence );
+	vec3 dialectricF = F * surf.specularIntensity;
+	F = mix( dialectricF, metalF, metalness );
 
-vec3 color = mix( surf.specularColor, surf.color, metalness );
-color = mix( color, vec3( 1.0 ), F );
-color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
-color *= mix( F, vec3( 1.0 ), metalness );
-color *= wi.z; // scale the light by the direction the light is coming in from
+	vec3 color = mix( surf.specularColor, surf.color, metalness );
+	color = mix( color, vec3( 1.0 ), F );
+	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
+	color *= mix( F, vec3( 1.0 ), metalness );
+	color *= wi.z; // scale the light by the direction the light is coming in from
 
-return color;
+	return color;
 
 }
 
