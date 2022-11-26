@@ -332,7 +332,7 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] 
 
 }
 
-float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, float[ 4 ] weights ) {
+float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, out vec3 color, float[ 4 ] weights ) {
 
 	float diffuseWeight = weights[ DIFF_WEIGHT ];
 	float specularWeight = weights[ SPEC_WEIGHT ];
@@ -357,7 +357,7 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	float dpdf = 0.0;
 	float tpdf = 0.0;
 	float cpdf = 0.0;
-	vec3 color;
+	color = vec3( 0.0 );
 	if ( wi.z < 0.0 ) {
 
 		if( transmissionWeight > 0.0 ) {
@@ -371,14 +371,20 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 		if( diffuseWeight > 0.0 ) {
 
 			dpdf = diffuseEval( wo, wi, surf, color );
+			color *= 1.0 - surf.transmission;
 
 		}
 
 		if( specularWeight > 0.0 ) {
 
-			spdf = specularEval( wo, wi, surf, color );
+			vec3 outColor;
+			spdf = specularEval( wo, wi, surf, outColor );
+			color += outColor;
 
 		}
+
+		color *= sheenAlbedoScaling( wo, wi, surf );
+		color += sheenColor( wo, wi, surf );
 
 	}
 
@@ -401,61 +407,13 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 }
 
-vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, float[ 4 ] weights ) {
-
-	float diffuseWeight = weights[ DIFF_WEIGHT ];
-	float specularWeight = weights[ SPEC_WEIGHT ];
-	float transmissionWeight = weights[ TRANS_WEIGHT ];
-	float clearcoatWeight = weights[ CC_WEIGHT ];
-	vec3 color = vec3( 0.0 );
-	if ( wi.z < 0.0 ) {
-
-		if( transmissionWeight > 0.0 ) {
-
-			transmissionEval( wo, wi, surf, color );
-
-		}
-
-	} else {
-
-		if( diffuseWeight > 0.0 ) {
-
-			diffuseEval( wo, wi, surf, color );
-			color *= 1.0 - surf.transmission;
-
-		}
-
-		if( specularWeight > 0.0 ) {
-
-			vec3 outColor;
-			specularEval( wo, wi, surf, outColor );
-			color += outColor;
-
-		}
-
-		color *= sheenAlbedoScaling( wo, wi, surf );
-		color += sheenColor( wo, wi, surf );
-
-	}
-
-	if( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
-
-		clearcoatEval( clearcoatWo, clearcoatWi, surf, color );
-
-	}
-
-	return color;
-
-}
-
 float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color ) {
 
 	float[ 4 ] pdf;
 	getLobeWeights( wo, clearcoatWo, surf, pdf );
 
 	float specularPdf;
-	color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, pdf );
-	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, pdf );
+	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, color, pdf );
 
 }
 
@@ -514,8 +472,7 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	}
 
 	SampleRec result;
-	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, pdf );
-	result.color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, pdf );
+	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, result.color, pdf );
 	result.direction = wi;
 	result.clearcoatDirection = clearcoatWi;
 
