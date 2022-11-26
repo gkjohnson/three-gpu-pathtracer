@@ -332,7 +332,7 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] 
 
 }
 
-float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, out vec3 color, float[ 4 ] weights ) {
+float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, float[ 4 ] weights, out float specularPdf, out vec3 color ) {
 
 	float diffuseWeight = weights[ DIFF_WEIGHT ];
 	float specularWeight = weights[ SPEC_WEIGHT ];
@@ -413,7 +413,7 @@ float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceR
 	getLobeWeights( wo, clearcoatWo, surf, pdf );
 
 	float specularPdf;
-	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, color, pdf );
+	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, pdf, specularPdf, color );
 
 }
 
@@ -472,7 +472,7 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	}
 
 	SampleRec result;
-	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, result.color, pdf );
+	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, pdf, result.specularPdf, result.color );
 	result.direction = wi;
 	result.clearcoatDirection = clearcoatWi;
 
