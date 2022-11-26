@@ -315,7 +315,11 @@ vec3 sheenColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 }
 
 // bsdf
-void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight ) {
+#define DIFF_WEIGHT 0
+#define SPEC_WEIGHT 1
+#define TRANS_WEIGHT 2
+#define CC_WEIGHT 3
+void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] weights ) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -336,20 +340,20 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float diffu
 	float transSpecularProb = mix( reflectance, 1.0, metalness );
 	float diffSpecularProb = 0.5 + 0.5 * metalness;
 
-	clearcoatWeight = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
-	diffuseWeight = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb ) * ( 1.0 - clearcoatWeight );
-	specularWeight = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb * ( 1.0 - clearcoatWeight );
-	transmissionWeight = transmission * ( 1.0 - transSpecularProb ) * ( 1.0 - clearcoatWeight );
+	float clearcoatWeight = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
+	float diffuseWeight = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb ) * ( 1.0 - clearcoatWeight );
+	float specularWeight = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb * ( 1.0 - clearcoatWeight );
+	float transmissionWeight = transmission * ( 1.0 - transSpecularProb ) * ( 1.0 - clearcoatWeight );
 
 	float totalWeight = diffuseWeight + specularWeight + transmissionWeight + clearcoatWeight;
-	diffuseWeight /= totalWeight;
-	specularWeight /= totalWeight;
-	transmissionWeight /= totalWeight;
-	clearcoatWeight /= totalWeight;
+	weights[ DIFF_WEIGHT ] = diffuseWeight / totalWeight;
+	weights[ SPEC_WEIGHT ] = specularWeight / totalWeight;
+	weights[ TRANS_WEIGHT ] = transmissionWeight / totalWeight;
+	weights[ CC_WEIGHT ] = clearcoatWeight / totalWeight;
 
 }
 
-float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color, out float specularPdf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight ) {
+float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color, out float specularPdf, float[ 4 ] weights ) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -400,6 +404,10 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 	}
 
+	float diffuseWeight = weights[ DIFF_WEIGHT ];
+	float specularWeight = weights[ SPEC_WEIGHT ];
+	float transmissionWeight = weights[ TRANS_WEIGHT ];
+	float clearcoatWeight = weights[ CC_WEIGHT ];
 	float pdf =
 		  dpdf * diffuseWeight
 		+ spdf * specularWeight
@@ -413,8 +421,12 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 }
 
-vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight ) {
+vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, float[ 4 ] weights ) {
 
+	float diffuseWeight = weights[ DIFF_WEIGHT ];
+	float specularWeight = weights[ SPEC_WEIGHT ];
+	float transmissionWeight = weights[ TRANS_WEIGHT ];
+	float clearcoatWeight = weights[ CC_WEIGHT ];
 	vec3 color = vec3( 0.0 );
 	if ( wi.z < 0.0 ) {
 
@@ -456,31 +468,19 @@ vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color ) {
 
-	float diffuseWeight;
-	float specularWeight;
-	float transmissionWeight;
-	float clearcoatWeight;
-	getLobeWeights( wo, clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+	float[ 4 ] pdf;
+	getLobeWeights( wo, clearcoatWo, surf, pdf );
 
 	float specularPdf;
-	color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
-	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+	color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, pdf );
+	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, specularPdf, pdf );
 
 }
 
 SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRec surf ) {
 
-	float diffuseWeight;
-	float specularWeight;
-	float transmissionWeight;
-	float clearcoatWeight;
-	getLobeWeights( wo, clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
-
 	float pdf[4];
-	pdf[0] = diffuseWeight;
-	pdf[1] = specularWeight;
-	pdf[2] = transmissionWeight;
-	pdf[3] = clearcoatWeight;
+	getLobeWeights( wo, clearcoatWo, surf, pdf );
 
 	float cdf[4];
 	cdf[0] = pdf[0];
@@ -532,8 +532,8 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	}
 
 	SampleRec result;
-	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
-	result.color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+	result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, result.specularPdf, pdf );
+	result.color = bsdfColor( wo, clearcoatWo, wi, clearcoatWi, surf, pdf );
 	result.direction = wi;
 	result.clearcoatDirection = clearcoatWi;
 
