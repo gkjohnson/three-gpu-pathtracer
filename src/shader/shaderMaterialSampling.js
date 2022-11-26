@@ -407,12 +407,10 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 }
 
-float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color ) {
+float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, out vec3 color ) {
 
 	float[ 4 ] pdf;
 	getLobeWeights( wo, clearcoatWo, surf, pdf );
-
-	float specularPdf;
 	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, pdf, specularPdf, color );
 
 }
