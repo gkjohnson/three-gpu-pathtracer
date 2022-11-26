@@ -46,19 +46,16 @@ ${ shaderIridescenceFunctions }
 // diffuse
 float diffuseEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
+	// TODO: scale by 1 - F here
+	// note on division by PI
+	// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
+	float metalFactor = ( 1.0 - surf.metalness );
+	color = surf.color * metalFactor * wi.z / PI;
+
+	// PDF
 	// https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html#lightscattering/thescatteringpdf
 	float cosValue = wi.z;
 	return cosValue / PI;
-
-}
-
-vec3 diffuseColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
-
-// TODO: scale by 1 - F here
-// note on division by PI
-// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
-float metalFactor = ( 1.0 - surf.metalness );
-return surf.color * metalFactor * wi.z / PI;
 
 }
 
@@ -74,20 +71,6 @@ vec3 diffuseDirection( vec3 wo, SurfaceRec surf ) {
 
 // specular
 float specularEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
-
-	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
-	float filteredRoughness = surf.filteredRoughness;
-	vec3 halfVector = getHalfVector( wi, wo );
-
-	float incidentTheta = acos( wo.z );
-	float D = ggxDistribution( halfVector, filteredRoughness );
-	float G1 = ggxShadowMaskG1( incidentTheta, filteredRoughness );
-	float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, halfVector ) ) ) / abs ( wo.z );
-	return ggxPdf / ( 4.0 * dot( wo, halfVector ) );
-
-}
-
-vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 
 	// if roughness is set to 0 then D === NaN which results in black pixels
 	float metalness = surf.metalness;
@@ -115,13 +98,18 @@ vec3 specularColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
 	vec3 dialectricF = F * surf.specularIntensity;
 	F = mix( dialectricF, metalF, metalness );
 
-	vec3 color = mix( surf.specularColor, surf.color, metalness );
+	color = mix( surf.specularColor, surf.color, metalness );
 	color = mix( color, vec3( 1.0 ), F );
 	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
 	color *= mix( F, vec3( 1.0 ), metalness );
 	color *= wi.z; // scale the light by the direction the light is coming in from
 
-	return color;
+	// PDF
+	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
+	float incidentTheta = acos( wo.z );
+	float G1 = ggxShadowMaskG1( incidentTheta, filteredRoughness );
+	float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, halfVector ) ) ) / abs ( wo.z );
+	return ggxPdf / ( 4.0 * dot( wo, halfVector ) );
 
 }
 
@@ -198,6 +186,11 @@ function transmissionDirection( wo, hit, material, lightDirection ) {
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
 float transmissionEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
+	// only attenuate the color if it's on the way in
+	vec3 col = surf.thinFilm || surf.frontFace ? surf.color : vec3( 1.0 );
+	color = surf.transmission * col;
+
+	// PDF
 	float iorRatio = surf.iorRatio;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -210,14 +203,6 @@ float transmissionEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 	}
 
 	return 1.0 / ( 1.0 - reflectance );
-
-}
-
-vec3 transmissionColor( vec3 wo, vec3 wi, SurfaceRec surf ) {
-
-	// only attenuate the color if it's on the way in
-	vec3 col = surf.thinFilm || surf.frontFace ? surf.color : vec3( 1.0 );
-	return surf.transmission * col;
 
 }
 
@@ -240,16 +225,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 
 // clearcoat
-float clearcoatEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
-
-	// See equation (27) in http://jcgt.org/published/0003/02/03/
-	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
-	vec3 halfVector = getHalfVector( wi, wo );
-	return ggxPDF( wo, halfVector, filteredClearcoatRoughness ) / ( 4.0 * dot( wi, halfVector ) );
-
-}
-
-void clearcoatColor( inout vec3 color, vec3 wo, vec3 wi, SurfaceRec surf ) {
+float clearcoatEval( vec3 wo, vec3 wi, SurfaceRec surf, inout vec3 color ) {
 
 	float ior = 1.5;
 	bool frontFace = surf.frontFace;
@@ -271,8 +247,11 @@ void clearcoatColor( inout vec3 color, vec3 wo, vec3 wi, SurfaceRec surf ) {
 	}
 
 	float fClearcoat = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
-
 	color = color * ( 1.0 - surf.clearcoat * F ) + fClearcoat * surf.clearcoat * wi.z;
+
+	// PDF
+	// See equation (27) in http://jcgt.org/published/0003/02/03/
+	return ggxPDF( wo, halfVector, filteredClearcoatRoughness ) / ( 4.0 * dot( wi, halfVector ) );
 
 }
 
@@ -353,7 +332,12 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] 
 
 }
 
-float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color, out float specularPdf, float[ 4 ] weights ) {
+float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out float specularPdf, float[ 4 ] weights ) {
+
+	float diffuseWeight = weights[ DIFF_WEIGHT ];
+	float specularWeight = weights[ SPEC_WEIGHT ];
+	float transmissionWeight = weights[ TRANS_WEIGHT ];
+	float clearcoatWeight = weights[ CC_WEIGHT ];
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -373,12 +357,12 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	float dpdf = 0.0;
 	float tpdf = 0.0;
 	float cpdf = 0.0;
-
+	vec3 color;
 	if ( wi.z < 0.0 ) {
 
 		if( transmissionWeight > 0.0 ) {
 
-			tpdf = transmissionEval( wo, wi, surf );
+			tpdf = transmissionEval( wo, wi, surf, color );
 
 		}
 
@@ -386,13 +370,13 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 		if( diffuseWeight > 0.0 ) {
 
-			dpdf = diffuseEval( wo, wi, surf );
+			dpdf = diffuseEval( wo, wi, surf, color );
 
 		}
 
 		if( specularWeight > 0.0 ) {
 
-			spdf = specularEval( wo, wi, surf );
+			spdf = specularEval( wo, wi, surf, color );
 
 		}
 
@@ -400,14 +384,10 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 	if( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
 
-		cpdf = clearcoatEval( clearcoatWo, clearcoatWi, surf );
+		cpdf = clearcoatEval( clearcoatWo, clearcoatWi, surf, color );
 
 	}
 
-	float diffuseWeight = weights[ DIFF_WEIGHT ];
-	float specularWeight = weights[ SPEC_WEIGHT ];
-	float transmissionWeight = weights[ TRANS_WEIGHT ];
-	float clearcoatWeight = weights[ CC_WEIGHT ];
 	float pdf =
 		  dpdf * diffuseWeight
 		+ spdf * specularWeight
@@ -432,7 +412,7 @@ vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 		if( transmissionWeight > 0.0 ) {
 
-			color = transmissionColor( wo, wi, surf );
+			transmissionEval( wo, wi, surf, color );
 
 		}
 
@@ -440,14 +420,16 @@ vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 		if( diffuseWeight > 0.0 ) {
 
-			color = diffuseColor( wo, wi, surf );
+			diffuseEval( wo, wi, surf, color );
 			color *= 1.0 - surf.transmission;
 
 		}
 
 		if( specularWeight > 0.0 ) {
 
-			color += specularColor( wo, wi, surf );
+			vec3 outColor;
+			specularEval( wo, wi, surf, outColor );
+			color += outColor;
 
 		}
 
@@ -458,7 +440,7 @@ vec3 bsdfColor( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 
 	if( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
 
-		clearcoatColor( color, clearcoatWo, clearcoatWi, surf );
+		clearcoatEval( clearcoatWo, clearcoatWi, surf, color );
 
 	}
 
