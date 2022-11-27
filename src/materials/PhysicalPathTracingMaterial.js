@@ -906,7 +906,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// determine whether the ray is a shadow ray so we can use this for specular reflection determination
-									bool isShadowRay = specularPdf < 0.1 * rand();
+									bool isShadowRay = specularPdf < rand();
 									if ( i <= 1 && ! isShadowRay ) {
 
 										envColor = sampleBackground( envDirection );
