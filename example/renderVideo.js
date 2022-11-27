@@ -93,6 +93,7 @@ async function init() {
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
+	ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( Math.PI / 4 ) );
 	ptRenderer.material.filterGlossyFactor = 0.25;
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
@@ -116,7 +117,7 @@ async function init() {
 	videoEl.style.display = 'none';
 
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr' )
 		.then( texture => {
 
 			ptRenderer.material.envMapInfo.updateFrom( texture );
@@ -193,6 +194,7 @@ function rebuildGUI() {
 		ptRenderer.reset();
 
 	} );
+
 }
 
 function loadModel( url ) {
@@ -341,8 +343,8 @@ function animate() {
 
 				// save the video
 				CanvasCapture.stopRecord();
-				recordedFrames = 0;
 
+				recordedFrames = 0;
 				rebuildGUI();
 
 			}
