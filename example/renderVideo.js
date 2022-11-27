@@ -214,7 +214,6 @@ function loadModel( url ) {
 			// animations
 			const animations = gltf.animations;
 			const mixer = new THREE.AnimationMixer( gltf.scene );
-			console.log( mixer );
 
 			const clip = animations[ 0 ];
 			const action = mixer.clipAction( clip );
@@ -390,6 +389,5 @@ function animate() {
 		samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
 
 	}
-
 
 }
