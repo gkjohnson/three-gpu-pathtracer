@@ -17,7 +17,6 @@ import {
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
-	Matrix4
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
