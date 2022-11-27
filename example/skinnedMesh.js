@@ -37,6 +37,7 @@ init();
 
 async function init() {
 
+	// initialize renderer, scene, camera
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.outputEncoding = THREE.sRGBEncoding;
@@ -47,6 +48,7 @@ async function init() {
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
 
+	// initialize path tracer
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
@@ -59,8 +61,8 @@ async function init() {
 		transparent: true,
 	} ) );
 
+	// initialize controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.15, 2, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
@@ -73,6 +75,7 @@ async function init() {
 
 	clock = new THREE.Clock();
 
+	// loading the
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
@@ -87,26 +90,28 @@ async function init() {
 
 		} );
 
+	let modelPromise;
 	if ( window.location.hash === '#morphtarget' ) {
 
-		model = await loadModel( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb' );
+		modelPromise = loadModel( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb' );
 
 	} else {
 
-		model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' );
+		modelPromise = loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' );
 
 	}
 
-	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pigman/scene.gltf' );
-	scene.add( model.scene );
+	modelPromise = modelPromise.then( res => model = res );
 
-	await envMapPromise;
+	await Promise.all( [ envMapPromise, modelPromise ] );
+	scene.add( model.scene );
 
 	document.getElementById( 'loading' ).remove();
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
+	// init gui
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
