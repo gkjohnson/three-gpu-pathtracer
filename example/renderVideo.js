@@ -237,7 +237,7 @@ function loadModel( url ) {
 					transparent: true,
 					color: 0xdddddd,
 					roughness: 0.15,
-					metalness: 1.0
+					metalness: 0.8
 				} )
 			);
 			floorPlane.scale.setScalar( 50 );
