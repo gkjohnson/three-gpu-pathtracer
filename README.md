@@ -49,7 +49,9 @@ _More features and capabilities in progress!_
 
 [Physical Material Database](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialDatabase.html)
 
-**Light Baking**
+**Tools**
+
+[Animation Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/renderVideo.html)
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
