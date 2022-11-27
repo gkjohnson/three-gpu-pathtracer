@@ -7,10 +7,12 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import CanvasCapture from 'canvas-capture';
+
+const requestAnimationFrame = window.requestAnimationFrame;
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, gui, model;
 let samplesEl;
-let recording = false;
 let recordedFrames = 0;
 let animationDuration = 0;
 const params = {
@@ -19,20 +21,29 @@ const params = {
 	rotate: true,
 	duration: 0,
 	frameRate: 12,
-	samples: 100,
+	samples: 20,
 	record: () => {
 
+		CanvasCapture.init( renderer.domElement );
+		CanvasCapture.beginVideoRecord( {
+			format: CanvasCapture.WEBM,
+			fps: params.frameRate,
+			onExport: ( blob, filename ) => {
+
+				console.log( blob );
+
+			}
+		} );
+
 		ptRenderer.reset();
-		recording = true;
 		recordedFrames = 0;
 		rebuildGUI();
 
 	},
 	stop: () => {
 
-		// save video
+		CanvasCapture.stopRecord();
 
-		recording = false;
 		recordedFrames = 0;
 		rebuildGUI();
 
@@ -58,7 +69,7 @@ init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
@@ -91,8 +102,6 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	clock = new THREE.Clock();
-
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
@@ -118,8 +127,6 @@ async function init() {
 	document.getElementById( 'loading' ).remove();
 
 	onResize();
-	window.addEventListener( 'resize', onResize );
-
 	rebuildGUI();
 
 	animate();
@@ -134,11 +141,11 @@ function rebuildGUI() {
 
 	}
 
-	params.duration = animationDuration;
 
 	gui = new GUI();
 	const animationFolder = gui.addFolder( 'animation' );
 
+	const recording = CanvasCapture.isRecording();
 	animationFolder.add( params, 'rotate' ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
@@ -200,7 +207,9 @@ function loadModel( url ) {
 			const clip = animations[ 0 ];
 			const action = mixer.clipAction( clip );
 			action.play();
+
 			animationDuration = parseFloat( clip.duration.toFixed( 2 ) );
+			params.duration = animationDuration;
 
 			// add floor
 			const group = new THREE.Group();
@@ -296,6 +305,7 @@ function animate() {
 
 	}
 
+	controls.enabled = ! CanvasCapture.isRecording();
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.bounces = params.bounces;
 
@@ -303,16 +313,19 @@ function animate() {
 
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
-		if ( recording && ptRenderer.samples >= params.samples ) {
+		if ( CanvasCapture.isRecording() && ptRenderer.samples >= params.samples ) {
 
 			// record frame
+			CanvasCapture.recordFrame();
 
 			recordedFrames ++;
-			if ( recordedFrames >= params.frames ) {
+			if ( recordedFrames >= params.frameRate * params.duration ) {
 
 				// save the video
-				recording = false;
+				CanvasCapture.stopRecord();
 				recordedFrames = 0;
+
+				rebuildGUI();
 
 			}
 
@@ -338,7 +351,22 @@ function animate() {
 	fsQuad.render( renderer );
 	renderer.autoClear = true;
 
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	if ( CanvasCapture.isRecording() ) {
+
+		const total = Math.ceil( params.frameRate * params.duration );
+		const percStride = 1 / total;
+		const samplesPerc = ptRenderer.samples / params.samples;
+		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
+		samplesEl.innerText = `Frame Samples        : ${ Math.floor( ptRenderer.samples ) }\n`;
+		samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
+		samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
+
+	} else {
+
+		samplesEl.innerText = '';
+		samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
+
+	}
 
 
 }
