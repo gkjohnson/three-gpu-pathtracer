@@ -140,9 +140,8 @@ function rebuildGUI() {
 	const animationFolder = gui.addFolder( 'animation' );
 
 	animationFolder.add( params, 'rotate' ).disable( recording );
-	animationFolder.add( params, 'duration', 0.25, animationDuration ).disable( recording );
+	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
-	animationFolder.add( params, 'samples', 1, 500, 1 ).disable( recording );
 	if ( ! recording ) {
 
 		animationFolder.add( params, 'record' );
@@ -159,6 +158,7 @@ function rebuildGUI() {
 		ptRenderer.tiles.set( value, value );
 
 	} );
+	renderFolder.add( params, 'samples', 1, 500, 1 );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	renderFolder.add( params, 'bounces', 1, 5, 1 ).onChange( () => {
 
@@ -200,7 +200,7 @@ function loadModel( url ) {
 			const clip = animations[ 0 ];
 			const action = mixer.clipAction( clip );
 			action.play();
-			animationDuration = clip.duration;
+			animationDuration = parseFloat( clip.duration.toFixed( 2 ) );
 
 			// add floor
 			const group = new THREE.Group();
