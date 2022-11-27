@@ -16,10 +16,12 @@ let samplesEl, videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
+const UP_AXIS = new THREE.Vector3( 0, 1, 0 );
+
 const params = {
 
 	tiles: 2,
-	rotate: true,
+	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
 	samples: 20,
@@ -158,9 +160,15 @@ function rebuildGUI() {
 	const animationFolder = gui.addFolder( 'animation' );
 
 	const recording = CanvasCapture.isRecording();
-	animationFolder.add( params, 'rotate' ).disable( recording );
+	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
+	animationFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
+
+		onResize();
+
+	} ).disable( recording );
+
 	if ( ! recording ) {
 
 		animationFolder.add( params, 'record' );
@@ -184,12 +192,6 @@ function rebuildGUI() {
 		ptRenderer.reset();
 
 	} );
-	renderFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
-
-	} );
-
 }
 
 function loadModel( url ) {
@@ -339,6 +341,11 @@ function animate() {
 
 			// record frame
 			CanvasCapture.recordFrame();
+
+			const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
+			camera.position.applyAxisAngle( UP_AXIS, angle );
+			controls.update();
+			camera.updateMatrixWorld();
 
 			recordedFrames ++;
 			if ( recordedFrames >= params.frameRate * params.duration ) {
