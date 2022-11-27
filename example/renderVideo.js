@@ -131,6 +131,7 @@ async function init() {
 		.then( result => {
 
 			model = result;
+			regenerateScene();
 
 		} );
 
@@ -283,10 +284,10 @@ function onResize() {
 function regenerateScene() {
 
 	const { scene, sceneGenerator } = model;
-	const result = sceneGenerator.generate( scene );
-	sceneInfo = result;
+	scene.updateMatrixWorld( true );
+	sceneInfo = sceneGenerator.generate();
 
-	const { bvh, textures, materials } = result;
+	const { bvh, textures, materials } = sceneInfo;
 	const geometry = bvh.geometry;
 	const material = ptRenderer.material;
 
@@ -314,18 +315,6 @@ function animate() {
 	if ( displayVideo ) {
 
 		return;
-
-	}
-
-	if ( ptRenderer.samples < 1 ) {
-
-		renderer.render( scene, camera );
-
-	}
-
-	if ( ! sceneInfo ) {
-
-		regenerateScene();
 
 	}
 
@@ -360,7 +349,6 @@ function animate() {
 
 			const delta = 1 / params.frameRate;
 			model.mixer.update( delta );
-			model.scene.updateMatrixWorld();
 
 			regenerateScene();
 

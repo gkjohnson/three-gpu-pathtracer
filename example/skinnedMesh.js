@@ -241,11 +241,10 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { scene, sceneGenerator } = model;
-	const result = sceneGenerator.generate( scene );
-	sceneInfo = result;
+	const { sceneGenerator } = model;
+	sceneInfo = sceneGenerator.generate();
 
-	const { bvh, textures, materials } = result;
+	const { bvh, textures, materials } = sceneInfo;
 	const geometry = bvh.geometry;
 	const material = ptRenderer.material;
 
