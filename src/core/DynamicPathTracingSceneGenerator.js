@@ -6,19 +6,19 @@ export class DynamicPathTracingSceneGenerator {
 
 	get initialized() {
 
-		return Boolean( this.bvh );
+		return Boolean(this.bvh);
 
 	}
 
-	constructor( scene ) {
+	constructor(scene) {
 
-		this.objects = Array.isArray( scene ) ? scene : [ scene ];
+		this.objects = Array.isArray(scene) ? scene : [scene];
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
 		this.materials = null;
 		this.textures = null;
 		this.lights = [];
-		this.staticGeometryGenerator = new StaticGeometryGenerator( scene );
+		this.staticGeometryGenerator = new StaticGeometryGenerator(scene);
 
 	}
 
@@ -30,65 +30,65 @@ export class DynamicPathTracingSceneGenerator {
 		this.materials = null;
 		this.textures = null;
 		this.lights = [];
-		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
+		this.staticGeometryGenerator = new StaticGeometryGenerator(this.objects);
 
 	}
 
-	dispose() {}
+	dispose() { }
 
 	generate() {
 
 		const { objects, staticGeometryGenerator, geometry } = this;
-		if ( this.bvh === null ) {
+		if (this.bvh === null) {
 
-			const attributes = [ 'position', 'normal', 'tangent', 'uv', 'color' ];
+			const attributes = ['position', 'normal', 'tangent', 'uv', 'color'];
 
-			for ( let i = 0, l = objects.length; i < l; i ++ ) {
+			for (let i = 0, l = objects.length; i < l; i++) {
 
-				objects[ i ].traverse( c => {
+				objects[i].traverseVisible(c => {
 
-					if ( c.isMesh ) {
+					if (c.isMesh) {
 
-						const normalMapRequired = ! ! c.material.normalMap;
-						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+						const normalMapRequired = ! !c.material.normalMap;
+						setCommonAttributes(c.geometry, { attributes, normalMapRequired });
 
-					} else if ( c.isRectAreaLight || c.isSpotLight ) {
+					} else if (c.isRectAreaLight || c.isSpotLight) {
 
-						this.lights.push( c );
+						this.lights.push(c);
 
 					}
 
-				} );
+				});
 
 			}
 
 			const textureSet = new Set();
 			const materials = staticGeometryGenerator.getMaterials();
-			materials.forEach( material => {
+			materials.forEach(material => {
 
-				for ( const key in material ) {
+				for (const key in material) {
 
-					const value = material[ key ];
-					if ( value && value.isTexture ) {
+					const value = material[key];
+					if (value && value.isTexture) {
 
-						textureSet.add( value );
+						textureSet.add(value);
 
 					}
 
 				}
 
-			} );
+			});
 
 			staticGeometryGenerator.attributes = attributes;
-			staticGeometryGenerator.generate( geometry );
+			staticGeometryGenerator.generate(geometry);
 
-			const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
-			geometry.setAttribute( 'materialIndex', materialIndexAttribute );
+			const materialIndexAttribute = getGroupMaterialIndicesAttribute(geometry, materials, materials);
+			geometry.setAttribute('materialIndex', materialIndexAttribute);
 			geometry.clearGroups();
 
-			this.bvh = new MeshBVH( geometry );
+			this.bvh = new MeshBVH(geometry);
 			this.materials = materials;
-			this.textures = Array.from( textureSet );
+			this.textures = Array.from(textureSet);
 
 			return {
 				lights: this.lights,
@@ -101,7 +101,7 @@ export class DynamicPathTracingSceneGenerator {
 		} else {
 
 			const { bvh } = this;
-			staticGeometryGenerator.generate( geometry );
+			staticGeometryGenerator.generate(geometry);
 			bvh.refit();
 			return {
 				lights: this.lights,
