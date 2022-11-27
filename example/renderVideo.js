@@ -2,25 +2,46 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, BlurredEnvMapGenerator } from '../src/index.js';
+import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, model;
+let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, gui, model;
 let samplesEl;
-let counter = 0;
+let recording = false;
+let recordedFrames = 0;
+let animationDuration = 0;
 const params = {
 
-	environmentIntensity: 1,
+	tiles: 1,
+	rotate: true,
+	duration: 0,
+	frameRate: 12,
+	samples: 100,
+	record: () => {
+
+		ptRenderer.reset();
+		recording = true;
+		recordedFrames = 0;
+		rebuildGUI();
+
+	},
+	stop: () => {
+
+		// save video
+
+		recording = false;
+		recordedFrames = 0;
+		rebuildGUI();
+
+	},
+
+
 	bounces: 3,
 	samplesPerFrame: 1,
-	resolutionScale: 1 / window.devicePixelRatio,
-	tiles: 1,
-	autoPause: true,
-	pause: false,
-	continuous: false,
+	resolutionScale: 1,
 
 };
 
@@ -51,7 +72,6 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.filterGlossyFactor = 0.25;
-	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -77,84 +97,79 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 
-			const generator = new BlurredEnvMapGenerator( renderer );
-			const blurredTex = generator.generate( texture, 0.35 );
-			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-			generator.dispose();
+			ptRenderer.material.envMapInfo.updateFrom( texture );
 
-			scene.background = blurredTex;
-			scene.environment = blurredTex;
+			texture.mapping = THREE.EquirectangularReflectionMapping;
+			scene.background = texture;
+			scene.environment = texture;
 
 		} );
 
-	if ( window.location.hash === '#morphtarget' ) {
+	const modelPromise = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' )
+		.then( result => {
 
-		model = await loadModel( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb' );
+			model = result;
 
-	} else {
+		} );
 
-		model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' );
-
-	}
-
-	// model = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pigman/scene.gltf' );
+	await Promise.all( [ envMapPromise, modelPromise ] );
 	scene.add( model.scene );
-
-	await envMapPromise;
 
 	document.getElementById( 'loading' ).remove();
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
-	const gui = new GUI();
-	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
-
-		ptRenderer.tiles.set( value, value );
-
-	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'bounces', 1, 5, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
-
-	} );
-	gui.add( params, 'autoPause' ).listen();
-	gui.add( params, 'pause' ).onChange( v => {
-
-		params.autoPause = false;
-		setPause( v );
-
-	} ).listen();
-	gui.add( params, 'continuous' ).onChange( () => {
-
-		params.autoPause = false;
-
-	} );
+	rebuildGUI();
 
 	animate();
 
 }
 
-function setPause( v ) {
+function rebuildGUI() {
 
-	model.action.paused = v;
-	params.pause = v;
-	if ( v ) {
+	if ( gui ) {
 
-		regenerateScene();
+		gui.destroy();
 
 	}
+
+	params.duration = animationDuration;
+
+	gui = new GUI();
+	const animationFolder = gui.addFolder( 'animation' );
+
+	animationFolder.add( params, 'rotate' ).disable( recording );
+	animationFolder.add( params, 'duration', 0.25, animationDuration ).disable( recording );
+	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
+	animationFolder.add( params, 'samples', 1, 500, 1 ).disable( recording );
+	if ( ! recording ) {
+
+		animationFolder.add( params, 'record' );
+
+	} else {
+
+		animationFolder.add( params, 'stop' );
+
+	}
+
+	const renderFolder = gui.addFolder( 'rendering' );
+	renderFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+
+		ptRenderer.tiles.set( value, value );
+
+	} );
+	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
+	renderFolder.add( params, 'bounces', 1, 5, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	renderFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
+
+		onResize();
+
+	} );
 
 }
 
@@ -180,10 +195,12 @@ function loadModel( url ) {
 			// animations
 			const animations = gltf.animations;
 			const mixer = new THREE.AnimationMixer( gltf.scene );
+			console.log( mixer );
 
-			const action = mixer.clipAction( animations[ 0 ] );
+			const clip = animations[ 0 ];
+			const action = mixer.clipAction( clip );
 			action.play();
-			action.paused = params.pause;
+			animationDuration = clip.duration;
 
 			// add floor
 			const group = new THREE.Group();
@@ -221,11 +238,10 @@ function loadModel( url ) {
 
 }
 
-
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
+	const w = Math.min( 800, window.innerWidth );
+	const h = Math.floor( w * 9 / 16 );
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
@@ -268,63 +284,61 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
-	model.mixer.update( delta );
-	model.scene.updateMatrixWorld();
-
-	if ( params.autoPause ) {
-
-		counter += delta;
-		if ( ! params.pause && counter >= 2.5 || params.pause && counter >= 5 ) {
-
-			setPause( ! params.pause );
-			counter = 0;
-
-		}
-
-	} else {
-
-		counter = 0;
-
-	}
-
-	if ( ! params.pause && ! params.continuous ) {
+	if ( ptRenderer.samples < 1 ) {
 
 		renderer.render( scene, camera );
 
-	} else {
+	}
 
-		if ( ! params.pause && params.continuous ) {
+	if ( ! sceneInfo ) {
+
+		regenerateScene();
+
+	}
+
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.bounces = params.bounces;
+
+	camera.updateMatrixWorld();
+
+	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
+
+		if ( recording && ptRenderer.samples >= params.samples ) {
+
+			// record frame
+
+			recordedFrames ++;
+			if ( recordedFrames >= params.frames ) {
+
+				// save the video
+				recording = false;
+				recordedFrames = 0;
+
+			}
+
+			const delta = 1 / params.frameRate;
+			model.mixer.update( delta );
+			model.scene.updateMatrixWorld();
 
 			regenerateScene();
 
 		}
 
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-		ptRenderer.material.environmentBlur = 0.35;
-		ptRenderer.material.bounces = params.bounces;
-
-		camera.updateMatrixWorld();
-
-		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-			ptRenderer.update();
-
-		}
-
-		if ( ptRenderer.samples < 1 ) {
-
-			renderer.render( scene, camera );
-
-		}
-
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-		samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+		ptRenderer.update();
 
 	}
+
+	if ( ptRenderer.samples < 1 ) {
+
+		renderer.render( scene, camera );
+
+	}
+
+	renderer.autoClear = false;
+	fsQuad.render( renderer );
+	renderer.autoClear = true;
+
+	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+
 
 }
