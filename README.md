@@ -577,7 +577,7 @@ _extends MaterialBase_
 
 	// Environment Map information
 	envMapInfo: EquirectHdrInfoUniform,
-	environmentRotation: Matrix3,
+	environmentRotation: Matrix4,
 	environmentIntensity = 1: Number,
 
 	// background blur
