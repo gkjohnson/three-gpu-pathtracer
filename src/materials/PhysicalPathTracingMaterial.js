@@ -481,10 +481,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! hit ) {
 
-							if ( i == 0 || transmissiveRay ) {
+							if ( i == 0 || transmissiveRay || i == 1 && ! isShadowRay ) {
 
 								gl_FragColor.rgb += sampleBackground( environmentRotation * rayDirection ) * throughputColor;
-								gl_FragColor.a = backgroundAlpha;
+								gl_FragColor.a = i == 1 && ! isShadowRay ? 1.0 : backgroundAlpha;
 
 							} else {
 
@@ -857,7 +857,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+								float specularPdf;
+								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, specularPdf, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -887,6 +888,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
+							// TODO: we pass a shadow ray boolean in here but this needs to be handled per the new ray or even within the
+							// "attenuateHit" function
 							// check if a ray could even reach the surface
 							vec3 attenuatedColor;
 							if (
@@ -897,9 +900,18 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surfaceRec, sampleColor );
+								float specularPdf;
+								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surfaceRec, specularPdf, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
+
+									// determine whether the ray is a shadow ray so we can use this for specular reflection determination
+									bool isShadowRay = specularPdf < rand();
+									if ( i <= 1 && ! isShadowRay ) {
+
+										envColor = sampleBackground( envDirection );
+
+									}
 
 									// weight the direct light contribution
 									envPdf /= float( lights.count + 1u );
