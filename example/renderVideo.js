@@ -94,14 +94,14 @@ async function init() {
 	scene = new THREE.Scene();
 
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 5.5, 3.5, 7.5 );
+	camera.position.set( 5, 8, 12 );
 
 	// initialize path tracer
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( Math.PI / 4 ) );
 	ptRenderer.material.filterGlossyFactor = 0.25;
+	ptRenderer.material.backgroundBlur = 0.2;
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -111,7 +111,7 @@ async function init() {
 
 	// initialize controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.15, 2, - 0.08 );
+	controls.target.set( - 0.15, 4.5, - 0.08 );
 	controls.addEventListener( 'change', () => {
 
 		ptRenderer.reset();
@@ -210,12 +210,13 @@ function loadModel( url ) {
 
 				if ( c.material ) {
 
-					c.material.metalness = 0;
-					c.material.map = null;
+					c.material.transparent = false;
+					c.material.depthWrite = true;
 
 				}
 
 			} );
+			gltf.scene.scale.setScalar( 0.3 );
 
 			// initialize animations
 			const animations = gltf.animations;
@@ -240,7 +241,7 @@ function loadModel( url ) {
 					transparent: true,
 					color: 0xdddddd,
 					roughness: 0.15,
-					metalness: 0.8
+					metalness: 0.95
 				} )
 			);
 			floorPlane.scale.setScalar( 50 );
@@ -317,7 +318,7 @@ function animate() {
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
 
-		videoEl.style.display = '';
+		videoEl.style.display = 'inline-block';
 
 	} else {
 
@@ -376,23 +377,23 @@ function animate() {
 		fsQuad.render( renderer );
 		renderer.autoClear = true;
 
-		// update the stats display
-		if ( isRecording ) {
+	}
 
-			const total = Math.ceil( params.frameRate * params.duration );
-			const percStride = 1 / total;
-			const samplesPerc = ptRenderer.samples / params.samples;
-			const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-			samplesEl.innerText = `Frame Samples        : ${ Math.floor( ptRenderer.samples ) }\n`;
-			samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
-			samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
+	// update the stats display
+	if ( isRecording ) {
 
-		} else {
+		const total = Math.ceil( params.frameRate * params.duration );
+		const percStride = 1 / total;
+		const samplesPerc = ptRenderer.samples / params.samples;
+		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
+		samplesEl.innerText = `Frame Samples        : ${ Math.floor( ptRenderer.samples ) }\n`;
+		samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
+		samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
 
-			samplesEl.innerText = '';
-			samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
+	} else {
 
-		}
+		samplesEl.innerText = '';
+		samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
 
 	}
 

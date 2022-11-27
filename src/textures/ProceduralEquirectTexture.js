@@ -68,6 +68,7 @@ export class ProceduralEquirectTexture extends DataTexture {
 
 		super.copy( other );
 		this.generationCallback = other.generationCallback;
+		return this;
 
 	}
 

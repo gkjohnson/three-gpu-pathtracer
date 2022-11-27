@@ -28,6 +28,7 @@ export class GradientEquirectTexture extends ProceduralEquirectTexture {
 
 		this.topColor.copy( other.topColor );
 		this.bottomColor.copy( other.bottomColor );
+		return this;
 
 	}
 
