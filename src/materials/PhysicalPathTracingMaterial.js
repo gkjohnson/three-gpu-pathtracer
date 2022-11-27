@@ -415,7 +415,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					getCameraRay( rayDirection, rayOrigin );
 
 					// inverse environment rotation
-					mat3 invEnvironmentRotation = mat3( inverse( environmentRotation ) );
+					mat3 envRotation3x3 = mat3( environmentRotation );
+					mat3 invEnvRotation3x3 = inverse( envRotation3x3 );
 
 					// final color
 					gl_FragColor = vec4( 0.0 );
@@ -483,7 +484,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( environmentRotation * rayDirection ) * throughputColor;
+								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection ) * throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {
@@ -492,7 +493,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = envMapSample( environmentRotation * rayDirection, envMapInfo, envColor );
+								float envPdf = envMapSample( envRotation3x3 * rayDirection, envMapInfo, envColor );
 								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
@@ -503,7 +504,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								gl_FragColor.rgb +=
 									environmentIntensity *
-									sampleEquirectEnvMapColor( environmentRotation * rayDirection, envMapInfo.map ) *
+									sampleEquirectEnvMapColor( envRotation3x3 * rayDirection, envMapInfo.map ) *
 									throughputColor;
 
 								#endif
@@ -875,7 +876,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
 							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
-							envDirection = invEnvironmentRotation * envDirection;
+							envDirection = invEnvRotation3x3 * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
