@@ -101,7 +101,7 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.filterGlossyFactor = 0.25;
-	ptRenderer.material.backgroundBlur = 0.2;
+	ptRenderer.material.backgroundBlur = 0.1;
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
@@ -127,7 +127,7 @@ async function init() {
 
 	// model models and environment map
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr' )
 		.then( texture => {
 
 			ptRenderer.material.envMapInfo.updateFrom( texture );
@@ -138,7 +138,7 @@ async function init() {
 
 		} );
 
-	const modelPromise = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' )
+	const modelPromise = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb' )
 		.then( result => {
 
 			model = result;
@@ -265,8 +265,8 @@ function loadModel( url ) {
 
 function onResize() {
 
-	const w = Math.min( 800, window.innerWidth );
-	const h = Math.floor( w * 9 / 16 );
+	const w = Math.min( 700, window.innerWidth );
+	const h = Math.floor( w * 3 / 4 );
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
