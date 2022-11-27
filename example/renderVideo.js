@@ -12,25 +12,34 @@ import CanvasCapture from 'canvas-capture';
 const requestAnimationFrame = window.requestAnimationFrame;
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, gui, model;
-let samplesEl;
+let samplesEl, videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
+let videoUrl = '';
 const params = {
 
-	tiles: 1,
+	tiles: 2,
 	rotate: true,
 	duration: 0,
 	frameRate: 12,
 	samples: 20,
+	displayVideo: false,
 	record: () => {
+
+		params.displayVideo = false;
+		URL.revokeObjectURL( videoUrl );
 
 		CanvasCapture.init( renderer.domElement );
 		CanvasCapture.beginVideoRecord( {
 			format: CanvasCapture.WEBM,
 			fps: params.frameRate,
-			onExport: ( blob, filename ) => {
+			onExport: blob => {
 
-				console.log( blob );
+				videoUrl = URL.createObjectURL( blob );
+				videoEl.src = videoUrl;
+				videoEl.play();
+				params.displayVideo = true;
+				rebuildGUI();
 
 			}
 		} );
@@ -101,6 +110,8 @@ async function init() {
 	controls.update();
 
 	samplesEl = document.getElementById( 'samples' );
+	videoEl = document.getElementsByTagName( 'video' )[ 0 ];
+	videoEl.style.display = 'none';
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
@@ -141,8 +152,9 @@ function rebuildGUI() {
 
 	}
 
-
 	gui = new GUI();
+	gui.add( params, 'displayVideo' ).disable( videoUrl === '' );
+
 	const animationFolder = gui.addFolder( 'animation' );
 
 	const recording = CanvasCapture.isRecording();
@@ -257,10 +269,13 @@ function onResize() {
 	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
 	ptRenderer.reset();
 
-	renderer.setSize( w, h );
+	renderer.setSize( w, h, false );
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
+
+	renderer.domElement.style.width = `${ w }px`;
+	videoEl.style.width = `${ w }px`;
 
 }
 
@@ -292,6 +307,14 @@ function regenerateScene() {
 function animate() {
 
 	requestAnimationFrame( animate );
+
+	const displayVideo = params.displayVideo && ! CanvasCapture.isRecording() && videoUrl !== '';
+	videoEl.style.display = displayVideo ? '' : 'none';
+	if ( displayVideo ) {
+
+		return;
+
+	}
 
 	if ( ptRenderer.samples < 1 ) {
 

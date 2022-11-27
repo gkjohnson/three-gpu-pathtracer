@@ -10,12 +10,18 @@
 				background-color: #161616;
 			}
 
-			canvas {
+			canvas, video {
 				position: absolute;
 				left: 50%;
 				top: 50%;
 				transform: translate(-50%, -50%);
+				max-width: 100%;
+				aspect-ratio: 16/9;
+			}
 
+			video {
+				z-index: 1;
+				max-width: 100%;
 			}
 
 			#info {
@@ -25,6 +31,7 @@
 				font-family: 'Courier New', Courier, monospace;
 				color: white;
 				pointer-events: none;
+				z-index: 2;
 			}
 
 			#samples, #credits {
@@ -62,6 +69,7 @@
 				<div id="credits">Model by DailyArt on Sketchfab</div>
 			</div>
 		</div>
+		<video loop controls></video>
 		<script src="./renderVideo.js" type="module"></script>
 	</body>
 </html>
