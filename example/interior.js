@@ -191,7 +191,7 @@ async function init() {
 	} );
 	gui.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
 
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.material.environmentRotation.makeRotationY( v );
 		ptRenderer.reset();
 
 	} );
