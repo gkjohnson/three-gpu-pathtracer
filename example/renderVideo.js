@@ -313,78 +313,86 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const displayVideo = params.displayVideo && ! CanvasCapture.isRecording() && videoUrl !== '';
-	videoEl.style.display = displayVideo ? '' : 'none';
-	if ( displayVideo ) {
+	const isRecording = CanvasCapture.isRecording();
+	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
+	if ( displayingVideo ) {
 
-		return;
-
-	}
-
-	controls.enabled = ! CanvasCapture.isRecording();
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.bounces = params.bounces;
-
-	camera.updateMatrixWorld();
-
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-		if ( CanvasCapture.isRecording() && ptRenderer.samples >= params.samples ) {
-
-			// record frame
-			CanvasCapture.recordFrame();
-
-			const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
-			camera.position.applyAxisAngle( UP_AXIS, angle );
-			controls.update();
-			camera.updateMatrixWorld();
-
-			recordedFrames ++;
-			if ( recordedFrames >= params.frameRate * params.duration ) {
-
-				// save the video
-				CanvasCapture.stopRecord();
-
-				recordedFrames = 0;
-				rebuildGUI();
-
-			}
-
-			const delta = 1 / params.frameRate;
-			model.mixer.update( delta );
-
-			regenerateScene();
-
-		}
-
-		ptRenderer.update();
-
-	}
-
-	if ( ptRenderer.samples < 1 ) {
-
-		renderer.render( scene, camera );
-
-	}
-
-	renderer.autoClear = false;
-	fsQuad.render( renderer );
-	renderer.autoClear = true;
-
-	if ( CanvasCapture.isRecording() ) {
-
-		const total = Math.ceil( params.frameRate * params.duration );
-		const percStride = 1 / total;
-		const samplesPerc = ptRenderer.samples / params.samples;
-		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-		samplesEl.innerText = `Frame Samples        : ${ Math.floor( ptRenderer.samples ) }\n`;
-		samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
-		samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
+		videoEl.style.display = '';
 
 	} else {
 
-		samplesEl.innerText = '';
-		samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
+		videoEl.style.display = 'none';
+		controls.enabled = ! isRecording;
+		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+		ptRenderer.material.bounces = params.bounces;
+
+		camera.updateMatrixWorld();
+
+		// render the samples
+		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
+
+			// if we're recording and we hit the target samples then record the frame step the animation forward
+			if ( isRecording && ptRenderer.samples >= params.samples ) {
+
+				CanvasCapture.recordFrame();
+				recordedFrames ++;
+
+				// stop recording if we've hit enough frames
+				if ( recordedFrames >= params.frameRate * params.duration ) {
+
+					CanvasCapture.stopRecord();
+
+					recordedFrames = 0;
+					rebuildGUI();
+
+				}
+
+				// update the camera transform and update the geometry
+				const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
+				camera.position.applyAxisAngle( UP_AXIS, angle );
+				controls.update();
+				camera.updateMatrixWorld();
+
+				const delta = 1 / params.frameRate;
+				model.mixer.update( delta );
+
+				regenerateScene();
+
+			}
+
+			ptRenderer.update();
+
+		}
+
+		// rasterize if we don't have a full path trace render
+		if ( ptRenderer.samples < 1 ) {
+
+			renderer.render( scene, camera );
+
+		}
+
+		// render the path traced image
+		renderer.autoClear = false;
+		fsQuad.render( renderer );
+		renderer.autoClear = true;
+
+		// update the stats display
+		if ( isRecording ) {
+
+			const total = Math.ceil( params.frameRate * params.duration );
+			const percStride = 1 / total;
+			const samplesPerc = ptRenderer.samples / params.samples;
+			const percentDone = ( samplesPerc + recordedFrames ) * percStride;
+			samplesEl.innerText = `Frame Samples        : ${ Math.floor( ptRenderer.samples ) }\n`;
+			samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
+			samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
+
+		} else {
+
+			samplesEl.innerText = '';
+			samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
+
+		}
 
 	}
 

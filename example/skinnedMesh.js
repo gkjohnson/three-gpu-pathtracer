@@ -272,12 +272,14 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	// step the animation forward
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
 	model.mixer.update( delta );
 	model.scene.updateMatrixWorld();
 
 	if ( params.autoPause ) {
 
+		// auto pause the animation
 		counter += delta;
 		if ( ! params.pause && counter >= 2.5 || params.pause && counter >= 5 ) {
 
@@ -298,6 +300,7 @@ function animate() {
 
 	} else {
 
+		// if we're continuously path tracing then update the scene
 		if ( ! params.pause && params.continuous ) {
 
 			regenerateScene();
@@ -310,6 +313,7 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
+		// update samples
 		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
 			ptRenderer.update();
