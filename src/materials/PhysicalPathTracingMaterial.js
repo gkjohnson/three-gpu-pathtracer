@@ -1,4 +1,4 @@
-import { Matrix4, Matrix3, Vector2 } from 'three';
+import { Matrix4, Vector2 } from 'three';
 import { MaterialBase } from './MaterialBase.js';
 import {
 	MeshBVHUniformStruct, UIntVertexAttributeTexture,
@@ -67,7 +67,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				invProjectionMatrix: { value: new Matrix4() },
 				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 1.0 },
-				environmentRotation: { value: new Matrix3() },
+				environmentRotation: { value: new Matrix4() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
 				backgroundMap: { value: null },
 
@@ -112,7 +112,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderMaterialSampling }
 				${ shaderEnvMapSampling }
 
-				uniform mat3 environmentRotation;
+				uniform mat4 environmentRotation;
 				uniform float backgroundBlur;
 				uniform float backgroundAlpha;
 
@@ -415,7 +415,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					getCameraRay( rayDirection, rayOrigin );
 
 					// inverse environment rotation
-					mat3 invEnvironmentRotation = inverse( environmentRotation );
+					mat3 invEnvironmentRotation = mat3( inverse( environmentRotation ) );
 
 					// final color
 					gl_FragColor = vec4( 0.0 );

@@ -15,7 +15,6 @@ const focusPoint = new THREE.Vector3();
 const params = {
 
 	environmentIntensity: 0.5,
-	environmentRotation: 0,
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,

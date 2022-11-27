@@ -17,7 +17,6 @@ import {
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
-	Matrix4
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -362,7 +361,7 @@ function buildGui() {
 	} ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
-		ptRenderer.material.environmentRotation.setFromMatrix4( new Matrix4().makeRotationY( v ) );
+		ptRenderer.material.environmentRotation.makeRotationY( v );
 		ptRenderer.reset();
 
 	} );

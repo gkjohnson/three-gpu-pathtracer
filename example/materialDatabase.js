@@ -256,7 +256,7 @@ async function init() {
 	} );
 	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
-		ptRenderer.material.environmentRotation.setFromMatrix4( new THREE.Matrix4().makeRotationY( v ) );
+		ptRenderer.material.environmentRotation.makeRotationY( v );
 		ptRenderer.reset();
 
 	} );
