@@ -18,7 +18,7 @@ export class DynamicPathTracingSceneGenerator {
 		this.materials = null;
 		this.textures = null;
 		this.lights = [];
-		this.staticGeometryGenerator = new StaticGeometryGenerator( scene );
+		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
 
@@ -45,7 +45,7 @@ export class DynamicPathTracingSceneGenerator {
 
 			for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
-				objects[ i ].traverseVisible( c => {
+				objects[ i ].traverse( c => {
 
 					if ( c.isMesh ) {
 
