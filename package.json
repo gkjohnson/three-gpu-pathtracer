@@ -26,7 +26,7 @@
     "rtx"
   ],
   "dependencies": {
-    "three-mesh-bvh": "^0.5.18"
+    "three-mesh-bvh": "^0.5.19"
   },
   "devDependencies": {
     "canvas-capture": "^2.0.5",
