@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Three.js semver package version.
 - Removed 3 texture sampler units to add room for future features, background map.
 - Texture memory leak in `BlurredEnvMapGenerator`.
+- PathtracingSceneGenerator / DynamicPathTracingSceneGenerator: both generators now only include visible geometry in the result.
 
 ### Added
 - `GradientEquirectTexture` class for generating an equirect background texture with a gradient.
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `MaterialsTexture` automatically uses the specified material side unless the object is transmissive - in which case double-sided is used.
 - Used textures are now reduced to just those with unique sources.
 - `PhysicalPathTracingMaterial.uniforms.environmentRotation` from a `Matrix3` to a `Matrix4`.
+- Updated three-mesh-bvh to v0.5.19.
 
 ## [0.0.7] - 2022-10-15
 ### Added
