@@ -45,12 +45,6 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	luminance( vec3 color ) {
-
-		return dot( color, vec3( 0.2125, 0.7154, 0.0721 ) );
-
-	}
-
 	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
 	float iorRatioToF0( float iorRatio ) {
 
