@@ -368,6 +368,11 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	float cpdf = 0.0;
 	color = vec3( 0.0 );
 
+	// get the half vector - assuming if the light incident vector is on the other side
+	// of the that it's transmissive. Scale by the ior ratio to retrieve the appropriate half vector
+	// TODO: verify this?
+	vec3 halfVector = getHalfVector( wi, wo, surf.eta );
+
 	// diffuse
 	if ( diffuseWeight > 0.0 && w.z > 0.0 ) {
 

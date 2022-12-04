@@ -56,6 +56,24 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	vec3 getHalfVector( vec3 wi, vec3 wo, float eta ) {
+
+		vec3 h;
+		if ( wi.z < 0.0 ) {
+
+			h = normalize( wi + wo );
+
+		} else {
+
+			h = normalize( wi + wo * eta );
+
+		}
+
+		h *= sign( h.z );
+		return h;
+
+	}
+
 	vec3 getHalfVector( vec3 a, vec3 b ) {
 
 		return normalize( a + b );
