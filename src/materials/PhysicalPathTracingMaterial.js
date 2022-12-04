@@ -800,8 +800,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
-						surfaceRec.iorRatio = material.thinFilm || surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
-						surfaceRec.f0 = iorRatioToF0( surfaceRec.iorRatio );
+						surfaceRec.eta = material.thinFilm || surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
+						surfaceRec.f0 = iorRatioToF0( surfaceRec.eta );
 						surfaceRec.thinFilm = material.thinFilm;
 
 						// Compute the filtered roughness value to use during specular reflection computations.

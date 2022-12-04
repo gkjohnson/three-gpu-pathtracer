@@ -25,7 +25,7 @@ struct SurfaceRec {
 	float transmission;
 	bool thinFilm;
 	float ior;
-	float iorRatio;
+	float eta;
 	float f0;
 	float clearcoat;
 	float clearcoatRoughness;
@@ -59,7 +59,7 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 halfVector ) {
 	float dotHL = dot( wi, halfVector );
 
     float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
-    float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.iorRatio );
+    float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
     return mix( dielectricFresnel, metallicFresnel, surf.metalness );
 
 }
@@ -98,16 +98,16 @@ float specularEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 	float filteredRoughness = surf.filteredRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
-	float iorRatio = surf.iorRatio;
+	float eta =  surf.eta;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
 
-	float f0 = iorRatioToF0( iorRatio );
+	float f0 = iorRatioToF0( eta );
 	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) );
 
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	bool cannotRefract = iorRatio * sinTheta > 1.0;
+	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		F = vec3( 1.0 );
@@ -212,12 +212,12 @@ float transmissionEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 	color = surf.transmission * col;
 
 	// PDF
-	float iorRatio = surf.iorRatio;
+	float eta =  surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	float reflectance = schlickFresnel( cosTheta, f0 );
-	bool cannotRefract = iorRatio * sinTheta > 1.0;
+	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		return 0.0;
@@ -231,14 +231,14 @@ float transmissionEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 	float roughness = surf.roughness;
-	float iorRatio = surf.iorRatio;
+	float eta =  surf.eta;
 
 	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + randDirection() * roughness );
-	vec3 lightDirection = refract( normalize( - wo ), halfVector, iorRatio );
+	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
 
 	if ( surf.thinFilm ) {
 
-		lightDirection = - refract( normalize( - lightDirection ), - vec3( 0.0, 0.0, 1.0 ), 1.0 / iorRatio );
+		lightDirection = - refract( normalize( - lightDirection ), - vec3( 0.0, 0.0, 1.0 ), 1.0 / eta );
 
 	}
 	return normalize( lightDirection );
@@ -255,14 +255,14 @@ float clearcoatEval( vec3 wo, vec3 wi, SurfaceRec surf, inout vec3 color ) {
 	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
 
 	vec3 halfVector = getHalfVector( wo, wi );
-	float iorRatio = frontFace ? 1.0 / ior : ior;
+	float eta =  frontFace ? 1.0 / ior : ior;
 	float G = ggxShadowMaskG2( wi, wo, filteredClearcoatRoughness );
 	float D = ggxDistribution( halfVector, filteredClearcoatRoughness );
 
 	float F = schlickFresnel( dot( wi, halfVector ), f0 );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	bool cannotRefract = iorRatio * sinTheta > 1.0;
+	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		F = 1.0;
@@ -328,12 +328,12 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] 
 
 	// TODO: we should compute a half vector ahead of time and pass it into the sampling functions
 	// so all functions will use the same half vector
-	float iorRatio = surf.iorRatio;
+	float eta =  surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	float reflectance = schlickFresnel( cosTheta, f0 );
-	bool cannotRefract = iorRatio * sinTheta > 1.0;
+	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		reflectance = 1.0;
@@ -366,12 +366,12 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
 
-	float iorRatio = surf.iorRatio;
+	float eta =  surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	float reflectance = schlickFresnel( cosTheta, f0 );
-	bool cannotRefract = iorRatio * sinTheta > 1.0;
+	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
 		reflectance = 1.0;
@@ -387,7 +387,7 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	// get the half vector - assuming if the light incident vector is on the other side
 	// of the that it's transmissive. Scale by the ior ratio to retrieve the appropriate half vector
 	// TODO: verify this?
-	vec3 halfVector = getHalfVector( wi, wo, surf.iorRatio );
+	vec3 halfVector = getHalfVector( wi, wo, surf.eta );
 
 	// diffuse
 	if ( diffuseWeight > 0.0 && wi.z > 0.0 ) {
