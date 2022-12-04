@@ -21,6 +21,29 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	float dielectricFresnel( float cosThetaI, float eta ) {
+
+		// TODO: simplify
+		float ni = eta;
+		float nt = 1.0;
+
+		float sinThetaI = sqrt( 1.0f - cosThetaI * cosThetaI );
+		float sinThetaT = ni / nt * sinThetaI;
+
+		// Check for total internal reflection
+		if( sinThetaT >= 1.0 ) {
+
+			return 1.0;
+
+		}
+
+		float cosThetaT = sqrt( max( 0.0, 1.0f - sinThetaT * sinThetaT ) );
+		float rParallel = ( ( nt * cosThetaI ) - ( ni * cosThetaT ) ) / ( ( nt * cosThetaI ) + ( ni * cosThetaT ) );
+		float rPerpendicuar = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
+		return ( rParallel * rParallel + rPerpendicuar * rPerpendicuar ) / 2.0;
+
+	}
+
 	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
 	float iorRatioToF0( float iorRatio ) {
 
