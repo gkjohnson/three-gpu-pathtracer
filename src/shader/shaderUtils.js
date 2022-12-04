@@ -27,20 +27,27 @@ export const shaderUtils = /* glsl */`
 		float ni = eta;
 		float nt = 1.0;
 
-		float sinThetaI = sqrt( 1.0f - cosThetaI * cosThetaI );
-		float sinThetaT = ni / nt * sinThetaI;
-
 		// Check for total internal reflection
-		if( sinThetaT >= 1.0 ) {
+		float sinThetaISq = 1.0f - cosThetaI * cosThetaI;
+		float sinThetaTSq = eta * eta * sinThetaISq;
+		if( sinThetaTSq >= 1.0 ) {
 
 			return 1.0;
 
 		}
 
+		float sinThetaT = sqrt( sinThetaTSq );
+
 		float cosThetaT = sqrt( max( 0.0, 1.0f - sinThetaT * sinThetaT ) );
 		float rParallel = ( ( nt * cosThetaI ) - ( ni * cosThetaT ) ) / ( ( nt * cosThetaI ) + ( ni * cosThetaT ) );
 		float rPerpendicular = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
 		return ( rParallel * rParallel + rPerpendicular * rPerpendicular ) / 2.0;
+
+	}
+
+	luminance( vec3 color ) {
+
+		return dot( color, vec3( 0.2125, 0.7154, 0.0721 ) );
 
 	}
 
