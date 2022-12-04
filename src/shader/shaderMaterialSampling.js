@@ -26,6 +26,7 @@ struct SurfaceRec {
 	bool thinFilm;
 	float ior;
 	float iorRatio;
+	float f0;
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
@@ -371,10 +372,10 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	// get the half vector - assuming if the light incident vector is on the other side
 	// of the that it's transmissive. Scale by the ior ratio to retrieve the appropriate half vector
 	// TODO: verify this?
-	vec3 halfVector = getHalfVector( wi, wo, surf.eta );
+	vec3 halfVector = getHalfVector( wi, wo, surf.iorRatio );
 
 	// diffuse
-	if ( diffuseWeight > 0.0 && w.z > 0.0 ) {
+	if ( diffuseWeight > 0.0 && wi.z > 0.0 ) {
 
 		dpdf = diffuseEval( wo, wi, surf, color );
 		color *= 1.0 - surf.transmission;
@@ -382,7 +383,7 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	}
 
 	// ggx specular
-	if ( specularWeight > 0.0 && w.z > 0.0 ) {
+	if ( specularWeight > 0.0 && wi.z > 0.0 ) {
 
 		vec3 outColor;
 		spdf = specularEval( wo, wi, surf, outColor );
