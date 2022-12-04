@@ -39,8 +39,8 @@ export const shaderUtils = /* glsl */`
 
 		float cosThetaT = sqrt( max( 0.0, 1.0f - sinThetaT * sinThetaT ) );
 		float rParallel = ( ( nt * cosThetaI ) - ( ni * cosThetaT ) ) / ( ( nt * cosThetaI ) + ( ni * cosThetaT ) );
-		float rPerpendicuar = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
-		return ( rParallel * rParallel + rPerpendicuar * rPerpendicuar ) / 2.0;
+		float rPerpendicular = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
+		return ( rParallel * rParallel + rPerpendicular * rPerpendicular ) / 2.0;
 
 	}
 
