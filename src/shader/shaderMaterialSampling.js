@@ -2,6 +2,15 @@ import { shaderGGXFunctions } from './shaderGGXFunctions.js';
 import { shaderSheenFunctions } from './shaderSheenFunctions.js';
 import { shaderIridescenceFunctions } from './shaderIridescenceFunctions.js';
 
+/*
+wi     : incident vector or light vector (pointing toward the light)
+wo     : outgoing vector or view vector (pointing towards the camera)
+Eval   : Get the color and pdf for a direction
+Sample : Get the direction, color, and pdf for a sample
+eta    : Greek character used to denote the "ratio of ior"
+f0     : Amount of light reflected when looking at a surface head on - "fresnel 0"
+*/
+
 export const shaderMaterialSampling = /* glsl */`
 
 struct SurfaceRec {
@@ -358,37 +367,37 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	float tpdf = 0.0;
 	float cpdf = 0.0;
 	color = vec3( 0.0 );
-	if ( wi.z < 0.0 ) {
 
-		if( transmissionWeight > 0.0 ) {
+	// diffuse
+	if ( diffuseWeight > 0.0 && w.z > 0.0 ) {
 
-			tpdf = transmissionEval( wo, wi, surf, color );
-
-		}
-
-	} else {
-
-		if( diffuseWeight > 0.0 ) {
-
-			dpdf = diffuseEval( wo, wi, surf, color );
-			color *= 1.0 - surf.transmission;
-
-		}
-
-		if( specularWeight > 0.0 ) {
-
-			vec3 outColor;
-			spdf = specularEval( wo, wi, surf, outColor );
-			color += outColor;
-
-		}
-
-		color *= sheenAlbedoScaling( wo, wi, surf );
-		color += sheenColor( wo, wi, surf );
+		dpdf = diffuseEval( wo, wi, surf, color );
+		color *= 1.0 - surf.transmission;
 
 	}
 
-	if( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
+	// ggx specular
+	if ( specularWeight > 0.0 && w.z > 0.0 ) {
+
+		vec3 outColor;
+		spdf = specularEval( wo, wi, surf, outColor );
+		color += outColor;
+
+	}
+
+	// transmission
+	if ( transmissionWeight > 0.0 && wi.z < 0.0 ) {
+
+		tpdf = transmissionEval( wo, wi, surf, color );
+
+	}
+
+	// sheen
+	color *= sheenAlbedoScaling( wo, wi, surf );
+	color += sheenColor( wo, wi, surf );
+
+	// clearcoat
+	if ( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
 
 		cpdf = clearcoatEval( clearcoatWo, clearcoatWi, surf, color );
 
