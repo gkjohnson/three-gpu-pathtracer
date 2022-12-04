@@ -52,14 +52,6 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	float schlickFresnelFromIor( float cosine, float iorRatio ) {
-
-		// Schlick approximation
-		float r_0 = iorRatioToF0( iorRatio );
-		return schlickFresnel( cosine, r_0 );
-
-	}
-
 	// forms a basis with the normal vector as Z
 	mat3 getBasisFromNormal( vec3 normal ) {
 
