@@ -23,7 +23,6 @@ export const shaderUtils = /* glsl */`
 
 	float dielectricFresnel( float cosThetaI, float eta ) {
 
-		// TODO: simplify
 		float ni = eta;
 		float nt = 1.0;
 
