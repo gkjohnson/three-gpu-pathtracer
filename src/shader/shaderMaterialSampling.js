@@ -59,9 +59,9 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 	float dotHV = dot( wo, wh );
 	float dotHL = dot( wi, wh );
 
-    float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
-    float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
-    return mix( dielectricFresnel, metallicFresnel, surf.metalness );
+	float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
+	float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
+	return mix( dielectricFresnel, metallicFresnel, surf.metalness );
 
 }
 
@@ -74,12 +74,12 @@ float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) 
 	float metalFactor = ( 1.0 - surf.metalness );
 	float transFactor = ( 1.0 - surf.transmission );
 	float rr = 0.5 + 2.0 * surf.roughness * fl * fl;
-    float retro = rr * ( fl + fv + fl * fv * ( rr - 1.0f ) );
+	float retro = rr * ( fl + fv + fl * fv * ( rr - 1.0f ) );
 	float lambert = ( 1.0f - 0.5f * fl ) * ( 1.0f - 0.5f * fv );
 
 	// TODO: subsurface approx?
 
-    color = transFactor * metalFactor * normalize( wi ).z * surf.color * ( retro + lambert ) / PI;
+	color = transFactor * metalFactor * normalize( wi ).z * surf.color * ( retro + lambert ) / PI;
 	return wi.z / PI;
 
 }
