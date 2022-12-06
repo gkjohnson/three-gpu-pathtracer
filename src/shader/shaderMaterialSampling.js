@@ -68,7 +68,6 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 // diffuse
 float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
-	// float halfVector = getHalfVector( wo, wi );
 	float fl = schlickFresnel( wi.z, 0.0 );
 	float fv = schlickFresnel( wo.z, 0.0 );
 
@@ -322,7 +321,7 @@ vec3 sheenColor( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf ) {
 #define SPEC_WEIGHT 1
 #define TRANS_WEIGHT 2
 #define CC_WEIGHT 3
-void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] weights ) {
+void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] weights ) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -333,7 +332,9 @@ void getLobeWeights( vec3 wo, vec3 clearcoatWo, SurfaceRec surf, out float[ 4 ] 
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-	float reflectance = schlickFresnel( cosTheta, f0 );
+
+	// TODO: does "cannot refract" belong in disney fresnel?
+	float reflectance =  disneyFresnel( surf, wo, wi, wh );
 	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
@@ -439,7 +440,8 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color ) {
 
 	float[ 4 ] pdf;
-	getLobeWeights( wo, clearcoatWo, surf, pdf );
+	vec3 wh = getHalfVector( wo, wi, surf.eta );
+	getLobeWeights( wo, wi, wh, clearcoatWo, surf, pdf );
 
 	float specularPdf;
 	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, pdf, specularPdf, color );
@@ -448,8 +450,9 @@ float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceR
 
 SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRec surf ) {
 
+	// using normal and basically-reflected ray since we don't have proper half vector here
 	float pdf[4];
-	getLobeWeights( wo, clearcoatWo, surf, pdf );
+	getLobeWeights( wo, wo, vec3( 0, 0, 1 ), clearcoatWo, surf, pdf );
 
 	float cdf[4];
 	cdf[0] = pdf[0];
