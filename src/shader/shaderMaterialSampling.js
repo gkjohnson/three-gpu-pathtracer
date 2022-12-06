@@ -326,7 +326,7 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 
 	// TODO: we should compute a half vector ahead of time and pass it into the sampling functions
 	// so all functions will use the same half vector
-	float eta =  surf.eta;
+	float eta = surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
