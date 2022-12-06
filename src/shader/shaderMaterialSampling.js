@@ -59,7 +59,7 @@ float diffuseEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
 	// TODO: subsurface approx?
 
-	color = transFactor * metalFactor * normalize( wi ).z * surf.color * ( retro + lambert ) / PI;
+	color = transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
 	return wi.z / PI;
 
 }
