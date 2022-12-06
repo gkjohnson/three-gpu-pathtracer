@@ -343,8 +343,8 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 	float specularLuminance = luminance( surf.specularColor );
 
 	float diffuseWeight = diffuseLuminance * ( 1.0 - transmission ) * ( 1.0 - metalness );
-	float specularWeight = mix( mix( specularLuminance, 1.0, reflectance ), 1.0, metalness );
-	float transmissionWeight = diffuseLuminance * transmission * ( 1.0 - reflectance ) * ( 1.0 - metalness );
+	float specularWeight = 0.01 + reflectance;
+	float transmissionWeight = transmission * ( 1.0 - metalness );
 	float clearcoatWeight = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
 
 	float totalWeight = diffuseWeight + specularWeight + transmissionWeight + clearcoatWeight;
