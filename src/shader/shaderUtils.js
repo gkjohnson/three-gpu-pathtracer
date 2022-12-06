@@ -73,13 +73,17 @@ export const shaderUtils = /* glsl */`
 
 	vec3 getHalfVector( vec3 wi, vec3 wo, float eta ) {
 
+		// get the half vector - assuming if the light incident vector is on the other side
+		// of the that it's transmissive.
 		vec3 h;
-		if ( wi.z < 0.0 ) {
+		if ( wi.z > 0.0 ) {
 
 			h = normalize( wi + wo );
 
 		} else {
 
+			// Scale by the ior ratio to retrieve the appropriate half vector
+			// TODO: verify this?
 			h = normalize( wi + wo * eta );
 
 		}
