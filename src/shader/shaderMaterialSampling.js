@@ -68,16 +68,20 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 // diffuse
 float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
-	// TODO: scale by 1 - F here
-	// note on division by PI
-	// https://seblagarde.wordpress.com/2012/01/08/pi-or-not-to-pi-in-game-lighting-equation/
-	float metalFactor = ( 1.0 - surf.metalness );
-	color = surf.color * metalFactor * wi.z / PI;
+	// float halfVector = getHalfVector( wo, wi );
+	float fl = schlickFresnel( wi.z, 0.0 );
+	float fv = schlickFresnel( wo.z, 0.0 );
 
-	// PDF
-	// https://raytracing.github.io/books/RayTracingTheRestOfYourLife.html#lightscattering/thescatteringpdf
-	float cosValue = wi.z;
-	return cosValue / PI;
+	float metalFactor = ( 1.0 - surf.metalness );
+	float transFactor = ( 1.0 - surf.transmission );
+	float rr = 0.5 + 2.0 * surf.roughness * fl * fl;
+    float retro = rr * ( fl + fv + fl * fv * ( rr - 1.0f ) );
+	float lambert = ( 1.0f - 0.5f * fl ) * ( 1.0f - 0.5f * fv );
+
+	// TODO: subsurface approx?
+
+    color = transFactor * metalFactor * normalize( wi ).z * surf.color * ( retro + lambert ) / PI;
+	return wi.z / PI;
 
 }
 
