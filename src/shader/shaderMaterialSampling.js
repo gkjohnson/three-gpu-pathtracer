@@ -17,6 +17,7 @@ struct SurfaceRec {
 	bool thinFilm;
 	float ior;
 	float eta;
+	float f0;
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
@@ -78,10 +79,9 @@ float specularEval( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
 	vec3 halfVector = getHalfVector( wo, wi );
 	float eta = surf.eta;
+	float f0 = surf.f0;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( halfVector, filteredRoughness );
-
-	float f0 = iorRatioToF0( eta );
 	vec3 F = vec3( schlickFresnel( dot( wi, halfVector ), f0 ) );
 
 	float cosTheta = min( wo.z, 1.0 );
