@@ -45,9 +45,9 @@ export const shaderUtils = /* glsl */`
 	}
 
 	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
-	float iorRatioToF0( float iorRatio ) {
+	float iorRatioToF0( float eta ) {
 
-		return pow( ( 1.0 - iorRatio ) / ( 1.0 + iorRatio ), 2.0 );
+		return pow( ( 1.0 - eta ) / ( 1.0 + eta ), 2.0 );
 
 	}
 

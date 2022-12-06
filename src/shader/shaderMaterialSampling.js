@@ -101,11 +101,10 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 	float metalness = surf.metalness;
 	float filteredRoughness = surf.filteredRoughness;
 
-	float eta =  surf.eta;
+	float eta = surf.eta;
+	float f0 = surf.f0;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( wh, filteredRoughness );
-
-	float f0 = iorRatioToF0( eta );
 	vec3 F = vec3( schlickFresnel( dot( wi, wh ), f0 ) );
 
 	float cosTheta = min( wo.z, 1.0 );
@@ -215,7 +214,7 @@ float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 col
 	color = surf.transmission * col;
 
 	// PDF
-	float eta =  surf.eta;
+	float eta = surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -234,8 +233,7 @@ float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 col
 vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 	float roughness = surf.roughness;
-	float eta =  surf.eta;
-
+	float eta = surf.eta;
 	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + randDirection() * roughness );
 	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
 
@@ -260,7 +258,6 @@ float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 colo
 	float eta =  frontFace ? 1.0 / ior : ior;
 	float G = ggxShadowMaskG2( wi, wo, filteredClearcoatRoughness );
 	float D = ggxDistribution( wh, filteredClearcoatRoughness );
-
 	float F = schlickFresnel( dot( wi, wh ), f0 );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -368,7 +365,7 @@ float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
 
-	float eta =  surf.eta;
+	float eta = surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
