@@ -256,7 +256,7 @@ float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 colo
 	bool frontFace = surf.frontFace;
 	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
 
-	float eta =  frontFace ? 1.0 / ior : ior;
+	float eta = frontFace ? 1.0 / ior : ior;
 	float G = ggxShadowMaskG2( wi, wo, filteredClearcoatRoughness );
 	float D = ggxDistribution( wh, filteredClearcoatRoughness );
 	float F = schlickFresnel( dot( wi, wh ), f0 );
@@ -330,7 +330,7 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 
 	// TODO: does "cannot refract" belong in disney fresnel?
-	float reflectance =  disneyFresnel( surf, wo, wi, wh );
+	float reflectance = disneyFresnel( surf, wo, wi, wh );
 	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
@@ -338,12 +338,8 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 
 	}
 
-	float diffuseLuminance = luminance( surf.color );
-	float specularLuminance = luminance( surf.specularColor );
-
-	// add 0.01 to specular so we don't have a case where the total weight is 0
-	float diffuseWeight = diffuseLuminance * ( 1.0 - transmission ) * ( 1.0 - metalness );
-	float specularWeight = 0.01 + reflectance;
+	float diffuseWeight = ( 1.0 - transmission ) * ( 1.0 - metalness );
+	float specularWeight = 0.5;
 	float transmissionWeight = transmission * ( 1.0 - metalness );
 	float clearcoatWeight = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
 
