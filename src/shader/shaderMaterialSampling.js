@@ -324,8 +324,6 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
 
-	// TODO: we should compute a half vector ahead of time and pass it into the sampling functions
-	// so all functions will use the same half vector
 	float eta = surf.eta;
 	float f0 = surf.f0;
 	float cosTheta = min( wo.z, 1.0 );
@@ -343,6 +341,7 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 	float diffuseLuminance = luminance( surf.color );
 	float specularLuminance = luminance( surf.specularColor );
 
+	// add 0.01 to specular so we don't have a case where the total weight is 0
 	float diffuseWeight = diffuseLuminance * ( 1.0 - transmission ) * ( 1.0 - metalness );
 	float specularWeight = 0.01 + reflectance;
 	float transmissionWeight = transmission * ( 1.0 - metalness );
