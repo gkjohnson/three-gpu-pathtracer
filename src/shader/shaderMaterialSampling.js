@@ -60,8 +60,9 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 	float dotHL = dot( wi, wh );
 
 	// TODO: some model-viewer test models look better when surf.eta is set to a non 1.5 eta here here?
+	// and the furnace test seems to pass when it === 1.0
 	// float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
-	float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 / 1.1 );
+	float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 );
 	float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
 
 	return mix( dielectricFresnel, metallicFresnel, surf.metalness );
@@ -83,7 +84,9 @@ float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) 
 
 	// TODO: subsurface approx?
 
-	color = transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
+	float FM = disneyFresnel( surf, wo, wi, wh );
+
+	color = ( 1.0 - FM ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
 	return wi.z / PI;
 
 }
