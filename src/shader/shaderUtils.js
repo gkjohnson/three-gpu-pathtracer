@@ -23,6 +23,7 @@ export const shaderUtils = /* glsl */`
 
 	float dielectricFresnel( float cosThetaI, float eta ) {
 
+		// https://schuttejoe.github.io/post/disneybsdf/
 		float ni = eta;
 		float nt = 1.0;
 
@@ -83,6 +84,7 @@ export const shaderUtils = /* glsl */`
 		} else {
 
 			// Scale by the ior ratio to retrieve the appropriate half vector
+			// TODO: from knightcrawler/glsl-pathtracer
 			// TODO: verify this?
 			h = normalize( wi + wo * eta );
 
