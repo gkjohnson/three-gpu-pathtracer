@@ -153,54 +153,45 @@ vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 
 }
 
-/*
+
 // transmission
-function transmissionEval( wo, wi, material, surf ) {
+/*
+float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
 	// See section 4.2 in https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 
-	const { roughness, ior } = material;
-	const { frontFace } = hit;
-	const ratio = frontFace ? ior : 1 / ior;
-	const minRoughness = Math.max( roughness, MIN_ROUGHNESS );
+	float filteredRoughness = surf.filteredRoughness;
+	float eta = surf.eta;
+	bool frontFace = surf.frontFace;
+	bool thinFilm = surf.thinFilm;
 
-	halfVector.set( 0, 0, 0 ).addScaledVector( wi, ratio ).addScaledVector( wo, 1.0 ).normalize().multiplyScalar( - 1 );
+	vec3 col = thinFilm || frontFace ? surf.color : vec3( 1.0 );
+	color = surf.transmission * col;
 
-	const denom = Math.pow( ratio * halfVector.dot( wi ) + 1.0 * halfVector.dot( wo ), 2.0 );
-	return ggxPDF( wo, halfVector, minRoughness ) / denom;
-
-}
-
-function transmissionColor( wo, wi, material, hit, colorTarget ) {
-
-	const { metalness, transmission } = material;
-	colorTarget
-		.copy( material.color )
-		.multiplyScalar( ( 1.0 - metalness ) * wo.z )
-		.multiplyScalar( transmission );
+	float denom = pow( eta * dot( wi, wh ) + dot( wo, wh ), 2.0 );
+	return ggxPDF( wo, wh, filteredRoughness ) / denom;
 
 }
 
-function transmissionDirection( wo, hit, material, lightDirection ) {
+vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
-	const { roughness, ior } = material;
-	const { frontFace } = hit;
-	const ratio = frontFace ? 1 / ior : ior;
-	const minRoughness = Math.max( roughness, MIN_ROUGHNESS );
+	float filteredRoughness = surf.filteredRoughness;
+	float eta = surf.eta;
+	bool frontFace = surf.frontFace;
 
 	// sample ggx vndf distribution which gives a new normal
-	ggxDirection(
+	vec3 halfVector = ggxDirection(
 		wo,
-		minRoughness,
-		minRoughness,
-		Math.random(),
-		Math.random(),
-		halfVector,
+		filteredRoughness,
+		filteredRoughness,
+		rand(),
+		rand()
 	);
 
-	// apply to new ray by reflecting off the new normal
-	tempDir.copy( wo ).multiplyScalar( - 1 );
-	refract( tempDir, halfVector, ratio, lightDirection );
+
+	// TODO: support thin film
+	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
+	return normalize( lightDirection );
 
 }
 */
