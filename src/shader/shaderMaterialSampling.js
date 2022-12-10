@@ -60,8 +60,10 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 	float dotHL = dot( wi, wh );
 
 	// TODO: some model-viewer test models look better when surf.eta is set to 1.0 here?
+	// float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
+	float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 );
 	float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
-	float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
+
 	return mix( dielectricFresnel, metallicFresnel, surf.metalness );
 
 }
@@ -236,7 +238,6 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	return normalize( lightDirection );
 
 }
-
 
 // clearcoat
 float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 color ) {
