@@ -6,6 +6,16 @@ const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master
 	const { scenarios } = await req.json();
 	const imageType = window.location.hash.replace( /^#/, '' ) || 'model-viewer';
 
+	const selector = document.querySelector( 'select' );
+	const selectedIndex = [ ...selector.options ].findIndex( op => op.value === imageType );
+	selector.options[ selectedIndex ].setAttribute( 'selected', true );
+	selector.addEventListener( 'change', () => {
+
+		window.location.hash = selector.value;
+		window.location.reload();
+
+	} );
+
 	scenarios.forEach( s => {
 
 		const name = s.name;
