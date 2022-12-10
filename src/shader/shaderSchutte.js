@@ -165,4 +165,47 @@ float EvaluateDisneyClearcoat( float clearcoat, float alpha, vec3 wo, vec3 wm, v
     return d / ( 4.0f * absDotNL );
 
 }
+
+void GgxVndfAnisotropicPdf(vec3 wi, vec3 wm, vec3 wo, float ax, float ay, float forwardPdfW )
+{
+	float D = GgxAnisotropicD(wm, ax, ay);
+
+	float absDotNL = AbsCosTheta(wi);
+	float absDotHL = abs(dot(wm, wi));
+	float G1v = SeparableSmithGGXG1(wo, wm, ax, ay);
+	forwardPdfW = G1v * absDotHL * D / absDotNL;
+
+	// float absDotNV = AbsCosTheta(wo);
+	// float absDotHV = abs(Dot(wm, wo));
+	// float G1l = SeparableSmithGGXG1(wi, wm, ax, ay);
+	// reversePdfW = G1l * absDotHV * D / absDotNV;
+}
+
+vec3 EvaluateDisneyBRDF( SurfaceRec surface, vec3 wo, vec3 wm, vec3 wi, float fPdf )
+{
+	fPdf = 0.0f;
+
+	float dotNL = CosTheta(wi);
+	float dotNV = CosTheta(wo);
+	if(dotNL <= 0.0f || dotNV <= 0.0f) {
+		return vec3( 0.0 );
+	}
+
+	float ax, ay;
+	// CalculateAnisotropicParams(surface.roughness, surface.anisotropic, ax, ay);
+	ax = surface.filteredRoughness;
+	ay = surface.filteredRoughness;
+
+	float d = GgxAnisotropicD(wm, ax, ay);
+	float gl = SeparableSmithGGXG1(wi, wm, ax, ay);
+	float gv = SeparableSmithGGXG1(wo, wm, ax, ay);
+
+	vec3 f = surface.specularColor * disneyFresnel(surface, wo, wm, wi);
+
+	GgxVndfAnisotropicPdf(wi, wm, wo, ax, ay, fPdf );
+	fPdf *= (1.0f / (4.0 * abs( dot(wo, wm))));
+
+	return d * gl * gv * f / (4.0f * dotNL * dotNV);
+}
+
 `;
