@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Used textures are now reduced to just those with unique sources.
 - `PhysicalPathTracingMaterial.uniforms.environmentRotation` from a `Matrix3` to a `Matrix4`.
 - Updated three-mesh-bvh to v0.5.19.
+- Rework application of Fresnel based on Joe Shutte's Disney BSDF writeup resulting in improve handling of metalness brightness.
+- Use a 1.1 fresnel by default for plastics since it matches GlTF models more exactly.
 
 ## [0.0.7] - 2022-10-15
 ### Added
