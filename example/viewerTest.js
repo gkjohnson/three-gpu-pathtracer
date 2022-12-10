@@ -450,7 +450,7 @@ async function updateModel() {
 		geometry.computeBoundingSphere();
 
 		// mirror the model-viewer near / far planes
-		const radius = geometry.boundingSphere.radius;
+		const radius = Math.max( orbit.radius, geometry.boundingSphere.radius );
 		camera.near = 2 * radius / 1000;
 		camera.far = 2 * radius;
 		camera.updateProjectionMatrix();
