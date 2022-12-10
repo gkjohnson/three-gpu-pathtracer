@@ -107,27 +107,26 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 	float f0 = surf.f0;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( wh, filteredRoughness );
-	vec3 F = vec3( schlickFresnel( dot( wi, wh ), f0 ) );
 
+	float FM = disneyFresnel( surf, wo, wi, wh );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		F = vec3( 1.0 );
+		FM = 1.0;
 
 	}
 
-	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
-	vec3 metalF = mix( F, iridescenceFresnel, surf.iridescence );
-	vec3 dialectricF = F * surf.specularIntensity;
-	F = mix( dialectricF, metalF, metalness );
+	vec3 metalColor = surf.color;
+	vec3 dielectricColor = f0 * surf.specularColor * surf.specularIntensity;
+	vec3 specColor = mix( dielectricColor, metalColor, surf.metalness );
 
-	color = mix( surf.specularColor, surf.color, metalness );
-	color = mix( color, vec3( 1.0 ), F );
-	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
-	color *= mix( F, vec3( 1.0 ), metalness );
-	color *= wi.z; // scale the light by the direction the light is coming in from
+	vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
+	vec3 iridescenceMix = mix( vec3( FM ), iridescenceF, surf.iridescence );
+	vec3 F = mix( specColor, vec3( 1.0 ), iridescenceMix );
+
+	color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
 	// PDF
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
