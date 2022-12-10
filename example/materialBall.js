@@ -110,6 +110,7 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.material1.roughness = 0.25;
 	params.material1.metalness = 1.0;
 	params.material1.iridescence = 1.0;
+	params.material1.iridescenceIOR = 2.2;
 
 } else if ( window.location.hash.includes( 'acrylic' ) ) {
 
