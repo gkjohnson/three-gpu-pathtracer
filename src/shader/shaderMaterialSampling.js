@@ -59,8 +59,12 @@ float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 	float dotHV = dot( wo, wh );
 	float dotHL = dot( wi, wh );
 
+	// TODO: some model-viewer test models look better when surf.eta is set to a non 1.5 eta here here?
+	// and the furnace test seems to pass when it === 1.0
+	// float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
+	float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 / 1.1 );
 	float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
-	float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
+
 	return mix( dielectricFresnel, metallicFresnel, surf.metalness );
 
 }
@@ -80,7 +84,9 @@ float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) 
 
 	// TODO: subsurface approx?
 
-	color = transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
+	float FM = disneyFresnel( surf, wo, wi, wh );
+
+	color = ( 1.0 - FM ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
 	return wi.z / PI;
 
 }
@@ -106,27 +112,25 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 	float f0 = surf.f0;
 	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
 	float D = ggxDistribution( wh, filteredRoughness );
-	vec3 F = vec3( schlickFresnel( dot( wi, wh ), f0 ) );
-
+	float FM = disneyFresnel( surf, wo, wi, wh );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
 	bool cannotRefract = eta * sinTheta > 1.0;
 	if ( cannotRefract ) {
 
-		F = vec3( 1.0 );
+		FM = 1.0;
 
 	}
 
-	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
-	vec3 metalF = mix( F, iridescenceFresnel, surf.iridescence );
-	vec3 dialectricF = F * surf.specularIntensity;
-	F = mix( dialectricF, metalF, metalness );
+	vec3 metalColor = surf.color;
+	vec3 dielectricColor = f0 * surf.specularColor;
+	vec3 specColor = mix( dielectricColor, metalColor, surf.metalness );
 
-	color = mix( surf.specularColor, surf.color, metalness );
-	color = mix( color, vec3( 1.0 ), F );
-	color *= G * D / ( 4.0 * abs( wi.z * wo.z ) );
-	color *= mix( F, vec3( 1.0 ), metalness );
-	color *= wi.z; // scale the light by the direction the light is coming in from
+	vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
+	vec3 iridescenceMix = mix( vec3( FM ), iridescenceF, surf.iridescence );
+	vec3 F = mix( specColor, vec3( 1.0 ), iridescenceMix );
+
+	color = mix( surf.specularIntensity, 1.0, surf.metalness ) * wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
 	// PDF
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
@@ -154,54 +158,45 @@ vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 
 }
 
-/*
+
 // transmission
-function transmissionEval( wo, wi, material, surf ) {
+/*
+float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
 	// See section 4.2 in https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 
-	const { roughness, ior } = material;
-	const { frontFace } = hit;
-	const ratio = frontFace ? ior : 1 / ior;
-	const minRoughness = Math.max( roughness, MIN_ROUGHNESS );
+	float filteredRoughness = surf.filteredRoughness;
+	float eta = surf.eta;
+	bool frontFace = surf.frontFace;
+	bool thinFilm = surf.thinFilm;
 
-	halfVector.set( 0, 0, 0 ).addScaledVector( wi, ratio ).addScaledVector( wo, 1.0 ).normalize().multiplyScalar( - 1 );
+	vec3 col = thinFilm || frontFace ? surf.color : vec3( 1.0 );
+	color = surf.transmission * col;
 
-	const denom = Math.pow( ratio * halfVector.dot( wi ) + 1.0 * halfVector.dot( wo ), 2.0 );
-	return ggxPDF( wo, halfVector, minRoughness ) / denom;
-
-}
-
-function transmissionColor( wo, wi, material, hit, colorTarget ) {
-
-	const { metalness, transmission } = material;
-	colorTarget
-		.copy( material.color )
-		.multiplyScalar( ( 1.0 - metalness ) * wo.z )
-		.multiplyScalar( transmission );
+	float denom = pow( eta * dot( wi, wh ) + dot( wo, wh ), 2.0 );
+	return ggxPDF( wo, wh, filteredRoughness ) / denom;
 
 }
 
-function transmissionDirection( wo, hit, material, lightDirection ) {
+vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
-	const { roughness, ior } = material;
-	const { frontFace } = hit;
-	const ratio = frontFace ? 1 / ior : ior;
-	const minRoughness = Math.max( roughness, MIN_ROUGHNESS );
+	float filteredRoughness = surf.filteredRoughness;
+	float eta = surf.eta;
+	bool frontFace = surf.frontFace;
 
 	// sample ggx vndf distribution which gives a new normal
-	ggxDirection(
+	vec3 halfVector = ggxDirection(
 		wo,
-		minRoughness,
-		minRoughness,
-		Math.random(),
-		Math.random(),
-		halfVector,
+		filteredRoughness,
+		filteredRoughness,
+		rand(),
+		rand()
 	);
 
-	// apply to new ray by reflecting off the new normal
-	tempDir.copy( wo ).multiplyScalar( - 1 );
-	refract( tempDir, halfVector, ratio, lightDirection );
+
+	// TODO: support thin film
+	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
+	return normalize( lightDirection );
 
 }
 */
@@ -246,7 +241,6 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	return normalize( lightDirection );
 
 }
-
 
 // clearcoat
 float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 color ) {
