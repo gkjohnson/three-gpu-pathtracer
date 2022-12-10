@@ -1,7 +1,8 @@
 import { shaderGGXFunctions } from './shaderGGXFunctions.js';
 import { shaderSheenFunctions } from './shaderSheenFunctions.js';
 import { shaderIridescenceFunctions } from './shaderIridescenceFunctions.js';
-
+import { shaderCrawler } from './shaderCrawler.js';
+import { shaderSchutte } from './shaderSchutte.js';
 /*
 wi     : incident vector or light vector (pointing toward the light)
 wo     : outgoing vector or view vector (pointing towards the camera)
