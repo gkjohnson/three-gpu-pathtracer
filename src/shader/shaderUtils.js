@@ -23,6 +23,7 @@ export const shaderUtils = /* glsl */`
 
 	float dielectricFresnel( float cosThetaI, float eta ) {
 
+		// https://schuttejoe.github.io/post/disneybsdf/
 		float ni = eta;
 		float nt = 1.0;
 
@@ -83,7 +84,8 @@ export const shaderUtils = /* glsl */`
 		} else {
 
 			// Scale by the ior ratio to retrieve the appropriate half vector
-			// TODO: verify this?
+			// From Section 2.2 on computing the transmission half vector:
+			// https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
 			h = normalize( wi + wo * eta );
 
 		}
