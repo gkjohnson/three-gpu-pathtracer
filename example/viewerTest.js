@@ -28,6 +28,7 @@ const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
+const scale = parseInt( urlParams.get( 'scale' ) ) || ( 1 / window.devicePixelRatio );
 
 const params = {
 
@@ -37,7 +38,7 @@ const params = {
 	tilesX: tiles,
 	tilesY: tiles,
 	samplesPerFrame: 1,
-	scale: 1 / window.devicePixelRatio,
+	scale: scale,
 
 	model: '',
 	checkerboardTransparency: true,

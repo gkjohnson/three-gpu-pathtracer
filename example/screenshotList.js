@@ -1,36 +1,71 @@
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
+const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer/commits?sha=screenshots';
+
 ( async () => {
 
 	const containerEl = document.getElementById( 'container' );
-	const req = await fetch( CONFIG_URL );
-	const { scenarios } = await req.json();
-	const imageType = window.location.hash.replace( /^#/, '' ) || 'model-viewer';
+	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
+	const commits = await ( await fetch( COMMITS_URL ) ).json();
+	let imageType = window.location.hash.replace( /^#/, '' ) || 'model-viewer';
 
-	const selector = document.querySelector( 'select' );
-	const selectedIndex = [ ...selector.options ].findIndex( op => op.value === imageType );
-	selector.options[ selectedIndex ].setAttribute( 'selected', true );
-	selector.addEventListener( 'change', () => {
+	const selectionBox = document.querySelector( 'select' );
+	const selectedIndex = [ ...selectionBox.options ].findIndex( op => op.value === imageType );
+	selectionBox.options[ selectedIndex ].setAttribute( 'selected', true );
+	selectionBox.addEventListener( 'change', () => {
 
-		window.location.hash = selector.value;
-		window.location.reload();
+		window.location.hash = selectionBox.value;
+		imageType = selectionBox.value;
+		rebuildList();
 
 	} );
 
-	scenarios.forEach( s => {
+	const largeImageBox = document.querySelector( 'input[type="checkbox"]' );
+	largeImageBox.addEventListener( 'change', () => {
 
-		const name = s.name;
-		const url1 = `https://raw.githubusercontent.com/gkjohnson/three-gpu-pathtracer/screenshots/screenshots/golden/${ name }.png`;
-		const url2 = `https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/goldens/${ name }/${ imageType }-golden.png`;
-		containerEl.innerHTML += `
-			<div>
-				<h1>${ s.name }</h1>
-				<div class="img-wrapper">
-					<a href="${ url1 }" target="_blank"><img src="${ url1 }" /></a>
-					<a href="${ url2 }" target="_blank"><img src="${ url2 }" /></a>
+		if ( largeImageBox.checked ) {
+
+			containerEl.classList.add( 'large-images' );
+
+		} else {
+
+			containerEl.classList.remove( 'large-images' );
+
+		}
+
+	} );
+
+	rebuildList();
+
+	function rebuildList() {
+
+		containerEl.innerHTML = '';
+		scenarios.forEach( s => {
+
+			const name = s.name;
+			const url1 = `https://raw.githubusercontent.com/gkjohnson/three-gpu-pathtracer/screenshots/screenshots/golden/${ name }.png`;
+			let url2;
+			if ( imageType === 'prior-commit' ) {
+
+				url2 = `https://raw.githubusercontent.com/gkjohnson/three-gpu-pathtracer/${ commits[ 1 ].sha }/screenshots/golden/${ name }.png`;
+
+			} else {
+
+				url2 = `https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/goldens/${ name }/${ imageType }-golden.png`;
+
+			}
+
+			containerEl.innerHTML += `
+				<div>
+					<h1>${ s.name }</h1>
+					<div class="img-wrapper">
+						<a href="${ url1 }" target="_blank"><img src="${ url1 }" /></a>
+						<a href="${ url2 }" target="_blank"><img src="${ url2 }" /></a>
+					</div>
 				</div>
-			</div>
-		`;
+			`;
 
-	} );
+		} );
+
+	}
 
 } )();
