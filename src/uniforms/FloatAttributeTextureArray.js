@@ -9,14 +9,33 @@ function copyArrayToArray( fromArray, fromStride, toArray, toStride, offset ) {
 
 	}
 
+	// scale non-float values to their normalized range
 	const count = fromArray.length / fromStride;
+	const bpe = fromArray.constructor.BYTES_PER_ELEMENT * 8;
+	let maxValue = 1.0;
+	switch ( fromArray.constructor ) {
+
+	case Uint8Array:
+	case Uint16Array:
+	case Uint32Array:
+		maxValue = 2 ** bpe - 1;
+		break;
+
+	case Int8Array:
+	case Int16Array:
+	case Int32Array:
+		maxValue = 2 ** ( bpe - 1 ) - 1;
+		break;
+
+	}
+
 	for ( let i = 0; i < count; i ++ ) {
 
 		const i4 = 4 * i;
 		const is = fromStride * i;
 		for ( let j = 0; j < toStride; j ++ ) {
 
-			toArray[ offset + i4 + j ] = fromStride >= j + 1 ? fromArray[ is + j ] : 0;
+			toArray[ offset + i4 + j ] = fromStride >= j + 1 ? fromArray[ is + j ] / maxValue : 0;
 
 		}
 
