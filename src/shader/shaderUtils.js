@@ -21,18 +21,34 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
-	float iorRatioToF0( float iorRatio ) {
+	float dielectricFresnel( float cosThetaI, float eta ) {
 
-		return pow( ( 1.0 - iorRatio ) / ( 1.0 + iorRatio ), 2.0 );
+		// https://schuttejoe.github.io/post/disneybsdf/
+		float ni = eta;
+		float nt = 1.0;
+
+		// Check for total internal reflection
+		float sinThetaISq = 1.0f - cosThetaI * cosThetaI;
+		float sinThetaTSq = eta * eta * sinThetaISq;
+		if( sinThetaTSq >= 1.0 ) {
+
+			return 1.0;
+
+		}
+
+		float sinThetaT = sqrt( sinThetaTSq );
+
+		float cosThetaT = sqrt( max( 0.0, 1.0f - sinThetaT * sinThetaT ) );
+		float rParallel = ( ( nt * cosThetaI ) - ( ni * cosThetaT ) ) / ( ( nt * cosThetaI ) + ( ni * cosThetaT ) );
+		float rPerpendicular = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
+		return ( rParallel * rParallel + rPerpendicular * rPerpendicular ) / 2.0;
 
 	}
 
-	float schlickFresnelFromIor( float cosine, float iorRatio ) {
+	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
+	float iorRatioToF0( float eta ) {
 
-		// Schlick approximation
-		float r_0 = iorRatioToF0( iorRatio );
-		return schlickFresnel( cosine, r_0 );
+		return pow( ( 1.0 - eta ) / ( 1.0 + eta ), 2.0 );
 
 	}
 
@@ -53,6 +69,29 @@ export const shaderUtils = /* glsl */`
 		vec3 ortho = normalize( cross( normal, other ) );
 		vec3 ortho2 = normalize( cross( normal, ortho ) );
 		return mat3( ortho2, ortho, normal );
+
+	}
+
+	vec3 getHalfVector( vec3 wi, vec3 wo, float eta ) {
+
+		// get the half vector - assuming if the light incident vector is on the other side
+		// of the that it's transmissive.
+		vec3 h;
+		if ( wi.z > 0.0 ) {
+
+			h = normalize( wi + wo );
+
+		} else {
+
+			// Scale by the ior ratio to retrieve the appropriate half vector
+			// From Section 2.2 on computing the transmission half vector:
+			// https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
+			h = normalize( wi + wo * eta );
+
+		}
+
+		h *= sign( h.z );
+		return h;
 
 	}
 

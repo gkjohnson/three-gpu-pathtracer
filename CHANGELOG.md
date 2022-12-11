@@ -5,11 +5,36 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- Three.js semver package version.
+- Removed 3 texture sampler units to add room for future features, background map.
+- Texture memory leak in `BlurredEnvMapGenerator`.
+- PathtracingSceneGenerator / DynamicPathTracingSceneGenerator: both generators now only include visible geometry in the result.
+
+### Added
+- `GradientEquirectTexture` class for generating an equirect background texture with a gradient.
+- `AttributesTextureArray` class for storing multiple vertex attribute buffers in a sampler array to save texture units.
+
+### Removed
+- Removed `FEATURE_GRADIENT_BG` define and bgGradientTop, bgGradientBottom uniforms. Use the new GradientEquirectTexture class instead.
+- PhysicalPathTracingMaterial: Removed `normalAttribute`, `tangentAttribute`, `uvAttribute`, and `colorAttribute` uniforms. Use `attributesArray` to store those parameters, instead.
+- `MaterialsTexture.setSide` function.
+
+### Changed
+- `MaterialsTexture` automatically uses the specified material side unless the object is transmissive - in which case double-sided is used.
+- Used textures are now reduced to just those with unique sources.
+- `PhysicalPathTracingMaterial.uniforms.environmentRotation` from a `Matrix3` to a `Matrix4`.
+- Updated three-mesh-bvh to v0.5.19.
+- Rework application of Fresnel based on Joe Shutte's Disney BSDF writeup resulting in improve handling of metalness brightness.
+- Use a 1.1 fresnel by default for plastics since it matches GlTF models more exactly.
+
+## [0.0.7] - 2022-10-15
 ### Added
 - DenoiseMaterial based on "glslSmartDenoise" to smooth the final render.
 - Support for vertex colors.
 - Support for attenuated transmission.
 - PathTracingRenderer.alpha: Docs specifying premuliplied alpha behavior.
+- Support for thin film transmission.
 
 ### Fixed
 - Diffuse materials looking too dark.

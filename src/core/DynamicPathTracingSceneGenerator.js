@@ -18,7 +18,7 @@ export class DynamicPathTracingSceneGenerator {
 		this.materials = null;
 		this.textures = null;
 		this.lights = [];
-		this.staticGeometryGenerator = new StaticGeometryGenerator( scene );
+		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
 

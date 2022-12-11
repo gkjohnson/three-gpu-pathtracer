@@ -428,11 +428,13 @@ async function updateModel() {
 		const material = ptRenderer.material;
 
 		material.bvh.updateFrom( bvh );
-		material.normalAttribute.updateFrom( geometry.attributes.normal );
-		material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-		material.uvAttribute.updateFrom( geometry.attributes.uv );
+		material.attributesArray.updateFrom(
+			geometry.attributes.normal,
+			geometry.attributes.tangent,
+			geometry.attributes.uv,
+			geometry.attributes.color,
+		);
 		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.colorAttribute.updateFrom( geometry.attributes.color );
 		material.textures.setTextures( renderer, 2048, 2048, textures );
 		material.materials.updateFrom( materials, textures );
 		material.envMapInfo.updateFrom( envMap );
@@ -448,7 +450,7 @@ async function updateModel() {
 		geometry.computeBoundingSphere();
 
 		// mirror the model-viewer near / far planes
-		const radius = geometry.boundingSphere.radius;
+		const radius = Math.max( orbit.radius, geometry.boundingSphere.radius );
 		camera.near = 2 * radius / 1000;
 		camera.far = 2 * radius;
 		camera.updateProjectionMatrix();

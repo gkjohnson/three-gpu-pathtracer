@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -14,8 +14,7 @@ const mouse = new THREE.Vector2();
 const focusPoint = new THREE.Vector3();
 const params = {
 
-	environmentIntensity: 1,
-	environmentRotation: 0,
+	environmentIntensity: 0.5,
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -53,14 +52,17 @@ async function init() {
 
 	scene = new THREE.Scene();
 
+	const gradientMap = new GradientEquirectTexture();
+	gradientMap.topColor.set( 0x390f20 ).convertSRGBToLinear();
+	gradientMap.bottomColor.set( 0x151b1f ).convertSRGBToLinear();
+	gradientMap.update();
+
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
-	ptRenderer.material.bgGradientTop.set( 0x390f20 ).convertSRGBToLinear();
-	ptRenderer.material.bgGradientBottom.set( 0x151b1f ).convertSRGBToLinear();
+	ptRenderer.material.backgroundMap = gradientMap;
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -78,24 +80,20 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	const envMapPromise = new Promise( resolve => {
+	const envMapPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.then( texture => {
 
-		new RGBELoader()
-			.load( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr', texture => {
+			const generator = new BlurredEnvMapGenerator( renderer );
+			const blurredTex = generator.generate( texture, 0.35 );
+			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+			generator.dispose();
+			texture.dispose();
 
-				const generator = new BlurredEnvMapGenerator( renderer );
-				const blurredTex = generator.generate( texture, 0.35 );
-				ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-				generator.dispose();
-				texture.dispose();
+			scene.environment = blurredTex;
 
-				scene.environment = blurredTex;
+		} );
 
-				resolve();
-
-			} );
-
-	} );
 
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
@@ -105,7 +103,7 @@ async function init() {
 
 			const group = new THREE.Group();
 
-			const geometry = new THREE.SphereBufferGeometry( 1, 10, 10 );
+			const geometry = new THREE.SphereGeometry( 1, 10, 10 );
 			const mat = new THREE.MeshStandardMaterial( {
 				emissiveIntensity: 10,
 				emissive: 0xffffff
@@ -151,9 +149,12 @@ async function init() {
 			const material = ptRenderer.material;
 
 			material.bvh.updateFrom( bvh );
-			material.normalAttribute.updateFrom( geometry.attributes.normal );
-			material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-			material.uvAttribute.updateFrom( geometry.attributes.uv );
+			material.attributesArray.updateFrom(
+				geometry.attributes.normal,
+				geometry.attributes.tangent,
+				geometry.attributes.uv,
+				geometry.attributes.color,
+			);
 			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 			material.textures.setTextures( renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );

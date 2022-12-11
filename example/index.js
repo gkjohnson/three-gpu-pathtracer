@@ -4,7 +4,6 @@ import {
 	Box3,
 	LoadingManager,
 	Sphere,
-	Color,
 	DoubleSide,
 	Mesh,
 	MeshStandardMaterial,
@@ -18,7 +17,6 @@ import {
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
-	Matrix4
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -29,7 +27,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -106,7 +104,7 @@ let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats, sceneInfo;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
 let ptRenderer, fsQuad, controls, scene;
-let envMap, envMapGenerator;
+let envMap, envMapGenerator, backgroundMap;
 let loadingModel = false;
 let delaySamples = 0;
 
@@ -135,14 +133,17 @@ async function init() {
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 1, 0.25, 1 );
 
+	backgroundMap = new GradientEquirectTexture();
+	backgroundMap.topColor.set( params.bgGradientTop );
+	backgroundMap.bottomColor.set( params.bgGradientBottom );
+	backgroundMap.update();
+
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
-	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
+	ptRenderer.material.backgroundMap = backgroundMap;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -163,7 +164,8 @@ async function init() {
 			transparent: true,
 			color: 0x080808,
 			roughness: 0.1,
-			metalness: 0.0
+			metalness: 0.0,
+			side: DoubleSide,
 		} )
 	);
 	floorPlane.scale.setScalar( 3 );
@@ -173,8 +175,7 @@ async function init() {
 	document.body.appendChild( stats.dom );
 	renderer.physicallyCorrectLights = true;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', 1 );
-	scene.background = new Color( 0x060606 );
+	scene.background = backgroundMap;
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
 	updateCamera( params.cameraProjection );
@@ -204,8 +205,6 @@ function animate() {
 	floorPlane.material.roughness = params.floorRoughness;
 	floorPlane.material.metalness = params.floorMetalness;
 	floorPlane.material.opacity = params.floorOpacity;
-	ptRenderer.material.bgGradientTop.set( params.bgGradientTop );
-	ptRenderer.material.bgGradientBottom.set( params.bgGradientBottom );
 
 	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
 
@@ -362,7 +361,7 @@ function buildGui() {
 	} ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
-		ptRenderer.material.environmentRotation.setFromMatrix4( new Matrix4().makeRotationY( v ) );
+		ptRenderer.material.environmentRotation.makeRotationY( v );
 		ptRenderer.reset();
 
 	} );
@@ -371,26 +370,33 @@ function buildGui() {
 	const backgroundFolder = gui.addFolder( 'background' );
 	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
 
-		ptRenderer.material.setDefine( 'FEATURE_GRADIENT_BG', Number( v === 'Gradient' ) );
 		if ( v === 'Gradient' ) {
 
-			scene.background = new Color( 0x060606 );
+			scene.background = backgroundMap;
+			ptRenderer.material.backgroundMap = backgroundMap;
 
 		} else {
 
 			scene.background = scene.environment;
+			ptRenderer.material.backgroundMap = null;
 
 		}
 
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( () => {
+	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
+
+		backgroundMap.topColor.set( v );
+		backgroundMap.update();
 
 		ptRenderer.reset();
 
 	} );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( () => {
+	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
+
+		backgroundMap.bottomColor.set( v );
+		backgroundMap.update();
 
 		ptRenderer.reset();
 
@@ -685,11 +691,13 @@ async function updateModel() {
 		const material = ptRenderer.material;
 
 		material.bvh.updateFrom( bvh );
-		material.normalAttribute.updateFrom( geometry.attributes.normal );
-		material.tangentAttribute.updateFrom( geometry.attributes.tangent );
-		material.uvAttribute.updateFrom( geometry.attributes.uv );
+		material.attributesArray.updateFrom(
+			geometry.attributes.normal,
+			geometry.attributes.tangent,
+			geometry.attributes.uv,
+			geometry.attributes.color,
+		);
 		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.colorAttribute.updateFrom( geometry.attributes.color );
 		material.textures.setTextures( renderer, 2048, 2048, textures );
 		material.materials.updateFrom( materials, textures );
 
@@ -705,6 +713,10 @@ async function updateModel() {
 		params.floorMetalness = modelInfo.floorMetalness || 0.0;
 		params.bgGradientTop = modelInfo.gradientTop || '#111111';
 		params.bgGradientBottom = modelInfo.gradientBot || '#000000';
+
+		backgroundMap.topColor.set( params.bgGradientTop );
+		backgroundMap.bottomColor.set( params.bgGradientBottom );
+		backgroundMap.update();
 
 		buildGui();
 

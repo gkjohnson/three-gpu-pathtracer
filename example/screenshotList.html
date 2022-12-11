@@ -15,9 +15,10 @@
 				color: white;
 			}
 
-			#container {
+			#container, #selector {
 				width: 805px;
 				margin: auto;
+				margin-top: 20px;
 			}
 
 			#container > * {
@@ -40,15 +41,28 @@
 				margin-right: 5px;
 			}
 
-			h1 {
+			h1, span {
 				font-size: 15px;
 				font-weight: 300;
-
 			}
 		</style>
 
 	</head>
 	<body>
+		<div id="selector">
+			<label>
+				<span>comparison&nbsp;</span>
+				<select value="model-viewer">
+					<option value="dspbr-pt">dspbr-pt</option>
+					<option value="filament">filament</option>
+					<option value="babylon">babylon</option>
+					<option value="gltf-sample-viewer">gltf-sample-viewer</option>
+					<option value="model-viewer">model-viewer</option>
+					<option value="rhodonite">rhodonite</option>
+					<option value="stellar">stellar</option>
+				</select>
+			</label>
+		</div>
 		<div id="container"></div>
 		<script src="./screenshotList.js" type="module"></script>
 	</body>

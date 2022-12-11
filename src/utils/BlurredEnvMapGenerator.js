@@ -106,6 +106,9 @@ export class BlurredEnvMapGenerator {
 		result.mapping = EquirectangularReflectionMapping;
 		result.needsUpdate = true;
 
+		// dispose of the now unneeded target
+		pmremTarget.dispose();
+
 		return result;
 
 	}
