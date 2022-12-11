@@ -16,7 +16,7 @@
 			}
 
 			#container, #selector {
-				width: 805px;
+				width: 800px;
 				margin: auto;
 				margin-top: 20px;
 			}
@@ -27,14 +27,22 @@
 				width: 100%;
 			}
 
+			#container.large-images {
+				width: 1200px;
+				max-width: 100%;
+			}
+
+			a {
+				width: 50%;
+			}
+
 			.img-wrapper {
 				display: flex;
 				justify-content: center;
 			}
 
 			img {
-				max-height: 400px;
-				max-width: 400px;
+				width: 100%;
 			}
 
 			img:first-child {
@@ -44,6 +52,16 @@
 			h1, span {
 				font-size: 15px;
 				font-weight: 300;
+			}
+
+			label {
+				display: block;
+				padding: 3px 0;
+			}
+
+			label span {
+				display: inline-block;
+				width: 150px;
 			}
 		</style>
 
@@ -60,7 +78,12 @@
 					<option value="model-viewer">model-viewer</option>
 					<option value="rhodonite">rhodonite</option>
 					<option value="stellar">stellar</option>
+					<option value="prior-commit">prior-commit</option>
 				</select>
+			</label>
+			<label>
+				<span>large images&nbsp;</span>
+				<input type="checkbox" />
 			</label>
 		</div>
 		<div id="container"></div>
