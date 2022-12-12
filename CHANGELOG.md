@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Support for `Material.flatShading` to render flad-shaded materials.
+
+## [0.0.8] - 2022-12-11
 ### Fixed
 - Three.js semver package version.
 - Removed 3 texture sampler units to add room for future features, background map.
