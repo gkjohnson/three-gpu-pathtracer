@@ -39,6 +39,7 @@ const params = {
 		specularColor: '#ffffff',
 		specularIntensity: 1.0,
 		matte: false,
+		flatShading: false,
 		castShadow: true,
 	},
 	material2: {
@@ -63,6 +64,7 @@ const params = {
 		specularColor: '#ffffff',
 		specularIntensity: 1.0,
 		matte: false,
+		flatShading: false,
 		castShadow: true,
 	},
 	material3: {
@@ -449,6 +451,7 @@ async function init() {
 	matFolder1.addColor( params.material1, 'specularColor' ).onChange( reset );
 	matFolder1.add( params.material1, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder1.add( params.material1, 'matte' ).onChange( reset );
+	matFolder1.add( params.material1, 'flatShading' ).onChange( reset );
 	matFolder1.add( params.material1, 'castShadow' ).onChange( reset );
 	matFolder1.close();
 
@@ -474,6 +477,7 @@ async function init() {
 	matFolder2.addColor( params.material2, 'specularColor' ).onChange( reset );
 	matFolder2.add( params.material2, 'specularIntensity', 0.0, 1.0 ).onChange( reset );
 	matFolder2.add( params.material2, 'matte' ).onChange( reset );
+	matFolder2.add( params.material2, 'flatShading' ).onChange( reset );
 	matFolder2.add( params.material2, 'castShadow' ).onChange( reset );
 	matFolder2.close();
 
@@ -596,6 +600,7 @@ function animate() {
 	m1.specularColor.set( params.material1.specularColor ).convertSRGBToLinear();
 	m1.specularIntensity = params.material1.specularIntensity;
 	m1.transparent = m1.opacity < 1;
+	m1.flatShading = params.material1.flatShading;
 
 	const m2 = materials[ 1 ];
 	m2.color.set( params.material2.color ).convertSRGBToLinear();
@@ -618,6 +623,7 @@ function animate() {
 	m2.specularColor.set( params.material2.specularColor ).convertSRGBToLinear();
 	m2.specularIntensity = params.material2.specularIntensity;
 	m2.transparent = m2.opacity < 1;
+	m2.flatShading = params.material2.flatShading;
 
 	const m3 = materials[ 2 ];
 	m3.color.set( params.material3.color ).convertSRGBToLinear();
