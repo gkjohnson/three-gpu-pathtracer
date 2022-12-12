@@ -639,6 +639,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						// normal
+						if ( material.flatShading ) {
+
+							// if we're rendering a flat shaded object then use the face normals - the face normal
+							// is provided based on the side the ray hits the mesh so flip it to align with the
+							// interpolated vertex normals.
+							normal = faceNormal * side;
+
+						}
+
 						vec3 baseNormal = normal;
 						if ( material.normalMap != - 1 ) {
 
