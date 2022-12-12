@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
-- Support for `Material.flatShading` to render flad-shaded materials.
+- Support for `Material.flatShading` to render flat-shaded materials.
 
 ## [0.0.8] - 2022-12-11
 ### Fixed
