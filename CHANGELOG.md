@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for `Material.flatShading` to render flat-shaded materials.
 
+### Fixed
+- Roughness and metalness maps not being assigned correctly.
+
 ## [0.0.8] - 2022-12-11
 ### Fixed
 - Three.js semver package version.
