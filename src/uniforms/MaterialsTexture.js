@@ -183,9 +183,9 @@ export class MaterialsTexture extends DataTexture {
 			// sample 1
 			// metalness & roughness
 			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			floatArray[ index ++ ] = uniqueTextures.indexOf( m.metalnessMap );
+			floatArray[ index ++ ] = getTexture( m, 'metalnessMap' );
 			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			floatArray[ index ++ ] = uniqueTextures.indexOf( m.roughnessMap );
+			floatArray[ index ++ ] = getField( m, 'roughessMap' );
 
 			// sample 2
 			// transmission & emissiveIntensity
