@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 - Roughness and metalness maps not being assigned correctly.
+- Case where textures using shared "Source" with different encodings were not treated as unique.
 
 ## [0.0.8] - 2022-12-11
 ### Fixed
