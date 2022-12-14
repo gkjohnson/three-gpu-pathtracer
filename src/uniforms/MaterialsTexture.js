@@ -1,4 +1,4 @@
-import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, Uniform } from 'three';
+import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
 import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
 
 const MATERIAL_PIXELS = 45;
