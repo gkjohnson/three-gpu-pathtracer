@@ -1,5 +1,5 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
-import { reduceTexturesToUniqueSources } from './utils.js';
+import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
 
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
@@ -61,8 +61,8 @@ export class MaterialsTexture extends DataTexture {
 
 			if ( key in material && material[ key ] ) {
 
-				const source = material[ key ].source;
-				return uniqueTextures.findIndex( tex => tex.source === source );
+				const hash = getTextureHash( material[ key ] );
+				return uniqueTextureLookup[ hash ];
 
 			} else {
 
@@ -152,6 +152,12 @@ export class MaterialsTexture extends DataTexture {
 
 		// get the list of textures with unique sources
 		const uniqueTextures = reduceTexturesToUniqueSources( textures );
+		const uniqueTextureLookup = {};
+		for ( let i = 0, l = uniqueTextures.length; i < l; i ++ ) {
+
+			uniqueTextureLookup[ getTextureHash( uniqueTextures[ i ] ) ] = i;
+
+		}
 
 		if ( image.width !== dimension ) {
 
