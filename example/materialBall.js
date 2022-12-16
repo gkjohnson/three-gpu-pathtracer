@@ -12,6 +12,7 @@ let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQu
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
+let PT_PROGRAM_ID;
 
 const orthoWidth = 5;
 
@@ -657,9 +658,35 @@ function animate() {
 
 	}
 
+	// Get the path tracing shader id. It will be the next program compiled and used here.
+	if ( PT_PROGRAM_ID === undefined ) {
+
+		PT_PROGRAM_ID = renderer.info.programs.length;
+
+	}
+
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
 		ptRenderer.update();
+
+	}
+
+	if ( ! window.DEBUG_SHADERS ) {
+
+		const gl = renderer.getContext();
+		const DEBUG_SHADERS = {};
+
+		const programs = renderer.info.programs;
+		const ptProgram = programs[ PT_PROGRAM_ID ];
+		DEBUG_SHADERS.vertexShader = gl.getShaderSource( ptProgram.vertexShader );
+		DEBUG_SHADERS.fragmentShader = gl.getShaderSource( ptProgram.fragmentShader );
+
+		const shaderDebugExt = gl.getExtension( 'WEBGL_debug_shaders' );
+		DEBUG_SHADERS.debugVertexShader = shaderDebugExt.getTranslatedShaderSource( ptProgram.vertexShader );
+		DEBUG_SHADERS.debugFragmentShader = shaderDebugExt.getTranslatedShaderSource( ptProgram.fragmentShader );
+
+		window.DEBUG_SHADERS = DEBUG_SHADERS;
+		console.log( 'Original and translated debug shaders added to window.DEBUG_SHADERS object.' );
 
 	}
 
