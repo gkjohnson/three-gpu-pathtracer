@@ -41,6 +41,7 @@ async function init() {
 	controls.update();
 
 	scene = new THREE.Scene();
+	scene.backgroundBlurriness = 0.05;
 
 	// init path tracer
 	pathTracer = new PathTracingRenderer( renderer );
