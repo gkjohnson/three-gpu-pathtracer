@@ -678,12 +678,17 @@ function animate() {
 
 		const programs = renderer.info.programs;
 		const ptProgram = programs[ PT_PROGRAM_ID ];
-		DEBUG_SHADERS.vertexShader = gl.getShaderSource( ptProgram.vertexShader );
-		DEBUG_SHADERS.fragmentShader = gl.getShaderSource( ptProgram.fragmentShader );
+		DEBUG_SHADERS.context = gl;
+
+		DEBUG_SHADERS.vertexShader = ptProgram.vertexShader;
+		DEBUG_SHADERS.fragmentShader = ptProgram.fragmentShader;
+
+		DEBUG_SHADERS.vertexShaderSource = gl.getShaderSource( ptProgram.vertexShader );
+		DEBUG_SHADERS.fragmentShaderSource = gl.getShaderSource( ptProgram.fragmentShader );
 
 		const shaderDebugExt = gl.getExtension( 'WEBGL_debug_shaders' );
-		DEBUG_SHADERS.debugVertexShader = shaderDebugExt.getTranslatedShaderSource( ptProgram.vertexShader );
-		DEBUG_SHADERS.debugFragmentShader = shaderDebugExt.getTranslatedShaderSource( ptProgram.fragmentShader );
+		DEBUG_SHADERS.debugVertexShaderSource = shaderDebugExt.getTranslatedShaderSource( ptProgram.vertexShader );
+		DEBUG_SHADERS.debugFragmentShaderSource = shaderDebugExt.getTranslatedShaderSource( ptProgram.fragmentShader );
 
 		window.DEBUG_SHADERS = DEBUG_SHADERS;
 		console.log( 'Original and translated debug shaders added to window.DEBUG_SHADERS object.' );
