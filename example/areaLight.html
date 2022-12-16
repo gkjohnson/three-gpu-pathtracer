@@ -40,11 +40,25 @@
 				color: white;
 				font-family: 'Courier New', Courier, monospace;
 			}
+
+			#description {
+				position: absolute;
+				top: 0;
+				width: 100%;
+				color: white;
+				font-family: monospace;
+				text-align: center;
+				padding: 5px 0;
+				pointer-events: none;
+			}
 		</style>
 
 	</head>
 	<body>
 		<div id="loading">LOADING</div>
+		<div id="description">
+			Rendering with area lights and multiple importance sampling.
+		</div>
 		<div id="info">
 			<div>
 				<div id="samples">--</div>
