@@ -73,19 +73,15 @@ vec2 get_sobol_pt(uint index) {
 
 uint pixel_idx;
 uint path_idx;
-uint seed_idx;
 
 uint get_seed(uint bounce, uint effect) {
 	return hash(
 		hash_combine(
 			hash_combine(
-				hash_combine(
-					hash(bounce),
-					pixel_idx
-				),
-				effect
+				hash(bounce),
+				pixel_idx
 			),
-			seed_idx
+			effect
 		)
 	);
 }
