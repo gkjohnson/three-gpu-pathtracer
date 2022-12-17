@@ -326,13 +326,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					return rayOrigin4.xyz / rayOrigin4.w;
 				}
 
-				void getCameraRay( vec2 uv, out vec3 rayDirection, out vec3 rayOrigin ) {
+				void getCameraRay( out vec3 rayDirection, out vec3 rayOrigin ) {
 
 					vec2 ssd = vec2( 1.0 ) / resolution;
 
 					// Jitter the camera ray by finding a uv coordinate at a random sample
-					// around this pixel's UV coordinate
-					vec2 jitteredUv = vUv + vec2( tentFilter( uv.x ) * ssd.x, tentFilter( uv.y ) * ssd.y );
+					// around this pixel's UV coordinate for AA
+					vec2 ruv = rand2();
+					vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
 
 					#if CAMERA_TYPE == 2
 
@@ -404,7 +405,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 rayDirection;
 					vec3 rayOrigin;
 
-					getCameraRay( rand2(), rayDirection, rayOrigin );
+					getCameraRay( rayDirection, rayOrigin );
 
 					// inverse environment rotation
 					mat3 envRotation3x3 = mat3( environmentRotation );
