@@ -158,6 +158,16 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	vec3 sampleSphere( vec2 uv ) {
+
+		float u = ( uv.x - 0.5 ) * 2.0;
+		float t = uv.y * PI * 2.0;
+		float f = sqrt( 1.0 - u * u );
+
+		return vec3( f * cos( t ), f * sin( t ), u );
+
+	}
+
 	vec2 sampleRegularNGon( int sides, vec3 uvw ) {
 
 		sides = max( sides, 3 );
@@ -348,5 +358,4 @@ export const shaderUtils = /* glsl */`
 		return x < 0.5 ? sqrt( 2.0 * x ) - 1.0 : 1.0 - sqrt( 2.0 - ( 2.0 * x ) );
 
 	}
-
 `;

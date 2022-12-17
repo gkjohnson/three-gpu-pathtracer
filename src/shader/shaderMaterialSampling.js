@@ -93,7 +93,7 @@ float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) 
 
 vec3 diffuseDirection( vec3 wo, SurfaceRec surf ) {
 
-	vec3 lightDirection = randDirection();
+	vec3 lightDirection = sampleSphere( rand2() );
 	lightDirection.z += 1.0;
 	lightDirection = normalize( lightDirection );
 
@@ -226,7 +226,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 	float roughness = surf.roughness;
 	float eta = surf.eta;
-	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + randDirection() * roughness );
+	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( rand2() ) * roughness );
 	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
 
 	if ( surf.thinFilm ) {
