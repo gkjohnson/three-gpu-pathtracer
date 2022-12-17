@@ -148,7 +148,7 @@ async function init() {
 
 			// init environment
 			const floor = new THREE.Mesh(
-				new THREE.CylinderBufferGeometry( 8, 8, 0.5, 200 ),
+				new THREE.CylinderGeometry( 8, 8, 0.5, 200 ),
 				new THREE.MeshStandardMaterial( { color: 0xffffff, roughness: 0.5, metalness: 0.2 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
