@@ -179,13 +179,6 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	float colorToLuminance( vec3 color ) {
-
-		// https://en.wikipedia.org/wiki/Relative_luminance
-		return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-
-	}
-
 	// ray sampling x and z are swapped to align with expected background view
 	vec2 equirectDirectionToUv( vec3 direction ) {
 
