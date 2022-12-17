@@ -73,9 +73,21 @@ vec2 get_sobol_pt(uint index) {
 
 uint pixel_idx;
 uint path_idx;
+uint seed_idx;
 
 uint get_seed(uint bounce, uint effect) {
-	return hash(hash_combine(hash_combine(hash(bounce), pixel_idx), effect));
+	return hash(
+		hash_combine(
+			hash_combine(
+				hash_combine(
+					hash(bounce),
+					pixel_idx
+				),
+				effect
+			),
+			seed_idx
+		)
+	);
 }
 
 vec2 get_shuffled_scrambled_sobol_pt(uint index, uint seed) {
