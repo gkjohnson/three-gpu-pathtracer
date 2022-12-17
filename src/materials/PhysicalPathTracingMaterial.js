@@ -487,7 +487,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = envMapSample( envRotation3x3 * rayDirection, envMapInfo, envColor );
+								float envPdf = sampleEnvMap( envMapInfo, envRotation3x3 * rayDirection, envColor );
 								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
@@ -879,7 +879,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
+							float envPdf = sampleEnvMapProbability( envMapInfo, rand2(), envColor, envDirection );
 							envDirection = invEnvRotation3x3 * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright

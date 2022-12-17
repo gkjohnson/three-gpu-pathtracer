@@ -21,7 +21,7 @@ float envMapDirectionPdf( vec3 direction ) {
 
 }
 
-float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
+float sampleEnvMap( EquirectHdrInfo info, vec3 direction, out vec3 color ) {
 
 	vec2 uv = equirectDirectionToUv( direction );
 	color = texture2D( info.map, uv ).rgb;
@@ -35,10 +35,9 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 
 }
 
-float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 direction ) {
+float sampleEnvMapProbability( EquirectHdrInfo info, vec2 r, out vec3 color, out vec3 direction ) {
 
 	// sample env map cdf
-	vec2 r = rand2();
 	float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
 	float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
 	vec2 uv = vec2( u, v );
