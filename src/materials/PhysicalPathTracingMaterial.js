@@ -10,6 +10,7 @@ import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
 import { shaderLightSampling } from '../shader/shaderLightSampling.js';
+import { shaderSobolSampling } from '../shader/shaderSobolSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { shaderLayerTexelFetchFunctions } from '../shader/shaderLayerTexelFetchFunctions.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
@@ -102,6 +103,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
 
+				${ shaderSobolSampling }
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
