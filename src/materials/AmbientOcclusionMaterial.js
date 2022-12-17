@@ -3,6 +3,7 @@ import { MaterialBase } from './MaterialBase.js';
 import { MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh';
 import { shaderMaterialStructs } from '../shader/shaderStructs.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
+import { shaderRandFunctions } from '../shader/shaderRandFunctions.js';
 
 export class AmbientOcclusionMaterial extends MaterialBase {
 
@@ -97,6 +98,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
+				${ shaderRandFunctions }
 				${ shaderUtils }
 
 				uniform BVH bvh;
