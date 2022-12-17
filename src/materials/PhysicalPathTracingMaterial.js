@@ -357,14 +357,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if CAMERA_TYPE == 1
 
 							// Orthographic projection
-
 							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, - 1.0, 0.0 ) ).xyz;
 							rayDirection = normalize( rayDirection );
 
 						#else
 
 							// Perspective projection
-
 							rayDirection = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
 
 						#endif
@@ -381,18 +379,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// if blades === 0 then we assume a circle
 						vec3 shapeUVW = rand3();
 						int blades = physicalCamera.apertureBlades;
+						float anamorphicRatio = physicalCamera.anamorphicRatio;
 						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularNGon( blades, shapeUVW );
 						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape
-						float ac = cos( physicalCamera.apertureRotation );
-						float as = sin( physicalCamera.apertureRotation );
-						apertureSample = vec2(
-							apertureSample.x * ac - apertureSample.y * as,
-							apertureSample.x * as + apertureSample.y * ac
-						);
-						apertureSample.x *= saturate( physicalCamera.anamorphicRatio );
-						apertureSample.y *= saturate( 1.0 / physicalCamera.anamorphicRatio );
+						apertureSample =
+							rotateVector( apertureSample, physicalCamera.apertureRotation ) *
+							saturate( vec2( anamorphicRatio, 1.0 / anamorphicRatio ) );
 
 						// create the new ray
 						rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;

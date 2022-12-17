@@ -262,6 +262,17 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	vec2 rotateVector( vec2 v, float t ) {
+
+		float ac = cos( t );
+		float as = sin( t );
+		return vec2(
+			v.x * ac - v.y * as,
+			v.x * as + v.y * ac
+		);
+
+	}
+
 	// Finds the point where the ray intersects the plane defined by u and v and checks if this point
 	// falls in the bounds of the rectangle on that same plane.
 	// Plane intersection: https://lousodrome.net/blog/light/2020/07/03/intersection-of-a-ray-and-a-plane/
