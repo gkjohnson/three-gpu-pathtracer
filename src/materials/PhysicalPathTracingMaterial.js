@@ -166,9 +166,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				vec3 sampleBackground( vec3 direction ) {
+				vec3 sampleBackground( vec3 direction, vec2 uv ) {
 
-					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
+					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, uv ) * 0.5 * backgroundBlur );
 
 					#if FEATURE_BACKGROUND_MAP
 
@@ -326,18 +326,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					return rayOrigin4.xyz / rayOrigin4.w;
 				}
 
-				void getCameraRay( out vec3 rayDirection, out vec3 rayOrigin ) {
+				void getCameraRay( vec2 uv, out vec3 rayDirection, out vec3 rayOrigin ) {
 
 					vec2 ssd = vec2( 1.0 ) / resolution;
 
 					// Jitter the camera ray by finding a uv coordinate at a random sample
 					// around this pixel's UV coordinate
-					vec2 jitteredUv = vUv + vec2( tentFilter( rand() ) * ssd.x, tentFilter( rand() ) * ssd.y );
+					vec2 jitteredUv = vUv + vec2( tentFilter( uv.x ) * ssd.x, tentFilter( uv.y ) * ssd.y );
 
 					#if CAMERA_TYPE == 2
 
 						// Equirectangular projection
-
 						vec4 rayDirection4 = vec4( equirectUvToDirection( jitteredUv ), 0.0 );
 						vec4 rayOrigin4 = vec4( 0.0, 0.0, 0.0, 1.0 );
 
@@ -351,7 +350,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// get [- 1, 1] normalized device coordinates
 						vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
-
 						rayOrigin = ndcToRayOrigin( ndc );
 
 						#if CAMERA_TYPE == 1
@@ -406,7 +404,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec3 rayDirection;
 					vec3 rayOrigin;
 
-					getCameraRay( rayDirection, rayOrigin );
+					getCameraRay( rand2(), rayDirection, rayOrigin );
 
 					// inverse environment rotation
 					mat3 envRotation3x3 = mat3( environmentRotation );
@@ -478,7 +476,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection ) * throughputColor;
+								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection, rand2() ) * throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {

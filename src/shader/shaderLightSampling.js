@@ -133,17 +133,18 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 	lightSampleRec.emission = light.color * light.intensity;
 
+	vec2 ruv = rand2();
 	vec3 randomPos;
 	if( light.type == RECT_AREA_LIGHT_TYPE ) {
 
 		// rectangular area light
-		randomPos = light.position + light.u * ( rand() - 0.5 ) + light.v * ( rand() - 0.5 );
+		randomPos = light.position + light.u * ( ruv.x - 0.5 ) + light.v * ( ruv.y - 0.5 );
 
 	} else if( light.type == 1 ) {
 
 		// circular area light
-		float r = 0.5 * sqrt( rand() );
-		float theta = rand() * 2.0 * PI;
+		float r = 0.5 * sqrt( ruv.x );
+		float theta = ruv.y * 2.0 * PI;
 		float x = r * cos( theta );
 		float y = r * sin( theta );
 
@@ -167,8 +168,9 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin ) {
 
-	float radius = light.radius * sqrt( rand() );
-	float theta = rand() * 2.0 * PI;
+	vec2 ruv = rand2();
+	float radius = light.radius * sqrt( ruv.x );
+	float theta = ruv.y * 2.0 * PI;
 	float x = radius * cos( theta );
 	float y = radius * sin( theta );
 
@@ -212,7 +214,8 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin ) {
 
 	// pick a random light
-	uint l = uint( rand() * float( lightCount ) );
+	float r = rand();
+	uint l = uint( r * float( lightCount ) );
 	Light light = readLightInfo( lights, l );
 
 	if ( light.type == SPOT_LIGHT_TYPE ) {
