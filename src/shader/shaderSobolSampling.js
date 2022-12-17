@@ -4,18 +4,7 @@ export const shaderSobolSampling = /* glsl */`
 // - https://jcgt.org/published/0009/04/01/
 // - Code from https://www.shadertoy.com/view/WtGyDm
 
-const float SOBOL_FACTOR = 1.0 / 16777216.0;
-const uint SOBOL_DIRECTIONS[32] = uint[32](
-	0x80000000u, 0xc0000000u, 0xa0000000u, 0xf0000000u,
-	0x88000000u, 0xcc000000u, 0xaa000000u, 0xff000000u,
-	0x80800000u, 0xc0c00000u, 0xa0a00000u, 0xf0f00000u,
-	0x88880000u, 0xcccc0000u, 0xaaaa0000u, 0xffff0000u,
-	0x80008000u, 0xc000c000u, 0xa000a000u, 0xf000f000u,
-	0x88008800u, 0xcc00cc00u, 0xaa00aa00u, 0xff00ff00u,
-	0x80808080u, 0xc0c0c0c0u, 0xa0a0a0a0u, 0xf0f0f0f0u,
-	0x88888888u, 0xccccccccu, 0xaaaaaaaau, 0xffffffffu
-);
-
+// Utils
 uint reverse_bits(uint x) {
 	x = (((x & 0xaaaaaaaau) >> 1) | ((x & 0x55555555u) << 1));
 	x = (((x & 0xccccccccu) >> 2) | ((x & 0x33333333u) << 2));
@@ -53,6 +42,35 @@ uint nested_uniform_scramble_base2(uint x, uint seed) {
 	return x;
 }
 
+// Seeds
+uint pixel_idx;
+uint path_idx;
+
+uint get_seed(uint bounce, uint effect) {
+	return hash(
+		hash_combine(
+			hash_combine(
+				hash(bounce),
+				pixel_idx
+			),
+			effect
+		)
+	);
+}
+
+// Sampling
+const float SOBOL_FACTOR = 1.0 / 16777216.0;
+const uint SOBOL_DIRECTIONS[32] = uint[32](
+	0x80000000u, 0xc0000000u, 0xa0000000u, 0xf0000000u,
+	0x88000000u, 0xcc000000u, 0xaa000000u, 0xff000000u,
+	0x80800000u, 0xc0c00000u, 0xa0a00000u, 0xf0f00000u,
+	0x88880000u, 0xcccc0000u, 0xaaaa0000u, 0xffff0000u,
+	0x80008000u, 0xc000c000u, 0xa000a000u, 0xf000f000u,
+	0x88008800u, 0xcc00cc00u, 0xaa00aa00u, 0xff00ff00u,
+	0x80808080u, 0xc0c0c0c0u, 0xa0a0a0a0u, 0xf0f0f0f0u,
+	0x88888888u, 0xccccccccu, 0xaaaaaaaau, 0xffffffffu
+);
+
 uint sobol(uint index) {
 	uint X = 0u;
 	for (int bit = 0; bit < 32; bit++) {
@@ -69,21 +87,6 @@ vec2 get_sobol_pt(uint index) {
 	float r = float(x) * SOBOL_FACTOR;
 	float g = float(y) * SOBOL_FACTOR;
 	return vec2( r, g );
-}
-
-uint pixel_idx;
-uint path_idx;
-
-uint get_seed(uint bounce, uint effect) {
-	return hash(
-		hash_combine(
-			hash_combine(
-				hash(bounce),
-				pixel_idx
-			),
-			effect
-		)
-	);
 }
 
 vec2 get_shuffled_scrambled_sobol_pt(uint index, uint seed) {
