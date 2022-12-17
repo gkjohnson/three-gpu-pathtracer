@@ -27,7 +27,7 @@ float envMapSample( vec3 direction, EquirectHdrInfo info, out vec3 color ) {
 	color = texture2D( info.map, uv ).rgb;
 
 	float totalSum = info.totalSumWhole + info.totalSumDecimal;
-	float lum = colorToLuminance( color );
+	float lum = luminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
 	float pdf = lum / totalSum;
 
@@ -48,7 +48,7 @@ float randomEnvMapSample( EquirectHdrInfo info, out vec3 color, out vec3 directi
 	color = texture2D( info.map, uv ).rgb;
 
 	float totalSum = info.totalSumWhole + info.totalSumDecimal;
-	float lum = colorToLuminance( color );
+	float lum = luminance( color );
 	ivec2 resolution = textureSize( info.map, 0 );
 	float pdf = lum / totalSum;
 
