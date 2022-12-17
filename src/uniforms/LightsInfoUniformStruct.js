@@ -62,8 +62,16 @@ export class LightsInfoUniformStruct {
 
 			// type
 			let type = RECT_AREA_LIGHT;
-			if ( l.isRectAreaLight && l.isCircular ) type = CIRC_AREA_LIGHT;
-			else if ( l.isSpotLight ) type = SPOT_LIGHT;
+			if ( l.isRectAreaLight && l.isCircular ) {
+
+				type = CIRC_AREA_LIGHT;
+
+			} else if ( l.isSpotLight ) {
+
+				type = SPOT_LIGHT;
+
+			}
+
 			floatArray[ baseIndex + ( index ++ ) ] = type;
 
 			// sample 2
