@@ -189,8 +189,8 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 	float cosTheta = dot( direction, normal );
 
 	float spotAttenuation = light.iesProfile != - 1 ?
-		  getPhotometricAttenuation( iesProfiles, light.iesProfile, direction, normal, u, v )
-		: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
+		getPhotometricAttenuation( iesProfiles, light.iesProfile, direction, normal, u, v ) :
+		getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 
 	float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 	LightSampleRec lightSampleRec;

@@ -73,6 +73,7 @@ async function init() {
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.setClearColor( 0, 0 );
 	renderer.shadowMap.enabled = true;
+	renderer.physicallyCorrectLights = true;
 	document.body.appendChild( renderer.domElement );
 
 	// init camera
