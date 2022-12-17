@@ -67,6 +67,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 		float dist;
 
+		// MIS / light intersection is not supported for punctual lights.
 		if(
 			( light.type == RECT_AREA_LIGHT_TYPE && intersectsRectangle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) ) ||
 			( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
@@ -84,38 +85,6 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 				lightSampleRec.type = light.type;
 
 			}
-
-		} else if ( light.type == SPOT_LIGHT_TYPE ) {
-
-			// TODO: forward path tracing sampling needs to be made consistent with direct light sampling logic
-			// float radius = light.radius;
-			// vec3 lightNormal = normalize( cross( light.u, light.v ) );
-			// float angle = acos( light.coneCos );
-			// float angleTan = tan( angle );
-			// float startDistance = radius / max( angleTan, EPSILON );
-
-			// u = light.u / radius;
-			// v = light.v / radius;
-
-			// if (
-			// 	intersectsCircle( light.position - normal * startDistance, normal, u, v, rayOrigin, rayDirection, dist ) &&
-			// 	( dist < lightSampleRec.dist || ! lightSampleRec.hit )
-			// ) {
-
-			// 	float cosTheta = dot( rayDirection, normal );
-			// 	float spotAttenuation = light.iesProfile != - 1 ?
-			// 		getPhotometricAttenuation( iesProfiles, light.iesProfile, rayDirection, normal, u, v )
-			// 		: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
-
-			// 	float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
-
-			// 	lightSampleRec.hit = true;
-			// 	lightSampleRec.dist = dist;
-			// 	lightSampleRec.direction = rayDirection;
-			// 	lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
-			// 	lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
-
-			// }
 
 		}
 
@@ -199,11 +168,7 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 	lightSampleRec.dist = dist;
 	lightSampleRec.direction = direction;
 	lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
-
-	// TODO: this makes the result consistent between MIS and non MIS paths but at radius 0 the pdf is infinite
-	// and the intensity of the light is not correct
 	lightSampleRec.pdf = 1.0;
-	// lightSampleRec.pdf = lightDistSq / ( light.area * cosTheta );
 
 	return lightSampleRec;
 

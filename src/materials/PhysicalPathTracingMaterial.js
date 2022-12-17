@@ -449,8 +449,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#if FEATURE_MIS
 
-								// NOTE: we skip MIS for spotlights since we haven't fixed the forward
-								// path tracing code path, yet
+								// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
 								if ( lightHit.type == SPOT_LIGHT_TYPE ) {
 
 									gl_FragColor.rgb += lightHit.emission * throughputColor;
