@@ -147,10 +147,8 @@ vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 	float filteredRoughness = surf.filteredRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
-		filteredRoughness,
-		filteredRoughness,
-		rand(),
-		rand()
+		vec2( filteredRoughness ),
+		rand2()
 	);
 
 	// apply to new ray by reflecting off the new normal
@@ -187,10 +185,8 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	// sample ggx vndf distribution which gives a new normal
 	vec3 halfVector = ggxDirection(
 		wo,
-		filteredRoughness,
-		filteredRoughness,
-		rand(),
-		rand()
+		vec2( filteredRoughness ),
+		rand2()
 	);
 
 
@@ -278,10 +274,8 @@ vec3 clearcoatDirection( vec3 wo, SurfaceRec surf ) {
 	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
-		filteredClearcoatRoughness,
-		filteredClearcoatRoughness,
-		rand(),
-		rand()
+		vec2( filteredClearcoatRoughness ),
+		rand2()
 	);
 
 	// apply to new ray by reflecting off the new normal

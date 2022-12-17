@@ -139,7 +139,7 @@ export const shaderUtils = /* glsl */`
 		vec2 e2 = c - b;
 		vec2 diag = normalize( e1 + e2 );
 
-		// pick a random point in the parallelogram
+		// pick the point in the parallelogram
 		if ( r.x + r.y > 1.0 ) {
 
 			r = vec2( 1.0 ) - r;
