@@ -12,6 +12,7 @@ import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
 import { shaderLightSampling } from '../shader/shaderLightSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { shaderLayerTexelFetchFunctions } from '../shader/shaderLayerTexelFetchFunctions.js';
+import { shaderRandFunctions } from '../shader/shaderRandFunctions.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
@@ -102,6 +103,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
 
+				${ shaderRandFunctions }
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
@@ -316,14 +318,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				// tentFilter from Peter Shirley's 'Realistic Ray Tracing (2nd Edition)' book, pg. 60
-				// erichlof/THREE.js-PathTracing-Renderer/
-				float tentFilter( float x ) {
-
-					return x < 0.5 ? sqrt( 2.0 * x ) - 1.0 : 1.0 - sqrt( 2.0 - ( 2.0 * x ) );
-
-				}
-
 				vec3 ndcToRayOrigin( vec2 coord ) {
 
 					vec4 rayOrigin4 = cameraWorldMatrix * invProjectionMatrix * vec4( coord, - 1.0, 1.0 );
@@ -382,7 +376,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
 
 						// get the aperture sample
-						vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * physicalCamera.bokehSize * 0.5 * 1e-3;
+						vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades, rand3() ) * physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape
 						float ac = cos( physicalCamera.apertureRotation );

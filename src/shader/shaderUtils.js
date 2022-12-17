@@ -131,74 +131,7 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	// https://www.shadertoy.com/view/wltcRS
-	uvec4 s0;
-
-	void rng_initialize(vec2 p, int frame) {
-
-		// white noise seed
-		s0 = uvec4( p, uint( frame ), uint( p.x ) + uint( p.y ) );
-
-	}
-
-	// https://www.pcg-random.org/
-	void pcg4d( inout uvec4 v ) {
-
-		v = v * 1664525u + 1013904223u;
-		v.x += v.y * v.w;
-		v.y += v.z * v.x;
-		v.z += v.x * v.y;
-		v.w += v.y * v.z;
-		v = v ^ ( v >> 16u );
-		v.x += v.y*v.w;
-		v.y += v.z*v.x;
-		v.z += v.x*v.y;
-		v.w += v.y*v.z;
-
-	}
-
-	// returns [ 0, 1 ]
-	float rand() {
-
-		pcg4d(s0);
-		return float( s0.x ) / float( 0xffffffffu );
-
-	}
-
-	vec2 rand2() {
-
-		pcg4d( s0 );
-		return vec2( s0.xy ) / float(0xffffffffu);
-
-	}
-
-	vec3 rand3() {
-
-		pcg4d(s0);
-		return vec3( s0.xyz ) / float( 0xffffffffu );
-
-	}
-
-	vec4 rand4() {
-
-		pcg4d(s0);
-		return vec4(s0)/float(0xffffffffu);
-
-	}
-
-	// https://github.com/mrdoob/three.js/blob/dev/src/math/Vector3.js#L724
-	vec3 randDirection() {
-
-		vec2 r = rand2();
-		float u = ( r.x - 0.5 ) * 2.0;
-		float t = r.y * PI * 2.0;
-		float f = sqrt( 1.0 - u * u );
-
-		return vec3( f * cos( t ), f * sin( t ), u );
-
-	}
-
-	vec2 triangleSample( vec2 a, vec2 b, vec2 c ) {
+	vec2 sampleTriangle( vec2 a, vec2 b, vec2 c, vec2 r ) {
 
 		// get the edges of the triangle and the diagonal across the
 		// center of the parallelogram
@@ -207,7 +140,6 @@ export const shaderUtils = /* glsl */`
 		vec2 diag = normalize( e1 + e2 );
 
 		// pick a random point in the parallelogram
-		vec2 r = rand2();
 		if ( r.x + r.y > 1.0 ) {
 
 			r = vec2( 1.0 ) - r;
@@ -219,20 +151,19 @@ export const shaderUtils = /* glsl */`
 	}
 
 	// samples an aperture shape with the given number of sides. 0 means circle
-	vec2 sampleAperture( int blades ) {
+	vec2 sampleAperture( int blades, vec3 uvw ) {
 
 		if ( blades == 0 ) {
 
-			vec2 r = rand2();
-			float angle = 2.0 * PI * r.x;
-			float radius = sqrt( rand() );
+			float angle = 2.0 * PI * uvw.x;
+			float radius = sqrt( uvw.y );
 			return vec2( cos( angle ), sin( angle ) ) * radius;
 
 		} else {
 
 			blades = max( blades, 3 );
 
-			vec3 r = rand3();
+			vec3 r = uvw;
 			float anglePerSegment = 2.0 * PI / float( blades );
 			float segment = floor( float( blades ) * r.x );
 
@@ -242,7 +173,7 @@ export const shaderUtils = /* glsl */`
 			vec2 b = vec2( 0.0, 0.0 );
 			vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
 
-			return triangleSample( a, b, c );
+			return sampleTriangle( a, b, c, r.yz );
 
 		}
 
@@ -397,6 +328,14 @@ export const shaderUtils = /* glsl */`
 		float aa = a * a;
 		float bb = b * b;
 		return aa / ( aa + bb );
+
+	}
+
+	// tentFilter from Peter Shirley's 'Realistic Ray Tracing (2nd Edition)' book, pg. 60
+	// erichlof/THREE.js-PathTracing-Renderer/
+	float tentFilter( float x ) {
+
+		return x < 0.5 ? sqrt( 2.0 * x ) - 1.0 : 1.0 - sqrt( 2.0 - ( 2.0 * x ) );
 
 	}
 
