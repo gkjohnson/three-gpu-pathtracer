@@ -150,32 +150,38 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	vec2 sampleCircle( vec2 uv ) {
+
+		float angle = 2.0 * PI * uv.x;
+		float radius = sqrt( uv.y );
+		return vec2( cos( angle ), sin( angle ) ) * radius;
+
+	}
+
+	vec2 sampleRegularNGon( int sides, vec3 uvw ) {
+
+		sides = max( sides, 3 );
+
+		vec3 r = uvw;
+		float anglePerSegment = 2.0 * PI / float( sides );
+		float segment = floor( float( sides ) * r.x );
+
+		float angle1 = anglePerSegment * segment;
+		float angle2 = angle1 + anglePerSegment;
+		vec2 a = vec2( sin( angle1 ), cos( angle1 ) );
+		vec2 b = vec2( 0.0, 0.0 );
+		vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
+
+		return sampleTriangle( a, b, c, r.yz );
+
+	}
+
 	// samples an aperture shape with the given number of sides. 0 means circle
 	vec2 sampleAperture( int blades, vec3 uvw ) {
 
-		if ( blades == 0 ) {
-
-			float angle = 2.0 * PI * uvw.x;
-			float radius = sqrt( uvw.y );
-			return vec2( cos( angle ), sin( angle ) ) * radius;
-
-		} else {
-
-			blades = max( blades, 3 );
-
-			vec3 r = uvw;
-			float anglePerSegment = 2.0 * PI / float( blades );
-			float segment = floor( float( blades ) * r.x );
-
-			float angle1 = anglePerSegment * segment;
-			float angle2 = angle1 + anglePerSegment;
-			vec2 a = vec2( sin( angle1 ), cos( angle1 ) );
-			vec2 b = vec2( 0.0, 0.0 );
-			vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
-
-			return sampleTriangle( a, b, c, r.yz );
-
-		}
+		return blades == 0 ?
+			sampleCircle( uvw.xy ) :
+			sampleRegularNGon( blades, uvw );
 
 	}
 

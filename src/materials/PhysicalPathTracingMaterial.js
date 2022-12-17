@@ -378,7 +378,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
 
 						// get the aperture sample
-						vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades, rand3() ) * physicalCamera.bokehSize * 0.5 * 1e-3;
+						// if blades === 0 then we assume a circle
+						vec3 ar = rand3();
+						int blades = physicalCamera.apertureBlades;
+						vec2 apertureSample = blades == 0 ? sampleCircle( ar.xy ) : sampleRegularNGon( blades, ar );
+						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape
 						float ac = cos( physicalCamera.apertureRotation );
