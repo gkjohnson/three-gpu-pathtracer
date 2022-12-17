@@ -841,7 +841,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if( rand() > 1.0 / float( lights.count + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin );
+							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, rand3() );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {

@@ -94,7 +94,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 }
 
-LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
+LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
@@ -102,7 +102,6 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 	lightSampleRec.emission = light.color * light.intensity;
 
-	vec2 ruv = rand2();
 	vec3 randomPos;
 	if( light.type == RECT_AREA_LIGHT_TYPE ) {
 
@@ -135,9 +134,8 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 }
 
-LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin ) {
+LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin, vec2 ruv ) {
 
-	vec2 ruv = rand2();
 	float radius = light.radius * sqrt( ruv.x );
 	float theta = ruv.y * 2.0 * PI;
 	float x = radius * cos( theta );
@@ -176,21 +174,20 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 
 }
 
-LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin ) {
+LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
 
 	// pick a random light
-	float r = rand();
-	uint l = uint( r * float( lightCount ) );
+	uint l = uint( ruv.x * float( lightCount ) );
 	Light light = readLightInfo( lights, l );
 
 	if ( light.type == SPOT_LIGHT_TYPE ) {
 
-		return randomSpotLightSample( light, iesProfiles, rayOrigin );
+		return randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
 
 	} else {
 
 		// sample the light
-		return randomAreaLightSample( light, rayOrigin );
+		return randomAreaLightSample( light, rayOrigin, ruv.yz );
 
 	}
 
