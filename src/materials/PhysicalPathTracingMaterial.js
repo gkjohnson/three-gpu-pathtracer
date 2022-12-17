@@ -379,9 +379,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// get the aperture sample
 						// if blades === 0 then we assume a circle
-						vec3 ar = rand3();
+						vec3 shapeUVW = rand3();
 						int blades = physicalCamera.apertureBlades;
-						vec2 apertureSample = blades == 0 ? sampleCircle( ar.xy ) : sampleRegularNGon( blades, ar );
+						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularNGon( blades, shapeUVW );
 						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape
