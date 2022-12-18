@@ -14,7 +14,7 @@ function generateSobolFunctionVariants( dim = 1 ) {
 	}
 
 	return /* glsl */`
-		${ type } sobol_reverse_bits( ${ type } x ) {
+		${ type } sobolReverseBits( ${ type } x ) {
 
 			x = ( ( ( x & 0xaaaaaaaau ) >> 1 ) | ( ( x & 0x55555555u ) << 1 ) );
 			x = ( ( ( x & 0xccccccccu ) >> 2 ) | ( ( x & 0x33333333u ) << 2 ) );
@@ -24,13 +24,13 @@ function generateSobolFunctionVariants( dim = 1 ) {
 
 		}
 
-		${ type } sobol_hash_combine( uint seed, ${ type } v ) {
+		${ type } sobolHashCombine( uint seed, ${ type } v ) {
 
 			return seed ^ ( v + ${ type }( ( seed << 6 ) + ( seed >> 2 ) ) );
 
 		}
 
-		${ type } sobol_laine_karras_permutation( ${ type } x, ${ type } seed ) {
+		${ type } sobolLaineKarrasPermutation( ${ type } x, ${ type } seed ) {
 
 			x += seed;
 			x ^= x * 0x6c50b47cu;
@@ -41,10 +41,10 @@ function generateSobolFunctionVariants( dim = 1 ) {
 
 		}
 
-		${ type } nested_uniform_scramble_base2( ${ type } x, ${ type } seed ) {
+		${ type } nestedUniformScrambleBase2( ${ type } x, ${ type } seed ) {
 
-			x = sobol_laine_karras_permutation( x, seed );
-			x = sobol_reverse_bits( x );
+			x = sobolLaineKarrasPermutation( x, seed );
+			x = sobolReverseBits( x );
 			return x;
 
 		}
@@ -87,16 +87,16 @@ function generateSobolSampleFunctions( dim = 1 ) {
 
 		${ vtype } sobol${ num }( int bounce, int effect ) {
 
-			uint seed = sobol_get_seed( uint( bounce ), uint( effect ) );
+			uint seed = sobolGetSeed( uint( bounce ), uint( effect ) );
 			uint index = path_idx;
 
-			uint shuffle_seed = sobol_hash_combine( seed, 0u );
-			uint shuffled_index = nested_uniform_scramble_base2( sobol_reverse_bits( index ), shuffle_seed );
-			${ vtype } sobol_pt = sobol_get_pt( shuffled_index )${ components };
+			uint shuffle_seed = sobolHashCombine( seed, 0u );
+			uint shuffled_index = nestedUniformScrambleBase2( sobolReverseBits( index ), shuffle_seed );
+			${ vtype } sobol_pt = sobolGetTexturePoint( shuffled_index )${ components };
 			${ utype } result = ${ utype }( sobol_pt * 16777216.0 );
 
-			${ utype } seed2 = sobol_hash_combine( seed, ${ combineValues } );
-			result = nested_uniform_scramble_base2( result, seed2 );
+			${ utype } seed2 = sobolHashCombine( seed, ${ combineValues } );
+			result = nestedUniformScrambleBase2( result, seed2 );
 
 			return SOBOL_FACTOR * ${ vtype }( result >> 8 );
 
@@ -132,7 +132,7 @@ export const shaderSobolCommon = /* glsl */`
 
 export const shaderSobolGeneration = /* glsl */`
 
-	const uint SOBOL_DIRECTIONS1[ 32 ] = uint[ 32 ](
+	const uint SOBOL_DIRECTIONS_1[ 32 ] = uint[ 32 ](
 		0x80000000u, 0xc0000000u, 0xa0000000u, 0xf0000000u,
 		0x88000000u, 0xcc000000u, 0xaa000000u, 0xff000000u,
 		0x80800000u, 0xc0c00000u, 0xa0a00000u, 0xf0f00000u,
@@ -143,7 +143,7 @@ export const shaderSobolGeneration = /* glsl */`
 		0x88888888u, 0xccccccccu, 0xaaaaaaaau, 0xffffffffu
 	);
 
-	const uint SOBOL_DIRECTIONS2[ 32 ] = uint[ 32 ](
+	const uint SOBOL_DIRECTIONS_2[ 32 ] = uint[ 32 ](
 		0x80000000u, 0xc0000000u, 0x60000000u, 0x90000000u,
 		0xe8000000u, 0x5c000000u, 0x8e000000u, 0xc5000000u,
 		0x68800000u, 0x9cc00000u, 0xee600000u, 0x55900000u,
@@ -154,7 +154,7 @@ export const shaderSobolGeneration = /* glsl */`
 		0xe8006868u, 0x5c009c9cu, 0x8e00eeeeu, 0xc5005555u
 	);
 
-	const uint SOBOL_DIRECTIONS3[ 32 ] = uint[ 32 ](
+	const uint SOBOL_DIRECTIONS_3[ 32 ] = uint[ 32 ](
 		0x80000000u, 0xc0000000u, 0x20000000u, 0x50000000u,
 		0xf8000000u, 0x74000000u, 0xa2000000u, 0x93000000u,
 		0xd8800000u, 0x25400000u, 0x59e00000u, 0xe6d00000u,
@@ -165,7 +165,7 @@ export const shaderSobolGeneration = /* glsl */`
 		0x800800f8u, 0xc00c0074u, 0x200200a2u, 0x50050093u
 	);
 
-	const uint SOBOL_DIRECTIONS4[ 32 ] = uint[ 32 ](
+	const uint SOBOL_DIRECTIONS_4[ 32 ] = uint[ 32 ](
 		0x80000000u, 0x40000000u, 0x20000000u, 0xb0000000u,
 		0xf8000000u, 0xdc000000u, 0x7a000000u, 0x9d000000u,
 		0x5a800000u, 0x2fc00000u, 0xa1600000u, 0xf0b00000u,
@@ -199,10 +199,10 @@ export const shaderSobolGeneration = /* glsl */`
 
 		// NOTEL this sobol "direction" is also available but we can't write out 5 components
 		// uint x = index & 0x00ffffffu;
-		uint x = sobol_reverse_bits( getMaskedSobol( index, SOBOL_DIRECTIONS1 ) ) & 0x00ffffffu;
-		uint y = sobol_reverse_bits( getMaskedSobol( index, SOBOL_DIRECTIONS2 ) ) & 0x00ffffffu;
-		uint z = sobol_reverse_bits( getMaskedSobol( index, SOBOL_DIRECTIONS3 ) ) & 0x00ffffffu;
-		uint w = sobol_reverse_bits( getMaskedSobol( index, SOBOL_DIRECTIONS4 ) ) & 0x00ffffffu;
+		uint x = sobolReverseBits( getMaskedSobol( index, SOBOL_DIRECTIONS_1 ) ) & 0x00ffffffu;
+		uint y = sobolReverseBits( getMaskedSobol( index, SOBOL_DIRECTIONS_2 ) ) & 0x00ffffffu;
+		uint z = sobolReverseBits( getMaskedSobol( index, SOBOL_DIRECTIONS_3 ) ) & 0x00ffffffu;
+		uint w = sobolReverseBits( getMaskedSobol( index, SOBOL_DIRECTIONS_4 ) ) & 0x00ffffffu;
 
 		return vec4( x, y, z, w ) * SOBOL_FACTOR;
 
@@ -217,11 +217,11 @@ export const shaderSobolSampling = /* glsl */`
 	uint pixel_idx;
 	uint path_idx;
 
-	uint sobol_get_seed( uint bounce, uint effect ) {
+	uint sobolGetSeed( uint bounce, uint effect ) {
 
 		return hash(
-			sobol_hash_combine(
-				sobol_hash_combine(
+			sobolHashCombine(
+				sobolHashCombine(
 					hash( bounce ),
 					pixel_idx
 				),
@@ -231,7 +231,7 @@ export const shaderSobolSampling = /* glsl */`
 
 	}
 
-	vec4 sobol_get_pt( uint index ) {
+	vec4 sobolGetTexturePoint( uint index ) {
 
 		if ( index >= SOBOL_MAX_POINTS ) {
 
