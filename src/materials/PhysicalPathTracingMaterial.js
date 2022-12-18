@@ -269,7 +269,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							bool useAlphaTest = alphaTest != 0.0;
 							float transmissionFactor = ( 1.0 - metalness ) * transmission;
 							if (
-								transmissionFactor < rand() && ! (
+								transmissionFactor < sobol( 8 ) && ! (
 									// material sidedness
 									material.side != 0.0 && side == material.side
 
@@ -277,7 +277,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									|| useAlphaTest && albedo.a < alphaTest
 
 									// opacity
-									|| material.transparent && ! useAlphaTest && albedo.a < rand()
+									|| material.transparent && ! useAlphaTest && albedo.a < sobol( 9 )
 								)
 							) {
 
@@ -482,7 +482,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection, rand2() ) * throughputColor;
+								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection, sobol2( 2 ) ) * throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {
@@ -576,7 +576,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| useAlphaTest && albedo.a < alphaTest
 
 							// opacity
-							|| material.transparent && ! useAlphaTest && albedo.a < rand()
+							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
@@ -828,7 +828,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
-						isShadowRay = sampleRec.specularPdf < rand();
+						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
@@ -845,10 +845,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if FEATURE_MIS
 
 						// uniformly pick a light or environment map
-						if( rand() > 1.0 / float( lights.count + 1u ) ) {
+						if( sobol( 5 ) > 1.0 / float( lights.count + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, rand3() );
+							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
@@ -883,7 +883,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = sampleEnvMapProbability( envMapInfo, rand2(), envColor, envDirection );
+							float envPdf = sampleEnvMapProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
 							envDirection = invEnvRotation3x3 * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
