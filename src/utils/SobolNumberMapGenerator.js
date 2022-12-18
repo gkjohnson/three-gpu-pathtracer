@@ -1,4 +1,4 @@
-import { FloatType, NearestFilter, NoBlending, RGBAFormat, WebGLRenderTarget } from 'three';
+import { FloatType, NearestFilter, NoBlending, RGBAFormat, Vector2, WebGLRenderTarget } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass';
 import { MaterialBase } from '../materials/MaterialBase.js';
 import { shaderSobolCommon, shaderSobolGeneration } from '../shader/shaderSobolSampling.js';
@@ -10,6 +10,12 @@ class SobolNumbersMaterial extends MaterialBase {
 		super( {
 
 			blending: NoBlending,
+
+			uniforms: {
+
+				resolution: { value: new Vector2() },
+
+			},
 
 			vertexShader: /* glsl */`
 
@@ -28,9 +34,9 @@ class SobolNumbersMaterial extends MaterialBase {
 				${ shaderSobolGeneration }
 
 				varying vec2 vUv;
+				uniform vec2 resolution;
 				void main() {
 
-					vec2 resolution = 1.0 / fwidth( vUv );
 					uint index = uint( gl_FragCoord.y ) * uint( resolution.x ) + uint( gl_FragCoord.x );
 					gl_FragColor = generateSobolPoint( index );
 
@@ -61,6 +67,7 @@ export class SobolNumberMapGenerator {
 		renderer.setRenderTarget( target );
 
 		const quad = new FullScreenQuad( new SobolNumbersMaterial() );
+		quad.material.resolution.set( dimensions, dimensions );
 		quad.render( renderer );
 
 		renderer.setRenderTarget( ogTarget );

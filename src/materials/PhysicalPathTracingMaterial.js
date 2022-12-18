@@ -78,6 +78,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				filterGlossyFactor: { value: 0.0 },
 
 				backgroundAlpha: { value: 1.0 },
+				sobolTexture: { value: null },
 			},
 
 			vertexShader: /* glsl */`

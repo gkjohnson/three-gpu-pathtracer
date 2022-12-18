@@ -1,6 +1,7 @@
 import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
+import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 
 function* renderTask() {
 
@@ -10,6 +11,7 @@ function* renderTask() {
 		_blendQuad,
 		_primaryTarget,
 		_blendTargets,
+		_sobolTarget,
 		alpha,
 		camera,
 		material,
@@ -36,6 +38,7 @@ function* renderTask() {
 		const w = _primaryTarget.width;
 		const h = _primaryTarget.height;
 		material.resolution.set( w, h );
+		material.sobolTexture = _sobolTarget.texture;
 		material.seed ++;
 
 		const tilesX = this.tiles.x || 1;
@@ -184,6 +187,7 @@ export class PathTracingRenderer {
 		this._task = null;
 		this._currentTile = 0;
 
+		this._sobolTarget = new SobolNumberMapGenerator().generate( renderer );
 		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
 			format: RGBAFormat,
 			type: FloatType,
@@ -215,6 +219,7 @@ export class PathTracingRenderer {
 		this._primaryTarget.dispose();
 		this._blendTargets[ 0 ].dispose();
 		this._blendTargets[ 1 ].dispose();
+		this._sobolTarget.dispose();
 
 		this._fsQuad.dispose();
 		this._blendQuad.dispose();
