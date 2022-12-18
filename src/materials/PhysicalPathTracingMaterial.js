@@ -334,7 +334,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// Jitter the camera ray by finding a uv coordinate at a random sample
 					// around this pixel's UV coordinate for AA
-					vec2 ruv = rand2();
+					vec2 ruv = sobol2( 0, 1 );
 					vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
 
 					#if CAMERA_TYPE == 2
@@ -378,7 +378,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// get the aperture sample
 						// if blades === 0 then we assume a circle
-						vec3 shapeUVW = rand3();
+						vec3 shapeUVW= sobol3( 0, 0 );
 						int blades = physicalCamera.apertureBlades;
 						float anamorphicRatio = physicalCamera.anamorphicRatio;
 						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularNGon( blades, shapeUVW );
@@ -403,6 +403,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
+					path_idx = uint( seed );
+					pixel_idx = ( uint( gl_FragCoord.x ) << 16 ) | ( uint( gl_FragCoord.y ) );
 
 					vec3 rayDirection;
 					vec3 rayOrigin;
