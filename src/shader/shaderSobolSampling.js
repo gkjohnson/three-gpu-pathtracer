@@ -81,8 +81,8 @@ export const shaderSobolSampling = /* glsl */`
 	}
 
 	vec2 get_sobol_pt(uint index) {
-		uint x = reverse_bits(index) >> 8;
-		uint y = sobol(index) >> 8;
+		uint x = index & 0x00ffffffu;
+    	uint y = reverse_bits(sobol(index)) & 0x00ffffffu;
 
 		float r = float(x) * SOBOL_FACTOR;
 		float g = float(y) * SOBOL_FACTOR;

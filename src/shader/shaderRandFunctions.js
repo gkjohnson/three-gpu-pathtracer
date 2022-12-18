@@ -51,7 +51,7 @@ export const shaderRandFunctions = /* glsl */`
 	vec4 rand4() {
 
 		pcg4d( WHITE_NOISE_SEED );
-		return vec4(WHITE_NOISE_SEED)/float(0xffffffffu);
+		return vec4( WHITE_NOISE_SEED ) / float( 0xffffffffu );
 
 	}
 `;
