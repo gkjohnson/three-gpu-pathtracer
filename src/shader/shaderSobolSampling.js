@@ -116,7 +116,7 @@ export const shaderSobolCommon = /* glsl */`
 	${ generateSobolFunctionVariants( 3 ) }
 	${ generateSobolFunctionVariants( 4 ) }
 
-	uint hash( uint x ) {
+	uint sobolHash( uint x ) {
 
 		// finalizer from murmurhash3
 		x ^= x >> 16;
@@ -219,10 +219,10 @@ export const shaderSobolSampling = /* glsl */`
 
 	uint sobolGetSeed( uint bounce, uint effect ) {
 
-		return hash(
+		return sobolHash(
 			sobolHashCombine(
 				sobolHashCombine(
-					hash( bounce ),
+					sobolHash( bounce ),
 					pixel_idx
 				),
 				effect
