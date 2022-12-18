@@ -269,7 +269,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							bool useAlphaTest = alphaTest != 0.0;
 							float transmissionFactor = ( 1.0 - metalness ) * transmission;
 							if (
-								transmissionFactor < sobol( 8 ) && ! (
+								transmissionFactor < rand() && ! (
 									// material sidedness
 									material.side != 0.0 && side == material.side
 
@@ -277,7 +277,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									|| useAlphaTest && albedo.a < alphaTest
 
 									// opacity
-									|| material.transparent && ! useAlphaTest && albedo.a < sobol( 9 )
+									|| material.transparent && ! useAlphaTest && albedo.a < rand()
 								)
 							) {
 
@@ -576,7 +576,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| useAlphaTest && albedo.a < alphaTest
 
 							// opacity
-							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
+							|| material.transparent && ! useAlphaTest && albedo.a < rand()
 						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
@@ -828,7 +828,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
-						isShadowRay = sampleRec.specularPdf < sobol( 4 );
+						isShadowRay = sampleRec.specularPdf < rand();
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point

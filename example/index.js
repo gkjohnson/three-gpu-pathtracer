@@ -7,7 +7,7 @@ import {
 	DoubleSide,
 	Mesh,
 	MeshStandardMaterial,
-	PlaneBufferGeometry,
+	PlaneGeometry,
 	Group,
 	MeshPhysicalMaterial,
 	WebGLRenderer,
@@ -158,7 +158,7 @@ async function init() {
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
-		new PlaneBufferGeometry(),
+		new PlaneGeometry(),
 		new MeshStandardMaterial( {
 			map: floorTex,
 			transparent: true,

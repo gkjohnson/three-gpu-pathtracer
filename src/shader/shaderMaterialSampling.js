@@ -93,7 +93,7 @@ float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) 
 
 vec3 diffuseDirection( vec3 wo, SurfaceRec surf ) {
 
-	vec3 lightDirection = sampleSphere( rand2() );
+	vec3 lightDirection = sampleSphere( sobol2( 11 ) );
 	lightDirection.z += 1.0;
 	lightDirection = normalize( lightDirection );
 
@@ -148,7 +148,7 @@ vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 	vec3 halfVector = ggxDirection(
 		wo,
 		vec2( filteredRoughness ),
-		rand2()
+		sobol2( 12 )
 	);
 
 	// apply to new ray by reflecting off the new normal
@@ -186,7 +186,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 	vec3 halfVector = ggxDirection(
 		wo,
 		vec2( filteredRoughness ),
-		rand2()
+		sobol2( 13 )
 	);
 
 
@@ -226,7 +226,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
 	float roughness = surf.roughness;
 	float eta = surf.eta;
-	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( rand2() ) * roughness );
+	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( sobol2( 13 ) ) * roughness );
 	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
 
 	if ( surf.thinFilm ) {
@@ -275,7 +275,7 @@ vec3 clearcoatDirection( vec3 wo, SurfaceRec surf ) {
 	vec3 halfVector = ggxDirection(
 		wo,
 		vec2( filteredClearcoatRoughness ),
-		rand2()
+		sobol2( 14 )
 	);
 
 	// apply to new ray by reflecting off the new normal
@@ -464,7 +464,7 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	vec3 wi;
 	vec3 clearcoatWi;
 
-	float r = rand();
+	float r = sobol( 15 );
 	if ( r <= cdf[0] ) { // diffuse
 
 		wi = diffuseDirection( wo, surf );
