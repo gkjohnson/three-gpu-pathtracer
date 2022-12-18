@@ -85,10 +85,10 @@ function generateSobolSampleFunctions( dim = 1 ) {
 
 	return /* glsl */`
 
-		${ vtype } sobol${ num }( int bounce, int effect ) {
+		${ vtype } sobol${ num }( int effect ) {
 
-			uint seed = sobolGetSeed( uint( bounce ), uint( effect ) );
-			uint index = path_idx;
+			uint seed = sobolGetSeed( sobolBounceIndex, uint( effect ) );
+			uint index = sobolPathIndex;
 
 			uint shuffle_seed = sobolHashCombine( seed, 0u );
 			uint shuffled_index = nestedUniformScrambleBase2( sobolReverseBits( index ), shuffle_seed );
@@ -214,8 +214,9 @@ export const shaderSobolSampling = /* glsl */`
 
 	// Seeds
 	uniform sampler2D sobolTexture;
-	uint pixel_idx;
-	uint path_idx;
+	uint sobolPixelIndex;
+	uint sobolPathIndex;
+	uint sobolBounceIndex;
 
 	uint sobolGetSeed( uint bounce, uint effect ) {
 
@@ -223,7 +224,7 @@ export const shaderSobolSampling = /* glsl */`
 			sobolHashCombine(
 				sobolHashCombine(
 					sobolHash( bounce ),
-					pixel_idx
+					sobolPixelIndex
 				),
 				effect
 			)
