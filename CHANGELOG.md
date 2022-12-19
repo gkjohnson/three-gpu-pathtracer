@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- Support for `Material.flatShading` to render flat-shaded materials.
+- Support for randomization using Owen-scrambled and shuffled Sobol values enabling sample stratification and image in fewer samples.
+
+### Fixed
+- Roughness and metalness maps not being assigned correctly.
+- Case where textures using shared "Source" with different encodings were not treated as unique.
+- Spot Lights no longer have a dark hot spot.
+
+### Changed
+- Move "random" functions around.
+
+## [0.0.8] - 2022-12-11
 ### Fixed
 - Three.js semver package version.
 - Removed 3 texture sampler units to add room for future features, background map.

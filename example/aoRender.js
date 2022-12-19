@@ -60,7 +60,7 @@ async function init() {
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material-ball.glb' )
+		.loadAsync( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf' )
 		.then( async gltf => {
 
 			const group = new THREE.Group();
@@ -73,6 +73,7 @@ async function init() {
 			box.getBoundingSphere( sphere );
 
 			gltf.scene.scale.setScalar( 2.5 / sphere.radius );
+			gltf.scene.position.y = - 0.25 * ( box.max.y - box.min.y ) * 2.5 / sphere.radius;
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
 
@@ -80,7 +81,7 @@ async function init() {
 			box.setFromObject( gltf.scene );
 
 			const floor = new THREE.Mesh(
-				new THREE.CylinderBufferGeometry( 3, 3, 0.05, 200 ),
+				new THREE.CylinderGeometry( 3, 3, 0.05, 200 ),
 				new THREE.MeshStandardMaterial( { color: 0x1a1a1a } ),
 			);
 			floor.geometry.clearGroups();

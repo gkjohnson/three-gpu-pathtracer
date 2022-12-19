@@ -9,7 +9,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
-let renderer, controls, transformControls, transformControlsScene, areaLights, sceneInfo, ptRenderer, camera, fsQuad;
+let renderer, controls, transformControls, transformControlsScene, areaLights, sceneInfo, ptRenderer, camera, fsQuad, enabledLights;
 let samplesEl, loadingEl;
 const params = {
 
@@ -126,7 +126,7 @@ async function init() {
 
 	group.add( scene );
 
-	const floorGeom = new THREE.CylinderBufferGeometry( 3.5, 3.5, 0.05, 60 );
+	const floorGeom = new THREE.CylinderGeometry( 3.5, 3.5, 0.05, 60 );
 	const floorMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
 	const floor = new THREE.Mesh( floorGeom, floorMat );
 	floor.position.y = - 0.025;
@@ -315,7 +315,7 @@ function updateLights() {
 	areaLights[ 1 ].height = params.areaLight2Height;
 	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
 
-	const enabledLights = [];
+	enabledLights = [];
 	if ( params.areaLight1Enabled ) enabledLights.push( areaLights[ 0 ] );
 	if ( params.areaLight2Enabled ) enabledLights.push( areaLights[ 1 ] );
 
@@ -346,7 +346,7 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.lights.updateFrom( areaLights );
+	ptRenderer.material.lights.updateFrom( enabledLights );
 
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;

@@ -67,6 +67,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 		float dist;
 
+		// MIS / light intersection is not supported for punctual lights.
 		if(
 			( light.type == RECT_AREA_LIGHT_TYPE && intersectsRectangle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) ) ||
 			( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
@@ -85,38 +86,6 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 			}
 
-		} else if ( light.type == SPOT_LIGHT_TYPE ) {
-
-			// TODO: forward path tracing sampling needs to be made consistent with direct light sampling logic
-			// float radius = light.radius;
-			// vec3 lightNormal = normalize( cross( light.u, light.v ) );
-			// float angle = acos( light.coneCos );
-			// float angleTan = tan( angle );
-			// float startDistance = radius / max( angleTan, EPSILON );
-
-			// u = light.u / radius;
-			// v = light.v / radius;
-
-			// if (
-			// 	intersectsCircle( light.position - normal * startDistance, normal, u, v, rayOrigin, rayDirection, dist ) &&
-			// 	( dist < lightSampleRec.dist || ! lightSampleRec.hit )
-			// ) {
-
-			// 	float cosTheta = dot( rayDirection, normal );
-			// 	float spotAttenuation = light.iesProfile != - 1 ?
-			// 		getPhotometricAttenuation( iesProfiles, light.iesProfile, rayDirection, normal, u, v )
-			// 		: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
-
-			// 	float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
-
-			// 	lightSampleRec.hit = true;
-			// 	lightSampleRec.dist = dist;
-			// 	lightSampleRec.direction = rayDirection;
-			// 	lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
-			// 	lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
-
-			// }
-
 		}
 
 	}
@@ -125,7 +94,7 @@ LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrig
 
 }
 
-LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
+LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 
 	LightSampleRec lightSampleRec;
 	lightSampleRec.hit = true;
@@ -137,13 +106,13 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 	if( light.type == RECT_AREA_LIGHT_TYPE ) {
 
 		// rectangular area light
-		randomPos = light.position + light.u * ( rand() - 0.5 ) + light.v * ( rand() - 0.5 );
+		randomPos = light.position + light.u * ( ruv.x - 0.5 ) + light.v * ( ruv.y - 0.5 );
 
 	} else if( light.type == 1 ) {
 
 		// circular area light
-		float r = 0.5 * sqrt( rand() );
-		float theta = rand() * 2.0 * PI;
+		float r = 0.5 * sqrt( ruv.x );
+		float theta = ruv.y * 2.0 * PI;
 		float x = r * cos( theta );
 		float y = r * sin( theta );
 
@@ -165,10 +134,10 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin ) {
 
 }
 
-LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin ) {
+LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin, vec2 ruv ) {
 
-	float radius = light.radius * sqrt( rand() );
-	float theta = rand() * 2.0 * PI;
+	float radius = light.radius * sqrt( ruv.x );
+	float theta = ruv.y * 2.0 * PI;
 	float x = radius * cos( theta );
 	float y = radius * sin( theta );
 
@@ -189,8 +158,8 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 	float cosTheta = dot( direction, normal );
 
 	float spotAttenuation = light.iesProfile != - 1 ?
-		  getPhotometricAttenuation( iesProfiles, light.iesProfile, direction, normal, u, v )
-		: getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
+		getPhotometricAttenuation( iesProfiles, light.iesProfile, direction, normal, u, v ) :
+		getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 
 	float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 	LightSampleRec lightSampleRec;
@@ -199,30 +168,26 @@ LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, v
 	lightSampleRec.dist = dist;
 	lightSampleRec.direction = direction;
 	lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
-
-	// TODO: this makes the result consistent between MIS and non MIS paths but at radius 0 the pdf is infinite
-	// and the intensity of the light is not correct
 	lightSampleRec.pdf = 1.0;
-	// lightSampleRec.pdf = lightDistSq / ( light.area * cosTheta );
 
 	return lightSampleRec;
 
 }
 
-LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin ) {
+LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
 
 	// pick a random light
-	uint l = uint( rand() * float( lightCount ) );
+	uint l = uint( ruv.x * float( lightCount ) );
 	Light light = readLightInfo( lights, l );
 
 	if ( light.type == SPOT_LIGHT_TYPE ) {
 
-		return randomSpotLightSample( light, iesProfiles, rayOrigin );
+		return randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
 
 	} else {
 
 		// sample the light
-		return randomAreaLightSample( light, rayOrigin );
+		return randomAreaLightSample( light, rayOrigin, ruv.yz );
 
 	}
 

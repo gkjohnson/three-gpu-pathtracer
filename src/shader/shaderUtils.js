@@ -131,74 +131,7 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	// https://www.shadertoy.com/view/wltcRS
-	uvec4 s0;
-
-	void rng_initialize(vec2 p, int frame) {
-
-		// white noise seed
-		s0 = uvec4( p, uint( frame ), uint( p.x ) + uint( p.y ) );
-
-	}
-
-	// https://www.pcg-random.org/
-	void pcg4d( inout uvec4 v ) {
-
-		v = v * 1664525u + 1013904223u;
-		v.x += v.y * v.w;
-		v.y += v.z * v.x;
-		v.z += v.x * v.y;
-		v.w += v.y * v.z;
-		v = v ^ ( v >> 16u );
-		v.x += v.y*v.w;
-		v.y += v.z*v.x;
-		v.z += v.x*v.y;
-		v.w += v.y*v.z;
-
-	}
-
-	// returns [ 0, 1 ]
-	float rand() {
-
-		pcg4d(s0);
-		return float( s0.x ) / float( 0xffffffffu );
-
-	}
-
-	vec2 rand2() {
-
-		pcg4d( s0 );
-		return vec2( s0.xy ) / float(0xffffffffu);
-
-	}
-
-	vec3 rand3() {
-
-		pcg4d(s0);
-		return vec3( s0.xyz ) / float( 0xffffffffu );
-
-	}
-
-	vec4 rand4() {
-
-		pcg4d(s0);
-		return vec4(s0)/float(0xffffffffu);
-
-	}
-
-	// https://github.com/mrdoob/three.js/blob/dev/src/math/Vector3.js#L724
-	vec3 randDirection() {
-
-		vec2 r = rand2();
-		float u = ( r.x - 0.5 ) * 2.0;
-		float t = r.y * PI * 2.0;
-		float f = sqrt( 1.0 - u * u );
-
-		return vec3( f * cos( t ), f * sin( t ), u );
-
-	}
-
-	vec2 triangleSample( vec2 a, vec2 b, vec2 c ) {
+	vec2 sampleTriangle( vec2 a, vec2 b, vec2 c, vec2 r ) {
 
 		// get the edges of the triangle and the diagonal across the
 		// center of the parallelogram
@@ -206,8 +139,7 @@ export const shaderUtils = /* glsl */`
 		vec2 e2 = c - b;
 		vec2 diag = normalize( e1 + e2 );
 
-		// pick a random point in the parallelogram
-		vec2 r = rand2();
+		// pick the point in the parallelogram
 		if ( r.x + r.y > 1.0 ) {
 
 			r = vec2( 1.0 ) - r;
@@ -218,40 +150,48 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	// samples an aperture shape with the given number of sides. 0 means circle
-	vec2 sampleAperture( int blades ) {
+	vec2 sampleCircle( vec2 uv ) {
 
-		if ( blades == 0 ) {
-
-			vec2 r = rand2();
-			float angle = 2.0 * PI * r.x;
-			float radius = sqrt( rand() );
-			return vec2( cos( angle ), sin( angle ) ) * radius;
-
-		} else {
-
-			blades = max( blades, 3 );
-
-			vec3 r = rand3();
-			float anglePerSegment = 2.0 * PI / float( blades );
-			float segment = floor( float( blades ) * r.x );
-
-			float angle1 = anglePerSegment * segment;
-			float angle2 = angle1 + anglePerSegment;
-			vec2 a = vec2( sin( angle1 ), cos( angle1 ) );
-			vec2 b = vec2( 0.0, 0.0 );
-			vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
-
-			return triangleSample( a, b, c );
-
-		}
+		float angle = 2.0 * PI * uv.x;
+		float radius = sqrt( uv.y );
+		return vec2( cos( angle ), sin( angle ) ) * radius;
 
 	}
 
-	float colorToLuminance( vec3 color ) {
+	vec3 sampleSphere( vec2 uv ) {
 
-		// https://en.wikipedia.org/wiki/Relative_luminance
-		return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+		float u = ( uv.x - 0.5 ) * 2.0;
+		float t = uv.y * PI * 2.0;
+		float f = sqrt( 1.0 - u * u );
+
+		return vec3( f * cos( t ), f * sin( t ), u );
+
+	}
+
+	vec2 sampleRegularNGon( int sides, vec3 uvw ) {
+
+		sides = max( sides, 3 );
+
+		vec3 r = uvw;
+		float anglePerSegment = 2.0 * PI / float( sides );
+		float segment = floor( float( sides ) * r.x );
+
+		float angle1 = anglePerSegment * segment;
+		float angle2 = angle1 + anglePerSegment;
+		vec2 a = vec2( sin( angle1 ), cos( angle1 ) );
+		vec2 b = vec2( 0.0, 0.0 );
+		vec2 c = vec2( sin( angle2 ), cos( angle2 ) );
+
+		return sampleTriangle( a, b, c, r.yz );
+
+	}
+
+	// samples an aperture shape with the given number of sides. 0 means circle
+	vec2 sampleAperture( int blades, vec3 uvw ) {
+
+		return blades == 0 ?
+			sampleCircle( uvw.xy ) :
+			sampleRegularNGon( blades, uvw );
 
 	}
 
@@ -332,6 +272,17 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	vec2 rotateVector( vec2 v, float t ) {
+
+		float ac = cos( t );
+		float as = sin( t );
+		return vec2(
+			v.x * ac - v.y * as,
+			v.x * as + v.y * ac
+		);
+
+	}
+
 	// Finds the point where the ray intersects the plane defined by u and v and checks if this point
 	// falls in the bounds of the rectangle on that same plane.
 	// Plane intersection: https://lousodrome.net/blog/light/2020/07/03/intersection-of-a-ray-and-a-plane/
@@ -400,4 +351,11 @@ export const shaderUtils = /* glsl */`
 
 	}
 
+	// tentFilter from Peter Shirley's 'Realistic Ray Tracing (2nd Edition)' book, pg. 60
+	// erichlof/THREE.js-PathTracing-Renderer/
+	float tentFilter( float x ) {
+
+		return x < 0.5 ? sqrt( 2.0 * x ) - 1.0 : 1.0 - sqrt( 2.0 - ( 2.0 * x ) );
+
+	}
 `;

@@ -8,15 +8,15 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
 let renderer, controls, pathTracer, blitQuad, camera, scene, samplesEl;
 
-let tiles = 1;
-let resolutionScale = 1;
+let tiles = 2;
+let resolutionScale = Math.max( 1 / window.devicePixelRatio, 0.5 );
 
 // adjust performance parameters for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
-	resolutionScale *= 0.5;
-	tiles = 2;
+	resolutionScale = 1 / window.devicePixelRatio;
+	tiles = 3;
 
 }
 
@@ -41,6 +41,7 @@ async function init() {
 	controls.update();
 
 	scene = new THREE.Scene();
+	scene.backgroundBlurriness = 0.05;
 
 	// init path tracer
 	pathTracer = new PathTracingRenderer( renderer );

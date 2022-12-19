@@ -14,7 +14,6 @@ const mouse = new THREE.Vector2();
 const focusPoint = new THREE.Vector3();
 const params = {
 
-	environmentIntensity: 0.5,
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -63,6 +62,7 @@ async function init() {
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
 	ptRenderer.material.backgroundMap = gradientMap;
+	ptRenderer.material.environmentIntensity = 0.5;
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -285,7 +285,6 @@ function animate() {
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 

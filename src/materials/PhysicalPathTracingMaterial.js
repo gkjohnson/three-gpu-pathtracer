@@ -10,8 +10,10 @@ import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
 import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
 import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
 import { shaderLightSampling } from '../shader/shaderLightSampling.js';
+import { shaderSobolCommon, shaderSobolSampling } from '../shader/shaderSobolSampling.js';
 import { shaderUtils } from '../shader/shaderUtils.js';
 import { shaderLayerTexelFetchFunctions } from '../shader/shaderLayerTexelFetchFunctions.js';
+import { shaderRandFunctions } from '../shader/shaderRandFunctions.js';
 import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
@@ -76,6 +78,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				filterGlossyFactor: { value: 0.0 },
 
 				backgroundAlpha: { value: 1.0 },
+				sobolTexture: { value: null },
 			},
 
 			vertexShader: /* glsl */`
@@ -102,6 +105,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
 
+				${ shaderRandFunctions }
+				${ shaderSobolCommon }
+				${ shaderSobolSampling }
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 				${ shaderMaterialStructs }
@@ -162,9 +168,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				vec3 sampleBackground( vec3 direction ) {
+				vec3 sampleBackground( vec3 direction, vec2 uv ) {
 
-					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, rand2() ) * 0.5 * backgroundBlur );
+					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, uv ) * 0.5 * backgroundBlur );
 
 					#if FEATURE_BACKGROUND_MAP
 
@@ -190,6 +196,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					color = vec3( 1.0 );
 
+					// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
+					// and then reset.
 					for ( int i = 0; i < traversals; i ++ ) {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
@@ -316,14 +324,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				// tentFilter from Peter Shirley's 'Realistic Ray Tracing (2nd Edition)' book, pg. 60
-				// erichlof/THREE.js-PathTracing-Renderer/
-				float tentFilter( float x ) {
-
-					return x < 0.5 ? sqrt( 2.0 * x ) - 1.0 : 1.0 - sqrt( 2.0 - ( 2.0 * x ) );
-
-				}
-
 				vec3 ndcToRayOrigin( vec2 coord ) {
 
 					vec4 rayOrigin4 = cameraWorldMatrix * invProjectionMatrix * vec4( coord, - 1.0, 1.0 );
@@ -335,13 +335,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					vec2 ssd = vec2( 1.0 ) / resolution;
 
 					// Jitter the camera ray by finding a uv coordinate at a random sample
-					// around this pixel's UV coordinate
-					vec2 jitteredUv = vUv + vec2( tentFilter( rand() ) * ssd.x, tentFilter( rand() ) * ssd.y );
+					// around this pixel's UV coordinate for AA
+					vec2 ruv = sobol2( 0 );
+					vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
 
 					#if CAMERA_TYPE == 2
 
 						// Equirectangular projection
-
 						vec4 rayDirection4 = vec4( equirectUvToDirection( jitteredUv ), 0.0 );
 						vec4 rayOrigin4 = vec4( 0.0, 0.0, 0.0, 1.0 );
 
@@ -355,20 +355,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// get [- 1, 1] normalized device coordinates
 						vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
-
 						rayOrigin = ndcToRayOrigin( ndc );
 
 						#if CAMERA_TYPE == 1
 
 							// Orthographic projection
-
 							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, - 1.0, 0.0 ) ).xyz;
 							rayDirection = normalize( rayDirection );
 
 						#else
 
 							// Perspective projection
-
 							rayDirection = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
 
 						#endif
@@ -382,17 +379,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
 
 						// get the aperture sample
-						vec2 apertureSample = sampleAperture( physicalCamera.apertureBlades ) * physicalCamera.bokehSize * 0.5 * 1e-3;
+						// if blades === 0 then we assume a circle
+						vec3 shapeUVW= sobol3( 1 );
+						int blades = physicalCamera.apertureBlades;
+						float anamorphicRatio = physicalCamera.anamorphicRatio;
+						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularNGon( blades, shapeUVW );
+						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape
-						float ac = cos( physicalCamera.apertureRotation );
-						float as = sin( physicalCamera.apertureRotation );
-						apertureSample = vec2(
-							apertureSample.x * ac - apertureSample.y * as,
-							apertureSample.x * as + apertureSample.y * ac
-						);
-						apertureSample.x *= saturate( physicalCamera.anamorphicRatio );
-						apertureSample.y *= saturate( 1.0 / physicalCamera.anamorphicRatio );
+						apertureSample =
+							rotateVector( apertureSample, physicalCamera.apertureRotation ) *
+							saturate( vec2( anamorphicRatio, 1.0 / anamorphicRatio ) );
 
 						// create the new ray
 						rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
@@ -408,6 +405,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				void main() {
 
 					rng_initialize( gl_FragCoord.xy, seed );
+					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) | ( uint( gl_FragCoord.y ) );
+					sobolPathIndex = uint( seed );
 
 					vec3 rayDirection;
 					vec3 rayOrigin;
@@ -441,6 +440,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					for ( i = 0; i < bounces; i ++ ) {
 
+						sobolBounceIndex ++;
+
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 
 						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
@@ -455,8 +456,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#if FEATURE_MIS
 
-								// NOTE: we skip MIS for spotlights since we haven't fixed the forward
-								// path tracing code path, yet
+								// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
 								if ( lightHit.type == SPOT_LIGHT_TYPE ) {
 
 									gl_FragColor.rgb += lightHit.emission * throughputColor;
@@ -484,7 +484,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( i == 0 || transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection ) * throughputColor;
+								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection, sobol2( 2 ) ) * throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {
@@ -493,7 +493,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = envMapSample( envRotation3x3 * rayDirection, envMapInfo, envColor );
+								float envPdf = sampleEnvMap( envMapInfo, envRotation3x3 * rayDirection, envColor );
 								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
@@ -578,7 +578,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| useAlphaTest && albedo.a < alphaTest
 
 							// opacity
-							|| material.transparent && ! useAlphaTest && albedo.a < rand()
+							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
@@ -639,6 +639,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						// normal
+						if ( material.flatShading ) {
+
+							// if we're rendering a flat shaded object then use the face normals - the face normal
+							// is provided based on the side the ray hits the mesh so flip it to align with the
+							// interpolated vertex normals.
+							normal = faceNormal * side;
+
+						}
+
 						vec3 baseNormal = normal;
 						if ( material.normalMap != - 1 ) {
 
@@ -821,7 +830,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
-						isShadowRay = sampleRec.specularPdf < rand();
+						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
@@ -838,10 +847,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if FEATURE_MIS
 
 						// uniformly pick a light or environment map
-						if( rand() > 1.0 / float( lights.count + 1u ) ) {
+						if( sobol( 5 ) > 1.0 / float( lights.count + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin );
+							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
@@ -865,7 +874,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 									// weight the direct light contribution
 									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
-									float misWeight = misHeuristic( lightPdf, lightMaterialPdf );
+									float misWeight = lightSampleRec.type == SPOT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
 									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
 								}
@@ -876,7 +885,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = randomEnvMapSample( envMapInfo, envColor, envDirection );
+							float envPdf = sampleEnvMapProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
 							envDirection = invEnvRotation3x3 * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
