@@ -438,7 +438,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					for ( i = 0; i < bounces; i ++ ) {
 
-						sobolBounceIndex = uint( i );
+						sobolBounceIndex ++;
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 
@@ -576,7 +576,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| useAlphaTest && albedo.a < alphaTest
 
 							// opacity
-							|| material.transparent && ! useAlphaTest && albedo.a < rand()
+							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
 							vec3 point = rayOrigin + rayDirection * dist;
@@ -828,7 +828,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
-						isShadowRay = sampleRec.specularPdf < rand();
+						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
 						// maximum component-wise value of the current point to accommodate floating point
