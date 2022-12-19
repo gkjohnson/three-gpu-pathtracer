@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Spot Lights no longer have a dark hot spot.
 
 ### Changed
-- Move random functions around.
+- Move "random" functions around.
 
 ## [0.0.8] - 2022-12-11
 ### Fixed
