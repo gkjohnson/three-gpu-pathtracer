@@ -8,14 +8,14 @@ export const shaderGGXFunctions = /* glsl */`
 
 // trowbridge-reitz === GGX === GTR
 
-vec3 ggxDirection( vec3 incidentDir, float roughnessX, float roughnessY, float random1, float random2 ) {
+vec3 ggxDirection( vec3 incidentDir, vec2 roughness, vec2 uv ) {
 
 	// TODO: try GGXVNDF implementation from reference [2], here. Needs to update ggxDistribution
 	// function below, as well
 
 	// Implementation from reference [1]
 	// stretch view
-	vec3 V = normalize( vec3( roughnessX * incidentDir.x, roughnessY * incidentDir.y, incidentDir.z ) );
+	vec3 V = normalize( vec3( roughness * incidentDir.xy, incidentDir.z ) );
 
 	// orthonormal basis
 	vec3 T1 = ( V.z < 0.9999 ) ? normalize( cross( V, vec3( 0.0, 0.0, 1.0 ) ) ) : vec3( 1.0, 0.0, 0.0 );
@@ -23,16 +23,16 @@ vec3 ggxDirection( vec3 incidentDir, float roughnessX, float roughnessY, float r
 
 	// sample point with polar coordinates (r, phi)
 	float a = 1.0 / ( 1.0 + V.z );
-	float r = sqrt( random1 );
-	float phi = ( random2 < a ) ? random2 / a * PI : PI + ( random2 - a ) / ( 1.0 - a ) * PI;
+	float r = sqrt( uv.x );
+	float phi = ( uv.y < a ) ? uv.y / a * PI : PI + ( uv.y - a ) / ( 1.0 - a ) * PI;
 	float P1 = r * cos( phi );
-	float P2 = r * sin( phi ) * ( ( random2 < a ) ? 1.0 : V.z );
+	float P2 = r * sin( phi ) * ( ( uv.y < a ) ? 1.0 : V.z );
 
 	// compute normal
 	vec3 N = P1 * T1 + P2 * T2 + V * sqrt( max( 0.0, 1.0 - P1 * P1 - P2 * P2 ) );
 
 	// unstretch
-	N = normalize( vec3( roughnessX * N.x, roughnessY * N.y, max( 0.0, N.z ) ) );
+	N = normalize( vec3( roughness * N.xy, max( 0.0, N.z ) ) );
 
 	return N;
 
