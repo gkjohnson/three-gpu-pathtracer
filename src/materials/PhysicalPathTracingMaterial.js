@@ -196,6 +196,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					color = vec3( 1.0 );
 
+					// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
+					// and then reset.
 					for ( int i = 0; i < traversals; i ++ ) {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
