@@ -97,4 +97,53 @@ float ggxPDF( vec3 wi, vec3 halfVector, float roughness ) {
 	return D * G1 * max( 0.0, dot( wi, halfVector ) ) / wi.z;
 
 }
+
+
+
+
+
+
+
+
+// https://github.com/AcademySoftwareFoundation/MaterialX/blob/main/libraries/pbrlib/genglsl/lib/mx_microfacet_specular.glsl#L113
+// Rational quadratic fit to Monte Carlo data for GGX directional albedo.
+vec3 mx_ggx_dir_albedo_analytic( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
+
+	float x = NdotV;
+    float y = alpha;
+    float x2 = x * x;
+    float y2 = y * y;
+    vec4 r =
+		vec4( 0.1003, 0.9345, 1.0, 1.0 ) +
+		vec4( - 0.6303, - 2.323, - 1.765, 0.2281 ) * x +
+		vec4( 9.748, 2.229, 8.263, 15.94 ) * y +
+		vec4( - 2.038, - 3.748, 11.53, - 55.83 ) * x * y +
+		vec4( 29.34, 1.424, 28.96, 13.08 ) * x2 +
+		vec4( - 8.245, - 0.7684, - 7.507, 41.26 ) * y2 +
+		vec4( - 26.44, 1.436, - 36.11, 54.9 ) * x2 * y +
+		vec4( 19.99, 0.2913, 15.86, 300.2 ) * x * y2 +
+		vec4( - 5.448, 0.6286, 33.37, -285.1 ) * x2 * y2;
+    vec2 AB = clamp( r.xy / r.zw, 0.0, 1.0 );
+    return F0 * AB.x + F90 * AB.y;
+
+}
+
+vec3 mx_ggx_dir_albedo( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
+
+    return mx_ggx_dir_albedo_analytic( NdotV, alpha, F0, F90 );
+
+}
+
+float mx_ggx_dir_albedo( float NdotV, float alpha, float F0, float F90 ) {
+
+    return mx_ggx_dir_albedo( NdotV, alpha, vec3( F0 ), vec3( F90 ) ).x;
+
+}
+
+vec3 mx_ggx_energy_compensation( float NdotV, float alpha, vec3 Fss ) {
+
+	float Ess = mx_ggx_dir_albedo( NdotV, alpha, 1.0, 1.0 );
+    return 1.0 + Fss * ( 1.0 - Ess ) / Ess;
+
+}
 `;
