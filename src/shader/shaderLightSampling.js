@@ -184,6 +184,27 @@ LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, 
 
 		return randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
 
+	} else if ( light.type == POINT_LIGHT_TYPE ) {
+
+		vec3 lightRay = light.u - rayOrigin;
+		float lightDist = length( lightRay );
+		float cutoffDistance = light.distance;
+		float distanceFalloff = 1.0 / max( pow( lightDist, light.decay ), 0.01 );
+		if ( cutoffDistance > 0.0 ) {
+
+			distanceFalloff *= pow2( saturate( 1.0 - pow4( lightDist / cutoffDistance ) ) );
+
+		}
+
+		LightSampleRec rec;
+		rec.hit = true;
+		rec.direction = normalize( lightRay );
+		rec.dist = length( lightRay );
+		rec.pdf = 1.0;
+		rec.emission = light.color * light.intensity * distanceFalloff;
+		rec.type = light.type;
+		return rec;
+
 	} else if ( light.type == DIR_LIGHT_TYPE ) {
 
 		LightSampleRec rec;
