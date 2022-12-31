@@ -108,7 +108,7 @@ LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 		// rectangular area light
 		randomPos = light.position + light.u * ( ruv.x - 0.5 ) + light.v * ( ruv.y - 0.5 );
 
-	} else if( light.type == 1 ) {
+	} else if( light.type == CIRC_AREA_LIGHT_TYPE ) {
 
 		// circular area light
 		float r = 0.5 * sqrt( ruv.x );
@@ -183,6 +183,18 @@ LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, 
 	if ( light.type == SPOT_LIGHT_TYPE ) {
 
 		return randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
+
+	} else if ( light.type == DIR_LIGHT_TYPE ) {
+
+		LightSampleRec rec;
+		rec.hit = true;
+		rec.dist = 1e10;
+		rec.direction = normalize( light.u + 0.1 * getHemisphereSample( light.u, ruv.xy ) );
+		rec.pdf = 1.0;
+		rec.emission = light.color * light.intensity;
+		rec.type = light.type;
+
+		return rec;
 
 	} else {
 
