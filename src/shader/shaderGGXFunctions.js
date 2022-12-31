@@ -98,13 +98,6 @@ float ggxPDF( vec3 wi, vec3 halfVector, float roughness ) {
 
 }
 
-
-
-
-
-
-
-
 // https://github.com/AcademySoftwareFoundation/MaterialX/blob/main/libraries/pbrlib/genglsl/lib/mx_microfacet_specular.glsl#L113
 // Rational quadratic fit to Monte Carlo data for GGX directional albedo.
 vec3 ggxDirAlbedoAnalytic( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
