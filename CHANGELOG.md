@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for `Material.flatShading` to render flat-shaded materials.
 - Support for randomization using Owen-scrambled and shuffled Sobol values enabling sample stratification and image in fewer samples.
+- Support for directional lights, point lights.
 
 ### Fixed
 - Roughness and metalness maps not being assigned correctly.
