@@ -129,9 +129,9 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 	vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
 	vec3 iridescenceMix = mix( vec3( FM ), iridescenceF, surf.iridescence );
 	vec3 F = mix( specColor, vec3( 1.0 ), iridescenceMix );
-    vec3 comp = mx_ggx_energy_compensation( dot( wo, wh ), filteredRoughness, F );
+    vec3 comp = ggxEnergyCompensation( dot( wo, wh ), filteredRoughness, F );
 
-	color = comp * mix( surf.specularIntensity, 1.0, surf.metalness ) * wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
+	color = mix( surf.specularIntensity, 1.0, surf.metalness ) * comp * wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
 	// PDF
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/

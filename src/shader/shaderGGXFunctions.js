@@ -107,7 +107,7 @@ float ggxPDF( vec3 wi, vec3 halfVector, float roughness ) {
 
 // https://github.com/AcademySoftwareFoundation/MaterialX/blob/main/libraries/pbrlib/genglsl/lib/mx_microfacet_specular.glsl#L113
 // Rational quadratic fit to Monte Carlo data for GGX directional albedo.
-vec3 mx_ggx_dir_albedo_analytic( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
+vec3 ggxDirAlbedoAnalytic( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
 
 	float x = NdotV;
     float y = alpha;
@@ -128,21 +128,9 @@ vec3 mx_ggx_dir_albedo_analytic( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
 
 }
 
-vec3 mx_ggx_dir_albedo( float NdotV, float alpha, vec3 F0, vec3 F90 ) {
+vec3 ggxEnergyCompensation( float NdotV, float alpha, vec3 Fss ) {
 
-    return mx_ggx_dir_albedo_analytic( NdotV, alpha, F0, F90 );
-
-}
-
-float mx_ggx_dir_albedo( float NdotV, float alpha, float F0, float F90 ) {
-
-    return mx_ggx_dir_albedo( NdotV, alpha, vec3( F0 ), vec3( F90 ) ).x;
-
-}
-
-vec3 mx_ggx_energy_compensation( float NdotV, float alpha, vec3 Fss ) {
-
-	float Ess = mx_ggx_dir_albedo( NdotV, alpha, 1.0, 1.0 );
+	float Ess = ggxDirAlbedoAnalytic( NdotV, alpha, vec3( 1.0 ), vec3( 1.0 ) ).r;
     return 1.0 + Fss * ( 1.0 - Ess ) / Ess;
 
 }
