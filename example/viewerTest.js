@@ -20,6 +20,8 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
@@ -409,9 +411,31 @@ async function updateModel() {
 
 	const onFinish = async () => {
 
+		await MikkTSpace.ready;
+
 		const reducer = new MaterialReducer();
 		reducer.process( model );
 		model.updateMatrixWorld();
+
+		model.traverse( c => {
+
+			if ( c.geometry ) {
+
+				if ( ! c.geometry.attributes.normal ) {
+
+					c.geometry.computeVertexNormals();
+
+				}
+
+				if ( ! c.geometry.attributes.tangent ) {
+
+					BufferGeometryUtils.computeMikkTSpaceTangents( c.geometry, MikkTSpace );
+
+				}
+
+			}
+
+		} );
 
 		const generator = new PathTracingSceneWorker();
 		const result = await generator.generate( model, { onProgress: v => {
