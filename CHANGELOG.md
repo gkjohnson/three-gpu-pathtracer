@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Fixed
 - Equirect sampling CDF offset values causing env maps with 1 bright pixel to be most noticeably incorrect.
+- Clearcoat roughness map values not being respected.
 
 ## [0.0.9] - 2022-12-31
 ### Added
