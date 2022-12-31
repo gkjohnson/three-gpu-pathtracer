@@ -228,6 +228,7 @@ export const shaderLightStruct = /* glsl */ `
 	#define RECT_AREA_LIGHT_TYPE 0
 	#define CIRC_AREA_LIGHT_TYPE 1
 	#define SPOT_LIGHT_TYPE 2
+	#define DIR_LIGHT_TYPE 3
 
 	struct LightsInfo {
 

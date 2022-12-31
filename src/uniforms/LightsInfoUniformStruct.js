@@ -4,6 +4,7 @@ const LIGHT_PIXELS = 6;
 const RECT_AREA_LIGHT = 0;
 const CIRC_AREA_LIGHT = 1;
 const SPOT_LIGHT = 2;
+const DIR_LIGHT = 3;
 export class LightsInfoUniformStruct {
 
 	constructor() {
@@ -69,6 +70,10 @@ export class LightsInfoUniformStruct {
 			} else if ( l.isSpotLight ) {
 
 				type = SPOT_LIGHT;
+
+			} else if ( l.isDirectionalLight ) {
+
+				type = DIR_LIGHT;
 
 			}
 
@@ -157,6 +162,16 @@ export class LightsInfoUniformStruct {
 
 				// iesProfile
 				floatArray[ baseIndex + ( index ++ ) ] = iesTextures.indexOf( l.iesTexture );
+
+			} else if ( l.isDirectionalLight ) {
+
+				const worldPosition = l.getWorldPosition( u );
+				const targetPosition = l.target.getWorldPosition( v );
+
+				target.subVectors( worldPosition, targetPosition ).normalize();
+				floatArray[ baseIndex + ( index ++ ) ] = target.x;
+				floatArray[ baseIndex + ( index ++ ) ] = target.y;
+				floatArray[ baseIndex + ( index ++ ) ] = target.z;
 
 			}
 
