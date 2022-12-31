@@ -10,6 +10,7 @@ import {
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
+	BufferAttribute,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -421,7 +422,7 @@ async function updateModel() {
 
 			if ( c.geometry ) {
 
-				if ( ! c.geometry.attributes.normal ) {
+				if ( ! c.geometry.hasAttribute( 'normal' ) ) {
 
 					c.geometry.computeVertexNormals();
 
@@ -429,7 +430,18 @@ async function updateModel() {
 
 				if ( ! c.geometry.attributes.tangent ) {
 
-					BufferGeometryUtils.computeMikkTSpaceTangents( c.geometry, MikkTSpace );
+					if ( c.geometry.hasAttribute( 'uv' ) ) {
+
+						BufferGeometryUtils.computeMikkTSpaceTangents( c.geometry, MikkTSpace );
+
+					} else {
+
+						c.geometry.setAttribute(
+							'tangent',
+							new BufferAttribute( new Float32Array( c.geometry.attributes.position.count * 4 ), 4, false ),
+						);
+
+					}
 
 				}
 
