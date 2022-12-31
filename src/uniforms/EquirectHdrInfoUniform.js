@@ -3,11 +3,10 @@ import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatTy
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
 	let lower = 0;
-	let upper = count;
+	let upper = count - 1;
 	while ( lower < upper ) {
 
 		const mid = ~ ~ ( 0.5 * upper + 0.5 * lower );
-
 
 		// check if the middle array value is above or below the target and shift
 		// which half of the array we're looking at
@@ -215,6 +214,7 @@ export class EquirectHdrInfoUniform {
 		const marginalDataArray = new Float32Array( height );
 		const conditionalDataArray = new Float32Array( width * height );
 
+		// we add a half texel offset so we're sampling the center of the pixel
 		for ( let i = 0; i < height; i ++ ) {
 
 			const dist = ( i + 1 ) / height;
