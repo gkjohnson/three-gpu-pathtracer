@@ -10,6 +10,7 @@ import {
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
+	BufferAttribute,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -20,6 +21,8 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
@@ -409,9 +412,42 @@ async function updateModel() {
 
 	const onFinish = async () => {
 
+		await MikkTSpace.ready;
+
 		const reducer = new MaterialReducer();
 		reducer.process( model );
 		model.updateMatrixWorld();
+
+		model.traverse( c => {
+
+			if ( c.geometry ) {
+
+				if ( ! c.geometry.hasAttribute( 'normal' ) ) {
+
+					c.geometry.computeVertexNormals();
+
+				}
+
+				if ( ! c.geometry.attributes.tangent ) {
+
+					if ( c.geometry.hasAttribute( 'uv' ) ) {
+
+						BufferGeometryUtils.computeMikkTSpaceTangents( c.geometry, MikkTSpace );
+
+					} else {
+
+						c.geometry.setAttribute(
+							'tangent',
+							new BufferAttribute( new Float32Array( c.geometry.attributes.position.count * 4 ), 4, false ),
+						);
+
+					}
+
+				}
+
+			}
+
+		} );
 
 		const generator = new PathTracingSceneWorker();
 		const result = await generator.generate( model, { onProgress: v => {

@@ -691,7 +691,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( material.clearcoatRoughnessMap != - 1 ) {
 
 							vec3 uvPrime = material.clearcoatRoughnessMapTransform * vec3( uv, 1 );
-							clearcoat *= texture2D( textures, vec3( uvPrime.xy, material.clearcoatRoughnessMap ) ).g;
+							clearcoatRoughness *= texture2D( textures, vec3( uvPrime.xy, material.clearcoatRoughnessMap ) ).g;
 
 						}
 
