@@ -220,7 +220,7 @@ export class EquirectHdrInfoUniform {
 			const dist = ( i + 1 ) / height;
 			const row = binarySearchFindClosestIndexOf( cdfMarginal, dist );
 
-			marginalDataArray[ i ] = row / height;
+			marginalDataArray[ i ] = ( row + 0.5 ) / height;
 
 		}
 
@@ -232,7 +232,7 @@ export class EquirectHdrInfoUniform {
 				const dist = ( x + 1 ) / width;
 				const col = binarySearchFindClosestIndexOf( cdfConditional, dist, y * width, width );
 
-				conditionalDataArray[ i ] = col / width;
+				conditionalDataArray[ i ] = ( col + 0.5 ) / width;
 
 			}
 
