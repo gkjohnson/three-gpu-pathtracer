@@ -189,7 +189,7 @@ LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, 
 		LightSampleRec rec;
 		rec.hit = true;
 		rec.dist = 1e10;
-		rec.direction = normalize( light.u + 0.1 * getHemisphereSample( light.u, ruv.xy ) );
+		rec.direction = light.u;
 		rec.pdf = 1.0;
 		rec.emission = light.color * light.intensity;
 		rec.type = light.type;
