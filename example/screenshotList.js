@@ -18,6 +18,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 		rebuildList();
 
 	} );
+	document.body.style.visibility = 'visible';
 
 	const largeImageBox = document.querySelector( 'input[type="checkbox"]' );
 	largeImageBox.addEventListener( 'change', () => {
