@@ -243,11 +243,11 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 color ) {
 
 	float ior = 1.5;
-	float f0 = iorRatioToF0( ior );
 	bool frontFace = surf.frontFace;
 	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
 
 	float eta = frontFace ? 1.0 / ior : ior;
+	float f0 = etaToF0( eta );
 	float G = ggxShadowMaskG2( wi, wo, filteredClearcoatRoughness );
 	float D = ggxDistribution( wh, filteredClearcoatRoughness );
 	float F = schlickFresnel( dot( wi, wh ), f0 );

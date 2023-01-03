@@ -11,13 +11,15 @@ export const shaderUtils = /* glsl */`
 	// https://google.github.io/filament/Filament.md.html#materialsystem/diffusebrdf
 	float schlickFresnel( float cosine, float f0 ) {
 
-		return f0 + ( 1.0 - f0 ) * pow( 1.0 - cosine, 5.0 );
+		float f = pow( 1.0 - cosine, 5.0 );
+	    return f + f0 * ( 1.0 - f );
 
 	}
 
 	vec3 schlickFresnel( float cosine, vec3 f0 ) {
 
-		return f0 + ( 1.0 - f0 ) * pow( 1.0 - cosine, 5.0 );
+		float f = pow( 1.0 - cosine, 5.0 );
+	    return f + f0 * ( 1.0 - f );
 
 	}
 
@@ -45,10 +47,10 @@ export const shaderUtils = /* glsl */`
 
 	}
 
-	// https://raytracing.github.io/books/RayTracingInOneWeekend.html#dielectrics/schlickapproximation
-	float iorRatioToF0( float eta ) {
+	// https://google.github.io/filament/Filament.html#materialsystem/specularbrdf/fresnel(specularf)
+	float etaToF0( float eta ) {
 
-		return pow( ( 1.0 - eta ) / ( 1.0 + eta ), 2.0 );
+		return pow( eta - 1.0, 2.0 ) / pow( eta + 1.0, 2.0 );
 
 	}
 
