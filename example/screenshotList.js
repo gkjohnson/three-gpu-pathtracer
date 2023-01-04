@@ -9,8 +9,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 	let imageType = window.location.hash.replace( /^#/, '' ) || 'model-viewer';
 
 	const selectionBox = document.querySelector( 'select' );
-	const selectedIndex = [ ...selectionBox.options ].findIndex( op => op.value === imageType );
-	selectionBox.options[ selectedIndex ].setAttribute( 'selected', true );
+	selectionBox.value = imageType;
 	selectionBox.addEventListener( 'change', () => {
 
 		window.location.hash = selectionBox.value;
@@ -18,6 +17,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 		rebuildList();
 
 	} );
+	document.body.style.visibility = 'visible';
 
 	const largeImageBox = document.querySelector( 'input[type="checkbox"]' );
 	largeImageBox.addEventListener( 'change', () => {

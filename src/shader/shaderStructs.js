@@ -228,6 +228,8 @@ export const shaderLightStruct = /* glsl */ `
 	#define RECT_AREA_LIGHT_TYPE 0
 	#define CIRC_AREA_LIGHT_TYPE 1
 	#define SPOT_LIGHT_TYPE 2
+	#define DIR_LIGHT_TYPE 3
+	#define POINT_LIGHT_TYPE 4
 
 	struct LightsInfo {
 
@@ -279,7 +281,7 @@ export const shaderLightStruct = /* glsl */ `
 		l.v = s3.rgb;
 		l.area = s3.a;
 
-		if ( l.type == SPOT_LIGHT_TYPE ) {
+		if ( l.type == SPOT_LIGHT_TYPE || l.type == POINT_LIGHT_TYPE ) {
 
 			vec4 s4 = texelFetch1D( tex, i + 4u );
 			vec4 s5 = texelFetch1D( tex, i + 5u );
