@@ -137,7 +137,7 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 	float incidentTheta = acos( wo.z );
 	float G1 = ggxShadowMaskG1( incidentTheta, filteredRoughness );
-	float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
+	float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs( wo.z );
 	return ggxPdf / ( 4.0 * dot( wo, wh ) );
 
 }
