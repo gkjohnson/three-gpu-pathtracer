@@ -505,7 +505,7 @@ dispose() : void
 
 Disposes of the temporary files and textures for generation.
 
-## GradientEquirectMap
+## GradientEquirectTexture
 
 ### .exponent
 
