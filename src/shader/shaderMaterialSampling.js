@@ -303,7 +303,10 @@ vec3 sheenColor( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf ) {
 }
 
 // bsdf
-void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec surf, out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight ) {
+void getLobeWeights(
+	vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec surf,
+	out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight
+) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -337,7 +340,10 @@ void getLobeWeights( vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec sur
 	clearcoatWeight /= totalWeight;
 }
 
-float bsdfEval( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight, out float specularPdf, out vec3 color ) {
+float bsdfEval(
+	vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf,
+	float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight, out float specularPdf, out vec3 color
+) {
 
 	float metalness = surf.metalness;
 	float transmission = surf.transmission;
@@ -419,11 +425,6 @@ float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceR
 	float transmissionWeight;
 	float clearcoatWeight;
 	getLobeWeights( wo, wi, wh, clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
-	float[ 4 ] pdf;
-	pdf[0] = diffuseWeight;
-	pdf[1] = specularWeight;
-	pdf[2] = transmissionWeight;
-	pdf[3] = clearcoatWeight;
 
 	float specularPdf;
 	return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, specularPdf, color );
@@ -438,7 +439,7 @@ SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis
 	float clearcoatWeight;
 	// using normal and basically-reflected ray since we don't have proper half vector here
 	getLobeWeights( wo, wo, vec3( 0, 0, 1 ), clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
-	
+
 	float pdf[4];
 	pdf[0] = diffuseWeight;
 	pdf[1] = specularWeight;
