@@ -433,6 +433,9 @@ async function updateModel() {
 					if ( c.geometry.hasAttribute( 'uv' ) ) {
 
 						BufferGeometryUtils.computeMikkTSpaceTangents( c.geometry, MikkTSpace );
+						c.material = c.material.clone();
+						if ( c.material.normalScale ) c.material.normalScale.y *= - 1;
+						if ( c.material.clearcoatNormalScale ) c.material.clearcoatNormalScale.y *= - 1;
 
 					} else {
 
