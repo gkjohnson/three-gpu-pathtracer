@@ -48,6 +48,27 @@ const envMaps = {
 	'Measuring Lab': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/vintage_measuring_lab_2k.hdr',
 	'Whale Skeleton': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/whale_skeleton_2k.hdr',
 	'Hall of Mammals': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/hall_of_mammals_2k.hdr',
+
+	'Drachenfels Cellar': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/drachenfels_cellar_2k.hdr',
+	'Adams Place Bridge': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/adams_place_bridge_2k.hdr',
+	'Sepulchral Chapel Rotunda': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/sepulchral_chapel_rotunda_2k.hdr',
+	'Peppermint Powerplant': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/peppermint_powerplant_2k.hdr',
+	'Noon Grass': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/noon_grass_2k.hdr',
+	'Narrow Moonlit Road': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/narrow_moonlit_road_2k.hdr',
+	'St Peters Square Night': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/st_peters_square_night_2k.hdr',
+	'Brown Photostudio 01': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/brown_photostudio_01_2k.hdr',
+	'Rainforest Trail': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/rainforest_trail_2k.hdr',
+	'Brown Photostudio 07': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/brown_photostudio_07_2k.hdr',
+	'Brown Photostudio 06': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/brown_photostudio_06_2k.hdr',
+	'Dancing Hall': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/dancing_hall_2k.hdr',
+	'Aristea Wreck Puresky': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr',
+	'Modern Buildings 2': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/modern_buildings_2_2k.hdr',
+	'Thatch Chapel': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/thatch_chapel_2k.hdr',
+	'Vestibule': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/vestibule_2k.hdr',
+	'Blocky Photo Studio': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/blocky_photo_studio_1k.hdr',
+	'Christmas Photo Studio 07': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/christmas_photo_studio_07_2k.hdr',
+	'Aerodynamics Workshop': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aerodynamics_workshop_1k.hdr',
+
 };
 
 const models = window.MODEL_LIST || {};
@@ -75,7 +96,7 @@ const params = {
 
 	model: initialModel,
 
-	envMap: envMaps[ 'Royal Esplanade' ],
+	envMap: envMaps[ 'Aristea Wreck Puresky' ],
 
 	gradientTop: '#bfd8ff',
 	gradientBottom: '#ffffff',
@@ -97,10 +118,10 @@ const params = {
 	filterGlossyFactor: 0.5,
 	pause: false,
 
-	floorColor: '#080808',
+	floorColor: '#111111',
 	floorOpacity: 1.0,
-	floorRoughness: 0.1,
-	floorMetalness: 0.0
+	floorRoughness: 0.2,
+	floorMetalness: 0.2,
 
 };
 
@@ -166,13 +187,13 @@ async function init() {
 		new MeshStandardMaterial( {
 			map: floorTex,
 			transparent: true,
-			color: 0x080808,
+			color: 0x111111,
 			roughness: 0.1,
 			metalness: 0.0,
 			side: DoubleSide,
 		} )
 	);
-	floorPlane.scale.setScalar( 3 );
+	floorPlane.scale.setScalar( 5 );
 	floorPlane.rotation.x = - Math.PI / 2;
 
 	stats = new Stats();
@@ -712,9 +733,9 @@ async function updateModel() {
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		params.bounces = modelInfo.bounces || 3;
-		params.floorColor = modelInfo.floorColor || '#080808';
-		params.floorRoughness = modelInfo.floorRoughness || 1.0;
-		params.floorMetalness = modelInfo.floorMetalness || 0.0;
+		params.floorColor = modelInfo.floorColor || '#111111';
+		params.floorRoughness = modelInfo.floorRoughness || 0.2;
+		params.floorMetalness = modelInfo.floorMetalness || 0.2;
 		params.bgGradientTop = modelInfo.gradientTop || '#111111';
 		params.bgGradientBottom = modelInfo.gradientBot || '#000000';
 
