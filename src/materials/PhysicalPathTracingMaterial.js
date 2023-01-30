@@ -40,7 +40,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_MIS: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
-				TRANSPARENT_TRAVERSALS: 5,
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -56,6 +55,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				resolution: { value: new Vector2() },
 
 				bounces: { value: 3 },
+				transmissiveBounces: { value: 5 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -136,6 +136,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				uniform vec2 resolution;
 				uniform int bounces;
+				uniform int transmissiveBounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
 				uniform sampler2DArray attributesArray;
@@ -441,7 +442,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float accumulatedRoughness = 0.0;
 					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
-					int transparentTraversals = TRANSPARENT_TRAVERSALS;
+					int transparentTraversals = transmissiveBounces;
 					vec3 throughputColor = vec3( 1.0 );
 					SampleRec sampleRec;
 					int i;
@@ -452,7 +453,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						sobolBounceIndex ++;
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
-						bool firstRay = i == 0 && transparentTraversals == TRANSPARENT_TRAVERSALS;
+						bool firstRay = i == 0 && transparentTraversals == transmissiveBounces;
 						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
 
 						if ( lightHit.hit && ( lightHit.dist < dist || ! hit ) ) {
