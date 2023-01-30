@@ -106,7 +106,7 @@ export class EquirectHdrInfoUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance row & pdf
 		// used to sampling a random value to a relevant row to sample from
-		const marginalWeights = new DataTexture( new Float32Array( [ 0.5 ] ), 1, 1 );
+		const marginalWeights = new DataTexture( new Float32Array( [ 0, 1 ] ), 1, 2 );
 		marginalWeights.type = FloatType;
 		marginalWeights.format = RedFormat;
 		marginalWeights.minFilter = LinearFilter;
@@ -116,7 +116,7 @@ export class EquirectHdrInfoUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance column & pdf
 		// used to sampling a random value to a relevant pixel to sample from
-		const conditionalWeights = new DataTexture( new Float32Array( [ 0.5 ] ), 1, 1 );
+		const conditionalWeights = new DataTexture( new Float32Array( [ 0, 0, 1, 1 ] ), 2, 2 );
 		conditionalWeights.type = FloatType;
 		conditionalWeights.format = RedFormat;
 		conditionalWeights.minFilter = LinearFilter;
