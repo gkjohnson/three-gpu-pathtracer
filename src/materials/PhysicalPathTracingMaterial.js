@@ -185,7 +185,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				}
 
 				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
-				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, bool isShadowRay, out vec3 color ) {
+				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, int transparentTraversals, bool isShadowRay, out vec3 color ) {
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -198,7 +198,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
 					// and then reset.
-					for ( int i = 0; i < traversals; i ++ ) {
+					for ( int i = 0; i < traversals + transparentTraversals; i ++ ) {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
@@ -443,12 +443,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						sobolBounceIndex ++;
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
-
+						bool firstRay = i == 0 && transparentTraversals == TRANSPARENT_TRAVERSALS;
 						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
 
-						if ( lightHit.hit && ( lightHit.dist < dist || !hit ) ) {
+						if ( lightHit.hit && ( lightHit.dist < dist || ! hit ) ) {
 
-							if ( i == 0 || transmissiveRay ) {
+							if ( firstRay || transmissiveRay ) {
 
 								gl_FragColor.rgb += lightHit.emission * throughputColor;
 
@@ -482,7 +482,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! hit ) {
 
-							if ( i == 0 || transmissiveRay ) {
+							if ( firstRay || transmissiveRay ) {
 
 								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection, sobol2( 2 ) ) * throughputColor;
 								gl_FragColor.a = backgroundAlpha;
@@ -517,7 +517,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
-						if ( material.matte && i == 0 ) {
+						if ( material.matte && firstRay ) {
 
 							gl_FragColor = vec4( 0.0 );
 							break;
@@ -830,6 +830,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
+						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
@@ -903,7 +904,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -936,6 +937,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							accumulatedClearcoatRoughness += sin( acosApprox( clearcoatHalfVector.z ) );
 
 							transmissiveRay = false;
+
+						}
+
+						bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
+						if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+
+							transparentTraversals --;
+							i --;
 
 						}
 
