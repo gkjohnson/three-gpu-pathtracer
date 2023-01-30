@@ -657,7 +657,6 @@ async function updateModel() {
 
 				// set the thickness so we render the material as a volumetric object
 				c.material.thickness = 1.0;
-				c.material.side = DoubleSide;
 
 			}
 
