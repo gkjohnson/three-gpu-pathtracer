@@ -47,7 +47,8 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 10,
+	bounces: 3,
+	transmissiveBounces: 10,
 	pause: false,
 
 	displayImage: false,
@@ -198,6 +199,7 @@ function animate() {
 		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = 0.5;
 		ptRenderer.material.bounces = params.bounces;
+		ptRenderer.material.transmissiveBounces = params.transmissiveBounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 
@@ -293,6 +295,11 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
+	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
