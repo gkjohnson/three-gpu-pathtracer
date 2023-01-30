@@ -68,19 +68,27 @@
 			window.MODEL_LIST = {
 
 				'X-Wing': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
 				},
 
 				'UCS AT-ST': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
 				},
 
 				'Death Star': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models10143-1 - Death Star II.mpd',
 					rotation: [ Math.PI, Math.PI + 1.75 * Math.PI / 4, 0 ],
 				},
 
 				'Lunar Vehicle': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
 					rotation: [ Math.PI, - Math.PI / 2, 0 ],
 				},
@@ -197,6 +205,8 @@
 
 					window.MODEL_LIST[ cleanedName ] = {
 
+						opacityToTransmission: true,
+						ior: 1.4,
 						url: `https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/${ name }`,
 
 					};
