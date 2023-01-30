@@ -198,7 +198,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
 					// and then reset.
-					for ( int i = 0; i < traversals + transparentTraversals; i ++ ) {
+					for ( int i = 0; i < traversals; i ++ ) {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
@@ -298,6 +298,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								color *= transmissionAttenuation( dist, material.attenuationColor, material.attenuationDistance );
 
 							}
+
+							bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
+							if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+
+								transparentTraversals --;
+								i --;
+
+							}
+
 
 						} else {
 
@@ -940,6 +949,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						// if we're bouncing around the inside a transmissive material then decrement
+						// perform this separate from a bounce
 						bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
 
