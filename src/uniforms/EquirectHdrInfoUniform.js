@@ -1,4 +1,4 @@
-import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping } from 'three';
+import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat } from 'three';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
@@ -92,31 +92,45 @@ export class EquirectHdrInfoUniform {
 
 	constructor() {
 
+		// Default to a white texture and associated weights so we don't
+		// just render black initially.
+		const whiteTex = new DataTexture( new Float32Array( [ 1, 1, 1, 1 ] ), 1, 1 );
+		whiteTex.type = FloatType;
+		whiteTex.format = RGBAFormat;
+		whiteTex.minFilter = LinearFilter;
+		whiteTex.magFilter = LinearFilter;
+		whiteTex.wrapS = RepeatWrapping;
+		whiteTex.wrapT = RepeatWrapping;
+		whiteTex.generateMipmaps = false;
+		whiteTex.needsUpdate = true;
+
 		// Stores a map of [0, 1] value -> cumulative importance row & pdf
 		// used to sampling a random value to a relevant row to sample from
-		const marginalWeights = new DataTexture();
+		const marginalWeights = new DataTexture( new Float32Array( [ 0.5 ] ), 1, 1 );
 		marginalWeights.type = FloatType;
 		marginalWeights.format = RedFormat;
 		marginalWeights.minFilter = LinearFilter;
 		marginalWeights.magFilter = LinearFilter;
 		marginalWeights.generateMipmaps = false;
+		marginalWeights.needsUpdate = true;
 
 		// Stores a map of [0, 1] value -> cumulative importance column & pdf
 		// used to sampling a random value to a relevant pixel to sample from
-		const conditionalWeights = new DataTexture();
+		const conditionalWeights = new DataTexture( new Float32Array( [ 0.5 ] ), 1, 1 );
 		conditionalWeights.type = FloatType;
 		conditionalWeights.format = RedFormat;
 		conditionalWeights.minFilter = LinearFilter;
 		conditionalWeights.magFilter = LinearFilter;
 		conditionalWeights.generateMipmaps = false;
+		conditionalWeights.needsUpdate = true;
 
+		this.map = whiteTex;
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
-		this.map = null;
 
 		// the total sum value is separated into two values to work around low precision
 		// storage of floating values in structs
-		this.totalSumWhole = 0;
+		this.totalSumWhole = 1;
 		this.totalSumDecimal = 0;
 
 	}
@@ -125,7 +139,7 @@ export class EquirectHdrInfoUniform {
 
 		this.marginalWeights.dispose();
 		this.conditionalWeights.dispose();
-		if ( this.map ) this.map.dispose();
+		this.map.dispose();
 
 	}
 
