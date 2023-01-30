@@ -68,40 +68,153 @@
 			window.MODEL_LIST = {
 
 				'X-Wing': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
 				},
 
 				'UCS AT-ST': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
 				},
 
 				'Death Star': {
-					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/10143-1 - Death Star II.mpd',
+					opacityToTransmission: true,
+					ior: 1.4,
+					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models10143-1 - Death Star II.mpd',
 					rotation: [ Math.PI, Math.PI + 1.75 * Math.PI / 4, 0 ],
 				},
 
-				'Blacksmith': {
-					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/21325 - Medieval Blacksmith.mpd',
-				},
-
-				'Tree House': {
-					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/21318 - Tree House.mpd',
-				},
-
 				'Lunar Vehicle': {
+					opacityToTransmission: true,
+					ior: 1.4,
 					url: 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
 					rotation: [ Math.PI, - Math.PI / 2, 0 ],
 				},
 
-				'Cafe Corner': {
-					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/10182-1 - Cafe Corner.mpd',
-				},
+				// 'Blacksmith': {
+				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/21325 - Medieval Blacksmith.mpd',
+				// },
 
-				'Scorpion Pyramid': {
-					url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/7327-1 - Scorpion Pyramid.mpd',
-				},
+				// 'Tree House': {
+				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/21318 - Tree House.mpd',
+				// },
+
+				// 'Cafe Corner': {
+				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/10182-1 - Cafe Corner.mpd',
+				// },
+
+				// 'Scorpion Pyramid': {
+				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/7327-1 - Scorpion Pyramid.mpd',
+				// },
 
 			};
+
+			const modelNames = [
+				'10019 - Rebel Blockade Runner - UCS.mpd',
+				'10030-1 - Imperial Star Destroyer - UCS.mpd',
+				'10129-1 - Rebel Snowspeeder - UCS.mpd',
+				'10134-1 - Y-wing Attack Starfighter - UCS.mpd',
+				'10143-1 - Death Star II.mpd',
+				'10156-1 - LEGO Truck.mpd',
+				'10179-1 - Millennium Falcon - UCS.mpd',
+				'10182-1 - Cafe Corner.mpd',
+				'10212-1 - Imperial Shuttle - UCS.mpd',
+				'10213-1 - Shuttle Adventure.mpd',
+				'10214-1 - Tower Bridge.mpd',
+				'10220 - Volkswagen T1 Camper Van.mpd',
+				'10224 - Town Hall.mpd',
+				'10227-1 - B-wing Starfighter.mpd',
+				'10240-1 - Red Five X-Wing Starfighter.mpd',
+				'1180-1 - Space Port Moon Buggy.mpd',
+				'1713-1 - Shipwrecked Pirate.mpd',
+				'1789-1 - Star Hawk II.mpd',
+				'1793-1 - Space Station Zenon.mpd',
+				'21019-1 - Eiffel Tower.mpd',
+				'21022-1 - Lincoln Memorial.mpd',
+				'21028-1 - New York City.mpd',
+				'21041-1 - Great Wall of China.mpd',
+				'21043-1 - San Francisco.mpd',
+				'21303 - WALLE.mpd',
+				'21307 - Caterham Seven 620R.mpd',
+				'21309-1 - NASA Apollo Saturn V.mpd',
+				'21311 - Voltron - Voltron.mpd',
+				'21318 - Tree House.mpd',
+				'21321 - International Space Station.mpd',
+				'21325 - Medieval Blacksmith.mpd',
+				'40448 - Vintage Car.mpd',
+				'5542 - Black Thunder.mpd',
+				'5571-1 - Giant Truck.mpd',
+				'5920-1 - Island Racer.mpd',
+				'5934 - Dino Explorer.mpd',
+				'6066 - Camouflaged Outpost.mpd',
+				'6071 - Forestmens Crossing.mpd',
+				'6080 - Kings Castle.mpd',
+				'6232-1 - Skeleton Crew.mpd',
+				'6235 - Buried Treasure.mpd',
+				'6245 - Harbor Sentry.mpd',
+				'6279-1 - Skull Island.mpd',
+				'6285 - Black Seas Barracuda.mpd',
+				'6286 - Skulls Eye Schooner.mpd',
+				'6712-1 - Sheriff\'s Showdown.mpd',
+				'6716-1 - Covered Wagon.mpd',
+				'6718 - Raindance Ridge.mpd',
+				'6755-1 - Sheriff\'s Lock-Up.mpd',
+				'6761-1 - Bandit\'s Secret Hide-Out.mpd',
+				'6799-1 - Showdown Canyon - Carriage.mpd',
+				'6814-1 - Ice Tunnelator.mpd',
+				'6831-1 - Message Decoder.mpd',
+				'6835-1 - Saucer Scout.mpd',
+				'6852-1 - Sonar Security.mpd',
+				'6861-1 - X1 Patrol Craft.mpd',
+				'6861-2 - Super Model Building Instruction.mpd',
+				'6862-1 - Secret Space Voyager.mpd',
+				'6879-1 - Blizzard Baron.mpd',
+				'6886-1 - Galactic Peace Keeper.mpd',
+				'6887-1 - Allied Avenger.mpd',
+				'6898-1 - Ice-Sat V.mpd',
+				'6923-1 - Particle Ionizer.mpd',
+				'6955-1 - Space Lock-Up Isolation Base.mpd',
+				'6956-1 - Stellar Recon Voyager.mpd',
+				'6957-1 - Solar Snooper.mpd',
+				'6959-1 - Lunar Launch Site.mpd',
+				'6973-1 - Deep Freeze Defender.mpd',
+				'6983-1 - Ice Station Odyssey.mpd',
+				'70814 - Emmets Constructo-Mech.mpd',
+				'70816 - Bennys Spaceship Spa_kOdSy6E.mpd',
+				'7131-1 - Anakin\'s Podracer.mpd',
+				'7150-1 - TIE Fighter & Y-wing.mpd',
+				'7181 - TIE Interceptor - UCS.mpd',
+				'7191 - X-wing Fighter - UCS.mpd',
+				'7326-1 - Rise of the Sphinx.mpd',
+				'7327-1 - Scorpion Pyramid.mpd',
+				'7410-1 - Jungle River.mpd',
+				'75053-1 - The Ghost.mpd',
+				'75060 - Slave I.mpd',
+				'75144 - Snowspeeder.mpd',
+				'7784 - The Batmobile Ult_V1hXfMw.mpd',
+				'928-1 - Galaxy Explorer.mpd',
+				'9476-1 - The Orc Forge.mpd'
+			];
+
+			modelNames.forEach( name => {
+
+				const cleanedName = name.replace( /.+?\s-\s/, '' ).replace( /\.mpd$/, '' );
+				if ( ! ( cleanedName in window.MODEL_LIST ) ) {
+
+					window.MODEL_LIST[ cleanedName ] = {
+
+						opacityToTransmission: true,
+						ior: 1.4,
+						url: `https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/${ name }`,
+
+					};
+
+				}
+
+			} );
+
 
 			for ( const key in window.MODEL_LIST ) {
 

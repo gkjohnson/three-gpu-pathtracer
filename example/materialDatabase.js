@@ -37,7 +37,7 @@ if ( aspectRatio < 0.65 ) {
 	params.tiles = 2;
 	params.multipleImportanceSampling = false;
 	params.environmentBlur = 0.35;
-	hideInfo = true;
+	params.hideInfo = true;
 
 }
 

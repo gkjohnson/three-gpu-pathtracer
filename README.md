@@ -505,7 +505,7 @@ dispose() : void
 
 Disposes of the temporary files and textures for generation.
 
-## GradientEquirectMap
+## GradientEquirectTexture
 
 ### .exponent
 
@@ -562,6 +562,9 @@ _extends MaterialBase_
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	bounces = 3 : Number,
 
+	// The number of additional transmissive ray bounces to allow on top of existing bounces for object opacity / transmission.
+	transmissiveBounces = 5 : Number,
+
 	// The physical camera parameters to use
 	physicalCamera : PhysicalCameraUniform,
 
@@ -605,9 +608,6 @@ _extends MaterialBase_
 
 	// Whether to use multiple importance sampling to help the image converge more quickly
 	FEATURE_MIS = 1 : Number,
-
-	// The number of transparent pixels to allow on top of existing bounces for object transparency.
-	TRANSPARENT_TRAVERSALS = 5 : Number,
 
 }
 ```

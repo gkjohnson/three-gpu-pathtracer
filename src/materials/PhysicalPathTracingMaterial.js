@@ -40,7 +40,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_MIS: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
-				TRANSPARENT_TRAVERSALS: 5,
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -56,6 +55,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				resolution: { value: new Vector2() },
 
 				bounces: { value: 3 },
+				transmissiveBounces: { value: 5 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -136,6 +136,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				uniform vec2 resolution;
 				uniform int bounces;
+				uniform int transmissiveBounces;
 				uniform mat4 cameraWorldMatrix;
 				uniform mat4 invProjectionMatrix;
 				uniform sampler2DArray attributesArray;
@@ -185,7 +186,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				}
 
 				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
-				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, bool isShadowRay, out vec3 color ) {
+				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, int transparentTraversals, bool isShadowRay, out vec3 color ) {
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -298,6 +299,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								color *= transmissionAttenuation( dist, material.attenuationColor, material.attenuationDistance );
 
 							}
+
+							bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
+							if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+
+								transparentTraversals --;
+								i --;
+
+							}
+
 
 						} else {
 
@@ -432,7 +442,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float accumulatedRoughness = 0.0;
 					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
-					int transparentTraversals = TRANSPARENT_TRAVERSALS;
+					int transparentTraversals = transmissiveBounces;
 					vec3 throughputColor = vec3( 1.0 );
 					SampleRec sampleRec;
 					int i;
@@ -443,12 +453,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						sobolBounceIndex ++;
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
-
+						bool firstRay = i == 0 && transparentTraversals == transmissiveBounces;
 						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
 
-						if ( lightHit.hit && ( lightHit.dist < dist || !hit ) ) {
+						if ( lightHit.hit && ( lightHit.dist < dist || ! hit ) ) {
 
-							if ( i == 0 || transmissiveRay ) {
+							if ( firstRay || transmissiveRay ) {
 
 								gl_FragColor.rgb += lightHit.emission * throughputColor;
 
@@ -482,7 +492,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( ! hit ) {
 
-							if ( i == 0 || transmissiveRay ) {
+							if ( firstRay || transmissiveRay ) {
 
 								gl_FragColor.rgb += sampleBackground( envRotation3x3 * rayDirection, sobol2( 2 ) ) * throughputColor;
 								gl_FragColor.a = backgroundAlpha;
@@ -517,7 +527,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
-						if ( material.matte && i == 0 ) {
+						if ( material.matte && firstRay ) {
 
 							gl_FragColor = vec4( 0.0 );
 							break;
@@ -830,6 +840,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
 
+						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						// adjust the hit point by the surface normal by a factor of some offset and the
@@ -903,7 +914,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -936,6 +947,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							accumulatedClearcoatRoughness += sin( acosApprox( clearcoatHalfVector.z ) );
 
 							transmissiveRay = false;
+
+						}
+
+						// if we're bouncing around the inside a transmissive material then decrement
+						// perform this separate from a bounce
+						bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
+						if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+
+							transparentTraversals --;
+							i --;
 
 						}
 

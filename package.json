@@ -1,6 +1,6 @@
 {
   "name": "three-gpu-pathtracer",
-  "version": "0.0.9",
+  "version": "0.0.12",
   "description": "Path tracing renderer and utilities for three.js built on top of three-mesh-bvh.",
   "module": "src/index.js",
   "main": "build/index.umd.cjs",
@@ -23,7 +23,10 @@
     "three-js",
     "path-tracing",
     "three-mesh-bvh",
-    "rtx"
+    "rtx",
+    "path-tracer",
+    "path",
+    "tracer"
   ],
   "dependencies": {
     "three-mesh-bvh": "^0.5.19"
