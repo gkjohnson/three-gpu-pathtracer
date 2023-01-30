@@ -169,6 +169,7 @@ async function init() {
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.backgroundMap = backgroundMap;
+	ptRenderer.material.transmissiveBounces = 10;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
