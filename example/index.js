@@ -169,6 +169,7 @@ async function init() {
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.backgroundMap = backgroundMap;
+	ptRenderer.material.transmissiveBounces = 10;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -531,7 +532,7 @@ function updateCamera( cameraProjection ) {
 
 }
 
-function convertOpacityToTransmission( model ) {
+function convertOpacityToTransmission( model, ior ) {
 
 	model.traverse( c => {
 
@@ -571,6 +572,13 @@ function convertOpacityToTransmission( model ) {
 
 				newMaterial.opacity = 1.0;
 				newMaterial.transmission = 1.0;
+				newMaterial.ior = ior;
+
+				const hsl = {};
+				newMaterial.color.getHSL( hsl );
+				hsl.l = Math.max( hsl.l, 0.35 );
+				newMaterial.color.setHSL( hsl.h, hsl.s, hsl.l );
+
 				c.material = newMaterial;
 
 			}
@@ -647,7 +655,7 @@ async function updateModel() {
 
 		if ( modelInfo.opacityToTransmission ) {
 
-			convertOpacityToTransmission( model );
+			convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
 
 		}
 
@@ -800,11 +808,13 @@ async function updateModel() {
 
 					model = LDrawUtils.mergeObject( result );
 					model.rotation.set( Math.PI, 0, 0 );
+
+					const toRemove = [];
 					model.traverse( c => {
 
 						if ( c.isLineSegments ) {
 
-							c.visible = false;
+							toRemove.push( c );
 
 						}
 
@@ -815,9 +825,17 @@ async function updateModel() {
 						}
 
 					} );
+
+					toRemove.forEach( c => {
+
+						c.parent.remove( c );
+
+					} );
+
 					onFinish();
 
 				},
+
 			);
 
 	}
