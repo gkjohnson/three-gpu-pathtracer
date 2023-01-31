@@ -33,7 +33,7 @@ export class PathTracingSceneGenerator {
 
 					meshes.push( c );
 
-				} else if ( c.isRectAreaLight || c.isSpotLight ) {
+				} else if ( c.isRectAreaLight || c.isSpotLight || c.isDirectionalLight || c.isPointLight ) {
 
 					lights.push( c );
 
