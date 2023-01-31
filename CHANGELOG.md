@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.0.13] - Unreleased
+### Changed
+- `TRANSPARENT_TRAVERSALS` define to `transmissiveBounces` uniform.
+- EquirectUniformInfo now defaults to a white environment map so lighting is present by default.
+
+### Added
+- Transmissive materials now traverse more bounces than non transmissive materials for improved quality. See `transmissiveBounces` uniform.
+
 ## [0.0.12] - 2023-01-29
 ### Fixed
 - Added workaround for Windows machines to address case where the shader compilation would fail due to arrays being passed as function arguments.
