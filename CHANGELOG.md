@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Transmissive materials now traverse more bounces than non transmissive materials for improved quality. See `transmissiveBounces` uniform.
 
+### Fixed
+- PathTracingSceneGenerator / Worker: include point lights and directional lights in the result.
+
 ## [0.0.12] - 2023-01-29
 ### Fixed
 - Added workaround for Windows machines to address case where the shader compilation would fail due to arrays being passed as function arguments.
