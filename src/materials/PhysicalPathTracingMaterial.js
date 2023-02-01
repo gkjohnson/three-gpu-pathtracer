@@ -55,8 +55,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			uniforms: {
 				resolution: { value: new Vector2() },
 
-				bounces: { value: 3 },
-				transmissiveBounces: { value: 5 },
+				bounces: { value: 10 },
+				transmissiveBounces: { value: 10 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -975,26 +975,22 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// russian roulette path termination
 						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
-						int minBounces = 1;
-						float depthProb = float( i > minBounces );
+						uint minBounces = 3u;
+						float depthProb = float( sobolBounceIndex < minBounces );
 
-						// TODO: hone the number of bounces before beginning
-						if ( int( sobolBounceIndex ) > 1 ) {
+						float rrProb = luminance( throughputColor * sampleRec.color / sampleRec.pdf );
+						rrProb /= luminance( throughputColor );
+						rrProb = sqrt( rrProb );
+						rrProb = max( rrProb, depthProb );
+						rrProb = min( rrProb, 1.0 );
+						if ( sobol( 8 ) > rrProb ) {
 
-							float rrProb = luminance( throughputColor * sampleRec.color / sampleRec.pdf );
-							rrProb /= luminance( throughputColor );
-							rrProb = min( sqrt( rrProb ), 1.0 );
-							if ( sobol( 8 ) > rrProb ) {
-
-								break;
-
-							}
-
-							throughputColor /= rrProb;
+							break;
 
 						}
 
-						// TODO: perform sample clamping here?
+						// perform sample clamping here to avoid bright pixels
+						throughputColor *= min( 1.0 / rrProb, 20.0 );
 
 						#endif
 

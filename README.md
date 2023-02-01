@@ -609,6 +609,9 @@ _extends MaterialBase_
 	// Whether to use multiple importance sampling to help the image converge more quickly
 	FEATURE_MIS = 1 : Number,
 
+	// Whether to use russian roulette path termination
+	FEATURE_RUSSIAN_ROULETTE = 1 : Number,
+
 }
 ```
 
