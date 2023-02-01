@@ -606,8 +606,12 @@ _extends MaterialBase_
 ```js
 {
 
-	// Whether to use multiple importance sampling to help the image converge more quickly
+	// Whether to use multiple importance sampling to help the image converge more quickly.
 	FEATURE_MIS = 1 : Number,
+
+	// Whether to use russian roulette path termination. Path termination will kick in after
+	// a minimum three bounces have been performed.
+	FEATURE_RUSSIAN_ROULETTE = 1 : Number,
 
 }
 ```

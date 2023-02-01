@@ -38,6 +38,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			defines: {
 				FEATURE_MIS: 1,
+				FEATURE_RUSSIAN_ROULETTE: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
 				// 0 = Perspective
@@ -54,8 +55,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			uniforms: {
 				resolution: { value: new Vector2() },
 
-				bounces: { value: 3 },
-				transmissiveBounces: { value: 5 },
+				bounces: { value: 10 },
+				transmissiveBounces: { value: 10 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -970,6 +971,29 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						#if FEATURE_RUSSIAN_ROULETTE
+
+						// russian roulette path termination
+						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
+						uint minBounces = 3u;
+						float depthProb = float( sobolBounceIndex < minBounces );
+
+						float rrProb = luminance( throughputColor * sampleRec.color / sampleRec.pdf );
+						rrProb /= luminance( throughputColor );
+						rrProb = sqrt( rrProb );
+						rrProb = max( rrProb, depthProb );
+						rrProb = min( rrProb, 1.0 );
+						if ( sobol( 8 ) > rrProb ) {
+
+							break;
+
+						}
+
+						// perform sample clamping here to avoid bright pixels
+						throughputColor *= min( 1.0 / rrProb, 20.0 );
+
+						#endif
+
 						throughputColor *= sampleRec.color / sampleRec.pdf;
 
 						// attenuate the throughput color by the medium color
@@ -985,6 +1009,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							break;
 
 						}
+
 
 					}
 

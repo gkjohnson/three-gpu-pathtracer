@@ -18,7 +18,7 @@ const params = {
 	acesToneMapping: true,
 	stableNoise: false,
 	tiles: 2,
-	bounces: 15,
+	bounces: 5,
 	multipleImportanceSampling: true,
 	resolutionScale: 1 / window.devicePixelRatio,
 	environmentBlur: 0,
