@@ -38,6 +38,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			defines: {
 				FEATURE_MIS: 1,
+				FEATURE_RUSSIAN_ROULETTE: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
 				// 0 = Perspective
@@ -970,6 +971,33 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						#if FEATURE_RUSSIAN_ROULETTE
+
+						// russian roulette path termination
+						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
+						int minBounces = 1;
+						float depthProb = float( i > minBounces );
+
+						// TODO: hone the number of bounces before beginning
+						if ( int( sobolBounceIndex ) > 1 ) {
+
+							float rrProb = luminance( throughputColor * sampleRec.color / sampleRec.pdf );
+							rrProb /= luminance( throughputColor );
+							rrProb = min( sqrt( rrProb ), 1.0 );
+							if ( sobol( 8 ) > rrProb ) {
+
+								break;
+
+							}
+
+							throughputColor /= rrProb;
+
+						}
+
+						// TODO: perform sample clamping here?
+
+						#endif
+
 						throughputColor *= sampleRec.color / sampleRec.pdf;
 
 						// attenuate the throughput color by the medium color
@@ -985,6 +1013,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							break;
 
 						}
+
 
 					}
 
