@@ -14,7 +14,7 @@ let counter = 0;
 const params = {
 
 	environmentIntensity: 1,
-	bounces: 3,
+	bounces: 5,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	tiles: 1,
@@ -124,7 +124,7 @@ async function init() {
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'bounces', 1, 5, 1 ).onChange( () => {
+	gui.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 

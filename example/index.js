@@ -114,7 +114,7 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 3,
+	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
 
@@ -739,7 +739,7 @@ async function updateModel() {
 
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
-		params.bounces = modelInfo.bounces || 3;
+		params.bounces = modelInfo.bounces || 5;
 		params.floorColor = modelInfo.floorColor || '#111111';
 		params.floorRoughness = modelInfo.floorRoughness || 0.2;
 		params.floorMetalness = modelInfo.floorMetalness || 0.2;

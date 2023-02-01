@@ -47,7 +47,7 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 3,
+	bounces: 10,
 	transmissiveBounces: 10,
 	pause: false,
 
