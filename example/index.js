@@ -791,7 +791,14 @@ async function updateModel() {
 
 	} else if ( /mpd$/i.test( url ) ) {
 
+		let failed = false;
 		manager.onProgress = ( url, loaded, total ) => {
+
+			if ( failed ) {
+
+				return;
+
+			}
 
 			const percent = Math.floor( 100 * loaded / total );
 			loadingEl.innerText = `Loading : ${ percent }%`;
@@ -835,6 +842,13 @@ async function updateModel() {
 					onFinish();
 
 				},
+				undefined,
+				err => {
+
+					failed = true;
+					loadingEl.innerText = 'Failed to load model. ' + err.message;
+
+				}
 
 			);
 
