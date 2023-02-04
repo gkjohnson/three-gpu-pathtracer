@@ -26,6 +26,11 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+import {
+	LookingGlassWebXRPolyfill,
+	LookingGlassConfig
+} from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 
 const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/6814-1 - Ice Tunnelator.mpd';
@@ -43,22 +48,25 @@ const params = {
 	filterGlossyFactor: 0.5,
 	pause: false,
 
-	floorColor: '#111111',
-	floorRoughness: 0.2,
-	floorMetalness: 0.2,
-
 };
 
 let loadingEl, samplesEl;
-let floorPlane, gui, stats, sceneInfo;
+let gui, stats;
 let renderer, camera;
 let ptRenderer, fsQuad, controls, scene;
-let backgroundMap;
-let loadingModel = false;
 
 init();
 
 async function init() {
+
+	const config = LookingGlassConfig;
+	config.tileHeight = 512;
+	config.numViews = 45;
+	config.targetY = 0;
+	config.targetZ = 0;
+	config.targetDiam = 3;
+	config.fovy = ( 14 * Math.PI ) / 180;
+	new LookingGlassWebXRPolyfill();
 
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
@@ -67,6 +75,7 @@ async function init() {
 	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
+	renderer.xr.enabled = true;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new Scene();
@@ -78,6 +87,7 @@ async function init() {
 
 	ptRenderer = new QuiltPathTracingRenderer( renderer );
 	ptRenderer.material = new PhysicalPathTracingMaterial();
+	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = camera;
 	ptRenderer.setFromDisplayView( 1, 0.75 * 0.12065, 0.12065 );
 	ptRenderer.setSize( 3360, 3360 );
@@ -153,6 +163,21 @@ async function init() {
 
 			convertOpacityToTransmission( model, 1.4 );
 
+			const floorTex = generateRadialFloorTexture( 2048 );
+			const floorPlane = new Mesh(
+				new PlaneGeometry(),
+				new MeshStandardMaterial( {
+					map: floorTex,
+					transparent: true,
+					color: 0x111111,
+					roughness: 0.2,
+					metalness: 0.2,
+					side: DoubleSide,
+				} )
+			);
+			floorPlane.scale.setScalar( 5 );
+			floorPlane.rotation.x = - Math.PI / 2;
+
 			// center the model
 			const box = new Box3();
 			box.setFromObject( model );
@@ -190,8 +215,7 @@ async function init() {
 		} )
 		.then( result => {
 
-			sceneInfo = result;
-			scene.add( sceneInfo.scene );
+			scene.add( result.scene );
 
 			const { bvh, textures, materials } = result;
 			const geometry = bvh.geometry;
@@ -211,11 +235,10 @@ async function init() {
 			generator.dispose();
 
 			loadingEl.style.visibility = 'hidden';
-			loadingModel = false;
 			renderer.domElement.style.visibility = 'visible';
 			ptRenderer.reset();
 
-			animate();
+			renderer.setAnimationLoop( animate );
 
 		} )
 		.catch( err => {
@@ -225,26 +248,9 @@ async function init() {
 
 		} );
 
-
-	const floorTex = generateRadialFloorTexture( 2048 );
-	floorPlane = new Mesh(
-		new PlaneGeometry(),
-		new MeshStandardMaterial( {
-			map: floorTex,
-			transparent: true,
-			color: 0x111111,
-			roughness: 0.1,
-			metalness: 0.0,
-			side: DoubleSide,
-		} )
-	);
-	floorPlane.scale.setScalar( 5 );
-	floorPlane.rotation.x = - Math.PI / 2;
-
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
-	scene.background = backgroundMap;
-	ptRenderer.tiles.set( params.tiles, params.tiles );
+	document.body.append( VRButton.createButton( renderer ) );
 
 	onResize();
 	buildGui();
@@ -255,20 +261,13 @@ async function init() {
 
 function animate() {
 
-	requestAnimationFrame( animate );
-
-	stats.update();
-
-	if ( loadingModel ) {
+	if ( ! scene.environment ) {
 
 		return;
 
 	}
 
-	floorPlane.material.color.set( params.floorColor );
-	floorPlane.material.roughness = params.floorRoughness;
-	floorPlane.material.metalness = params.floorMetalness;
-	floorPlane.material.opacity = params.floorOpacity;
+	stats.update();
 
 	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
 
@@ -281,7 +280,6 @@ function animate() {
 		const samples = Math.floor( ptRenderer.samples );
 		samplesEl.innerText = `samples: ${ samples }`;
 
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
@@ -316,8 +314,8 @@ function resetRenderer() {
 
 function onResize() {
 
-	const w = 3360;//window.innerWidth;
-	const h = 3360;//window.innerHeight;
+	const w = window.innerWidth;
+	const h = window.innerHeight;
 	const scale = params.resolutionScale;
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
@@ -348,24 +346,6 @@ function buildGui() {
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.open();
-
-	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	floorFolder.close();
 
 }
 
