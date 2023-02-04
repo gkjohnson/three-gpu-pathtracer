@@ -18,72 +18,21 @@ import {
 	sRGBEncoding,
 	CustomBlending,
 } from 'three';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture, PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-const envMaps = {
-	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
-	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/moonless_golf_1k.hdr',
-	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
-	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
-	'Small Studio': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr',
-	'Pfalzer Forest': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr',
-	'Leadenhall Market': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr',
-	'Kloppenheim': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/kloppenheim_05_1k.hdr',
-	'Hilly Terrain': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/hilly_terrain_01_1k.hdr',
-	'Circus Arena': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/circus_arena_1k.hdr',
-	'Chinese Garden': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr',
-	'Autoshop': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr',
-
-	'Measuring Lab': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/vintage_measuring_lab_2k.hdr',
-	'Whale Skeleton': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/whale_skeleton_2k.hdr',
-	'Hall of Mammals': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/hall_of_mammals_2k.hdr',
-
-	'Drachenfels Cellar': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/drachenfels_cellar_2k.hdr',
-	'Adams Place Bridge': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/adams_place_bridge_2k.hdr',
-	'Sepulchral Chapel Rotunda': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/sepulchral_chapel_rotunda_2k.hdr',
-	'Peppermint Powerplant': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/peppermint_powerplant_2k.hdr',
-	'Noon Grass': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/noon_grass_2k.hdr',
-	'Narrow Moonlit Road': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/narrow_moonlit_road_2k.hdr',
-	'St Peters Square Night': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/st_peters_square_night_2k.hdr',
-	'Brown Photostudio 01': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/brown_photostudio_01_2k.hdr',
-	'Rainforest Trail': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/rainforest_trail_2k.hdr',
-	'Brown Photostudio 07': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/brown_photostudio_07_2k.hdr',
-	'Brown Photostudio 06': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/brown_photostudio_06_2k.hdr',
-	'Dancing Hall': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/dancing_hall_2k.hdr',
-	'Aristea Wreck Puresky': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr',
-	'Modern Buildings 2': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/modern_buildings_2_2k.hdr',
-	'Thatch Chapel': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/thatch_chapel_2k.hdr',
-	'Vestibule': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/vestibule_2k.hdr',
-	'Blocky Photo Studio': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/blocky_photo_studio_1k.hdr',
-	'Christmas Photo Studio 07': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/christmas_photo_studio_07_2k.hdr',
-	'Aerodynamics Workshop': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aerodynamics_workshop_1k.hdr',
-
-};
-
-const models = window.MODEL_LIST || {};
-
-let initialModel = Object.keys( models )[ 0 ];
-if ( window.location.hash ) {
-
-	const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
-	if ( modelName in models ) {
-
-		initialModel = modelName;
-
-	}
-
-}
+const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/';
+const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
+const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 
 const params = {
 
@@ -152,12 +101,8 @@ async function init() {
 	scene = new Scene();
 
 	const aspect = window.innerWidth / window.innerHeight;
-	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
+	perspectiveCamera = new PhysicalCamera( 60, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 1, 0.25, 1 );
-
-	const orthoHeight = orthoWidth / aspect;
-	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
-	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	backgroundMap = new GradientEquirectTexture();
 	backgroundMap.topColor.set( params.bgGradientTop );
@@ -165,12 +110,8 @@ async function init() {
 	backgroundMap.update();
 
 	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.alpha = true;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.material.backgroundMap = backgroundMap;
-	ptRenderer.material.transmissiveBounces = 10;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -182,6 +123,141 @@ async function init() {
 	controls.addEventListener( 'change', resetRenderer );
 
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+
+	new RGBELoader()
+		.load( params.envMap, texture => {
+
+			if ( scene.environmentMap ) {
+
+				scene.environment.dispose();
+				envMap.dispose();
+
+			}
+
+			scene.environment = texture;
+			ptRenderer.material.envMapInfo.updateFrom( texture );
+			ptRenderer.reset();
+
+		} );
+
+
+	let failed = false;
+	const manager = new LoadingManager();
+	manager.onProgress = ( url, loaded, total ) => {
+
+		if ( failed ) {
+
+			return;
+
+		}
+
+		const percent = Math.floor( 100 * loaded / total );
+		loadingEl.innerText = `Loading : ${ percent }%`;
+
+	};
+
+	const loader = new LDrawLoader( manager );
+	await loader.preloadMaterials( MATERIALS_URL );
+	loader
+		.setPartsLibraryPath( PARTS_PATH )
+		.loadAsync( MODEL_URL )
+		.then( async result => {
+
+			const model = LDrawUtils.mergeObject( result );
+			model.rotation.set( Math.PI, 0, 0 );
+
+			const toRemove = [];
+			model.traverse( c => {
+
+				if ( c.isLineSegments ) {
+
+					toRemove.push( c );
+
+				}
+
+				if ( c.isMesh ) {
+
+					c.material.roughness *= 0.25;
+
+				}
+
+			} );
+
+			toRemove.forEach( c => {
+
+				c.parent.remove( c );
+
+			} );
+
+			convertOpacityToTransmission( model, 1.4 );
+
+
+
+			// center the model
+			const box = new Box3();
+			box.setFromObject( model );
+			model.position
+				.addScaledVector( box.min, - 0.5 )
+				.addScaledVector( box.max, - 0.5 );
+
+			const sphere = new Sphere();
+			box.getBoundingSphere( sphere );
+
+			model.scale.setScalar( 1 / sphere.radius );
+			model.position.multiplyScalar( 1 / sphere.radius );
+
+			box.setFromObject( model );
+
+			model.updateMatrixWorld();
+
+			const group = new Group();
+			floorPlane.position.y = box.min.y;
+			group.add( model, floorPlane );
+
+			const reducer = new MaterialReducer();
+			reducer.process( group );
+
+			const generator = new PathTracingSceneWorker();
+			const generatedInfo = await generator.generate( group, { onProgress: v => {
+
+				const percent = Math.floor( 100 * v );
+				loadingEl.innerText = `Building BVH : ${ percent }%`;
+
+			} } );
+
+			sceneInfo = generatedInfo;
+			scene.add( sceneInfo.scene );
+
+			const { bvh, textures, materials } = generatedInfo;
+			const geometry = bvh.geometry;
+			const material = ptRenderer.material;
+
+			material.bvh.updateFrom( bvh );
+			material.attributesArray.updateFrom(
+				geometry.attributes.normal,
+				geometry.attributes.tangent,
+				geometry.attributes.uv,
+				geometry.attributes.color,
+			);
+			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+			material.textures.setTextures( renderer, 2048, 2048, textures );
+			material.materials.updateFrom( materials, textures );
+
+			generator.dispose();
+
+			loadingEl.style.visibility = 'hidden';
+			loadingModel = false;
+			renderer.domElement.style.visibility = 'visible';
+			ptRenderer.reset();
+
+		} )
+		.catch( err => {
+
+			failed = true;
+			loadingEl.innerText = 'Failed to load model. ' + err.message;
+
+		} );
+
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -203,11 +279,7 @@ async function init() {
 	scene.background = backgroundMap;
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
-	updateCamera( params.cameraProjection );
-	updateModel();
-	updateEnvMap();
 	onResize();
-
 	animate();
 
 	window.addEventListener( 'resize', onResize );
@@ -323,19 +395,7 @@ function buildGui() {
 	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
-	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-
-	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -348,96 +408,8 @@ function buildGui() {
 	} );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onResize();
-
-	} );
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
-
-		ptRenderer.tiles.x = v;
-
-	} );
-	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
-
-		ptRenderer.tiles.y = v;
-
-	} );
-	resolutionFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
-
-		updateCamera( v );
-
-	} );
 	resolutionFolder.open();
-
-	const environmentFolder = gui.addFolder( 'environment' );
-	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0 ).onChange( () => {
-
-		updateEnvBlur();
-		ptRenderer.reset();
-
-	} ).name( 'env map blur' );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
-
-	} );
-	environmentFolder.open();
-
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
-
-		if ( v === 'Gradient' ) {
-
-			scene.background = backgroundMap;
-			ptRenderer.material.backgroundMap = backgroundMap;
-
-		} else {
-
-			scene.background = scene.environment;
-			ptRenderer.material.backgroundMap = null;
-
-		}
-
-		ptRenderer.reset();
-
-	} );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
-
-		backgroundMap.topColor.set( v );
-		backgroundMap.update();
-
-		ptRenderer.reset();
-
-	} );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
-
-		backgroundMap.bottomColor.set( v );
-		backgroundMap.update();
-
-		ptRenderer.reset();
-
-	} );
-	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( v => {
-
-		ptRenderer.material.backgroundAlpha = v;
-		ptRenderer.reset();
-
-	} );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
-
-	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.addColor( params, 'floorColor' ).onChange( () => {
@@ -461,73 +433,6 @@ function buildGui() {
 
 	} );
 	floorFolder.close();
-
-}
-
-function updateEnvMap() {
-
-	new RGBELoader()
-		.load( params.envMap, texture => {
-
-			if ( scene.environmentMap ) {
-
-				scene.environment.dispose();
-				envMap.dispose();
-
-			}
-
-			envMap = texture;
-			updateEnvBlur();
-			ptRenderer.reset();
-
-		} );
-
-}
-
-function updateEnvBlur() {
-
-	const blurredEnvMap = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredEnvMap );
-
-	scene.environment = blurredEnvMap;
-	if ( params.backgroundType !== 'Gradient' ) {
-
-		scene.background = blurredEnvMap;
-
-	}
-
-}
-
-function updateCamera( cameraProjection ) {
-
-	if ( cameraProjection === 'Perspective' ) {
-
-		if ( activeCamera ) {
-
-			perspectiveCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = perspectiveCamera;
-
-	} else {
-
-		if ( activeCamera ) {
-
-			orthoCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = orthoCamera;
-
-	}
-
-	controls.object = activeCamera;
-	ptRenderer.camera = activeCamera;
-
-	controls.update();
-
-	resetRenderer();
 
 }
 
@@ -571,6 +476,7 @@ function convertOpacityToTransmission( model, ior ) {
 
 				newMaterial.opacity = 1.0;
 				newMaterial.transmission = 1.0;
+				newMaterial.thickness = 1.0;
 				newMaterial.ior = ior;
 
 				const hsl = {};
@@ -637,48 +543,9 @@ async function updateModel() {
 
 	const onFinish = async () => {
 
-		if ( modelInfo.removeEmission ) {
-
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					c.material.emissiveMap = null;
-					c.material.emissiveIntensity = 0;
-
-				}
-
-			} );
-
-		}
-
 		if ( modelInfo.opacityToTransmission ) {
 
 			convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
-
-		}
-
-		model.traverse( c => {
-
-			if ( c.material ) {
-
-				// set the thickness so we render the material as a volumetric object
-				c.material.thickness = 1.0;
-
-			}
-
-		} );
-
-		if ( modelInfo.postProcess ) {
-
-			modelInfo.postProcess( model );
-
-		}
-
-		// rotate model after so it doesn't affect the bounding sphere scale
-		if ( modelInfo.rotation ) {
-
-			model.rotation.set( ...modelInfo.rotation );
 
 		}
 
@@ -791,6 +658,7 @@ async function updateModel() {
 	} else if ( /mpd$/i.test( url ) ) {
 
 		let failed = false;
+		const manager = new LoadingManager();
 		manager.onProgress = ( url, loaded, total ) => {
 
 			if ( failed ) {

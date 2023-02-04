@@ -32,6 +32,7 @@
     "three-mesh-bvh": "^0.5.19"
   },
   "devDependencies": {
+    "@lookingglass/webxr": "^0.3.1",
     "canvas-capture": "^2.0.5",
     "eslint": "^7.32.0",
     "eslint-config-mdcs": "^5.0.0",
