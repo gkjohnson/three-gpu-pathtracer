@@ -3,7 +3,6 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 
-const _ogScissor = new Vector4();
 function* renderTask() {
 
 	const {
@@ -13,10 +12,13 @@ function* renderTask() {
 		_primaryTarget,
 		_blendTargets,
 		_sobolTarget,
+		_subframe,
 		alpha,
 		camera,
 		material,
 	} = this;
+	const _ogScissor = new Vector4();
+	const _ogViewport = new Vector4();
 
 	const blendMaterial = _blendQuad.material;
 	let [ blendTarget1, blendTarget2 ] = _blendTargets;
@@ -25,13 +27,13 @@ function* renderTask() {
 
 		if ( alpha ) {
 
-			blendMaterial.opacity = 1 / ( this.samples + 1 );
+			blendMaterial.opacity = this._opacityFactor / ( this._samples + 1 );
 			material.blending = NoBlending;
 			material.opacity = 1;
 
 		} else {
 
-			material.opacity = 1 / ( this.samples + 1 );
+			material.opacity = this._opacityFactor / ( this._samples + 1 );
 			material.blending = NormalBlending;
 
 		}
@@ -46,6 +48,7 @@ function* renderTask() {
 		const tilesY = this.tiles.y || 1;
 		const totalTiles = tilesX * tilesY;
 		const dprInv = ( 1 / _renderer.getPixelRatio() );
+
 		for ( let y = 0; y < tilesY; y ++ ) {
 
 			for ( let x = 0; x < tilesX; x ++ ) {
@@ -79,6 +82,7 @@ function* renderTask() {
 				const ogAutoClear = _renderer.autoClear;
 				const ogScissorTest = _renderer.getScissorTest();
 				_renderer.getScissor( _ogScissor );
+				_renderer.getViewport( _ogViewport );
 
 				let tx = x;
 				let ty = y;
@@ -96,16 +100,21 @@ function* renderTask() {
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
 				_renderer.setScissor(
-					dprInv * Math.ceil( tx * w / tilesX ),
-					dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ),
-					dprInv * Math.ceil( w / tilesX ),
-					dprInv * Math.ceil( h / tilesY ) );
+					Math.round( _subframe.x * dprInv * w + dprInv * Math.ceil( tx * w / tilesX ) ),
+					Math.round( _subframe.y * dprInv * h + dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ) ),
+					Math.round( _subframe.z * dprInv * Math.ceil( w / tilesX ) ),
+					Math.round( _subframe.w * dprInv * Math.ceil( h / tilesY ) ) );
+				_renderer.setViewport(
+					Math.round( _subframe.x * dprInv * w ),
+					Math.round( _subframe.y * dprInv * h ),
+					Math.round( _subframe.z * dprInv * w ),
+					Math.round( _subframe.w * dprInv * h ),
+				);
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
 
-				// TODO: support subframe via setViewport and setScissor
-
 				// reset original renderer state
+				_renderer.setViewport( _ogViewport );
 				_renderer.setScissor( _ogScissor );
 				_renderer.setScissorTest( ogScissorTest );
 				_renderer.setRenderTarget( ogRenderTarget );
@@ -123,7 +132,7 @@ function* renderTask() {
 
 				}
 
-				this.samples += ( 1 / totalTiles );
+				this._samples += ( 1 / totalTiles );
 
 				yield;
 
@@ -133,7 +142,7 @@ function* renderTask() {
 
 		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
 
-		this.samples = Math.round( this.samples );
+		this._samples = Math.round( this._samples );
 
 	}
 
@@ -162,6 +171,12 @@ export class PathTracingRenderer {
 
 	set alpha( v ) {
 
+		if ( this._alpha === v ) {
+
+			return;
+
+		}
+
 		if ( ! v ) {
 
 			this._blendTargets[ 0 ].dispose();
@@ -180,16 +195,23 @@ export class PathTracingRenderer {
 
 	}
 
+	get samples() {
+
+		return this._samples;
+
+	}
+
 	constructor( renderer ) {
 
 		this.camera = null;
 		this.tiles = new Vector2( 1, 1 );
 
-		this.samples = 0;
 		this.stableNoise = false;
 		this.stableTiles = true;
 
+		this._samples = 0;
 		this._subframe = new Vector4( 0, 0, 1, 1 );
+		this._opacityFactor = 1.0;
 		this._renderer = renderer;
 		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );
@@ -259,7 +281,7 @@ export class PathTracingRenderer {
 		_renderer.setClearColor( ogClearColor, ogClearAlpha );
 		_renderer.setRenderTarget( ogRenderTarget );
 
-		this.samples = 0;
+		this._samples = 0;
 		this._task = null;
 
 		if ( this.stableNoise ) {
