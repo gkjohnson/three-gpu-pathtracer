@@ -76,7 +76,6 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 		super( ...args );
 
 		this.quiltDimensions = new Vector2( 8, 6 );
-		// this.quiltDimensions = new Vector2( 2, 2 );
 		this.viewCone = 35 * MathUtils.DEG2RAD;
 		this.viewDistance = 1;
 		this.viewFoV = 14;
