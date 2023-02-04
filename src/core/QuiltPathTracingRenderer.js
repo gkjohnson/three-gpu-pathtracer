@@ -57,8 +57,8 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 		this.quiltDimensions = new Vector2( 8, 6 );
 		this.viewCone = 35 * MathUtils.DEG2RAD;
 		this.viewFoV = 14 * MathUtils.DEG2RAD;
-		this.viewDistance = 1;
-		this.viewAspect = 0.75;
+		this.displayDistance = 1;
+		this.displayAspect = 0.75;
 		this._quiltSamples = 0;
 		this._camera = new PerspectiveCamera();
 		this._quiltTask = null;
@@ -79,8 +79,8 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
 	_setCameraTransform( i ) {
 
-		const { _camera, viewCone, viewDistance, viewCount, viewFoV, viewAspect } = this;
-		const halfWidth = Math.tan( 0.5 * viewCone ) * viewDistance;
+		const { _camera, viewCone, displayDistance, viewCount, viewFoV, displayAspect } = this;
+		const halfWidth = Math.tan( 0.5 * viewCone ) * displayDistance;
 		const totalWidth = halfWidth * 2.0;
 		const stride = totalWidth / ( viewCount - 1 );
 
@@ -102,10 +102,10 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 		_camera.updateMatrixWorld();
 
 		// set the projection matrix
-		const displayHalfHeight = Math.tan( viewFoV * 0.5 ) * viewDistance;
-		const displayHalfWidth = viewAspect * displayHalfHeight;
+		const displayHalfHeight = Math.tan( viewFoV * 0.5 ) * displayDistance;
+		const displayHalfWidth = displayAspect * displayHalfHeight;
 		const { near, far } = this.camera;
-		const nearScale = near / viewDistance;
+		const nearScale = near / displayDistance;
 
 		_camera
 			.projectionMatrix
@@ -124,8 +124,8 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
 	setFromDisplayView( distance, width, height ) {
 
-		this.viewAspect = width / height;
-		this.viewDistance = distance;
+		this.displayAspect = width / height;
+		this.displayDistance = distance;
 		this.viewFoV = 2.0 * Math.atan( 0.5 * height / distance );
 
 	}

@@ -303,6 +303,68 @@ reset() : void
 
 Resets and restarts the render from scratch.
 
+## QuiltPathTracingRenderer
+
+Renderer that supports rendering to a quilt renderer to rendering on displays such as the Looking Glass display.
+
+### .viewCount
+
+```js
+viewCount : Number
+```
+
+Getter for the number of camera views rendered.
+
+### .quiltDimensions
+```js
+quiltDimensions = Vector2( 8, 6 ) : Vector2
+```
+
+The number of quilt patches in each dimension.
+
+### .viewCone
+```js
+viewCone = 35 * DEG2RAD : Number
+```
+
+The total angle sweep for the camera views rendered across the quilt.
+
+### .viewFoV
+
+```js
+viewFoV = 14 * DEG2RAD : Number
+```
+
+The camera field of view to render.
+
+### .displayDistance
+
+```js
+displayDistance = 1 : Number
+```
+
+The distance of the viewer to the display.
+
+### .displayAspect
+
+```js
+displayAspect = 0.75 : Number
+```
+
+The aspect ratio of the display.
+
+### .setFromDisplayView
+
+```js
+setFromDisplayView(
+	displayDistance : Number,
+	displayWidth : Number,
+	displayHeight : Number,
+) : void
+```
+
+Updates the `displayDistance`, `displayAspect`, and the `viewFoV` from viewer and display information.
+
 ## PathTracingSceneGenerator
 
 Utility class for generating the set of data required for initializing the path tracing material with a bvh, geometry, materials, and textures.
