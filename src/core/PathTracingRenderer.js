@@ -1,8 +1,9 @@
-import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 
+const _ogScissor = new Vector4();
 function* renderTask() {
 
 	const {
@@ -73,8 +74,11 @@ function* renderTask() {
 
 				material.setDefine( 'CAMERA_TYPE', cameraType );
 
+				// store og state
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
+				const ogScissorTest = _renderer.getScissorTest();
+				_renderer.getScissor( _ogScissor );
 
 				let tx = x;
 				let ty = y;
@@ -99,10 +103,15 @@ function* renderTask() {
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
 
-				_renderer.setScissorTest( false );
+				// TODO: support subframe via setViewport and setScissor
+
+				// reset original renderer state
+				_renderer.setScissor( _ogScissor );
+				_renderer.setScissorTest( ogScissorTest );
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
+				// swap and blend alpha targets
 				if ( alpha ) {
 
 					blendMaterial.target1 = blendTarget1.texture;
@@ -180,6 +189,7 @@ export class PathTracingRenderer {
 		this.stableNoise = false;
 		this.stableTiles = true;
 
+		this._subframe = new Vector4( 0, 0, 1, 1 );
 		this._renderer = renderer;
 		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );

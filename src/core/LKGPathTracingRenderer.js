@@ -1,4 +1,4 @@
-import { PerspectiveCamera } from 'three';
+import { PerspectiveCamera, Vector3, MathUtils } from 'three';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 
 export class LKGPathTracingRenderer extends PathTracingRenderer {
@@ -8,9 +8,10 @@ export class LKGPathTracingRenderer extends PathTracingRenderer {
 		super( ...args );
 
 		this.viewCount = 30;
-		this.viewCone = 35;
+		this.viewCone = 35 * MathUtils.DEG2RAD;
 		this.viewDistance = 1;
 		this.viewFoV = 14;
+		this.viewAspect = 0.75;
 		this._camera = new PerspectiveCamera();
 		this._lkgTask = null;
 
@@ -18,14 +19,39 @@ export class LKGPathTracingRenderer extends PathTracingRenderer {
 
 	*_task() {
 
+		const step = new Vector3();
 		while ( true ) {
 
-			const { viewCount, viewCone, viewFoV, viewDistance, _camera } = this;
+			const {
+				viewCount,
+				viewCone,
+				viewDistance,
+				viewFoV,
+				viewAspect,
+				_camera,
+			} = this;
+
+			const halfWidth = Math.atan( viewCone ) / viewDistance;
+			const totalWidth = halfWidth * 2.0;
+			const stride = totalWidth / ( viewCount - 1 );
+
 			for ( let i = 0; i < viewCount || 1; i ++ ) {
 
-				// TODO:
-				// - prep camera position
-				// - prep subframe
+				// step from left to right
+				step
+					.set( 1, 0, 0 )
+					.applyQuaternion( this.camera.quaternion );
+				_camera
+					.quaternion
+					.copy( this.camera.quaternion );
+				_camera
+					.position
+					.copy( this.camera.position ).addScaledVector( step, - halfWidth + stride * i );
+				_camera.updateMatrixWorld();
+
+				// TODO: set up projection matrix
+
+				// TODO: set up subframe
 
 				while ( this.samples % 1 !== 0 ) {
 
