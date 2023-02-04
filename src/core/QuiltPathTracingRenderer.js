@@ -1,41 +1,20 @@
 import { PerspectiveCamera, Vector3, MathUtils, Vector2 } from 'three';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 
+const _step = new Vector3();
 function* _task( cb ) {
 
-	const step = new Vector3();
 	while ( true ) {
 
 		const {
 			viewCount,
-			viewCone,
-			viewDistance,
-			viewFoV,
-			viewAspect,
 			_camera,
 		} = this;
-
-		const halfWidth = Math.atan( viewCone ) / viewDistance;
-		const totalWidth = halfWidth * 2.0;
-		const stride = totalWidth / ( viewCount - 1 );
 
 		for ( let i = 0; i < viewCount; i ++ ) {
 
 			// step from left to right
-			step
-				.set( 1, 0, 0 )
-				.applyQuaternion( this.camera.quaternion );
-			_camera
-				.quaternion
-				.copy( this.camera.quaternion );
-			_camera
-				.position
-				.copy( this.camera.position )
-				.addScaledVector( step, - halfWidth + stride * i );
-			_camera.updateMatrixWorld();
-
-			// TODO: set up projection matrix
-
+			this._setCameraTransform( i );
 			this._setQuiltFrame( i );
 			this._opacityFactor = Math.floor( this._samples + 1 ) / Math.floor( this._quiltSamples + 1 );
 
@@ -77,8 +56,8 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
 		this.quiltDimensions = new Vector2( 8, 6 );
 		this.viewCone = 35 * MathUtils.DEG2RAD;
+		this.viewFoV = 14 * MathUtils.DEG2RAD;
 		this.viewDistance = 1;
-		this.viewFoV = 14;
 		this.viewAspect = 0.75;
 		this._quiltSamples = 0;
 		this._camera = new PerspectiveCamera();
@@ -95,6 +74,56 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 		const qw = 1 / quiltDimensions.x;
 		const qh = 1 / quiltDimensions.y;
 		this._subframe.set( x * qw, y * qh, qw, qh );
+
+	}
+
+	_setCameraTransform( i ) {
+
+		const { _camera, viewCone, viewDistance, viewCount, viewFoV, viewAspect } = this;
+		const halfWidth = Math.tan( 0.5 * viewCone ) * viewDistance;
+		const totalWidth = halfWidth * 2.0;
+		const stride = totalWidth / ( viewCount - 1 );
+
+		// set camera offset
+		const offset = - halfWidth + stride * i;
+		_step
+			.set( 1, 0, 0 )
+			.applyQuaternion( this.camera.quaternion );
+		_camera
+			.quaternion
+			.copy( this.camera.quaternion );
+		_camera
+			.position
+			.copy( this.camera.position )
+			.addScaledVector( _step, offset );
+		_camera.updateMatrixWorld();
+
+		// set the projection matrix
+		const displayHalfHeight = Math.tan( viewFoV * 0.5 ) * viewDistance;
+		const displayHalfWidth = viewAspect * displayHalfHeight;
+		const { near, far } = this.camera;
+		const nearScale = near / viewDistance;
+
+		_camera
+			.projectionMatrix
+			.makePerspective(
+				nearScale * ( - displayHalfWidth - offset ), nearScale * ( displayHalfWidth - offset ),
+				nearScale * displayHalfHeight, nearScale * - displayHalfHeight,
+				near, far,
+			);
+
+		_camera
+			.projectionMatrixInverse
+			.copy( _camera.projectionMatrix )
+			.invert();
+
+	}
+
+	setFromDisplayView( distance, width, height ) {
+
+		this.viewAspect = width / height;
+		this.viewDistance = distance;
+		this.viewFoV = 2.0 * Math.atan( 0.5 * height / distance );
 
 	}
 

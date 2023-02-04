@@ -38,9 +38,11 @@ function* renderTask() {
 
 		}
 
+		const [ subX, subY, subW, subH ] = _subframe;
+
 		const w = _primaryTarget.width;
 		const h = _primaryTarget.height;
-		material.resolution.set( w, h );
+		material.resolution.set( w * subW, h * subH );
 		material.sobolTexture = _sobolTarget.texture;
 		material.seed ++;
 
@@ -100,15 +102,15 @@ function* renderTask() {
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
 				_renderer.setScissor(
-					Math.round( _subframe.x * dprInv * w + dprInv * Math.ceil( tx * w / tilesX ) ),
-					Math.round( _subframe.y * dprInv * h + dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ) ),
-					Math.round( _subframe.z * dprInv * Math.ceil( w / tilesX ) ),
-					Math.round( _subframe.w * dprInv * Math.ceil( h / tilesY ) ) );
+					Math.round( subX * dprInv * w + dprInv * Math.ceil( tx * w / tilesX ) ),
+					Math.round( subY * dprInv * h + dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ) ),
+					Math.round( subW * dprInv * Math.ceil( w / tilesX ) ),
+					Math.round( subH * dprInv * Math.ceil( h / tilesY ) ) );
 				_renderer.setViewport(
-					Math.round( _subframe.x * dprInv * w ),
-					Math.round( _subframe.y * dprInv * h ),
-					Math.round( _subframe.z * dprInv * w ),
-					Math.round( _subframe.w * dprInv * h ),
+					Math.round( subX * dprInv * w ),
+					Math.round( subY * dprInv * h ),
+					Math.round( subW * dprInv * w ),
+					Math.round( subH * dprInv * h ),
 				);
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
