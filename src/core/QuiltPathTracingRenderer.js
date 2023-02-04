@@ -1,7 +1,7 @@
 import { PerspectiveCamera, Vector3, MathUtils, Vector2 } from 'three';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 
-const _step = new Vector3();
+const _cameraRight = new Vector3();
 function* _task( cb ) {
 
 	while ( true ) {
@@ -86,16 +86,19 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
 		// set camera offset
 		const offset = - halfWidth + stride * i;
-		_step
+		_cameraRight
 			.set( 1, 0, 0 )
-			.applyQuaternion( this.camera.quaternion );
-		_camera
-			.quaternion
-			.copy( this.camera.quaternion );
+			.transformDirection( this.camera.matrixWorld )
+			.normalize();
+
+		this.camera.matrixWorld.decompose(
+			_camera.position,
+			_camera.quaternion,
+			_camera.scale,
+		);
 		_camera
 			.position
-			.copy( this.camera.position )
-			.addScaledVector( _step, offset );
+			.addScaledVector( _cameraRight, offset );
 		_camera.updateMatrixWorld();
 
 		// set the projection matrix
