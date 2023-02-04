@@ -27,20 +27,29 @@ import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer,
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
-import {
-	LookingGlassWebXRPolyfill,
-	LookingGlassConfig
-} from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
+import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 
+// model and map urls
 const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/6814-1 - Ice Tunnelator.mpd';
 const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
 const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 
+const LKG_WIDTH = 420;
+const LKG_HEIGHT = 560;
+const QUILT_TILES_X = 8;
+const QUILT_TILES_Y = 6;
+const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
+const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
+const NUM_VIEWS = QUILT_TILES_X * QUILT_TILES_Y;
+
+const DISPLAY_HEIGHT = 4.75 * 0.0254;
+const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
+
 const params = {
 
 	resolutionScale: 1 / window.devicePixelRatio,
-	tiles: 1,
+	tiles: 2,
 	samplesPerFrame: 1,
 
 	enable: true,
@@ -59,13 +68,10 @@ init();
 
 async function init() {
 
+	// initialize lkg config
 	const config = LookingGlassConfig;
-	config.tileHeight = 512;
-	config.numViews = 45;
-	config.targetY = 0;
-	config.targetZ = 0;
-	config.targetDiam = 3;
-	config.fovy = ( 14 * Math.PI ) / 180;
+	config.tileHeight = LKG_HEIGHT;
+	config.numViews = NUM_VIEWS;
 	new LookingGlassWebXRPolyfill();
 
 	loadingEl = document.getElementById( 'loading' );
@@ -80,17 +86,22 @@ async function init() {
 
 	scene = new Scene();
 
+	// initialize the camera
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PhysicalCamera( 60, aspect, 0.025, 500 );
 	camera.position.set( - 1, 0.25, 1 ).normalize();
 	camera.bokehSize = 0;
 
+	// initialize the quilt renderer
 	ptRenderer = new QuiltPathTracingRenderer( renderer );
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = camera;
-	ptRenderer.setFromDisplayView( 1, 0.75 * 0.12065, 0.12065 );
-	ptRenderer.setSize( 3360, 3360 );
+
+	// lkg quilt parameters
+	ptRenderer.setFromDisplayView( 1, DISPLAY_WIDTH, DISPLAY_HEIGHT );
+	ptRenderer.setSize( QUILT_WIDTH, QUILT_HEIGHT );
+	ptRenderer.quiltDimensions.set( QUILT_TILES_X, QUILT_TILES_Y );
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -101,6 +112,7 @@ async function init() {
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', resetRenderer );
 
+	// load the environment map
 	new RGBELoader()
 		.load( ENVMAP_URL, texture => {
 
@@ -112,6 +124,7 @@ async function init() {
 
 		} );
 
+	// load the lego model
 	let failed = false;
 	const manager = new LoadingManager();
 	manager.onProgress = ( url, loaded, total ) => {
@@ -135,9 +148,11 @@ async function init() {
 		.loadAsync( MODEL_URL )
 		.then( result => {
 
+			// get a merged version of the model
 			const model = LDrawUtils.mergeObject( result );
 			model.rotation.set( Math.PI, 0, 0 );
 
+			// remove the non mesh components
 			const toRemove = [];
 			model.traverse( c => {
 
@@ -163,6 +178,7 @@ async function init() {
 
 			convertOpacityToTransmission( model, 1.4 );
 
+			// generate the floor
 			const floorTex = generateRadialFloorTexture( 2048 );
 			const floorPlane = new Mesh(
 				new PlaneGeometry(),
@@ -188,13 +204,11 @@ async function init() {
 			const sphere = new Sphere();
 			box.getBoundingSphere( sphere );
 
+			// scale the model to 0.07 m so it fits within the LKG view volume
 			model.scale.setScalar( 0.07 / sphere.radius );
 			model.position.multiplyScalar( 0.07 / sphere.radius );
 			model.updateMatrixWorld();
-
 			box.setFromObject( model );
-
-			model.updateMatrixWorld();
 
 			const group = new Group();
 			floorPlane.position.y = box.min.y;
@@ -261,12 +275,17 @@ async function init() {
 
 function animate() {
 
+	// skip rendering if we still haven't loaded the env map
 	if ( ! scene.environment ) {
 
 		return;
 
 	}
 
+
+	// disable the xr component so three.js doesn't hijack the camera. But we need it enabled otherwise so
+	// we can start an xr session.
+	renderer.xr.enabled = false;
 	stats.update();
 
 	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
@@ -302,6 +321,8 @@ function animate() {
 
 	}
 
+	// re enable the xr manager
+	renderer.xr.enabled = true;
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
@@ -330,22 +351,19 @@ function buildGui() {
 
 	gui = new GUI();
 
-	const pathTracingFolder = gui.addFolder( 'path tracing' );
-	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+	gui.add( params, 'enable' );
+	gui.add( params, 'pause' );
+	gui.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
+	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-
-	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	resolutionFolder.open();
+	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 
 }
 
