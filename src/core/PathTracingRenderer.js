@@ -102,10 +102,11 @@ function* renderTask() {
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
 				_renderer.setScissor(
-					Math.round( subX * dprInv * w + dprInv * Math.ceil( tx * w / tilesX ) ),
-					Math.round( subY * dprInv * h + dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ) ),
+					Math.round( subX * dprInv * w + dprInv * Math.ceil( subW * tx * w / tilesX ) ),
+					Math.round( subY * dprInv * h + dprInv * Math.ceil( subH * ( tilesY - ty - 1 ) * h / tilesY ) ),
 					Math.round( subW * dprInv * Math.ceil( w / tilesX ) ),
-					Math.round( subH * dprInv * Math.ceil( h / tilesY ) ) );
+					Math.round( subH * dprInv * Math.ceil( h / tilesY ) ),
+				);
 				_renderer.setViewport(
 					Math.round( subX * dprInv * w ),
 					Math.round( subY * dprInv * h ),
