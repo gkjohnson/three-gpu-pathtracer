@@ -59,9 +59,13 @@ const params = {
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
+	stableNoise: true,
 
 	tiltingPreview: true,
 	animationSpeed: 1,
+
+	viewCone: 35,
+	viewerDistance: VIEWER_DISTANCE,
 
 	saveImage: () => {
 
@@ -71,7 +75,7 @@ const params = {
 
 };
 
-let loadingEl, samplesEl;
+let loadingEl, samplesEl, distEl;
 let gui, stats;
 let renderer, camera;
 let ptRenderer, fsQuad, previewQuad, controls, scene;
@@ -87,6 +91,7 @@ async function init() {
 	config.inlineView = 2;
 	new LookingGlassWebXRPolyfill();
 
+	distEl = document.getElementById( 'distance' );
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 
@@ -324,6 +329,7 @@ function animate() {
 		const samples = Math.floor( ptRenderer.samples );
 		samplesEl.innerText = `samples: ${ samples }`;
 
+		ptRenderer.stableNoise = params.stableNoise;
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
@@ -363,6 +369,7 @@ function animate() {
 	// re enable the xr manager
 	renderer.xr.enabled = true;
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 }
 
@@ -410,6 +417,11 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'stableNoise' ).onChange( () => {
+
+		ptRenderer.reset();
+
+	} );
 	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
 		ptRenderer.reset();
@@ -424,6 +436,20 @@ function buildGui() {
 	ptFolder.add( params, 'tiles', 1, 3 ).onChange( v => {
 
 		ptRenderer.tiles.setScalar( v );
+		ptRenderer.reset();
+
+	} );
+
+	const lkgFolder = gui.addFolder( 'Looking Glass Views' );
+	lkgFolder.add( params, 'viewCone', 10, 70, 0.1 ).onChange( v => {
+
+		ptRenderer.viewCone = v * MathUtils.DEG2RAD;
+		ptRenderer.reset();
+
+	} );
+	lkgFolder.add( params, 'viewerDistance', 0.2, 2, 0.1 ).onChange( v => {
+
+		ptRenderer.setFromDisplayView( v, DISPLAY_WIDTH, DISPLAY_HEIGHT );
 		ptRenderer.reset();
 
 	} );
