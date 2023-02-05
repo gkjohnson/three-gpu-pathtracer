@@ -164,7 +164,7 @@ function* renderTask() {
 				this._samples += ( 1 / totalTiles );
 
 				// round the samples value if we've finished the tiles
-				if ( x !== tilesX - 1 && y !== tilesY - 1 ) {
+				if ( x === tilesX - 1 && y === tilesY - 1 ) {
 
 					this._samples = Math.round( this._samples );
 
