@@ -51,7 +51,7 @@ const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
 
 const params = {
 
-	resolutionScale: 1 / window.devicePixelRatio,
+	resolutionScale: 1,
 	tiles: 1,
 	samplesPerFrame: 1,
 
@@ -433,7 +433,7 @@ function buildGui() {
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'tiles', 1, 3 ).onChange( v => {
+	ptFolder.add( params, 'tiles', 1, 3, 1 ).onChange( v => {
 
 		ptRenderer.tiles.setScalar( v );
 		ptRenderer.reset();
