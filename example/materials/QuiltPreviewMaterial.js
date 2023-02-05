@@ -55,17 +55,20 @@ export class QuiltPreviewMaterial extends MaterialBase {
 
 					if ( tileUv.x < 0.0 || tileUv.x > 1.0 || tileUv.y < 0.0 || tileUv.y > 1.0 ) {
 
-						gl_FragColor = vec4( 0.0, 0.0, 0.0, 1.0 );
+						gl_FragColor = vec4( 0.05, 0.05, 0.05, 1.0 );
 						return;
 
 					}
+
+					ivec2 size = textureSize( quiltMap, 0 );
+					vec2 texelWidth = 1.0 / vec2( size );
+					vec2 tileTexelHalfWidth = 0.5 * vec2( quiltDimensions ) * texelWidth;
+					tileUv = max( tileTexelHalfWidth, min( 1.0 - tileTexelHalfWidth, tileUv ) );
 
 					ivec2 tileIndex = ivec2( 0 );
 					tileIndex.x = displayIndex % quiltDimensions.x;
 					tileIndex.y = ( displayIndex - tileIndex.x ) / quiltDimensions.x;
 
-					ivec2 size = textureSize( quiltMap, 0 );
-					vec2 texelWidth = 1.0 / vec2( size );
 					vec2 tileWidth = 1.0 / vec2( quiltDimensions );
 					vec2 quiltUv = tileWidth * ( vec2( tileIndex ) + tileUv );
 

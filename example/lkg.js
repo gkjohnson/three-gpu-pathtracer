@@ -364,9 +364,8 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
 	const aspect = w / h;
 	camera.aspect = aspect;
@@ -379,6 +378,12 @@ function buildGui() {
 	gui = new GUI();
 
 	gui.add( params, 'enable' );
+	gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
+
+		ptRenderer.setSize( v * QUILT_WIDTH, v * QUILT_HEIGHT );
+		ptRenderer.reset();
+
+	} );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
