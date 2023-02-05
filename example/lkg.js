@@ -78,6 +78,7 @@ async function init() {
 	const config = LookingGlassConfig;
 	config.tileHeight = LKG_HEIGHT;
 	config.numViews = NUM_VIEWS;
+	config.inlineView = 2;
 	new LookingGlassWebXRPolyfill();
 
 	loadingEl = document.getElementById( 'loading' );
@@ -334,15 +335,18 @@ function animate() {
 		}
 
 		renderer.autoClear = false;
-		fsQuad.render( renderer );
 
-		if ( ptRenderer.samples > 1 && params.tiltingPreview ) {
+		if ( ptRenderer.samples > 1 && params.tiltingPreview && ! renderer.xr.isPresenting ) {
 
 			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * ptRenderer.viewCount;
 			previewQuad.material.displayIndex = Math.floor( displayIndex );
 			previewQuad.material.aspectRatio = ptRenderer.displayAspect * window.innerHeight / window.innerWidth;
 			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
 			previewQuad.render( renderer );
+
+		} else {
+
+			fsQuad.render( renderer );
 
 		}
 
