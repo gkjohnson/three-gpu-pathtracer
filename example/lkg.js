@@ -17,6 +17,7 @@ import {
 	EquirectangularReflectionMapping,
 	MathUtils,
 } from 'three';
+import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
@@ -28,7 +29,7 @@ import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer,
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
-import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
+import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 
 // model and map urls
 const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
@@ -51,7 +52,7 @@ const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
 const params = {
 
 	resolutionScale: 1 / window.devicePixelRatio,
-	tiles: 2,
+	tiles: 1,
 	samplesPerFrame: 1,
 
 	enable: true,
@@ -59,12 +60,15 @@ const params = {
 	filterGlossyFactor: 0.5,
 	pause: false,
 
+	tiltingPreview: true,
+	animationSpeed: 1,
+
 };
 
 let loadingEl, samplesEl;
 let gui, stats;
 let renderer, camera;
-let ptRenderer, fsQuad, controls, scene;
+let ptRenderer, fsQuad, previewQuad, controls, scene;
 
 init();
 
@@ -111,11 +115,20 @@ async function init() {
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
+	} ) );
+
+	previewQuad = new FullScreenQuad( new QuiltPreviewMaterial( {
+		quiltMap: ptRenderer.target.texture,
+		quiltDimensions: ptRenderer.quiltDimensions,
+		aspectRatio: ptRenderer.displayAspect,
 	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.addEventListener( 'change', resetRenderer );
+	controls.addEventListener( 'change', () => {
+
+		ptRenderer.reset();
+
+	} );
 
 	// load the environment map
 	new RGBELoader()
@@ -322,6 +335,17 @@ function animate() {
 
 		renderer.autoClear = false;
 		fsQuad.render( renderer );
+
+		if ( ptRenderer.samples > 1 && params.tiltingPreview ) {
+
+			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * ptRenderer.viewCount;
+			previewQuad.material.displayIndex = Math.floor( displayIndex );
+			previewQuad.material.aspectRatio = ptRenderer.displayAspect * window.innerHeight / window.innerWidth;
+			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
+			previewQuad.render( renderer );
+
+		}
+
 		renderer.autoClear = true;
 
 	}
@@ -329,12 +353,6 @@ function animate() {
 	// re enable the xr manager
 	renderer.xr.enabled = true;
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
-
-}
-
-function resetRenderer() {
-
-	ptRenderer.reset();
 
 }
 
@@ -357,18 +375,31 @@ function buildGui() {
 	gui = new GUI();
 
 	gui.add( params, 'enable' );
-	gui.add( params, 'pause' );
-	gui.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+
+	const ptFolder = gui.addFolder( 'Path Tracing' );
+	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
+	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
+	ptFolder.add( params, 'tiles', 1, 3 ).onChange( v => {
+
+		ptRenderer.tiles.setScalar( v );
+		ptRenderer.reset();
+
+	} );
+
+	const quiltPreviewFolder = gui.addFolder( 'Preview' );
+	quiltPreviewFolder.add( params, 'tiltingPreview' );
+	quiltPreviewFolder.add( params, 'animationSpeed', 0, 2 );
+	quiltPreviewFolder.open();
 
 }
 
