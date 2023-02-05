@@ -15,6 +15,7 @@ import {
 	sRGBEncoding,
 	CustomBlending,
 	EquirectangularReflectionMapping,
+	MathUtils,
 } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -42,8 +43,9 @@ const QUILT_TILES_Y = 6;
 const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
 const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
 const NUM_VIEWS = QUILT_TILES_X * QUILT_TILES_Y;
+const VIEWER_DISTANCE = 0.5;
 
-const DISPLAY_HEIGHT = 4.75 * 0.0254;
+const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
 
 const params = {
@@ -89,7 +91,7 @@ async function init() {
 	// initialize the camera
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PhysicalCamera( 60, aspect, 0.025, 500 );
-	camera.position.set( - 1, 0.25, 1 ).normalize();
+	camera.position.set( - 1, 0.25, 1 ).normalize().multiplyScalar( VIEWER_DISTANCE );
 	camera.bokehSize = 0;
 
 	// initialize the quilt renderer
@@ -99,9 +101,12 @@ async function init() {
 	ptRenderer.camera = camera;
 
 	// lkg quilt parameters
-	ptRenderer.setFromDisplayView( 1, DISPLAY_WIDTH, DISPLAY_HEIGHT );
+	ptRenderer.setFromDisplayView( VIEWER_DISTANCE, DISPLAY_WIDTH, DISPLAY_HEIGHT );
 	ptRenderer.setSize( QUILT_WIDTH, QUILT_HEIGHT );
 	ptRenderer.quiltDimensions.set( QUILT_TILES_X, QUILT_TILES_Y );
+
+	camera.fov = ptRenderer.viewFoV * MathUtils.RAD2DEG;
+	camera.updateProjectionMatrix();
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
