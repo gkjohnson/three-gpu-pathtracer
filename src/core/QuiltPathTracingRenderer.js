@@ -19,6 +19,7 @@ function* _task( cb ) {
 
 	while ( true ) {
 
+		const seed = this.material.seed;
 		for ( let i = 0; i < viewCount; i ++ ) {
 
 			// get the camera info for the current view index
@@ -44,6 +45,13 @@ function* _task( cb ) {
 				.invert();
 
 			this._opacityFactor = Math.floor( this._samples + 1 ) / Math.floor( this._quiltSamples + 1 );
+
+			// enable consistent noise across the views
+			if ( this.stableNoise ) {
+
+				this.material.seed = seed;
+
+			}
 
 			do {
 
