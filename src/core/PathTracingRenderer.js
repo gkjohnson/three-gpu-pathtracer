@@ -3,6 +3,9 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 
+const _scissor = new Vector4();
+const _viewport = new Vector4();
+
 function* renderTask() {
 
 	const {
@@ -101,18 +104,37 @@ function* renderTask() {
 				// three.js renderer takes values relative to the current pixel ratio
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
-				_renderer.setScissor(
-					Math.round( subX * dprInv * w + dprInv * Math.ceil( subW * tx * w / tilesX ) ),
-					Math.round( subY * dprInv * h + dprInv * Math.ceil( subH * ( tilesY - ty - 1 ) * h / tilesY ) ),
-					Math.round( subW * dprInv * Math.ceil( w / tilesX ) ),
-					Math.round( subH * dprInv * Math.ceil( h / tilesY ) ),
-				);
-				_renderer.setViewport(
-					Math.round( subX * dprInv * w ),
-					Math.round( subY * dprInv * h ),
-					Math.round( subW * dprInv * w ),
-					Math.round( subH * dprInv * h ),
-				);
+
+				// set the scissor window for a subtile
+				_scissor.x = tx * w / tilesX;
+				_scissor.y = ( tilesY - ty - 1 ) * h / tilesY;
+				_scissor.z = w / tilesX;
+				_scissor.w = h / tilesY;
+
+				// adjust for the subframe
+				_scissor.x = subX * w + subW * _scissor.x;
+				_scissor.y = subY * h + subH * _scissor.y;
+				_scissor.z = subW * _scissor.z;
+				_scissor.w = subH * _scissor.w;
+
+				// round for floating point cases
+				_scissor.x = Math.round( _scissor.x );
+				_scissor.y = Math.round( _scissor.y );
+				_scissor.z = Math.round( _scissor.z );
+				_scissor.w = Math.round( _scissor.w );
+
+				// multiply inverse of DPR in because threes multiplies it in
+				_scissor.multiplyScalar( dprInv );
+
+				_viewport.x = Math.round( subX * w );
+				_viewport.y = Math.round( subY * h );
+				_viewport.z = Math.round( subW * w );
+				_viewport.w = Math.round( subH * h );
+				_viewport.multiplyScalar( dprInv );
+
+				_renderer.setScissor( _scissor );
+				_renderer.setViewport( _viewport );
+
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
 
