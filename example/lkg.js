@@ -436,7 +436,6 @@ function buildGui() {
 	ptFolder.add( params, 'tiles', 1, 3, 1 ).onChange( v => {
 
 		ptRenderer.tiles.setScalar( v );
-		ptRenderer.reset();
 
 	} );
 
