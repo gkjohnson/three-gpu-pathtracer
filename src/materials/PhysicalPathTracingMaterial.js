@@ -74,6 +74,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
 				backgroundMap: { value: null },
 
+				seedCoordOffset: { value: new Vector2() },
 				seed: { value: 0 },
 				opacity: { value: 1 },
 				filterGlossyFactor: { value: 0.0 },
@@ -145,6 +146,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform BVH bvh;
 				uniform float environmentIntensity;
 				uniform float filterGlossyFactor;
+				uniform vec2 seedCoordOffset;
 				uniform int seed;
 				uniform float opacity;
 				uniform sampler2D materials;
@@ -415,8 +417,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				void main() {
 
-					rng_initialize( gl_FragCoord.xy, seed );
-					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) | ( uint( gl_FragCoord.y ) );
+					vec2 coord = gl_FragCoord.xy - seedCoordOffset;
+					rng_initialize( coord.xy, seed );
+					sobolPixelIndex = ( uint( coord.x ) << 16 ) | ( uint( coord.y ) );
 					sobolPathIndex = uint( seed );
 
 					vec3 rayDirection;

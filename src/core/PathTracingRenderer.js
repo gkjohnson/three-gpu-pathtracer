@@ -105,6 +105,10 @@ function* renderTask() {
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
 
+				// set the coordinate offset for the random seed so we can have consistent noise
+				// in different tiles
+				material.seedCoordOffset.set( Math.round( subX * w ), Math.round( subY * h ) );
+
 				// set the scissor window for a subtile
 				_scissor.x = tx * w / tilesX;
 				_scissor.y = ( tilesY - ty - 1 ) * h / tilesY;

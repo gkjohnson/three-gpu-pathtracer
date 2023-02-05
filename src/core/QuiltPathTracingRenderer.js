@@ -203,6 +203,7 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 		this._quiltSamples = 0;
 		this._camera = new PerspectiveCamera();
 		this._quiltTask = null;
+		this.stableNoise = true;
 
 	}
 
