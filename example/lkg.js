@@ -63,6 +63,12 @@ const params = {
 	tiltingPreview: true,
 	animationSpeed: 1,
 
+	saveImage: () => {
+
+		saveImage();
+
+	},
+
 };
 
 let loadingEl, samplesEl;
@@ -373,6 +379,22 @@ function onResize() {
 
 }
 
+function saveImage() {
+
+	renderer.setSize( ptRenderer.target.width, ptRenderer.target.height );
+	fsQuad.render( renderer );
+
+	const imageURL = renderer.domElement.toDataURL( 'image/png' );
+	const anchor = document.createElement( 'a' );
+	anchor.href = imageURL;
+	anchor.download = 'preview.png';
+	anchor.click();
+	anchor.remove();
+
+	onResize();
+
+}
+
 function buildGui() {
 
 	gui = new GUI();
@@ -384,6 +406,7 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
+	gui.add( params, 'saveImage' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
