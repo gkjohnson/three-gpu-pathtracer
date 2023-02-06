@@ -17,7 +17,6 @@ import {
 	EquirectangularReflectionMapping,
 	MathUtils,
 } from 'three';
-import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
@@ -28,12 +27,15 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 
+// import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
+// import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+
 // model and map urls
+const MODEL_NAME = '6814-1 - Ice Tunnelator.mpd';
 const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/6814-1 - Ice Tunnelator.mpd';
+const MODEL_URL = `https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/${ MODEL_NAME }`;
 const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
 const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 
@@ -50,7 +52,7 @@ const QUILT_TILES_Y = Math.ceil( NUM_VIEWS / QUILT_TILES_X );
 const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
 const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
 const VIEWER_DISTANCE = 0.5;
-const BUFFER_HEIGHT = 2 ** Math.ceil( Math.log2( QUILT_TILES_Y * LKG_HEIGHT ) );
+// const BUFFER_HEIGHT = 2 ** Math.ceil( Math.log2( QUILT_TILES_Y * LKG_HEIGHT ) );
 
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
@@ -65,7 +67,7 @@ const params = {
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
-	stableNoise: true,
+	stableNoise: false,
 
 	tiltingPreview: true,
 	animationSpeed: 1,
@@ -89,13 +91,6 @@ let ptRenderer, fsQuad, previewQuad, controls, scene;
 init();
 
 async function init() {
-
-	// initialize lkg config
-	const config = LookingGlassConfig;
-	config.tileHeight = LKG_HEIGHT;
-	config.numViews = NUM_VIEWS;
-	config.inlineView = 2;
-	new LookingGlassWebXRPolyfill();
 
 	distEl = document.getElementById( 'distance' );
 	loadingEl = document.getElementById( 'loading' );
@@ -244,6 +239,8 @@ async function init() {
 			// scale the model to 0.07 m so it fits within the LKG view volume
 			model.scale.setScalar( 0.07 / sphere.radius );
 			model.position.multiplyScalar( 0.07 / sphere.radius );
+			model.position.x += 0.006;
+			model.position.z += 0.006;
 			model.updateMatrixWorld();
 			box.setFromObject( model );
 
@@ -301,7 +298,14 @@ async function init() {
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
-	document.body.append( VRButton.createButton( renderer ) );
+
+	// initialize lkg config and xr button
+	// const config = LookingGlassConfig;
+	// config.tileHeight = LKG_HEIGHT;
+	// config.numViews = NUM_VIEWS;
+	// config.inlineView = 2;
+	// new LookingGlassWebXRPolyfill();
+	// document.body.append( VRButton.createButton( renderer ) );
 
 	onResize();
 	buildGui();
