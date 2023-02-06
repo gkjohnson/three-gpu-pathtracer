@@ -39,7 +39,7 @@ const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-libr
 
 const LKG_WIDTH = 420;
 const LKG_HEIGHT = 560;
-const NUM_VIEWS = 48;
+const NUM_VIEWS = 54;
 
 // https://github.com/Looking-Glass/looking-glass-webxr/blob/93508561550e131403b63dd9eff91eb8de0942ca/src/LookingGlassConfig.js#L113
 const NUM_PIXELS = LKG_WIDTH * LKG_HEIGHT * NUM_VIEWS;
@@ -50,6 +50,7 @@ const QUILT_TILES_Y = Math.ceil( NUM_VIEWS / QUILT_TILES_X );
 const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
 const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
 const VIEWER_DISTANCE = 0.5;
+const BUFFER_HEIGHT = 2 ** Math.ceil( Math.log2( QUILT_TILES_Y * LKG_HEIGHT ) );
 
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
