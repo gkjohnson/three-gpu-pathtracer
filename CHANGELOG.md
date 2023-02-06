@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Transmissive materials now traverse more bounces than non transmissive materials for improved quality. See `transmissiveBounces` uniform.
 - Support for russian roulette path termination after 3 bounces. See the `FEATURE_RUSSIAN_ROULETTE` flag.
+- QuiltPathTracingRenderer to enable rending for the Looking Glass Display.
 
 ### Fixed
 - PathTracingSceneGenerator / Worker: include point lights and directional lights in the result.
