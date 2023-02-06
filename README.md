@@ -222,6 +222,9 @@ readonly target : WebGLRenderTarget
 
 The target being rendered to. The size of the target is updated with `setSize` and is initialized to a FloatType texture.
 
+> **Note**
+> Target will swap render targets after every full sample when alpha is enabled.
+
 ### .camera
 
 ```js
@@ -271,7 +274,7 @@ alpha = false : Boolean
 Whether to support rendering scenes with transparent backgrounds. When transparent backgrounds are used two extra render targets are used, custom blending is performed, and PathTracingRenderer.target will change on every completed sample.
 
 > **Note**
-> When a transparent background is used then the material used for the final render to the canvas must use the same "premultipliedAlpha" setting as the canvas the final image may look incorrect.
+> When a transparent background is used the material used for the final render to the canvas must use the same "premultipliedAlpha" setting as the canvas otherwise the final image may look incorrect.
 
 ### constructor
 
