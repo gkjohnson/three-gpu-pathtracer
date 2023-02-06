@@ -128,13 +128,13 @@ function* renderTask() {
 				_scissor.w = Math.round( _scissor.w );
 
 				// multiply inverse of DPR in because threes multiplies it in
-				_scissor.multiplyScalar( dprInv );
+				_scissor.multiplyScalar( dprInv ).ceil();
 
 				_viewport.x = Math.round( subX * w );
 				_viewport.y = Math.round( subY * h );
 				_viewport.z = Math.round( subW * w );
 				_viewport.w = Math.round( subH * h );
-				_viewport.multiplyScalar( dprInv );
+				_viewport.multiplyScalar( dprInv ).ceil();
 
 				_renderer.setScissor( _scissor );
 				_renderer.setViewport( _viewport );
@@ -273,6 +273,8 @@ export class PathTracingRenderer {
 
 	setSize( w, h ) {
 
+		w = Math.ceil( w );
+		h = Math.ceil( h );
 		this._primaryTarget.setSize( w, h );
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );
