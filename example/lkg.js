@@ -67,7 +67,6 @@ const params = {
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
-	stableNoise: false,
 
 	tiltingPreview: true,
 	animationSpeed: 1,
@@ -340,7 +339,6 @@ function animate() {
 		const samples = Math.floor( ptRenderer.samples );
 		samplesEl.innerText = `samples: ${ samples }`;
 
-		ptRenderer.stableNoise = params.stableNoise;
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
@@ -428,11 +426,6 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'stableNoise' ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
 	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
 		ptRenderer.reset();

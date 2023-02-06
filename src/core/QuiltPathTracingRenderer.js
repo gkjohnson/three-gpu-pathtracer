@@ -46,13 +46,6 @@ function* _task( cb ) {
 
 			this._opacityFactor = Math.floor( this._samples + 1 ) / Math.floor( this._quiltSamples + 1 );
 
-			// enable consistent noise across the views
-			if ( this.stableNoise ) {
-
-				this.material.seed = seed;
-
-			}
-
 			do {
 
 				const ogCamera = this.camera;
