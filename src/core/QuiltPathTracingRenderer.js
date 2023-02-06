@@ -75,14 +75,9 @@ function* _task( cb ) {
 // for rendering a quilt with the provided parameters.
 class QuiltViewUtility {
 
-	get viewCount() {
-
-		return this.quiltDimensions.x * this.quiltDimensions.y;
-
-	}
-
 	constructor() {
 
+		this.viewCount = 48;
 		this.quiltDimensions = new Vector2( 8, 6 );
 		this.viewCone = 35 * MathUtils.DEG2RAD;
 		this.viewFoV = 14 * MathUtils.DEG2RAD;
@@ -154,12 +149,6 @@ class QuiltViewUtility {
 
 export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
-	get viewCount() {
-
-		return this.quiltDimensions.x * this.quiltDimensions.y;
-
-	}
-
 	get samples() {
 
 		return this._quiltSamples + ( ( this._samples % 1 ) / this.viewCount );
@@ -172,6 +161,7 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
 		[
 			'quiltDimensions',
+			'viewCount',
 			'viewCone',
 			'viewFoV',
 			'displayDistance',

@@ -39,11 +39,16 @@ const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-libr
 
 const LKG_WIDTH = 420;
 const LKG_HEIGHT = 560;
-const QUILT_TILES_X = 8;
-const QUILT_TILES_Y = 6;
+const NUM_VIEWS = 48;
+
+// https://github.com/Looking-Glass/looking-glass-webxr/blob/93508561550e131403b63dd9eff91eb8de0942ca/src/LookingGlassConfig.js#L113
+const NUM_PIXELS = LKG_WIDTH * LKG_HEIGHT * NUM_VIEWS;
+const BUFFER_WIDTH = 2 ** Math.ceil( Math.log2( Math.max( Math.sqrt( NUM_PIXELS ), LKG_WIDTH ) ) );
+
+const QUILT_TILES_X = Math.floor( BUFFER_WIDTH / LKG_WIDTH );
+const QUILT_TILES_Y = Math.ceil( NUM_VIEWS / QUILT_TILES_X );
 const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
 const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
-const NUM_VIEWS = QUILT_TILES_X * QUILT_TILES_Y;
 const VIEWER_DISTANCE = 0.5;
 
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
@@ -120,6 +125,7 @@ async function init() {
 	ptRenderer.setFromDisplayView( VIEWER_DISTANCE, DISPLAY_WIDTH, DISPLAY_HEIGHT );
 	ptRenderer.setSize( QUILT_WIDTH, QUILT_HEIGHT );
 	ptRenderer.quiltDimensions.set( QUILT_TILES_X, QUILT_TILES_Y );
+	ptRenderer.viewCount = NUM_VIEWS;
 
 	camera.fov = ptRenderer.viewFoV * MathUtils.RAD2DEG;
 	camera.updateProjectionMatrix();
