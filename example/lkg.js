@@ -47,7 +47,7 @@ const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-libr
 const MODELS = {
 	'X-Wing': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
 	'UCS AT-ST': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
-	'Death Star': 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models10143-1 - Death Star II.mpd',
+	'Death Star': 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/10143-1 - Death Star II.mpd',
 	'Lunar Vehicle': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
 };
 
@@ -92,9 +92,9 @@ const params = {
 	viewCone: 35,
 	viewerDistance: VIEWER_DISTANCE,
 
-	saveImage: () => {
+	saveQuilt: () => {
 
-		saveImage();
+		saveQuilt();
 
 	},
 
@@ -258,11 +258,14 @@ async function init() {
 			const sphere = new Sphere();
 			box.getBoundingSphere( sphere );
 
-			// scale the model to 0.07 m so it fits within the LKG view volume
-			model.scale.setScalar( 0.07 / sphere.radius );
-			model.position.multiplyScalar( 0.07 / sphere.radius );
-			model.position.x += 0.006;
-			model.position.z += 0.006;
+			const boxRadius2d = Math.sqrt( box.min.x ** 2 + box.min.z ** 2 );
+			const widthRadiusScale = 0.06 / Math.min( boxRadius2d, sphere.radius );
+			const heightRadiusScale = 0.14 / ( box.max.y - box.min.y );
+			const scaleRadius = Math.min( widthRadiusScale, heightRadiusScale );
+
+			// scale the model to 0.06 m so it fits within the LKG view volume
+			model.scale.setScalar( scaleRadius );
+			model.position.multiplyScalar( scaleRadius );
 			model.updateMatrixWorld();
 			box.setFromObject( model );
 
@@ -477,7 +480,7 @@ function onResize() {
 }
 
 // save the canvas
-function saveImage() {
+function saveQuilt() {
 
 	renderer.setSize( ptRenderer.target.width, ptRenderer.target.height );
 	fsQuad.render( renderer );
@@ -511,7 +514,7 @@ function buildGui() {
 		ptRenderer.reset();
 
 	} );
-	saveButton = gui.add( params, 'saveImage' );
+	saveButton = gui.add( params, 'saveQuilt' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
