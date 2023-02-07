@@ -37,6 +37,17 @@
 				font-family: 'Courier New', Courier, monospace;
 			}
 
+			#description {
+				position: absolute;
+				top: 0;
+				width: 100%;
+				color: white;
+				font-family: monospace;
+				text-align: center;
+				padding: 5px 0;
+				pointer-events: none;
+			}
+
 			a {
 				color: white;
 				pointer-events: all;
@@ -46,6 +57,13 @@
 	</head>
 	<body>
 		<div id="loading">LOADING</div>
+		<div id="description">
+			Quilt rendering using WebXR to support hologram display on the <a href="https://lookingglassfactory.com/looking-glass-portrait">Looking Glass Portrait</a> display.
+			<br/>
+			<br/>
+
+			See <a href="https://blocks.glass/gkjohnson">blocks.glass</a> profile for prerendered images.
+		</div>
 		<div id="info">
 			<div>
 				<div id="samples">--</div>
