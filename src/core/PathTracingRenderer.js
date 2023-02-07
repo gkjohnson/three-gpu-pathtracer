@@ -271,6 +271,13 @@ export class PathTracingRenderer {
 
 		w = Math.ceil( w );
 		h = Math.ceil( h );
+
+		if ( this._primaryTarget.width === w && this._primaryTarget.height === h ) {
+
+			return;
+
+		}
+
 		this._primaryTarget.setSize( w, h );
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );

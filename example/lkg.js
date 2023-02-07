@@ -25,7 +25,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera } from '../src/index.js';
+import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera, GradientEquirectTexture } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
@@ -42,24 +42,15 @@ const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-libr
 
 const LKG_WIDTH = 420;
 const LKG_HEIGHT = 560;
-const NUM_VIEWS = 54;
-
-// https://github.com/Looking-Glass/looking-glass-webxr/blob/93508561550e131403b63dd9eff91eb8de0942ca/src/LookingGlassConfig.js#L113
-const NUM_PIXELS = LKG_WIDTH * LKG_HEIGHT * NUM_VIEWS;
-const BUFFER_WIDTH = 2 ** Math.ceil( Math.log2( Math.max( Math.sqrt( NUM_PIXELS ), LKG_WIDTH ) ) );
-
-const QUILT_TILES_X = Math.floor( BUFFER_WIDTH / LKG_WIDTH );
-const QUILT_TILES_Y = Math.ceil( NUM_VIEWS / QUILT_TILES_X );
-const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
-const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
+const NUM_VIEWS = 100;
 const VIEWER_DISTANCE = 0.5;
-
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
 
 const params = {
 
 	resolutionScale: 1,
+	numViews: 54,
 	tiles: 1,
 	samplesPerFrame: 1,
 
@@ -86,7 +77,9 @@ let loadingEl, samplesEl, distEl;
 let gui, stats;
 let renderer, camera;
 let ptRenderer, fsQuad, previewQuad, controls, scene;
+let saveButton;
 const _viewport = new Vector4();
+let lkgParams = getLkgParams( params.numViews );
 
 init();
 
@@ -116,12 +109,6 @@ async function init() {
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = camera;
-
-	// lkg quilt parameters
-	ptRenderer.setFromDisplayView( VIEWER_DISTANCE, DISPLAY_WIDTH, DISPLAY_HEIGHT );
-	ptRenderer.setSize( QUILT_WIDTH, QUILT_HEIGHT );
-	ptRenderer.quiltDimensions.set( QUILT_TILES_X, QUILT_TILES_Y );
-	ptRenderer.viewCount = NUM_VIEWS;
 
 	camera.fov = ptRenderer.viewFoV * MathUtils.RAD2DEG;
 	camera.updateProjectionMatrix();
@@ -286,6 +273,10 @@ async function init() {
 			renderer.domElement.style.visibility = 'visible';
 			ptRenderer.reset();
 
+			// initialize LKG XR
+			new LookingGlassWebXRPolyfill();
+			document.body.append( VRButton.createButton( renderer ) );
+
 			renderer.setAnimationLoop( animate );
 
 		} )
@@ -300,17 +291,51 @@ async function init() {
 	document.body.appendChild( stats.dom );
 
 	// initialize lkg config and xr button
-	const config = LookingGlassConfig;
-	config.tileHeight = LKG_HEIGHT;
-	config.numViews = NUM_VIEWS;
-	config.inlineView = 2;
-	new LookingGlassWebXRPolyfill( config );
-	document.body.append( VRButton.createButton( renderer ) );
+	LookingGlassConfig.tileHeight = LKG_HEIGHT;
+	LookingGlassConfig.numViews = NUM_VIEWS;
+	LookingGlassConfig.inlineView = 2;
 
 	onResize();
+	onLkgParamsChange();
 	buildGui();
 
 	window.addEventListener( 'resize', onResize );
+
+}
+
+// https://github.com/Looking-Glass/looking-glass-webxr/blob/93508561550e131403b63dd9eff91eb8de0942ca/src/LookingGlassConfig.js#L113
+function getLkgParams( numViews ) {
+
+	const numPixels = LKG_WIDTH * LKG_HEIGHT * numViews;
+	const bufferWidth = 2 ** Math.ceil( Math.log2( Math.max( Math.sqrt( numPixels ), LKG_WIDTH ) ) );
+
+	const quiltTilesX = Math.floor( bufferWidth / LKG_WIDTH );
+	const quiltTilesY = Math.ceil( numViews / quiltTilesX );
+	const quiltWidth = LKG_WIDTH * quiltTilesX;
+	const quiltHeight = LKG_HEIGHT * quiltTilesY;
+
+	return {
+		numViews,
+		numPixels,
+		bufferWidth,
+		quiltTilesX,
+		quiltTilesY,
+		quiltWidth,
+		quiltHeight,
+	};
+
+}
+
+function onLkgParamsChange() {
+
+	lkgParams = getLkgParams( params.numViews );
+
+	LookingGlassConfig.numViews = lkgParams.numViews;
+	ptRenderer.viewCount = lkgParams.numViews;
+	ptRenderer.viewCone = params.viewCone * MathUtils.DEG2RAD;
+	ptRenderer.setFromDisplayView( params.viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
+	ptRenderer.setSize( params.resolutionScale * lkgParams.quiltWidth, params.resolutionScale * lkgParams.quiltHeight );
+	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
 }
 
@@ -322,7 +347,6 @@ function animate() {
 		return;
 
 	}
-
 
 	// disable the xr component so three.js doesn't hijack the camera. But we need it enabled otherwise so
 	// we can start an xr session.
@@ -371,7 +395,7 @@ function animate() {
 			LookingGlassConfig.numViews = ptRenderer.samples < 1.0 ? 1 : NUM_VIEWS;
 
 			renderer.getViewport( _viewport );
-			renderer.setViewport( 0, 0, QUILT_WIDTH, QUILT_HEIGHT );
+			renderer.setViewport( 0, 0, lkgParams.quiltWidth, lkgParams.quiltHeight );
 			fsQuad.render( renderer );
 			renderer.setViewport( _viewport );
 
@@ -384,6 +408,9 @@ function animate() {
 		renderer.autoClear = true;
 
 	}
+
+	// toggle save button
+	saveButton.disable( renderer.xr.isPresenting );
 
 	// re enable the xr manager
 	renderer.xr.enabled = true;
@@ -426,13 +453,13 @@ function buildGui() {
 	gui = new GUI();
 
 	gui.add( params, 'enable' );
-	gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( v => {
+	gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
-		ptRenderer.setSize( v * QUILT_WIDTH, v * QUILT_HEIGHT );
+		onLkgParamsChange();
 		ptRenderer.reset();
 
 	} );
-	gui.add( params, 'saveImage' );
+	saveButton = gui.add( params, 'saveImage' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
@@ -454,15 +481,21 @@ function buildGui() {
 	} );
 
 	const lkgFolder = gui.addFolder( 'Looking Glass Views' );
-	lkgFolder.add( params, 'viewCone', 10, 70, 0.1 ).onChange( v => {
+	lkgFolder.add( params, 'numViews', 1, 100, 1 ).onChange( () => {
 
-		ptRenderer.viewCone = v * MathUtils.DEG2RAD;
+		onLkgParamsChange();
 		ptRenderer.reset();
 
 	} );
-	lkgFolder.add( params, 'viewerDistance', 0.2, 2, 0.1 ).onChange( v => {
+	lkgFolder.add( params, 'viewCone', 10, 70, 0.1 ).onChange( () => {
 
-		ptRenderer.setFromDisplayView( v, DISPLAY_WIDTH, DISPLAY_HEIGHT );
+		onLkgParamsChange();
+		ptRenderer.reset();
+
+	} );
+	lkgFolder.add( params, 'viewerDistance', 0.2, 2, 0.1 ).onChange( () => {
+
+		onLkgParamsChange();
 		ptRenderer.reset();
 
 	} );
