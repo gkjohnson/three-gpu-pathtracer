@@ -58,6 +58,8 @@ function* _task( cb ) {
 
 		}
 
+		this._quiltSamples = Math.round( this._quiltSamples );
+
 	}
 
 }
@@ -142,7 +144,7 @@ export class QuiltPathTracingRenderer extends PathTracingRenderer {
 
 	get samples() {
 
-		return this._quiltSamples + ( ( this._samples % 1 ) / this.viewCount );
+		return this._samples / this.viewCount;
 
 	}
 

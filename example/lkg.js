@@ -16,6 +16,7 @@ import {
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
+	Vector4
 } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -29,8 +30,8 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 
-// import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
-// import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
+import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 
 // model and map urls
 const MODEL_NAME = '6814-1 - Ice Tunnelator.mpd';
@@ -52,7 +53,6 @@ const QUILT_TILES_Y = Math.ceil( NUM_VIEWS / QUILT_TILES_X );
 const QUILT_WIDTH = LKG_WIDTH * QUILT_TILES_X;
 const QUILT_HEIGHT = LKG_HEIGHT * QUILT_TILES_Y;
 const VIEWER_DISTANCE = 0.5;
-// const BUFFER_HEIGHT = 2 ** Math.ceil( Math.log2( QUILT_TILES_Y * LKG_HEIGHT ) );
 
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
@@ -86,6 +86,7 @@ let loadingEl, samplesEl, distEl;
 let gui, stats;
 let renderer, camera;
 let ptRenderer, fsQuad, previewQuad, controls, scene;
+const _viewport = new Vector4();
 
 init();
 
@@ -299,12 +300,12 @@ async function init() {
 	document.body.appendChild( stats.dom );
 
 	// initialize lkg config and xr button
-	// const config = LookingGlassConfig;
-	// config.tileHeight = LKG_HEIGHT;
-	// config.numViews = NUM_VIEWS;
-	// config.inlineView = 2;
-	// new LookingGlassWebXRPolyfill();
-	// document.body.append( VRButton.createButton( renderer ) );
+	const config = LookingGlassConfig;
+	config.tileHeight = LKG_HEIGHT;
+	config.numViews = NUM_VIEWS;
+	config.inlineView = 2;
+	new LookingGlassWebXRPolyfill( config );
+	document.body.append( VRButton.createButton( renderer ) );
 
 	onResize();
 	buildGui();
@@ -364,6 +365,15 @@ function animate() {
 			previewQuad.material.aspectRatio = ptRenderer.displayAspect * window.innerHeight / window.innerWidth;
 			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
 			previewQuad.render( renderer );
+
+		} else if ( renderer.xr.isPresenting ) {
+
+			LookingGlassConfig.numViews = ptRenderer.samples < 1.0 ? 1 : NUM_VIEWS;
+
+			renderer.getViewport( _viewport );
+			renderer.setViewport( 0, 0, QUILT_WIDTH, QUILT_HEIGHT );
+			fsQuad.render( renderer );
+			renderer.setViewport( _viewport );
 
 		} else {
 
