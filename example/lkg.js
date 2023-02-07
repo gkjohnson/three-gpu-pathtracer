@@ -34,21 +34,47 @@ import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/web
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 
 // model and map urls
-const MODEL_NAME = '6814-1 - Ice Tunnelator.mpd';
 const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
-const MODEL_URL = `https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/${ MODEL_NAME }`;
 const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
 const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 
 const LKG_WIDTH = 420;
 const LKG_HEIGHT = 560;
-const NUM_VIEWS = 100;
 const VIEWER_DISTANCE = 0.5;
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
 
+const MODELS = {
+	'X-Wing': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
+	'UCS AT-ST': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
+	'Death Star': 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models10143-1 - Death Star II.mpd',
+	'Lunar Vehicle': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
+};
+
+[
+	'6814-1 - Ice Tunnelator.mpd',
+	'6861-2 - Super Model Building Instruction.mpd',
+	'75060 - Slave I.mpd',
+	'6983-1 - Ice Station Odyssey.mpd',
+	'6835-1 - Saucer Scout.mpd',
+	'21311 - Voltron - Voltron.mpd',
+	'21303 - WALLE.mpd',
+	'1180-1 - Space Port Moon Buggy.mpd',
+	'10179-1 - Millennium Falcon - UCS.mpd',
+	'6232-1 - Skeleton Crew.mpd',
+	'6235 - Buried Treasure.mpd',
+].forEach( name => {
+
+	const cleanedName = name.replace( /.+?\s-\s/, '' ).replace( /\.mpd$/, '' );
+	MODELS[ cleanedName ] = `https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/${ name }`;
+
+} );
+
+const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
+
 const params = {
 
+	model: modelName in MODELS ? modelName : 'Ice Tunnelator',
 	resolutionScale: 1,
 	numViews: 54,
 	tiles: 1,
@@ -164,7 +190,7 @@ async function init() {
 	await loader.preloadMaterials( MATERIALS_URL );
 	loader
 		.setPartsLibraryPath( PARTS_PATH )
-		.loadAsync( MODEL_URL )
+		.loadAsync( MODELS[ params.model ] )
 		.then( result => {
 
 			// get a merged version of the model
@@ -292,7 +318,7 @@ async function init() {
 
 	// initialize lkg config and xr button
 	LookingGlassConfig.tileHeight = LKG_HEIGHT;
-	LookingGlassConfig.numViews = NUM_VIEWS;
+	LookingGlassConfig.numViews = params.numViews;
 	LookingGlassConfig.inlineView = 2;
 
 	onResize();
@@ -328,13 +354,15 @@ function getLkgParams( numViews ) {
 
 function onLkgParamsChange() {
 
+	const { resolutionScale, viewCone, viewerDistance } = params;
+
 	lkgParams = getLkgParams( params.numViews );
 
 	LookingGlassConfig.numViews = lkgParams.numViews;
 	ptRenderer.viewCount = lkgParams.numViews;
-	ptRenderer.viewCone = params.viewCone * MathUtils.DEG2RAD;
-	ptRenderer.setFromDisplayView( params.viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
-	ptRenderer.setSize( params.resolutionScale * lkgParams.quiltWidth, params.resolutionScale * lkgParams.quiltHeight );
+	ptRenderer.viewCone = viewCone * MathUtils.DEG2RAD;
+	ptRenderer.setFromDisplayView( viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
+	ptRenderer.setSize( resolutionScale * lkgParams.quiltWidth, resolutionScale * lkgParams.quiltHeight );
 	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
 }
@@ -392,7 +420,7 @@ function animate() {
 
 		} else if ( renderer.xr.isPresenting ) {
 
-			LookingGlassConfig.numViews = ptRenderer.samples < 1.0 ? 1 : NUM_VIEWS;
+			LookingGlassConfig.numViews = ptRenderer.samples < 1.0 ? 1 : params.numViews;
 
 			renderer.getViewport( _viewport );
 			renderer.setViewport( 0, 0, lkgParams.quiltWidth, lkgParams.quiltHeight );
@@ -452,6 +480,12 @@ function buildGui() {
 
 	gui = new GUI();
 
+	gui.add( params, 'model', Object.keys( MODELS ) ).onChange( v => {
+
+		window.location.hash = v;
+		window.location.reload();
+
+	} );
 	gui.add( params, 'enable' );
 	gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
