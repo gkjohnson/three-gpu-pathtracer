@@ -54,6 +54,9 @@ _More features and capabilities in progress!_
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
+[Looking Glass Portrait Quilt Render](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lkg.html)
+
+
 ## Running examples locally
 
 To run and modify the examples locally, make sure you have Node and NPM installed.  Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
