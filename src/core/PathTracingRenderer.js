@@ -1,7 +1,10 @@
-import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
+
+const _scissor = new Vector4();
+const _viewport = new Vector4();
 
 function* renderTask() {
 
@@ -12,10 +15,13 @@ function* renderTask() {
 		_primaryTarget,
 		_blendTargets,
 		_sobolTarget,
+		_subframe,
 		alpha,
 		camera,
 		material,
 	} = this;
+	const _ogScissor = new Vector4();
+	const _ogViewport = new Vector4();
 
 	const blendMaterial = _blendQuad.material;
 	let [ blendTarget1, blendTarget2 ] = _blendTargets;
@@ -24,20 +30,22 @@ function* renderTask() {
 
 		if ( alpha ) {
 
-			blendMaterial.opacity = 1 / ( this.samples + 1 );
+			blendMaterial.opacity = this._opacityFactor / ( this._samples + 1 );
 			material.blending = NoBlending;
 			material.opacity = 1;
 
 		} else {
 
-			material.opacity = 1 / ( this.samples + 1 );
+			material.opacity = this._opacityFactor / ( this._samples + 1 );
 			material.blending = NormalBlending;
 
 		}
 
+		const [ subX, subY, subW, subH ] = _subframe;
+
 		const w = _primaryTarget.width;
 		const h = _primaryTarget.height;
-		material.resolution.set( w, h );
+		material.resolution.set( w * subW, h * subH );
 		material.sobolTexture = _sobolTarget.texture;
 		material.seed ++;
 
@@ -45,6 +53,7 @@ function* renderTask() {
 		const tilesY = this.tiles.y || 1;
 		const totalTiles = tilesX * tilesY;
 		const dprInv = ( 1 / _renderer.getPixelRatio() );
+
 		for ( let y = 0; y < tilesY; y ++ ) {
 
 			for ( let x = 0; x < tilesX; x ++ ) {
@@ -73,8 +82,12 @@ function* renderTask() {
 
 				material.setDefine( 'CAMERA_TYPE', cameraType );
 
+				// store og state
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
+				const ogScissorTest = _renderer.getScissorTest();
+				_renderer.getScissor( _ogScissor );
+				_renderer.getViewport( _ogViewport );
 
 				let tx = x;
 				let ty = y;
@@ -91,18 +104,48 @@ function* renderTask() {
 				// three.js renderer takes values relative to the current pixel ratio
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
-				_renderer.setScissor(
-					dprInv * Math.ceil( tx * w / tilesX ),
-					dprInv * Math.ceil( ( tilesY - ty - 1 ) * h / tilesY ),
-					dprInv * Math.ceil( w / tilesX ),
-					dprInv * Math.ceil( h / tilesY ) );
+
+				// set the scissor window for a subtile
+				_scissor.x = tx * w / tilesX;
+				_scissor.y = ( tilesY - ty - 1 ) * h / tilesY;
+				_scissor.z = w / tilesX;
+				_scissor.w = h / tilesY;
+
+				// adjust for the subframe
+				_scissor.x = subX * w + subW * _scissor.x;
+				_scissor.y = subY * h + subH * _scissor.y;
+				_scissor.z = subW * _scissor.z;
+				_scissor.w = subH * _scissor.w;
+
+				// round for floating point cases
+				_scissor.x = Math.round( _scissor.x );
+				_scissor.y = Math.round( _scissor.y );
+				_scissor.z = Math.round( _scissor.z );
+				_scissor.w = Math.round( _scissor.w );
+
+				// multiply inverse of DPR in because threes multiplies it in
+				_scissor.multiplyScalar( dprInv ).ceil();
+
+				_viewport.x = Math.round( subX * w );
+				_viewport.y = Math.round( subY * h );
+				_viewport.z = Math.round( subW * w );
+				_viewport.w = Math.round( subH * h );
+				_viewport.multiplyScalar( dprInv ).ceil();
+
+				_renderer.setScissor( _scissor );
+				_renderer.setViewport( _viewport );
+
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );
 
-				_renderer.setScissorTest( false );
+				// reset original renderer state
+				_renderer.setViewport( _ogViewport );
+				_renderer.setScissor( _ogScissor );
+				_renderer.setScissorTest( ogScissorTest );
 				_renderer.setRenderTarget( ogRenderTarget );
 				_renderer.autoClear = ogAutoClear;
 
+				// swap and blend alpha targets
 				if ( alpha ) {
 
 					blendMaterial.target1 = blendTarget1.texture;
@@ -114,7 +157,14 @@ function* renderTask() {
 
 				}
 
-				this.samples += ( 1 / totalTiles );
+				this._samples += ( 1 / totalTiles );
+
+				// round the samples value if we've finished the tiles
+				if ( x === tilesX - 1 && y === tilesY - 1 ) {
+
+					this._samples = Math.round( this._samples );
+
+				}
 
 				yield;
 
@@ -123,8 +173,6 @@ function* renderTask() {
 		}
 
 		[ blendTarget1, blendTarget2 ] = [ blendTarget2, blendTarget1 ];
-
-		this.samples = Math.round( this.samples );
 
 	}
 
@@ -153,6 +201,12 @@ export class PathTracingRenderer {
 
 	set alpha( v ) {
 
+		if ( this._alpha === v ) {
+
+			return;
+
+		}
+
 		if ( ! v ) {
 
 			this._blendTargets[ 0 ].dispose();
@@ -171,15 +225,23 @@ export class PathTracingRenderer {
 
 	}
 
+	get samples() {
+
+		return this._samples;
+
+	}
+
 	constructor( renderer ) {
 
 		this.camera = null;
 		this.tiles = new Vector2( 1, 1 );
 
-		this.samples = 0;
 		this.stableNoise = false;
 		this.stableTiles = true;
 
+		this._samples = 0;
+		this._subframe = new Vector4( 0, 0, 1, 1 );
+		this._opacityFactor = 1.0;
 		this._renderer = renderer;
 		this._alpha = false;
 		this._fsQuad = new FullScreenQuad( null );
@@ -206,6 +268,15 @@ export class PathTracingRenderer {
 	}
 
 	setSize( w, h ) {
+
+		w = Math.ceil( w );
+		h = Math.ceil( h );
+
+		if ( this._primaryTarget.width === w && this._primaryTarget.height === h ) {
+
+			return;
+
+		}
 
 		this._primaryTarget.setSize( w, h );
 		this._blendTargets[ 0 ].setSize( w, h );
@@ -249,7 +320,7 @@ export class PathTracingRenderer {
 		_renderer.setClearColor( ogClearColor, ogClearAlpha );
 		_renderer.setRenderTarget( ogRenderTarget );
 
-		this.samples = 0;
+		this._samples = 0;
 		this._task = null;
 
 		if ( this.stableNoise ) {

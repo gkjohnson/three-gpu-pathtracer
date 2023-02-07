@@ -146,6 +146,7 @@ async function init() {
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.physicallyCorrectLights = true;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new Scene();
@@ -199,8 +200,6 @@ async function init() {
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
-	renderer.physicallyCorrectLights = true;
-	renderer.toneMapping = ACESFilmicToneMapping;
 	scene.background = backgroundMap;
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
