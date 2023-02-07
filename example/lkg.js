@@ -76,7 +76,7 @@ const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
 const params = {
 
 	enable: true,
-	model: modelName in MODELS ? modelName : 'Ice Tunnelator',
+	model: modelName in MODELS ? modelName : 'Voltron - Voltron',
 	resolutionScale: 1,
 	tiles: 1,
 
@@ -132,7 +132,7 @@ async function init() {
 	// initialize the camera
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PhysicalCamera( 60, aspect, 0.025, 500 );
-	camera.position.set( - 1, 0.25, 1 ).normalize().multiplyScalar( VIEWER_DISTANCE );
+	camera.position.set( 0.43, 0.06, - 0.2 ).normalize().multiplyScalar( 0.48 );
 	camera.bokehSize = 0;
 
 	// initialize the quilt renderer
