@@ -33,17 +33,17 @@ import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 
-// model and map urls
-const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
-const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
-const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
-
+// lkg display constants
 const LKG_WIDTH = 420;
 const LKG_HEIGHT = 560;
 const VIEWER_DISTANCE = 0.5;
 const DISPLAY_HEIGHT = 6.1 * 0.0254;
 const DISPLAY_WIDTH = DISPLAY_HEIGHT * LKG_WIDTH / LKG_HEIGHT;
 
+// model and map urls
+const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
+const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
+const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 const MODELS = {
 	'X-Wing': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
 	'UCS AT-ST': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
@@ -70,17 +70,17 @@ const MODELS = {
 
 } );
 
+// get the hash model name
 const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
 
 const params = {
 
+	enable: true,
 	model: modelName in MODELS ? modelName : 'Ice Tunnelator',
 	resolutionScale: 1,
-	numViews: 54,
 	tiles: 1,
-	samplesPerFrame: 1,
 
-	enable: true,
+	samplesPerFrame: 1,
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
@@ -88,6 +88,7 @@ const params = {
 	tiltingPreview: true,
 	animationSpeed: 1,
 
+	numViews: 54,
 	viewCone: 35,
 	viewerDistance: VIEWER_DISTANCE,
 
@@ -105,16 +106,20 @@ let renderer, camera;
 let ptRenderer, fsQuad, previewQuad, controls, scene;
 let saveButton;
 const _viewport = new Vector4();
+
+// initialize lkg parameters
 let lkgParams = getLkgParams( params.numViews );
 
 init();
 
 async function init() {
 
+	// get elements
 	distEl = document.getElementById( 'distance' );
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 
+	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
@@ -139,6 +144,7 @@ async function init() {
 	camera.fov = ptRenderer.viewFoV * MathUtils.RAD2DEG;
 	camera.updateProjectionMatrix();
 
+	// initialize quads
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: CustomBlending,
@@ -150,6 +156,7 @@ async function init() {
 		aspectRatio: ptRenderer.displayAspect,
 	} ) );
 
+	// init controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
@@ -185,6 +192,7 @@ async function init() {
 
 	};
 
+	// Load the lego model
 	let generator;
 	const loader = new LDrawLoader( manager );
 	await loader.preloadMaterials( MATERIALS_URL );
@@ -221,6 +229,7 @@ async function init() {
 
 			} );
 
+			// conver materials
 			convertOpacityToTransmission( model, 1.4 );
 
 			// generate the floor
@@ -257,11 +266,13 @@ async function init() {
 			model.updateMatrixWorld();
 			box.setFromObject( model );
 
+			// generate the view group
 			const group = new Group();
 			floorPlane.position.y = box.min.y;
 			group.add( model, floorPlane );
 			group.updateMatrixWorld( true );
 
+			// dedupe materials
 			const reducer = new MaterialReducer();
 			reducer.process( group );
 
@@ -303,6 +314,7 @@ async function init() {
 			new LookingGlassWebXRPolyfill();
 			document.body.append( VRButton.createButton( renderer ) );
 
+			// start render loop
 			renderer.setAnimationLoop( animate );
 
 		} )
@@ -329,44 +341,6 @@ async function init() {
 
 }
 
-// https://github.com/Looking-Glass/looking-glass-webxr/blob/93508561550e131403b63dd9eff91eb8de0942ca/src/LookingGlassConfig.js#L113
-function getLkgParams( numViews ) {
-
-	const numPixels = LKG_WIDTH * LKG_HEIGHT * numViews;
-	const bufferWidth = 2 ** Math.ceil( Math.log2( Math.max( Math.sqrt( numPixels ), LKG_WIDTH ) ) );
-
-	const quiltTilesX = Math.floor( bufferWidth / LKG_WIDTH );
-	const quiltTilesY = Math.ceil( numViews / quiltTilesX );
-	const quiltWidth = LKG_WIDTH * quiltTilesX;
-	const quiltHeight = LKG_HEIGHT * quiltTilesY;
-
-	return {
-		numViews,
-		numPixels,
-		bufferWidth,
-		quiltTilesX,
-		quiltTilesY,
-		quiltWidth,
-		quiltHeight,
-	};
-
-}
-
-function onLkgParamsChange() {
-
-	const { resolutionScale, viewCone, viewerDistance } = params;
-
-	lkgParams = getLkgParams( params.numViews );
-
-	LookingGlassConfig.numViews = lkgParams.numViews;
-	ptRenderer.viewCount = lkgParams.numViews;
-	ptRenderer.viewCone = viewCone * MathUtils.DEG2RAD;
-	ptRenderer.setFromDisplayView( viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
-	ptRenderer.setSize( resolutionScale * lkgParams.quiltWidth, resolutionScale * lkgParams.quiltHeight );
-	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
-
-}
-
 function animate() {
 
 	// skip rendering if we still haven't loaded the env map
@@ -389,13 +363,10 @@ function animate() {
 
 	if ( params.enable ) {
 
-		const samples = Math.floor( ptRenderer.samples );
-		samplesEl.innerText = `samples: ${ samples }`;
-
+		// set path tracer variables
 		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
 		ptRenderer.material.bounces = params.bounces;
 		ptRenderer.material.physicalCamera.updateFrom( camera );
-
 		camera.updateMatrixWorld();
 
 		if ( ! params.pause || ptRenderer.samples < 1 ) {
@@ -412,6 +383,7 @@ function animate() {
 
 		if ( ptRenderer.samples > 1 && params.tiltingPreview && ! renderer.xr.isPresenting ) {
 
+			// render the animated tilting preview
 			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * ptRenderer.viewCount;
 			previewQuad.material.displayIndex = Math.floor( displayIndex );
 			previewQuad.material.aspectRatio = ptRenderer.displayAspect * window.innerHeight / window.innerWidth;
@@ -420,6 +392,7 @@ function animate() {
 
 		} else if ( renderer.xr.isPresenting ) {
 
+			// only display the first view if we haven't rendered the full number of views yet
 			LookingGlassConfig.numViews = ptRenderer.samples < 1.0 ? 1 : params.numViews;
 
 			renderer.getViewport( _viewport );
@@ -429,6 +402,7 @@ function animate() {
 
 		} else {
 
+			// render the full quilt
 			fsQuad.render( renderer );
 
 		}
@@ -447,6 +421,48 @@ function animate() {
 
 }
 
+// returns a set of derivative LKG view parameters based on the above constants and
+// passed number of views
+function getLkgParams( numViews ) {
+
+	// https://github.com/Looking-Glass/looking-glass-webxr/blob/93508561550e131403b63dd9eff91eb8de0942ca/src/LookingGlassConfig.js#L113
+	const numPixels = LKG_WIDTH * LKG_HEIGHT * numViews;
+	const bufferWidth = 2 ** Math.ceil( Math.log2( Math.max( Math.sqrt( numPixels ), LKG_WIDTH ) ) );
+
+	const quiltTilesX = Math.floor( bufferWidth / LKG_WIDTH );
+	const quiltTilesY = Math.ceil( numViews / quiltTilesX );
+	const quiltWidth = LKG_WIDTH * quiltTilesX;
+	const quiltHeight = LKG_HEIGHT * quiltTilesY;
+
+	return {
+		numViews,
+		numPixels,
+		bufferWidth,
+		quiltTilesX,
+		quiltTilesY,
+		quiltWidth,
+		quiltHeight,
+	};
+
+}
+
+// callback when a parameter impacting the LKG rendering changes
+function onLkgParamsChange() {
+
+	const { resolutionScale, viewCone, viewerDistance } = params;
+
+	lkgParams = getLkgParams( params.numViews );
+
+	LookingGlassConfig.numViews = lkgParams.numViews;
+	ptRenderer.viewCount = lkgParams.numViews;
+	ptRenderer.viewCone = viewCone * MathUtils.DEG2RAD;
+	ptRenderer.setFromDisplayView( viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
+	ptRenderer.setSize( resolutionScale * lkgParams.quiltWidth, resolutionScale * lkgParams.quiltHeight );
+	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
+
+}
+
+// resize callback
 function onResize() {
 
 	const w = window.innerWidth;
@@ -460,6 +476,7 @@ function onResize() {
 
 }
 
+// save the canvas
 function saveImage() {
 
 	renderer.setSize( ptRenderer.target.width, ptRenderer.target.height );
@@ -476,6 +493,7 @@ function saveImage() {
 
 }
 
+// build the gui
 function buildGui() {
 
 	gui = new GUI();
