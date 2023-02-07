@@ -14,7 +14,6 @@ function* _task( cb ) {
 		subframe: _subframe,
 		projectionMatrix: _camera.projectionMatrix,
 		offsetDirection: new Vector3(),
-		offsetLength: 0,
 	};
 
 	while ( true ) {
@@ -102,9 +101,9 @@ class QuiltViewUtility {
 		const halfWidth = Math.tan( 0.5 * viewCone ) * displayDistance;
 		const totalWidth = halfWidth * 2.0;
 		const stride = totalWidth / ( viewCount - 1 );
-		const offset = - halfWidth + stride * i;
+		const offset = viewCount === 1 ? 0 : - halfWidth + stride * i;
 		target.offsetDirection.set( 1.0, 0, 0 );
-		target.offset = viewCount === 1 ? 0 : offset;
+		target.offset = offset;
 
 		// set the projection matrix
 		const displayHalfHeight = Math.tan( viewFoV * 0.5 ) * displayDistance;
