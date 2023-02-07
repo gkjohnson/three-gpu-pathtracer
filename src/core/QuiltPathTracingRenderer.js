@@ -105,7 +105,7 @@ class QuiltViewUtility {
 		const stride = totalWidth / ( viewCount - 1 );
 		const offset = - halfWidth + stride * i;
 		target.offsetDirection.set( 1.0, 0, 0 );
-		target.offset = offset;
+		target.offset = viewCount === 1 ? 0 : offset;
 
 		// set the projection matrix
 		const displayHalfHeight = Math.tan( viewFoV * 0.5 ) * displayDistance;
