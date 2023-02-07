@@ -310,10 +310,10 @@ Renderer that supports rendering to a quilt renderer to rendering on displays su
 ### .viewCount
 
 ```js
-viewCount : Number
+viewCount = 48 : Number
 ```
 
-Getter for the number of camera views rendered.
+The number of views to be rendered. If this is less than the product of the quiltDimensions then there will be gaps at the end of the quilt.
 
 ### .quiltDimensions
 ```js

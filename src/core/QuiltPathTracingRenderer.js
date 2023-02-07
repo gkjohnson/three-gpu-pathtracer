@@ -19,7 +19,6 @@ function* _task( cb ) {
 
 	while ( true ) {
 
-		const seed = this.material.seed;
 		for ( let i = 0; i < viewCount; i ++ ) {
 
 			// get the camera info for the current view index
