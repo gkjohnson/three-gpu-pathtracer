@@ -118,18 +118,18 @@ function* renderTask() {
 				_scissor.w = subH * _scissor.w;
 
 				// round for floating point cases
-				_scissor.x = Math.round( _scissor.x );
-				_scissor.y = Math.round( _scissor.y );
-				_scissor.z = Math.round( _scissor.z );
-				_scissor.w = Math.round( _scissor.w );
+				_scissor.x = _scissor.x;
+				_scissor.y = _scissor.y;
+				_scissor.z = _scissor.z;
+				_scissor.w = _scissor.w;
 
 				// multiply inverse of DPR in because threes multiplies it in
 				_scissor.multiplyScalar( dprInv ).ceil();
 
-				_viewport.x = Math.round( subX * w );
-				_viewport.y = Math.round( subY * h );
-				_viewport.z = Math.round( subW * w );
-				_viewport.w = Math.round( subH * h );
+				_viewport.x = subX * w;
+				_viewport.y = subY * h;
+				_viewport.z = subW * w;
+				_viewport.w = subH * h;
 				_viewport.multiplyScalar( dprInv ).ceil();
 
 				_renderer.setScissor( _scissor );
