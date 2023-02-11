@@ -449,6 +449,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					int i;
 					bool isShadowRay = false;
 
+					// TODO: determine if the ray is in a fog volume initially
+					bool isInFogVolume = false;
+					Material fogMaterial;
+
 					for ( i = 0; i < bounces; i ++ ) {
 
 						sobolBounceIndex ++;
