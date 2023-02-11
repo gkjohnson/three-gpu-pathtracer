@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - `TRANSPARENT_TRAVERSALS` define to `transmissiveBounces` uniform.
 - EquirectUniformInfo now defaults to a white environment map so lighting is present by default.
+- Add "stepRayOrigin" function for reuse in the path tracer functions.
 
 ### Added
 - Transmissive materials now traverse more bounces than non transmissive materials for improved quality. See `transmissiveBounces` uniform.
