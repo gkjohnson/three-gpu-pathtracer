@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - `TRANSPARENT_TRAVERSALS` define to `transmissiveBounces` uniform.
 - EquirectUniformInfo now defaults to a white environment map so lighting is present by default.
+- Add "stepRayOrigin" function for reuse in the path tracer functions.
 
 ### Added
 - Transmissive materials now traverse more bounces than non transmissive materials for improved quality. See `transmissiveBounces` uniform.
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 - PathTracingSceneGenerator / Worker: include point lights and directional lights in the result.
+- Translucent and transparent meshes incorrectly completely blocking area and punctual lights.
 
 ## [0.0.12] - 2023-01-29
 ### Fixed
