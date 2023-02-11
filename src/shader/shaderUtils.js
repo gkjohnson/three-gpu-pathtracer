@@ -7,12 +7,12 @@ export const shaderUtils = /* glsl */`
 	// adjust the hit point by the surface normal by a factor of some offset and the
 	// maximum component-wise value of the current point to accommodate floating point
 	// error as values increase.
-	vec3 stepRayOrigin( vec3 rayOrigin, vec3 rayDirection, vec3 faceNormal, float dist, bool placeOnFront ) {
+	vec3 stepRayOrigin( vec3 rayOrigin, vec3 rayDirection, vec3 offset, float dist ) {
 
 		vec3 point = rayOrigin + rayDirection * dist;
 		vec3 absPoint = abs( point );
 		float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-		return point + faceNormal * ( maxPoint + 1.0 ) * ( placeOnFront ? RAY_OFFSET : - RAY_OFFSET );
+		return point + offset * ( maxPoint + 1.0 ) * RAY_OFFSET;
 
 	}
 

@@ -226,7 +226,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// adjust the ray to the new surface
 							bool isEntering = side == 1.0;
-							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist, ! isEntering );
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
 							if ( ! material.castShadow && isShadowRay ) {
 
@@ -533,7 +533,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then skip it
 						if ( ! material.castShadow && isShadowRay ) {
 
-							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist, side == - 1.0 );
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 							continue;
 
 						}
@@ -582,7 +582,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
-							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist, side == - 1.0 );
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
@@ -835,7 +835,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						rayDirection = normalize( normalBasis * sampleRec.direction );
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, faceNormal, dist, ! isBelowSurface );
+						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
 
 						// direct env map sampling
 						#if FEATURE_MIS
