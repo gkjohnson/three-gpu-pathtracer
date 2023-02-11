@@ -78,6 +78,7 @@ vec3 evalIridescence( float outsideIOR, float eta2, float cosTheta1, float thinF
 		phi12 = PI;
 
 	}
+
 	float phi21 = PI - phi12;
 
 	// Second interface
@@ -90,11 +91,13 @@ vec3 evalIridescence( float outsideIOR, float eta2, float cosTheta1, float thinF
 		phi23[ 0 ] = PI;
 
 	}
+
 	if ( baseIOR[1] < iridescenceIor ) {
 
 		phi23[ 1 ] = PI;
 
 	}
+
 	if ( baseIOR[2] < iridescenceIor ) {
 
 		phi23[ 2 ] = PI;
@@ -116,15 +119,17 @@ vec3 evalIridescence( float outsideIOR, float eta2, float cosTheta1, float thinF
 
 	// Reflectance term for m > 0 (pairs of diracs)
 	vec3 Cm = Rs - T121;
-	for ( int m = 1; m <= 2; ++ m )
-	{
+	for ( int m = 1; m <= 2; ++ m ) {
+
 		Cm *= r123;
 		vec3 Sm = 2.0 * evalSensitivity( float( m ) * OPD, float( m ) * phi );
 		I += Cm * Sm;
+
 	}
 
 	// Since out of gamut colors might be produced, negative color values are clamped to 0.
 	return max( I, vec3( 0.0 ) );
+
 }
 
 `;
