@@ -99,6 +99,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			fragmentShader: /* glsl */`
 				#define RAY_OFFSET 1e-4
+				#define INFINITY 1e20
 
 				precision highp isampler2D;
 				precision highp usampler2D;
@@ -187,7 +188,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				}
 
 				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
-				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, int transparentTraversals, bool isShadowRay, out vec3 color ) {
+				bool attenuateHit(
+					BVH bvh, vec3 rayOrigin, vec3 rayDirection, float rayDist,
+					int traversals, int transparentTraversals, bool isShadowRay, out vec3 color
+				) {
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -203,6 +207,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					for ( int i = 0; i < traversals; i ++ ) {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+
+							if ( dist > rayDist ) {
+
+								return true;
+
+							}
 
 							// TODO: attenuate the contribution based on the PDF of the resulting ray including refraction values
 							// Should be able to work using the material BSDF functions which will take into account specularity, etc.
@@ -319,19 +329,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					}
 
 					return true;
-
-				}
-
-				// returns whether the ray hit anything before a certain distance, not just the first surface. Could be optimized to not check the full hierarchy.
-				bool anyCloserHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, float maxDist ) {
-
-					uvec4 faceIndices = uvec4( 0u );
-					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
-					vec3 barycoord = vec3( 0.0 );
-					float side = 1.0;
-					float dist = 0.0;
-					bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
-					return hit && dist < maxDist;
 
 				}
 
@@ -872,10 +869,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// check if a ray could even reach the light area
+							vec3 attenuatedColor;
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
-								! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
+								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -887,7 +885,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									// weight the direct light contribution
 									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
 									float misWeight = lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
+									gl_FragColor.rgb += attenuatedColor * lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
 								}
 
@@ -915,7 +913,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
