@@ -1,5 +1,21 @@
 export const shaderUtils = /* glsl */`
 
+	#ifndef RAY_OFFSET
+	#define RAY_OFFSET 1e-4
+	#endif
+
+	// adjust the hit point by the surface normal by a factor of some offset and the
+	// maximum component-wise value of the current point to accommodate floating point
+	// error as values increase.
+	vec3 stepRayOrigin( vec3 rayOrigin, vec3 rayDirection, vec3 offset, float dist ) {
+
+		vec3 point = rayOrigin + rayDirection * dist;
+		vec3 absPoint = abs( point );
+		float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+		return point + offset * ( maxPoint + 1.0 ) * RAY_OFFSET;
+
+	}
+
 	// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
 	vec3 transmissionAttenuation( float dist, vec3 attColor, float attDist ) {
 
