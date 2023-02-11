@@ -215,11 +215,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							Material material = readMaterialInfo( materials, materialIndex );
 
 							// adjust the ray to the new surface
-							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+							bool isEntering = side == 1.0;
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist, ! isEntering );
 
 							if ( ! material.castShadow && isShadowRay ) {
 
@@ -289,7 +286,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
-							if ( side == 1.0 && isBelowSurface ) {
+							if ( side == 1.0 && isEntering ) {
 
 								// only attenuate by surface color on the way in
 								color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
@@ -302,7 +299,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
-							if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+							if ( ( isTransmissiveRay || isEntering ) && transparentTraversals > 0 ) {
 
 								transparentTraversals --;
 								i --;
@@ -539,11 +536,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then skip it
 						if ( ! material.castShadow && isShadowRay ) {
 
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
-
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist, side == - 1.0 );
 							continue;
 
 						}
@@ -592,10 +585,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist, side == - 1.0 );
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
@@ -844,16 +834,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
-						// adjust the hit point by the surface normal by a factor of some offset and the
-						// maximum component-wise value of the current point to accommodate floating point
-						// error as values increase.
-						vec3 point = rayOrigin + rayDirection * dist;
-						vec3 absPoint = abs( point );
-						float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+						vec3 prevRayDirection = rayDirection;
 						rayDirection = normalize( normalBasis * sampleRec.direction );
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, faceNormal, dist, ! isBelowSurface );
 
 						// direct env map sampling
 						#if FEATURE_MIS
