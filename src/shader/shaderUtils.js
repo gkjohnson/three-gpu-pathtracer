@@ -358,4 +358,15 @@ export const shaderUtils = /* glsl */`
 		return x < 0.5 ? sqrt( 2.0 * x ) - 1.0 : 1.0 - sqrt( 2.0 - ( 2.0 * x ) );
 
 	}
+
+	// steps a distance along the ray accounting for floating point error
+	vec3 stepRayOrigin( vec3 rayOrigin, vec3 rayDirection, vec3 faceNormal, float dist ) {
+
+		bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+		vec3 point = rayOrigin + rayDirection * dist;
+		vec3 absPoint = abs( point );
+		float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+		return point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+
+	}
 `;

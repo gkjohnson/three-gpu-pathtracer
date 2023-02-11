@@ -142,12 +142,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform mat4 invProjectionMatrix;
 				uniform sampler2DArray attributesArray;
 				uniform usampler2D materialIndexAttribute;
+				uniform sampler2D materials;
 				uniform BVH bvh;
 				uniform float environmentIntensity;
 				uniform float filterGlossyFactor;
 				uniform int seed;
 				uniform float opacity;
-				uniform sampler2D materials;
 				uniform LightsInfo lights;
 				uniform sampler2DArray iesProfiles;
 
@@ -216,10 +216,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// adjust the ray to the new surface
 							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist );
 
 							if ( ! material.castShadow && isShadowRay ) {
 
@@ -543,11 +540,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then skip it
 						if ( ! material.castShadow && isShadowRay ) {
 
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
-
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist );
 							continue;
 
 						}
@@ -596,10 +589,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, faceNormal, dist );
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
