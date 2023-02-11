@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 - PathTracingSceneGenerator / Worker: include point lights and directional lights in the result.
+- Translucent and transparent meshes incorrectly completely blocking area and punctual lights.
 
 ## [0.0.12] - 2023-01-29
 ### Fixed
