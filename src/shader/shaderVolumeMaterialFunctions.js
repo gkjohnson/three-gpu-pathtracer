@@ -1,5 +1,9 @@
 export const shaderVolumeMaterialFunctions = /* glsl */`
 
+#ifndef FOG_CHECK_ITERATIONS
+#define FOG_CHECK_ITERATIONS 20
+#endif
+
 bool isMaterialFogVolume( uint materialIndex, sampler2D materials ) {
 
 	return false;
@@ -15,7 +19,7 @@ bool bvhIntersectVolumeHit(
 	uniform usampler2D materialIndexAttribute;
 	uniform sampler2D materials;
 
-	while ( true ) {
+	for ( int i = 0; i < FOG_CHECK_ITERATIONS; i ++ ) {
 
 		uvec4 faceIndices = uvec4( 0u );
 		vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
