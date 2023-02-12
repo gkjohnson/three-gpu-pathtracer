@@ -425,14 +425,14 @@ async function updateModel() {
 		const reducer = new MaterialReducer();
 		reducer.process( model );
 
-		const targetGroup = new Group();
-		targetGroup.position.set( - target.x, - target.y, - target.z );
-		targetGroup.add( model );
-
-		model = targetGroup;
-		model.updateMatrixWorld();
-
+		const targetsToDisconnect = [];
 		model.traverse( c => {
+
+			if ( c.isLight && c.target ) {
+
+				targetsToDisconnect.push( c.target );
+
+			}
 
 			if ( c.geometry ) {
 
@@ -465,6 +465,22 @@ async function updateModel() {
 			}
 
 		} );
+
+		// disconnect all light targets from parents because that's what happens after a clone which
+		// is needed to match the model viewer setup
+		targetsToDisconnect.forEach( t => {
+
+			t.removeFromParent();
+
+		} );
+
+		// add a parent group to process the parent offset
+		const targetGroup = new Group();
+		targetGroup.position.set( - target.x, - target.y, - target.z );
+		targetGroup.add( model );
+
+		model = targetGroup;
+		model.updateMatrixWorld( true );
 
 		const generator = new PathTracingSceneWorker();
 		const result = await generator.generate( model, { onProgress: v => {
@@ -570,7 +586,7 @@ async function updateModel() {
 			modelUrl,
 			gltf => {
 
-				model = gltf.scene.clone();
+				model = gltf.scene;
 
 			},
 			progress => {
