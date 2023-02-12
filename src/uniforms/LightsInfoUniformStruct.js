@@ -171,6 +171,9 @@ export class LightsInfoUniformStruct {
 			} else if ( l.isPointLight ) {
 
 				const worldPosition = u.setFromMatrixPosition( l.matrixWorld );
+
+				// sample 3
+				// u vector
 				floatArray[ baseIndex + ( index ++ ) ] = worldPosition.x;
 				floatArray[ baseIndex + ( index ++ ) ] = worldPosition.y;
 				floatArray[ baseIndex + ( index ++ ) ] = worldPosition.z;
@@ -189,8 +192,10 @@ export class LightsInfoUniformStruct {
 
 				const worldPosition = u.setFromMatrixPosition( l.matrixWorld );
 				const targetPosition = v.setFromMatrixPosition( l.target.matrixWorld );
-
 				target.subVectors( worldPosition, targetPosition ).normalize();
+
+				// sample 3
+				// u vector
 				floatArray[ baseIndex + ( index ++ ) ] = target.x;
 				floatArray[ baseIndex + ( index ++ ) ] = target.y;
 				floatArray[ baseIndex + ( index ++ ) ] = target.z;
