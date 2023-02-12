@@ -799,11 +799,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.attenuationColor = material.attenuationColor;
 						surfaceRec.attenuationDistance = material.attenuationDistance;
 
-						// apply perceptual roughness factor from gltf
+						// apply perceptual roughness factor from gltf. sheen perceptual roughness is
+						// applied by its brdf function
 						// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#microfacet-surfaces
 						surfaceRec.roughness = roughness * roughness;
 						surfaceRec.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
-						surfaceRec.sheenRoughness = sheenRoughness * sheenRoughness;
+						surfaceRec.sheenRoughness = sheenRoughness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
