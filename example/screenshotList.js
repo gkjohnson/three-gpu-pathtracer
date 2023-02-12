@@ -6,6 +6,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 	const containerEl = document.getElementById( 'container' );
 	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
 	const commits = await ( await fetch( COMMITS_URL ) ).json();
+	const latestSha = commits[ 0 ].sha;
 	let imageType = window.location.hash.replace( /^#/, '' ) || 'model-viewer';
 
 	const selectionBox = document.querySelector( 'select' );
@@ -42,7 +43,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 		scenarios.forEach( s => {
 
 			const name = s.name;
-			const url1 = `https://raw.githubusercontent.com/gkjohnson/three-gpu-pathtracer/screenshots/screenshots/golden/${ name }.png`;
+			const url1 = `https://raw.githubusercontent.com/gkjohnson/three-gpu-pathtracer/${ latestSha }/screenshots/golden/${ name }.png`;
 			let url2;
 			if ( imageType === 'prior-commit' ) {
 
