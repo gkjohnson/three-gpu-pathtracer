@@ -179,6 +179,39 @@ export class MaterialsTexture extends DataTexture {
 
 			const m = materials[ i ];
 
+			if ( m.isFogVolumeMaterial ) {
+
+				for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
+
+					floatArray[ j ] = 0;
+
+				}
+
+				// sample 0 .rgb
+				floatArray[ index + 0 * 4 + 0 ] = m.color.r;
+				floatArray[ index + 0 * 4 + 1 ] = m.color.g;
+				floatArray[ index + 0 * 4 + 2 ] = m.color.b;
+
+				// sample 2 .a
+				floatArray[ index + 2 * 4 + 3 ] = getField( m, 'emissiveIntensity', 0.0 );
+
+				// sample 3 .rgb
+				floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
+				floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
+				floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
+
+				// sample 13 .g
+				// reusing opacity field
+				floatArray[ index + 13 * 4 + 1 ] = m.density;
+
+				// sample 14 .g
+				floatArray[ index ++ ] = 1 << 2;
+
+				i += MATERIAL_STRIDE;
+				continue;
+
+			}
+
 			// sample 0
 			// color
 			floatArray[ index ++ ] = m.color.r;
@@ -285,7 +318,8 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
 			floatArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
 
-			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 ); // sample 9
+			// sample 9
+			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
 			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
 
 			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );

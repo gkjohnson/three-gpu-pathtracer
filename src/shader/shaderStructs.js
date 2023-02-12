@@ -84,6 +84,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		bool vertexColors;
 		bool flatShading;
 		bool transparent;
+		bool fogVolume;
 
 		mat3 mapTransform;
 		mat3 metalnessMapTransform;
@@ -197,6 +198,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.castShadow = ! bool( s14.g );
 		m.vertexColors = bool( int( s14.b ) & 1 );
 		m.flatShading = bool( int( s14.b ) & 2 );
+		m.fogVolume = bool( int( s14.b ) & 3 );
 		m.transparent = bool( s14.a );
 
 		uint firstTextureTransformIdx = i + 15u;
