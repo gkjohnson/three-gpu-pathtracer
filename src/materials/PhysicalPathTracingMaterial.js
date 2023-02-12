@@ -789,6 +789,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.clearcoat = clearcoat;
+						surfaceRec.sheen = material.sheen;
 						surfaceRec.sheenColor = sheenColor;
 						surfaceRec.iridescence = iridescence;
 						surfaceRec.iridescenceIor = material.iridescenceIor;

@@ -257,7 +257,7 @@ export class MaterialsTexture extends DataTexture {
 			}
 
 			index ++;
-			index ++;
+			floatArray[ index ++ ] = getField( m, 'sheen', 0.0 );
 
 			// sample 7
 			// sheen
