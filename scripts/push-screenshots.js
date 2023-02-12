@@ -30,7 +30,7 @@ import { runScript } from './utils.js';
 	await git.merge( [ 'main' ] );
 
 	// rebuild the screenshots
-	await runScript( 'node ./scripts/update-screenshots.js' );
+	await runScript( 'node ./scripts/update-screenshots.js ' + process.argv.slice( 2 ).join( ' ' ) );
 
 	// commit and push the screenshots
 	console.log( 'Committing all screenshots.' );
