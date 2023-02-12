@@ -170,7 +170,7 @@ export class LightsInfoUniformStruct {
 
 			} else if ( l.isPointLight ) {
 
-				const worldPosition = l.getWorldPosition( u );
+				const worldPosition = u.setFromMatrixPosition( l.matrixWorld );
 				floatArray[ baseIndex + ( index ++ ) ] = worldPosition.x;
 				floatArray[ baseIndex + ( index ++ ) ] = worldPosition.y;
 				floatArray[ baseIndex + ( index ++ ) ] = worldPosition.z;
@@ -187,8 +187,8 @@ export class LightsInfoUniformStruct {
 
 			} else if ( l.isDirectionalLight ) {
 
-				const worldPosition = l.getWorldPosition( u );
-				const targetPosition = l.target.getWorldPosition( v );
+				const worldPosition = u.setFromMatrixPosition( l.matrixWorld );
+				const targetPosition = v.setFromMatrixPosition( l.target.matrixWorld );
 
 				target.subVectors( worldPosition, targetPosition ).normalize();
 				floatArray[ baseIndex + ( index ++ ) ] = target.x;
