@@ -76,6 +76,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		float side;
 		bool matte;
 
+		float sheen;
 		vec3 sheenColor;
 		int sheenColorMap;
 		float sheenRoughness;
@@ -165,6 +166,7 @@ export const shaderMaterialStructs = /* glsl */ `
 		m.clearcoatNormalMap = int( round( s5.a ) );
 		m.clearcoatNormalScale = s6.rg;
 
+		m.sheen = s6.a;
 		m.sheenColor = s7.rgb;
 		m.sheenColorMap = int( round( s7.a ) );
 		m.sheenRoughness = s8.r;

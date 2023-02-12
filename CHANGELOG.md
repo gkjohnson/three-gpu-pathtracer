@@ -8,12 +8,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - `TRANSPARENT_TRAVERSALS` define to `transmissiveBounces` uniform.
 - EquirectUniformInfo now defaults to a white environment map so lighting is present by default.
+- Add "stepRayOrigin" function for reuse in the path tracer functions.
 
 ### Added
 - Transmissive materials now traverse more bounces than non transmissive materials for improved quality. See `transmissiveBounces` uniform.
+- Support for russian roulette path termination after 3 bounces. See the `FEATURE_RUSSIAN_ROULETTE` flag.
+- QuiltPathTracingRenderer to enable rending for the Looking Glass Display.
 
 ### Fixed
 - PathTracingSceneGenerator / Worker: include point lights and directional lights in the result.
+- Translucent and transparent meshes incorrectly completely blocking area and punctual lights.
+- Respect the Material "sheen" field.
 
 ## [0.0.12] - 2023-01-29
 ### Fixed

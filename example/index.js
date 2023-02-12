@@ -114,7 +114,7 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 3,
+	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
 
@@ -146,6 +146,7 @@ async function init() {
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.physicallyCorrectLights = true;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new Scene();
@@ -199,8 +200,6 @@ async function init() {
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
-	renderer.physicallyCorrectLights = true;
-	renderer.toneMapping = ACESFilmicToneMapping;
 	scene.background = backgroundMap;
 	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
@@ -739,7 +738,7 @@ async function updateModel() {
 
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
-		params.bounces = modelInfo.bounces || 3;
+		params.bounces = modelInfo.bounces || 5;
 		params.floorColor = modelInfo.floorColor || '#111111';
 		params.floorRoughness = modelInfo.floorRoughness || 0.2;
 		params.floorMetalness = modelInfo.floorMetalness || 0.2;
@@ -791,7 +790,14 @@ async function updateModel() {
 
 	} else if ( /mpd$/i.test( url ) ) {
 
+		let failed = false;
 		manager.onProgress = ( url, loaded, total ) => {
+
+			if ( failed ) {
+
+				return;
+
+			}
 
 			const percent = Math.floor( 100 * loaded / total );
 			loadingEl.innerText = `Loading : ${ percent }%`;
@@ -835,6 +841,13 @@ async function updateModel() {
 					onFinish();
 
 				},
+				undefined,
+				err => {
+
+					failed = true;
+					loadingEl.innerText = 'Failed to load model. ' + err.message;
+
+				}
 
 			);
 

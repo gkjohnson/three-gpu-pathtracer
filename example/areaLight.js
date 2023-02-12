@@ -32,7 +32,7 @@ const params = {
 	environmentIntensity: 0.03,
 	environmentRotation: 0,
 
-	bounces: 3,
+	bounces: 5,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,

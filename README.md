@@ -54,6 +54,9 @@ _More features and capabilities in progress!_
 
 [Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
+[Looking Glass Portrait Quilt Render](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lkg.html)
+
+
 ## Running examples locally
 
 To run and modify the examples locally, make sure you have Node and NPM installed.  Check the supported versions in [the test configuration](./.github/workflows/node.js.yml).
@@ -222,6 +225,9 @@ readonly target : WebGLRenderTarget
 
 The target being rendered to. The size of the target is updated with `setSize` and is initialized to a FloatType texture.
 
+> **Note**
+> Target will swap render targets after every full sample when alpha is enabled.
+
 ### .camera
 
 ```js
@@ -271,7 +277,7 @@ alpha = false : Boolean
 Whether to support rendering scenes with transparent backgrounds. When transparent backgrounds are used two extra render targets are used, custom blending is performed, and PathTracingRenderer.target will change on every completed sample.
 
 > **Note**
-> When a transparent background is used then the material used for the final render to the canvas must use the same "premultipliedAlpha" setting as the canvas the final image may look incorrect.
+> When a transparent background is used the material used for the final render to the canvas must use the same "premultipliedAlpha" setting as the canvas otherwise the final image may look incorrect.
 
 ### constructor
 
@@ -302,6 +308,68 @@ reset() : void
 ```
 
 Resets and restarts the render from scratch.
+
+## QuiltPathTracingRenderer
+
+Renderer that supports rendering to a quilt renderer to rendering on displays such as the Looking Glass display.
+
+### .viewCount
+
+```js
+viewCount = 48 : Number
+```
+
+The number of views to be rendered. If this is less than the product of the quiltDimensions then there will be gaps at the end of the quilt.
+
+### .quiltDimensions
+```js
+quiltDimensions = Vector2( 8, 6 ) : Vector2
+```
+
+The number of quilt patches in each dimension.
+
+### .viewCone
+```js
+viewCone = 35 * DEG2RAD : Number
+```
+
+The total angle sweep for the camera views rendered across the quilt.
+
+### .viewFoV
+
+```js
+viewFoV = 14 * DEG2RAD : Number
+```
+
+The camera field of view to render.
+
+### .displayDistance
+
+```js
+displayDistance = 1 : Number
+```
+
+The distance of the viewer to the display.
+
+### .displayAspect
+
+```js
+displayAspect = 0.75 : Number
+```
+
+The aspect ratio of the display.
+
+### .setFromDisplayView
+
+```js
+setFromDisplayView(
+	displayDistance : Number,
+	displayWidth : Number,
+	displayHeight : Number,
+) : void
+```
+
+Updates the `displayDistance`, `displayAspect`, and the `viewFoV` from viewer and display information.
 
 ## PathTracingSceneGenerator
 
@@ -606,8 +674,12 @@ _extends MaterialBase_
 ```js
 {
 
-	// Whether to use multiple importance sampling to help the image converge more quickly
+	// Whether to use multiple importance sampling to help the image converge more quickly.
 	FEATURE_MIS = 1 : Number,
+
+	// Whether to use russian roulette path termination. Path termination will kick in after
+	// a minimum three bounces have been performed.
+	FEATURE_RUSSIAN_ROULETTE = 1 : Number,
 
 }
 ```

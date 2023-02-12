@@ -66,7 +66,7 @@ const params = {
 
 	},
 
-	bounces: 3,
+	bounces: 5,
 	samplesPerFrame: 1,
 	resolutionScale: 1,
 
@@ -188,7 +188,7 @@ function rebuildGUI() {
 	} );
 	renderFolder.add( params, 'samples', 1, 500, 1 );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'bounces', 1, 5, 1 ).onChange( () => {
+	renderFolder.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
 
 		ptRenderer.reset();
 

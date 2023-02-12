@@ -31,6 +31,7 @@ struct SurfaceRec {
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
+	float sheen;
 	vec3 sheenColor;
 	float sheenRoughness;
 	float iridescence;
@@ -106,12 +107,12 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 
 	// if roughness is set to 0 then D === NaN which results in black pixels
 	float metalness = surf.metalness;
-	float filteredRoughness = surf.filteredRoughness;
+	float roughness = surf.filteredRoughness;
 
 	float eta = surf.eta;
 	float f0 = surf.f0;
-	float G = ggxShadowMaskG2( wi, wo, filteredRoughness );
-	float D = ggxDistribution( wh, filteredRoughness );
+	float G = ggxShadowMaskG2( wi, wo, roughness );
+	float D = ggxDistribution( wh, roughness );
 	float FM = disneyFresnel( surf, wo, wi, wh );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -135,7 +136,7 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 	// PDF
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 	float incidentTheta = acos( wo.z );
-	float G1 = ggxShadowMaskG1( incidentTheta, filteredRoughness );
+	float G1 = ggxShadowMaskG1( incidentTheta, roughness );
 	float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
 	return ggxPdf / ( 4.0 * dot( wo, wh ) );
 
@@ -144,10 +145,10 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	float filteredRoughness = surf.filteredRoughness;
+	float roughness = surf.filteredRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
-		vec2( filteredRoughness ),
+		vec2( roughness ),
 		sobol2( 12 )
 	);
 
@@ -224,7 +225,7 @@ float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 col
 
 vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 
-	float roughness = surf.roughness;
+	float roughness = surf.filteredRoughness;
 	float eta = surf.eta;
 	vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( sobol2( 13 ) ) * roughness );
 	vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
@@ -244,11 +245,11 @@ float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 colo
 	float ior = 1.5;
 	float f0 = iorRatioToF0( ior );
 	bool frontFace = surf.frontFace;
-	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
+	float roughness = surf.filteredClearcoatRoughness;
 
 	float eta = frontFace ? 1.0 / ior : ior;
-	float G = ggxShadowMaskG2( wi, wo, filteredClearcoatRoughness );
-	float D = ggxDistribution( wh, filteredClearcoatRoughness );
+	float G = ggxShadowMaskG2( wi, wo, roughness );
+	float D = ggxDistribution( wh, roughness );
 	float F = schlickFresnel( dot( wi, wh ), f0 );
 	float cosTheta = min( wo.z, 1.0 );
 	float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
@@ -264,17 +265,17 @@ float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 colo
 
 	// PDF
 	// See equation (27) in http://jcgt.org/published/0003/02/03/
-	return ggxPDF( wo, wh, filteredClearcoatRoughness ) / ( 4.0 * dot( wi, wh ) );
+	return ggxPDF( wo, wh, roughness ) / ( 4.0 * dot( wi, wh ) );
 
 }
 
 vec3 clearcoatDirection( vec3 wo, SurfaceRec surf ) {
 
 	// sample ggx vndf distribution which gives a new normal
-	float filteredClearcoatRoughness = surf.filteredClearcoatRoughness;
+	float roughness = surf.filteredClearcoatRoughness;
 	vec3 halfVector = ggxDirection(
 		wo,
-		vec2( filteredClearcoatRoughness ),
+		vec2( roughness ),
 		sobol2( 14 )
 	);
 
@@ -393,8 +394,8 @@ float bsdfEval(
 	}
 
 	// sheen
-	color *= sheenAlbedoScaling( wo, wi, surf );
-	color += sheenColor( wo, wi, halfVector, surf );
+	color *= mix( 1.0, sheenAlbedoScaling( wo, wi, surf ), surf.sheen );
+	color += sheenColor( wo, wi, halfVector, surf ) * surf.sheen;
 
 	// clearcoat
 	if ( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {

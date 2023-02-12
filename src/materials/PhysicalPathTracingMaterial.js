@@ -38,6 +38,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			defines: {
 				FEATURE_MIS: 1,
+				FEATURE_RUSSIAN_ROULETTE: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
 				// 0 = Perspective
@@ -54,8 +55,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			uniforms: {
 				resolution: { value: new Vector2() },
 
-				bounces: { value: 3 },
-				transmissiveBounces: { value: 5 },
+				bounces: { value: 10 },
+				transmissiveBounces: { value: 10 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -98,6 +99,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 			fragmentShader: /* glsl */`
 				#define RAY_OFFSET 1e-4
+				#define INFINITY 1e20
 
 				precision highp isampler2D;
 				precision highp usampler2D;
@@ -186,7 +188,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				}
 
 				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
-				bool attenuateHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, int traversals, int transparentTraversals, bool isShadowRay, out vec3 color ) {
+				bool attenuateHit(
+					BVH bvh, vec3 rayOrigin, vec3 rayDirection, float rayDist,
+					int traversals, int transparentTraversals, bool isShadowRay, out vec3 color
+				) {
 
 					// hit results
 					uvec4 faceIndices = uvec4( 0u );
@@ -203,6 +208,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
 
+							if ( dist > rayDist ) {
+
+								return true;
+
+							}
+
 							// TODO: attenuate the contribution based on the PDF of the resulting ray including refraction values
 							// Should be able to work using the material BSDF functions which will take into account specularity, etc.
 							// TODO: should we account for emissive surfaces here?
@@ -214,11 +225,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							Material material = readMaterialInfo( materials, materialIndex );
 
 							// adjust the ray to the new surface
-							bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+							bool isEntering = side == 1.0;
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
 							if ( ! material.castShadow && isShadowRay ) {
 
@@ -288,7 +296,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							}
 
-							if ( side == 1.0 && isBelowSurface ) {
+							if ( side == 1.0 && isEntering ) {
 
 								// only attenuate by surface color on the way in
 								color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
@@ -301,7 +309,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
-							if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+							if ( ( isTransmissiveRay || isEntering ) && transparentTraversals > 0 ) {
 
 								transparentTraversals --;
 								i --;
@@ -318,19 +326,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					}
 
 					return true;
-
-				}
-
-				// returns whether the ray hit anything before a certain distance, not just the first surface. Could be optimized to not check the full hierarchy.
-				bool anyCloserHit( BVH bvh, vec3 rayOrigin, vec3 rayDirection, float maxDist ) {
-
-					uvec4 faceIndices = uvec4( 0u );
-					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
-					vec3 barycoord = vec3( 0.0 );
-					float side = 1.0;
-					float dist = 0.0;
-					bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
-					return hit && dist < maxDist;
 
 				}
 
@@ -538,11 +533,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then skip it
 						if ( ! material.castShadow && isShadowRay ) {
 
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
-
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 							continue;
 
 						}
@@ -591,10 +582,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
 						) {
 
-							vec3 point = rayOrigin + rayDirection * dist;
-							vec3 absPoint = abs( point );
-							float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
-							rayOrigin = point - ( maxPoint + 1.0 ) * faceNormal * RAY_OFFSET;
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
@@ -801,6 +789,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
 						surfaceRec.clearcoat = clearcoat;
+						surfaceRec.sheen = material.sheen;
 						surfaceRec.sheenColor = sheenColor;
 						surfaceRec.iridescence = iridescence;
 						surfaceRec.iridescenceIor = material.iridescenceIor;
@@ -810,11 +799,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.attenuationColor = material.attenuationColor;
 						surfaceRec.attenuationDistance = material.attenuationDistance;
 
-						// apply perceptual roughness factor from gltf
+						// apply perceptual roughness factor from gltf. sheen perceptual roughness is
+						// applied by its brdf function
 						// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#microfacet-surfaces
 						surfaceRec.roughness = roughness * roughness;
 						surfaceRec.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
-						surfaceRec.sheenRoughness = sheenRoughness * sheenRoughness;
+						surfaceRec.sheenRoughness = sheenRoughness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
@@ -843,16 +833,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
-						// adjust the hit point by the surface normal by a factor of some offset and the
-						// maximum component-wise value of the current point to accommodate floating point
-						// error as values increase.
-						vec3 point = rayOrigin + rayDirection * dist;
-						vec3 absPoint = abs( point );
-						float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
+						vec3 prevRayDirection = rayDirection;
 						rayDirection = normalize( normalBasis * sampleRec.direction );
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
-						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * ( isBelowSurface ? - RAY_OFFSET : RAY_OFFSET );
+						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
 
 						// direct env map sampling
 						#if FEATURE_MIS
@@ -871,10 +856,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// check if a ray could even reach the light area
+							vec3 attenuatedColor;
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
-								! anyCloserHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist )
+								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -886,7 +872,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									// weight the direct light contribution
 									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
 									float misWeight = lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
+									gl_FragColor.rgb += attenuatedColor * lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
 								}
 
@@ -914,7 +900,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -970,6 +956,29 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						#if FEATURE_RUSSIAN_ROULETTE
+
+						// russian roulette path termination
+						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
+						uint minBounces = 3u;
+						float depthProb = float( sobolBounceIndex < minBounces );
+
+						float rrProb = luminance( throughputColor * sampleRec.color / sampleRec.pdf );
+						rrProb /= luminance( throughputColor );
+						rrProb = sqrt( rrProb );
+						rrProb = max( rrProb, depthProb );
+						rrProb = min( rrProb, 1.0 );
+						if ( sobol( 8 ) > rrProb ) {
+
+							break;
+
+						}
+
+						// perform sample clamping here to avoid bright pixels
+						throughputColor *= min( 1.0 / rrProb, 20.0 );
+
+						#endif
+
 						throughputColor *= sampleRec.color / sampleRec.pdf;
 
 						// attenuate the throughput color by the medium color
@@ -985,6 +994,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							break;
 
 						}
+
 
 					}
 

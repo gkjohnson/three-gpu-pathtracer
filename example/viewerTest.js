@@ -11,6 +11,7 @@ import {
 	EquirectangularReflectionMapping,
 	MathUtils,
 	BufferAttribute,
+	Group,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -31,7 +32,7 @@ const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
-const scale = parseInt( urlParams.get( 'scale' ) ) || ( 1 / window.devicePixelRatio );
+const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
 
 const params = {
 
@@ -47,7 +48,7 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
-	bounces: 3,
+	bounces: 10,
 	transmissiveBounces: 10,
 	pause: false,
 
@@ -423,6 +424,12 @@ async function updateModel() {
 
 		const reducer = new MaterialReducer();
 		reducer.process( model );
+
+		const targetGroup = new Group();
+		targetGroup.position.set( - target.x, - target.y, - target.z );
+		targetGroup.add( model );
+
+		model = targetGroup;
 		model.updateMatrixWorld();
 
 		model.traverse( c => {
@@ -502,11 +509,7 @@ async function updateModel() {
 		camera.near = 2 * radius / 1000;
 		camera.far = 2 * radius;
 		camera.updateProjectionMatrix();
-
 		camera.position.setFromSphericalCoords( orbit.radius, MathUtils.DEG2RAD * orbit.phi, MathUtils.DEG2RAD * orbit.theta );
-		camera.position.x += target.x;
-		camera.position.y += target.y;
-		camera.position.z += target.z;
 
 		const dpr = window.devicePixelRatio;
 		const { width, height } = dimensions;
@@ -517,8 +520,8 @@ async function updateModel() {
 		camera.fov = verticalFoV;
 		camera.updateProjectionMatrix();
 
-		controls.target.set( target.x, target.y, target.z );
 		controls.update();
+		scene.updateMatrixWorld();
 		camera.updateMatrixWorld();
 
 		envMap.mapping = EquirectangularReflectionMapping;
@@ -567,7 +570,7 @@ async function updateModel() {
 			modelUrl,
 			gltf => {
 
-				model = gltf.scene;
+				model = gltf.scene.clone();
 
 			},
 			progress => {
