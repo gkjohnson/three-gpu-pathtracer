@@ -31,6 +31,7 @@ struct SurfaceRec {
 	float clearcoat;
 	float clearcoatRoughness;
 	float filteredClearcoatRoughness;
+	float sheen;
 	vec3 sheenColor;
 	float sheenRoughness;
 	float iridescence;
@@ -393,8 +394,8 @@ float bsdfEval(
 	}
 
 	// sheen
-	color *= sheenAlbedoScaling( wo, wi, surf );
-	color += sheenColor( wo, wi, halfVector, surf );
+	color *= mix( 1.0, sheenAlbedoScaling( wo, wi, surf ), surf.sheen );
+	color += sheenColor( wo, wi, halfVector, surf ) * surf.sheen;
 
 	// clearcoat
 	if ( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
