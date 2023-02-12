@@ -5,6 +5,11 @@ import fs from 'fs';
 import fetch from 'node-fetch';
 import { exec } from 'child_process';
 
+const excludeList = [
+	'khronos-MetalRoughSpheres-LDR',
+	'khronos-BoxInterleaved',
+];
+
 let totalTime = 0;
 const SAMPLES = 200;
 const argv = yargs( process.argv.slice( 2 ) )
@@ -61,8 +66,16 @@ const argv = yargs( process.argv.slice( 2 ) )
 			for ( const key in scenarios ) {
 
 				const scenario = scenarios[ key ];
-				console.log( `Rendering ${ scenario.name }` );
-				await saveScreenshot( scenario, folderPath );
+				if ( excludeList.includes( scenario.name ) ) {
+
+					console.log( `Skipping ${ scenario.name }` );
+
+				} else {
+
+					console.log( `Rendering ${ scenario.name }` );
+					await saveScreenshot( scenario, folderPath );
+
+				}
 
 			}
 
