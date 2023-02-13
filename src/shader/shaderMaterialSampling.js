@@ -123,16 +123,15 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 
 	}
 
-	vec3 baseColor = mix( f0 * surf.specularColor, surf.color, surf.metalness );
+	vec3 baseColor = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
 	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, baseColor );
 
 	vec3 metalMix = mix( surf.color, iridescenceFresnel, surf.iridescence );
 	vec3 metalFresnel = mix( metalMix, vec3( 1.0 ), FM );
 
-	// TODO: the dielectric fresnel looks pretty good - the specular intensity and color values may need to be
-	// applied elsewhere, though.
-	vec3 dielectricMix = mix( f0 * surf.specularColor, iridescenceFresnel, surf.iridescence );
-	vec3 dielectricFresnel = mix( dielectricMix, vec3( 1.0 ), FM ) * surf.specularIntensity;
+	vec3 dielectricIriMix = mix( iridescenceFresnel, vec3( 1.0 ), FM );
+	vec3 dielectricMix = mix( f0 * surf.specularColor, vec3( 1.0 ), FM ) * surf.specularIntensity;
+	vec3 dielectricFresnel = mix( dielectricMix, dielectricIriMix, surf.iridescence );
 
 	vec3 F = mix( dielectricFresnel, metalFresnel, surf.metalness );
 	color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
