@@ -123,15 +123,45 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 
 	}
 
+	vec3 baseF0 = f0 * mix( surf.specularColor, surf.color, surf.metalness );
+	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, baseF0 );
+
+	// TODO: fix metal color
 	vec3 metalColor = surf.color;
+	vec3 metalFresnel = mix( metalColor, iridescenceFresnel, surf.iridescence );
+	metalFresnel = mix( metalFresnel, vec3( 1.0 ), FM );
+
+	// TODO: the dielectric fresnel looks pretty good - the specular intensity and color values may need to be
+	// applied elsewhere, though.
 	vec3 dielectricColor = f0 * surf.specularColor;
-	vec3 specColor = mix( dielectricColor, metalColor, surf.metalness );
+	vec3 dielectricFresnel = mix( mix( dielectricColor, iridescenceFresnel, surf.iridescence ), vec3( 1.0 ), FM ) * surf.specularIntensity;
 
-	vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
-	vec3 iridescenceMix = mix( vec3( FM ), iridescenceF, surf.iridescence );
-	vec3 F = mix( specColor, vec3( 1.0 ), iridescenceMix );
+	vec3 F = mix( dielectricFresnel, metalFresnel, surf.metalness );
 
-	color = mix( surf.specularIntensity, 1.0, surf.metalness ) * wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
+
+
+
+
+
+
+
+
+	// vec3 specColor = mix( dielectricColor, metalColor, surf.metalness );
+
+
+	// vec3 iridescenceMix = mix( vec3( FM ), iridescenceF, surf.iridescence );
+	// vec3 F = mix( specColor, vec3( 1.0 ), iridescenceMix );
+
+	color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
+	// // color = F * 0.1;
+	// OUT_COLOR = color;
+
+
+
+
+
+
+
 
 	// PDF
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
