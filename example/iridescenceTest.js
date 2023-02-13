@@ -20,10 +20,11 @@ const params = {
 
 	color: '#444444',
 	roughness: 0,
-	metalness: 1,
+	metalness: 0,
 	specularIntensity: 1,
+	specularColor: '#ffffff',
 	iridescence: 1.0,
-	iridescenceIOR: 1.5,
+	iridescenceIOR: 2,
 	iridescenceThicknessMin: 0,
 	iridescenceThicknessMax: 400,
 
@@ -130,6 +131,7 @@ async function init() {
 	matFolder.add( params, 'roughness', 0, 1 ).onChange( reset );
 	matFolder.add( params, 'metalness', 0, 1 ).onChange( reset );
 	matFolder.add( params, 'specularIntensity', 0, 1 ).onChange( reset );
+	matFolder.addColor( params, 'specularColor' ).onChange( reset );
 
 	matFolder.add( params, 'iridescence', 0, 1 ).onChange( reset );
 	matFolder.add( params, 'iridescenceIOR', 1, 2 ).onChange( reset );
@@ -179,6 +181,7 @@ function animate() {
 	meshMaterial.iridescenceIOR = params.iridescenceIOR;
 	meshMaterial.iridescenceThicknessRange = [ params.iridescenceThicknessMin, params.iridescenceThicknessMax ];
 	meshMaterial.specularIntensity = params.specularIntensity;
+	meshMaterial.specularColor.set( params.specularColor ).convertSRGBToLinear();
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	perspectiveCamera.updateMatrixWorld();
