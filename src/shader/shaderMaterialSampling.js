@@ -123,15 +123,18 @@ float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color )
 
 	}
 
-	vec3 metalColor = surf.color;
-	vec3 dielectricColor = f0 * surf.specularColor;
-	vec3 specColor = mix( dielectricColor, metalColor, surf.metalness );
+	vec3 baseColor = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
+	vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, baseColor );
 
-	vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, vec3( f0 ) );
-	vec3 iridescenceMix = mix( vec3( FM ), iridescenceF, surf.iridescence );
-	vec3 F = mix( specColor, vec3( 1.0 ), iridescenceMix );
+	vec3 metalMix = mix( surf.color, iridescenceFresnel, surf.iridescence );
+	vec3 metalFresnel = mix( metalMix, vec3( 1.0 ), FM );
 
-	color = mix( surf.specularIntensity, 1.0, surf.metalness ) * wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
+	vec3 dielectricIriMix = mix( iridescenceFresnel, vec3( 1.0 ), FM );
+	vec3 dielectricMix = mix( f0 * surf.specularColor, vec3( 1.0 ), FM ) * surf.specularIntensity;
+	vec3 dielectricFresnel = mix( dielectricMix, dielectricIriMix, surf.iridescence );
+
+	vec3 F = mix( dielectricFresnel, metalFresnel, surf.metalness );
+	color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
 	// PDF
 	// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
