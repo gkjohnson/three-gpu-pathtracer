@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Translucent and transparent meshes incorrectly completely blocking area and punctual lights.
 - Respect the Material "sheen" field.
 - Incorrectly squaring the sheen term.
+- Iridescence being incorrectly applied to materials.
 
 ## [0.0.12] - 2023-01-29
 ### Fixed
