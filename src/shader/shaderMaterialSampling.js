@@ -205,9 +205,7 @@ vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
 float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
-	// only attenuate the color if it's on the way in
-	vec3 col = surf.thinFilm || surf.frontFace ? surf.color : vec3( 1.0 );
-	color = surf.transmission * col;
+	color = surf.transmission * surf.color;
 
 	// PDF
 	float eta = surf.eta;
