@@ -15,32 +15,49 @@ f0     : Amount of light reflected when looking at a surface head on - "fresnel 
 export const bsdfSamplingGLSL = /* glsl */`
 
 	struct SurfaceRec {
-		vec3 normal;
+
+		// geometry
 		vec3 faceNormal;
 		bool frontFace;
+		vec3 normal;
+
+		// cached properties
+		float ior;
+		float eta;
+		float f0;
+
+		// material
 		float roughness;
 		float filteredRoughness;
 		float metalness;
 		vec3 color;
 		vec3 emission;
+
+		// transmission
 		float transmission;
 		bool thinFilm;
-		float ior;
-		float eta;
-		float f0;
+		vec3 attenuationColor;
+		float attenuationDistance;
+
+		// clearcoat
+		vec3 clearcoatNormal;
 		float clearcoat;
 		float clearcoatRoughness;
 		float filteredClearcoatRoughness;
+
+		// sheen
 		float sheen;
 		vec3 sheenColor;
 		float sheenRoughness;
+
+		// iridescence
 		float iridescence;
 		float iridescenceIor;
 		float iridescenceThickness;
+
+		// specular
 		vec3 specularColor;
 		float specularIntensity;
-		vec3 attenuationColor;
-		float attenuationDistance;
 	};
 
 	struct SampleRec {
