@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GraphMaterial } from '../src/index.js';
-import { shaderGGXFunctions } from '../src/shader/shaderGGXFunctions.js';
-import { shaderUtils } from '../src/shader/shaderUtils.js';
+import { ggxGLSL } from '../src/shader/bsdf/ggx.glsl.js';
+import { utilsGLSL } from '../src/shader/common/utils.glsl.js';
 
 const graphFunctionSnippet = /* glsl */`
 	#include <common>
-	${ shaderUtils }
-	${ shaderGGXFunctions }
+	${ utilsGLSL }
+	${ ggxGLSL }
 
 	vec4 graphFunction( float x ) {
 

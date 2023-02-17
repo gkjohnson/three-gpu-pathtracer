@@ -1,5 +1,37 @@
 export const lightSamplingGLSL = /* glsl */`
 
+	float getSpotAttenuation( const in float coneCosine, const in float penumbraCosine, const in float angleCosine ) {
+
+		return smoothstep( coneCosine, penumbraCosine, angleCosine );
+
+	}
+
+	float getDistanceAttenuation( const in float lightDistance, const in float cutoffDistance, const in float decayExponent ) {
+
+		// based upon Frostbite 3 Moving to Physically-based Rendering
+		// page 32, equation 26: E[window1]
+		// https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+		float distanceFalloff = 1.0 / max( pow( lightDistance, decayExponent ), EPSILON );
+
+		if ( cutoffDistance > 0.0 ) {
+
+			distanceFalloff *= pow2( saturate( 1.0 - pow4( lightDistance / cutoffDistance ) ) );
+
+		}
+
+		return distanceFalloff;
+
+	}
+
+	float getPhotometricAttenuation( sampler2DArray iesProfiles, int iesProfile, vec3 posToLight, vec3 lightDir, vec3 u, vec3 v ) {
+
+		float cosTheta = dot( posToLight, lightDir );
+		float angle = acos( cosTheta ) * ( 1.0 / PI );
+
+		return texture2D( iesProfiles, vec3( 0.0, angle, iesProfile ) ).r;
+
+	}
+
 	struct LightSampleRec {
 
 		bool hit;
@@ -191,38 +223,6 @@ export const lightSamplingGLSL = /* glsl */`
 			return randomAreaLightSample( light, rayOrigin, ruv.yz );
 
 		}
-
-	}
-
-	float getSpotAttenuation( const in float coneCosine, const in float penumbraCosine, const in float angleCosine ) {
-
-		return smoothstep( coneCosine, penumbraCosine, angleCosine );
-
-	}
-
-	float getDistanceAttenuation( const in float lightDistance, const in float cutoffDistance, const in float decayExponent ) {
-
-		// based upon Frostbite 3 Moving to Physically-based Rendering
-		// page 32, equation 26: E[window1]
-		// https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
-		float distanceFalloff = 1.0 / max( pow( lightDistance, decayExponent ), EPSILON );
-
-		if ( cutoffDistance > 0.0 ) {
-
-			distanceFalloff *= pow2( saturate( 1.0 - pow4( lightDistance / cutoffDistance ) ) );
-
-		}
-
-		return distanceFalloff;
-
-	}
-
-	float getPhotometricAttenuation( sampler2DArray iesProfiles, int iesProfile, vec3 posToLight, vec3 lightDir, vec3 u, vec3 v ) {
-
-		float cosTheta = dot( posToLight, lightDir );
-		float angle = acos( cosTheta ) * ( 1.0 / PI );
-
-		return texture2D( iesProfiles, vec3( 0.0, angle, iesProfile ) ).r;
 
 	}
 

@@ -30,7 +30,7 @@ import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
 
 // common glsl
 import { intersectShapesGLSL } from '../../shader/common/intersectShapes.glsl';
-import { mathGLSL } from '../../shader/common/math.glsl';
+import { mathGLSL } from '../../shader/common/math.glsl.js';
 import { utilsGLSL } from '../../shader/common/utils.glsl.js';
 import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
 

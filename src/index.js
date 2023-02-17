@@ -34,7 +34,3 @@ export * from './materials/debug/GraphMaterial.js';
 export * from './materials/MaterialBase.js';
 export * from './materials/pathtracing/PhysicalPathTracingMaterial.js';
 
-// shaders
-export * from './shader/shaderMaterialSampling.js';
-export * from './shader/shaderUtils.js';
-export * from './shader/shaderStructs.js';
