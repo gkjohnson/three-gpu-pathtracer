@@ -1,13 +1,13 @@
 import { Matrix4, Color } from 'three';
-import { MaterialBase } from './MaterialBase.js';
+import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs } from '../shader/shaderStructs.js';
-import { shaderUtils } from '../shader/shaderUtils.js';
+import { shaderMaterialStructs } from '../../shader/shaderStructs.js';
+import { shaderUtils } from '../../shader/shaderUtils.js';
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
-import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
+import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
 
 export class LambertPathTracingMaterial extends MaterialBase {
 

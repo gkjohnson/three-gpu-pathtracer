@@ -1,5 +1,5 @@
 import { NoBlending } from 'three';
-import { MaterialBase } from './MaterialBase.js';
+import { MaterialBase } from '../MaterialBase.js';
 
 export class AlphaDisplayMaterial extends MaterialBase {
 

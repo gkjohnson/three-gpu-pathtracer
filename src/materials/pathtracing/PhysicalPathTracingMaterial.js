@@ -1,24 +1,24 @@
 import { Matrix4, Vector2 } from 'three';
-import { MaterialBase } from './MaterialBase.js';
+import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs, shaderLightStruct } from '../shader/shaderStructs.js';
-import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
-import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
-import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
-import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
-import { shaderLightSampling } from '../shader/shaderLightSampling.js';
-import { shaderSobolCommon, shaderSobolSampling } from '../shader/shaderSobolSampling.js';
-import { shaderUtils } from '../shader/shaderUtils.js';
-import { shaderLayerTexelFetchFunctions } from '../shader/shaderLayerTexelFetchFunctions.js';
-import { shaderRandFunctions } from '../shader/shaderRandFunctions.js';
-import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
-import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
-import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
-import { AttributesTextureArray } from '../uniforms/AttributesTextureArray.js';
+import { shaderMaterialStructs, shaderLightStruct } from '../../shader/shaderStructs.js';
+import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
+import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
+import { shaderMaterialSampling } from '../../shader/shaderMaterialSampling.js';
+import { shaderEnvMapSampling } from '../../shader/shaderEnvMapSampling.js';
+import { shaderLightSampling } from '../../shader/shaderLightSampling.js';
+import { shaderSobolCommon, shaderSobolSampling } from '../../shader/shaderSobolSampling.js';
+import { shaderUtils } from '../../shader/shaderUtils.js';
+import { shaderLayerTexelFetchFunctions } from '../../shader/shaderLayerTexelFetchFunctions.js';
+import { shaderRandFunctions } from '../../shader/shaderRandFunctions.js';
+import { PhysicalCameraUniform } from '../../uniforms/PhysicalCameraUniform.js';
+import { EquirectHdrInfoUniform } from '../../uniforms/EquirectHdrInfoUniform.js';
+import { LightsInfoUniformStruct } from '../../uniforms/LightsInfoUniformStruct.js';
+import { IESProfilesTexture } from '../../uniforms/IESProfilesTexture.js';
+import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 

@@ -1,5 +1,5 @@
 import { NoBlending, Color, Vector2, Vector4 } from 'three';
-import { MaterialBase } from './MaterialBase.js';
+import { MaterialBase } from '../MaterialBase.js';
 
 export class GraphMaterial extends MaterialBase {
 
