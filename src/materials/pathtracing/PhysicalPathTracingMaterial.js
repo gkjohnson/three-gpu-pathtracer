@@ -16,7 +16,7 @@ import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
 
 // glsl
 import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
-import { envMapStructGLSL } from '../../shader/structs/envMapStruct.glsl.js';
+import { equirectStructGLSL } from '../../shader/structs/equirectStruct.glsl.js';
 import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
 import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
 
@@ -24,7 +24,7 @@ import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js'
 import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
 
 // sampling
-import { envMapSamplingGLSL } from '../../shader/sampling/envMapSampling.glsl.js';
+import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
 import { lightSamplingGLSL } from '../../shader/sampling/lightSampling.glsl.js';
 import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
 
@@ -138,7 +138,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// uniform structs
 				${ cameraStructGLSL }
 				${ lightsStructGLSL }
-				${ envMapStructGLSL }
+				${ equirectStructGLSL }
 				${ materialStructGLSL }
 
 				// common
@@ -150,7 +150,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// sampling
 				${ shapeSamplingGLSL }
 				${ bsdfSamplingGLSL }
-				${ envMapSamplingGLSL }
+				${ equirectSamplingGLSL }
 
 				uniform mat4 environmentRotation;
 				uniform float backgroundBlur;
@@ -209,11 +209,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#if FEATURE_BACKGROUND_MAP
 
-					return sampleEquirectEnvMapColor( sampleDir, backgroundMap );
+					return sampleEquirectColor( backgroundMap, sampleDir );
 
 					#else
 
-					return environmentIntensity * sampleEquirectEnvMapColor( sampleDir, envMapInfo.map );
+					return environmentIntensity * sampleEquirectColor( envMapInfo.map, sampleDir );
 
 					#endif
 
@@ -530,7 +530,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = sampleEnvMap( envMapInfo, envRotation3x3 * rayDirection, envColor );
+								float envPdf = sampleEquirect( envMapInfo, envRotation3x3 * rayDirection, envColor );
 								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
@@ -541,7 +541,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								gl_FragColor.rgb +=
 									environmentIntensity *
-									sampleEquirectEnvMapColor( envRotation3x3 * rayDirection, envMapInfo.map ) *
+									sampleEquirectColor( envMapInfo.map, envRotation3x3 * rayDirection ) *
 									throughputColor;
 
 								#endif
@@ -914,7 +914,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = sampleEnvMapProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
+							float envPdf = sampleEquirectProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
 							envDirection = invEnvRotation3x3 * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
