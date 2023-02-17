@@ -1,4 +1,4 @@
-export const shaderBvhAnyHit = /* glsl */`
+export const bvhAnyHit = /* glsl */`
 
 	bool bvhIntersectAnyHit(
 		BVH bvh, vec3 rayOrigin, vec3 rayDirection,
