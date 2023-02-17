@@ -25,10 +25,10 @@ float getDistanceAttenuation( const in float lightDistance, const in float cutof
 
 float getPhotometricAttenuation( sampler2DArray iesProfiles, int iesProfile, vec3 posToLight, vec3 lightDir, vec3 u, vec3 v ) {
 
-    float cosTheta = dot( posToLight, lightDir );
-    float angle = acos( cosTheta ) * ( 1.0 / PI );
+	float cosTheta = dot( posToLight, lightDir );
+	float angle = acos( cosTheta ) * ( 1.0 / PI );
 
-    return texture2D( iesProfiles, vec3( 0.0, angle, iesProfile ) ).r;
+	return texture2D( iesProfiles, vec3( 0.0, angle, iesProfile ) ).r;
 
 }
 
