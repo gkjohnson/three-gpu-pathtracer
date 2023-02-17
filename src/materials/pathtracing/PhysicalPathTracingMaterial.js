@@ -40,9 +40,7 @@ import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl
 
 // path tracer utils
 import { cameraUtilsGLSL } from './glsl/cameraUtils.glsl.js';
-import { materialUtilsGLSL } from './glsl/materialUtils.glsl.js';
 import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
-import { materialToSurfaceRecGLSL } from './glsl/materialToSurfaceRec.glsl.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
