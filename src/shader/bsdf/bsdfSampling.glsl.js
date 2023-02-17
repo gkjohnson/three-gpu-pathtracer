@@ -22,7 +22,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 normal;
 
 		// cached properties
-		float ior;
 		float eta;
 		float f0;
 
@@ -34,6 +33,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 emission;
 
 		// transmission
+		float ior;
 		float transmission;
 		bool thinFilm;
 		vec3 attenuationColor;

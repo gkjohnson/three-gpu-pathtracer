@@ -609,23 +609,31 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						SurfaceRec surfaceRec;
-						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.transmission = transmission;
-						surfaceRec.ior = material.ior;
-						surfaceRec.emission = emission;
+						surfaceRec.normal = normal;
+
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
+						surfaceRec.emission = emission;
+
+						surfaceRec.ior = material.ior;
+						surfaceRec.transmission = transmission;
+						surfaceRec.thinFilm = material.thinFilm;
+						surfaceRec.attenuationColor = material.attenuationColor;
+						surfaceRec.attenuationDistance = material.attenuationDistance;
+
+						surfaceRec.clearcoatNormal = clearcoatNormal;
 						surfaceRec.clearcoat = clearcoat;
+
 						surfaceRec.sheen = material.sheen;
 						surfaceRec.sheenColor = sheenColor;
+
 						surfaceRec.iridescence = iridescence;
 						surfaceRec.iridescenceIor = material.iridescenceIor;
 						surfaceRec.iridescenceThickness = iridescenceThickness;
+
 						surfaceRec.specularColor = specularColor;
 						surfaceRec.specularIntensity = specularIntensity;
-						surfaceRec.attenuationColor = material.attenuationColor;
-						surfaceRec.attenuationDistance = material.attenuationDistance;
 
 						// apply perceptual roughness factor from gltf. sheen perceptual roughness is
 						// applied by its brdf function
@@ -639,7 +647,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 						surfaceRec.eta = material.thinFilm || surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
 						surfaceRec.f0 = iorRatioToF0( surfaceRec.eta );
-						surfaceRec.thinFilm = material.thinFilm;
 
 						// Compute the filtered roughness value to use during specular reflection computations.
 						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.

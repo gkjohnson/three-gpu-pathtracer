@@ -47,8 +47,6 @@ export const attenuateHitGLSL = /* glsl */`
 
 				}
 
-				// Opacity Test
-
 				// albedo
 				vec4 albedo = vec4( material.color, material.opacity );
 				if ( material.map != - 1 ) {
