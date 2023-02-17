@@ -205,7 +205,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				vec3 sampleBackground( vec3 direction, vec2 uv ) {
 
-					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, uv ) * 0.5 * backgroundBlur );
+					vec3 sampleDir = normalize( direction + sampleHemisphere( direction, uv ) * 0.5 * backgroundBlur );
 
 					#if FEATURE_BACKGROUND_MAP
 
@@ -420,7 +420,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 shapeUVW= sobol3( 1 );
 						int blades = physicalCamera.apertureBlades;
 						float anamorphicRatio = physicalCamera.anamorphicRatio;
-						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularNGon( blades, shapeUVW );
+						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularPolygon( blades, shapeUVW );
 						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape

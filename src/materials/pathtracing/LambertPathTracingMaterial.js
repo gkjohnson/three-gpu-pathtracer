@@ -269,7 +269,7 @@ export class LambertPathTracingMaterial extends MaterialBase {
 						vec3 absPoint = abs( point );
 						float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-						rayDirection = getHemisphereSample( normal, rand2() );
+						rayDirection = sampleHemisphere( normal, rand2() );
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.

@@ -166,7 +166,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 
 						// sample the cosine weighted hemisphere and discard the sample if it's below
 						// the geometric surface
-						vec3 rayDirection = getHemisphereSample( normalize( normal ), rand4().xy );
+						vec3 rayDirection = sampleHemisphere( normalize( normal ), rand4().xy );
 
 						// check if we hit the mesh and its within the specified radius
 						float side = 1.0;

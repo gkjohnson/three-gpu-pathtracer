@@ -1,7 +1,6 @@
 export const shapeSamplingGLSL = /* glsl */`
 
-	// TODO: renaming this "sampleHemisphere"
-	vec3 getHemisphereSample( vec3 n, vec2 uv ) {
+	vec3 sampleHemisphere( vec3 n, vec2 uv ) {
 
 		// https://www.rorydriscoll.com/2009/01/07/better-sampling/
 		// https://graphics.pixar.com/library/OrthonormalB/paper.pdf
@@ -56,7 +55,7 @@ export const shapeSamplingGLSL = /* glsl */`
 
 	}
 
-	vec2 sampleRegularNGon( int sides, vec3 uvw ) {
+	vec2 sampleRegularPolygon( int sides, vec3 uvw ) {
 
 		sides = max( sides, 3 );
 
@@ -79,7 +78,7 @@ export const shapeSamplingGLSL = /* glsl */`
 
 		return blades == 0 ?
 			sampleCircle( uvw.xy ) :
-			sampleRegularNGon( blades, uvw );
+			sampleRegularPolygon( blades, uvw );
 
 	}
 

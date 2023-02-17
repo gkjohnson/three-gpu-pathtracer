@@ -59,7 +59,9 @@ export const lightSamplingGLSL = /* glsl */`
 			// check for backface
 			vec3 normal = normalize( cross( u, v ) );
 			if ( dot( normal, rayDirection ) < 0.0 ) {
+
 				continue;
+
 			}
 
 			u *= 1.0 / dot( u, u );

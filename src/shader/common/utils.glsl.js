@@ -1,5 +1,7 @@
 export const utilsGLSL = /* glsl */`
 
+	// TODO: possibly this should be renamed something related to material or path tracing logic
+
 	#ifndef RAY_OFFSET
 	#define RAY_OFFSET 1e-4
 	#endif
