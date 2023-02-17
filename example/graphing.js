@@ -3,9 +3,11 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GraphMaterial } from '../src/index.js';
 import { ggxGLSL } from '../src/shader/bsdf/ggx.glsl.js';
 import { utilsGLSL } from '../src/shader/common/utils.glsl.js';
+import { mathGLSL } from '../src/shader/common/math.glsl.js';
 
 const graphFunctionSnippet = /* glsl */`
 	#include <common>
+	${ mathGLSL }
 	${ utilsGLSL }
 	${ ggxGLSL }
 
