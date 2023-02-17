@@ -1,4 +1,4 @@
-export const envMapSampling = /* glsl */`
+export const envMapSamplingGLSL = /* glsl */`
 
 	// samples the the given environment map in the given direction
 	// TODO: swap argument order

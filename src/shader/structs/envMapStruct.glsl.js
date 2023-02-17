@@ -1,4 +1,4 @@
-export const envMapStruct = /* glsl */`
+export const envMapStructGLSL = /* glsl */`
 
 	struct EquirectHdrInfo {
 

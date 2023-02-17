@@ -1,4 +1,4 @@
-export const shapeSampling = /* glsl */`
+export const shapeSamplingGLSL = /* glsl */`
 
 	// TODO: renaming this "sampleHemisphere"
 	vec3 getHemisphereSample( vec3 n, vec2 uv ) {

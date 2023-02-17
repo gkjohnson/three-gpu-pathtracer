@@ -1,6 +1,6 @@
-import { shaderGGXFunctions } from './shaderGGXFunctions.js';
-import { shaderSheenFunctions } from './shaderSheenFunctions.js';
-import { shaderIridescenceFunctions } from './shaderIridescenceFunctions.js';
+import { ggxGLSL } from './ggx.glsl.js';
+import { sheenGLSL } from './sheen.glsl.js';
+import { iridescenceGLSL } from './iridescence.glsl.js';
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -12,7 +12,7 @@ eta    : Greek character used to denote the "ratio of ior"
 f0     : Amount of light reflected when looking at a surface head on - "fresnel 0"
 */
 
-export const shaderMaterialSampling = /* glsl */`
+export const bsdfSamplingGLSL = /* glsl */`
 
 	struct SurfaceRec {
 		vec3 normal;
@@ -51,9 +51,9 @@ export const shaderMaterialSampling = /* glsl */`
 		vec3 color;
 	};
 
-	${ shaderGGXFunctions }
-	${ shaderSheenFunctions }
-	${ shaderIridescenceFunctions }
+	${ ggxGLSL }
+	${ sheenGLSL }
+	${ iridescenceGLSL }
 
 	float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 

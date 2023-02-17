@@ -1,4 +1,4 @@
-export const shaderSheenFunctions = /* glsl */`
+export const sheenGLSL = /* glsl */`
 
 	// See equation (2) in http://www.aconty.com/pdf/s2017_pbs_imageworks_sheen.pdf
 	float velvetD( float cosThetaH, float roughness ) {

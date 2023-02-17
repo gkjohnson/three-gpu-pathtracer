@@ -1,4 +1,4 @@
-export const ggxFunctions = /* glsl */`
+export const ggxGLSL = /* glsl */`
 
 	// The GGX functions provide sampling and distribution information for normals as output so
 	// in order to get probability of scatter direction the half vector must be computed and provided.

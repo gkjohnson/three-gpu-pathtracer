@@ -1,4 +1,4 @@
-export const shaderIridescenceFunctions = /* glsl */`
+export const iridescenceGLSL = /* glsl */`
 
 	// XYZ to sRGB color space
 	const mat3 XYZ_TO_REC709 = mat3(

@@ -1,4 +1,4 @@
-export const shaderUtils = /* glsl */`
+export const utilsGLSL = /* glsl */`
 
 	#ifndef RAY_OFFSET
 	#define RAY_OFFSET 1e-4
