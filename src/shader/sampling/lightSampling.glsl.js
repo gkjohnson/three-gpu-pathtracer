@@ -1,4 +1,4 @@
-export const shaderLightSamplingGLSL = /* glsl */`
+export const lightSamplingGLSL = /* glsl */`
 
 	struct LightSampleRec {
 

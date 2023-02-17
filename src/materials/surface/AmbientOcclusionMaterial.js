@@ -1,9 +1,10 @@
 import { TangentSpaceNormalMap, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import { MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh';
-import { shaderMaterialStructs } from '../../shader/shaderStructs.js';
-import { shaderUtils } from '../../shader/shaderUtils.js';
-import { shaderRandFunctions } from '../../shader/shaderRandFunctions.js';
+
+import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
+import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
 
 export class AmbientOcclusionMaterial extends MaterialBase {
 
@@ -95,11 +96,18 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				#include <common>
 				#include <cube_uv_reflection_fragment>
 
+				// bvh
 				${ shaderStructs }
 				${ shaderIntersectFunction }
-				${ shaderMaterialStructs }
-				${ shaderRandFunctions }
-				${ shaderUtils }
+
+				// uniform structs
+				${ materialStructGLSL }
+
+				// rand
+				${ pcgGLSL }
+
+				// common
+				${ shapeSamplingGLSL }
 
 				uniform BVH bvh;
 				uniform int seed;

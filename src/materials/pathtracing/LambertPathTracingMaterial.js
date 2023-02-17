@@ -4,10 +4,14 @@ import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs } from '../../shader/shaderStructs.js';
-import { shaderUtils } from '../../shader/shaderUtils.js';
+
+// uniforms
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
 import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
+
+import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
+import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
 
 export class LambertPathTracingMaterial extends MaterialBase {
 
@@ -83,8 +87,15 @@ export class LambertPathTracingMaterial extends MaterialBase {
 
 				${ shaderStructs }
 				${ shaderIntersectFunction }
-				${ shaderMaterialStructs }
-				${ shaderUtils }
+
+				// uniform structs
+				${ materialStructGLSL }
+
+				// rand
+				${ pcgGLSL }
+
+				// common
+				${ shapeSamplingGLSL }
 
 				#ifdef USE_ENVMAP
 

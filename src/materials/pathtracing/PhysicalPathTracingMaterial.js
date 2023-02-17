@@ -4,21 +4,40 @@ import {
 	MeshBVHUniformStruct, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs, shaderLightStruct } from '../../shader/shaderStructs.js';
-import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
-import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
-import { shaderMaterialSampling } from '../../shader/shaderMaterialSampling.js';
-import { shaderEnvMapSampling } from '../../shader/shaderEnvMapSampling.js';
-import { shaderLightSampling } from '../../shader/shaderLightSampling.js';
-import { shaderSobolCommon, shaderSobolSampling } from '../../shader/shaderSobolSampling.js';
-import { shaderUtils } from '../../shader/shaderUtils.js';
-import { shaderLayerTexelFetchFunctions } from '../../shader/shaderLayerTexelFetchFunctions.js';
-import { shaderRandFunctions } from '../../shader/shaderRandFunctions.js';
+
+// uniforms
 import { PhysicalCameraUniform } from '../../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../../uniforms/LightsInfoUniformStruct.js';
 import { IESProfilesTexture } from '../../uniforms/IESProfilesTexture.js';
 import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
+import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
+import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
+
+// glsl
+import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
+import { envMapStructGLSL } from '../../shader/structs/envMapStruct.glsl.js';
+import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
+import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+
+// material sampling
+import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
+
+// sampling
+import { envMapSamplingGLSL } from '../../shader/sampling/envMapSampling.glsl.js';
+import { lightSamplingGLSL } from '../../shader/sampling/lightSampling.glsl.js';
+import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
+
+// common glsl
+import { intersectShapesGLSL } from '../../shader/common/intersectShapes.glsl';
+import { mathGLSL } from '../../shader/common/math.glsl';
+import { utilsGLSL } from '../../shader/common/utils.glsl.js';
+import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
+
+// random glsl
+import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
+import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl.js';
+
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -107,18 +126,31 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
 
-				${ shaderRandFunctions }
-				${ shaderSobolCommon }
-				${ shaderSobolSampling }
+				// bvh intersection
 				${ shaderStructs }
 				${ shaderIntersectFunction }
-				${ shaderMaterialStructs }
-				${ shaderLightStruct }
 
-				${ shaderLayerTexelFetchFunctions }
-				${ shaderUtils }
-				${ shaderMaterialSampling }
-				${ shaderEnvMapSampling }
+				// random
+				${ pcgGLSL }
+				${ sobolCommonGLSL }
+				${ sobolSamplingGLSL }
+
+				// uniform structs
+				${ cameraStructGLSL }
+				${ lightsStructGLSL }
+				${ envMapStructGLSL }
+				${ materialStructGLSL }
+
+				// common
+				${ arraySamplerTexelFetchGLSL }
+				${ utilsGLSL }
+				${ mathGLSL }
+				${ intersectShapesGLSL }
+
+				// sampling
+				${ shapeSamplingGLSL }
+				${ bsdfSamplingGLSL }
+				${ envMapSamplingGLSL }
 
 				uniform mat4 environmentRotation;
 				uniform float backgroundBlur;
@@ -152,7 +184,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform LightsInfo lights;
 				uniform sampler2DArray iesProfiles;
 
-				${ shaderLightSampling }
+				${ lightSamplingGLSL }
 
 				uniform EquirectHdrInfo envMapInfo;
 

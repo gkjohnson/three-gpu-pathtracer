@@ -210,7 +210,7 @@ export const sobolGenerationGLSL = /* glsl */`
 
 `;
 
-export const randSobolSampling = /* glsl */`
+export const sobolSamplingGLSL = /* glsl */`
 
 	// Seeds
 	uniform sampler2D sobolTexture;
