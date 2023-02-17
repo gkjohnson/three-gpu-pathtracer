@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { AmbientOcclusionMaterial } from '../src/materials/AmbientOcclusionMaterial.js';
+import { AmbientOcclusionMaterial } from '../src/materials/surface/AmbientOcclusionMaterial.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
 import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';

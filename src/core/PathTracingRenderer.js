@@ -1,6 +1,6 @@
 import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { BlendMaterial } from '../materials/BlendMaterial.js';
+import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 
 const _scissor = new Vector4();

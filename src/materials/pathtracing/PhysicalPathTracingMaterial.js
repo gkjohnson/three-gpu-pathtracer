@@ -1,24 +1,43 @@
 import { Matrix4, Vector2 } from 'three';
-import { MaterialBase } from './MaterialBase.js';
+import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs, shaderLightStruct } from '../shader/shaderStructs.js';
-import { MaterialsTexture } from '../uniforms/MaterialsTexture.js';
-import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
-import { shaderMaterialSampling } from '../shader/shaderMaterialSampling.js';
-import { shaderEnvMapSampling } from '../shader/shaderEnvMapSampling.js';
-import { shaderLightSampling } from '../shader/shaderLightSampling.js';
-import { shaderSobolCommon, shaderSobolSampling } from '../shader/shaderSobolSampling.js';
-import { shaderUtils } from '../shader/shaderUtils.js';
-import { shaderLayerTexelFetchFunctions } from '../shader/shaderLayerTexelFetchFunctions.js';
-import { shaderRandFunctions } from '../shader/shaderRandFunctions.js';
-import { PhysicalCameraUniform } from '../uniforms/PhysicalCameraUniform.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
-import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
-import { IESProfilesTexture } from '../uniforms/IESProfilesTexture.js';
-import { AttributesTextureArray } from '../uniforms/AttributesTextureArray.js';
+
+// uniforms
+import { PhysicalCameraUniform } from '../../uniforms/PhysicalCameraUniform.js';
+import { EquirectHdrInfoUniform } from '../../uniforms/EquirectHdrInfoUniform.js';
+import { LightsInfoUniformStruct } from '../../uniforms/LightsInfoUniformStruct.js';
+import { IESProfilesTexture } from '../../uniforms/IESProfilesTexture.js';
+import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
+import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
+import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
+
+// glsl
+import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
+import { equirectStructGLSL } from '../../shader/structs/equirectStruct.glsl.js';
+import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
+import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+
+// material sampling
+import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
+
+// sampling
+import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
+import { lightSamplingGLSL } from '../../shader/sampling/lightSampling.glsl.js';
+import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
+
+// common glsl
+import { intersectShapesGLSL } from '../../shader/common/intersectShapes.glsl';
+import { mathGLSL } from '../../shader/common/math.glsl.js';
+import { utilsGLSL } from '../../shader/common/utils.glsl.js';
+import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
+
+// random glsl
+import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
+import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl.js';
+
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -107,18 +126,31 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				vec4 envMapTexelToLinear( vec4 a ) { return a; }
 				#include <common>
 
-				${ shaderRandFunctions }
-				${ shaderSobolCommon }
-				${ shaderSobolSampling }
+				// bvh intersection
 				${ shaderStructs }
 				${ shaderIntersectFunction }
-				${ shaderMaterialStructs }
-				${ shaderLightStruct }
 
-				${ shaderLayerTexelFetchFunctions }
-				${ shaderUtils }
-				${ shaderMaterialSampling }
-				${ shaderEnvMapSampling }
+				// random
+				${ pcgGLSL }
+				${ sobolCommonGLSL }
+				${ sobolSamplingGLSL }
+
+				// uniform structs
+				${ cameraStructGLSL }
+				${ lightsStructGLSL }
+				${ equirectStructGLSL }
+				${ materialStructGLSL }
+
+				// common
+				${ arraySamplerTexelFetchGLSL }
+				${ utilsGLSL }
+				${ mathGLSL }
+				${ intersectShapesGLSL }
+
+				// sampling
+				${ shapeSamplingGLSL }
+				${ bsdfSamplingGLSL }
+				${ equirectSamplingGLSL }
 
 				uniform mat4 environmentRotation;
 				uniform float backgroundBlur;
@@ -152,7 +184,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform LightsInfo lights;
 				uniform sampler2DArray iesProfiles;
 
-				${ shaderLightSampling }
+				${ lightSamplingGLSL }
 
 				uniform EquirectHdrInfo envMapInfo;
 
@@ -173,15 +205,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				vec3 sampleBackground( vec3 direction, vec2 uv ) {
 
-					vec3 sampleDir = normalize( direction + getHemisphereSample( direction, uv ) * 0.5 * backgroundBlur );
+					vec3 sampleDir = normalize( direction + sampleHemisphere( direction, uv ) * 0.5 * backgroundBlur );
 
 					#if FEATURE_BACKGROUND_MAP
 
-					return sampleEquirectEnvMapColor( sampleDir, backgroundMap );
+					return sampleEquirectColor( backgroundMap, sampleDir );
 
 					#else
 
-					return environmentIntensity * sampleEquirectEnvMapColor( sampleDir, envMapInfo.map );
+					return environmentIntensity * sampleEquirectColor( envMapInfo.map, sampleDir );
 
 					#endif
 
@@ -388,7 +420,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 shapeUVW= sobol3( 1 );
 						int blades = physicalCamera.apertureBlades;
 						float anamorphicRatio = physicalCamera.anamorphicRatio;
-						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularNGon( blades, shapeUVW );
+						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularPolygon( blades, shapeUVW );
 						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 						// rotate the aperture shape
@@ -498,7 +530,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = sampleEnvMap( envMapInfo, envRotation3x3 * rayDirection, envColor );
+								float envPdf = sampleEquirect( envMapInfo, envRotation3x3 * rayDirection, envColor );
 								envPdf /= float( lights.count + 1u );
 
 								// and weight the contribution
@@ -509,7 +541,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								gl_FragColor.rgb +=
 									environmentIntensity *
-									sampleEquirectEnvMapColor( envRotation3x3 * rayDirection, envMapInfo.map ) *
+									sampleEquirectColor( envMapInfo.map, envRotation3x3 * rayDirection ) *
 									throughputColor;
 
 								#endif
@@ -882,7 +914,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// find a sample in the environment map to include in the contribution
 							vec3 envColor, envDirection;
-							float envPdf = sampleEnvMapProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
+							float envPdf = sampleEquirectProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
 							envDirection = invEnvRotation3x3 * envDirection;
 
 							// this env sampling is not set up for transmissive sampling and yields overly bright
