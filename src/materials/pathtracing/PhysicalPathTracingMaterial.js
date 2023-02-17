@@ -38,6 +38,9 @@ import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexe
 import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
 import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl.js';
 
+// path tracer utils
+import { cameraUtilsGLSL } from './glsl/cameraUtils.glsl.js';
+import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -151,45 +154,56 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shapeSamplingGLSL }
 				${ bsdfSamplingGLSL }
 				${ equirectSamplingGLSL }
+				${ lightSamplingGLSL }
 
+				// environment
+				uniform EquirectHdrInfo envMapInfo;
 				uniform mat4 environmentRotation;
+				uniform float environmentIntensity;
+
+				// lighting
+				uniform sampler2DArray iesProfiles;
+				uniform LightsInfo lights;
+
+				// background
 				uniform float backgroundBlur;
 				uniform float backgroundAlpha;
-
 				#if FEATURE_BACKGROUND_MAP
 
 				uniform sampler2D backgroundMap;
 
 				#endif
 
+				// camera
+				uniform mat4 cameraWorldMatrix;
+				uniform mat4 invProjectionMatrix;
 				#if FEATURE_DOF
 
 				uniform PhysicalCamera physicalCamera;
 
 				#endif
 
-				uniform vec2 resolution;
-				uniform int bounces;
-				uniform int transmissiveBounces;
-				uniform mat4 cameraWorldMatrix;
-				uniform mat4 invProjectionMatrix;
+				// geometry
 				uniform sampler2DArray attributesArray;
 				uniform usampler2D materialIndexAttribute;
+				uniform sampler2D materials;
+				uniform sampler2DArray textures;
 				uniform BVH bvh;
-				uniform float environmentIntensity;
+
+				// path tracer
+				uniform int bounces;
+				uniform int transmissiveBounces;
 				uniform float filterGlossyFactor;
 				uniform int seed;
+
+				// image
+				uniform vec2 resolution;
 				uniform float opacity;
-				uniform sampler2D materials;
-				uniform LightsInfo lights;
-				uniform sampler2DArray iesProfiles;
 
-				${ lightSamplingGLSL }
-
-				uniform EquirectHdrInfo envMapInfo;
-
-				uniform sampler2DArray textures;
 				varying vec2 vUv;
+
+				${ cameraUtilsGLSL }
+				${ attenuateHitGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 
@@ -219,235 +233,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
-				bool attenuateHit(
-					BVH bvh, vec3 rayOrigin, vec3 rayDirection, float rayDist,
-					int traversals, int transparentTraversals, bool isShadowRay, out vec3 color
-				) {
-
-					// hit results
-					uvec4 faceIndices = uvec4( 0u );
-					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
-					vec3 barycoord = vec3( 0.0 );
-					float side = 1.0;
-					float dist = 0.0;
-
-					color = vec3( 1.0 );
-
-					// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
-					// and then reset.
-					for ( int i = 0; i < traversals; i ++ ) {
-
-						if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
-
-							if ( dist > rayDist ) {
-
-								return true;
-
-							}
-
-							// TODO: attenuate the contribution based on the PDF of the resulting ray including refraction values
-							// Should be able to work using the material BSDF functions which will take into account specularity, etc.
-							// TODO: should we account for emissive surfaces here?
-
-							vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, barycoord, faceIndices.xyz ).xy;
-							vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, barycoord, faceIndices.xyz );
-
-							uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
-							Material material = readMaterialInfo( materials, materialIndex );
-
-							// adjust the ray to the new surface
-							bool isEntering = side == 1.0;
-							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
-
-							if ( ! material.castShadow && isShadowRay ) {
-
-								continue;
-
-							}
-
-							// Opacity Test
-
-							// albedo
-							vec4 albedo = vec4( material.color, material.opacity );
-							if ( material.map != - 1 ) {
-
-								vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
-								albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
-
-							}
-
-							if ( material.vertexColors ) {
-
-								albedo *= vertexColor;
-
-							}
-
-							// alphaMap
-							if ( material.alphaMap != - 1 ) {
-
-								albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
-
-							}
-
-							// transmission
-							float transmission = material.transmission;
-							if ( material.transmissionMap != - 1 ) {
-
-								vec3 uvPrime = material.transmissionMapTransform * vec3( uv, 1 );
-								transmission *= texture2D( textures, vec3( uvPrime.xy, material.transmissionMap ) ).r;
-
-							}
-
-							// metalness
-							float metalness = material.metalness;
-							if ( material.metalnessMap != - 1 ) {
-
-								vec3 uvPrime = material.metalnessMapTransform * vec3( uv, 1 );
-								metalness *= texture2D( textures, vec3( uvPrime.xy, material.metalnessMap ) ).b;
-
-							}
-
-							float alphaTest = material.alphaTest;
-							bool useAlphaTest = alphaTest != 0.0;
-							float transmissionFactor = ( 1.0 - metalness ) * transmission;
-							if (
-								transmissionFactor < rand() && ! (
-									// material sidedness
-									material.side != 0.0 && side == material.side
-
-									// alpha test
-									|| useAlphaTest && albedo.a < alphaTest
-
-									// opacity
-									|| material.transparent && ! useAlphaTest && albedo.a < rand()
-								)
-							) {
-
-								return true;
-
-							}
-
-							if ( side == 1.0 && isEntering ) {
-
-								// only attenuate by surface color on the way in
-								color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
-
-							} else if ( side == - 1.0 ) {
-
-								// attenuate by medium once we hit the opposite side of the model
-								color *= transmissionAttenuation( dist, material.attenuationColor, material.attenuationDistance );
-
-							}
-
-							bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
-							if ( ( isTransmissiveRay || isEntering ) && transparentTraversals > 0 ) {
-
-								transparentTraversals --;
-								i --;
-
-							}
-
-
-						} else {
-
-							return false;
-
-						}
-
-					}
-
-					return true;
-
-				}
-
-				vec3 ndcToRayOrigin( vec2 coord ) {
-
-					vec4 rayOrigin4 = cameraWorldMatrix * invProjectionMatrix * vec4( coord, - 1.0, 1.0 );
-					return rayOrigin4.xyz / rayOrigin4.w;
-				}
-
-				void getCameraRay( out vec3 rayDirection, out vec3 rayOrigin ) {
-
-					vec2 ssd = vec2( 1.0 ) / resolution;
-
-					// Jitter the camera ray by finding a uv coordinate at a random sample
-					// around this pixel's UV coordinate for AA
-					vec2 ruv = sobol2( 0 );
-					vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
-
-					#if CAMERA_TYPE == 2
-
-						// Equirectangular projection
-						vec4 rayDirection4 = vec4( equirectUvToDirection( jitteredUv ), 0.0 );
-						vec4 rayOrigin4 = vec4( 0.0, 0.0, 0.0, 1.0 );
-
-						rayDirection4 = cameraWorldMatrix * rayDirection4;
-						rayOrigin4 = cameraWorldMatrix * rayOrigin4;
-
-						rayDirection = normalize( rayDirection4.xyz );
-						rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
-
-					#else
-
-						// get [- 1, 1] normalized device coordinates
-						vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
-						rayOrigin = ndcToRayOrigin( ndc );
-
-						#if CAMERA_TYPE == 1
-
-							// Orthographic projection
-							rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, - 1.0, 0.0 ) ).xyz;
-							rayDirection = normalize( rayDirection );
-
-						#else
-
-							// Perspective projection
-							rayDirection = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
-
-						#endif
-
-					#endif
-
-					#if FEATURE_DOF
-					{
-
-						// depth of field
-						vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
-
-						// get the aperture sample
-						// if blades === 0 then we assume a circle
-						vec3 shapeUVW= sobol3( 1 );
-						int blades = physicalCamera.apertureBlades;
-						float anamorphicRatio = physicalCamera.anamorphicRatio;
-						vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularPolygon( blades, shapeUVW );
-						apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
-
-						// rotate the aperture shape
-						apertureSample =
-							rotateVector( apertureSample, physicalCamera.apertureRotation ) *
-							saturate( vec2( anamorphicRatio, 1.0 / anamorphicRatio ) );
-
-						// create the new ray
-						rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
-						rayDirection = focalPoint - rayOrigin;
-
-					}
-					#endif
-
-					rayDirection = normalize( rayDirection );
-
-				}
-
 				void main() {
 
+					// init
 					rng_initialize( gl_FragCoord.xy, seed );
 					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) | ( uint( gl_FragCoord.y ) );
 					sobolPathIndex = uint( seed );
 
-					vec3 rayDirection;
-					vec3 rayOrigin;
-
+					// get camera ray
+					vec3 rayDirection, rayOrigin;
 					getCameraRay( rayDirection, rayOrigin );
 
 					// inverse environment rotation
@@ -469,11 +263,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float accumulatedRoughness = 0.0;
 					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
+					bool isShadowRay = false;
 					int transparentTraversals = transmissiveBounces;
 					vec3 throughputColor = vec3( 1.0 );
 					SampleRec sampleRec;
 					int i;
-					bool isShadowRay = false;
 
 					for ( i = 0; i < bounces; i ++ ) {
 
@@ -813,23 +607,31 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						SurfaceRec surfaceRec;
-						surfaceRec.normal = normal;
 						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.transmission = transmission;
-						surfaceRec.ior = material.ior;
-						surfaceRec.emission = emission;
+						surfaceRec.normal = normal;
+
 						surfaceRec.metalness = metalness;
 						surfaceRec.color = albedo.rgb;
+						surfaceRec.emission = emission;
+
+						surfaceRec.ior = material.ior;
+						surfaceRec.transmission = transmission;
+						surfaceRec.thinFilm = material.thinFilm;
+						surfaceRec.attenuationColor = material.attenuationColor;
+						surfaceRec.attenuationDistance = material.attenuationDistance;
+
+						surfaceRec.clearcoatNormal = clearcoatNormal;
 						surfaceRec.clearcoat = clearcoat;
+
 						surfaceRec.sheen = material.sheen;
 						surfaceRec.sheenColor = sheenColor;
+
 						surfaceRec.iridescence = iridescence;
 						surfaceRec.iridescenceIor = material.iridescenceIor;
 						surfaceRec.iridescenceThickness = iridescenceThickness;
+
 						surfaceRec.specularColor = specularColor;
 						surfaceRec.specularIntensity = specularIntensity;
-						surfaceRec.attenuationColor = material.attenuationColor;
-						surfaceRec.attenuationDistance = material.attenuationDistance;
 
 						// apply perceptual roughness factor from gltf. sheen perceptual roughness is
 						// applied by its brdf function
@@ -843,7 +645,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
 						surfaceRec.eta = material.thinFilm || surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
 						surfaceRec.f0 = iorRatioToF0( surfaceRec.eta );
-						surfaceRec.thinFilm = material.thinFilm;
 
 						// Compute the filtered roughness value to use during specular reflection computations.
 						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
