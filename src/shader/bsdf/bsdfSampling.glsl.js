@@ -333,18 +333,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
 
-		float eta = surf.eta;
-		float f0 = surf.f0;
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		float reflectance = schlickFresnel( cosTheta, f0 );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			reflectance = 1.0;
-
-		}
-
 		float spdf = 0.0;
 		float dpdf = 0.0;
 		float tpdf = 0.0;
