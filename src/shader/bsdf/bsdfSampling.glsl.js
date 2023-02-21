@@ -79,8 +79,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// TODO: some model-viewer test models look better when surf.eta is set to a non 1.5 eta here here?
 		// and the furnace test seems to pass when it === 1.0
-		// float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
-		float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 / 1.1 );
+		float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
+		// float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 / 1.1 );
 		float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
 
 		return mix( dielectricFresnel, metallicFresnel, surf.metalness );
@@ -217,19 +217,14 @@ export const bsdfSamplingGLSL = /* glsl */`
 		color = surf.transmission * surf.color;
 
 		// PDF
-		float eta = surf.eta;
-		float f0 = surf.f0;
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		float reflectance = schlickFresnel( cosTheta, f0 );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
+		float FM = disneyFresnel( surf, wo, wi, wh );
+		if ( FM >= 1.0 ) {
 
 			return 0.0;
 
 		}
 
-		return 1.0 / ( 1.0 - reflectance );
+		return 1.0 / ( 1.0 - FM );
 
 	}
 
