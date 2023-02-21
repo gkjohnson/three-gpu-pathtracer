@@ -131,14 +131,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float G = ggxShadowMaskG2( wi, wo, roughness );
 		float D = ggxDistribution( wh, roughness );
 		float FM = disneyFresnel( surf, wo, wi, wh );
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			FM = 1.0;
-
-		}
 
 		vec3 baseColor = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
 		vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, baseColor );
@@ -269,14 +261,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float G = ggxShadowMaskG2( wi, wo, roughness );
 		float D = ggxDistribution( wh, roughness );
 		float F = schlickFresnel( dot( wi, wh ), f0 );
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			F = 1.0;
-
-		}
 
 		float fClearcoat = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
 		color = color * ( 1.0 - surf.clearcoat * F ) + fClearcoat * surf.clearcoat * wi.z;
