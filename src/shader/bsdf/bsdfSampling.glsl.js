@@ -313,20 +313,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
-
-		float eta = surf.eta;
-		float f0 = surf.f0;
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-
-		// TODO: does "cannot refract" belong in disney fresnel?
 		float reflectance = disneyFresnel( surf, wo, wi, wh );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			reflectance = 1.0;
-
-		}
 
 		float transSpecularProb = mix( max( 0.25, reflectance ), 1.0, metalness );
 		float diffSpecularProb = 0.5 + 0.5 * metalness;
