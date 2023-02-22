@@ -32,6 +32,7 @@ import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
 import { intersectShapesGLSL } from '../../shader/common/intersectShapes.glsl';
 import { mathGLSL } from '../../shader/common/math.glsl.js';
 import { utilsGLSL } from '../../shader/common/utils.glsl.js';
+import { fresnelGLSL } from '../../shader/common/fresnel.glsl.js';
 import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
 
 // random glsl
@@ -146,6 +147,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// common
 				${ arraySamplerTexelFetchGLSL }
+				${ fresnelGLSL }
 				${ utilsGLSL }
 				${ mathGLSL }
 				${ intersectShapesGLSL }
