@@ -10,7 +10,7 @@ Eval   : Get the color and pdf for a direction
 Sample : Get the direction, color, and pdf for a sample
 eta    : Greek character used to denote the "ratio of ior"
 f0     : Amount of light reflected when looking at a surface head on - "fresnel 0"
-f90	   : Amount of light reflected at grazing angles
+f90    : Amount of light reflected at grazing angles
 */
 
 export const bsdfSamplingGLSL = /* glsl */`
