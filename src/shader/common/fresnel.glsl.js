@@ -57,4 +57,42 @@ export const fresnelGLSL = /* glsl */`
 
 	}
 
+	vec3 evaluateFresnel( float cosTheta, float eta, vec3 f0, vec3 f90 ) {
+
+		if ( totalInternalReflection( cosTheta, eta ) ) {
+
+			return f90;
+
+		}
+
+		return schlickFresnel( cosTheta, f0, f90 );
+
+	}
+
+	float evaluateFresnelWeight( float cosTheta, float eta, float f0 ) {
+
+		if ( totalInternalReflection( cosTheta, eta ) ) {
+
+			return 1.0;
+
+		}
+
+		return schlickFresnel( cosTheta, f0 );
+
+	}
+
+	/*
+	// https://schuttejoe.github.io/post/disneybsdf/
+	float disneyFresnel( vec3 wo, vec3 wi, vec3 wh, float f0, float eta, float metalness ) {
+
+		float dotHV = dot( wo, wh );
+		float dotHL = dot( wi, wh );
+
+		float dielectricFresnel = dielectricFresnel( abs( dotHV ), eta );
+		float metallicFresnel = schlickFresnel( dotHL, f0 );
+
+		return mix( dielectricFresnel, metallicFresnel, metalness );
+
+	}
+	*/
 `;
