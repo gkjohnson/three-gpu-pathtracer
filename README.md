@@ -958,6 +958,6 @@ Set of randomness and other light transport utilities for use in a shader. See t
 
 [knightcrawler25/GLSL-PathTracer](https://github.com/knightcrawler25/GLSL-PathTracer/)
 
-[DassaultSystemes Path Tracer](https://github.com/DassaultSystemes-Technology/dspbr-pt)
+[DassaultSystemes-Technology/dspbr-pt](https://github.com/DassaultSystemes-Technology/dspbr-pt)
 
 
