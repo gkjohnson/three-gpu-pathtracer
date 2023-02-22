@@ -86,12 +86,16 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
+	bool totalInternalReflection( float cosTheta, float eta ) {
+
+		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		return eta * sinTheta > 1.0;
+
+	}
+
 	vec3 evaluateFresnel( float cosTheta, float eta, vec3 f0, vec3 f90 ) {
 
-		// total internal refraction
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
+		if ( totalInternalReflection( cosTheta, eta ) ) {
 
 			return f90;
 
@@ -103,10 +107,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	float evaluateFresnelWeight( float cosTheta, float eta, float f0 ) {
 
-		// total internal refraction
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
+		if ( totalInternalReflection( cosTheta, eta ) ) {
 
 			return 1.0;
 
