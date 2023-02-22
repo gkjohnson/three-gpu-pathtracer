@@ -10,6 +10,7 @@ Eval   : Get the color and pdf for a direction
 Sample : Get the direction, color, and pdf for a sample
 eta    : Greek character used to denote the "ratio of ior"
 f0     : Amount of light reflected when looking at a surface head on - "fresnel 0"
+f90    : Amount of light reflected at grazing angles
 */
 
 export const bsdfSamplingGLSL = /* glsl */`
@@ -72,21 +73,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 	${ sheenGLSL }
 	${ iridescenceGLSL }
 
-	float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
-
-		float dotHV = dot( wo, wh );
-		float dotHL = dot( wi, wh );
-
-		// TODO: some model-viewer test models look better when surf.eta is set to a non 1.5 eta here here?
-		// and the furnace test seems to pass when it === 1.0
-		// float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
-		float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 / 1.1 );
-		float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
-
-		return mix( dielectricFresnel, metallicFresnel, surf.metalness );
-
-	}
-
 	// diffuse
 	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
@@ -102,9 +88,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// TODO: subsurface approx?
 
-		float FM = disneyFresnel( surf, wo, wi, wh );
-
-		color = ( 1.0 - FM ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
+		float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		color = ( 1.0 - F ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
 		return wi.z / PI;
 
 	}
@@ -130,27 +115,14 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float f0 = surf.f0;
 		float G = ggxShadowMaskG2( wi, wo, roughness );
 		float D = ggxDistribution( wh, roughness );
-		float FM = disneyFresnel( surf, wo, wi, wh );
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
 
-			FM = 1.0;
+		vec3 f0Color = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
+		vec3 f90Color = vec3( mix( surf.specularIntensity, 1.0, surf.metalness ) );
+		vec3 F = evaluateFresnel( dot( wo, wh ), eta, f0Color, f90Color );
 
-		}
+		vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Color );
+		F = mix( F, iridescenceF,  surf.iridescence );
 
-		vec3 baseColor = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
-		vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, baseColor );
-
-		vec3 metalMix = mix( surf.color, iridescenceFresnel, surf.iridescence );
-		vec3 metalFresnel = mix( metalMix, vec3( 1.0 ), FM );
-
-		vec3 dielectricIriMix = mix( iridescenceFresnel, vec3( 1.0 ), FM );
-		vec3 dielectricMix = mix( f0 * surf.specularColor, vec3( 1.0 ), FM ) * surf.specularIntensity;
-		vec3 dielectricFresnel = mix( dielectricMix, dielectricIriMix, surf.iridescence );
-
-		vec3 F = mix( dielectricFresnel, metalFresnel, surf.metalness );
 		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
 		// PDF
@@ -225,19 +197,14 @@ export const bsdfSamplingGLSL = /* glsl */`
 		color = surf.transmission * surf.color;
 
 		// PDF
-		float eta = surf.eta;
-		float f0 = surf.f0;
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		float reflectance = schlickFresnel( cosTheta, f0 );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
+		float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		if ( F >= 1.0 ) {
 
 			return 0.0;
 
 		}
 
-		return 1.0 / ( 1.0 - reflectance );
+		return 1.0 / ( 1.0 - F );
 
 	}
 
@@ -269,14 +236,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float G = ggxShadowMaskG2( wi, wo, roughness );
 		float D = ggxDistribution( wh, roughness );
 		float F = schlickFresnel( dot( wi, wh ), f0 );
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			F = 1.0;
-
-		}
 
 		float fClearcoat = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
 		color = color * ( 1.0 - surf.clearcoat * F ) + fClearcoat * surf.clearcoat * wi.z;
@@ -329,22 +288,9 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
+		float fEstimate = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
 
-		float eta = surf.eta;
-		float f0 = surf.f0;
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-
-		// TODO: does "cannot refract" belong in disney fresnel?
-		float reflectance = disneyFresnel( surf, wo, wi, wh );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			reflectance = 1.0;
-
-		}
-
-		float transSpecularProb = mix( max( 0.25, reflectance ), 1.0, metalness );
+		float transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
 		float diffSpecularProb = 0.5 + 0.5 * metalness;
 
 		diffuseWeight = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
@@ -366,18 +312,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
-
-		float eta = surf.eta;
-		float f0 = surf.f0;
-		float cosTheta = min( wo.z, 1.0 );
-		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		float reflectance = schlickFresnel( cosTheta, f0 );
-		bool cannotRefract = eta * sinTheta > 1.0;
-		if ( cannotRefract ) {
-
-			reflectance = 1.0;
-
-		}
 
 		float spdf = 0.0;
 		float dpdf = 0.0;
