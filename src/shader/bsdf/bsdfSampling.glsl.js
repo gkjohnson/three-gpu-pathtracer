@@ -118,9 +118,10 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		vec3 f0Specular = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
 		vec3 f90Specular = vec3( mix( surf.specularIntensity, 1.0, surf.metalness ) );
-
-		vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Specular );
 		vec3 F = evaluateFresnel( dot( wo, wh ), eta, f0Specular, f90Specular );
+
+		vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Specular );
+		F = mix( F, iridescenceF,  surf.iridescence );
 
 		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
