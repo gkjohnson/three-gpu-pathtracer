@@ -10,6 +10,7 @@ Eval   : Get the color and pdf for a direction
 Sample : Get the direction, color, and pdf for a sample
 eta    : Greek character used to denote the "ratio of ior"
 f0     : Amount of light reflected when looking at a surface head on - "fresnel 0"
+f90	   : Amount of light reflected at grazing angles
 */
 
 export const bsdfSamplingGLSL = /* glsl */`
@@ -72,15 +73,13 @@ export const bsdfSamplingGLSL = /* glsl */`
 	${ sheenGLSL }
 	${ iridescenceGLSL }
 
+	// https://schuttejoe.github.io/post/disneybsdf/
 	float disneyFresnel( SurfaceRec surf, vec3 wo, vec3 wi, vec3 wh ) {
 
 		float dotHV = dot( wo, wh );
 		float dotHL = dot( wi, wh );
 
-		// TODO: some model-viewer test models look better when surf.eta is set to a non 1.5 eta here here?
-		// and the furnace test seems to pass when it === 1.0
 		float dielectricFresnel = dielectricFresnel( abs( dotHV ), surf.eta );
-		// float dielectricFresnel = dielectricFresnel( abs( dotHV ), 1.0 / 1.1 );
 		float metallicFresnel = schlickFresnel( dotHL, surf.f0 );
 
 		return mix( dielectricFresnel, metallicFresnel, surf.metalness );
@@ -130,19 +129,13 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float f0 = surf.f0;
 		float G = ggxShadowMaskG2( wi, wo, roughness );
 		float D = ggxDistribution( wh, roughness );
-		float FM = disneyFresnel( surf, wo, wi, wh );
 
-		vec3 baseColor = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
-		vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, baseColor );
+		vec3 f0Specular = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
+		vec3 f90Specular = vec3( mix( surf.specularIntensity, 1.0, surf.metalness ) );
 
-		vec3 metalMix = mix( surf.color, iridescenceFresnel, surf.iridescence );
-		vec3 metalFresnel = mix( metalMix, vec3( 1.0 ), FM );
+		vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Specular );
+		vec3 F = schlickFresnel( dot( wi, wh ), f0Specular, f90Specular );
 
-		vec3 dielectricIriMix = mix( iridescenceFresnel, vec3( 1.0 ), FM );
-		vec3 dielectricMix = mix( f0 * surf.specularColor, vec3( 1.0 ), FM ) * surf.specularIntensity;
-		vec3 dielectricFresnel = mix( dielectricMix, dielectricIriMix, surf.iridescence );
-
-		vec3 F = mix( dielectricFresnel, metalFresnel, surf.metalness );
 		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
 		// PDF

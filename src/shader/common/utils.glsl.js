@@ -39,6 +39,12 @@ export const utilsGLSL = /* glsl */`
 
 	}
 
+	vec3 schlickFresnel( float cosine, vec3 f0, vec3 f90 ) {
+
+		return f0 + ( f90 - f0 ) * pow( 1.0 - cosine, 5.0 );
+
+	}
+
 	float dielectricFresnel( float cosThetaI, float eta ) {
 
 		// https://schuttejoe.github.io/post/disneybsdf/
