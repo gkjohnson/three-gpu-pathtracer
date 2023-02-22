@@ -86,6 +86,36 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
+	vec3 evaluateFresnel( float cosTheta, float eta, vec3 f0, vec3 f90 ) {
+
+		// total internal refraction
+		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		bool cannotRefract = eta * sinTheta > 1.0;
+		if ( cannotRefract ) {
+
+			return f90;
+
+		}
+
+		return schlickFresnel( cosTheta, f0, f90 );
+
+	}
+
+	float evaluateFresnelWeight( float cosTheta, float eta, float f0 ) {
+
+		// total internal refraction
+		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		bool cannotRefract = eta * sinTheta > 1.0;
+		if ( cannotRefract ) {
+
+			return 1.0;
+
+		}
+
+		return schlickFresnel( cosTheta, f0 );
+
+	}
+
 	// diffuse
 	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
 
@@ -134,7 +164,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 f90Specular = vec3( mix( surf.specularIntensity, 1.0, surf.metalness ) );
 
 		vec3 iridescenceFresnel = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Specular );
-		vec3 F = schlickFresnel( dot( wi, wh ), f0Specular, f90Specular );
+		vec3 F = evaluateFresnel( dot( wo, wh ), eta, f0Specular, f90Specular );
 
 		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
