@@ -308,10 +308,24 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	float bsdfEval(
-		vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf,
+		vec3 wo, vec3 wi, SurfaceRec surf,
 		float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight, out float specularPdf, out vec3 color
 	) {
 
+		// local frames
+		mat3 normalBasis = getBasisFromNormal( surf.normal );
+		mat3 invBasis = inverse( normalBasis );
+
+		mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
+		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
+
+		vec3 clearcoatWo = clearcoatInvBasis * wo;
+		vec3 clearcoatWi = clearcoatInvBasis * wi;
+
+		vec3 localWo = invBasis * wo;
+		vec3 localWi = invBasis * wi;
+
+		// evaluate
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
 
@@ -321,35 +335,35 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float cpdf = 0.0;
 		color = vec3( 0.0 );
 
-		vec3 halfVector = getHalfVector( wi, wo, surf.eta );
+		vec3 halfVector = getHalfVector( localWi, localWo, surf.eta );
 
 		// diffuse
-		if ( diffuseWeight > 0.0 && wi.z > 0.0 ) {
+		if ( diffuseWeight > 0.0 && localWi.z > 0.0 ) {
 
-			dpdf = diffuseEval( wo, wi, halfVector, surf, color );
+			dpdf = diffuseEval( localWo, localWi, halfVector, surf, color );
 			color *= 1.0 - surf.transmission;
 
 		}
 
 		// ggx specular
-		if ( specularWeight > 0.0 && wi.z > 0.0 ) {
+		if ( specularWeight > 0.0 && localWi.z > 0.0 ) {
 
 			vec3 outColor;
-			spdf = specularEval( wo, wi, getHalfVector( wi, wo ), surf, outColor );
+			spdf = specularEval( localWo, localWi, getHalfVector( localWi, localWo ), surf, outColor );
 			color += outColor;
 
 		}
 
 		// transmission
-		if ( transmissionWeight > 0.0 && wi.z < 0.0 ) {
+		if ( transmissionWeight > 0.0 && localWi.z < 0.0 ) {
 
-			tpdf = transmissionEval( wo, wi, halfVector, surf, color );
+			tpdf = transmissionEval( localWo, localWi, halfVector, surf, color );
 
 		}
 
 		// sheen
-		color *= mix( 1.0, sheenAlbedoScaling( wo, wi, surf ), surf.sheen );
-		color += sheenColor( wo, wi, halfVector, surf ) * surf.sheen;
+		color *= mix( 1.0, sheenAlbedoScaling( localWo, localWi, surf ), surf.sheen );
+		color += sheenColor( localWo, localWi, halfVector, surf ) * surf.sheen;
 
 		// clearcoat
 		if ( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
@@ -374,6 +388,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	float bsdfResult( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
 
+		// local frames
 		mat3 normalBasis = getBasisFromNormal( surf.normal );
 		mat3 invBasis = inverse( normalBasis );
 
@@ -383,26 +398,25 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 clearcoatWo = clearcoatInvBasis * wo;
 		vec3 clearcoatWi = clearcoatInvBasis * wi;
 
-		wo = invBasis * wo;
-		wi = invBasis * wi;
+		vec3 localWo = invBasis * wo;
+		vec3 localWi = invBasis * wi;
 
-
-
-
-		vec3 wh = getHalfVector( wo, wi, surf.eta );
+		// evaluate
+		vec3 wh = getHalfVector( localWo, localWi, surf.eta );
 		float diffuseWeight;
 		float specularWeight;
 		float transmissionWeight;
 		float clearcoatWeight;
-		getLobeWeights( wo, wi, wh, clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+		getLobeWeights( localWo, localWi, wh, clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 
 		float specularPdf;
-		return bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, specularPdf, color );
+		return bsdfEval( wo, wi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, specularPdf, color );
 
 	}
 
 	SampleRec bsdfSample( vec3 wo, SurfaceRec surf ) {
 
+		// local frames
 		mat3 normalBasis = getBasisFromNormal( surf.normal );
 		mat3 invBasis = inverse( normalBasis );
 
@@ -410,15 +424,16 @@ export const bsdfSamplingGLSL = /* glsl */`
 		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
 
 		vec3 clearcoatWo = clearcoatInvBasis * wo;
-		wo = invBasis * wo;
+		vec3 localWo = invBasis * wo;
 
+		// evaluate
 		float diffuseWeight;
 		float specularWeight;
 		float transmissionWeight;
 		float clearcoatWeight;
 
 		// using normal and basically-reflected ray since we don't have proper half vector here
-		getLobeWeights( wo, wo, vec3( 0, 0, 1 ), clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
+		getLobeWeights( localWo, localWo, vec3( 0, 0, 1 ), clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 
 		float pdf[4];
 		pdf[0] = diffuseWeight;
@@ -450,34 +465,30 @@ export const bsdfSamplingGLSL = /* glsl */`
 		}
 
 		vec3 wi;
-		vec3 clearcoatWi;
 
 		float r = sobol( 15 );
 		if ( r <= cdf[0] ) { // diffuse
 
-			wi = diffuseDirection( wo, surf );
-			clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
+			wi = diffuseDirection( localWo, surf );
 
 		} else if ( r <= cdf[1] ) { // specular
 
-			wi = specularDirection( wo, surf );
-			clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
+			wi = specularDirection( localWo, surf );
 
 		} else if ( r <= cdf[2] ) { // transmission / refraction
 
-			wi = transmissionDirection( wo, surf );
-			clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
+			wi = transmissionDirection( localWo, surf );
 
 		} else if ( r <= cdf[3] ) { // clearcoat
 
-			clearcoatWi = clearcoatDirection( clearcoatWo, surf );
+			vec3 clearcoatWi = clearcoatDirection( clearcoatWo, surf );
 			wi = normalize( invBasis * normalize( clearcoatNormalBasis * clearcoatWi ) );
 
 		}
 
 		SampleRec result;
-		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
 		result.direction = normalBasis * wi;
+		result.pdf = bsdfEval( wo, result.direction, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
 
 		return result;
 
