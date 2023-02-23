@@ -367,13 +367,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
-						if ( material.matte && firstRay ) {
-
-							gl_FragColor = vec4( 0.0 );
-							break;
-
-						}
-
+						bool fogHit = false;
 						#if FEATURE_FOG
 
 						if ( fogMaterial.fogVolume ) {
@@ -387,13 +381,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								throughputColor *= sampleRec.color;
 								rayOrigin += rayDirection * particleDist;
 								rayDirection = sampleRec.direction;
+								material = fogMaterial;
+								fogHit = true;
 								continue;
 
 							}
 
 						}
 
-						if ( material.fogVolume ) {
+						if ( ! fogHit && material.fogVolume ) {
 
 							fogMaterial = material;
 							fogMaterial.fogVolume = side == 1.0;
@@ -407,6 +403,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						#endif
+
+						if ( material.matte && firstRay ) {
+
+							gl_FragColor = vec4( 0.0 );
+							break;
+
+						}
 
 						// if we've determined that this is a shadow ray and we've hit an item with no shadow casting
 						// then skip it
