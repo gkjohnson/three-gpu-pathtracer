@@ -113,8 +113,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float eta = surf.eta;
 		float f0 = surf.f0;
-		float G = ggxShadowMaskG2( wi, wo, roughness );
-		float D = ggxDistribution( wh, roughness );
 
 		vec3 f0Color = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
 		vec3 f90Color = vec3( mix( surf.specularIntensity, 1.0, surf.metalness ) );
@@ -128,6 +126,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		// PDF
 		// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 		float incidentTheta = acos( wo.z );
+		float G = ggxShadowMaskG2( wi, wo, roughness );
+		float D = ggxDistribution( wh, roughness );
 		float G1 = ggxShadowMaskG1( incidentTheta, roughness );
 		float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
 		return ggxPdf / ( 4.0 * dot( wo, wh ) );
