@@ -15,6 +15,7 @@ const params = {
 
 	enable: true,
 	pause: false,
+	mis: true,
 	tiles: 2,
 	resolutionScale: 1,
 
@@ -118,6 +119,12 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'mis' ).onChange( v => {
+
+		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
+		ptRenderer.reset();
+
+	} );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		ptRenderer.tiles.set( value, value );
