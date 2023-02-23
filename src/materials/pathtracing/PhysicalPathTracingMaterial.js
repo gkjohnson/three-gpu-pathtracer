@@ -23,6 +23,7 @@ import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js'
 
 // material sampling
 import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
+import { fogGLSL } from '../../shader/bsdf/fog.glsl.js';
 
 // sampling
 import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
@@ -161,6 +162,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ bsdfSamplingGLSL }
 				${ equirectSamplingGLSL }
 				${ lightSamplingGLSL }
+				${ fogGLSL }
 
 				// environment
 				uniform EquirectHdrInfo envMapInfo;
@@ -278,7 +280,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#if FEATURE_FOG
 
 					Material fogMaterial;
-					bvhIntersectFogVolumeHit(
+					fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
 						bvh, rayOrigin, rayDirection,
 						materialIndexAttribute, materials,
 						fogMaterial
@@ -374,12 +376,20 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						#if FEATURE_FOG
 
-						// TODO: scatter here
-						// TODO: adjust PDF
-						// TODO: check ray dist vs fog density
 						if ( fogMaterial.fogVolume ) {
 
+							vec3 uvw = sobol3( 9 );
+							float particleDist = intersectFogVolume( fogMaterial, uvw.x );
 
+							if ( particleDist < dist ) {
+
+								sampleRec = sampleFogVolume( fogMaterial, uvw.yz );
+								throughputColor *= sampleRec.color;
+								rayOrigin += rayDirection * particleDist;
+								rayDirection = sampleRec.direction;
+								continue;
+
+							}
 
 						}
 

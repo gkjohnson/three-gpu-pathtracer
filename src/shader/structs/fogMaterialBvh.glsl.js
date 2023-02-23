@@ -9,7 +9,7 @@ bool isMaterialFogVolume( sampler2D materials, uint materialIndex ) {
 
 	uint i = materialIndex * 45u;
 	vec4 s14 = texelFetch1D( materials, i + 14u );
-	return bool( int( s14.b ) & 3 );
+	return bool( int( s14.b ) & 4 );
 
 }
 

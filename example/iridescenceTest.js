@@ -33,6 +33,7 @@ const params = {
 	ior: 1.5,
 
 	fog: true,
+	density: 1,
 
 };
 
@@ -153,6 +154,7 @@ async function init() {
 	matFolder.add( params, 'iridescenceThicknessMax', 0, 1000, 1 ).onChange( reset );
 
 	matFolder.add( params, 'fog' ).onChange( reset );
+	matFolder.add( params, 'density', 0, 10 ).onChange( reset );
 
 	animate();
 
@@ -202,6 +204,8 @@ function animate() {
 	meshMaterial.specularIntensity = params.specularIntensity;
 	meshMaterial.specularColor.set( params.specularColor ).convertSRGBToLinear();
 	meshMaterial.isFogVolumeMaterial = params.fog;
+	meshMaterial.opacity = params.fog ? params.density : 1.0;
+	meshMaterial.density = meshMaterial.opacity;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	perspectiveCamera.updateMatrixWorld();
