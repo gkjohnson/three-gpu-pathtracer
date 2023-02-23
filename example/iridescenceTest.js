@@ -18,15 +18,18 @@ const params = {
 	tiles: 2,
 	resolutionScale: 1,
 
-	color: '#444444',
+	color: '#ffcccc',
 	roughness: 0,
 	metalness: 0,
 	specularIntensity: 1,
 	specularColor: '#ffffff',
-	iridescence: 1.0,
+	iridescence: 0.0,
 	iridescenceIOR: 2,
 	iridescenceThicknessMin: 0,
 	iridescenceThicknessMax: 400,
+
+	transmission: 1.0,
+	ior: 1.5,
 
 };
 
@@ -132,6 +135,8 @@ async function init() {
 	matFolder.add( params, 'metalness', 0, 1 ).onChange( reset );
 	matFolder.add( params, 'specularIntensity', 0, 1 ).onChange( reset );
 	matFolder.addColor( params, 'specularColor' ).onChange( reset );
+	matFolder.add( params, 'transmission', 0, 1 ).onChange( reset );
+	matFolder.add( params, 'ior', 1, 2 ).onChange( reset );
 
 	matFolder.add( params, 'iridescence', 0, 1 ).onChange( reset );
 	matFolder.add( params, 'iridescenceIOR', 1, 2 ).onChange( reset );
@@ -177,6 +182,9 @@ function animate() {
 	meshMaterial.roughness = params.roughness;
 	meshMaterial.metalness = params.metalness;
 
+	meshMaterial.thickness = 1.0;
+	meshMaterial.ior = params.ior;
+	meshMaterial.transmission = params.transmission;
 	meshMaterial.iridescence = params.iridescence;
 	meshMaterial.iridescenceIOR = params.iridescenceIOR;
 	meshMaterial.iridescenceThicknessRange = [ params.iridescenceThicknessMin, params.iridescenceThicknessMax ];

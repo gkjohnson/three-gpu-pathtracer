@@ -161,8 +161,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		bool frontFace = surf.frontFace;
 		bool thinFilm = surf.thinFilm;
 
-		vec3 col = thinFilm || frontFace ? surf.color : vec3( 1.0 );
-		color = surf.transmission * col;
+		color = surf.transmission * surf.color;
 
 		float denom = pow( eta * dot( wi, wh ) + dot( wo, wh ), 2.0 );
 		return ggxPDF( wo, wh, filteredRoughness ) / denom;
@@ -182,9 +181,13 @@ export const bsdfSamplingGLSL = /* glsl */`
 			sobol2( 13 )
 		);
 
-
-		// TODO: support thin film
 		vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
+		if ( surf.thinFilm ) {
+
+			lightDirection = - refract( normalize( - lightDirection ), - vec3( 0.0, 0.0, 1.0 ), 1.0 / eta );
+
+		}
+
 		return normalize( lightDirection );
 
 	}
