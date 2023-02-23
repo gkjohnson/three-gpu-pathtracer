@@ -655,21 +655,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						surfaceRec.filteredRoughness = applyFilteredGlossy( surfaceRec.roughness, accumulatedRoughness );
 						surfaceRec.filteredClearcoatRoughness = applyFilteredGlossy( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness );
 
-						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
-						mat3 invBasis = inverse( normalBasis );
-
-						mat3 clearcoatNormalBasis = getBasisFromNormal( clearcoatNormal );
-						mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
-
-						vec3 outgoing = - normalize( invBasis * rayDirection );
-						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
-						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
+						vec3 outgoing = - rayDirection;
+						sampleRec = bsdfSample( outgoing, surfaceRec );
 
 						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = rayDirection;
-						rayDirection = normalize( normalBasis * sampleRec.direction );
+						rayDirection = sampleRec.worldDirection;
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
@@ -700,7 +693,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+								float lightMaterialPdf = bsdfResult( outgoing, lightSampleRec.direction, surfaceRec, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -740,7 +733,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surfaceRec, sampleColor );
+								float envMaterialPdf = bsdfResult( outgoing, envDirection, surfaceRec, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -761,11 +754,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( ! isBelowSurface ) {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
-							vec3 halfVector = normalize( outgoing + sampleRec.direction );
-							accumulatedRoughness += sin( acosApprox( halfVector.z ) );
-
-							vec3 clearcoatHalfVector = normalize( clearcoatOutgoing + sampleRec.clearcoatDirection );
-							accumulatedClearcoatRoughness += sin( acosApprox( clearcoatHalfVector.z ) );
+							vec3 halfVector = normalize( outgoing + sampleRec.worldDirection );
+							accumulatedRoughness += sin( acosApprox( dot( halfVector, normal ) ) );
+							accumulatedClearcoatRoughness += sin( acosApprox( dot( halfVector, normal ) ) );
 
 							transmissiveRay = false;
 

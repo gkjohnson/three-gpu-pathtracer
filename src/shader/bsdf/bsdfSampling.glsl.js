@@ -66,6 +66,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float pdf;
 		vec3 direction;
 		vec3 clearcoatDirection;
+		vec3 worldDirection;
 		vec3 color;
 	};
 
@@ -373,7 +374,22 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color ) {
+	float bsdfResult( vec3 wo, vec3 wi, SurfaceRec surf, out vec3 color ) {
+
+		mat3 normalBasis = getBasisFromNormal( surf.normal );
+		mat3 invBasis = inverse( normalBasis );
+
+		mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
+		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
+
+		vec3 clearcoatWo = clearcoatInvBasis * wo;
+		vec3 clearcoatWi = clearcoatInvBasis * wi;
+
+		wo = invBasis * wo;
+		wi = invBasis * wi;
+
+
+
 
 		vec3 wh = getHalfVector( wo, wi, surf.eta );
 		float diffuseWeight;
@@ -387,12 +403,22 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRec surf ) {
+	SampleRec bsdfSample( vec3 wo, SurfaceRec surf ) {
+
+		mat3 normalBasis = getBasisFromNormal( surf.normal );
+		mat3 invBasis = inverse( normalBasis );
+
+		mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
+		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
+
+		vec3 clearcoatWo = clearcoatInvBasis * wo;
+		wo = invBasis * wo;
 
 		float diffuseWeight;
 		float specularWeight;
 		float transmissionWeight;
 		float clearcoatWeight;
+
 		// using normal and basically-reflected ray since we don't have proper half vector here
 		getLobeWeights( wo, wo, vec3( 0, 0, 1 ), clearcoatWo, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight );
 
@@ -455,6 +481,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
 		result.direction = wi;
 		result.clearcoatDirection = clearcoatWi;
+		result.worldDirection = normalBasis * wi;
 
 		return result;
 
