@@ -319,11 +319,11 @@ export const bsdfSamplingGLSL = /* glsl */`
 		mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
 		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
 
-		vec3 clearcoatWo = clearcoatInvBasis * wo;
-		vec3 clearcoatWi = clearcoatInvBasis * wi;
+		vec3 clearcoatWo = normalize( clearcoatInvBasis * wo );
+		vec3 clearcoatWi = normalize( clearcoatInvBasis * wi );
 
-		vec3 localWo = invBasis * wo;
-		vec3 localWi = invBasis * wi;
+		vec3 localWo = normalize( invBasis * wo );
+		vec3 localWi = normalize( invBasis * wi );
 
 		// evaluate
 		float metalness = surf.metalness;
@@ -395,11 +395,11 @@ export const bsdfSamplingGLSL = /* glsl */`
 		mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
 		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
 
-		vec3 clearcoatWo = clearcoatInvBasis * wo;
-		vec3 clearcoatWi = clearcoatInvBasis * wi;
+		vec3 clearcoatWo = normalize( clearcoatInvBasis * wo );
+		vec3 clearcoatWi = normalize( clearcoatInvBasis * wi );
 
-		vec3 localWo = invBasis * wo;
-		vec3 localWi = invBasis * wi;
+		vec3 localWo = normalize( invBasis * wo );
+		vec3 localWi = normalize( invBasis * wi );
 
 		// evaluate
 		vec3 wh = getHalfVector( localWo, localWi, surf.eta );
@@ -423,8 +423,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
 		mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
 
-		vec3 clearcoatWo = clearcoatInvBasis * wo;
-		vec3 localWo = invBasis * wo;
+		vec3 clearcoatWo = normalize( clearcoatInvBasis * wo );
+		vec3 localWo = normalize( invBasis * wo );
 
 		// evaluate
 		float diffuseWeight;
