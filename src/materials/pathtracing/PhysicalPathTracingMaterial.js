@@ -662,7 +662,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = rayDirection;
-						rayDirection = sampleRec.worldDirection;
+						rayDirection = sampleRec.direction;
 
 						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
@@ -754,7 +754,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( ! isBelowSurface ) {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
-							vec3 halfVector = normalize( outgoing + sampleRec.worldDirection );
+							vec3 halfVector = normalize( outgoing + sampleRec.direction );
 							accumulatedRoughness += sin( acosApprox( dot( halfVector, normal ) ) );
 							accumulatedClearcoatRoughness += sin( acosApprox( dot( halfVector, clearcoatNormal ) ) );
 

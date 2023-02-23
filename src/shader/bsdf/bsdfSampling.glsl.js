@@ -64,7 +64,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	struct SampleRec {
 		float specularPdf;
 		float pdf;
-		vec3 worldDirection;
+		vec3 direction;
 		vec3 color;
 	};
 
@@ -477,7 +477,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		SampleRec result;
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
-		result.worldDirection = normalBasis * wi;
+		result.direction = normalBasis * wi;
 
 		return result;
 
