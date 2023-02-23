@@ -33,4 +33,4 @@ export * from './materials/fullscreen/DenoiseMaterial.js';
 export * from './materials/debug/GraphMaterial.js';
 export * from './materials/MaterialBase.js';
 export * from './materials/pathtracing/PhysicalPathTracingMaterial.js';
-
+export * from './materials/surface/FogVolumeMaterial.js';

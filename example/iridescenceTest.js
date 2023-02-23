@@ -32,6 +32,8 @@ const params = {
 	transmission: 1.0,
 	ior: 1.5,
 
+	fog: true,
+
 };
 
 init();
@@ -150,6 +152,8 @@ async function init() {
 	matFolder.add( params, 'iridescenceThicknessMin', 0, 1000, 1 ).onChange( reset );
 	matFolder.add( params, 'iridescenceThicknessMax', 0, 1000, 1 ).onChange( reset );
 
+	matFolder.add( params, 'fog' ).onChange( reset );
+
 	animate();
 
 }
@@ -197,6 +201,7 @@ function animate() {
 	meshMaterial.iridescenceThicknessRange = [ params.iridescenceThicknessMin, params.iridescenceThicknessMax ];
 	meshMaterial.specularIntensity = params.specularIntensity;
 	meshMaterial.specularColor.set( params.specularColor ).convertSRGBToLinear();
+	meshMaterial.isFogVolumeMaterial = params.fog;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	perspectiveCamera.updateMatrixWorld();

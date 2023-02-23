@@ -19,6 +19,7 @@ import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
 import { equirectStructGLSL } from '../../shader/structs/equirectStruct.glsl.js';
 import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
 import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
 
 // material sampling
 import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
@@ -64,6 +65,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_RUSSIAN_ROULETTE: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
+				FEATURE_FOG: 1,
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -139,18 +141,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ sobolCommonGLSL }
 				${ sobolSamplingGLSL }
 
-				// uniform structs
-				${ cameraStructGLSL }
-				${ lightsStructGLSL }
-				${ equirectStructGLSL }
-				${ materialStructGLSL }
-
 				// common
 				${ arraySamplerTexelFetchGLSL }
 				${ fresnelGLSL }
 				${ utilsGLSL }
 				${ mathGLSL }
 				${ intersectShapesGLSL }
+
+				// uniform structs
+				${ cameraStructGLSL }
+				${ lightsStructGLSL }
+				${ equirectStructGLSL }
+				${ materialStructGLSL }
+				${ fogMaterialBvhGLSL }
 
 				// sampling
 				${ shapeSamplingGLSL }
@@ -271,9 +274,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					SampleRec sampleRec;
 					int i;
 
-					// TODO: determine if the ray is in a fog volume initially
-					bool isInFogVolume = false;
+					#if FEATURE_FOG
+
 					Material fogMaterial;
+					bvhIntersectFogVolumeHit(
+						bvh, rayOrigin, rayDirection,
+						materialIndexAttribute, materials,
+						fogMaterial
+					);
+
+					#endif
 
 					for ( i = 0; i < bounces; i ++ ) {
 
@@ -360,6 +370,32 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							break;
 
 						}
+
+						#if FEATURE_FOG
+
+						// TODO: scatter here
+						// TODO: adjust PDF
+						// TODO: check ray dist vs fog density
+						if ( fogMaterial.fogVolume ) {
+
+
+
+						}
+
+						if ( material.fogVolume ) {
+
+							fogMaterial = material;
+							fogMaterial.fogVolume = side == 1.0;
+
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
+
+							i -= sign( transparentTraversals );
+							transparentTraversals -= sign( transparentTraversals );
+							continue;
+
+						}
+
+						#endif
 
 						// if we've determined that this is a shadow ray and we've hit an item with no shadow casting
 						// then skip it

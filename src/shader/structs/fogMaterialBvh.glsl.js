@@ -1,14 +1,14 @@
-export const shaderFogVolumeFunctions = /* glsl */`
+export const fogMaterialBvhGLSL = /* glsl */`
 
 #ifndef FOG_CHECK_ITERATIONS
-#define FOG_CHECK_ITERATIONS 30
+#define FOG_CHECK_ITERATIONS 10
 #endif
 
 // returns whether the given material is a fog material or not
 bool isMaterialFogVolume( sampler2D materials, uint materialIndex ) {
 
-	uint i = index * 45u;
-	vec4 s14 = texelFetch1D( tex, i + 14u );
+	uint i = materialIndex * 45u;
+	vec4 s14 = texelFetch1D( materials, i + 14u );
 	return bool( int( s14.b ) & 3 );
 
 }
@@ -20,8 +20,7 @@ bool bvhIntersectFogVolumeHit(
 	out Material material
 ) {
 
-	uniform usampler2D materialIndexAttribute;
-	uniform sampler2D materials;
+	material.fogVolume = false;
 
 	for ( int i = 0; i < FOG_CHECK_ITERATIONS; i ++ ) {
 
@@ -41,12 +40,18 @@ bool bvhIntersectFogVolumeHit(
 				material = readMaterialInfo( materials, materialIndex );
 				return side == - 1.0;
 
+			} else {
+
+				// move the ray forward
+				rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
+
 			}
 
-		}
+		} else {
 
-		// move the ray forward
-		rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
+			return false;
+
+		}
 
 	}
 
