@@ -263,7 +263,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// path tracing state
 					float accumulatedRoughness = 0.0;
-					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
 					bool isShadowRay = false;
 					int transparentTraversals = transmissiveBounces;
@@ -653,7 +652,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
 						surfaceRec.filteredRoughness = applyFilteredGlossy( surfaceRec.roughness, accumulatedRoughness );
-						surfaceRec.filteredClearcoatRoughness = applyFilteredGlossy( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness );
+						surfaceRec.filteredClearcoatRoughness = applyFilteredGlossy( surfaceRec.clearcoatRoughness, accumulatedRoughness );
 
 						vec3 outgoing = - rayDirection;
 						sampleRec = bsdfSample( outgoing, surfaceRec );
@@ -756,7 +755,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.worldDirection );
 							accumulatedRoughness += sin( acosApprox( dot( halfVector, normal ) ) );
-							accumulatedClearcoatRoughness += sin( acosApprox( dot( halfVector, normal ) ) );
 
 							transmissiveRay = false;
 
