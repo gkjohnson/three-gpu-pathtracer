@@ -12,13 +12,15 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 		if ( material.fogVolume ) {
 
+			vec3 normal = vec3( 0, 0, 1 );
+
 			SurfaceRecord fogSurface;
 			fogSurface.volumeParticle = true;
 			fogSurface.color = material.color;
 			fogSurface.emission = material.emissiveIntensity * material.emissive;
-			fogSurface.normal = vec3( 0, 0, 1 );
-			fogSurface.faceNormal = vec3( 0, 0, 1 );
-			fogSurface.clearcoatNormal = vec3( 0, 0, 1 );
+			fogSurface.normal = normal;
+			fogSurface.faceNormal = normal;
+			fogSurface.clearcoatNormal = normal;
 
 			surf = fogSurface;
 			return HIT_SURFACE;

@@ -376,7 +376,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
-						bool fogHit = false;
 						#if FEATURE_FOG
 
 						if ( hitType == FOG_HIT ) {
@@ -433,6 +432,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						faceNormal = surf.faceNormal;
+
 						mat3 normalBasis = getBasisFromNormal( surf.normal );
 						mat3 invBasis = inverse( normalBasis );
 
@@ -443,13 +444,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surf );
 
-						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
+						bool wasBelowSurface = ! material.fogVolume && dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = rayDirection;
 						rayDirection = normalize( normalBasis * sampleRec.direction );
 
-						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+						bool isBelowSurface = ! material.fogVolume && dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
 
 						// direct env map sampling
@@ -564,7 +565,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						gl_FragColor.rgb += ( surf.emission * throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, surf.normal, faceNormal) ) {
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, surf.normal, faceNormal ) ) {
 
 							break;
 

@@ -401,7 +401,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
-			sampleRec.pdf = dot( wi, wh ) / PI;
+			sampleRec.pdf = 1.0;// / 2.0 * PI;
 			sampleRec.direction = wi;
 			sampleRec.clearcoatDirection = wi;
 			sampleRec.color = surf.color;
