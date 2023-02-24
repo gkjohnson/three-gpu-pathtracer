@@ -608,62 +608,62 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						SurfaceRec surfaceRec;
-						surfaceRec.faceNormal = faceNormal;
-						surfaceRec.normal = normal;
+						SurfaceRec surf;
+						surf.faceNormal = faceNormal;
+						surf.normal = normal;
 
-						surfaceRec.metalness = metalness;
-						surfaceRec.color = albedo.rgb;
-						surfaceRec.emission = emission;
+						surf.metalness = metalness;
+						surf.color = albedo.rgb;
+						surf.emission = emission;
 
-						surfaceRec.ior = material.ior;
-						surfaceRec.transmission = transmission;
-						surfaceRec.thinFilm = material.thinFilm;
-						surfaceRec.attenuationColor = material.attenuationColor;
-						surfaceRec.attenuationDistance = material.attenuationDistance;
+						surf.ior = material.ior;
+						surf.transmission = transmission;
+						surf.thinFilm = material.thinFilm;
+						surf.attenuationColor = material.attenuationColor;
+						surf.attenuationDistance = material.attenuationDistance;
 
-						surfaceRec.clearcoatNormal = clearcoatNormal;
-						surfaceRec.clearcoat = clearcoat;
+						surf.clearcoatNormal = clearcoatNormal;
+						surf.clearcoat = clearcoat;
 
-						surfaceRec.sheen = material.sheen;
-						surfaceRec.sheenColor = sheenColor;
+						surf.sheen = material.sheen;
+						surf.sheenColor = sheenColor;
 
-						surfaceRec.iridescence = iridescence;
-						surfaceRec.iridescenceIor = material.iridescenceIor;
-						surfaceRec.iridescenceThickness = iridescenceThickness;
+						surf.iridescence = iridescence;
+						surf.iridescenceIor = material.iridescenceIor;
+						surf.iridescenceThickness = iridescenceThickness;
 
-						surfaceRec.specularColor = specularColor;
-						surfaceRec.specularIntensity = specularIntensity;
+						surf.specularColor = specularColor;
+						surf.specularIntensity = specularIntensity;
 
 						// apply perceptual roughness factor from gltf. sheen perceptual roughness is
 						// applied by its brdf function
 						// https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#microfacet-surfaces
-						surfaceRec.roughness = roughness * roughness;
-						surfaceRec.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
-						surfaceRec.sheenRoughness = sheenRoughness;
+						surf.roughness = roughness * roughness;
+						surf.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
+						surf.sheenRoughness = sheenRoughness;
 
 						// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 						// then we can just always assume this is a front face.
-						surfaceRec.frontFace = side == 1.0 || transmission == 0.0;
-						surfaceRec.eta = material.thinFilm || surfaceRec.frontFace ? 1.0 / material.ior : material.ior;
-						surfaceRec.f0 = iorRatioToF0( surfaceRec.eta );
+						surf.frontFace = side == 1.0 || transmission == 0.0;
+						surf.eta = material.thinFilm || surf.frontFace ? 1.0 / material.ior : material.ior;
+						surf.f0 = iorRatioToF0( surf.eta );
 
 						// Compute the filtered roughness value to use during specular reflection computations.
 						// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
 						// If we're exiting something transmissive then scale the factor down significantly so we can retain
 						// sharp internal reflections
-						surfaceRec.filteredRoughness = applyFilteredGlossy( surfaceRec.roughness, accumulatedRoughness );
-						surfaceRec.filteredClearcoatRoughness = applyFilteredGlossy( surfaceRec.clearcoatRoughness, accumulatedClearcoatRoughness );
+						surf.filteredRoughness = applyFilteredGlossy( surf.roughness, accumulatedRoughness );
+						surf.filteredClearcoatRoughness = applyFilteredGlossy( surf.clearcoatRoughness, accumulatedClearcoatRoughness );
 
-						mat3 normalBasis = getBasisFromNormal( surfaceRec.normal );
+						mat3 normalBasis = getBasisFromNormal( surf.normal );
 						mat3 invBasis = inverse( normalBasis );
 
-						mat3 clearcoatNormalBasis = getBasisFromNormal( clearcoatNormal );
+						mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
 						mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
 
 						vec3 outgoing = - normalize( invBasis * rayDirection );
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
-						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surfaceRec );
+						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surf );
 
 						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
@@ -694,13 +694,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 attenuatedColor;
 							if (
 								lightSampleRec.pdf > 0.0 &&
-								isDirectionValid( lightSampleRec.direction, normal, faceNormal ) &&
+								isDirectionValid( lightSampleRec.direction, surf.normal, faceNormal ) &&
 								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surfaceRec, sampleColor );
+								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surf, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -734,13 +734,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 attenuatedColor;
 							if (
 								envPdf > 0.0 &&
-								isDirectionValid( envDirection, normal, faceNormal ) &&
+								isDirectionValid( envDirection, surf.normal, faceNormal ) &&
 								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
 							) {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surfaceRec, sampleColor );
+								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surf, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -782,10 +782,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						// accumulate color
-						gl_FragColor.rgb += ( emission * throughputColor );
+						gl_FragColor.rgb += ( surf.emission * throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, normal, faceNormal) ) {
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, surf.normal, faceNormal) ) {
 
 							break;
 
@@ -819,7 +819,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// attenuate the throughput color by the medium color
 						if ( side == - 1.0 ) {
 
-							throughputColor *= transmissionAttenuation( dist, surfaceRec.attenuationColor, surfaceRec.attenuationDistance );
+							throughputColor *= transmissionAttenuation( dist, surf.attenuationColor, surf.attenuationDistance );
 
 						}
 
