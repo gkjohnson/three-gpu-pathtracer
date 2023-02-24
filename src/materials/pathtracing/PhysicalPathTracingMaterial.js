@@ -499,6 +499,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// to a single pixel resulting in fireflies
 						if ( ! isBelowSurface ) {
 
+							// TODO: is this correct?
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
 							accumulatedRoughness += sin( acosApprox( halfVector.z ) );

@@ -61,7 +61,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float specularIntensity;
 	};
 
-	struct BSDFSampleRecord {
+	struct ScatterRecord {
 		float specularPdf;
 		float pdf;
 
@@ -389,7 +389,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	BSDFSampleRecord bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRecord surf ) {
+	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRecord surf ) {
 
 		float diffuseWeight;
 		float specularWeight;
@@ -453,7 +453,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		}
 
-		BSDFSampleRecord result;
+		ScatterRecord result;
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
 		result.direction = wi;
 		result.clearcoatDirection = clearcoatWi;

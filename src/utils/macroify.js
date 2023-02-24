@@ -4,6 +4,6 @@ export function macroify( contents ) {
 		.trim()
 		.replace( /\/\/.*[\n\r]/g, '' )
 		.split( /[\n\r]+/ )
-		.join( '\n\\' );
+		.join( '\\\n' ) + '\\\n';
 
 }
