@@ -123,8 +123,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Color );
 		F = mix( F, iridescenceF,  surf.iridescence );
 
-		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
-
 		// PDF
 		// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 		float incidentTheta = acos( wo.z );
@@ -132,6 +130,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float D = ggxDistribution( wh, roughness );
 		float G1 = ggxShadowMaskG1( incidentTheta, roughness );
 		float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
+
+		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 		return ggxPdf / ( 4.0 * dot( wo, wh ) );
 
 	}
