@@ -273,7 +273,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					bool isShadowRay = false;
 					int transparentTraversals = transmissiveBounces;
 					vec3 throughputColor = vec3( 1.0 );
-					BSDFSampleRecord sampleRec;
+					ScatterRecord sampleRec;
 					int i;
 
 					for ( i = 0; i < bounces; i ++ ) {
