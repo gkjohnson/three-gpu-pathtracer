@@ -32,7 +32,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	}
 
-	struct LightSampleRec {
+	struct LightSampleRecord {
 
 		float dist;
 		vec3 direction;
@@ -42,7 +42,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	};
 
-	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, LightSampleRec lightSampleRec ) {
+	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, LightSampleRecord lightSampleRec ) {
 
 		bool didHit = false;
 		uint l;
@@ -92,9 +92,9 @@ export const lightSamplingGLSL = /* glsl */`
 
 	}
 
-	LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
+	LightSampleRecord randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 
-		LightSampleRec lightSampleRec;
+		LightSampleRecord lightSampleRec;
 		lightSampleRec.type = light.type;
 
 		lightSampleRec.emission = light.color * light.intensity;
@@ -131,7 +131,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	}
 
-	LightSampleRec randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin, vec2 ruv ) {
+	LightSampleRecord randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin, vec2 ruv ) {
 
 		float radius = light.radius * sqrt( ruv.x );
 		float theta = ruv.y * 2.0 * PI;
@@ -159,7 +159,7 @@ export const lightSamplingGLSL = /* glsl */`
 			getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 
 		float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
-		LightSampleRec lightSampleRec;
+		LightSampleRecord lightSampleRec;
 		lightSampleRec.type = light.type;
 		lightSampleRec.dist = dist;
 		lightSampleRec.direction = direction;
@@ -170,7 +170,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	}
 
-	LightSampleRec randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
+	LightSampleRecord randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
 
 		// pick a random light
 		uint l = uint( ruv.x * float( lightCount ) );
@@ -192,7 +192,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 			}
 
-			LightSampleRec rec;
+			LightSampleRecord rec;
 			rec.direction = normalize( lightRay );
 			rec.dist = length( lightRay );
 			rec.pdf = 1.0;
@@ -202,7 +202,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 		} else if ( light.type == DIR_LIGHT_TYPE ) {
 
-			LightSampleRec rec;
+			LightSampleRecord rec;
 			rec.dist = 1e10;
 			rec.direction = light.u;
 			rec.pdf = 1.0;

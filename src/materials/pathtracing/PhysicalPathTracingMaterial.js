@@ -278,7 +278,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 						bool firstRay = i == 0 && transparentTraversals == transmissiveBounces;
 
-						LightSampleRec lightSampleRec;
+						LightSampleRecord lightSampleRec;
 						bool lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection, lightSampleRec );
 						if ( lightHit && ( lightSampleRec.dist < dist || ! hit ) ) {
 
@@ -682,7 +682,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if( sobol( 5 ) > 1.0 / float( lights.count + 1u ) ) {
 
 							// sample a light or environment
-							LightSampleRec lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
+							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
 							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
