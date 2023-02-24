@@ -15,7 +15,7 @@ f90    : Amount of light reflected at grazing angles
 
 export const bsdfSamplingGLSL = /* glsl */`
 
-	struct SurfaceRec {
+	struct SurfaceRecord {
 
 		// geometry
 		vec3 faceNormal;
@@ -61,11 +61,13 @@ export const bsdfSamplingGLSL = /* glsl */`
 		float specularIntensity;
 	};
 
-	struct SampleRec {
+	struct ScatterRecord {
 		float specularPdf;
 		float pdf;
+
 		vec3 direction;
 		vec3 clearcoatDirection;
+
 		vec3 color;
 	};
 
@@ -74,7 +76,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	${ iridescenceGLSL }
 
 	// diffuse
-	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
+	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
 
 		// https://schuttejoe.github.io/post/disneybsdf/
 		float fl = schlickFresnel( wi.z, 0.0 );
@@ -94,7 +96,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	vec3 diffuseDirection( vec3 wo, SurfaceRec surf ) {
+	vec3 diffuseDirection( vec3 wo, SurfaceRecord surf ) {
 
 		vec3 lightDirection = sampleSphere( sobol2( 11 ) );
 		lightDirection.z += 1.0;
@@ -105,7 +107,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	// specular
-	float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
+	float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
 
 		// if roughness is set to 0 then D === NaN which results in black pixels
 		float metalness = surf.metalness;
@@ -113,8 +115,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float eta = surf.eta;
 		float f0 = surf.f0;
-		float G = ggxShadowMaskG2( wi, wo, roughness );
-		float D = ggxDistribution( wh, roughness );
 
 		vec3 f0Color = mix( f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
 		vec3 f90Color = vec3( mix( surf.specularIntensity, 1.0, surf.metalness ) );
@@ -123,18 +123,20 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 iridescenceF = evalIridescence( 1.0, surf.iridescenceIor, dot( wi, wh ), surf.iridescenceThickness, f0Color );
 		F = mix( F, iridescenceF,  surf.iridescence );
 
-		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
-
 		// PDF
 		// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 		float incidentTheta = acos( wo.z );
+		float G = ggxShadowMaskG2( wi, wo, roughness );
+		float D = ggxDistribution( wh, roughness );
 		float G1 = ggxShadowMaskG1( incidentTheta, roughness );
 		float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
+
+		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 		return ggxPdf / ( 4.0 * dot( wo, wh ) );
 
 	}
 
-	vec3 specularDirection( vec3 wo, SurfaceRec surf ) {
+	vec3 specularDirection( vec3 wo, SurfaceRecord surf ) {
 
 		// sample ggx vndf distribution which gives a new normal
 		float roughness = surf.filteredRoughness;
@@ -152,7 +154,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	// transmission
 	/*
-	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
+	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
 
 		// See section 4.2 in https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 
@@ -168,7 +170,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
+	vec3 transmissionDirection( vec3 wo, SurfaceRecord surf ) {
 
 		float filteredRoughness = surf.filteredRoughness;
 		float eta = surf.eta;
@@ -195,7 +197,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	// TODO: This is just using a basic cosine-weighted specular distribution with an
 	// incorrect PDF value at the moment. Update it to correctly use a GGX distribution
-	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, out vec3 color ) {
+	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
 
 		color = surf.transmission * surf.color;
 
@@ -211,7 +213,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	vec3 transmissionDirection( vec3 wo, SurfaceRec surf ) {
+	vec3 transmissionDirection( vec3 wo, SurfaceRecord surf ) {
 
 		float roughness = surf.filteredRoughness;
 		float eta = surf.eta;
@@ -228,7 +230,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	// clearcoat
-	float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf, inout vec3 color ) {
+	float clearcoatEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, inout vec3 color ) {
 
 		float ior = 1.5;
 		float f0 = iorRatioToF0( ior );
@@ -249,7 +251,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	vec3 clearcoatDirection( vec3 wo, SurfaceRec surf ) {
+	vec3 clearcoatDirection( vec3 wo, SurfaceRecord surf ) {
 
 		// sample ggx vndf distribution which gives a new normal
 		float roughness = surf.filteredClearcoatRoughness;
@@ -265,7 +267,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	// sheen
-	vec3 sheenColor( vec3 wo, vec3 wi, vec3 wh, SurfaceRec surf ) {
+	vec3 sheenColor( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf ) {
 
 		float cosThetaO = saturateCos( wo.z );
 		float cosThetaI = saturateCos( wi.z );
@@ -285,7 +287,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	// bsdf
 	void getLobeWeights(
-		vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRec surf,
+		vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRecord surf,
 		out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight
 	) {
 
@@ -309,7 +311,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	float bsdfEval(
-		vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf,
+		vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRecord surf,
 		float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight, out float specularPdf, out vec3 color
 	) {
 
@@ -373,7 +375,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRec surf, out vec3 color ) {
+	float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRecord surf, out vec3 color ) {
 
 		vec3 wh = getHalfVector( wo, wi, surf.eta );
 		float diffuseWeight;
@@ -387,7 +389,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	SampleRec bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRec surf ) {
+	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRecord surf ) {
 
 		float diffuseWeight;
 		float specularWeight;
@@ -451,7 +453,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		}
 
-		SampleRec result;
+		ScatterRecord result;
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
 		result.direction = wi;
 		result.clearcoatDirection = clearcoatWi;
