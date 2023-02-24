@@ -42,6 +42,7 @@ import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl
 // path tracer utils
 import { cameraUtilsGLSL } from './glsl/cameraUtils.glsl.js';
 import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
+import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -206,6 +207,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				${ cameraUtilsGLSL }
 				${ attenuateHitGLSL }
+				${ traceSceneGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 
@@ -275,12 +277,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						sobolBounceIndex ++;
 
-						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 						bool firstRay = i == 0 && transparentTraversals == transmissiveBounces;
 
 						LightSampleRecord lightSampleRec;
-						bool lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection, lightSampleRec );
-						if ( lightHit && ( lightSampleRec.dist < dist || ! hit ) ) {
+						int hitType = traceScene(
+							rayOrigin, rayDirection,
+							bvh, lights,
+							faceIndices, faceNormal, barycoord, side, dist,
+							lightSampleRec
+						);
+
+						if ( hitType == LIGHT_HIT ) {
 
 							if ( firstRay || transmissiveRay ) {
 
@@ -312,9 +319,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 							break;
 
-						}
-
-						if ( ! hit ) {
+						} else if ( hitType == NO_HIT ) {
 
 							if ( firstRay || transmissiveRay ) {
 
