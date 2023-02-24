@@ -268,7 +268,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					bool isShadowRay = false;
 					int transparentTraversals = transmissiveBounces;
 					vec3 throughputColor = vec3( 1.0 );
-					SampleRec sampleRec;
+					BSDFSampleRecord sampleRec;
 					int i;
 
 					for ( i = 0; i < bounces; i ++ ) {
@@ -608,7 +608,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						SurfaceRec surf;
+						SurfaceRecord surf;
 						surf.faceNormal = faceNormal;
 						surf.normal = normal;
 

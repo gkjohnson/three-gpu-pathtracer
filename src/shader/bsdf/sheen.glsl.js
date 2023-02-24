@@ -67,7 +67,7 @@ export const sheenGLSL = /* glsl */`
 
 	}
 
-	float sheenAlbedoScaling( vec3 wo, vec3 wi, SurfaceRec surf ) {
+	float sheenAlbedoScaling( vec3 wo, vec3 wi, SurfaceRecord surf ) {
 
 		float alpha = max( surf.sheenRoughness, 0.07 );
 		alpha = alpha * alpha;
@@ -82,7 +82,7 @@ export const sheenGLSL = /* glsl */`
 	}
 
 	// See Section 5, Layering, in http://www.aconty.com/pdf/s2017_pbs_imageworks_sheen.pdf
-	float sheenAlbedoScaling( vec3 wo, SurfaceRec surf ) {
+	float sheenAlbedoScaling( vec3 wo, SurfaceRecord surf ) {
 
 		float alpha = max( surf.sheenRoughness, 0.07 );
 		alpha = alpha * alpha;
