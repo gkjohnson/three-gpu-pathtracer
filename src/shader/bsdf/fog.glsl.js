@@ -8,14 +8,14 @@ export const fogGLSL = /* glsl */`
 
 	}
 
-	SampleRec sampleFogVolume( Material material, vec2 uv ) {
+	ScatterRecord sampleFogVolume( SurfaceRecord surf, vec2 uv ) {
 
-		SampleRec sampleRec;
+		ScatterRecord sampleRec;
 		sampleRec.specularPdf = 0.0;
 		sampleRec.pdf = 1.0 / ( 2.0 * PI );
 		sampleRec.direction = sampleSphere( uv );
 		sampleRec.clearcoatDirection = sampleRec.direction;
-		sampleRec.color = material.color;
+		sampleRec.color = surf.color;
 		return sampleRec;
 
 	}

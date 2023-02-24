@@ -17,6 +17,9 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	struct SurfaceRecord {
 
+		// surface type
+		bool volumeParticle;
+
 		// geometry
 		vec3 faceNormal;
 		bool frontFace;
@@ -390,6 +393,21 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRecord surf ) {
+
+		if ( surf.volumeParticle ) {
+
+			vec3 wi = sampleSphere( sobol2( 16 ) );
+			vec3 wh = normalize( wo + wi );
+
+			ScatterRecord sampleRec;
+			sampleRec.specularPdf = 0.0;
+			sampleRec.pdf = dot( wi, wh ) / PI;
+			sampleRec.direction = wi;
+			sampleRec.clearcoatDirection = wi;
+			sampleRec.color = surf.color;
+			return sampleRec;
+
+		}
 
 		float diffuseWeight;
 		float specularWeight;

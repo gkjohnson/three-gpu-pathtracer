@@ -282,9 +282,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					ScatterRecord sampleRec;
 					int i;
 
+					Material fogMaterial;
 					#if FEATURE_FOG
 
-					Material fogMaterial;
 					fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
 						bvh, rayOrigin, rayDirection,
 						materialIndexAttribute, materials,
@@ -302,7 +302,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						LightSampleRecord lightSampleRec;
 						int hitType = traceScene(
 							rayOrigin, rayDirection,
-							bvh, lights,
+							bvh, lights, fogMaterial,
 							faceIndices, faceNormal, barycoord, side, dist,
 							lightSampleRec
 						);
@@ -379,26 +379,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						bool fogHit = false;
 						#if FEATURE_FOG
 
-						if ( fogMaterial.fogVolume ) {
+						if ( hitType == FOG_HIT ) {
 
-							vec3 uvw = sobol3( 9 );
-							float particleDist = intersectFogVolume( fogMaterial, uvw.x );
+							material = fogMaterial;
 
-							if ( particleDist < dist ) {
-
-								sampleRec = sampleFogVolume( fogMaterial, uvw.yz );
-								throughputColor *= sampleRec.color;
-								rayOrigin += rayDirection * particleDist;
-								rayDirection = sampleRec.direction;
-								material = fogMaterial;
-								fogHit = true;
-								continue;
-
-							}
-
-						}
-
-						if ( ! fogHit && material.fogVolume ) {
+						} else if ( material.fogVolume ) {
 
 							fogMaterial = material;
 							fogMaterial.fogVolume = side == 1.0;
@@ -568,7 +553,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
 						bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
-						if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+						if ( ( isTransmissiveRay || isBelowSurface || material.fogVolume ) && transparentTraversals > 0 ) {
 
 							transparentTraversals --;
 							i --;
