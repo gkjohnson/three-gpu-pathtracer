@@ -277,34 +277,35 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 						bool firstRay = i == 0 && transparentTraversals == transmissiveBounces;
-						LightSampleRec lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection );
 
-						if ( lightHit.hit && ( lightHit.dist < dist || ! hit ) ) {
+						LightSampleRec lightSampleRec;
+						bool lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection, lightSampleRec );
+						if ( lightHit && ( lightSampleRec.dist < dist || ! hit ) ) {
 
 							if ( firstRay || transmissiveRay ) {
 
-								gl_FragColor.rgb += lightHit.emission * throughputColor;
+								gl_FragColor.rgb += lightSampleRec.emission * throughputColor;
 
 							} else {
 
 								#if FEATURE_MIS
 
 								// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
-								if ( lightHit.type == SPOT_LIGHT_TYPE || lightHit.type == DIR_LIGHT_TYPE || lightHit.type == POINT_LIGHT_TYPE ) {
+								if ( lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ) {
 
-									gl_FragColor.rgb += lightHit.emission * throughputColor;
+									gl_FragColor.rgb += lightSampleRec.emission * throughputColor;
 
 								} else {
 
 									// weight the contribution
-									float misWeight = misHeuristic( sampleRec.pdf, lightHit.pdf / float( lights.count + 1u ) );
-									gl_FragColor.rgb += lightHit.emission * throughputColor * misWeight;
+									float misWeight = misHeuristic( sampleRec.pdf, lightSampleRec.pdf / float( lights.count + 1u ) );
+									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * misWeight;
 
 								}
 
 								#else
 
-								gl_FragColor.rgb += lightHit.emission * throughputColor;
+								gl_FragColor.rgb += lightSampleRec.emission * throughputColor;
 
 								#endif
 

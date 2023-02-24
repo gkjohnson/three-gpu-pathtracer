@@ -34,7 +34,6 @@ export const lightSamplingGLSL = /* glsl */`
 
 	struct LightSampleRec {
 
-		bool hit;
 		float dist;
 		vec3 direction;
 		float pdf;
@@ -43,11 +42,9 @@ export const lightSamplingGLSL = /* glsl */`
 
 	};
 
-	LightSampleRec lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection ) {
+	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, LightSampleRec lightSampleRec ) {
 
-		LightSampleRec lightSampleRec;
-		lightSampleRec.hit = false;
-
+		bool didHit = false;
 		uint l;
 		for ( l = 0u; l < lightCount; l ++ ) {
 
@@ -75,11 +72,10 @@ export const lightSamplingGLSL = /* glsl */`
 				( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
 			) {
 
-				if ( dist < lightSampleRec.dist || ! lightSampleRec.hit ) {
+				if ( dist < lightSampleRec.dist ) {
 
 					float cosTheta = dot( rayDirection, normal );
-
-					lightSampleRec.hit = true;
+					didHit = true;
 					lightSampleRec.dist = dist;
 					lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
 					lightSampleRec.emission = light.color * light.intensity;
@@ -92,14 +88,13 @@ export const lightSamplingGLSL = /* glsl */`
 
 		}
 
-		return lightSampleRec;
+		return didHit;
 
 	}
 
 	LightSampleRec randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 
 		LightSampleRec lightSampleRec;
-		lightSampleRec.hit = true;
 		lightSampleRec.type = light.type;
 
 		lightSampleRec.emission = light.color * light.intensity;
@@ -165,7 +160,6 @@ export const lightSamplingGLSL = /* glsl */`
 
 		float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 		LightSampleRec lightSampleRec;
-		lightSampleRec.hit = true;
 		lightSampleRec.type = light.type;
 		lightSampleRec.dist = dist;
 		lightSampleRec.direction = direction;
@@ -199,7 +193,6 @@ export const lightSamplingGLSL = /* glsl */`
 			}
 
 			LightSampleRec rec;
-			rec.hit = true;
 			rec.direction = normalize( lightRay );
 			rec.dist = length( lightRay );
 			rec.pdf = 1.0;
@@ -210,7 +203,6 @@ export const lightSamplingGLSL = /* glsl */`
 		} else if ( light.type == DIR_LIGHT_TYPE ) {
 
 			LightSampleRec rec;
-			rec.hit = true;
 			rec.dist = 1e10;
 			rec.direction = light.u;
 			rec.pdf = 1.0;
