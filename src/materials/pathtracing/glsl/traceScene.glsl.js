@@ -3,6 +3,7 @@ export const traceSceneGLSL = /* glsl */`
 	#define NO_HIT 0
 	#define SURFACE_HIT 1
 	#define LIGHT_HIT 2
+
 	int traceScene(
 
 		vec3 rayOrigin, vec3 rayDirection,
