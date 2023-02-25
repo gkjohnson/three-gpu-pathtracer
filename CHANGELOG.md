@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - Base color is now applied both on the way in and out of a transmissive material.
 
+### Fixed
+- Area light shapes now consistently cast shadows in MIS and non MIS mode
+
 ## [0.0.13] - 2023-02-13
 ### Changed
 - `TRANSPARENT_TRAVERSALS` define to `transmissiveBounces` uniform.
