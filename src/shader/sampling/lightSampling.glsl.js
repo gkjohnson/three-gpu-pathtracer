@@ -42,7 +42,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	};
 
-	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, LightSampleRecord lightSampleRec ) {
+	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, out LightSampleRecord lightSampleRec ) {
 
 		bool didHit = false;
 		uint l;
@@ -72,7 +72,7 @@ export const lightSamplingGLSL = /* glsl */`
 				( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
 			) {
 
-				if ( dist < lightSampleRec.dist ) {
+				if ( ! didHit || dist < lightSampleRec.dist ) {
 
 					float cosTheta = dot( rayDirection, normal );
 					didHit = true;
