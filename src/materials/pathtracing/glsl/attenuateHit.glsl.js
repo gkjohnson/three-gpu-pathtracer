@@ -1,9 +1,12 @@
 export const attenuateHitGLSL = /* glsl */`
 
 	// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
+	// returns true if a solid surface was hit
 	bool attenuateHit(
 		BVH bvh, vec3 rayOrigin, vec3 rayDirection, float rayDist,
-		int traversals, int transparentTraversals, bool isShadowRay, out vec3 color
+		int traversals, int transparentTraversals, bool isShadowRay,
+		Material fogMaterial,
+		out vec3 color
 	) {
 
 		// hit results
@@ -12,16 +15,39 @@ export const attenuateHitGLSL = /* glsl */`
 		vec3 barycoord = vec3( 0.0 );
 		float side = 1.0;
 		float dist = 0.0;
+		float totalDist = 0.0;
+		LightSampleRecord lightSampleRec;
 
 		color = vec3( 1.0 );
+
+		// TODO: we need to handle the case where we hit the light we're trying to check. Possibly remove the ability
+		// for the check to hit the lights here
 
 		// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
 		// and then reset.
 		for ( int i = 0; i < traversals; i ++ ) {
 
-			if ( bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist ) ) {
+			// int hitType = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist )
+			int hitType = traceScene(
+				rayOrigin, rayDirection,
+				bvh, lights, fogMaterial,
+				faceIndices, faceNormal, barycoord, side, dist,
+				lightSampleRec
+			);
 
-				if ( dist > rayDist ) {
+			totalDist += dist;
+
+			if ( hitType == FOG_HIT ) {
+
+				return true;
+
+			} else if ( hitType == LIGHT_HIT ) {
+
+				return abs( totalDist - rayDist ) > EPSILON;
+
+			} else if ( hitType == SURFACE_HIT ) {
+
+				if ( totalDist > rayDist ) {
 
 					return true;
 
@@ -31,9 +57,6 @@ export const attenuateHitGLSL = /* glsl */`
 				// Should be able to work using the material BSDF functions which will take into account specularity, etc.
 				// TODO: should we account for emissive surfaces here?
 
-				vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, barycoord, faceIndices.xyz ).xy;
-				vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, barycoord, faceIndices.xyz );
-
 				uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 				Material material = readMaterialInfo( materials, materialIndex );
 
@@ -41,11 +64,24 @@ export const attenuateHitGLSL = /* glsl */`
 				bool isEntering = side == 1.0;
 				rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
+				if ( material.fogVolume ) {
+
+					fogMaterial = material;
+					fogMaterial.fogVolume = side == 1.0;
+					i -= sign( transparentTraversals );
+					transparentTraversals --;
+					continue;
+
+				}
+
 				if ( ! material.castShadow && isShadowRay ) {
 
 					continue;
 
 				}
+
+				vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, barycoord, faceIndices.xyz ).xy;
+				vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, barycoord, faceIndices.xyz );
 
 				// albedo
 				vec4 albedo = vec4( material.color, material.opacity );
@@ -122,8 +158,8 @@ export const attenuateHitGLSL = /* glsl */`
 				bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
 				if ( ( isTransmissiveRay || isEntering ) && transparentTraversals > 0 ) {
 
+					i -= sign( transparentTraversals );
 					transparentTraversals --;
-					i --;
 
 				}
 

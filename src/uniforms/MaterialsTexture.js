@@ -244,6 +244,9 @@ export class MaterialsTexture extends DataTexture {
 				// reusing opacity field
 				floatArray[ index + 13 * 4 + 1 ] = m.density;
 
+				// side
+				floatArray[ index + 13 * 4 + 3 ] = 0.0;
+
 				// sample 14 .b
 				floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
 

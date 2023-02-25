@@ -213,6 +213,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				varying vec2 vUv;
 
 				${ cameraUtilsGLSL }
+				${ traceSceneGLSL }
 				${ attenuateHitGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
@@ -243,7 +244,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				${ traceSceneGLSL }
 				${ getSurfaceRecordGLSL }
 
 				void main() {
@@ -474,7 +474,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -514,7 +514,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf

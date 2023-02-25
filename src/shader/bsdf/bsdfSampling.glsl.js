@@ -380,6 +380,13 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRecord surf, out vec3 color ) {
 
+		if ( surf.volumeParticle ) {
+
+			color = surf.color;
+			return 1.0 / 4.0 * PI;
+
+		}
+
 		vec3 wh = getHalfVector( wo, wi, surf.eta );
 		float diffuseWeight;
 		float specularWeight;
@@ -401,7 +408,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
-			sampleRec.pdf = 1.0;// / 2.0 * PI;
+			sampleRec.pdf = 1.0 / 4.0 * PI;
 			sampleRec.direction = wi;
 			sampleRec.clearcoatDirection = wi;
 			sampleRec.color = surf.color;
