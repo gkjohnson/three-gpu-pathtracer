@@ -39,7 +39,7 @@ export const attenuateHitGLSL = /* glsl */`
 			} else if ( hitType == LIGHT_HIT ) {
 
 				float totalDist = distance( ogRayOrigin, rayOrigin + rayDirection * lightSampleRec.dist );
-				return abs( totalDist - rayDist ) > max( totalDist, rayDist ) * 1e-5;
+				return totalDist < rayDist - max( totalDist, rayDist ) * 1e-4;
 
 			} else if ( hitType == SURFACE_HIT ) {
 
