@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, RectAreaLight, SphereGeometry, SpotLight, SpotLightHelper } from 'three';
+import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial } from 'three';
 
 let renderer, controls, sceneInfo, ptRenderer, blitQuad;
 let perspectiveCamera, scene, fogMaterial, spotLight;
@@ -74,7 +74,7 @@ async function init() {
 	spotLight.position.set( 0, 1, 0 ).multiplyScalar( 3 );
 	spotLight.angle = Math.PI / 4.5;
 	spotLight.decay = 2;
-	spotLight.penumbra = 0.2;
+	spotLight.penumbra = 0.15;
 	spotLight.distance = 0.0;
 	spotLight.intensity = 50.0;
 	spotLight.radius = 0.025;
