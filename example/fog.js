@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial } from 'three';
@@ -62,7 +62,7 @@ async function init() {
 	scene = new THREE.Scene();
 
 	samplesEl = document.getElementById( 'samples' );
-	fogMaterial = new MeshPhysicalMaterial();
+	fogMaterial = new FogVolumeMaterial();
 
 	const generator = new PathTracingSceneWorker();
 	const envMat = new MeshStandardMaterial( { color: 0xffffff, roughness: 1, metalness: 0 } );
