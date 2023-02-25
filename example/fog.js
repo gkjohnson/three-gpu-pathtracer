@@ -21,7 +21,7 @@ const params = {
 	color: '#eeeeee',
 	fog: true,
 	density: 0.01,
-	lightIntensity: 100,
+	lightIntensity: 250,
 	lightColor: '#ffffff',
 
 };
