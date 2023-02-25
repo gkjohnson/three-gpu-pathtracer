@@ -21,7 +21,7 @@ const params = {
 	color: '#eeeeee',
 	fog: true,
 	density: 0.01,
-	lightIntensity: 250,
+	lightIntensity: 500,
 	lightColor: '#ffffff',
 
 };
@@ -38,7 +38,7 @@ async function init() {
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( 0, 1, 7 );
+	perspectiveCamera.position.set( 0, 1, 6 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
@@ -65,8 +65,8 @@ async function init() {
 	fogMaterial = new FogVolumeMaterial();
 
 	const generator = new PathTracingSceneWorker();
-	const envMat = new MeshStandardMaterial( { color: 0xffffff, roughness: 1, metalness: 0 } );
-	const mesh = new Mesh( new BoxGeometry( 10, 4.05, 10 ), fogMaterial );
+	const envMat = new MeshStandardMaterial( { color: 0x999999, roughness: 1, metalness: 0 } );
+	const fogMesh = new Mesh( new BoxGeometry( 8, 4.05, 8 ), fogMaterial );
 	const floor = new Mesh( new CylinderGeometry( 5, 5, 0.1, 40 ), envMat );
 	floor.position.y = - 1.1;
 
@@ -77,7 +77,7 @@ async function init() {
 	spotLight.penumbra = 0.15;
 	spotLight.distance = 0.0;
 	spotLight.intensity = 50.0;
-	spotLight.radius = 0.025;
+	spotLight.radius = 0.05;
 
 	const lightGroup = new Group();
 	lightGroup.add( spotLight );
@@ -95,7 +95,7 @@ async function init() {
 	}
 
 	const group = new Group();
-	group.add( mesh, floor, lightGroup );
+	group.add( fogMesh, floor, lightGroup );
 
 	group.updateMatrixWorld();
 	sceneInfo = await generator.generate( group );
@@ -148,7 +148,7 @@ async function init() {
 	fogFolder.add( params, 'density', 0, 1 ).onChange( reset );
 
 	const lightFolder = gui.addFolder( 'light' );
-	lightFolder.add( params, 'lightIntensity', 0, 500 ).onChange( reset );
+	lightFolder.add( params, 'lightIntensity', 0, 1000 ).onChange( reset );
 	lightFolder.addColor( params, 'lightColor' ).onChange( reset );
 
 	animate();
