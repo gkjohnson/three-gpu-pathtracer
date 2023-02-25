@@ -19,9 +19,7 @@ export const traceSceneGLSL = /* glsl */`
 
 		if ( fogMaterial.fogVolume ) {
 
-			vec3 uvw = sobol3( 9 );
-			float particleDist = intersectFogVolume( fogMaterial, uvw.x );
-
+			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
 			if ( particleDist < dist && ( particleDist < lightSampleRec.dist || ! lightHit ) ) {
 
 				side = 1.0;
