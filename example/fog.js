@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial } from 'three';
+import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 
 let renderer, controls, sceneInfo, ptRenderer, blitQuad;
 let perspectiveCamera, scene, fogMaterial, spotLight;
