@@ -5,7 +5,7 @@ import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera } from
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { EquirectangularReflectionMapping, Mesh, MeshPhysicalMaterial, SphereGeometry } from 'three';
+import { BoxGeometry, EquirectangularReflectionMapping, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, RectAreaLight, SphereGeometry } from 'three';
 
 let renderer, controls, sceneInfo, ptRenderer, blitQuad;
 let perspectiveCamera, scene, meshMaterial;
@@ -29,11 +29,12 @@ const params = {
 	iridescenceThicknessMin: 0,
 	iridescenceThicknessMax: 400,
 
-	transmission: 1.0,
+	transmission: 0.0,
 	ior: 1.5,
+	opacity: 0.0,
 
-	fog: true,
-	density: 1,
+	fog: false,
+	density: 0,
 
 };
 
@@ -93,12 +94,22 @@ async function init() {
 	meshMaterial = new MeshPhysicalMaterial();
 	const generator = new PathTracingSceneWorker();
 	const mesh = new Mesh( new SphereGeometry( 1, 50, 50 ), meshMaterial );
+	const floor = new Mesh( new BoxGeometry( 10, 0.01, 10 ), new MeshStandardMaterial( { color: 0xffffff, roughness: 1, metalness: 0 } ) );
+	floor.position.y = - 1.0;
 
-	sceneInfo = await generator.generate( mesh );
+	const areaLight = new RectAreaLight( 0xffffff, 10, 3, 3 );
+	areaLight.rotation.x = - Math.PI / 4;
+	areaLight.position.set( 0, 1, 1 ).multiplyScalar( 3 );
+
+	const group = new Group();
+	group.add( mesh, floor, areaLight );
+
+	sceneInfo = await generator.generate( group );
 	scene.add( sceneInfo.scene );
 
 	const { bvh, textures, materials } = sceneInfo;
 	const geometry = bvh.geometry;
+	ptRenderer.material.environmentIntensity = 0;
 	ptRenderer.material.bvh.updateFrom( bvh );
 	ptRenderer.material.attributesArray.updateFrom(
 		geometry.attributes.normal,
@@ -109,6 +120,7 @@ async function init() {
 	ptRenderer.material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 	ptRenderer.material.textures.setTextures( renderer, 2048, 2048, textures );
 	ptRenderer.material.materials.updateFrom( materials, textures );
+	ptRenderer.material.lights.updateFrom( sceneInfo.lights );
 
 	generator.dispose();
 
@@ -153,8 +165,9 @@ async function init() {
 	matFolder.add( params, 'iridescenceThicknessMin', 0, 1000, 1 ).onChange( reset );
 	matFolder.add( params, 'iridescenceThicknessMax', 0, 1000, 1 ).onChange( reset );
 
+	matFolder.add( params, 'opacity', 0, 1 ).onChange( reset );
 	matFolder.add( params, 'fog' ).onChange( reset );
-	matFolder.add( params, 'density', 0, 10 ).onChange( reset );
+	matFolder.add( params, 'density', 0, 100 ).onChange( reset );
 
 	animate();
 
@@ -204,8 +217,9 @@ function animate() {
 	meshMaterial.specularIntensity = params.specularIntensity;
 	meshMaterial.specularColor.set( params.specularColor ).convertSRGBToLinear();
 	meshMaterial.isFogVolumeMaterial = params.fog;
-	meshMaterial.opacity = params.fog ? params.density : 1.0;
+	meshMaterial.opacity = params.fog ? params.density : params.opacity;
 	meshMaterial.density = meshMaterial.opacity;
+	meshMaterial.transparent = meshMaterial.opacity < 1.0;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	perspectiveCamera.updateMatrixWorld();

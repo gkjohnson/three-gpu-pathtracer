@@ -9,13 +9,14 @@ export const attenuateHitGLSL = /* glsl */`
 		out vec3 color
 	) {
 
+		vec3 ogRayOrigin = rayOrigin;
+
 		// hit results
 		uvec4 faceIndices = uvec4( 0u );
 		vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
 		vec3 barycoord = vec3( 0.0 );
 		float side = 1.0;
 		float dist = 0.0;
-		float totalDist = 0.0;
 		LightSampleRecord lightSampleRec;
 
 		color = vec3( 1.0 );
@@ -37,12 +38,12 @@ export const attenuateHitGLSL = /* glsl */`
 
 			} else if ( hitType == LIGHT_HIT ) {
 
-				totalDist += lightSampleRec.dist;
-				return abs( totalDist - rayDist ) > EPSILON;
+				float totalDist = distance( ogRayOrigin, rayOrigin + rayDirection * lightSampleRec.dist );
+				return abs( totalDist - rayDist ) > max( totalDist, rayDist ) * 1e-5;
 
 			} else if ( hitType == SURFACE_HIT ) {
 
-				totalDist += dist;
+				float totalDist = distance( ogRayOrigin, rayOrigin + rayDirection * dist );
 				if ( totalDist > rayDist ) {
 
 					return true;
@@ -158,7 +159,6 @@ export const attenuateHitGLSL = /* glsl */`
 					transparentTraversals --;
 
 				}
-
 
 			} else {
 
