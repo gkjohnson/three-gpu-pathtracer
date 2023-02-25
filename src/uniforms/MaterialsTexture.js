@@ -250,7 +250,7 @@ export class MaterialsTexture extends DataTexture {
 				// sample 14 .b
 				floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
 
-				i += MATERIAL_STRIDE;
+				index += MATERIAL_STRIDE;
 				continue;
 
 			}
