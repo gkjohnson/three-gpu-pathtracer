@@ -382,8 +382,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		if ( surf.volumeParticle ) {
 
-			color = surf.color;
-			return 1.0 / 4.0 * PI;
+			color = surf.color / ( 4.0 * PI );
+			return 1.0 / ( 4.0 * PI );
 
 		}
 
@@ -408,10 +408,10 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
-			sampleRec.pdf = 1.0 / 4.0 * PI;
+			sampleRec.pdf = 1.0 / ( 4.0 * PI );
 			sampleRec.direction = wi;
 			sampleRec.clearcoatDirection = wi;
-			sampleRec.color = surf.color;
+			sampleRec.color = surf.color / ( 4.0 * PI );
 			return sampleRec;
 
 		}
