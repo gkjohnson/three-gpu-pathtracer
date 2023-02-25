@@ -20,9 +20,6 @@ export const attenuateHitGLSL = /* glsl */`
 
 		color = vec3( 1.0 );
 
-		// TODO: we need to handle the case where we hit the light we're trying to check. Possibly remove the ability
-		// for the check to hit the lights here
-
 		// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
 		// and then reset.
 		for ( int i = 0; i < traversals; i ++ ) {
