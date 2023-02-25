@@ -27,7 +27,6 @@ export const attenuateHitGLSL = /* glsl */`
 		// and then reset.
 		for ( int i = 0; i < traversals; i ++ ) {
 
-			// int hitType = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist )
 			int hitType = traceScene(
 				rayOrigin, rayDirection,
 				bvh, lights, fogMaterial,
@@ -35,18 +34,18 @@ export const attenuateHitGLSL = /* glsl */`
 				lightSampleRec
 			);
 
-			totalDist += dist;
-
 			if ( hitType == FOG_HIT ) {
 
 				return true;
 
 			} else if ( hitType == LIGHT_HIT ) {
 
+				totalDist += lightSampleRec.dist;
 				return abs( totalDist - rayDist ) > EPSILON;
 
 			} else if ( hitType == SURFACE_HIT ) {
 
+				totalDist += dist;
 				if ( totalDist > rayDist ) {
 
 					return true;
