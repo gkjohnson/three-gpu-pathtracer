@@ -46,7 +46,7 @@ export const attenuateHitGLSL = /* glsl */`
 				float totalDist = distance( ogRayOrigin, rayOrigin + rayDirection * dist );
 				if ( totalDist > rayDist ) {
 
-					return true;
+					return false;
 
 				}
 
