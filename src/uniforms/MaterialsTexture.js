@@ -223,7 +223,7 @@ export class MaterialsTexture extends DataTexture {
 
 				for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
 
-					floatArray[ j ] = 0;
+					floatArray[ index + j ] = 0;
 
 				}
 
