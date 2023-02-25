@@ -444,13 +444,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surf );
 
-						bool wasBelowSurface = ! material.fogVolume && dot( rayDirection, faceNormal ) > 0.0;
+						bool wasBelowSurface = ! surf.volumeParticle && dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = rayDirection;
 						rayDirection = normalize( normalBasis * sampleRec.direction );
 
-						bool isBelowSurface = ! material.fogVolume && dot( rayDirection, faceNormal ) < 0.0;
+						bool isBelowSurface = ! surf.volumeParticle && dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
 
 						// direct env map sampling
@@ -462,7 +462,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// sample a light or environment
 							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
-							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								lightSampleRec.pdf = 0.0;
@@ -502,7 +502,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
 							// TODO: this should be improved but how? The env samples could traverse a few layers?
-							bool isSampleBelowSurface = dot( faceNormal, envDirection ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( faceNormal, envDirection ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								envPdf = 0.0;
@@ -537,7 +537,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies
-						if ( ! isBelowSurface ) {
+						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
 							// TODO: is this correct?
 							// determine if this is a rough normal or not by checking how far off straight up it is
@@ -553,7 +553,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( rayDirection, faceNormal * side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface || material.fogVolume ) && transparentTraversals > 0 ) {
 
 							transparentTraversals --;
