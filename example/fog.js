@@ -186,7 +186,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	fogMaterial.isFogVolumeMaterial = true;
 	fogMaterial.color.set( params.color ).convertSRGBToLinear();
 	fogMaterial.density = params.density;
 
