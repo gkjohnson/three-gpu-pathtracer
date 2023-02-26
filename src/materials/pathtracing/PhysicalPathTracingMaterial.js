@@ -260,6 +260,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// inverse environment rotation
 					mat3 envRotation3x3 = mat3( environmentRotation );
 					mat3 invEnvRotation3x3 = inverse( envRotation3x3 );
+					float lightsDenom = environmentIntensity == 0.0 ? float( lights.count ) : float( lights.count + 1u );
 
 					// final color
 					gl_FragColor = vec4( 0.0 );
@@ -325,7 +326,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								} else {
 
 									// weight the contribution
-									float misWeight = misHeuristic( sampleRec.pdf, lightSampleRec.pdf / float( lights.count + 1u ) );
+									float misWeight = misHeuristic( sampleRec.pdf, lightSampleRec.pdf / lightsDenom );
 									gl_FragColor.rgb += lightSampleRec.emission * throughputColor * misWeight;
 
 								}
@@ -353,7 +354,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								// get the PDF of the hit envmap point
 								vec3 envColor;
 								float envPdf = sampleEquirect( envMapInfo, envRotation3x3 * rayDirection, envColor );
-								envPdf /= float( lights.count + 1u );
+								envPdf /= lightsDenom;
 
 								// and weight the contribution
 								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
@@ -457,7 +458,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if FEATURE_MIS
 
 						// uniformly pick a light or environment map
-						if( sobol( 5 ) > 1.0 / float( lights.count + 1u ) ) {
+						if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
 							// sample a light or environment
 							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
@@ -484,7 +485,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
-									float lightPdf = lightSampleRec.pdf / float( lights.count + 1u );
+									float lightPdf = lightSampleRec.pdf / lightsDenom;
 									float misWeight = lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
 									gl_FragColor.rgb += attenuatedColor * lightSampleRec.emission * throughputColor * sampleColor * misWeight / lightPdf;
 
@@ -524,7 +525,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 
 									// weight the direct light contribution
-									envPdf /= float( lights.count + 1u );
+									envPdf /= lightsDenom;
 									float misWeight = misHeuristic( envPdf, envMaterialPdf );
 									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * throughputColor * sampleColor * misWeight / envPdf;
 
