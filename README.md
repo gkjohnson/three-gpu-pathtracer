@@ -38,6 +38,8 @@ _More features and capabilities in progress!_
 
 [Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
 
+[Volumetric Fog Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
