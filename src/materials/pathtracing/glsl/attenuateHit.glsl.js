@@ -61,6 +61,8 @@ export const attenuateHitGLSL = /* glsl */`
 				bool isEntering = side == 1.0;
 				rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
+				#if FEATURE_FOG
+
 				if ( material.fogVolume ) {
 
 					fogMaterial = material;
@@ -70,6 +72,8 @@ export const attenuateHitGLSL = /* glsl */`
 					continue;
 
 				}
+
+				#endif
 
 				if ( ! material.castShadow && isShadowRay ) {
 

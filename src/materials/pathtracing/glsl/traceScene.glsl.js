@@ -17,10 +17,12 @@ export const traceSceneGLSL = /* glsl */`
 		bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
 		bool lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection, lightSampleRec );
 
+		#if FEATURE_FOG
+
 		if ( fogMaterial.fogVolume ) {
 
 			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
-			if ( particleDist < dist && ( particleDist < lightSampleRec.dist || ! lightHit ) ) {
+			if ( particleDist + 1e-4 < dist && ( particleDist + 1e-4 < lightSampleRec.dist || ! lightHit ) ) {
 
 				side = 1.0;
 				faceNormal = normalize( - rayDirection );
@@ -30,6 +32,8 @@ export const traceSceneGLSL = /* glsl */`
 			}
 
 		}
+
+		#endif
 
 		if ( lightHit && ( lightSampleRec.dist < dist || ! hit ) ) {
 
