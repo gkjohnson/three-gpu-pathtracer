@@ -7,6 +7,42 @@ const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 const MATTE_OFFSET = 14 * 4 + 0; // s14.r
 const SHADOW_OFFSET = 14 * 4 + 1; // s14.g
 
+class MaterialFeatures {
+
+	constructor() {
+
+		this._features = {};
+
+	}
+
+	isUsed( feature ) {
+
+		return feature in this._features;
+
+	}
+
+	setUsed( feature, used = true ) {
+
+		if ( used === false ) {
+
+			delete this._features[ feature ];
+
+		} else {
+
+			this._features[ feature ] = true;
+
+		}
+
+	}
+
+	reset() {
+
+		this._features = {};
+
+	}
+
+}
+
 export class MaterialsTexture extends DataTexture {
 
 	constructor() {
@@ -19,6 +55,7 @@ export class MaterialsTexture extends DataTexture {
 		this.wrapT = ClampToEdgeWrapping;
 		this.generateMipmaps = false;
 		this.threeCompatibilityTransforms = false;
+		this.features = new MaterialFeatures();
 
 	}
 
@@ -148,7 +185,7 @@ export class MaterialsTexture extends DataTexture {
 		let index = 0;
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
-		const { threeCompatibilityTransforms, image } = this;
+		const { threeCompatibilityTransforms, image, features } = this;
 
 		// get the list of textures with unique sources
 		const uniqueTextures = reduceTexturesToUniqueSources( textures );
@@ -175,9 +212,48 @@ export class MaterialsTexture extends DataTexture {
 		// can't encode texture ids that way.
 		// const intArray = new Int32Array( floatArray.buffer );
 
+		features.reset();
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];
+
+			if ( m.isFogVolumeMaterial ) {
+
+				features.setUsed( 'FOG' );
+
+				for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
+
+					floatArray[ index + j ] = 0;
+
+				}
+
+				// sample 0 .rgb
+				floatArray[ index + 0 * 4 + 0 ] = m.color.r;
+				floatArray[ index + 0 * 4 + 1 ] = m.color.g;
+				floatArray[ index + 0 * 4 + 2 ] = m.color.b;
+
+				// sample 2 .a
+				floatArray[ index + 2 * 4 + 3 ] = getField( m, 'emissiveIntensity', 0.0 );
+
+				// sample 3 .rgb
+				floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
+				floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
+				floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
+
+				// sample 13 .g
+				// reusing opacity field
+				floatArray[ index + 13 * 4 + 1 ] = m.density;
+
+				// side
+				floatArray[ index + 13 * 4 + 3 ] = 0.0;
+
+				// sample 14 .b
+				floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
+
+				index += MATERIAL_STRIDE;
+				continue;
+
+			}
 
 			// sample 0
 			// color
@@ -285,7 +361,8 @@ export class MaterialsTexture extends DataTexture {
 			floatArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
 			floatArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
 
-			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 ); // sample 9
+			// sample 9
+			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
 			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
 
 			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );

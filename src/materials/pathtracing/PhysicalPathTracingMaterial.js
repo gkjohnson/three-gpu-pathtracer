@@ -19,9 +19,11 @@ import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
 import { equirectStructGLSL } from '../../shader/structs/equirectStruct.glsl.js';
 import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
 import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
 
 // material sampling
 import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
+import { fogGLSL } from '../../shader/bsdf/fog.glsl.js';
 
 // sampling
 import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
@@ -51,6 +53,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 		this.setDefine( 'FEATURE_DOF', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
 		this.setDefine( 'FEATURE_BACKGROUND_MAP', this.backgroundMap ? 1 : 0 );
+		this.setDefine( 'FEATURE_FOG', this.materials.features.isUsed( 'FOG' ) ? 1 : 0 );
 
 	}
 
@@ -66,6 +69,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_RUSSIAN_ROULETTE: 1,
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
+				FEATURE_FOG: 1,
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -141,12 +145,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ sobolCommonGLSL }
 				${ sobolSamplingGLSL }
 
-				// uniform structs
-				${ cameraStructGLSL }
-				${ lightsStructGLSL }
-				${ equirectStructGLSL }
-				${ materialStructGLSL }
-
 				// common
 				${ arraySamplerTexelFetchGLSL }
 				${ fresnelGLSL }
@@ -154,11 +152,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ mathGLSL }
 				${ intersectShapesGLSL }
 
+				// uniform structs
+				${ cameraStructGLSL }
+				${ lightsStructGLSL }
+				${ equirectStructGLSL }
+				${ materialStructGLSL }
+				${ fogMaterialBvhGLSL }
+
 				// sampling
 				${ shapeSamplingGLSL }
 				${ bsdfSamplingGLSL }
 				${ equirectSamplingGLSL }
 				${ lightSamplingGLSL }
+				${ fogGLSL }
 
 				// environment
 				uniform EquirectHdrInfo envMapInfo;
@@ -207,6 +213,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				varying vec2 vUv;
 
 				${ cameraUtilsGLSL }
+				${ traceSceneGLSL }
 				${ attenuateHitGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
@@ -237,7 +244,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				${ traceSceneGLSL }
 				${ getSurfaceRecordGLSL }
 
 				void main() {
@@ -276,6 +282,17 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					ScatterRecord sampleRec;
 					int i;
 
+					Material fogMaterial;
+					#if FEATURE_FOG
+
+					fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
+						bvh, rayOrigin, rayDirection,
+						materialIndexAttribute, materials,
+						fogMaterial
+					);
+
+					#endif
+
 					for ( i = 0; i < bounces; i ++ ) {
 
 						sobolBounceIndex ++;
@@ -285,7 +302,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						LightSampleRecord lightSampleRec;
 						int hitType = traceScene(
 							rayOrigin, rayDirection,
-							bvh, lights,
+							bvh, lights, fogMaterial,
 							faceIndices, faceNormal, barycoord, side, dist,
 							lightSampleRec
 						);
@@ -359,6 +376,27 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
+						#if FEATURE_FOG
+
+						if ( hitType == FOG_HIT ) {
+
+							material = fogMaterial;
+
+						} else if ( material.fogVolume ) {
+
+							fogMaterial = material;
+							fogMaterial.fogVolume = side == 1.0;
+
+							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
+
+							i -= sign( transparentTraversals );
+							transparentTraversals -= sign( transparentTraversals );
+							continue;
+
+						}
+
+						#endif
+
 						if ( material.matte && firstRay ) {
 
 							gl_FragColor = vec4( 0.0 );
@@ -394,6 +432,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						faceNormal = surf.faceNormal;
+
 						mat3 normalBasis = getBasisFromNormal( surf.normal );
 						mat3 invBasis = inverse( normalBasis );
 
@@ -404,13 +444,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * rayDirection );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surf );
 
-						bool wasBelowSurface = dot( rayDirection, faceNormal ) > 0.0;
+						bool wasBelowSurface = ! surf.volumeParticle && dot( rayDirection, faceNormal ) > 0.0;
 						isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = rayDirection;
 						rayDirection = normalize( normalBasis * sampleRec.direction );
 
-						bool isBelowSurface = dot( rayDirection, faceNormal ) < 0.0;
+						bool isBelowSurface = ! surf.volumeParticle && dot( rayDirection, faceNormal ) < 0.0;
 						rayOrigin = stepRayOrigin( rayOrigin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
 
 						// direct env map sampling
@@ -422,7 +462,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// sample a light or environment
 							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
-							bool isSampleBelowSurface = dot( faceNormal, lightSampleRec.direction ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								lightSampleRec.pdf = 0.0;
@@ -434,7 +474,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -462,7 +502,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
 							// TODO: this should be improved but how? The env samples could traverse a few layers?
-							bool isSampleBelowSurface = dot( faceNormal, envDirection ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( faceNormal, envDirection ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								envPdf = 0.0;
@@ -474,7 +514,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -497,7 +537,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies
-						if ( ! isBelowSurface ) {
+						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
 							// TODO: is this correct?
 							// determine if this is a rough normal or not by checking how far off straight up it is
@@ -513,8 +553,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
-						if ( ( isTransmissiveRay || isBelowSurface ) && transparentTraversals > 0 ) {
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( rayDirection, faceNormal * side ) < 0.0;
+						if ( ( isTransmissiveRay || isBelowSurface || material.fogVolume ) && transparentTraversals > 0 ) {
 
 							transparentTraversals --;
 							i --;
@@ -525,7 +565,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						gl_FragColor.rgb += ( surf.emission * throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, surf.normal, faceNormal) ) {
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( rayDirection, surf.normal, faceNormal ) ) {
 
 							break;
 

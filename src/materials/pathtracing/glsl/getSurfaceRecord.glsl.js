@@ -10,6 +10,23 @@ export const getSurfaceRecordGLSL = /* glsl */`
 		out SurfaceRecord surf
 	) {
 
+		if ( material.fogVolume ) {
+
+			vec3 normal = vec3( 0, 0, 1 );
+
+			SurfaceRecord fogSurface;
+			fogSurface.volumeParticle = true;
+			fogSurface.color = material.color;
+			fogSurface.emission = material.emissiveIntensity * material.emissive;
+			fogSurface.normal = normal;
+			fogSurface.faceNormal = normal;
+			fogSurface.clearcoatNormal = normal;
+
+			surf = fogSurface;
+			return HIT_SURFACE;
+
+		}
+
 		// uv coord for textures
 		vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, barycoord, faceIndices.xyz ).xy;
 		vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, barycoord, faceIndices.xyz );
@@ -245,6 +262,8 @@ export const getSurfaceRecordGLSL = /* glsl */`
 			specularIntensity *= texture2D( textures, vec3( uvPrime.xy, material.specularIntensityMap ) ).a;
 
 		}
+
+		surf.volumeParticle = false;
 
 		surf.faceNormal = faceNormal;
 		surf.normal = normal;
