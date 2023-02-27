@@ -16,7 +16,8 @@ import {
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
-	Vector4
+	Vector4,
+	FloatType
 } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -32,7 +33,6 @@ import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 
 import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
-import { FloatType } from 'three';
 
 // lkg display constants
 const LKG_WIDTH = 420;
