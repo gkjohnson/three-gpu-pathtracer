@@ -132,7 +132,7 @@ ptMaterial.materials.updateFrom( materials, textures );
 ptMaterial.lights.updateFrom( lights );
 
 // set the environment map
-const texture = await new RGBELoader().setDataType(THREE.FloatType).loadAsync( envMapUrl );
+const texture = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
 ptRenderer.material.envMapInfo.updateFrom( texture );
 
 animate();
