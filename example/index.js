@@ -30,6 +30,7 @@ import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js
 import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FloatType } from 'three';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -466,7 +467,7 @@ function buildGui() {
 
 function updateEnvMap() {
 
-	new RGBELoader()
+	new RGBELoader().setDataType( FloatType )
 		.load( params.envMap, texture => {
 
 			if ( scene.environmentMap ) {

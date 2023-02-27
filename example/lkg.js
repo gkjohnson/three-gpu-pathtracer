@@ -32,6 +32,7 @@ import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 
 import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+import { FloatType } from 'three';
 
 // lkg display constants
 const LKG_WIDTH = 420;
@@ -165,7 +166,7 @@ async function init() {
 	} );
 
 	// load the environment map
-	new RGBELoader()
+	new RGBELoader().setDataType( FloatType )
 		.load( ENVMAP_URL, texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;

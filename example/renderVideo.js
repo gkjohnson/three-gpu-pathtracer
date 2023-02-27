@@ -126,7 +126,7 @@ async function init() {
 	videoEl.style.display = 'none';
 
 	// model models and environment map
-	const envMapPromise = new RGBELoader()
+	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr' )
 		.then( texture => {
 

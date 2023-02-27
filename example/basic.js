@@ -63,7 +63,7 @@ async function init() {
 	} );
 
 	// load the envmap and model
-	const envMapPromise = new RGBELoader()
+	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr' )
 		.then( texture => {
 

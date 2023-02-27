@@ -132,7 +132,7 @@ ptMaterial.materials.updateFrom( materials, textures );
 ptMaterial.lights.updateFrom( lights );
 
 // set the environment map
-const texture = await new RGBELoader().loadAsync( envMapUrl );
+const texture = await new RGBELoader().setDataType(THREE.FloatType).loadAsync( envMapUrl );
 ptRenderer.material.envMapInfo.updateFrom( texture );
 
 animate();
@@ -166,7 +166,7 @@ import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
 
 // ...
 
-const envMap = await new RGBELoader().loadAsync( envMapUrl );
+const envMap = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl ); 
 const generator = new BlurredEnvMapGenerator( renderer );
 const blurredEnvMap = generator.generate( envMap, 0.35 );
 
