@@ -78,7 +78,7 @@ async function init() {
 	const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
 	const envUrl = new URL( '../../../shared-assets/environments/lightroom_14b.hdr', BASE_URL ).toString();
 
-	await new RGBELoader()
+	await new RGBELoader().setDataType( THREE.FloatType )
 		.loadAsync( envUrl )
 		.then( texture => {
 

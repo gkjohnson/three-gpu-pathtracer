@@ -80,7 +80,7 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	const envMapPromise = new RGBELoader()
+	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 
