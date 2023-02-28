@@ -717,7 +717,7 @@ async function updateModel() {
 		sceneInfo = result;
 		scene.add( sceneInfo.scene );
 
-		const { bvh, textures, materials } = result;
+		const { bvh, textures, materials, lights } = result;
 		const geometry = bvh.geometry;
 		const material = ptRenderer.material;
 
@@ -731,6 +731,7 @@ async function updateModel() {
 		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 		material.textures.setTextures( renderer, 2048, 2048, textures );
 		material.materials.updateFrom( materials, textures );
+		material.lights.updateFrom( lights );
 
 		generator.dispose();
 
