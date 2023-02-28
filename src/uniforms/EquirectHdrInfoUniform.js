@@ -7,6 +7,9 @@ function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count =
 
 	while ( lower < upper ) {
 
+		// calculate the midpoint for this iteration using a bitwise shift right operator to save 1 floating point multiplication
+		// and 1 truncation from the double tilde operator to improve performance
+		// this results in much better performance over using standard "~ ~ ( (lower + upper) ) / 2" to calculate the midpoint
 		const mid = ( lower + upper ) >> 1;
 
 		// check if the middle array value is above or below the target and shift
