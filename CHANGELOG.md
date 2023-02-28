@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 - Base color is now applied both on the way in and out of a transmissive material.
+- Improved performance of env map CDF processing.
 
 ### Fixed
 - Area light shapes now consistently cast shadows in MIS and non MIS mode
