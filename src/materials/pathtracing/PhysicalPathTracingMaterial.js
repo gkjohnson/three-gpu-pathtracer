@@ -249,8 +249,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				void main() {
 
 					// init
-					rng_initialize( gl_FragCoord.xy, seed );
-					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) | ( uint( gl_FragCoord.y ) );
+					rng_initialize( vec2( 0 ), seed );
+					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) |  uint( gl_FragCoord.y );
 					sobolPathIndex = uint( seed );
 
 					// get camera ray
@@ -275,7 +275,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// path tracing state
 					float accumulatedRoughness = 0.0;
-					float accumulatedClearcoatRoughness = 0.0;
 					bool transmissiveRay = true;
 					bool isShadowRay = false;
 					int transparentTraversals = transmissiveBounces;
@@ -418,7 +417,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if (
 							getSurfaceRecord(
 								material, attributesArray, side, barycoord, faceIndices,
-								faceNormal, accumulatedRoughness, accumulatedClearcoatRoughness,
+								faceNormal, accumulatedRoughness,
 								surf
 							) == SKIP_SURFACE
 						) {
@@ -540,13 +539,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// to a single pixel resulting in fireflies
 						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
-							// TODO: is this correct?
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
-							accumulatedRoughness += sin( acosApprox( halfVector.z ) );
-
 							vec3 clearcoatHalfVector = normalize( clearcoatOutgoing + sampleRec.clearcoatDirection );
-							accumulatedClearcoatRoughness += sin( acosApprox( clearcoatHalfVector.z ) );
+							accumulatedRoughness += max( sin( acosApprox( halfVector.z ) ), sin( acosApprox( clearcoatHalfVector.z ) ) );
 
 							transmissiveRay = false;
 

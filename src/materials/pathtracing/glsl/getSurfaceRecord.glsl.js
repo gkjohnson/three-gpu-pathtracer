@@ -5,7 +5,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 	#define HIT_SURFACE 1
 	int getSurfaceRecord(
 		Material material, sampler2DArray attributesArray,
-		float side, vec3 barycoord, uvec4 faceIndices, vec3 faceNormal, float accumulatedRoughness, float accumulatedClearcoatRoughness,
+		float side, vec3 barycoord, uvec4 faceIndices, vec3 faceNormal, float accumulatedRoughness,
 
 		out SurfaceRecord surf
 	) {
@@ -309,7 +309,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 		// If we're exiting something transmissive then scale the factor down significantly so we can retain
 		// sharp internal reflections
 		surf.filteredRoughness = applyFilteredGlossy( surf.roughness, accumulatedRoughness );
-		surf.filteredClearcoatRoughness = applyFilteredGlossy( surf.clearcoatRoughness, accumulatedClearcoatRoughness );
+		surf.filteredClearcoatRoughness = applyFilteredGlossy( surf.clearcoatRoughness, accumulatedRoughness );
 
 		return HIT_SURFACE;
 
