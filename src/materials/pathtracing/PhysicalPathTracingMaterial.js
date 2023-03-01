@@ -86,6 +86,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				bounces: { value: 10 },
 				transmissiveBounces: { value: 10 },
+				fogBounces: { value: 0 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -202,6 +203,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// path tracer
 				uniform int bounces;
+				uniform int fogBounces;
 				uniform int transmissiveBounces;
 				uniform float filterGlossyFactor;
 				uniform int seed;
@@ -277,7 +279,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					float accumulatedRoughness = 0.0;
 					bool transmissiveRay = true;
 					bool isShadowRay = false;
-					int transparentTraversals = transmissiveBounces;
+					int transmissiveTraversals = transmissiveBounces;
+					int fogTraversals = fogBounces;
 					vec3 throughputColor = vec3( 1.0 );
 					ScatterRecord sampleRec;
 					int i;
@@ -297,7 +300,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						sobolBounceIndex ++;
 
-						bool firstRay = i == 0 && transparentTraversals == transmissiveBounces;
+						bool firstRay = i == 0 && transmissiveTraversals == transmissiveBounces && fogTraversals == fogBounces;
 
 						LightSampleRecord lightSampleRec;
 						int hitType = traceScene(
@@ -389,8 +392,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 
-							i -= sign( transparentTraversals );
-							transparentTraversals -= sign( transparentTraversals );
+							i -= sign( transmissiveTraversals );
+							transmissiveTraversals -= sign( transmissiveTraversals );
 							continue;
 
 						}
@@ -424,8 +427,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							// only allow a limited number of transparency discards otherwise we could
 							// crash the context with too long a loop.
-							i -= sign( transparentTraversals );
-							transparentTraversals -= sign( transparentTraversals );
+							i -= sign( transmissiveTraversals );
+							transmissiveTraversals -= sign( transmissiveTraversals );
 
 							rayOrigin = stepRayOrigin( rayOrigin, rayDirection, - faceNormal, dist );
 							continue;
@@ -474,7 +477,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transparentTraversals, isShadowRay, fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, transmissiveTraversals, isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -514,7 +517,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, faceNormal ) &&
-								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transparentTraversals, isShadowRay, fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, rayOrigin, envDirection, INFINITY, bounces - i, transmissiveTraversals, isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -551,12 +554,21 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
 						bool isTransmissiveRay = ! surf.volumeParticle && dot( rayDirection, faceNormal * side ) < 0.0;
-						if ( ( isTransmissiveRay || isBelowSurface || material.fogVolume ) && transparentTraversals > 0 ) {
+						if ( ( isTransmissiveRay || isBelowSurface ) && transmissiveTraversals > 0 ) {
 
-							transparentTraversals --;
+							transmissiveTraversals --;
 							i --;
 
 						}
+
+						#if FEATURE_FOG
+						if ( material.fogVolume && fogTraversals > 0 ) {
+
+							fogTraversals --;
+							i --;
+
+						}
+						#endif
 
 						// accumulate color
 						gl_FragColor.rgb += ( surf.emission * throughputColor );

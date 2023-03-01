@@ -166,7 +166,7 @@ import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
 
 // ...
 
-const envMap = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl ); 
+const envMap = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
 const generator = new BlurredEnvMapGenerator( renderer );
 const blurredEnvMap = generator.generate( envMap, 0.35 );
 
@@ -630,7 +630,10 @@ _extends MaterialBase_
 ```js
 {
 	// The number of ray bounces to test. Higher is better quality but slower performance.
+	// TransmissiveBounces indicates the number of additional transparent or translucent surfaces
+	// the ray can pass through.
 	bounces = 3 : Number,
+	transmissiveBounces = 10 : Number,
 
 	// The number of additional transmissive ray bounces to allow on top of existing bounces for object opacity / transmission.
 	transmissiveBounces = 5 : Number,

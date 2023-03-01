@@ -4,7 +4,7 @@ export const attenuateHitGLSL = /* glsl */`
 	// returns true if a solid surface was hit
 	bool attenuateHit(
 		BVH bvh, vec3 rayOrigin, vec3 rayDirection, float rayDist,
-		int traversals, int transparentTraversals, bool isShadowRay,
+		int traversals, int transmissiveTraversals, bool isShadowRay,
 		Material fogMaterial,
 		out vec3 color
 	) {
@@ -67,8 +67,8 @@ export const attenuateHitGLSL = /* glsl */`
 
 					fogMaterial = material;
 					fogMaterial.fogVolume = side == 1.0;
-					i -= sign( transparentTraversals );
-					transparentTraversals --;
+					i -= sign( transmissiveTraversals );
+					transmissiveTraversals --;
 					continue;
 
 				}
@@ -157,10 +157,10 @@ export const attenuateHitGLSL = /* glsl */`
 				}
 
 				bool isTransmissiveRay = dot( rayDirection, faceNormal * side ) < 0.0;
-				if ( ( isTransmissiveRay || isEntering ) && transparentTraversals > 0 ) {
+				if ( ( isTransmissiveRay || isEntering ) && transmissiveTraversals > 0 ) {
 
-					i -= sign( transparentTraversals );
-					transparentTraversals --;
+					i -= sign( transmissiveTraversals );
+					transmissiveTraversals --;
 
 				}
 
