@@ -632,11 +632,8 @@ _extends MaterialBase_
 	// The number of ray bounces to test. Higher is better quality but slower performance.
 	// TransmissiveBounces indicates the number of additional transparent or translucent surfaces
 	// the ray can pass through.
-	// FogBounces indicates the number of additional fog volume particles that are allowed to be
-	// hit before they are not longer checked.
 	bounces = 3 : Number,
 	transmissiveBounces = 10 : Number,
-	fogBounces = 10 : Number,
 
 	// The number of additional transmissive ray bounces to allow on top of existing bounces for object opacity / transmission.
 	transmissiveBounces = 5 : Number,

@@ -24,6 +24,8 @@ const params = {
 	lightIntensity: 500,
 	lightColor: '#ffffff',
 
+	bounces: 10,
+
 };
 
 init();
@@ -126,6 +128,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => ptRenderer.reset() );
 	ptFolder.add( params, 'mis' ).onChange( v => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
@@ -195,6 +198,8 @@ function animate() {
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.lights.updateFrom( sceneInfo.lights );
 	perspectiveCamera.updateMatrixWorld();
+
+	ptRenderer.material.bounces = params.bounces;
 
 	if ( ptRenderer.samples < 1 || ! params.enable ) {
 

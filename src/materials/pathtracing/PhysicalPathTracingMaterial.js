@@ -86,7 +86,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				bounces: { value: 10 },
 				transmissiveBounces: { value: 10 },
-				fogBounces: { value: 10 },
+				fogBounces: { value: 0 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -203,6 +203,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// path tracer
 				uniform int bounces;
+				uniform int fogBounces;
 				uniform int transmissiveBounces;
 				uniform float filterGlossyFactor;
 				uniform int seed;
