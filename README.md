@@ -692,7 +692,7 @@ _extends MeshStandardMaterial_
 
 A material used for rendering fog-like volumes within the scene. The `color`, `emissive`, and `emissiveIntensity` fields are all used in the render.
 
-> **NOTE**
+> *NOTE*
 > Since fog models many particles throughout the scene and cause many extra bounces fog materials can dramatically impact render time.
 
 ### .density
