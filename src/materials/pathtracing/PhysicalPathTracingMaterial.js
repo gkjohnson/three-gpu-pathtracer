@@ -417,7 +417,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if (
 							getSurfaceRecord(
 								material, attributesArray, side, barycoord, faceIndices,
-								faceNormal, accumulatedRoughness, accumulatedRoughness,
+								faceNormal, accumulatedRoughness,
 								surf
 							) == SKIP_SURFACE
 						) {
@@ -539,7 +539,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// to a single pixel resulting in fireflies
 						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
-							// TODO: is this correct?
 							// determine if this is a rough normal or not by checking how far off straight up it is
 							vec3 halfVector = normalize( outgoing + sampleRec.direction );
 							vec3 clearcoatHalfVector = normalize( clearcoatOutgoing + sampleRec.clearcoatDirection );
