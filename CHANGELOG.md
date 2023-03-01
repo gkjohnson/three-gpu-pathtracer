@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for volumetric fog material.
 - Disable sampling of the environment map if env intensity is set to 0.0 to improve light sampling.
+- "fogBounces" setting for limiting number of fog bounces in the render.
 
 ### Changed
 - Base color is now applied both on the way in and out of a transmissive material.
