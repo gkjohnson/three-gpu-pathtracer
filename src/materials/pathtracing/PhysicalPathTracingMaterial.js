@@ -251,7 +251,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				void main() {
 
 					// init
-					rng_initialize( vec2( 0 ), seed );
+					rng_initialize( gl_FragCoord.xy, seed );
 					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) |  uint( gl_FragCoord.y );
 					sobolPathIndex = uint( seed );
 
