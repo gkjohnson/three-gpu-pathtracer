@@ -16,6 +16,8 @@ export class FogVolumeMaterial extends MeshStandardMaterial {
 		this.roughness = 1.0;
 		this.metalness = 0.0;
 
+		this.setValues( params );
+
 	}
 
 }
