@@ -1,7 +1,7 @@
 export const fogMaterialBvhGLSL = /* glsl */`
 
 #ifndef FOG_CHECK_ITERATIONS
-#define FOG_CHECK_ITERATIONS 10
+#define FOG_CHECK_ITERATIONS 30
 #endif
 
 // returns whether the given material is a fog material or not

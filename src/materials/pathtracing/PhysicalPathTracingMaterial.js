@@ -289,7 +289,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#if FEATURE_FOG
 
 					fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
-						bvh, rayOrigin, rayDirection,
+						bvh, rayOrigin, - rayDirection,
 						materialIndexAttribute, materials,
 						fogMaterial
 					);
