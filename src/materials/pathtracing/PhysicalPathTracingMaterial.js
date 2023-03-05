@@ -86,7 +86,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				bounces: { value: 10 },
 				transmissiveBounces: { value: 10 },
-				fogBounces: { value: 0 },
 				physicalCamera: { value: new PhysicalCameraUniform() },
 
 				bvh: { value: new MeshBVHUniformStruct() },
@@ -203,7 +202,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// path tracer
 				uniform int bounces;
-				uniform int fogBounces;
 				uniform int transmissiveBounces;
 				uniform float filterGlossyFactor;
 				uniform int seed;
@@ -280,7 +278,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					bool transmissiveRay = true;
 					bool isShadowRay = false;
 					int transmissiveTraversals = transmissiveBounces;
-					int fogTraversals = fogBounces;
 					vec3 throughputColor = vec3( 1.0 );
 					ScatterRecord sampleRec;
 					int i;
@@ -300,7 +297,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						sobolBounceIndex ++;
 
-						bool firstRay = i == 0 && transmissiveTraversals == transmissiveBounces && fogTraversals == fogBounces;
+						bool firstRay = i == 0 && transmissiveTraversals == transmissiveBounces;
 
 						LightSampleRecord lightSampleRec;
 						int hitType = traceScene(
@@ -563,9 +560,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						#if FEATURE_FOG
-						if ( material.fogVolume && fogTraversals > 0 ) {
+						if ( material.fogVolume ) {
 
-							fogTraversals --;
+							transmissiveTraversals --;
 							i --;
 
 						}
