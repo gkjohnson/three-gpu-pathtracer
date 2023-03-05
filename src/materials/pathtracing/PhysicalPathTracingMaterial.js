@@ -559,15 +559,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						#if FEATURE_FOG
-						if ( material.fogVolume ) {
-
-							transmissiveTraversals --;
-							i --;
-
-						}
-						#endif
-
 						// accumulate color
 						gl_FragColor.rgb += ( surf.emission * throughputColor );
 

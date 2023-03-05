@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+### Changed
+- Fog hits no longer count as transparent surface bounces.
+
 ## [0.0.14] - 2023-03-05
 ### Added
 - Support for volumetric fog material.
