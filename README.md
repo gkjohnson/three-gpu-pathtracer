@@ -38,6 +38,8 @@ _More features and capabilities in progress!_
 
 [Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
 
+[Volumetric Fog Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/fog.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
@@ -130,7 +132,7 @@ ptMaterial.materials.updateFrom( materials, textures );
 ptMaterial.lights.updateFrom( lights );
 
 // set the environment map
-const texture = await new RGBELoader().loadAsync( envMapUrl );
+const texture = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
 ptRenderer.material.envMapInfo.updateFrom( texture );
 
 animate();
@@ -164,7 +166,7 @@ import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
 
 // ...
 
-const envMap = await new RGBELoader().loadAsync( envMapUrl );
+const envMap = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
 const generator = new BlurredEnvMapGenerator( renderer );
 const blurredEnvMap = generator.generate( envMap, 0.35 );
 
@@ -628,7 +630,10 @@ _extends MaterialBase_
 ```js
 {
 	// The number of ray bounces to test. Higher is better quality but slower performance.
+	// TransmissiveBounces indicates the number of additional transparent or translucent surfaces
+	// the ray can pass through.
 	bounces = 3 : Number,
+	transmissiveBounces = 10 : Number,
 
 	// The number of additional transmissive ray bounces to allow on top of existing bounces for object opacity / transmission.
 	transmissiveBounces = 5 : Number,
@@ -683,6 +688,19 @@ _extends MaterialBase_
 
 }
 ```
+
+## FogVolumeMaterial
+
+_extends MeshStandardMaterial_
+
+A material used for rendering fog-like volumes within the scene. The `color`, `emissive`, and `emissiveIntensity` fields are all used in the render.
+
+> *NOTE*
+> Since fog models many particles throughout the scene and cause many extra bounces fog materials can dramatically impact render time.
+
+### .density
+
+The particulate density of the volume.
 
 ## DenoiseMaterial
 
@@ -957,5 +975,7 @@ Set of randomness and other light transport utilities for use in a shader. See t
 [PBR Book](https://pbr-book.org/)
 
 [knightcrawler25/GLSL-PathTracer](https://github.com/knightcrawler25/GLSL-PathTracer/)
+
+[DassaultSystemes-Technology/dspbr-pt](https://github.com/DassaultSystemes-Technology/dspbr-pt)
 
 

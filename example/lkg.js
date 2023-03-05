@@ -16,7 +16,8 @@ import {
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
-	Vector4
+	Vector4,
+	FloatType
 } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -165,7 +166,7 @@ async function init() {
 	} );
 
 	// load the environment map
-	new RGBELoader()
+	new RGBELoader().setDataType( FloatType )
 		.load( ENVMAP_URL, texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;

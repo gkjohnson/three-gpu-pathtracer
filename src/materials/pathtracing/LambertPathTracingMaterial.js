@@ -1,13 +1,17 @@
 import { Matrix4, Color } from 'three';
-import { MaterialBase } from './MaterialBase.js';
+import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
 	shaderStructs, shaderIntersectFunction,
 } from 'three-mesh-bvh';
-import { shaderMaterialStructs } from '../shader/shaderStructs.js';
-import { shaderUtils } from '../shader/shaderUtils.js';
+
+// uniforms
 import { MaterialStructArrayUniform } from '../uniforms/MaterialStructArrayUniform.js';
-import { RenderTarget2DArray } from '../uniforms/RenderTarget2DArray.js';
+import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
+
+import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
+import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
 
 export class LambertPathTracingMaterial extends MaterialBase {
 
@@ -83,8 +87,15 @@ export class LambertPathTracingMaterial extends MaterialBase {
 
 				${ shaderStructs }
 				${ shaderIntersectFunction }
-				${ shaderMaterialStructs }
-				${ shaderUtils }
+
+				// uniform structs
+				${ materialStructGLSL }
+
+				// rand
+				${ pcgGLSL }
+
+				// common
+				${ shapeSamplingGLSL }
 
 				#ifdef USE_ENVMAP
 
@@ -258,7 +269,7 @@ export class LambertPathTracingMaterial extends MaterialBase {
 						vec3 absPoint = abs( point );
 						float maxPoint = max( absPoint.x, max( absPoint.y, absPoint.z ) );
 						rayOrigin = point + faceNormal * ( maxPoint + 1.0 ) * RAY_OFFSET;
-						rayDirection = getHemisphereSample( normal, rand2() );
+						rayDirection = sampleHemisphere( normal, rand2() );
 
 						// if the surface normal is skewed such that the outgoing vector can wind up underneath
 						// the triangle surface then just consider it absorbed.

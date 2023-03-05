@@ -2,15 +2,19 @@ import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatTy
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
-	let lower = 0;
-	let upper = count - 1;
+	let lower = offset;
+	let upper = offset + count - 1;
+
 	while ( lower < upper ) {
 
-		const mid = ~ ~ ( 0.5 * upper + 0.5 * lower );
+		// calculate the midpoint for this iteration using a bitwise shift right operator to save 1 floating point multiplication
+		// and 1 truncation from the double tilde operator to improve performance
+		// this results in much better performance over using standard "~ ~ ( (lower + upper) ) / 2" to calculate the midpoint
+		const mid = ( lower + upper ) >> 1;
 
 		// check if the middle array value is above or below the target and shift
 		// which half of the array we're looking at
-		if ( array[ offset + mid ] < targetValue ) {
+		if ( array[ mid ] < targetValue ) {
 
 			lower = mid + 1;
 
@@ -22,7 +26,7 @@ function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count =
 
 	}
 
-	return lower;
+	return lower - offset;
 
 }
 

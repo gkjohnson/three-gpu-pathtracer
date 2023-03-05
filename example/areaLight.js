@@ -95,7 +95,7 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 	loadingEl = document.getElementById( 'loading' );
 
-	const envMapPromise = new RGBELoader()
+	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr' )
 		.then( texture => {
 

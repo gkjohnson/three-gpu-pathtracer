@@ -60,7 +60,8 @@
 			</div>
 		</div>
 		<script type="module">
-			import { MeshPhysicalMaterial, Color, DoubleSide } from 'three';
+			import { MeshPhysicalMaterial, Color, DoubleSide, Mesh, CylinderGeometry, Box3 } from 'three';
+			import { FogVolumeMaterial } from '..';
 
 			window.MODEL_LIST = {
 				'M2020 Rover': {
@@ -70,6 +71,46 @@
 				'M2020 Helicopter': {
 					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Ingenuity.glb',
 					credit: 'Model credit NASA / JPL-Caltech',
+				},
+				'Stalenhag Winter': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/colourdrafts/scene.glb',
+					credit: 'Model by "ganzhugav" on Sketchfab',
+					bounces: 3,
+					postProcess( model ) {
+
+						const box = new Box3();
+						box.setFromObject( model );
+
+						const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeMaterial( {
+
+							color: 0xaaaaaa,
+							density: 1,
+
+						} ) );
+
+						fog.scale.subVectors( box.max, box.min );
+						fog.scale.x += 0.1;
+						fog.scale.y += 0.01;
+						fog.scale.z += 0.1;
+
+						fog.scale.x = fog.scale.z = Math.max( fog.scale.x, fog.scale.z );
+
+						box.getCenter( fog.position );
+						fog.position.y += 0.02;
+
+						model.traverse( c => {
+
+							if ( c.material && c.material.emissive.r < 0.1 ) {
+
+								c.material.emissive.set( 0 );
+
+							}
+
+						} );
+
+						model.add( fog );
+
+					}
 				},
 				'Gelatinous Cube': {
 					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/gelatinous-cube/scene.gltf',

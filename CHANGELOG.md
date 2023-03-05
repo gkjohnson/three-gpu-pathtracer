@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [0.0.13] - Unreleased
+## [0.0.14] - Unreleased
+### Added
+- Support for volumetric fog material.
+- Disable sampling of the environment map if env intensity is set to 0.0 to improve light sampling.
+
+### Changed
+- Base color is now applied both on the way in and out of a transmissive material.
+- Improved performance of env map CDF processing.
+
+### Fixed
+- Area light shapes now consistently cast shadows in MIS and non MIS mode
+
+## [0.0.13] - 2023-02-13
 ### Changed
 - `TRANSPARENT_TRAVERSALS` define to `transmissiveBounces` uniform.
 - EquirectUniformInfo now defaults to a white environment map so lighting is present by default.

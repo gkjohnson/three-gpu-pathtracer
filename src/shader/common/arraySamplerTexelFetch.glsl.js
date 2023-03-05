@@ -1,5 +1,5 @@
 
-export const shaderLayerTexelFetchFunctions = /*glsl */`
+export const arraySamplerTexelFetchGLSL = /*glsl */`
 
 	// add texel fetch functions for texture arrays
 	vec4 texelFetch1D( sampler2DArray tex, int layer, uint index ) {

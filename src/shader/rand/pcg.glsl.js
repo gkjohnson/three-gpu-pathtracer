@@ -1,4 +1,4 @@
-export const shaderRandFunctions = /* glsl */`
+export const pcgGLSL = /* glsl */`
 
 	// https://www.shadertoy.com/view/wltcRS
 	uvec4 WHITE_NOISE_SEED;

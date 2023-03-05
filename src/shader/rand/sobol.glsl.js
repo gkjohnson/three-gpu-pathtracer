@@ -105,7 +105,7 @@ function generateSobolSampleFunctions( dim = 1 ) {
 
 }
 
-export const shaderSobolCommon = /* glsl */`
+export const sobolCommonGLSL = /* glsl */`
 
 	// Utils
 	const float SOBOL_FACTOR = 1.0 / 16777216.0;
@@ -130,7 +130,7 @@ export const shaderSobolCommon = /* glsl */`
 
 `;
 
-export const shaderSobolGeneration = /* glsl */`
+export const sobolGenerationGLSL = /* glsl */`
 
 	const uint SOBOL_DIRECTIONS_1[ 32 ] = uint[ 32 ](
 		0x80000000u, 0xc0000000u, 0xa0000000u, 0xf0000000u,
@@ -210,7 +210,7 @@ export const shaderSobolGeneration = /* glsl */`
 
 `;
 
-export const shaderSobolSampling = /* glsl */`
+export const sobolSamplingGLSL = /* glsl */`
 
 	// Seeds
 	uniform sampler2D sobolTexture;

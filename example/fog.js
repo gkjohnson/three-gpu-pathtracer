@@ -1,14 +1,13 @@
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { BoxGeometry, EquirectangularReflectionMapping, Group, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, RectAreaLight, SphereGeometry } from 'three';
+import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 
 let renderer, controls, sceneInfo, ptRenderer, blitQuad;
-let perspectiveCamera, scene, meshMaterial;
+let perspectiveCamera, scene, fogMaterial, spotLight;
 let samplesEl;
 
 const params = {
@@ -17,24 +16,15 @@ const params = {
 	pause: false,
 	mis: true,
 	tiles: 2,
-	resolutionScale: 1,
+	resolutionScale: 1 / window.devicePixelRatio,
 
-	color: '#ffcccc',
-	roughness: 0,
-	metalness: 0,
-	specularIntensity: 1,
-	specularColor: '#ffffff',
-	iridescence: 0.0,
-	iridescenceIOR: 2,
-	iridescenceThicknessMin: 0,
-	iridescenceThicknessMax: 400,
+	color: '#eeeeee',
+	fog: true,
+	density: 0.01,
+	lightIntensity: 500,
+	lightColor: '#ffffff',
 
-	transmission: 0.0,
-	ior: 1.5,
-	opacity: 0.0,
-
-	fog: false,
-	density: 0,
+	bounces: 10,
 
 };
 
@@ -50,7 +40,7 @@ async function init() {
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 4, 2, 3 );
+	perspectiveCamera.position.set( 0, 1, 6 );
 
 	ptRenderer = new PathTracingRenderer( renderer );
 	ptRenderer.alpha = true;
@@ -74,42 +64,48 @@ async function init() {
 	scene = new THREE.Scene();
 
 	samplesEl = document.getElementById( 'samples' );
+	fogMaterial = new FogVolumeMaterial();
 
-	const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
-	const envUrl = new URL( '../../../shared-assets/environments/lightroom_14b.hdr', BASE_URL ).toString();
-
-	await new RGBELoader().setDataType( THREE.FloatType )
-		.loadAsync( envUrl )
-		.then( texture => {
-
-			texture.mapping = EquirectangularReflectionMapping;
-
-			scene.background = texture;
-			scene.environment = texture;
-
-			ptRenderer.material.envMapInfo.updateFrom( texture );
-
-		} );
-
-	meshMaterial = new MeshPhysicalMaterial();
 	const generator = new PathTracingSceneWorker();
-	const mesh = new Mesh( new SphereGeometry( 1, 50, 50 ), meshMaterial );
-	const floor = new Mesh( new BoxGeometry( 10, 0.01, 10 ), new MeshStandardMaterial( { color: 0xffffff, roughness: 1, metalness: 0 } ) );
-	floor.position.y = - 1.0;
+	const envMat = new MeshStandardMaterial( { color: 0x999999, roughness: 1, metalness: 0 } );
+	const fogMesh = new Mesh( new BoxGeometry( 8, 4.05, 8 ), fogMaterial );
+	const floor = new Mesh( new CylinderGeometry( 5, 5, 0.1, 40 ), envMat );
+	floor.position.y = - 1.1;
 
-	const areaLight = new RectAreaLight( 0xffffff, 10, 3, 3 );
-	areaLight.rotation.x = - Math.PI / 4;
-	areaLight.position.set( 0, 1, 1 ).multiplyScalar( 3 );
+	spotLight = new PhysicalSpotLight();
+	spotLight.position.set( 0, 1, 0 ).multiplyScalar( 3 );
+	spotLight.angle = Math.PI / 4.5;
+	spotLight.decay = 2;
+	spotLight.penumbra = 0.15;
+	spotLight.distance = 0.0;
+	spotLight.intensity = 50.0;
+	spotLight.radius = 0.05;
+
+	const lightGroup = new Group();
+	lightGroup.add( spotLight );
+
+	const TOTAL_SLATS = 10;
+	const WIDTH = 2.0;
+	const slat = new Mesh( new BoxGeometry( 0.1, 0.1, 2 ), envMat );
+	for ( let i = 0; i < TOTAL_SLATS; i ++ ) {
+
+		const s = slat.clone();
+		s.position.x = - WIDTH * 0.5 + WIDTH * i / ( TOTAL_SLATS - 1 );
+		s.position.y = 2;
+		lightGroup.add( s );
+
+	}
 
 	const group = new Group();
-	group.add( mesh, floor, areaLight );
+	group.add( fogMesh, floor, lightGroup );
 
+	group.updateMatrixWorld();
 	sceneInfo = await generator.generate( group );
 	scene.add( sceneInfo.scene );
 
 	const { bvh, textures, materials } = sceneInfo;
 	const geometry = bvh.geometry;
-	ptRenderer.material.environmentIntensity = 0;
+	ptRenderer.material.environmentIntensity = 0.0;
 	ptRenderer.material.bvh.updateFrom( bvh );
 	ptRenderer.material.attributesArray.updateFrom(
 		geometry.attributes.normal,
@@ -124,8 +120,6 @@ async function init() {
 
 	generator.dispose();
 
-	document.getElementById( 'loading' ).remove();
-
 	onResize();
 
 	window.addEventListener( 'resize', onResize );
@@ -134,6 +128,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => ptRenderer.reset() );
 	ptFolder.add( params, 'mis' ).onChange( v => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
@@ -151,23 +146,13 @@ async function init() {
 
 	} );
 
-	const matFolder = gui.addFolder( 'Material' );
-	matFolder.addColor( params, 'color' ).onChange( reset );
-	matFolder.add( params, 'roughness', 0, 1 ).onChange( reset );
-	matFolder.add( params, 'metalness', 0, 1 ).onChange( reset );
-	matFolder.add( params, 'specularIntensity', 0, 1 ).onChange( reset );
-	matFolder.addColor( params, 'specularColor' ).onChange( reset );
-	matFolder.add( params, 'transmission', 0, 1 ).onChange( reset );
-	matFolder.add( params, 'ior', 1, 2 ).onChange( reset );
+	const fogFolder = gui.addFolder( 'fog' );
+	fogFolder.addColor( params, 'color' ).onChange( reset );
+	fogFolder.add( params, 'density', 0, 1 ).onChange( reset );
 
-	matFolder.add( params, 'iridescence', 0, 1 ).onChange( reset );
-	matFolder.add( params, 'iridescenceIOR', 1, 2 ).onChange( reset );
-	matFolder.add( params, 'iridescenceThicknessMin', 0, 1000, 1 ).onChange( reset );
-	matFolder.add( params, 'iridescenceThicknessMax', 0, 1000, 1 ).onChange( reset );
-
-	matFolder.add( params, 'opacity', 0, 1 ).onChange( reset );
-	matFolder.add( params, 'fog' ).onChange( reset );
-	matFolder.add( params, 'density', 0, 100 ).onChange( reset );
+	const lightFolder = gui.addFolder( 'light' );
+	lightFolder.add( params, 'lightIntensity', 0, 1000 ).onChange( reset );
+	lightFolder.addColor( params, 'lightColor' ).onChange( reset );
 
 	animate();
 
@@ -204,25 +189,17 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	meshMaterial.color.set( params.color ).convertSRGBToLinear();
-	meshMaterial.roughness = params.roughness;
-	meshMaterial.metalness = params.metalness;
+	fogMaterial.color.set( params.color ).convertSRGBToLinear();
+	fogMaterial.density = params.density;
 
-	meshMaterial.thickness = 1.0;
-	meshMaterial.ior = params.ior;
-	meshMaterial.transmission = params.transmission;
-	meshMaterial.iridescence = params.iridescence;
-	meshMaterial.iridescenceIOR = params.iridescenceIOR;
-	meshMaterial.iridescenceThicknessRange = [ params.iridescenceThicknessMin, params.iridescenceThicknessMax ];
-	meshMaterial.specularIntensity = params.specularIntensity;
-	meshMaterial.specularColor.set( params.specularColor ).convertSRGBToLinear();
-	meshMaterial.isFogVolumeMaterial = params.fog;
-	meshMaterial.opacity = params.fog ? params.density : params.opacity;
-	meshMaterial.density = meshMaterial.opacity;
-	meshMaterial.transparent = meshMaterial.opacity < 1.0;
+	spotLight.intensity = params.lightIntensity;
+	spotLight.color.set( params.lightColor );
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.lights.updateFrom( sceneInfo.lights );
 	perspectiveCamera.updateMatrixWorld();
+
+	ptRenderer.material.bounces = params.bounces;
 
 	if ( ptRenderer.samples < 1 || ! params.enable ) {
 
