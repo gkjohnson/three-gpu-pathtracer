@@ -72,10 +72,10 @@
 					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Ingenuity.glb',
 					credit: 'Model credit NASA / JPL-Caltech',
 				},
-				'Colourdrafts': {
+				'Stalenhag Winter': {
 					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/colourdrafts/scene.glb',
 					credit: 'Model by "ganzhugav" on Sketchfab',
-					bounces: 10,
+					bounces: 3,
 					postProcess( model ) {
 
 						const box = new Box3();
@@ -83,7 +83,7 @@
 
 						const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeMaterial( {
 
-							color: 0xffffff,
+							color: 0xaaaaaa,
 							density: 1,
 
 						} ) );

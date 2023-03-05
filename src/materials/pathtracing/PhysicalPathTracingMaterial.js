@@ -262,7 +262,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// inverse environment rotation
 					mat3 envRotation3x3 = mat3( environmentRotation );
 					mat3 invEnvRotation3x3 = inverse( envRotation3x3 );
-					float lightsDenom = environmentIntensity == 0.0 ? float( lights.count ) : float( lights.count + 1u );
+					float lightsDenom = environmentIntensity == 0.0 && lights.count != 0u ? float( lights.count ) : float( lights.count + 1u );
 
 					// final color
 					gl_FragColor = vec4( 0.0 );
@@ -384,6 +384,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( hitType == FOG_HIT ) {
 
 							material = fogMaterial;
+							accumulatedRoughness += 0.2;
 
 						} else if ( material.fogVolume ) {
 
