@@ -35,10 +35,12 @@ export class MaterialCompileDetector {
 		} else {
 
 			const program = programs[ programs.length - 1 ];
+			const pass = program.diagnostics ? program.diagnostics.runnable : true;
+			const message = pass ? '' : `Cannot render ${ material.type } on this device.`;
 			return {
 				detail: {},
-				pass: program.runnable,
-				message: `Cannot render ${ material.type } on this device.`,
+				pass,
+				message,
 			};
 
 		}
