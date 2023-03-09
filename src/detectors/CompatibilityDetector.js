@@ -20,12 +20,18 @@ export class CompatibilityDetector {
 		}
 
 		detector = new MaterialCompileDetector( this._renderer );
-		result = detector.detect();
+		result = detector.detect( this._material );
 		if ( ! result.pass ) {
 
 			return result;
 
 		}
+
+		return {
+			detail: {},
+			pass: true,
+			message: '',
+		};
 
 	}
 

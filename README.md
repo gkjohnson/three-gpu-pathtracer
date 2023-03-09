@@ -880,6 +880,23 @@ mergeMeshes( meshes : Array<Mesh> ) : {
 
 Merges the set of meshes into a single geometry with a `materialIndex` vertex attribute included on the geometry identifying the associated material in the returned `materials` array.
 
+## CompatibilityDetector
+
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer, material : Material )
+```
+
+### .detect
+
+```js
+detect() : {
+	pass: Boolean,
+	message: String
+}
+```
+
 ## Shader Chunks
 
 **shaderMaterialSampling**
