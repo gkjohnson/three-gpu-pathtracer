@@ -882,11 +882,15 @@ Merges the set of meshes into a single geometry with a `materialIndex` vertex at
 
 ## CompatibilityDetector
 
+Detects whether the path tracer can run on the current device by checking whether struct precision is reliable and the material shader will compile.
+
 ### constructor
 
 ```js
 constructor( renderer : WebGLRenderer, material : Material )
 ```
+
+Takes a WebGLRenderer to use and material to test again.
 
 ### .detect
 
@@ -896,6 +900,8 @@ detect() : {
 	message: String
 }
 ```
+
+Returns `pass === true` if the path tracer can run. If it cannot run then a message is returned indicating why.
 
 ## Shader Chunks
 
