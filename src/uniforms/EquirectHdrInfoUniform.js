@@ -131,11 +131,7 @@ export class EquirectHdrInfoUniform {
 		this.map = whiteTex;
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
-
-		// the total sum value is separated into two values to work around low precision
-		// storage of floating values in structs
-		this.totalSumWhole = 1;
-		this.totalSumDecimal = 0;
+		this.totalSum = 1;
 
 	}
 
@@ -265,11 +261,7 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.image = { width, height, data: conditionalDataArray };
 		conditionalWeights.needsUpdate = true;
 
-		const totalSumWhole = ~ ~ totalSumValue;
-		const totalSumDecimal = ( totalSumValue - totalSumWhole );
-		this.totalSumWhole = totalSumWhole;
-		this.totalSumDecimal = totalSumDecimal;
-
+		this.totalSum = totalSumValue;
 		this.map = map;
 
 	}
