@@ -29,7 +29,7 @@ export const equirectSamplingGLSL = /* glsl */`
 		vec2 uv = equirectDirectionToUv( direction );
 		color = texture2D( info.map, uv ).rgb;
 
-		float totalSum = info.totalSumWhole + info.totalSumDecimal;
+		float totalSum = info.totalSum;
 		float lum = luminance( color );
 		ivec2 resolution = textureSize( info.map, 0 );
 		float pdf = lum / totalSum;
@@ -50,7 +50,7 @@ export const equirectSamplingGLSL = /* glsl */`
 		direction = derivedDirection;
 		color = texture2D( info.map, uv ).rgb;
 
-		float totalSum = info.totalSumWhole + info.totalSumDecimal;
+		float totalSum = info.totalSum;
 		float lum = luminance( color );
 		ivec2 resolution = textureSize( info.map, 0 );
 		float pdf = lum / totalSum;

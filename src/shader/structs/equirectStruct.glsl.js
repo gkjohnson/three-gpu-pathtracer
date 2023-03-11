@@ -6,8 +6,7 @@ export const equirectStructGLSL = /* glsl */`
 		sampler2D conditionalWeights;
 		sampler2D map;
 
-		float totalSumWhole;
-		float totalSumDecimal;
+		float totalSum;
 
 	};
 
