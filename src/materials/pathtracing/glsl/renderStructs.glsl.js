@@ -19,6 +19,7 @@ export const renderStructsGLSL = /* glsl */`
 
 	struct RenderState {
 
+		bool firstRay;
 		bool transmissiveRay;
 		bool isShadowRay;
 		float accumulatedRoughness;
@@ -27,5 +28,16 @@ export const renderStructsGLSL = /* glsl */`
 
 	}
 
+	RenderState initRenderState() {
+
+		RenderState result;
+		result.firstRay = true;
+		result.transmissiveRay = false;
+		result.isShadowRay = false;
+		result.accumulatedRoughness = 0.0;
+		result.transmissiveTraversals = 0;
+		result.throughputColor = vec3( 1.0 );
+
+	}
 
 `;
