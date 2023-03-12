@@ -43,7 +43,7 @@ export const cameraUtilsGLSL = /* glsl */`
 			#else
 
 				// Perspective projection
-				ray.direction = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
+				ray.direction = normalize( mat3( cameraWorldMatrix ) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
 
 			#endif
 

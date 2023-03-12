@@ -407,8 +407,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRecord surf;
 						if (
 							getSurfaceRecord(
-								material, attributesArray, geometryHit.side, geometryHit.barycoord, geometryHit.faceIndices,
-								geometryHit.faceNormal, state.accumulatedRoughness,
+								material, geometryHit, attributesArray, state.accumulatedRoughness,
 								surf
 							) == SKIP_SURFACE
 						) {
