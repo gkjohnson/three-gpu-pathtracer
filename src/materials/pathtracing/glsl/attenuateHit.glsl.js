@@ -9,7 +9,7 @@ export const attenuateHitGLSL = /* glsl */`
 		out vec3 color
 	) {
 
-		vec3 ogRayOrigin = ray.origin;
+		vec3 startPoint = ray.origin;
 
 		// hit results
 		GeometryHit geoHit;
@@ -32,12 +32,12 @@ export const attenuateHitGLSL = /* glsl */`
 
 			} else if ( hitType == LIGHT_HIT ) {
 
-				float totalDist = distance( ogRayOrigin, ray.origin + ray.direction * lightSampleRec.dist );
+				float totalDist = distance( startPoint, ray.origin + ray.direction * lightSampleRec.dist );
 				return totalDist < rayDist - max( totalDist, rayDist ) * 1e-4;
 
 			} else if ( hitType == SURFACE_HIT ) {
 
-				float totalDist = distance( ogRayOrigin, ray.origin + ray.direction * geoHit.dist );
+				float totalDist = distance( startPoint, ray.origin + ray.direction * geoHit.dist );
 				if ( totalDist > rayDist ) {
 
 					return false;

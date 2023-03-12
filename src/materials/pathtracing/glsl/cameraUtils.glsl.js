@@ -14,7 +14,7 @@ export const cameraUtilsGLSL = /* glsl */`
 		// around this pixel's UV coordinate for AA
 		vec2 ruv = sobol2( 0 );
 		vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
-		vec3 rayOrigin, rayDirection;
+		Ray ray;
 
 		#if CAMERA_TYPE == 2
 
@@ -25,25 +25,25 @@ export const cameraUtilsGLSL = /* glsl */`
 			rayDirection4 = cameraWorldMatrix * rayDirection4;
 			rayOrigin4 = cameraWorldMatrix * rayOrigin4;
 
-			rayDirection = normalize( rayDirection4.xyz );
-			rayOrigin = rayOrigin4.xyz / rayOrigin4.w;
+			ray.direction = normalize( rayDirection4.xyz );
+			ray.origin = rayOrigin4.xyz / rayOrigin4.w;
 
 		#else
 
 			// get [- 1, 1] normalized device coordinates
 			vec2 ndc = 2.0 * jitteredUv - vec2( 1.0 );
-			rayOrigin = ndcToRayOrigin( ndc );
+			ray.origin = ndcToRayOrigin( ndc );
 
 			#if CAMERA_TYPE == 1
 
 				// Orthographic projection
-				rayDirection = ( cameraWorldMatrix * vec4( 0.0, 0.0, - 1.0, 0.0 ) ).xyz;
-				rayDirection = normalize( rayDirection );
+				ray.direction = ( cameraWorldMatrix * vec4( 0.0, 0.0, - 1.0, 0.0 ) ).xyz;
+				ray.direction = normalize( ray.direction );
 
 			#else
 
 				// Perspective projection
-				rayDirection = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
+				ray.direction = normalize( mat3(cameraWorldMatrix) * ( invProjectionMatrix * vec4( ndc, 0.0, 1.0 ) ).xyz );
 
 			#endif
 
@@ -53,7 +53,7 @@ export const cameraUtilsGLSL = /* glsl */`
 		{
 
 			// depth of field
-			vec3 focalPoint = rayOrigin + normalize( rayDirection ) * physicalCamera.focusDistance;
+			vec3 focalPoint = ray.origin + normalize( ray.direction ) * physicalCamera.focusDistance;
 
 			// get the aperture sample
 			// if blades === 0 then we assume a circle
@@ -69,17 +69,14 @@ export const cameraUtilsGLSL = /* glsl */`
 				saturate( vec2( anamorphicRatio, 1.0 / anamorphicRatio ) );
 
 			// create the new ray
-			rayOrigin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
-			rayDirection = focalPoint - rayOrigin;
+			ray.origin += ( cameraWorldMatrix * vec4( apertureSample, 0.0, 0.0 ) ).xyz;
+			ray.direction = focalPoint - ray.origin;
 
 		}
 		#endif
 
-		rayDirection = normalize( rayDirection );
+		ray.direction = normalize( ray.direction );
 
-		Ray ray;
-		ray.direction = rayDirection;
-		ray.origin = rayOrigin;
 		return ray;
 
 	}
