@@ -267,11 +267,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					gl_FragColor = vec4( 0, 0, 0, 1 );
 
 					// hit results
-					uvec4 faceIndices = uvec4( 0u );
-					vec3 faceNormal = vec3( 0.0, 0.0, 1.0 );
-					vec3 barycoord = vec3( 0.0 );
-					float side = 1.0;
-					float dist = 0.0;
+					GeometryHit geometryHit;
 
 					// path tracing state
 					RenderState state = initRenderState();
@@ -299,7 +295,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						int hitType = traceScene(
 							ray.origin, ray.direction,
 							bvh, lights, fogMaterial,
-							faceIndices, faceNormal, barycoord, side, dist,
+							geometryHit.faceIndices, geometryHit.faceNormal, geometryHit.barycoord, geometryHit.side, geometryHit.dist,
 							lightSampleRec
 						);
 
@@ -369,7 +365,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						uint materialIndex = uTexelFetch1D( materialIndexAttribute, faceIndices.x ).r;
+						uint materialIndex = uTexelFetch1D( materialIndexAttribute, geometryHit.faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
 						#if FEATURE_FOG
@@ -382,9 +378,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						} else if ( material.fogVolume ) {
 
 							fogMaterial = material;
-							fogMaterial.fogVolume = side == 1.0;
+							fogMaterial.fogVolume = geometryHit.side == 1.0;
 
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - faceNormal, dist );
+							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
 
 							i -= sign( state.transmissiveTraversals );
 							state.transmissiveTraversals -= sign( state.transmissiveTraversals );
@@ -405,7 +401,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then skip it
 						if ( ! material.castShadow && state.isShadowRay ) {
 
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - faceNormal, dist );
+							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
 							continue;
 
 						}
@@ -413,8 +409,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRecord surf;
 						if (
 							getSurfaceRecord(
-								material, attributesArray, side, barycoord, faceIndices,
-								faceNormal, state.accumulatedRoughness,
+								material, attributesArray, geometryHit.side, geometryHit.barycoord, geometryHit.faceIndices,
+								geometryHit.faceNormal, state.accumulatedRoughness,
 								surf
 							) == SKIP_SURFACE
 						) {
@@ -424,12 +420,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							i -= sign( state.transmissiveTraversals );
 							state.transmissiveTraversals -= sign( state.transmissiveTraversals );
 
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - faceNormal, dist );
+							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
 							continue;
 
 						}
 
-						faceNormal = surf.faceNormal;
+						geometryHit.faceNormal = surf.faceNormal;
 
 						mat3 normalBasis = getBasisFromNormal( surf.normal );
 						mat3 invBasis = inverse( normalBasis );
@@ -441,14 +437,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * ray.direction );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surf );
 
-						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, faceNormal ) > 0.0;
+						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = ray.direction;
 						ray.direction = normalize( normalBasis * sampleRec.direction );
 
-						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, faceNormal ) < 0.0;
-						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - faceNormal : faceNormal, dist );
+						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) < 0.0;
+						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - geometryHit.faceNormal : geometryHit.faceNormal, geometryHit.dist );
 
 						// direct env map sampling
 						#if FEATURE_MIS
@@ -459,7 +455,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// sample a light or environment
 							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, ray.origin, sobol3( 6 ) );
 
-							bool isSampleBelowSurface = ! surf.volumeParticle && dot( faceNormal, lightSampleRec.direction ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( geometryHit.faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								lightSampleRec.pdf = 0.0;
@@ -470,7 +466,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 attenuatedColor;
 							if (
 								lightSampleRec.pdf > 0.0 &&
-								isDirectionValid( lightSampleRec.direction, surf.normal, faceNormal ) &&
+								isDirectionValid( lightSampleRec.direction, surf.normal, geometryHit.faceNormal ) &&
 								! attenuateHit( bvh, ray.origin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
@@ -499,7 +495,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
 							// TODO: this should be improved but how? The env samples could traverse a few layers?
-							bool isSampleBelowSurface = ! surf.volumeParticle && dot( faceNormal, envDirection ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( geometryHit.faceNormal, envDirection ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								envPdf = 0.0;
@@ -510,7 +506,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 attenuatedColor;
 							if (
 								envPdf > 0.0 &&
-								isDirectionValid( envDirection, surf.normal, faceNormal ) &&
+								isDirectionValid( envDirection, surf.normal, geometryHit.faceNormal ) &&
 								! attenuateHit( bvh, ray.origin, envDirection, INFINITY, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
@@ -547,7 +543,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = ! surf.volumeParticle && dot( ray.direction, faceNormal * side ) < 0.0;
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal * geometryHit.side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface ) && state.transmissiveTraversals > 0 ) {
 
 							state.transmissiveTraversals --;
@@ -559,7 +555,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						gl_FragColor.rgb += ( surf.emission * state.throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( ray.direction, surf.normal, faceNormal ) ) {
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( ray.direction, surf.normal, geometryHit.faceNormal ) ) {
 
 							break;
 
@@ -591,9 +587,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						state.throughputColor *= sampleRec.color / sampleRec.pdf;
 
 						// attenuate the throughput color by the medium color
-						if ( side == - 1.0 ) {
+						if ( geometryHit.side == - 1.0 ) {
 
-							state.throughputColor *= transmissionAttenuation( dist, surf.attenuationColor, surf.attenuationDistance );
+							state.throughputColor *= transmissionAttenuation( geometryHit.dist, surf.attenuationColor, surf.attenuationDistance );
 
 						}
 
