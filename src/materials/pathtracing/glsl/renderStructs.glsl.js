@@ -5,7 +5,7 @@ export const renderStructsGLSL = /* glsl */`
 		vec3 origin;
 		vec3 direction;
 
-	}
+	};
 
 	struct GeometryHit {
 
@@ -15,7 +15,7 @@ export const renderStructsGLSL = /* glsl */`
 		float side;
 		float dist;
 
-	}
+	};
 
 	struct RenderState {
 
@@ -26,17 +26,18 @@ export const renderStructsGLSL = /* glsl */`
 		int transmissiveTraversals;
 		vec3 throughputColor;
 
-	}
+	};
 
 	RenderState initRenderState() {
 
 		RenderState result;
 		result.firstRay = true;
-		result.transmissiveRay = false;
+		result.transmissiveRay = true;
 		result.isShadowRay = false;
 		result.accumulatedRoughness = 0.0;
 		result.transmissiveTraversals = 0;
 		result.throughputColor = vec3( 1.0 );
+		return result;
 
 	}
 
