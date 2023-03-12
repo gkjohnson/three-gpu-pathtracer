@@ -256,8 +256,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					sobolPathIndex = uint( seed );
 
 					// get camera ray
-					Ray ray;
-					getCameraRay( ray.direction, ray.origin );
+					Ray ray = getCameraRay();
 
 					// inverse environment rotation
 					mat3 envRotation3x3 = mat3( environmentRotation );
@@ -291,6 +290,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					for ( int i = 0; i < bounces; i ++ ) {
 
+						state.depth ++;
 						sobolBounceIndex ++;
 
 						state.firstRay = i == 0 && state.transmissiveTraversals == transmissiveBounces;
@@ -570,7 +570,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// russian roulette path termination
 						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
 						uint minBounces = 3u;
-						float depthProb = float( sobolBounceIndex < minBounces );
+						float depthProb = float( state.depth < minBounces );
 
 						float rrProb = luminance( state.throughputColor * sampleRec.color / sampleRec.pdf );
 						rrProb /= luminance( state.throughputColor );

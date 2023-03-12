@@ -24,6 +24,7 @@ export const renderStructsGLSL = /* glsl */`
 		bool isShadowRay;
 		float accumulatedRoughness;
 		int transmissiveTraversals;
+		uint depth;
 		vec3 throughputColor;
 
 	};
@@ -37,6 +38,7 @@ export const renderStructsGLSL = /* glsl */`
 		result.accumulatedRoughness = 0.0;
 		result.transmissiveTraversals = 0;
 		result.throughputColor = vec3( 1.0 );
+		result.depth = 0u;
 		return result;
 
 	}

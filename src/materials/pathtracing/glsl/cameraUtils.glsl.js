@@ -6,7 +6,7 @@ export const cameraUtilsGLSL = /* glsl */`
 		return rayOrigin4.xyz / rayOrigin4.w;
 	}
 
-	void getCameraRay( out vec3 rayDirection, out vec3 rayOrigin ) {
+	Ray getCameraRay() {
 
 		vec2 ssd = vec2( 1.0 ) / resolution;
 
@@ -14,6 +14,7 @@ export const cameraUtilsGLSL = /* glsl */`
 		// around this pixel's UV coordinate for AA
 		vec2 ruv = sobol2( 0 );
 		vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
+		vec3 rayOrigin, rayDirection;
 
 		#if CAMERA_TYPE == 2
 
@@ -75,6 +76,11 @@ export const cameraUtilsGLSL = /* glsl */`
 		#endif
 
 		rayDirection = normalize( rayDirection );
+
+		Ray ray;
+		ray.direction = rayDirection;
+		ray.origin = rayOrigin;
+		return ray;
 
 	}
 
