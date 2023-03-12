@@ -266,12 +266,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// final color
 					gl_FragColor = vec4( 0, 0, 0, 1 );
 
-					// hit results
+					// surface results
 					GeometryHit geometryHit;
+					LightSampleRecord lightSampleRec;
+					ScatterRecord sampleRec;
 
 					// path tracing state
 					RenderState state = initRenderState();
-					ScatterRecord sampleRec;
 
 					Material fogMaterial;
 					#if FEATURE_FOG
@@ -291,12 +292,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						state.firstRay = i == 0 && state.transmissiveTraversals == transmissiveBounces;
 
-						LightSampleRecord lightSampleRec;
 						int hitType = traceScene(
-							ray.origin, ray.direction,
-							bvh, lights, fogMaterial,
-							geometryHit.faceIndices, geometryHit.faceNormal, geometryHit.barycoord, geometryHit.side, geometryHit.dist,
-							lightSampleRec
+							ray, bvh, lights, fogMaterial,
+							geometryHit, lightSampleRec
 						);
 
 						if ( hitType == LIGHT_HIT ) {
@@ -463,11 +461,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// check if a ray could even reach the light area
+							Ray lightRay = ray;
+							ray.direction = lightSampleRec.direction;
 							vec3 attenuatedColor;
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray.origin, lightSampleRec.direction, lightSampleRec.dist, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, ray, lightSampleRec.dist, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -503,11 +503,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							}
 
 							// check if a ray could even reach the surface
+							Ray envRay = ray;
+							envRay.direction = envDirection;
 							vec3 attenuatedColor;
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray.origin, envDirection, INFINITY, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, ray, INFINITY, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
