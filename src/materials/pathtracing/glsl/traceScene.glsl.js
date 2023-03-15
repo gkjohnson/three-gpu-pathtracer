@@ -22,9 +22,9 @@ export const traceSceneGLSL = /* glsl */`
 			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
 			if ( particleDist + 1e-4 < geoHit.dist && ( particleDist + 1e-4 < lightSampleRec.dist || ! lightHit ) ) {
 
-				side = 1.0;
-				faceNormal = normalize( - rayDirection );
-				dist = particleDist;
+				geoHit.side = 1.0;
+				geoHit.faceNormal = normalize( - ray.direction );
+				geoHit.dist = particleDist;
 				return FOG_HIT;
 
 			}

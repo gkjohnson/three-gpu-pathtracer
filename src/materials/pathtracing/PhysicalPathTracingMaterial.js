@@ -273,6 +273,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// path tracing state
 					RenderState state = initRenderState();
+					state.transmissiveTraversals = transmissiveBounces;
 
 					Material fogMaterial;
 					#if FEATURE_FOG
