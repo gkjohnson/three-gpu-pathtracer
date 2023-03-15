@@ -1,7 +1,7 @@
-import { NoBlending } from 'three';
+import { Color, NoBlending } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 
-export class AlphaDisplayMaterial extends MaterialBase {
+export class GradientMapMaterial extends MaterialBase {
 
 	constructor( parameters ) {
 
@@ -10,6 +10,12 @@ export class AlphaDisplayMaterial extends MaterialBase {
 			uniforms: {
 
 				map: { value: null },
+
+				minColor: { value: new Color( 0 ) },
+				minValue: { value: 0 },
+
+				maxColor: { value: new Color( 0xffffff ) },
+				maxValue: { value: 10 },
 
 			},
 
@@ -29,12 +35,19 @@ export class AlphaDisplayMaterial extends MaterialBase {
 			fragmentShader: /* glsl */`
 
 				uniform sampler2D map;
+				uniform vec3 minColor;
+				uniform float minValue;
+				uniform vec3 maxColor;
+				uniform float maxValue;
 
 				varying vec2 vUv;
 
 				void main() {
 
-					gl_FragColor = vec4( texture( map, vUv ).a );
+					float value = texture( map, vUv ).r;
+					float t = smoothstep( minValue, maxValue, value );
+
+					gl_FragColor.rgb = vec3( mix( minColor, maxColor, t ) )x``;
 					gl_FragColor.a = 1.0;
 
 					#include <encodings_fragment>
