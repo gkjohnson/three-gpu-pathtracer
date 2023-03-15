@@ -76,6 +76,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// 2 = Equirectangular
 				CAMERA_TYPE: 0,
 
+				DEBUG_MODE: 0,
+
 				ATTR_NORMAL: 0,
 				ATTR_TANGENT: 1,
 				ATTR_UV: 2,
@@ -273,6 +275,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// path tracing state
 					RenderState state = initRenderState();
+					state.transmissiveTraversals = transmissiveBounces;
 
 					Material fogMaterial;
 					#if FEATURE_FOG
@@ -605,6 +608,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					}
 
 					gl_FragColor.a *= opacity;
+
+					#if DEBUG_MODE == 0
+
+					// output the number of rays checked in the path and number of
+					// transmissive rays encountered.
+					gl_FragColor.rgb = vec3(
+						float( state.depth ),
+						transmissiveBounces - state.transmissiveTraversals,
+						0.0
+					) * 0.1;
+					gl_FragColor.a = 1.0;
+
+					#endif
 
 				}
 
