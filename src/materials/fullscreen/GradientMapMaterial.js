@@ -17,6 +17,8 @@ export class GradientMapMaterial extends MaterialBase {
 				maxColor: { value: new Color( 0xffffff ) },
 				maxValue: { value: 10 },
 
+				field: { value: 0 },
+
 			},
 
 			blending: NoBlending,
@@ -39,20 +41,21 @@ export class GradientMapMaterial extends MaterialBase {
 				uniform float minValue;
 				uniform vec3 maxColor;
 				uniform float maxValue;
+				uniform int field;
 
 				varying vec2 vUv;
 
 				void main() {
 
-					float value = texture( map, vUv ).r;
+					float value = texture( map, vUv )[ field ];
 					float t = smoothstep( minValue, maxValue, value );
 
-					gl_FragColor.rgb = vec3( mix( minColor, maxColor, t ) )x``;
+					gl_FragColor.rgb = vec3( mix( minColor, maxColor, t ) );
 					gl_FragColor.a = 1.0;
 
 					#include <encodings_fragment>
 
-				}`
+				}`,
 
 		} );
 

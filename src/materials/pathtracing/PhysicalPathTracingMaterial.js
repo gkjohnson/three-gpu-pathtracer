@@ -609,7 +609,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					gl_FragColor.a *= opacity;
 
-					#if DEBUG_MODE == 0
+					#if DEBUG_MODE == 1
 
 					// output the number of rays checked in the path and number of
 					// transmissive rays encountered.
