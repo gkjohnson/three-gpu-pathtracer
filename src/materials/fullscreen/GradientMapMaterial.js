@@ -7,6 +7,12 @@ export class GradientMapMaterial extends MaterialBase {
 
 		super( {
 
+			defines: {
+
+				FEATURE_BIN: 0,
+
+			},
+
 			uniforms: {
 
 				map: { value: null },
@@ -48,8 +54,14 @@ export class GradientMapMaterial extends MaterialBase {
 				void main() {
 
 					float value = texture( map, vUv )[ field ];
-					float t = smoothstep( minValue, maxValue, value );
 
+					#if FEATURE_BIN
+
+					value = ceil( value );
+
+					#endif
+
+					float t = smoothstep( minValue, maxValue, value );
 					gl_FragColor.rgb = vec3( mix( minColor, maxColor, t ) );
 					gl_FragColor.a = 1.0;
 
