@@ -24,6 +24,7 @@ export class GradientMapMaterial extends MaterialBase {
 				maxValue: { value: 10 },
 
 				field: { value: 0 },
+				power: { value: 1 },
 
 			},
 
@@ -48,6 +49,7 @@ export class GradientMapMaterial extends MaterialBase {
 				uniform vec3 maxColor;
 				uniform float maxValue;
 				uniform int field;
+				uniform float power;
 
 				varying vec2 vUv;
 
@@ -62,6 +64,8 @@ export class GradientMapMaterial extends MaterialBase {
 					#endif
 
 					float t = smoothstep( minValue, maxValue, value );
+					t = pow( t, power );
+
 					gl_FragColor.rgb = vec3( mix( minColor, maxColor, t ) );
 					gl_FragColor.a = 1.0;
 
