@@ -617,7 +617,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						float( state.depth ),
 						transmissiveBounces - state.transmissiveTraversals,
 						0.0
-					) * 0.1;
+					);
 					gl_FragColor.a = 1.0;
 
 					#endif
