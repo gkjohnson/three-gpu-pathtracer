@@ -7,7 +7,7 @@ export const renderStructsGLSL = /* glsl */`
 
 	};
 
-	struct GeometryHit {
+	struct SurfaceHit {
 
 		uvec4 faceIndices;
 		vec3 barycoord;

@@ -1,40 +1,41 @@
 export const directLightContributionGLSL = /*glsl*/`
 
-	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, Ray ray ) {
+	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
 			// sample a light or environment
-			LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, ray.origin, sobol3( 6 ) );
+			LightRecord lightRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
-			bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightSampleRec.direction ) < 0.0;
+			bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightRec.direction ) < 0.0;
 			if ( isSampleBelowSurface ) {
 
-				lightSampleRec.pdf = 0.0;
+				lightRec.pdf = 0.0;
 
 			}
 
 			// check if a ray could even reach the light area
-			Ray lightRay = ray;
-			ray.direction = lightSampleRec.direction;
+			Ray lightRay;
+			lightRay.origin = rayOrigin;
+			lightRay.direction = lightRec.direction;
 			vec3 attenuatedColor;
 			if (
-				lightSampleRec.pdf > 0.0 &&
-				isDirectionValid( lightSampleRec.direction, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( bvh, state, ray, lightSampleRec.dist, attenuatedColor )
+				lightRec.pdf > 0.0 &&
+				isDirectionValid( lightRec.direction, surf.normal, surf.faceNormal ) &&
+				! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
 			) {
 
 				// get the material pdf
 				vec3 sampleColor;
-				float lightMaterialPdf = bsdfResult( worldWo, lightSampleRec.direction, surf, sampleColor );
+				float lightMaterialPdf = bsdfResult( worldWo, lightRec.direction, surf, sampleColor );
 				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 				if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
 					// weight the direct light contribution
-					float lightPdf = lightSampleRec.pdf / lightsDenom;
-					float misWeight = lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-					return attenuatedColor * lightSampleRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
+					float lightPdf = lightRec.pdf / lightsDenom;
+					float misWeight = lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
+					return attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
 
 				}
 
@@ -58,13 +59,14 @@ export const directLightContributionGLSL = /*glsl*/`
 			}
 
 			// check if a ray could even reach the surface
-			Ray envRay = ray;
+			Ray envRay;
+			envRay.origin = rayOrigin;
 			envRay.direction = envDirection;
 			vec3 attenuatedColor;
 			if (
 				envPdf > 0.0 &&
 				isDirectionValid( envDirection, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( bvh, state, ray, INFINITY, attenuatedColor )
+				! attenuateHit( bvh, state, envRay, INFINITY, attenuatedColor )
 			) {
 
 				// get the material pdf
