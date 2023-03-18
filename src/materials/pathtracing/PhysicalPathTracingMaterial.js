@@ -446,6 +446,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies
+						// TODO: handle transmissive surfaces
 						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
