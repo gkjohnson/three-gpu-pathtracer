@@ -14,7 +14,6 @@ export const fogGLSL = /* glsl */`
 		sampleRec.specularPdf = 0.0;
 		sampleRec.pdf = 1.0 / ( 2.0 * PI );
 		sampleRec.direction = sampleSphere( uv );
-		sampleRec.clearcoatDirection = sampleRec.direction;
 		sampleRec.color = surf.color;
 		return sampleRec;
 

@@ -438,7 +438,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = ray.direction;
-						ray.direction = normalize( surf.normalBasis * sampleRec.direction );
+						ray.direction = sampleRec.direction;
 
 						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) < 0.0;
 						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - surf.faceNormal : surf.faceNormal, geometryHit.dist );

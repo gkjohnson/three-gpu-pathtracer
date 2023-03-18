@@ -71,10 +71,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	struct ScatterRecord {
 		float specularPdf;
 		float pdf;
-
 		vec3 direction;
-		vec3 clearcoatDirection;
-
 		vec3 color;
 	};
 
@@ -411,7 +408,6 @@ export const bsdfSamplingGLSL = /* glsl */`
 			sampleRec.specularPdf = 0.0;
 			sampleRec.pdf = 1.0 / ( 4.0 * PI );
 			sampleRec.direction = sampleSphere( sobol2( 16 ) );
-			sampleRec.clearcoatDirection = sampleRec.direction;
 			sampleRec.color = surf.color / ( 4.0 * PI );
 			return sampleRec;
 
@@ -488,8 +484,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		ScatterRecord result;
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
-		result.direction = wi;
-		result.clearcoatDirection = clearcoatWi;
+		result.direction = normalize( surf.normalBasis * wi );
 
 		return result;
 
