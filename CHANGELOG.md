@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - Fog hits no longer count as transparent surface bounces.
 - Remove precision workaround for Equirect map.
+- Significant refactoring to make more effective use of structs.
 
 ## [0.0.14] - 2023-03-05
 ### Added
