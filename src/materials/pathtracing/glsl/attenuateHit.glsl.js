@@ -3,11 +3,12 @@ export const attenuateHitGLSL = /* glsl */`
 	// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
 	// returns true if a solid surface was hit
 	bool attenuateHit(
-		BVH bvh, Ray ray, RenderState state,
-		float rayDist, int traversals,
+		BVH bvh, RenderState state,
+		Ray ray, float rayDist,
 		out vec3 color
 	) {
 
+		int traversals = state.traversals;
 		int transmissiveTraversals = state.transmissiveTraversals;
 		bool isShadowRay = state.isShadowRay;
 		Material fogMaterial = state.fogMaterial;

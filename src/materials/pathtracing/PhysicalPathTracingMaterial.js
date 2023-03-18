@@ -288,9 +288,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					for ( int i = 0; i < bounces; i ++ ) {
 
-						state.depth ++;
 						sobolBounceIndex ++;
 
+						state.depth ++;
+						state.traversals = bounces - i;
 						state.firstRay = i == 0 && state.transmissiveTraversals == transmissiveBounces;
 
 						int hitType = traceScene(
@@ -467,7 +468,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray, state, lightSampleRec.dist, bounces - i, attenuatedColor )
+								! attenuateHit( bvh, state, ray, lightSampleRec.dist, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -509,7 +510,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray, state, INFINITY, bounces - i, attenuatedColor )
+								! attenuateHit( bvh, state, ray, INFINITY, attenuatedColor )
 							) {
 
 								// get the material pdf
