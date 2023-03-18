@@ -430,14 +430,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 clearcoatOutgoing = - normalize( surf.clearcoatInvBasis * ray.direction );
 						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, surf );
 
-						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) > 0.0;
+						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = ray.direction;
 						ray.direction = normalize( surf.normalBasis * sampleRec.direction );
 
-						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) < 0.0;
-						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - geometryHit.faceNormal : geometryHit.faceNormal, geometryHit.dist );
+						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) < 0.0;
+						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - surf.faceNormal : surf.faceNormal, geometryHit.dist );
 
 						// direct env map sampling
 						#if FEATURE_MIS
@@ -448,7 +448,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// sample a light or environment
 							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, ray.origin, sobol3( 6 ) );
 
-							bool isSampleBelowSurface = ! surf.volumeParticle && dot( geometryHit.faceNormal, lightSampleRec.direction ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightSampleRec.direction ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								lightSampleRec.pdf = 0.0;
@@ -461,7 +461,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 attenuatedColor;
 							if (
 								lightSampleRec.pdf > 0.0 &&
-								isDirectionValid( lightSampleRec.direction, surf.normal, geometryHit.faceNormal ) &&
+								isDirectionValid( lightSampleRec.direction, surf.normal, surf.faceNormal ) &&
 								! attenuateHit( bvh, state, ray, lightSampleRec.dist, attenuatedColor )
 							) {
 
@@ -490,7 +490,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							// this env sampling is not set up for transmissive sampling and yields overly bright
 							// results so we ignore the sample in this case.
 							// TODO: this should be improved but how? The env samples could traverse a few layers?
-							bool isSampleBelowSurface = ! surf.volumeParticle && dot( geometryHit.faceNormal, envDirection ) < 0.0;
+							bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, envDirection ) < 0.0;
 							if ( isSampleBelowSurface ) {
 
 								envPdf = 0.0;
@@ -503,7 +503,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							vec3 attenuatedColor;
 							if (
 								envPdf > 0.0 &&
-								isDirectionValid( envDirection, surf.normal, geometryHit.faceNormal ) &&
+								isDirectionValid( envDirection, surf.normal, surf.faceNormal ) &&
 								! attenuateHit( bvh, state, ray, INFINITY, attenuatedColor )
 							) {
 
@@ -540,7 +540,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal * geometryHit.side ) < 0.0;
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal * geometryHit.side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface ) && state.transmissiveTraversals > 0 ) {
 
 							state.transmissiveTraversals --;
@@ -552,7 +552,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						gl_FragColor.rgb += ( surf.emission * state.throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( ray.direction, surf.normal, geometryHit.faceNormal ) ) {
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( ray.direction, surf.normal, surf.faceNormal ) ) {
 
 							break;
 
