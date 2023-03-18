@@ -396,6 +396,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						#endif
 
+						// early out if this is a matte material
 						if ( material.matte && state.firstRay ) {
 
 							gl_FragColor = vec4( 0.0 );
@@ -431,21 +432,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						sampleRec = bsdfSample( - ray.direction, surf );
-
-						// TODO: this below surface check is inconsistent
-						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
-						vec3 prevRayDirection = ray.direction;
-						ray.direction = sampleRec.direction;
+						bool isBelowSurface = ! surf.volumeParticle && dot( sampleRec.direction, surf.faceNormal ) < 0.0;
+						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, geometryHit.dist );
 
-						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) < 0.0;
-						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - surf.faceNormal : surf.faceNormal, geometryHit.dist );
-
-						// direct env map sampling
+						// next event estimation
 						#if FEATURE_MIS
 
-						gl_FragColor.rgb += directLightContribution( - prevRayDirection, surf, state, ray.origin );
+						gl_FragColor.rgb += directLightContribution( - ray.direction, surf, state, hitPoint );
 
 						#endif
 
@@ -454,8 +449,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
-							vec3 worldDirection = ray.direction;
-							vec3 halfVector = normalize( prevRayDirection + worldDirection );
+							vec3 halfVector = normalize( - ray.direction + sampleRec.direction );
 							state.accumulatedRoughness += max(
 								sin( acosApprox( dot( halfVector, surf.normal ) ) ),
 								sin( acosApprox( dot( halfVector, surf.clearcoatNormal ) ) )
@@ -465,9 +459,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
+						// accumulate emissive color
+						gl_FragColor.rgb += ( surf.emission * state.throughputColor );
+
+						// skip the sample if our PDF or ray is impossible
+						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( sampleRec.direction, surf.normal, surf.faceNormal ) ) {
+
+							break;
+
+						}
+
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal * geometryHit.side ) < 0.0;
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( sampleRec.direction, surf.faceNormal * geometryHit.side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface ) && state.transmissiveTraversals > 0 ) {
 
 							state.transmissiveTraversals --;
@@ -475,13 +479,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						// accumulate color
-						gl_FragColor.rgb += ( surf.emission * state.throughputColor );
+						//
 
-						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( ray.direction, surf.normal, surf.faceNormal ) ) {
+						// handle throughput color transformation
+						// attenuate the throughput color by the medium color
+						if ( ! surf.frontFace ) {
 
-							break;
+							state.throughputColor *= transmissionAttenuation( geometryHit.dist, surf.attenuationColor, surf.attenuationDistance );
 
 						}
 
@@ -508,22 +512,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						#endif
 
+						// adjust the throughput and discard and exit if we find discard the sample if there are any NaNs
 						state.throughputColor *= sampleRec.color / sampleRec.pdf;
-
-						// attenuate the throughput color by the medium color
-						if ( geometryHit.side == - 1.0 ) {
-
-							state.throughputColor *= transmissionAttenuation( geometryHit.dist, surf.attenuationColor, surf.attenuationDistance );
-
-						}
-
-						// discard the sample if there are any NaNs
 						if ( any( isnan( state.throughputColor ) ) || any( isinf( state.throughputColor ) ) ) {
 
 							break;
 
 						}
 
+						//
+
+						// prepare for next ray
+						ray.direction = sampleRec.direction;
+						ray.origin = hitPoint;
 
 					}
 
