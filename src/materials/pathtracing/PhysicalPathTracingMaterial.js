@@ -277,7 +277,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// surface results
 					GeometryHit geometryHit;
 					LightSampleRecord lightSampleRec;
-					ScatterRecord sampleRec;
+					ScatterRecord scatterRec;
 
 					// path tracing state
 					RenderState state = initRenderState();
@@ -323,7 +323,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								} else {
 
 									// weight the contribution
-									float misWeight = misHeuristic( sampleRec.pdf, lightSampleRec.pdf / lightsDenom );
+									float misWeight = misHeuristic( scatterRec.pdf, lightSampleRec.pdf / lightsDenom );
 									gl_FragColor.rgb += lightSampleRec.emission * state.throughputColor * misWeight;
 
 								}
@@ -354,7 +354,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 								envPdf /= lightsDenom;
 
 								// and weight the contribution
-								float misWeight = misHeuristic( sampleRec.pdf, envPdf );
+								float misWeight = misHeuristic( scatterRec.pdf, envPdf );
 								gl_FragColor.rgb += environmentIntensity * envColor * state.throughputColor * misWeight;
 
 								#else
@@ -431,10 +431,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						sampleRec = bsdfSample( - ray.direction, surf );
-						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
+						scatterRec = bsdfSample( - ray.direction, surf );
+						state.isShadowRay = scatterRec.specularPdf < sobol( 4 );
 
-						bool isBelowSurface = ! surf.volumeParticle && dot( sampleRec.direction, surf.faceNormal ) < 0.0;
+						bool isBelowSurface = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal ) < 0.0;
 						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, geometryHit.dist );
 
 						// next event estimation
@@ -449,7 +449,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
-							vec3 halfVector = normalize( - ray.direction + sampleRec.direction );
+							vec3 halfVector = normalize( - ray.direction + scatterRec.direction );
 							state.accumulatedRoughness += max(
 								sin( acosApprox( dot( halfVector, surf.normal ) ) ),
 								sin( acosApprox( dot( halfVector, surf.clearcoatNormal ) ) )
@@ -463,7 +463,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						gl_FragColor.rgb += ( surf.emission * state.throughputColor );
 
 						// skip the sample if our PDF or ray is impossible
-						if ( sampleRec.pdf <= 0.0 || ! isDirectionValid( sampleRec.direction, surf.normal, surf.faceNormal ) ) {
+						if ( scatterRec.pdf <= 0.0 || ! isDirectionValid( scatterRec.direction, surf.normal, surf.faceNormal ) ) {
 
 							break;
 
@@ -471,7 +471,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = ! surf.volumeParticle && dot( sampleRec.direction, surf.faceNormal * geometryHit.side ) < 0.0;
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal * geometryHit.side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface ) && state.transmissiveTraversals > 0 ) {
 
 							state.transmissiveTraversals --;
@@ -496,7 +496,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						uint minBounces = 3u;
 						float depthProb = float( state.depth < minBounces );
 
-						float rrProb = luminance( state.throughputColor * sampleRec.color / sampleRec.pdf );
+						float rrProb = luminance( state.throughputColor * scatterRec.color / scatterRec.pdf );
 						rrProb /= luminance( state.throughputColor );
 						rrProb = sqrt( rrProb );
 						rrProb = max( rrProb, depthProb );
@@ -513,7 +513,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#endif
 
 						// adjust the throughput and discard and exit if we find discard the sample if there are any NaNs
-						state.throughputColor *= sampleRec.color / sampleRec.pdf;
+						state.throughputColor *= scatterRec.color / scatterRec.pdf;
 						if ( any( isnan( state.throughputColor ) ) || any( isinf( state.throughputColor ) ) ) {
 
 							break;
@@ -523,7 +523,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						//
 
 						// prepare for next ray
-						ray.direction = sampleRec.direction;
+						ray.direction = scatterRec.direction;
 						ray.origin = hitPoint;
 
 					}
