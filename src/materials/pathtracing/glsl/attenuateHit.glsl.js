@@ -17,7 +17,7 @@ export const attenuateHitGLSL = /* glsl */`
 
 		// hit results
 		SurfaceHit surfaceHit;
-		LightSampleRecord lightSampleRec;
+		LightRecord lightRec;
 
 		color = vec3( 1.0 );
 
@@ -27,7 +27,7 @@ export const attenuateHitGLSL = /* glsl */`
 
 			int hitType = traceScene(
 				ray, bvh, lights, fogMaterial,
-				surfaceHit, lightSampleRec
+				surfaceHit, lightRec
 			);
 
 			if ( hitType == FOG_HIT ) {
@@ -36,7 +36,7 @@ export const attenuateHitGLSL = /* glsl */`
 
 			} else if ( hitType == LIGHT_HIT ) {
 
-				float totalDist = distance( startPoint, ray.origin + ray.direction * lightSampleRec.dist );
+				float totalDist = distance( startPoint, ray.origin + ray.direction * lightRec.dist );
 				return totalDist < rayDist - max( totalDist, rayDist ) * 1e-4;
 
 			} else if ( hitType == SURFACE_HIT ) {

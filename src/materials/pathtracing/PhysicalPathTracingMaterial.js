@@ -276,7 +276,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// surface results
 					SurfaceHit surfaceHit;
-					LightSampleRecord lightSampleRec;
+					LightRecord lightRec;
 					ScatterRecord scatterRec;
 
 					// path tracing state
@@ -302,35 +302,35 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						int hitType = traceScene(
 							ray, bvh, lights, state.fogMaterial,
-							surfaceHit, lightSampleRec
+							surfaceHit, lightRec
 						);
 
 						if ( hitType == LIGHT_HIT ) {
 
 							if ( state.firstRay || state.transmissiveRay ) {
 
-								gl_FragColor.rgb += lightSampleRec.emission * state.throughputColor;
+								gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
 							} else {
 
 								#if FEATURE_MIS
 
 								// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
-								if ( lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ) {
+								if ( lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ) {
 
-									gl_FragColor.rgb += lightSampleRec.emission * state.throughputColor;
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
 								} else {
 
 									// weight the contribution
-									float misWeight = misHeuristic( scatterRec.pdf, lightSampleRec.pdf / lightsDenom );
-									gl_FragColor.rgb += lightSampleRec.emission * state.throughputColor * misWeight;
+									float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
 
 								}
 
 								#else
 
-								gl_FragColor.rgb += lightSampleRec.emission * state.throughputColor;
+								gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
 								#endif
 
