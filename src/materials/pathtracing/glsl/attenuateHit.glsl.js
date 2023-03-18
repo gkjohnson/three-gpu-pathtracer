@@ -16,7 +16,7 @@ export const attenuateHitGLSL = /* glsl */`
 		vec3 startPoint = ray.origin;
 
 		// hit results
-		GeometryHit geoHit;
+		SurfaceHit surfaceHit;
 		LightSampleRecord lightSampleRec;
 
 		color = vec3( 1.0 );
@@ -27,7 +27,7 @@ export const attenuateHitGLSL = /* glsl */`
 
 			int hitType = traceScene(
 				ray, bvh, lights, fogMaterial,
-				geoHit, lightSampleRec
+				surfaceHit, lightSampleRec
 			);
 
 			if ( hitType == FOG_HIT ) {
@@ -41,7 +41,7 @@ export const attenuateHitGLSL = /* glsl */`
 
 			} else if ( hitType == SURFACE_HIT ) {
 
-				float totalDist = distance( startPoint, ray.origin + ray.direction * geoHit.dist );
+				float totalDist = distance( startPoint, ray.origin + ray.direction * surfaceHit.dist );
 				if ( totalDist > rayDist ) {
 
 					return false;
@@ -52,19 +52,19 @@ export const attenuateHitGLSL = /* glsl */`
 				// Should be able to work using the material BSDF functions which will take into account specularity, etc.
 				// TODO: should we account for emissive surfaces here?
 
-				uint materialIndex = uTexelFetch1D( materialIndexAttribute, geoHit.faceIndices.x ).r;
+				uint materialIndex = uTexelFetch1D( materialIndexAttribute, surfaceHit.faceIndices.x ).r;
 				Material material = readMaterialInfo( materials, materialIndex );
 
 				// adjust the ray to the new surface
-				bool isEntering = geoHit.side == 1.0;
-				ray.origin = stepRayOrigin( ray.origin, ray.direction, - geoHit.faceNormal, geoHit.dist );
+				bool isEntering = surfaceHit.side == 1.0;
+				ray.origin = stepRayOrigin( ray.origin, ray.direction, - surfaceHit.faceNormal, surfaceHit.dist );
 
 				#if FEATURE_FOG
 
 				if ( material.fogVolume ) {
 
 					fogMaterial = material;
-					fogMaterial.fogVolume = geoHit.side == 1.0;
+					fogMaterial.fogVolume = surfaceHit.side == 1.0;
 					i -= sign( transmissiveTraversals );
 					transmissiveTraversals --;
 					continue;
@@ -79,8 +79,8 @@ export const attenuateHitGLSL = /* glsl */`
 
 				}
 
-				vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, geoHit.barycoord, geoHit.faceIndices.xyz ).xy;
-				vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, geoHit.barycoord, geoHit.faceIndices.xyz );
+				vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, surfaceHit.barycoord, surfaceHit.faceIndices.xyz ).xy;
+				vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, surfaceHit.barycoord, surfaceHit.faceIndices.xyz );
 
 				// albedo
 				vec4 albedo = vec4( material.color, material.opacity );
@@ -128,7 +128,7 @@ export const attenuateHitGLSL = /* glsl */`
 				if (
 					transmissionFactor < rand() && ! (
 						// material sidedness
-						material.side != 0.0 && geoHit.side == material.side
+						material.side != 0.0 && surfaceHit.side == material.side
 
 						// alpha test
 						|| useAlphaTest && albedo.a < alphaTest
@@ -142,19 +142,19 @@ export const attenuateHitGLSL = /* glsl */`
 
 				}
 
-				if ( geoHit.side == 1.0 && isEntering ) {
+				if ( surfaceHit.side == 1.0 && isEntering ) {
 
 					// only attenuate by surface color on the way in
 					color *= mix( vec3( 1.0 ), albedo.rgb, transmissionFactor );
 
-				} else if ( geoHit.side == - 1.0 ) {
+				} else if ( surfaceHit.side == - 1.0 ) {
 
 					// attenuate by medium once we hit the opposite side of the model
-					color *= transmissionAttenuation( geoHit.dist, material.attenuationColor, material.attenuationDistance );
+					color *= transmissionAttenuation( surfaceHit.dist, material.attenuationColor, material.attenuationDistance );
 
 				}
 
-				bool isTransmissiveRay = dot( ray.direction, geoHit.faceNormal * geoHit.side ) < 0.0;
+				bool isTransmissiveRay = dot( ray.direction, surfaceHit.faceNormal * surfaceHit.side ) < 0.0;
 				if ( ( isTransmissiveRay || isEntering ) && transmissiveTraversals > 0 ) {
 
 					i -= sign( transmissiveTraversals );

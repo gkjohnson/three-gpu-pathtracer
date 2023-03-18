@@ -275,7 +275,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					gl_FragColor = vec4( 0, 0, 0, 1 );
 
 					// surface results
-					GeometryHit geometryHit;
+					SurfaceHit surfaceHit;
 					LightSampleRecord lightSampleRec;
 					ScatterRecord scatterRec;
 
@@ -302,7 +302,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						int hitType = traceScene(
 							ray, bvh, lights, state.fogMaterial,
-							geometryHit, lightSampleRec
+							surfaceHit, lightSampleRec
 						);
 
 						if ( hitType == LIGHT_HIT ) {
@@ -371,7 +371,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						uint materialIndex = uTexelFetch1D( materialIndexAttribute, geometryHit.faceIndices.x ).r;
+						uint materialIndex = uTexelFetch1D( materialIndexAttribute, surfaceHit.faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
 
 						#if FEATURE_FOG
@@ -384,9 +384,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						} else if ( material.fogVolume ) {
 
 							state.fogMaterial = material;
-							state.fogMaterial.fogVolume = geometryHit.side == 1.0;
+							state.fogMaterial.fogVolume = surfaceHit.side == 1.0;
 
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
+							ray.origin = stepRayOrigin( ray.origin, ray.direction, - surfaceHit.faceNormal, surfaceHit.dist );
 
 							i -= sign( state.transmissiveTraversals );
 							state.transmissiveTraversals -= sign( state.transmissiveTraversals );
@@ -408,7 +408,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// then skip it
 						if ( ! material.castShadow && state.isShadowRay ) {
 
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
+							ray.origin = stepRayOrigin( ray.origin, ray.direction, - surfaceHit.faceNormal, surfaceHit.dist );
 							continue;
 
 						}
@@ -416,7 +416,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						SurfaceRecord surf;
 						if (
 							getSurfaceRecord(
-								material, geometryHit, attributesArray, state.accumulatedRoughness,
+								material, surfaceHit, attributesArray, state.accumulatedRoughness,
 								surf
 							) == SKIP_SURFACE
 						) {
@@ -426,7 +426,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							i -= sign( state.transmissiveTraversals );
 							state.transmissiveTraversals -= sign( state.transmissiveTraversals );
 
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
+							ray.origin = stepRayOrigin( ray.origin, ray.direction, - surfaceHit.faceNormal, surfaceHit.dist );
 							continue;
 
 						}
@@ -435,7 +435,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						state.isShadowRay = scatterRec.specularPdf < sobol( 4 );
 
 						bool isBelowSurface = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal ) < 0.0;
-						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, geometryHit.dist );
+						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, surfaceHit.dist );
 
 						// next event estimation
 						#if FEATURE_MIS
@@ -471,7 +471,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						// if we're bouncing around the inside a transmissive material then decrement
 						// perform this separate from a bounce
-						bool isTransmissiveRay = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal * geometryHit.side ) < 0.0;
+						bool isTransmissiveRay = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal * surfaceHit.side ) < 0.0;
 						if ( ( isTransmissiveRay || isBelowSurface ) && state.transmissiveTraversals > 0 ) {
 
 							state.transmissiveTraversals --;
@@ -485,7 +485,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// attenuate the throughput color by the medium color
 						if ( ! surf.frontFace ) {
 
-							state.throughputColor *= transmissionAttenuation( geometryHit.dist, surf.attenuationColor, surf.attenuationDistance );
+							state.throughputColor *= transmissionAttenuation( surfaceHit.dist, surf.attenuationColor, surf.attenuationDistance );
 
 						}
 

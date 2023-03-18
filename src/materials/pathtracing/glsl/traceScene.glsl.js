@@ -8,11 +8,11 @@ export const traceSceneGLSL = /* glsl */`
 	int traceScene(
 
 		Ray ray, BVH bvh, LightsInfo lights, Material fogMaterial,
-		out GeometryHit geoHit, out LightSampleRecord lightSampleRec
+		out SurfaceHit surfaceHit, out LightSampleRecord lightSampleRec
 
 	) {
 
-		bool hit = bvhIntersectFirstHit( bvh, ray.origin, ray.direction, geoHit.faceIndices, geoHit.faceNormal, geoHit.barycoord, geoHit.side, geoHit.dist );
+		bool hit = bvhIntersectFirstHit( bvh, ray.origin, ray.direction, surfaceHit.faceIndices, surfaceHit.faceNormal, surfaceHit.barycoord, surfaceHit.side, surfaceHit.dist );
 		bool lightHit = lightsClosestHit( lights.tex, lights.count, ray.origin, ray.direction, lightSampleRec );
 
 		#if FEATURE_FOG
@@ -20,11 +20,11 @@ export const traceSceneGLSL = /* glsl */`
 		if ( fogMaterial.fogVolume ) {
 
 			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
-			if ( particleDist + 1e-4 < geoHit.dist && ( particleDist + 1e-4 < lightSampleRec.dist || ! lightHit ) ) {
+			if ( particleDist + 1e-4 < surfaceHit.dist && ( particleDist + 1e-4 < lightSampleRec.dist || ! lightHit ) ) {
 
-				geoHit.side = 1.0;
-				geoHit.faceNormal = normalize( - ray.direction );
-				geoHit.dist = particleDist;
+				surfaceHit.side = 1.0;
+				surfaceHit.faceNormal = normalize( - ray.direction );
+				surfaceHit.dist = particleDist;
 				return FOG_HIT;
 
 			}
@@ -33,7 +33,7 @@ export const traceSceneGLSL = /* glsl */`
 
 		#endif
 
-		if ( lightHit && ( lightSampleRec.dist < geoHit.dist || ! hit ) ) {
+		if ( lightHit && ( lightSampleRec.dist < surfaceHit.dist || ! hit ) ) {
 
 			return LIGHT_HIT;
 

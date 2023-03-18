@@ -4,7 +4,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 	#define SKIP_SURFACE 0
 	#define HIT_SURFACE 1
 	int getSurfaceRecord(
-		Material material, GeometryHit geoHit, sampler2DArray attributesArray,
+		Material material, SurfaceHit surfaceHit, sampler2DArray attributesArray,
 		float accumulatedRoughness,
 		out SurfaceRecord surf
 	) {
@@ -27,8 +27,8 @@ export const getSurfaceRecordGLSL = /* glsl */`
 		}
 
 		// uv coord for textures
-		vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, geoHit.barycoord, geoHit.faceIndices.xyz ).xy;
-		vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, geoHit.barycoord, geoHit.faceIndices.xyz );
+		vec2 uv = textureSampleBarycoord( attributesArray, ATTR_UV, surfaceHit.barycoord, surfaceHit.faceIndices.xyz ).xy;
+		vec4 vertexColor = textureSampleBarycoord( attributesArray, ATTR_COLOR, surfaceHit.barycoord, surfaceHit.faceIndices.xyz );
 
 		// albedo
 		vec4 albedo = vec4( material.color, material.opacity );
@@ -61,7 +61,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 		bool useAlphaTest = alphaTest != 0.0;
 		if (
 			// material sidedness
-			material.side != 0.0 && geoHit.side != material.side
+			material.side != 0.0 && surfaceHit.side != material.side
 
 			// alpha test
 			|| useAlphaTest && albedo.a < alphaTest
@@ -78,8 +78,8 @@ export const getSurfaceRecordGLSL = /* glsl */`
 		vec3 normal = normalize( textureSampleBarycoord(
 			attributesArray,
 			ATTR_NORMAL,
-			geoHit.barycoord,
-			geoHit.faceIndices.xyz
+			surfaceHit.barycoord,
+			surfaceHit.faceIndices.xyz
 		).xyz );
 
 		// roughness
@@ -124,7 +124,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 			// if we're rendering a flat shaded object then use the face normals - the face normal
 			// is provided based on the side the ray hits the mesh so flip it to align with the
 			// interpolated vertex normals.
-			normal = geoHit.faceNormal * geoHit.side;
+			normal = surfaceHit.faceNormal * surfaceHit.side;
 
 		}
 
@@ -134,8 +134,8 @@ export const getSurfaceRecordGLSL = /* glsl */`
 			vec4 tangentSample = textureSampleBarycoord(
 				attributesArray,
 				ATTR_TANGENT,
-				geoHit.barycoord,
-				geoHit.faceIndices.xyz
+				surfaceHit.barycoord,
+				surfaceHit.faceIndices.xyz
 			);
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
@@ -155,7 +155,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 		}
 
-		normal *= geoHit.side;
+		normal *= surfaceHit.side;
 
 		// clearcoat
 		float clearcoat = material.clearcoat;
@@ -182,8 +182,8 @@ export const getSurfaceRecordGLSL = /* glsl */`
 			vec4 tangentSample = textureSampleBarycoord(
 				attributesArray,
 				ATTR_TANGENT,
-				geoHit.barycoord,
-				geoHit.faceIndices.xyz
+				surfaceHit.barycoord,
+				surfaceHit.faceIndices.xyz
 			);
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
@@ -203,7 +203,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 		}
 
-		clearcoatNormal *= geoHit.side;
+		clearcoatNormal *= surfaceHit.side;
 
 		// sheenColor
 		vec3 sheenColor = material.sheenColor;
@@ -264,7 +264,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 		surf.volumeParticle = false;
 
-		surf.faceNormal = geoHit.faceNormal;
+		surf.faceNormal = surfaceHit.faceNormal;
 		surf.normal = normal;
 
 		surf.metalness = metalness;
@@ -299,7 +299,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
-		surf.frontFace = geoHit.side == 1.0 || transmission == 0.0;
+		surf.frontFace = surfaceHit.side == 1.0 || transmission == 0.0;
 		surf.eta = material.thinFilm || surf.frontFace ? 1.0 / material.ior : material.ior;
 		surf.f0 = iorRatioToF0( surf.eta );
 
