@@ -47,6 +47,7 @@ import { cameraUtilsGLSL } from './glsl/cameraUtils.glsl.js';
 import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
 import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
 import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
+import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -215,10 +216,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				varying vec2 vUv;
 
-				${ renderStructsGLSL }
-				${ cameraUtilsGLSL }
-				${ traceSceneGLSL }
-				${ attenuateHitGLSL }
+				// globals
+				mat3 envRotation3x3;
+				mat3 invEnvRotation3x3;
+				float lightsDenom;
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 
@@ -248,6 +249,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
+				${ renderStructsGLSL }
+				${ cameraUtilsGLSL }
+				${ traceSceneGLSL }
+				${ attenuateHitGLSL }
+				${ directLightContributionGLSL }
 				${ getSurfaceRecordGLSL }
 
 				void main() {
@@ -261,9 +267,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					Ray ray = getCameraRay();
 
 					// inverse environment rotation
-					mat3 envRotation3x3 = mat3( environmentRotation );
-					mat3 invEnvRotation3x3 = inverse( envRotation3x3 );
-					float lightsDenom = environmentIntensity == 0.0 && lights.count != 0u ? float( lights.count ) : float( lights.count + 1u );
+					envRotation3x3 = mat3( environmentRotation );
+					invEnvRotation3x3 = inverse( envRotation3x3 );
+					lightsDenom = environmentIntensity == 0.0 && lights.count != 0u ? float( lights.count ) : float( lights.count + 1u );
 
 					// final color
 					gl_FragColor = vec4( 0, 0, 0, 1 );
@@ -442,87 +448,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// direct env map sampling
 						#if FEATURE_MIS
 
-						// uniformly pick a light or environment map
-						if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
+						gl_FragColor.rgb += directLightContribution( outgoing, clearcoatOutgoing, surf, state, ray );
 
-							// sample a light or environment
-							LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, ray.origin, sobol3( 6 ) );
-
-							bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightSampleRec.direction ) < 0.0;
-							if ( isSampleBelowSurface ) {
-
-								lightSampleRec.pdf = 0.0;
-
-							}
-
-							// check if a ray could even reach the light area
-							Ray lightRay = ray;
-							ray.direction = lightSampleRec.direction;
-							vec3 attenuatedColor;
-							if (
-								lightSampleRec.pdf > 0.0 &&
-								isDirectionValid( lightSampleRec.direction, surf.normal, surf.faceNormal ) &&
-								! attenuateHit( bvh, state, ray, lightSampleRec.dist, attenuatedColor )
-							) {
-
-								// get the material pdf
-								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( surf.normalInvBasis * lightSampleRec.direction ), normalize( surf.clearcoatInvBasis * lightSampleRec.direction ), surf, sampleColor );
-								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
-
-									// weight the direct light contribution
-									float lightPdf = lightSampleRec.pdf / lightsDenom;
-									float misWeight = lightSampleRec.type == SPOT_LIGHT_TYPE || lightSampleRec.type == DIR_LIGHT_TYPE || lightSampleRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-									gl_FragColor.rgb += attenuatedColor * lightSampleRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
-
-								}
-
-							}
-
-						} else {
-
-							// find a sample in the environment map to include in the contribution
-							vec3 envColor, envDirection;
-							float envPdf = sampleEquirectProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
-							envDirection = invEnvRotation3x3 * envDirection;
-
-							// this env sampling is not set up for transmissive sampling and yields overly bright
-							// results so we ignore the sample in this case.
-							// TODO: this should be improved but how? The env samples could traverse a few layers?
-							bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, envDirection ) < 0.0;
-							if ( isSampleBelowSurface ) {
-
-								envPdf = 0.0;
-
-							}
-
-							// check if a ray could even reach the surface
-							Ray envRay = ray;
-							envRay.direction = envDirection;
-							vec3 attenuatedColor;
-							if (
-								envPdf > 0.0 &&
-								isDirectionValid( envDirection, surf.normal, surf.faceNormal ) &&
-								! attenuateHit( bvh, state, ray, INFINITY, attenuatedColor )
-							) {
-
-								// get the material pdf
-								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( surf.normalInvBasis * envDirection ), normalize( surf.clearcoatInvBasis * envDirection ), surf, sampleColor );
-								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
-
-									// weight the direct light contribution
-									envPdf /= lightsDenom;
-									float misWeight = misHeuristic( envPdf, envMaterialPdf );
-									gl_FragColor.rgb += attenuatedColor * environmentIntensity * envColor * state.throughputColor * sampleColor * misWeight / envPdf;
-
-								}
-
-							}
-
-						}
 						#endif
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
