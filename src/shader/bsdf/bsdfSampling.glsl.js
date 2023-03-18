@@ -24,6 +24,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 faceNormal;
 		bool frontFace;
 		vec3 normal;
+		mat3 normalBasis;
+		mat3 normalInvBasis;
 
 		// cached properties
 		float eta;
@@ -45,6 +47,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// clearcoat
 		vec3 clearcoatNormal;
+		mat3 clearcoatBasis;
+		mat3 clearcoatInvBasis;
 		float clearcoat;
 		float clearcoatRoughness;
 		float filteredClearcoatRoughness;
@@ -67,10 +71,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	struct ScatterRecord {
 		float specularPdf;
 		float pdf;
-
 		vec3 direction;
-		vec3 clearcoatDirection;
-
 		vec3 color;
 	};
 
@@ -378,7 +379,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRecord surf, out vec3 color ) {
+	float bsdfResult( vec3 worldWo, vec3 worldWi, SurfaceRecord surf, out vec3 color ) {
 
 		if ( surf.volumeParticle ) {
 
@@ -386,6 +387,12 @@ export const bsdfSamplingGLSL = /* glsl */`
 			return 1.0 / ( 4.0 * PI );
 
 		}
+
+		vec3 wo = normalize( surf.normalInvBasis * worldWo );
+		vec3 wi = normalize( surf.normalInvBasis * worldWi );
+
+		vec3 clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
+		vec3 clearcoatWi = normalize( surf.clearcoatInvBasis * worldWi );
 
 		vec3 wh = getHalfVector( wo, wi, surf.eta );
 		float diffuseWeight;
@@ -399,22 +406,25 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRecord surf ) {
+	ScatterRecord bsdfSample( vec3 worldWo, SurfaceRecord surf ) {
 
 		if ( surf.volumeParticle ) {
-
-			vec3 wi = sampleSphere( sobol2( 16 ) );
-			vec3 wh = normalize( wo + wi );
 
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
 			sampleRec.pdf = 1.0 / ( 4.0 * PI );
-			sampleRec.direction = wi;
-			sampleRec.clearcoatDirection = wi;
+			sampleRec.direction = sampleSphere( sobol2( 16 ) );
 			sampleRec.color = surf.color / ( 4.0 * PI );
 			return sampleRec;
 
 		}
+
+		vec3 wo = normalize( surf.normalInvBasis * worldWo );
+		vec3 clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
+		mat3 normalBasis = surf.normalBasis;
+		mat3 invBasis = surf.normalInvBasis;
+		mat3 clearcoatNormalBasis = surf.clearcoatBasis;
+		mat3 clearcoatInvBasis = surf.clearcoatInvBasis;
 
 		float diffuseWeight;
 		float specularWeight;
@@ -480,8 +490,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		ScatterRecord result;
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
-		result.direction = wi;
-		result.clearcoatDirection = clearcoatWi;
+		result.direction = normalize( surf.normalBasis * wi );
 
 		return result;
 
