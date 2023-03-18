@@ -1,12 +1,12 @@
 export const directLightContributionGLSL = /*glsl*/`
 
-	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, Ray ray ) {
+	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
 			// sample a light or environment
-			LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, ray.origin, sobol3( 6 ) );
+			LightSampleRecord lightSampleRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
 			bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightSampleRec.direction ) < 0.0;
 			if ( isSampleBelowSurface ) {
@@ -16,13 +16,14 @@ export const directLightContributionGLSL = /*glsl*/`
 			}
 
 			// check if a ray could even reach the light area
-			Ray lightRay = ray;
-			ray.direction = lightSampleRec.direction;
+			Ray lightRay;
+			lightRay.origin = rayOrigin;
+			lightRay.direction = lightSampleRec.direction;
 			vec3 attenuatedColor;
 			if (
 				lightSampleRec.pdf > 0.0 &&
 				isDirectionValid( lightSampleRec.direction, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( bvh, state, ray, lightSampleRec.dist, attenuatedColor )
+				! attenuateHit( bvh, state, lightRay, lightSampleRec.dist, attenuatedColor )
 			) {
 
 				// get the material pdf
@@ -58,13 +59,14 @@ export const directLightContributionGLSL = /*glsl*/`
 			}
 
 			// check if a ray could even reach the surface
-			Ray envRay = ray;
+			Ray envRay;
+			envRay.origin = rayOrigin;
 			envRay.direction = envDirection;
 			vec3 attenuatedColor;
 			if (
 				envPdf > 0.0 &&
 				isDirectionValid( envDirection, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( bvh, state, ray, INFINITY, attenuatedColor )
+				! attenuateHit( bvh, state, envRay, INFINITY, attenuatedColor )
 			) {
 
 				// get the material pdf

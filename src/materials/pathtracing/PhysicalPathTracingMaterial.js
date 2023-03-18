@@ -432,6 +432,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						sampleRec = bsdfSample( - ray.direction, surf );
 
+						// TODO: this below surface check is inconsistent
 						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
@@ -444,7 +445,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// direct env map sampling
 						#if FEATURE_MIS
 
-						gl_FragColor.rgb += directLightContribution( - prevRayDirection, surf, state, ray );
+						gl_FragColor.rgb += directLightContribution( - prevRayDirection, surf, state, ray.origin );
 
 						#endif
 
