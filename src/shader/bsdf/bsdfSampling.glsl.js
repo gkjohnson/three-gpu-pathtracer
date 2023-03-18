@@ -403,7 +403,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, mat3 normalBasis, mat3 invBasis, mat3 clearcoatNormalBasis, mat3 clearcoatInvBasis, SurfaceRecord surf ) {
+	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, SurfaceRecord surf ) {
 
 		if ( surf.volumeParticle ) {
 
@@ -419,6 +419,11 @@ export const bsdfSamplingGLSL = /* glsl */`
 			return sampleRec;
 
 		}
+
+		mat3 normalBasis = surf.normalBasis;
+		mat3 invBasis = surf.normalInvBasis;
+		mat3 clearcoatNormalBasis = surf.clearcoatBasis;
+		mat3 clearcoatInvBasis = surf.clearcoatInvBasis;
 
 		float diffuseWeight;
 		float specularWeight;

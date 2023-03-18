@@ -428,7 +428,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						vec3 outgoing = - normalize( surf.normalInvBasis * ray.direction );
 						vec3 clearcoatOutgoing = - normalize( surf.clearcoatInvBasis * ray.direction );
-						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, surf.normalBasis, surf.normalInvBasis, surf.clearcoatBasis, surf.clearcoatInvBasis, surf );
+						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, surf );
 
 						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
