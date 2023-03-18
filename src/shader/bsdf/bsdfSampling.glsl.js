@@ -405,24 +405,20 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	ScatterRecord bsdfSample( vec3 worldWo, SurfaceRecord surf ) {
 
-		vec3 wo = normalize( surf.normalInvBasis * worldWo );
-		vec3 clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
-
 		if ( surf.volumeParticle ) {
-
-			vec3 wi = sampleSphere( sobol2( 16 ) );
-			vec3 wh = normalize( wo + wi );
 
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
 			sampleRec.pdf = 1.0 / ( 4.0 * PI );
-			sampleRec.direction = wi;
-			sampleRec.clearcoatDirection = wi;
+			sampleRec.direction = sampleSphere( sobol2( 16 ) );
+			sampleRec.clearcoatDirection = sampleRec.direction;
 			sampleRec.color = surf.color / ( 4.0 * PI );
 			return sampleRec;
 
 		}
 
+		vec3 wo = normalize( surf.normalInvBasis * worldWo );
+		vec3 clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
 		mat3 normalBasis = surf.normalBasis;
 		mat3 invBasis = surf.normalInvBasis;
 		mat3 clearcoatNormalBasis = surf.clearcoatBasis;

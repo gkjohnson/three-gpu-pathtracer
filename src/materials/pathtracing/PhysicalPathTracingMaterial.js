@@ -430,8 +430,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						geometryHit.faceNormal = surf.faceNormal;
-
 						vec3 outgoing = - normalize( surf.normalInvBasis * ray.direction );
 						vec3 clearcoatOutgoing = - normalize( surf.clearcoatInvBasis * ray.direction );
 						sampleRec = bsdfSample( - ray.direction, surf );
