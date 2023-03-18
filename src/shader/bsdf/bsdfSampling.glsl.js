@@ -403,7 +403,10 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	ScatterRecord bsdfSample( vec3 wo, vec3 clearcoatWo, SurfaceRecord surf ) {
+	ScatterRecord bsdfSample( vec3 worldWo, SurfaceRecord surf ) {
+
+		vec3 wo = normalize( surf.normalInvBasis * worldWo );
+		vec3 clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
 
 		if ( surf.volumeParticle ) {
 

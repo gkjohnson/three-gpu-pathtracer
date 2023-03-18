@@ -434,7 +434,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						vec3 outgoing = - normalize( surf.normalInvBasis * ray.direction );
 						vec3 clearcoatOutgoing = - normalize( surf.clearcoatInvBasis * ray.direction );
-						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, surf );
+						sampleRec = bsdfSample( - ray.direction, surf );
 
 						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
@@ -457,9 +457,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if ( ! surf.volumeParticle && ! isBelowSurface ) {
 
 							// determine if this is a rough normal or not by checking how far off straight up it is
-							vec3 halfVector = normalize( outgoing + sampleRec.direction );
-							vec3 clearcoatHalfVector = normalize( clearcoatOutgoing + sampleRec.clearcoatDirection );
-							state.accumulatedRoughness += max( sin( acosApprox( halfVector.z ) ), sin( acosApprox( clearcoatHalfVector.z ) ) );
+							vec3 worldDirection = ray.direction;
+							vec3 halfVector = normalize( prevRayDirection + worldDirection );
+							state.accumulatedRoughness += max(
+								sin( acosApprox( dot( halfVector, surf.normal ) ) ),
+								sin( acosApprox( dot( halfVector, surf.clearcoatNormal ) ) )
+							);
 
 							state.transmissiveRay = false;
 
