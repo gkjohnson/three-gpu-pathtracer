@@ -276,14 +276,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// path tracing state
 					RenderState state = initRenderState();
 					state.transmissiveTraversals = transmissiveBounces;
-
-					Material fogMaterial;
 					#if FEATURE_FOG
 
-					fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
+					state.fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
 						bvh, ray.origin, - ray.direction,
 						materialIndexAttribute, materials,
-						fogMaterial
+						state.fogMaterial
 					);
 
 					#endif
@@ -296,7 +294,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						state.firstRay = i == 0 && state.transmissiveTraversals == transmissiveBounces;
 
 						int hitType = traceScene(
-							ray, bvh, lights, fogMaterial,
+							ray, bvh, lights, state.fogMaterial,
 							geometryHit, lightSampleRec
 						);
 
@@ -373,13 +371,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						if ( hitType == FOG_HIT ) {
 
-							material = fogMaterial;
+							material = state.fogMaterial;
 							state.accumulatedRoughness += 0.2;
 
 						} else if ( material.fogVolume ) {
 
-							fogMaterial = material;
-							fogMaterial.fogVolume = geometryHit.side == 1.0;
+							state.fogMaterial = material;
+							state.fogMaterial.fogVolume = geometryHit.side == 1.0;
 
 							ray.origin = stepRayOrigin( ray.origin, ray.direction, - geometryHit.faceNormal, geometryHit.dist );
 
@@ -469,7 +467,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray, lightSampleRec.dist, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, ray, lightSampleRec.dist, bounces - i, state.transmissiveTraversals, state.isShadowRay, state.fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -511,7 +509,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray, INFINITY, bounces - i, state.transmissiveTraversals, state.isShadowRay, fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, ray, INFINITY, bounces - i, state.transmissiveTraversals, state.isShadowRay, state.fogMaterial, attenuatedColor )
 							) {
 
 								// get the material pdf

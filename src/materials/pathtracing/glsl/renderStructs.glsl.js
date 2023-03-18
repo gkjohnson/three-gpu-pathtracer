@@ -26,6 +26,7 @@ export const renderStructsGLSL = /* glsl */`
 		int transmissiveTraversals;
 		uint depth;
 		vec3 throughputColor;
+		Material fogMaterial;
 
 	};
 
@@ -39,6 +40,7 @@ export const renderStructsGLSL = /* glsl */`
 		result.transmissiveTraversals = 0;
 		result.throughputColor = vec3( 1.0 );
 		result.depth = 0u;
+		result.fogMaterial.fogVolume = false;
 		return result;
 
 	}
