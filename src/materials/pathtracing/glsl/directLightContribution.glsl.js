@@ -29,8 +29,7 @@ export const directLightContributionGLSL = /*glsl*/`
 				// get the material pdf
 				vec3 sampleColor;
 				float lightMaterialPdf = bsdfResult( worldWo, lightRec.direction, surf, sampleColor );
-				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-				if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
+				if ( lightMaterialPdf > 0.0 ) {
 
 					// weight the direct light contribution
 					float lightPdf = lightRec.pdf / lightsDenom;
@@ -72,8 +71,7 @@ export const directLightContributionGLSL = /*glsl*/`
 				// get the material pdf
 				vec3 sampleColor;
 				float envMaterialPdf = bsdfResult( worldWo, envDirection, surf, sampleColor );
-				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-				if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
+				if ( envMaterialPdf > 0.0 ) {
 
 					// weight the direct light contribution
 					envPdf /= lightsDenom;
