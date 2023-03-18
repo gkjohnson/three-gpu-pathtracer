@@ -430,8 +430,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						vec3 outgoing = - normalize( surf.normalInvBasis * ray.direction );
-						vec3 clearcoatOutgoing = - normalize( surf.clearcoatInvBasis * ray.direction );
 						sampleRec = bsdfSample( - ray.direction, surf );
 
 						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, surf.faceNormal ) > 0.0;
@@ -446,7 +444,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// direct env map sampling
 						#if FEATURE_MIS
 
-						gl_FragColor.rgb += directLightContribution( outgoing, clearcoatOutgoing, surf, state, ray );
+						gl_FragColor.rgb += directLightContribution( - prevRayDirection, surf, state, ray );
 
 						#endif
 

@@ -1,6 +1,6 @@
 export const directLightContributionGLSL = /*glsl*/`
 
-	vec3 directLightContribution( vec3 outgoing, vec3 clearcoatOutgoing, SurfaceRecord surf, RenderState state, Ray ray ) {
+	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, Ray ray ) {
 
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
@@ -27,7 +27,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 				// get the material pdf
 				vec3 sampleColor;
-				float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( surf.normalInvBasis * lightSampleRec.direction ), normalize( surf.clearcoatInvBasis * lightSampleRec.direction ), surf, sampleColor );
+				float lightMaterialPdf = bsdfResult( worldWo, lightSampleRec.direction, surf, sampleColor );
 				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 				if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -69,7 +69,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 				// get the material pdf
 				vec3 sampleColor;
-				float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( surf.normalInvBasis * envDirection ), normalize( surf.clearcoatInvBasis * envDirection ), surf, sampleColor );
+				float envMaterialPdf = bsdfResult( worldWo, envDirection, surf, sampleColor );
 				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 				if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 

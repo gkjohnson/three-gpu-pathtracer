@@ -379,7 +379,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	float bsdfResult( vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRecord surf, out vec3 color ) {
+	float bsdfResult( vec3 worldWo, vec3 worldWi, SurfaceRecord surf, out vec3 color ) {
 
 		if ( surf.volumeParticle ) {
 
@@ -387,6 +387,12 @@ export const bsdfSamplingGLSL = /* glsl */`
 			return 1.0 / ( 4.0 * PI );
 
 		}
+
+		vec3 wo = normalize( surf.normalInvBasis * worldWo );
+		vec3 wi = normalize( surf.normalInvBasis * worldWi );
+
+		vec3 clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
+		vec3 clearcoatWi = normalize( surf.clearcoatInvBasis * worldWi );
 
 		vec3 wh = getHalfVector( wo, wi, surf.eta );
 		float diffuseWeight;
