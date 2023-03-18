@@ -24,6 +24,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 faceNormal;
 		bool frontFace;
 		vec3 normal;
+		mat3 normalBasis;
+		mat3 normalInvBasis;
 
 		// cached properties
 		float eta;
@@ -45,6 +47,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// clearcoat
 		vec3 clearcoatNormal;
+		mat3 clearcoatBasis;
+		mat3 clearcoatInvBasis;
 		float clearcoat;
 		float clearcoatRoughness;
 		float filteredClearcoatRoughness;

@@ -426,21 +426,15 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						geometryHit.faceNormal = surf.faceNormal;
 
-						mat3 normalBasis = getBasisFromNormal( surf.normal );
-						mat3 invBasis = inverse( normalBasis );
-
-						mat3 clearcoatNormalBasis = getBasisFromNormal( surf.clearcoatNormal );
-						mat3 clearcoatInvBasis = inverse( clearcoatNormalBasis );
-
-						vec3 outgoing = - normalize( invBasis * ray.direction );
-						vec3 clearcoatOutgoing = - normalize( clearcoatInvBasis * ray.direction );
-						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, normalBasis, invBasis, clearcoatNormalBasis, clearcoatInvBasis, surf );
+						vec3 outgoing = - normalize( surf.normalInvBasis * ray.direction );
+						vec3 clearcoatOutgoing = - normalize( surf.clearcoatInvBasis * ray.direction );
+						sampleRec = bsdfSample( outgoing, clearcoatOutgoing, surf.normalBasis, surf.normalInvBasis, surf.clearcoatBasis, surf.clearcoatInvBasis, surf );
 
 						bool wasBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) > 0.0;
 						state.isShadowRay = sampleRec.specularPdf < sobol( 4 );
 
 						vec3 prevRayDirection = ray.direction;
-						ray.direction = normalize( normalBasis * sampleRec.direction );
+						ray.direction = normalize( surf.normalBasis * sampleRec.direction );
 
 						bool isBelowSurface = ! surf.volumeParticle && dot( ray.direction, geometryHit.faceNormal ) < 0.0;
 						ray.origin = stepRayOrigin( ray.origin, prevRayDirection, isBelowSurface ? - geometryHit.faceNormal : geometryHit.faceNormal, geometryHit.dist );
@@ -473,7 +467,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * lightSampleRec.direction ), normalize( clearcoatInvBasis * lightSampleRec.direction ), surf, sampleColor );
+								float lightMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( surf.normalInvBasis * lightSampleRec.direction ), normalize( surf.clearcoatInvBasis * lightSampleRec.direction ), surf, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
@@ -515,7 +509,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the material pdf
 								vec3 sampleColor;
-								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( invBasis * envDirection ), normalize( clearcoatInvBasis * envDirection ), surf, sampleColor );
+								float envMaterialPdf = bsdfResult( outgoing, clearcoatOutgoing, normalize( surf.normalInvBasis * envDirection ), normalize( surf.clearcoatInvBasis * envDirection ), surf, sampleColor );
 								bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
 								if ( envMaterialPdf > 0.0 && isValidSampleColor ) {
 

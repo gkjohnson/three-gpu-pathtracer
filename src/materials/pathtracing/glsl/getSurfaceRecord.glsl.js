@@ -310,6 +310,13 @@ export const getSurfaceRecordGLSL = /* glsl */`
 		surf.filteredRoughness = applyFilteredGlossy( surf.roughness, accumulatedRoughness );
 		surf.filteredClearcoatRoughness = applyFilteredGlossy( surf.clearcoatRoughness, accumulatedRoughness );
 
+		// get the normal frames
+		surf.normalBasis = getBasisFromNormal( surf.normal );
+		surf.normalInvBasis = inverse( surf.normalBasis );
+
+		surf.clearcoatBasis = getBasisFromNormal( surf.clearcoatNormal );
+		surf.clearcoatInvBasis = inverse( surf.clearcoatBasis );
+
 		return HIT_SURFACE;
 
 	}
