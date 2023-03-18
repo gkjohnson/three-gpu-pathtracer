@@ -467,7 +467,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								lightSampleRec.pdf > 0.0 &&
 								isDirectionValid( lightSampleRec.direction, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray, lightSampleRec.dist, bounces - i, state.transmissiveTraversals, state.isShadowRay, state.fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, ray, state, lightSampleRec.dist, bounces - i, attenuatedColor )
 							) {
 
 								// get the material pdf
@@ -509,7 +509,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							if (
 								envPdf > 0.0 &&
 								isDirectionValid( envDirection, surf.normal, geometryHit.faceNormal ) &&
-								! attenuateHit( bvh, ray, INFINITY, bounces - i, state.transmissiveTraversals, state.isShadowRay, state.fogMaterial, attenuatedColor )
+								! attenuateHit( bvh, ray, state, INFINITY, bounces - i, attenuatedColor )
 							) {
 
 								// get the material pdf
