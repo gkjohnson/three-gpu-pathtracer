@@ -26,6 +26,7 @@ export class PhysicalCamera extends PerspectiveCamera {
 	}
 
 	copy( source, recursive ) {
+
 		super.copy( source, recursive );
 
 		this.fStop = source.fStop;
@@ -35,6 +36,7 @@ export class PhysicalCamera extends PerspectiveCamera {
 		this.anamorphicRatio = source.anamorphicRatio;
 
 		return this;
+
 	}
 
 }
