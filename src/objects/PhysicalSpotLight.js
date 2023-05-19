@@ -11,12 +11,13 @@ export class PhysicalSpotLight extends SpotLight {
 
 	}
 
-	copy(source, recursive) {
-		super.copy(source, recursive);
+	copy( source, recursive ) {
+		super.copy( source, recursive );
 
 		this.iesTexture = source.iesTexture;
 		this.radius = source.radius;
 
 		return this;
 	}
+
 }

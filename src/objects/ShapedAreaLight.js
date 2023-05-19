@@ -9,8 +9,8 @@ export class ShapedAreaLight extends RectAreaLight {
 
 	}
 
-	copy(source, recursive) {
-		super.copy(source, recursive);
+	copy( source, recursive ) {
+		super.copy( source, recursive );
 
 		this.isCircular = source.isCircular;
 

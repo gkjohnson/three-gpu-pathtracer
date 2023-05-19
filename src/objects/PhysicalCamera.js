@@ -25,8 +25,8 @@ export class PhysicalCamera extends PerspectiveCamera {
 
 	}
 
-	copy(source, recursive) {
-		super.copy(source, recursive);
+	copy( source, recursive ) {
+		super.copy( source, recursive );
 
 		this.fStop = source.fStop;
 		this.apertureBlades = source.apertureBlades;
