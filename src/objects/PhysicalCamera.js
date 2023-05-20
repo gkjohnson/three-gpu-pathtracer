@@ -25,4 +25,18 @@ export class PhysicalCamera extends PerspectiveCamera {
 
 	}
 
+	copy( source, recursive ) {
+
+		super.copy( source, recursive );
+
+		this.fStop = source.fStop;
+		this.apertureBlades = source.apertureBlades;
+		this.apertureRotation = source.apertureRotation;
+		this.focusDistance = source.focusDistance;
+		this.anamorphicRatio = source.anamorphicRatio;
+
+		return this;
+
+	}
+
 }
