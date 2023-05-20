@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `CompatibilityDetector` to determine whether the path tracer can run on the target platform.
 - `DEBUG_MODE` define to PhysicalPathTracingMaterial to render out ray depth.
 - `GradientMapMaterial` to map texture values to a color ramp.
+- Support for copy function to `ShapedAreaLight`, `PhysicalCamera`, and `PhysicalSpotLight`.
 
 ### Changed
 - Fog hits no longer count as transparent surface bounces.
