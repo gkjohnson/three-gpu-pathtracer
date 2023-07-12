@@ -181,7 +181,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 							dot( rayDirection, faceNormal ) > 0.0 &&
 							(
 								! bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, outNormal, barycoord, side, dist ) ||
-								dist > radius
+								dist >= radius
 							)
 						) {
 
