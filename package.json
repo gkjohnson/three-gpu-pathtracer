@@ -28,9 +28,6 @@
     "path",
     "tracer"
   ],
-  "dependencies": {
-    "three-mesh-bvh": "^0.5.19"
-  },
   "devDependencies": {
     "@lookingglass/webxr": "^0.3.1",
     "canvas-capture": "^2.0.5",
@@ -44,11 +41,13 @@
     "puppeteer": "^15.4.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "three": "^0.147.0",
+    "three": "^0.151.0",
+		"three-mesh-bvh": "^0.6.7",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
-    "three": ">=0.139.2",
+    "three": ">=0.151.0",
+		"three-mesh-bvh": "^0.6.7",
     "xatlas-web": "^0.1.0"
   },
   "scripts": {
