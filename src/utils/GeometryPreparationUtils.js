@@ -176,6 +176,12 @@ export function mergeMeshes( meshes, options = {} ) {
 		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
+		if ( mesh.matrixWorld.determinant() < 0 ) {
+
+			geometry.index.array.reverse();
+
+		}
+
 		// ensure our geometry has common attributes
 		setCommonAttributes( geometry, {
 			attributes: options.attributes,
