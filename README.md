@@ -16,7 +16,9 @@ _More features and capabilities in progress!_
 
 **Setup**
 
-[Basic Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
+[Basic glTF Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
+
+[Basic Primitive Geometry Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/primitives.html)
 
 **Beauty Demos**
 
