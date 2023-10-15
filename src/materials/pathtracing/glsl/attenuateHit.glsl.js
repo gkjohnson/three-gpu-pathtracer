@@ -26,7 +26,7 @@ export const attenuateHitGLSL = /* glsl */`
 		for ( int i = 0; i < traversals; i ++ ) {
 
 			int hitType = traceScene(
-				ray, bvh, fogMaterial,
+				ray, fogMaterial,
 				surfaceHit, lightRec
 			);
 

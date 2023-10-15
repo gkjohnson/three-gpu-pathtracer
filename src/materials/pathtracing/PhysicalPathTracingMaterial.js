@@ -301,7 +301,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						state.firstRay = i == 0 && state.transmissiveTraversals == transmissiveBounces;
 
 						int hitType = traceScene(
-							ray, bvh, state.fogMaterial,
+							ray, state.fogMaterial,
 							surfaceHit, lightRec
 						);
 
