@@ -17,7 +17,7 @@ const _polar = new Spherical();
 const _color = new Color();
 export class ProceduralEquirectTexture extends DataTexture {
 
-	constructor( width, height ) {
+	constructor( width = 512, height = 512 ) {
 
 		super(
 			new Float32Array( width * height * 4 ),
