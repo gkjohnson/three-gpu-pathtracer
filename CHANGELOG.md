@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for rendering geometry with inverted scales.
 
+### Fixed
+- Renderer crashing on some apple devices.
+
 ## [0.0.16] - 2023-07-21
 ### Fixed
 - Reverted change that caused NaN values on some hardware.
