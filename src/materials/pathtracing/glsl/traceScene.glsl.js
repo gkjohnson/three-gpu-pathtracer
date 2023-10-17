@@ -5,9 +5,12 @@ export const traceSceneGLSL = /* glsl */`
 	#define LIGHT_HIT 2
 	#define FOG_HIT 3
 
+	// Passing the global variable 'lights' into this function caused shader program errors.
+	// So global variables like 'lights' and 'bvh' were moved out of the function parameters.
+	// For more information, refer to: https://github.com/gkjohnson/three-gpu-pathtracer/pull/457
 	int traceScene(
 
-		Ray ray, BVH bvh, LightsInfo lights, Material fogMaterial,
+		Ray ray, Material fogMaterial,
 		out SurfaceHit surfaceHit, out LightRecord lightRec
 
 	) {
