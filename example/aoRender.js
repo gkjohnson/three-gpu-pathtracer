@@ -50,9 +50,9 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 
 	// initialize render targs
-	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
+	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
 
-	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
+	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
 
 	materials = [];
 
