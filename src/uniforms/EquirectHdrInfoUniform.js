@@ -1,4 +1,4 @@
-import { DataTexture, FloatType, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat } from 'three';
+import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat } from 'three';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
@@ -49,15 +49,15 @@ function preprocessEnvMap( envMap ) {
 	let newData = data;
 	if ( map.type === HalfFloatType ) {
 
-		newData = new Float32Array( data.length );
+		newData = new Uint16Array( data.length );
 		for ( const i in data ) {
 
-			newData[ i ] = DataUtils.fromHalfFloat( data[ i ] );
+			newData[ i ] = data[ i ];
 
 		}
 
 		map.image.data = newData;
-		map.type = FloatType;
+		map.type = HalfFloatType;
 
 	}
 
@@ -92,14 +92,27 @@ function preprocessEnvMap( envMap ) {
 
 }
 
+function toHalfFloatArray( f32Array ) {
+
+	const f16Array = new Uint16Array( f32Array.length );
+	for ( let i = 0, n = f32Array.length; i < n; ++ i ) {
+
+		f16Array[ i ] = DataUtils.toHalfFloat( f32Array[ i ] );
+
+	}
+
+	return f16Array;
+
+}
+
 export class EquirectHdrInfoUniform {
 
 	constructor() {
 
 		// Default to a white texture and associated weights so we don't
 		// just render black initially.
-		const whiteTex = new DataTexture( new Float32Array( [ 1, 1, 1, 1 ] ), 1, 1 );
-		whiteTex.type = FloatType;
+		const whiteTex = new DataTexture( toHalfFloatArray(new Float32Array( [ 1, 1, 1, 1 ] )), 1, 1 );
+		whiteTex.type = HalfFloatType;
 		whiteTex.format = RGBAFormat;
 		whiteTex.minFilter = LinearFilter;
 		whiteTex.magFilter = LinearFilter;
@@ -110,8 +123,8 @@ export class EquirectHdrInfoUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance row & pdf
 		// used to sampling a random value to a relevant row to sample from
-		const marginalWeights = new DataTexture( new Float32Array( [ 0, 1 ] ), 1, 2 );
-		marginalWeights.type = FloatType;
+		const marginalWeights = new DataTexture( toHalfFloatArray(new Float32Array( [ 0, 1 ] )), 1, 2 );
+		marginalWeights.type = HalfFloatType;
 		marginalWeights.format = RedFormat;
 		marginalWeights.minFilter = LinearFilter;
 		marginalWeights.magFilter = LinearFilter;
@@ -120,8 +133,8 @@ export class EquirectHdrInfoUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance column & pdf
 		// used to sampling a random value to a relevant pixel to sample from
-		const conditionalWeights = new DataTexture( new Float32Array( [ 0, 0, 1, 1 ] ), 2, 2 );
-		conditionalWeights.type = FloatType;
+		const conditionalWeights = new DataTexture( toHalfFloatArray(new Float32Array( [ 0, 0, 1, 1 ] )), 2, 2 );
+		conditionalWeights.type = HalfFloatType;
 		conditionalWeights.format = RedFormat;
 		conditionalWeights.minFilter = LinearFilter;
 		conditionalWeights.magFilter = LinearFilter;
@@ -171,9 +184,9 @@ export class EquirectHdrInfoUniform {
 			for ( let x = 0; x < width; x ++ ) {
 
 				const i = y * width + x;
-				const r = data[ 4 * i + 0 ];
-				const g = data[ 4 * i + 1 ];
-				const b = data[ 4 * i + 2 ];
+				const r = DataUtils.fromHalfFloat( data[ 4 * i + 0 ] );
+				const g = DataUtils.fromHalfFloat( data[ 4 * i + 1 ] );
+				const b = DataUtils.fromHalfFloat( data[ 4 * i + 2 ] );
 
 				// the probability of the pixel being selected in this row is the
 				// scale of the luminance relative to the rest of the pixels.
@@ -225,8 +238,8 @@ export class EquirectHdrInfoUniform {
 		// the marginal and conditional data. These will be used to sample with a random number
 		// to retrieve a uv value to sample in the environment map.
 		// These values continually increase so it's okay to interpolate between them.
-		const marginalDataArray = new Float32Array( height );
-		const conditionalDataArray = new Float32Array( width * height );
+		const marginalDataArray = new Uint16Array( height );
+		const conditionalDataArray = new Uint16Array( width * height );
 
 		// we add a half texel offset so we're sampling the center of the pixel
 		for ( let i = 0; i < height; i ++ ) {
@@ -234,7 +247,7 @@ export class EquirectHdrInfoUniform {
 			const dist = ( i + 1 ) / height;
 			const row = binarySearchFindClosestIndexOf( cdfMarginal, dist );
 
-			marginalDataArray[ i ] = ( row + 0.5 ) / height;
+			marginalDataArray[ i ] = DataUtils.toHalfFloat( ( row + 0.5 ) / height );
 
 		}
 
@@ -246,7 +259,7 @@ export class EquirectHdrInfoUniform {
 				const dist = ( x + 1 ) / width;
 				const col = binarySearchFindClosestIndexOf( cdfConditional, dist, y * width, width );
 
-				conditionalDataArray[ i ] = ( col + 0.5 ) / width;
+				conditionalDataArray[ i ] = DataUtils.toHalfFloat( ( col + 0.5 ) / width );
 
 			}
 

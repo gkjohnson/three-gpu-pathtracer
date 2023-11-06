@@ -1,4 +1,4 @@
-import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4 } from 'three';
+import { RGBAFormat, HalfFloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
@@ -252,16 +252,16 @@ export class PathTracingRenderer {
 		this._sobolTarget = new SobolNumberMapGenerator().generate( renderer );
 		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
 			format: RGBAFormat,
-			type: FloatType,
+			type: HalfFloatType,
 		} );
 		this._blendTargets = [
 			new WebGLRenderTarget( 1, 1, {
 				format: RGBAFormat,
-				type: FloatType,
+				type: HalfFloatType,
 			} ),
 			new WebGLRenderTarget( 1, 1, {
 				format: RGBAFormat,
-				type: FloatType,
+				type: HalfFloatType,
 			} ),
 		];
 
