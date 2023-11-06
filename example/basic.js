@@ -63,7 +63,7 @@ async function init() {
 	} );
 
 	// load the envmap and model
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr' )
 		.then( texture => {
 
@@ -143,16 +143,18 @@ function animate() {
 	camera.updateMatrixWorld();
 	pathTracer.update();
 
-	if ( pathTracer.samples < 1 ) {
+	if (pathTracer.samples < 1) {
 
-		renderer.render( scene, camera );
+		renderer.render(scene, camera);
 
+	} else {
+
+		renderer.autoClear = false;
+		blitQuad.material.map = pathTracer.target.texture;
+		blitQuad.render(renderer);
+		renderer.autoClear = true;
+		
 	}
-
-	renderer.autoClear = false;
-	blitQuad.material.map = pathTracer.target.texture;
-	blitQuad.render( renderer );
-	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
