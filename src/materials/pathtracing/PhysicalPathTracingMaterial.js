@@ -55,7 +55,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 		this.setDefine( 'FEATURE_DOF', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
 		this.setDefine( 'FEATURE_BACKGROUND_MAP', this.backgroundMap ? 1 : 0 );
-		this.setDefine( 'FEATURE_FOG', this.materials.features.isUsed( 'FOG' ) ? 1 : 0 );
+		this.setDefine('FEATURE_FOG', this.materials.features.isUsed('FOG') ? 1 : 0);
+		this.setDefine('FEATURE_MIS', 0);
 
 	}
 
