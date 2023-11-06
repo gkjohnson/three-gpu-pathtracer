@@ -17,7 +17,6 @@ import {
 	MeshBasicMaterial,
 	sRGBEncoding,
 	CustomBlending,
-	FloatType
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -467,7 +466,7 @@ function buildGui() {
 
 function updateEnvMap() {
 
-	new RGBELoader().setDataType( FloatType )
+	new RGBELoader()
 		.load( params.envMap, texture => {
 
 			if ( scene.environmentMap ) {

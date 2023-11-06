@@ -166,7 +166,7 @@ async function init() {
 	} );
 
 	// load the environment map
-	new RGBELoader().setDataType( FloatType )
+	new RGBELoader()
 		.load( ENVMAP_URL, texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;

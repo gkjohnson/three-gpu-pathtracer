@@ -83,7 +83,7 @@ async function init() {
 
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr' )
 		.then( texture => {
 
