@@ -54,10 +54,10 @@ export class ProceduralEquirectTexture extends DataTexture {
 
 				const i = y * width + x;
 				const i4 = 4 * i;
-				data[ i4 + 0 ] = DataUtils.toHalfFloat(_color.r);
-				data[ i4 + 1 ] = DataUtils.toHalfFloat(_color.g);
-				data[ i4 + 2 ] = DataUtils.toHalfFloat(_color.b);
-				data[ i4 + 3 ] = DataUtils.toHalfFloat(1.0);
+				data[ i4 + 0 ] = DataUtils.toHalfFloat( _color.r );
+				data[ i4 + 1 ] = DataUtils.toHalfFloat( _color.g );
+				data[ i4 + 2 ] = DataUtils.toHalfFloat( _color.b );
+				data[ i4 + 3 ] = DataUtils.toHalfFloat( 1.0 );
 
 			}
 
