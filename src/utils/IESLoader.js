@@ -1,12 +1,14 @@
 import {
 	DataTexture,
 	FileLoader,
-	FloatType,
+	HalfFloatType,
 	LinearFilter,
 	RedFormat,
 	MathUtils,
 	Loader,
 } from 'three';
+
+import { toHalfFloatArray } from './TextureUtils.js';
 
 function IESLamp( text ) {
 
@@ -286,7 +288,7 @@ export class IESLoader extends Loader {
 		loader.setPath( this.path );
 		loader.setRequestHeader( this.requestHeader );
 
-		const texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
+		const texture = new DataTexture( null, 360, 180, RedFormat, HalfFloatType );
 		texture.minFilter = LinearFilter;
 		texture.magFilter = LinearFilter;
 
@@ -294,7 +296,7 @@ export class IESLoader extends Loader {
 
 			const iesLamp = new IESLamp( text );
 
-			texture.image.data = this._getIESValues( iesLamp );
+			texture.image.data = toHalfFloatArray( this._getIESValues( iesLamp ) );
 			texture.needsUpdate = true;
 
 			if ( onLoad !== undefined ) {
@@ -312,10 +314,10 @@ export class IESLoader extends Loader {
 	parse( text ) {
 
 		const iesLamp = new IESLamp( text );
-		const texture = new DataTexture( null, 360, 180, RedFormat, FloatType );
+		const texture = new DataTexture( null, 360, 180, RedFormat, HalfFloatType );
 		texture.minFilter = LinearFilter;
 		texture.magFilter = LinearFilter;
-		texture.image.data = this._getIESValues( iesLamp );
+		texture.image.data = toHalfFloatArray( this._getIESValues( iesLamp ) );
 		texture.needsUpdate = true;
 
 		return texture;

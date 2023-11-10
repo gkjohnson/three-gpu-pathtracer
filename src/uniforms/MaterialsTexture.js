@@ -1,4 +1,4 @@
-import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide } from 'three';
+import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, NearestFilter } from 'three';
 import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
 
 const MATERIAL_PIXELS = 45;
@@ -53,6 +53,8 @@ export class MaterialsTexture extends DataTexture {
 		this.type = FloatType;
 		this.wrapS = ClampToEdgeWrapping;
 		this.wrapT = ClampToEdgeWrapping;
+		this.minFilter = NearestFilter;
+		this.magFilter = NearestFilter;
 		this.generateMipmaps = false;
 		this.threeCompatibilityTransforms = false;
 		this.features = new MaterialFeatures();

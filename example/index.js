@@ -16,7 +16,7 @@ import {
 	OrthographicCamera,
 	MeshBasicMaterial,
 	sRGBEncoding,
-	CustomBlending,
+	CustomBlending
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';

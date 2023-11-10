@@ -1,4 +1,4 @@
-import { WebGLRenderTarget, DataUtils, RGBAFormat, FloatType, HalfFloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
+import { WebGLRenderTarget, RGBAFormat, HalfFloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
 import { utilsGLSL } from '../shader/common/utils.glsl.js';

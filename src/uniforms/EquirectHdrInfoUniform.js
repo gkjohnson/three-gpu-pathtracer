@@ -1,4 +1,5 @@
 import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat } from 'three';
+import { toHalfFloatArray } from '../utils/TextureUtils.js';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
 
@@ -89,19 +90,6 @@ function preprocessEnvMap( envMap ) {
 	}
 
 	return map;
-
-}
-
-function toHalfFloatArray( f32Array ) {
-
-	const f16Array = new Uint16Array( f32Array.length );
-	for ( let i = 0, n = f32Array.length; i < n; ++ i ) {
-
-		f16Array[ i ] = DataUtils.toHalfFloat( f32Array[ i ] );
-
-	}
-
-	return f16Array;
 
 }
 

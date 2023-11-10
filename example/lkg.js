@@ -16,8 +16,7 @@ import {
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
-	Vector4,
-	FloatType
+	Vector4
 } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';

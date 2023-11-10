@@ -143,18 +143,16 @@ function animate() {
 	camera.updateMatrixWorld();
 	pathTracer.update();
 
-	if (pathTracer.samples < 1) {
+	if ( pathTracer.samples < 1 ) {
 
-		renderer.render(scene, camera);
+		renderer.render( scene, camera );
 
-	} else {
-
-		renderer.autoClear = false;
-		blitQuad.material.map = pathTracer.target.texture;
-		blitQuad.render(renderer);
-		renderer.autoClear = true;
-		
 	}
+
+	renderer.autoClear = false;
+	blitQuad.material.map = pathTracer.target.texture;
+	blitQuad.render( renderer );
+	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
