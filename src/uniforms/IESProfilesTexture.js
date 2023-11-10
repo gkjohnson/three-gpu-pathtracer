@@ -1,7 +1,7 @@
 import {
 	ClampToEdgeWrapping,
 	Color,
-	FloatType,
+	HalfFloatType,
 	LinearFilter,
 	MeshBasicMaterial,
 	NoToneMapping,
@@ -20,7 +20,7 @@ export class IESProfilesTexture extends WebGLArrayRenderTarget {
 
 		const tex = this.texture;
 		tex.format = RGBAFormat;
-		tex.type = FloatType;
+		tex.type = HalfFloatType;
 		tex.minFilter = LinearFilter;
 		tex.magFilter = LinearFilter;
 		tex.wrapS = ClampToEdgeWrapping;
