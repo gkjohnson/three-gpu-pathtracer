@@ -1,4 +1,4 @@
-import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quaternion, Matrix4 } from 'three';
+import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quaternion, Matrix4, NearestFilter } from 'three';
 
 const LIGHT_PIXELS = 6;
 const RECT_AREA_LIGHT = 0;
@@ -16,6 +16,8 @@ export class LightsInfoUniformStruct {
 		tex.wrapS = ClampToEdgeWrapping;
 		tex.wrapT = ClampToEdgeWrapping;
 		tex.generateMipmaps = false;
+		tex.minFilter = NearestFilter;
+		tex.magFilter = NearestFilter;
 
 		this.tex = tex;
 		this.count = 0;
