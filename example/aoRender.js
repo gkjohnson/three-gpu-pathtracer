@@ -49,10 +49,13 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	// initialize render targs
-	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
+	// will be null if extension not supported
+	const floatLinearExtensionSupported = renderer.extensions.get( 'OES_texture_float_linear' );
 
-	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
+	// initialize render targs
+	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
+
+	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
 
 	materials = [];
 
