@@ -99,7 +99,7 @@ export class EquirectHdrInfoUniform {
 
 		// Default to a white texture and associated weights so we don't
 		// just render black initially.
-		const whiteTex = new DataTexture( toHalfFloatArray(new Float32Array( [ 1, 1, 1, 1 ] )), 1, 1 );
+		const whiteTex = new DataTexture( toHalfFloatArray( new Float32Array( [ 1, 1, 1, 1 ] ) ), 1, 1 );
 		whiteTex.type = HalfFloatType;
 		whiteTex.format = RGBAFormat;
 		whiteTex.minFilter = LinearFilter;
@@ -111,7 +111,7 @@ export class EquirectHdrInfoUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance row & pdf
 		// used to sampling a random value to a relevant row to sample from
-		const marginalWeights = new DataTexture( toHalfFloatArray(new Float32Array( [ 0, 1 ] )), 1, 2 );
+		const marginalWeights = new DataTexture( toHalfFloatArray( new Float32Array( [ 0, 1 ] ) ), 1, 2 );
 		marginalWeights.type = HalfFloatType;
 		marginalWeights.format = RedFormat;
 		marginalWeights.minFilter = LinearFilter;
@@ -121,7 +121,7 @@ export class EquirectHdrInfoUniform {
 
 		// Stores a map of [0, 1] value -> cumulative importance column & pdf
 		// used to sampling a random value to a relevant pixel to sample from
-		const conditionalWeights = new DataTexture( toHalfFloatArray(new Float32Array( [ 0, 0, 1, 1 ] )), 2, 2 );
+		const conditionalWeights = new DataTexture( toHalfFloatArray( new Float32Array( [ 0, 0, 1, 1 ] ) ), 2, 2 );
 		conditionalWeights.type = HalfFloatType;
 		conditionalWeights.format = RedFormat;
 		conditionalWeights.minFilter = LinearFilter;
