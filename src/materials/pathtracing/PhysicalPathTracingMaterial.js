@@ -55,7 +55,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 		this.setDefine( 'FEATURE_DOF', this.physicalCamera.bokehSize === 0 ? 0 : 1 );
 		this.setDefine( 'FEATURE_BACKGROUND_MAP', this.backgroundMap ? 1 : 0 );
-		this.setDefine( 'FEATURE_FOG', this.materials.features.isUsed( 'FOG' ) ? 1 : 0 );
+		this.setDefine('FEATURE_FOG', this.materials.features.isUsed('FOG') ? 1 : 0);
+		this.setDefine( 'FEATURE_MIS', 0 );
 
 	}
 
@@ -309,8 +310,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( state.firstRay || state.transmissiveRay ) {
 
-								gl_FragColor.rgb += lightRec.emission * state.throughputColor;
-
+								// gl_FragColor.rgb += lightRec.emission * state.throughputColor;
+							
 							} else {
 
 								#if FEATURE_MIS
@@ -330,12 +331,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								#else
 
-								gl_FragColor.rgb += lightRec.emission * state.throughputColor;
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
 								#endif
 
 							}
-							break;
+
+							ray.origin = ray.origin + ray.direction * surfaceHit.dist;
+							continue;
 
 						} else if ( hitType == NO_HIT ) {
 
