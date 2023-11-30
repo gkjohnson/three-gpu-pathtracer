@@ -314,26 +314,26 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							} else {
 
-								// #if FEATURE_MIS
+								#if FEATURE_MIS
 
-								// // NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
-								// if ( lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ) {
+								// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
+								if ( lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ) {
 
-								// 	gl_FragColor.rgb += lightRec.emission * state.throughputColor;
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
-								// } else {
+								} else {
 
-								// 	// weight the contribution
-								// 	float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
-								// 	gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
+									// weight the contribution
+									float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
 
-								// }
+								}
 
-								// #else
+								#else
 
 								gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
-								// #endif
+								#endif
 
 							}
 							break;
@@ -347,25 +347,25 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							} else {
 
-								// #if FEATURE_MIS
+								#if FEATURE_MIS
 
-								// // get the PDF of the hit envmap point
-								// vec3 envColor;
-								// float envPdf = sampleEquirect( envMapInfo, envRotation3x3 * ray.direction, envColor );
-								// envPdf /= lightsDenom;
+								// get the PDF of the hit envmap point
+								vec3 envColor;
+								float envPdf = sampleEquirect( envMapInfo, envRotation3x3 * ray.direction, envColor );
+								envPdf /= lightsDenom;
 
-								// // and weight the contribution
-								// float misWeight = misHeuristic( scatterRec.pdf, envPdf );
-								// gl_FragColor.rgb += environmentIntensity * envColor * state.throughputColor * misWeight;
+								// and weight the contribution
+								float misWeight = misHeuristic( scatterRec.pdf, envPdf );
+								gl_FragColor.rgb += environmentIntensity * envColor * state.throughputColor * misWeight;
 
-								// #else
+								#else
 
 								gl_FragColor.rgb +=
 									environmentIntensity *
 									sampleEquirectColor( envMapInfo.map, envRotation3x3 * ray.direction ) *
 									state.throughputColor;
 
-								// #endif
+								#endif
 
 							}
 							break;
@@ -439,11 +439,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, surfaceHit.dist );
 
 						// next event estimation
-						// #if FEATURE_MIS
+						#if FEATURE_MIS
 
-						// gl_FragColor.rgb += directLightContribution( - ray.direction, surf, state, hitPoint );
+						gl_FragColor.rgb += directLightContribution( - ray.direction, surf, state, hitPoint );
 
-						// #endif
+						#endif
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies
