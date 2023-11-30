@@ -5,7 +5,7 @@ export const directLightContributionGLSL = /*glsl*/`
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
-			// // sample a light or environment
+			// sample a light or environment
 			LightRecord lightRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
 
 			bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightRec.direction ) < 0.0;
@@ -15,7 +15,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 			}
 
-			// // check if a ray could even reach the light area
+			// check if a ray could even reach the light area
 			Ray lightRay;
 			lightRay.origin = rayOrigin;
 			lightRay.direction = lightRec.direction;
