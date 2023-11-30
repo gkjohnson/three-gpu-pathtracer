@@ -2,6 +2,8 @@ export const directLightContributionGLSL = /*glsl*/`
 
 	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 
+		vec3 result = vec3( 0.0 );
+
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
@@ -23,7 +25,7 @@ export const directLightContributionGLSL = /*glsl*/`
 			if (
 				lightRec.pdf > 0.0
 				&& isDirectionValid( lightRec.direction, surf.normal, surf.faceNormal ) 
-				// && ! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
+				//&& ! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
 			) {
 
 			 	// get the material pdf
@@ -35,7 +37,7 @@ export const directLightContributionGLSL = /*glsl*/`
 					// weight the direct light contribution
 					float lightPdf = lightRec.pdf / lightsDenom;
 					float misWeight = lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-				//	return attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
+					result = attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
 
 			 	}
 
@@ -80,7 +82,7 @@ export const directLightContributionGLSL = /*glsl*/`
 					// weight the direct light contribution
 					envPdf /= lightsDenom;
 					float misWeight = misHeuristic( envPdf, envMaterialPdf );
-					return attenuatedColor * environmentIntensity * envColor * state.throughputColor * sampleColor * misWeight / envPdf;
+					result = attenuatedColor * environmentIntensity * envColor * state.throughputColor * sampleColor * misWeight / envPdf;
 
 				}
 
@@ -88,7 +90,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 		}
 
-		return vec3( 0.0 );
+		return result;
 
 	}
 
