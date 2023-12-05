@@ -25,7 +25,7 @@ export const directLightContributionGLSL = /*glsl*/`
 			if (
 				lightRec.pdf > 0.0
 				&& isDirectionValid( lightRec.direction, surf.normal, surf.faceNormal ) 
-				//&& ! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
+				&& ! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
 			) {
 
 			 	// get the material pdf

@@ -34,11 +34,6 @@ export const attenuateHitGLSL = /* glsl */`
 
 				return true;
 
-			} else if ( hitType == LIGHT_HIT ) {
-
-				float totalDist = distance( startPoint, ray.origin + ray.direction * lightRec.dist );
-				return totalDist < rayDist - max( totalDist, rayDist ) * 1e-4;
-
 			} else if ( hitType == SURFACE_HIT ) {
 
 				float totalDist = distance( startPoint, ray.origin + ray.direction * surfaceHit.dist );

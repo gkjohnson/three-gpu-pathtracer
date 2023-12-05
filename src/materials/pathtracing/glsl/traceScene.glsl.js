@@ -17,7 +17,6 @@ export const traceSceneGLSL = /* glsl */`
 
 		int result = NO_HIT;
 		bool hit = bvhIntersectFirstHit( bvh, ray.origin, ray.direction, surfaceHit.faceIndices, surfaceHit.faceNormal, surfaceHit.barycoord, surfaceHit.side, surfaceHit.dist );
-		bool lightHit = lightsClosestHit( lights.tex, lights.count, ray.origin, ray.direction, lightRec );
 
 		#if FEATURE_FOG
 
@@ -37,11 +36,7 @@ export const traceSceneGLSL = /* glsl */`
 
 		#endif
 
-		if ( lightHit && ( lightRec.dist < surfaceHit.dist || ! hit ) ) {
-
-			result = LIGHT_HIT;
-
-		} else if ( hit ) {
+		if ( hit ) {
 
 			result = SURFACE_HIT;
 
