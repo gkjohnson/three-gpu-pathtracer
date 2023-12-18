@@ -26,11 +26,11 @@ export const directLightContributionGLSL = /*glsl*/`
 				! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
 			) {
 
-			 	// get the material pdf
+				// get the material pdf
 				vec3 sampleColor;
 				float lightMaterialPdf = bsdfResult( worldWo, lightRec.direction, surf, sampleColor );
 				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-			 	if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
+				if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
 
 					// weight the direct light contribution
 					float lightPdf = lightRec.pdf / lightsDenom;
