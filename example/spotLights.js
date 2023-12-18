@@ -43,7 +43,7 @@ const params = {
 
 	enabled: true,
 	multipleImportanceSampling: true,
-	environmentIntensity: 1,
+	environmentIntensity: 0.1,
 	bounces: 3,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
