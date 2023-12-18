@@ -306,41 +306,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							surfaceHit, lightRec
 						);
 
-						if ( hitType == LIGHT_HIT ) {
-
-							if ( state.firstRay || state.transmissiveRay ) {
-
-								// gl_FragColor.rgb += lightRec.emission * state.throughputColor;
-							
-							} else {
-
-								#if FEATURE_MIS
-
-								// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
-								if ( lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ) {
-
-									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
-
-								} else {
-
-									// weight the contribution
-									float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
-									gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
-
-								}
-
-								#else
-
-									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
-
-								#endif
-
-							}
-
-							ray.origin = ray.origin + ray.direction * surfaceHit.dist;
-							continue;
-
-						} else if ( hitType == NO_HIT ) {
+						if ( hitType == NO_HIT ) {
 
 							if ( state.firstRay || state.transmissiveRay ) {
 

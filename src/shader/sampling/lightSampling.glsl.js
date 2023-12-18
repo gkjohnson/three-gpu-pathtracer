@@ -172,13 +172,15 @@ export const lightSamplingGLSL = /* glsl */`
 
 	LightRecord randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
 
+		LightRecord result;
+
 		// pick a random light
 		uint l = uint( ruv.x * float( lightCount ) );
 		Light light = readLightInfo( lights, l );
 
 		if ( light.type == SPOT_LIGHT_TYPE ) {
 
-			return randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
+			result = randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
 
 		} else if ( light.type == POINT_LIGHT_TYPE ) {
 
@@ -198,7 +200,7 @@ export const lightSamplingGLSL = /* glsl */`
 			rec.pdf = 1.0;
 			rec.emission = light.color * light.intensity * distanceFalloff;
 			rec.type = light.type;
-			return rec;
+			result = rec;
 
 		} else if ( light.type == DIR_LIGHT_TYPE ) {
 
@@ -209,14 +211,16 @@ export const lightSamplingGLSL = /* glsl */`
 			rec.emission = light.color * light.intensity;
 			rec.type = light.type;
 
-			return rec;
+			result = rec;
 
 		} else {
 
 			// sample the light
-			return randomAreaLightSample( light, rayOrigin, ruv.yz );
+			result = randomAreaLightSample( light, rayOrigin, ruv.yz );
 
 		}
+
+		return result;
 
 	}
 
