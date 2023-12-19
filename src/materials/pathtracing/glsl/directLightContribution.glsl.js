@@ -37,13 +37,11 @@ export const directLightContributionGLSL = /*glsl*/`
 					float misWeight = lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
 					result = attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
 
-			 	}
+				}
 
 			}
 
-		}
-		
-		else {
+		} else {
 
 			// find a sample in the environment map to include in the contribution
 			vec3 envColor, envDirection;
@@ -88,6 +86,8 @@ export const directLightContributionGLSL = /*glsl*/`
 
 		}
 
+		// Function changed to have a single return statement to potentially help with crashes on Mac OS.
+		// See issue #470
 		return result;
 
 	}
