@@ -35,13 +35,15 @@ export const directLightContributionGLSL = /*glsl*/`
 					// weight the direct light contribution
 					float lightPdf = lightRec.pdf / lightsDenom;
 					float misWeight = lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-					return attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
+					result = attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
 
-				}
+			 	}
 
 			}
 
-		} else {
+		}
+		
+		else {
 
 			// find a sample in the environment map to include in the contribution
 			vec3 envColor, envDirection;
@@ -78,7 +80,7 @@ export const directLightContributionGLSL = /*glsl*/`
 					// weight the direct light contribution
 					envPdf /= lightsDenom;
 					float misWeight = misHeuristic( envPdf, envMaterialPdf );
-					return attenuatedColor * environmentIntensity * envColor * state.throughputColor * sampleColor * misWeight / envPdf;
+					result = attenuatedColor * environmentIntensity * envColor * state.throughputColor * sampleColor * misWeight / envPdf;
 
 				}
 
@@ -86,7 +88,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 		}
 
-		return vec3( 0.0 );
+		return result;
 
 	}
 
