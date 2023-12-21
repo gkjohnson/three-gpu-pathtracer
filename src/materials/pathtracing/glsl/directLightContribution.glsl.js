@@ -2,6 +2,8 @@ export const directLightContributionGLSL = /*glsl*/`
 
 	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 
+		vec3 result = vec3( 0.0 );
+		
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
