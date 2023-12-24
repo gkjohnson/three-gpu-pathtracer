@@ -42,24 +42,17 @@ export const lightSamplingGLSL = /* glsl */`
 
 	};
 
-	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, out LightRecord lightRec ) {
+	bool intersectLightAtIndex( sampler2D lights, vec3 rayOrigin, vec3 rayDirection, uint l, out LightRecord lightRec ) {
 
 		bool didHit = false;
-		uint l;
-		for ( l = 0u; l < lightCount; l ++ ) {
+		Light light = readLightInfo( lights, l );
 
-			Light light = readLightInfo( lights, l );
+		vec3 u = light.u;
+		vec3 v = light.v;
 
-			vec3 u = light.u;
-			vec3 v = light.v;
-
-			// check for backface
-			vec3 normal = normalize( cross( u, v ) );
-			if ( dot( normal, rayDirection ) < 0.0 ) {
-
-				continue;
-
-			}
+		// check for backface
+		vec3 normal = normalize( cross( u, v ) );
+		if ( dot( normal, rayDirection ) > 0.0 ) {
 
 			u *= 1.0 / dot( u, u );
 			v *= 1.0 / dot( v, v );
@@ -72,17 +65,13 @@ export const lightSamplingGLSL = /* glsl */`
 				( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
 			) {
 
-				if ( ! didHit || dist < lightRec.dist ) {
-
-					float cosTheta = dot( rayDirection, normal );
-					didHit = true;
-					lightRec.dist = dist;
-					lightRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
-					lightRec.emission = light.color * light.intensity;
-					lightRec.direction = rayDirection;
-					lightRec.type = light.type;
-
-				}
+				float cosTheta = dot( rayDirection, normal );
+				didHit = true;
+				lightRec.dist = dist;
+				lightRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
+				lightRec.emission = light.color * light.intensity;
+				lightRec.direction = rayDirection;
+				lightRec.type = light.type;
 
 			}
 

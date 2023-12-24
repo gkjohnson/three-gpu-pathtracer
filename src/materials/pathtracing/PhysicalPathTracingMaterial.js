@@ -260,7 +260,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// init
 					rng_initialize( gl_FragCoord.xy, seed );
-					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) |  uint( gl_FragCoord.y );
+					sobolPixelIndex = ( uint( gl_FragCoord.x ) << 16 ) | uint( gl_FragCoord.y );
 					sobolPathIndex = uint( seed );
 
 					// get camera ray
@@ -304,6 +304,47 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 							ray, state.fogMaterial,
 							surfaceHit, lightRec
 						);
+
+						// check if we intersect any lights and accumulate the light contribution
+						// TODO: we can add support for light surface rendering in the else condition if we
+						// add the ability to toggle visibility of the the light
+						if ( ! state.firstRay && ! state.transmissiveRay ) {
+
+							LightRecord lightRec;
+							float lightDist = hitType == NO_HIT ? INFINITY : surfaceHit.dist;
+							for ( uint i = 0u; i < lights.count; i ++ ) {
+
+								if (
+									intersectLightAtIndex( lights.tex, ray.origin, ray.direction, i, lightRec ) &&
+									lightRec.dist < lightDist
+								) {
+
+									#if FEATURE_MIS
+
+									// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
+									if ( lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ) {
+
+										gl_FragColor.rgb += lightRec.emission * state.throughputColor;
+
+									} else {
+
+										// weight the contribution
+										float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
+										gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
+
+									}
+
+									#else
+
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
+
+									#endif
+
+								}
+
+							}
+
+						}
 
 						if ( hitType == NO_HIT ) {
 
