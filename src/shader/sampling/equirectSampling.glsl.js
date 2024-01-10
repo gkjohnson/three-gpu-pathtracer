@@ -24,7 +24,7 @@ export const equirectSamplingGLSL = /* glsl */`
 	}
 
 	// samples the color given env map with CDF and returns the pdf of the direction
-	float sampleEquirect( EquirectHdrInfo info, vec3 direction, out vec3 color ) {
+	float sampleEquirect( EquirectHdrInfo info, vec3 direction, inout vec3 color ) {
 
 		vec2 uv = equirectDirectionToUv( direction );
 		color = texture2D( info.map, uv ).rgb;
@@ -39,7 +39,7 @@ export const equirectSamplingGLSL = /* glsl */`
 	}
 
 	// samples a direction of the envmap with color and retrieves pdf
-	float sampleEquirectProbability( EquirectHdrInfo info, vec2 r, out vec3 color, out vec3 direction ) {
+	float sampleEquirectProbability( EquirectHdrInfo info, vec2 r, inout vec3 color, inout vec3 direction ) {
 
 		// sample env map cdf
 		float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;

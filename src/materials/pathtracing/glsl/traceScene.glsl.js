@@ -11,7 +11,7 @@ export const traceSceneGLSL = /* glsl */`
 	int traceScene(
 
 		Ray ray, Material fogMaterial,
-		out SurfaceHit surfaceHit, out LightRecord lightRec
+		inout SurfaceHit surfaceHit, inout LightRecord lightRec
 
 	) {
 
