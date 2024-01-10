@@ -17,7 +17,7 @@ bool isMaterialFogVolume( sampler2D materials, uint materialIndex ) {
 bool bvhIntersectFogVolumeHit(
 	BVH bvh, vec3 rayOrigin, vec3 rayDirection,
 	usampler2D materialIndexAttribute, sampler2D materials,
-	out Material material
+	inout Material material
 ) {
 
 	material.fogVolume = false;

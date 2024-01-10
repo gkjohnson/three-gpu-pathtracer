@@ -80,7 +80,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	${ iridescenceGLSL }
 
 	// diffuse
-	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
+	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, inout vec3 color ) {
 
 		// https://schuttejoe.github.io/post/disneybsdf/
 		float fl = schlickFresnel( wi.z, 0.0 );
@@ -111,7 +111,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	}
 
 	// specular
-	float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
+	float specularEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, inout vec3 color ) {
 
 		// if roughness is set to 0 then D === NaN which results in black pixels
 		float metalness = surf.metalness;
@@ -158,7 +158,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	// transmission
 	/*
-	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
+	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, inout vec3 color ) {
 
 		// See section 4.2 in https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 
@@ -201,7 +201,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	// TODO: This is just using a basic cosine-weighted specular distribution with an
 	// incorrect PDF value at the moment. Update it to correctly use a GGX distribution
-	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, out vec3 color ) {
+	float transmissionEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, inout vec3 color ) {
 
 		color = surf.transmission * surf.color;
 
@@ -292,7 +292,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 	// bsdf
 	void getLobeWeights(
 		vec3 wo, vec3 wi, vec3 wh, vec3 clearcoatWo, SurfaceRecord surf,
-		out float diffuseWeight, out float specularWeight, out float transmissionWeight, out float clearcoatWeight
+		inout float diffuseWeight, inout float specularWeight, inout float transmissionWeight, inout float clearcoatWeight
 	) {
 
 		float metalness = surf.metalness;
@@ -316,7 +316,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	float bsdfEval(
 		vec3 wo, vec3 clearcoatWo, vec3 wi, vec3 clearcoatWi, SurfaceRecord surf,
-		float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight, out float specularPdf, out vec3 color
+		float diffuseWeight, float specularWeight, float transmissionWeight, float clearcoatWeight, inout float specularPdf, inout vec3 color
 	) {
 
 		float metalness = surf.metalness;
@@ -379,7 +379,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	}
 
-	float bsdfResult( vec3 worldWo, vec3 worldWi, SurfaceRecord surf, out vec3 color ) {
+	float bsdfResult( vec3 worldWo, vec3 worldWi, SurfaceRecord surf, inout vec3 color ) {
 
 		if ( surf.volumeParticle ) {
 

@@ -42,7 +42,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	};
 
-	bool intersectLightAtIndex( sampler2D lights, vec3 rayOrigin, vec3 rayDirection, uint l, out LightRecord lightRec ) {
+	bool intersectLightAtIndex( sampler2D lights, vec3 rayOrigin, vec3 rayDirection, uint l, inout LightRecord lightRec ) {
 
 		bool didHit = false;
 		Light light = readLightInfo( lights, l );

@@ -6,7 +6,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 	int getSurfaceRecord(
 		Material material, SurfaceHit surfaceHit, sampler2DArray attributesArray,
 		float accumulatedRoughness,
-		out SurfaceRecord surf
+		inout SurfaceRecord surf
 	) {
 
 		if ( material.fogVolume ) {
