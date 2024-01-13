@@ -198,7 +198,7 @@ export class GraphMaterial extends MaterialBase {
 
 					}
 
-					#include <encodings_fragment>
+					#include <colorspace_fragment>
 
 				}
 
