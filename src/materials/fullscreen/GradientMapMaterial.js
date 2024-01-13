@@ -69,7 +69,7 @@ export class GradientMapMaterial extends MaterialBase {
 					gl_FragColor.rgb = vec3( mix( minColor, maxColor, t ) );
 					gl_FragColor.a = 1.0;
 
-					#include <encodings_fragment>
+					#include <colorspace_fragment>
 
 				}`,
 

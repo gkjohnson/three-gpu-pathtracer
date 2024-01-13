@@ -61,7 +61,6 @@ async function init() {
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.setClearColor( 0x11161C );
 	renderer.setPixelRatio( window.devicePixelRatio );
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.setAnimationLoop( animation );
 	document.body.appendChild( renderer.domElement );
 

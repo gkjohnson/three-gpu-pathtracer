@@ -12,7 +12,6 @@ import {
 	WebGLRenderer,
 	Scene,
 	MeshBasicMaterial,
-	sRGBEncoding,
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
@@ -121,7 +120,6 @@ async function init() {
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
 	renderer.xr.enabled = true;

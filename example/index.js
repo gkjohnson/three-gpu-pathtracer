@@ -15,7 +15,6 @@ import {
 	PerspectiveCamera,
 	OrthographicCamera,
 	MeshBasicMaterial,
-	sRGBEncoding,
 	CustomBlending
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -144,7 +143,6 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
 	document.body.appendChild( renderer.domElement );
