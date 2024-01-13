@@ -2,7 +2,7 @@ import { Matrix4, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, UIntVertexAttributeTexture,
-	shaderStructs, shaderIntersectFunction,
+	BVHShaderGLSL,
 } from 'three-mesh-bvh';
 
 // uniforms
@@ -141,8 +141,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				#include <common>
 
 				// bvh intersection
-				${ shaderStructs }
-				${ shaderIntersectFunction }
+				${ BVHShaderGLSL.common_functions }
+				${ BVHShaderGLSL.bvh_struct_definitions }
+				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// random
 				${ pcgGLSL }
