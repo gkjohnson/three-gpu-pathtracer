@@ -37,7 +37,7 @@ export class AlphaDisplayMaterial extends MaterialBase {
 					gl_FragColor = vec4( texture( map, vUv ).a );
 					gl_FragColor.a = 1.0;
 
-					#include <encodings_fragment>
+					#include <colorspace_fragment>
 
 				}`
 

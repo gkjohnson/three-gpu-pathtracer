@@ -41,7 +41,7 @@
     "puppeteer": "^15.4.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "three": "^0.151.0",
+    "three": "^0.160.0",
     "three-mesh-bvh": "0.7.0-beta.0",
     "yargs": "^17.5.1"
   },

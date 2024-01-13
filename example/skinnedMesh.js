@@ -40,7 +40,6 @@ async function init() {
 	// initialize renderer, scene, camera
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new THREE.Scene();

@@ -30,7 +30,6 @@ async function init() {
 
 	// initialize renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( { transparent: true } ) );

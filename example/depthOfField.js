@@ -39,7 +39,6 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PhysicalCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
