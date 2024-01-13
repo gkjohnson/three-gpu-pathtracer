@@ -53,9 +53,9 @@ async function init() {
 	const floatLinearExtensionSupported = renderer.extensions.get( 'OES_texture_float_linear' );
 
 	// initialize render targs
-	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
+	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace } );
 
-	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, encoding: THREE.LinearEncoding } );
+	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace } );
 
 	materials = [];
 
