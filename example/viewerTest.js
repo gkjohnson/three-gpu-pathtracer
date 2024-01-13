@@ -6,7 +6,6 @@ import {
 	Scene,
 	PerspectiveCamera,
 	MeshBasicMaterial,
-	sRGBEncoding,
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
@@ -87,7 +86,6 @@ async function init() {
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
 	containerEl.appendChild( renderer.domElement );

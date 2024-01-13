@@ -64,7 +64,6 @@ init();
 async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
