@@ -163,14 +163,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ mathGLSL }
 				${ intersectShapesGLSL }
 
-				// sampling
-				${ fogMaterialBvhGLSL }
-				${ shapeSamplingGLSL }
-				${ bsdfSamplingGLSL }
-				${ equirectSamplingGLSL }
-				${ lightSamplingGLSL }
-				${ fogGLSL }
-
 				// environment
 				uniform EquirectHdrInfo envMapInfo;
 				uniform mat4 environmentRotation;
@@ -221,6 +213,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				mat3 envRotation3x3;
 				mat3 invEnvRotation3x3;
 				float lightsDenom;
+
+				// sampling
+				${ fogMaterialBvhGLSL }
+				${ shapeSamplingGLSL }
+				${ bsdfSamplingGLSL }
+				${ equirectSamplingGLSL }
+				${ lightSamplingGLSL }
+				${ fogGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 
