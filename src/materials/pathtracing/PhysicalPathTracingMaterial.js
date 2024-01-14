@@ -144,6 +144,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ shaderStructs }
 				${ shaderIntersectFunction }
 
+				// uniform structs
+				${ cameraStructGLSL }
+				${ lightsStructGLSL }
+				${ equirectStructGLSL }
+				${ materialStructGLSL }
+
+
 				// random
 				${ pcgGLSL }
 				${ sobolCommonGLSL }
@@ -156,14 +163,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ mathGLSL }
 				${ intersectShapesGLSL }
 
-				// uniform structs
-				${ cameraStructGLSL }
-				${ lightsStructGLSL }
-				${ equirectStructGLSL }
-				${ materialStructGLSL }
-				${ fogMaterialBvhGLSL }
-
 				// sampling
+				${ fogMaterialBvhGLSL }
 				${ shapeSamplingGLSL }
 				${ bsdfSamplingGLSL }
 				${ equirectSamplingGLSL }
