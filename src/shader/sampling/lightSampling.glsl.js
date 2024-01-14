@@ -83,11 +83,6 @@ export const lightSamplingGLSL = /* glsl */`
 
 	LightRecord randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 
-		LightRecord lightRec;
-		lightRec.type = light.type;
-
-		lightRec.emission = light.color * light.intensity;
-
 		vec3 randomPos;
 		if( light.type == RECT_AREA_LIGHT_TYPE ) {
 
@@ -108,12 +103,17 @@ export const lightSamplingGLSL = /* glsl */`
 
 		vec3 toLight = randomPos - rayOrigin;
 		float lightDistSq = dot( toLight, toLight );
-		lightRec.dist = sqrt( lightDistSq );
+		float dist = sqrt( lightDistSq );
+		vec3 direction = toLight / dist;
+		vec3 lightNormal = normalize( cross( light.u, light.v ) );
 
-		vec3 direction = toLight / lightRec.dist;
+		LightRecord lightRec;
+		lightRec.type = light.type;
+		lightRec.emission = light.color * light.intensity;
+		lightRec.dist = dist;
 		lightRec.direction = direction;
 
-		vec3 lightNormal = normalize( cross( light.u, light.v ) );
+		// TODO: the denominator is potentially zero
 		lightRec.pdf = lightDistSq / ( light.area * dot( direction, lightNormal ) );
 
 		return lightRec;
