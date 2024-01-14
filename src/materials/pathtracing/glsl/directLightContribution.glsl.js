@@ -47,7 +47,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 			// find a sample in the environment map to include in the contribution
 			vec3 envColor, envDirection;
-			float envPdf = sampleEquirectProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
+			float envPdf = sampleEquirectProbability( sobol2( 7 ), envColor, envDirection );
 			envDirection = invEnvRotation3x3 * envDirection;
 
 			// this env sampling is not set up for transmissive sampling and yields overly bright
