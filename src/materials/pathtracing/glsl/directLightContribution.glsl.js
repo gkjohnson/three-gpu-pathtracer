@@ -3,7 +3,7 @@ export const directLightContributionGLSL = /*glsl*/`
 	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 
 		vec3 result = vec3( 0.0 );
-		
+
 		// uniformly pick a light or environment map
 		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
@@ -25,7 +25,7 @@ export const directLightContributionGLSL = /*glsl*/`
 			if (
 				lightRec.pdf > 0.0 &&
 				isDirectionValid( lightRec.direction, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( bvh, state, lightRay, lightRec.dist, attenuatedColor )
+				! attenuateHit( state, lightRay, lightRec.dist, attenuatedColor )
 			) {
 
 				// get the material pdf
@@ -47,7 +47,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 			// find a sample in the environment map to include in the contribution
 			vec3 envColor, envDirection;
-			float envPdf = sampleEquirectProbability( envMapInfo, sobol2( 7 ), envColor, envDirection );
+			float envPdf = sampleEquirectProbability( sobol2( 7 ), envColor, envDirection );
 			envDirection = invEnvRotation3x3 * envDirection;
 
 			// this env sampling is not set up for transmissive sampling and yields overly bright
@@ -68,7 +68,7 @@ export const directLightContributionGLSL = /*glsl*/`
 			if (
 				envPdf > 0.0 &&
 				isDirectionValid( envDirection, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( bvh, state, envRay, INFINITY, attenuatedColor )
+				! attenuateHit( state, envRay, INFINITY, attenuatedColor )
 			) {
 
 				// get the material pdf

@@ -145,6 +145,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ BVHShaderGLSL.bvh_struct_definitions }
 				${ BVHShaderGLSL.bvh_ray_functions }
 
+				// uniform structs
+				${ cameraStructGLSL }
+				${ lightsStructGLSL }
+				${ equirectStructGLSL }
+				${ materialStructGLSL }
+
+
 				// random
 				${ pcgGLSL }
 				${ sobolCommonGLSL }
@@ -156,20 +163,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ utilsGLSL }
 				${ mathGLSL }
 				${ intersectShapesGLSL }
-
-				// uniform structs
-				${ cameraStructGLSL }
-				${ lightsStructGLSL }
-				${ equirectStructGLSL }
-				${ materialStructGLSL }
-				${ fogMaterialBvhGLSL }
-
-				// sampling
-				${ shapeSamplingGLSL }
-				${ bsdfSamplingGLSL }
-				${ equirectSamplingGLSL }
-				${ lightSamplingGLSL }
-				${ fogGLSL }
 
 				// environment
 				uniform EquirectHdrInfo envMapInfo;
@@ -221,6 +214,14 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				mat3 envRotation3x3;
 				mat3 invEnvRotation3x3;
 				float lightsDenom;
+
+				// sampling
+				${ fogMaterialBvhGLSL }
+				${ shapeSamplingGLSL }
+				${ bsdfSamplingGLSL }
+				${ equirectSamplingGLSL }
+				${ lightSamplingGLSL }
+				${ fogGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 
@@ -286,7 +287,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					#if FEATURE_FOG
 
 					state.fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
-						bvh, ray.origin, - ray.direction,
+						ray.origin, - ray.direction,
 						materialIndexAttribute, materials,
 						state.fogMaterial
 					);
