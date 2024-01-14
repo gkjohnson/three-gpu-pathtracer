@@ -72,6 +72,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
 				FEATURE_FOG: 1,
+				FEATURE_SOBOL: 0,
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -151,11 +152,24 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ equirectStructGLSL }
 				${ materialStructGLSL }
 
-
 				// random
 				${ pcgGLSL }
 				${ sobolCommonGLSL }
-				${ sobolSamplingGLSL }
+				#if FEATURE_SOBOL
+
+					${ sobolSamplingGLSL }
+
+				#else
+
+					uint sobolPixelIndex = 0u;
+					uint sobolPathIndex = 0u;
+					uint sobolBounceIndex = 0u;
+					float sobol( int v ) { return rand(); }
+					vec2 sobol2( int v ) { return rand2(); }
+					vec3 sobol3( int v ) { return rand3(); }
+					vec4 sobol4( int v ) { return rand4(); }
+
+				#endif
 
 				// common
 				${ arraySamplerTexelFetchGLSL }

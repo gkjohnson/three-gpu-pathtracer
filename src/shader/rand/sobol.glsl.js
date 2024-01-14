@@ -87,21 +87,18 @@ function generateSobolSampleFunctions( dim = 1 ) {
 
 		${ vtype } sobol${ num }( int effect ) {
 
-			// return ${ vtype }( 0 );
-			return rand${ num }();
+			uint seed = sobolGetSeed( sobolBounceIndex, uint( effect ) );
+			uint index = sobolPathIndex;
 
-			// uint seed = sobolGetSeed( sobolBounceIndex, uint( effect ) );
-			// uint index = sobolPathIndex;
+			uint shuffle_seed = sobolHashCombine( seed, 0u );
+			uint shuffled_index = nestedUniformScrambleBase2( sobolReverseBits( index ), shuffle_seed );
+			${ vtype } sobol_pt = sobolGetTexturePoint( shuffled_index )${ components };
+			${ utype } result = ${ utype }( sobol_pt * 16777216.0 );
 
-			// uint shuffle_seed = sobolHashCombine( seed, 0u );
-			// uint shuffled_index = nestedUniformScrambleBase2( sobolReverseBits( index ), shuffle_seed );
-			// ${ vtype } sobol_pt = sobolGetTexturePoint( shuffled_index )${ components };
-			// ${ utype } result = ${ utype }( sobol_pt * 16777216.0 );
+			${ utype } seed2 = sobolHashCombine( seed, ${ combineValues } );
+			result = nestedUniformScrambleBase2( result, seed2 );
 
-			// ${ utype } seed2 = sobolHashCombine( seed, ${ combineValues } );
-			// result = nestedUniformScrambleBase2( result, seed2 );
-
-			// return SOBOL_FACTOR * ${ vtype }( result >> 8 );
+			return SOBOL_FACTOR * ${ vtype }( result >> 8 );
 
 		}
 	`;
@@ -217,9 +214,9 @@ export const sobolSamplingGLSL = /* glsl */`
 
 	// Seeds
 	uniform sampler2D sobolTexture;
-	uint sobolPixelIndex;
-	uint sobolPathIndex;
-	uint sobolBounceIndex;
+	uint sobolPixelIndex = 0u;
+	uint sobolPathIndex = 0u;
+	uint sobolBounceIndex = 0u;
 
 	uint sobolGetSeed( uint bounce, uint effect ) {
 
