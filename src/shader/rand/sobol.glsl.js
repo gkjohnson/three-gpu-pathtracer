@@ -88,7 +88,7 @@ function generateSobolSampleFunctions( dim = 1 ) {
 		${ vtype } sobol${ num }( int effect ) {
 
 			// return ${ vtype }( 0 );
-			return rand${ num === 1 ? '' : num }();
+			return rand${ num }();
 
 			// uint seed = sobolGetSeed( sobolBounceIndex, uint( effect ) );
 			// uint index = sobolPathIndex;
