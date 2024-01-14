@@ -360,7 +360,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 								// get the PDF of the hit envmap point
 								vec3 envColor;
-								float envPdf = sampleEquirect( envMapInfo, envRotation3x3 * ray.direction, envColor );
+								float envPdf = sampleEquirect( envRotation3x3 * ray.direction, envColor );
 								envPdf /= lightsDenom;
 
 								// and weight the contribution
