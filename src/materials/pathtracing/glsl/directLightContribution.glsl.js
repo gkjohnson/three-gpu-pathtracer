@@ -1,47 +1,58 @@
 export const directLightContributionGLSL = /*glsl*/`
 
+	vec3 _func( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
+
+		vec3 result = vec3( 0 );
+
+		// sample a light or environment
+		LightRecord lightRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
+
+		bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightRec.direction ) < 0.0;
+		if ( isSampleBelowSurface ) {
+
+			lightRec.pdf = 0.0;
+
+		}
+
+		// check if a ray could even reach the light area
+		Ray lightRay;
+		lightRay.origin = rayOrigin;
+		lightRay.direction = lightRec.direction;
+		vec3 attenuatedColor = vec3( 0.0 );
+		if (
+			lightRec.pdf > 0.0
+			&& isDirectionValid( lightRec.direction, surf.normal, surf.faceNormal )
+			// && ! attenuateHit( state, lightRay, lightRec.dist, attenuatedColor )
+		) {
+
+			// get the material pdf
+			vec3 sampleColor = vec3( 0.0 );
+			float lightMaterialPdf = bsdfResult( worldWo, lightRec.direction, surf, sampleColor );
+			bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
+			if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
+
+				// weight the direct light contribution
+				float lightPdf = lightRec.pdf / lightsDenom;
+				float misWeight = lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
+				result = attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
+
+			}
+
+		}
+
+		return result;
+
+	}
+
+
 	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 
 		vec3 result = vec3( 0.0 );
 
 		// uniformly pick a light or environment map
-		if( lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
+		if( lights.count != 0u && lightsDenom != 0.0 && sobol( 5 ) < float( lights.count ) / lightsDenom ) {
 
-			// sample a light or environment
-			LightRecord lightRec = randomLightSample( lights.tex, iesProfiles, lights.count, rayOrigin, sobol3( 6 ) );
-
-			bool isSampleBelowSurface = ! surf.volumeParticle && dot( surf.faceNormal, lightRec.direction ) < 0.0;
-			if ( isSampleBelowSurface ) {
-
-				lightRec.pdf = 0.0;
-
-			}
-
-			// check if a ray could even reach the light area
-			Ray lightRay;
-			lightRay.origin = rayOrigin;
-			lightRay.direction = lightRec.direction;
-			vec3 attenuatedColor;
-			if (
-				lightRec.pdf > 0.0 &&
-				isDirectionValid( lightRec.direction, surf.normal, surf.faceNormal ) &&
-				! attenuateHit( state, lightRay, lightRec.dist, attenuatedColor )
-			) {
-
-				// get the material pdf
-				vec3 sampleColor;
-				float lightMaterialPdf = bsdfResult( worldWo, lightRec.direction, surf, sampleColor );
-				bool isValidSampleColor = all( greaterThanEqual( sampleColor, vec3( 0.0 ) ) );
-				if ( lightMaterialPdf > 0.0 && isValidSampleColor ) {
-
-					// weight the direct light contribution
-					float lightPdf = lightRec.pdf / lightsDenom;
-					float misWeight = lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ? 1.0 : misHeuristic( lightPdf, lightMaterialPdf );
-					result = attenuatedColor * lightRec.emission * state.throughputColor * sampleColor * misWeight / lightPdf;
-
-				}
-
-			}
+			result = _func( worldWo, surf, state, rayOrigin );
 
 		} else {
 
