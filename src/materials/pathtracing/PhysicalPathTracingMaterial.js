@@ -154,9 +154,9 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// random
 				${ pcgGLSL }
-				${ sobolCommonGLSL }
 				#if FEATURE_SOBOL
 
+					${ sobolCommonGLSL }
 					${ sobolSamplingGLSL }
 
 				#else
