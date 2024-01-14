@@ -67,7 +67,18 @@ export const lightsStructGLSL = /* glsl */`
 
 			l.coneCos = s5.r;
 			l.penumbraCos = s5.g;
-			l.iesProfile = int( round ( s5.b ) );
+			l.iesProfile = int( round( s5.b ) );
+
+		} else {
+
+			l.radius = 0.0;
+			l.near = 0.0;
+			l.decay = 0.0;
+			l.distance = 0.0;
+
+			l.coneCos = 0.0;
+			l.penumbraCos = 0.0;
+			l.iesProfile = - 1;
 
 		}
 
