@@ -184,21 +184,22 @@ export const materialStructGLSL = /* glsl */ `
 
 		uint firstTextureTransformIdx = i + 15u;
 
-		m.mapTransform = m.map == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx );
-		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
-		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
-		m.transmissionMapTransform = m.transmissionMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 6u );
-		m.emissiveMapTransform = m.emissiveMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 8u );
-		m.normalMapTransform = m.normalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 10u );
-		m.clearcoatMapTransform = m.clearcoatMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 12u );
-		m.clearcoatNormalMapTransform = m.clearcoatNormalMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 14u );
-		m.clearcoatRoughnessMapTransform = m.clearcoatRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 16u );
-		m.sheenColorMapTransform = m.sheenColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 18u );
-		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
-		m.iridescenceMapTransform = m.iridescenceMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 22u );
-		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
-		m.specularColorMapTransform = m.specularColorMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 26u );
-		m.specularIntensityMapTransform = m.specularIntensityMap == - 1 ? mat3( 0 ) : readTextureTransform( tex, firstTextureTransformIdx + 28u );
+		// mat3( 1.0 ) is an identity matrix
+		m.mapTransform = m.map == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx );
+		m.metalnessMapTransform = m.metalnessMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 2u );
+		m.roughnessMapTransform = m.roughnessMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 4u );
+		m.transmissionMapTransform = m.transmissionMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 6u );
+		m.emissiveMapTransform = m.emissiveMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 8u );
+		m.normalMapTransform = m.normalMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 10u );
+		m.clearcoatMapTransform = m.clearcoatMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 12u );
+		m.clearcoatNormalMapTransform = m.clearcoatNormalMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 14u );
+		m.clearcoatRoughnessMapTransform = m.clearcoatRoughnessMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 16u );
+		m.sheenColorMapTransform = m.sheenColorMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 18u );
+		m.sheenRoughnessMapTransform = m.sheenRoughnessMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 20u );
+		m.iridescenceMapTransform = m.iridescenceMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 22u );
+		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
+		m.specularColorMapTransform = m.specularColorMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 26u );
+		m.specularIntensityMapTransform = m.specularIntensityMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 28u );
 
 		return m;
 
