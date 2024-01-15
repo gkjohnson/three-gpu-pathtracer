@@ -214,9 +214,9 @@ export const sobolSamplingGLSL = /* glsl */`
 
 	// Seeds
 	uniform sampler2D sobolTexture;
-	uint sobolPixelIndex;
-	uint sobolPathIndex;
-	uint sobolBounceIndex;
+	uint sobolPixelIndex = 0u;
+	uint sobolPathIndex = 0u;
+	uint sobolBounceIndex = 0u;
 
 	uint sobolGetSeed( uint bounce, uint effect ) {
 

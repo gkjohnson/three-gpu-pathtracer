@@ -1,6 +1,6 @@
 import { TangentSpaceNormalMap, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
-import { MeshBVHUniformStruct, shaderStructs, shaderIntersectFunction } from 'three-mesh-bvh';
+import { MeshBVHUniformStruct, BVHShaderGLSL } from 'three-mesh-bvh';
 
 import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
 import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
@@ -97,8 +97,9 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				#include <cube_uv_reflection_fragment>
 
 				// bvh
-				${ shaderStructs }
-				${ shaderIntersectFunction }
+				${ BVHShaderGLSL.common_functions }
+				${ BVHShaderGLSL.bvh_struct_definitions }
+				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
 				${ materialStructGLSL }
