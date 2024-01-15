@@ -8,8 +8,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for rendering geometry with inverted scales.
 
+### Changed
+- Upgrade to three-mesh-bvh v0.7.0.
+- AreaLights no longer render the light surface.
+
 ### Fixed
-- Renderer crashing on some apple devices.
+- Renderer crashing on MacOS devices.
+- Renderer crashing on Android devices.
 - Rendering not working at all on iOS devices due to lacking support for linearly interpolated Float32 textures.
 
 ## [0.0.16] - 2023-07-21
