@@ -48,7 +48,7 @@ export class LightsInfoUniformStruct {
 		const worldQuaternion = new Quaternion();
 		const eye = new Vector3();
 		const target = new Vector3();
-		const up = new Vector3();
+		const up = new Vector3( 0, 1, 0 );
 
 		for ( let i = 0, l = lights.length; i < l; i ++ ) {
 
