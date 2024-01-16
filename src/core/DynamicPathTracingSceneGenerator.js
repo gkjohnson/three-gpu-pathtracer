@@ -38,7 +38,7 @@ export class DynamicPathTracingSceneGenerator {
 
 	generate() {
 
-		const { objects, staticGeometryGenerator, geometry } = this;
+		const { objects, staticGeometryGenerator, geometry, lights } = this;
 		if ( this.bvh === null ) {
 
 			const attributes = [ 'position', 'normal', 'tangent', 'uv', 'color' ];
@@ -52,9 +52,14 @@ export class DynamicPathTracingSceneGenerator {
 						const normalMapRequired = ! ! c.material.normalMap;
 						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
 
-					} else if ( c.isRectAreaLight || c.isSpotLight ) {
+					} else if (
+						c.isRectAreaLight ||
+						c.isSpotLight ||
+						c.isPointLight ||
+						c.isDirectionalLight
+					) {
 
-						this.lights.push( c );
+						lights.push( c );
 
 					}
 
