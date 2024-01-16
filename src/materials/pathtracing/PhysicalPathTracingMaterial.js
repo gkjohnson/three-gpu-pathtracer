@@ -161,6 +161,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#else
 
+					// Using the sobol functions seems to break the the compiler on MacOS
+					// - specifically the "sobolReverseBits" function.
 					uint sobolPixelIndex = 0u;
 					uint sobolPathIndex = 0u;
 					uint sobolBounceIndex = 0u;
