@@ -23,7 +23,7 @@ export const traceSceneGLSL = /* glsl */`
 		if ( fogMaterial.fogVolume ) {
 
 			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
-			if ( particleDist + 1e-4 < surfaceHit.dist && ( particleDist + 1e-4 < lightRec.dist || ! lightHit ) ) {
+			if ( particleDist + 1e-4 < surfaceHit.dist && ( particleDist + 1e-4 < lightRec.dist ) ) {
 
 				surfaceHit.side = 1.0;
 				surfaceHit.faceNormal = normalize( - ray.direction );
