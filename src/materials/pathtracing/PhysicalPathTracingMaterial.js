@@ -294,7 +294,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					// surface results
 					SurfaceHit surfaceHit;
-					LightRecord lightRec;
 					ScatterRecord scatterRec;
 
 					// path tracing state
@@ -318,10 +317,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						state.traversals = bounces - i;
 						state.firstRay = i == 0 && state.transmissiveTraversals == transmissiveBounces;
 
-						int hitType = traceScene(
-							ray, state.fogMaterial,
-							surfaceHit, lightRec
-						);
+						int hitType = traceScene( ray, state.fogMaterial, surfaceHit );
 
 						// check if we intersect any lights and accumulate the light contribution
 						// TODO: we can add support for light surface rendering in the else condition if we

@@ -10,8 +10,7 @@ export const traceSceneGLSL = /* glsl */`
 	// For more information, refer to: https://github.com/gkjohnson/three-gpu-pathtracer/pull/457
 	int traceScene(
 
-		Ray ray, Material fogMaterial,
-		inout SurfaceHit surfaceHit, inout LightRecord lightRec
+		Ray ray, Material fogMaterial, inout SurfaceHit surfaceHit
 
 	) {
 
@@ -22,8 +21,10 @@ export const traceSceneGLSL = /* glsl */`
 
 		if ( fogMaterial.fogVolume ) {
 
+			// offset the distance so we don't run into issues with particles on the same surface
+			// as other objects
 			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
-			if ( particleDist + 1e-4 < surfaceHit.dist && ( particleDist + 1e-4 < lightRec.dist ) ) {
+			if ( particleDist + RAY_OFFSET < surfaceHit.dist ) {
 
 				surfaceHit.side = 1.0;
 				surfaceHit.faceNormal = normalize( - ray.direction );

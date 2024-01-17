@@ -17,7 +17,6 @@ export const attenuateHitGLSL = /* glsl */`
 
 		// hit results
 		SurfaceHit surfaceHit;
-		LightRecord lightRec;
 
 		color = vec3( 1.0 );
 
@@ -25,10 +24,7 @@ export const attenuateHitGLSL = /* glsl */`
 		// and then reset.
 		for ( int i = 0; i < traversals; i ++ ) {
 
-			int hitType = traceScene(
-				ray, fogMaterial,
-				surfaceHit, lightRec
-			);
+			int hitType = traceScene( ray, fogMaterial, surfaceHit );
 
 			if ( hitType == FOG_HIT ) {
 
