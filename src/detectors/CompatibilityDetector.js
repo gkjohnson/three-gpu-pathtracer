@@ -9,7 +9,7 @@ export class CompatibilityDetector {
 
 	}
 
-	detect() {
+	async detect() {
 
 		let detector = new PrecisionDetector( this._renderer );
 		let result = detector.detect();

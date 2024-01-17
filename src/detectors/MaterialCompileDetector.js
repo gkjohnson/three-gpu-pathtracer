@@ -9,7 +9,7 @@ export class MaterialCompileDetector {
 
 	}
 
-	detect( material ) {
+	async detect( material ) {
 
 		const renderer = this._renderer;
 		const mesh = new Mesh( new BoxGeometry(), material );
@@ -19,7 +19,7 @@ export class MaterialCompileDetector {
 
 		const programs = renderer.info.programs;
 		const progLength = programs.length;
-		renderer.compile( mesh, camera );
+		await renderer.compileAsync( mesh, camera );
 
 		renderer.debug.checkShaderErrors = ogShaderErrors;
 		mesh.geometry.dispose();

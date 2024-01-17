@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, MaterialCompileDetector } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
@@ -116,6 +116,18 @@ async function init() {
 	ptRenderer.material.textures.setTextures( renderer, 2048, 2048, textures );
 	ptRenderer.material.materials.updateFrom( materials, textures );
 	ptRenderer.material.lights.updateFrom( sceneInfo.lights );
+
+
+
+	const d = new MaterialCompileDetector( renderer );
+
+	const start = performance.now();
+	const pr = d.detect( ptRenderer.material );
+	console.log('IMMEDIATE', performance.now() - start, 'ms' );
+	await pr;
+	console.log('AFTER', performance.now() - start, 'ms' );
+
+
 
 	generator.dispose();
 

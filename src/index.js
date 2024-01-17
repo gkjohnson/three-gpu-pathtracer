@@ -38,3 +38,4 @@ export * from './materials/surface/FogVolumeMaterial.js';
 
 // detectors
 export * from './detectors/CompatibilityDetector.js';
+export * from './detectors/MaterialCompileDetector.js';
