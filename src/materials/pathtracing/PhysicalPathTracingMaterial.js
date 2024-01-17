@@ -339,18 +339,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 									#if FEATURE_MIS
 
-									// NOTE: we skip MIS for punctual lights since they are not supported in forward PT case
-									if ( lightRec.type == SPOT_LIGHT_TYPE || lightRec.type == DIR_LIGHT_TYPE || lightRec.type == POINT_LIGHT_TYPE ) {
-
-										gl_FragColor.rgb += lightRec.emission * state.throughputColor;
-
-									} else {
-
-										// weight the contribution
-										float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
-										gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
-
-									}
+									// weight the contribution
+									// NOTE: Only area lights are supported for forward sampling and can be hit
+									float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
+									gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
 
 									#else
 
