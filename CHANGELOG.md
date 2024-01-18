@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - AreaLights no longer render the light surface.
 
 ### Fixed
+- Models with a negative scale not rendering correctly.
 - Renderer crashing on MacOS devices.
 - Renderer crashing on Android devices.
 - Rendering not working at all on iOS devices due to lacking support for linearly interpolated Float32 textures.
