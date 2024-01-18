@@ -566,7 +566,7 @@ async function updateModel() {
 	};
 
 	let modelUrl = new URL( modelInfo.model, BASE_URL ).toString();
-	modelUrl = modelUrl.replace( /.*?glTF-Sample-Models/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master' );
+	modelUrl = modelUrl.replace( /.*?glTF-Sample-Assets/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main' );
 
 	manager.onLoad = onFinish;
 
