@@ -15,9 +15,9 @@ bool isMaterialFogVolume( sampler2D materials, uint materialIndex ) {
 
 // returns true if we're within the first fog volume we hit
 bool bvhIntersectFogVolumeHit(
-	BVH bvh, vec3 rayOrigin, vec3 rayDirection,
+	vec3 rayOrigin, vec3 rayDirection,
 	usampler2D materialIndexAttribute, sampler2D materials,
-	out Material material
+	inout Material material
 ) {
 
 	material.fogVolume = false;

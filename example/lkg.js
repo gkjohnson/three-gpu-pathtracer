@@ -12,12 +12,10 @@ import {
 	WebGLRenderer,
 	Scene,
 	MeshBasicMaterial,
-	sRGBEncoding,
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
-	Vector4,
-	FloatType
+	Vector4
 } from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -122,7 +120,6 @@ async function init() {
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
 	renderer.xr.enabled = true;
@@ -166,7 +163,7 @@ async function init() {
 	} );
 
 	// load the environment map
-	new RGBELoader().setDataType( FloatType )
+	new RGBELoader()
 		.load( ENVMAP_URL, texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;

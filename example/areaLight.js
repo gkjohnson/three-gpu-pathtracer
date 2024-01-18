@@ -64,7 +64,6 @@ init();
 async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -95,7 +94,7 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 	loadingEl = document.getElementById( 'loading' );
 
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr' )
 		.then( texture => {
 

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/three-gpu-pathtracer.svg?style=flat-square)](https://www.npmjs.com/package/three-gpu-pathtracer)
 [![build](https://img.shields.io/github/actions/workflow/status/gkjohnson/three-gpu-pathtracer/node.js.yml?style=flat-square&label=build&branch=main)](https://github.com/gkjohnson/three-gpu-pathtracer/actions)
 [![github](https://flat.badgen.net/badge/icon/github?icon=github&label)](https://github.com/gkjohnson/three-gpu-pathtracer/)
-[![twitter](https://flat.badgen.net/twitter/follow/garrettkjohnson)](https://twitter.com/garrettkjohnson)
+[![twitter](https://flat.badgen.net/badge/twitter/@garrettkjohnson/?icon&label)](https://twitter.com/garrettkjohnson)
 [![sponsors](https://img.shields.io/github/sponsors/gkjohnson?style=flat-square&color=1da1f2)](https://github.com/sponsors/gkjohnson/)
 
 ![](https://user-images.githubusercontent.com/734200/162287477-96696b18-890b-4c1b-8a73-d662e577cc48.png)
@@ -16,7 +16,9 @@ _More features and capabilities in progress!_
 
 **Setup**
 
-[Basic Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
+[Basic glTF Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
+
+[Basic Primitive Geometry Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/primitives.html)
 
 **Beauty Demos**
 
@@ -879,6 +881,29 @@ mergeMeshes( meshes : Array<Mesh> ) : {
 ```
 
 Merges the set of meshes into a single geometry with a `materialIndex` vertex attribute included on the geometry identifying the associated material in the returned `materials` array.
+
+## CompatibilityDetector
+
+Detects whether the path tracer can run on the current device by checking whether struct precision is reliable and the material shader will compile.
+
+### constructor
+
+```js
+constructor( renderer : WebGLRenderer, material : Material )
+```
+
+Takes a WebGLRenderer to use and material to test again.
+
+### .detect
+
+```js
+detect() : {
+	pass: Boolean,
+	message: String
+}
+```
+
+Returns `pass === true` if the path tracer can run. If it cannot run then a message is returned indicating why.
 
 ## Shader Chunks
 

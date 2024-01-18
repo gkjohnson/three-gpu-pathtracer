@@ -27,5 +27,6 @@ Add screenshots and a gltf model to help explain your problem (drag and drop).
  - OS: [Windows, MacOS, Linux, Android, iOS, ...]
  - GPU: [NVidia ??, Radeon ??, ...]
  - Browser: [Chrome, Firefox, Safari, Edge, ...]
+ - Browser Version: [xx.xx.xx]
  - Three.js version: [r???]
  - Library version: [v???]

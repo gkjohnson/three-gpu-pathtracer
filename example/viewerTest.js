@@ -6,7 +6,6 @@ import {
 	Scene,
 	PerspectiveCamera,
 	MeshBasicMaterial,
-	sRGBEncoding,
 	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
@@ -87,7 +86,6 @@ async function init() {
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = sRGBEncoding;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
 	containerEl.appendChild( renderer.domElement );
@@ -568,7 +566,7 @@ async function updateModel() {
 	};
 
 	let modelUrl = new URL( modelInfo.model, BASE_URL ).toString();
-	modelUrl = modelUrl.replace( /.*?glTF-Sample-Models/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master' );
+	modelUrl = modelUrl.replace( /.*?glTF-Sample-Assets/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main' );
 
 	manager.onLoad = onFinish;
 

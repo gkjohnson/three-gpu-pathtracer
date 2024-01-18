@@ -53,7 +53,6 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	perspectiveCamera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
@@ -98,7 +97,7 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 

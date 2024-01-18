@@ -75,7 +75,7 @@ export class QuiltPreviewMaterial extends MaterialBase {
 					gl_FragColor = texture( quiltMap, quiltUv );
 
 					#include <tonemapping_fragment>
-					#include <encodings_fragment>
+					#include <colorspace_fragment>
 
 				}
 

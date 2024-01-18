@@ -2,7 +2,7 @@ import { Matrix4, Color } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, FloatVertexAttributeTexture, UIntVertexAttributeTexture,
-	shaderStructs, shaderIntersectFunction,
+	BVHShaderGLSL,
 } from 'three-mesh-bvh';
 
 // uniforms
@@ -85,8 +85,9 @@ export class LambertPathTracingMaterial extends MaterialBase {
 				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-				${ shaderStructs }
-				${ shaderIntersectFunction }
+				${ BVHShaderGLSL.common_functions }
+				${ BVHShaderGLSL.bvh_struct_definitions }
+				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
 				${ materialStructGLSL }

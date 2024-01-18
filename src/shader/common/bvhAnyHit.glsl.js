@@ -1,10 +1,10 @@
 export const bvhAnyHitGLSL = /* glsl */`
 
 	bool bvhIntersectAnyHit(
-		BVH bvh, vec3 rayOrigin, vec3 rayDirection,
+		vec3 rayOrigin, vec3 rayDirection,
 
 		// output variables
-		out float side, out float dist
+		inout float side, inout float dist
 	) {
 
 		uvec4 faceIndices;

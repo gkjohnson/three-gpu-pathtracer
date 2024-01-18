@@ -29,7 +29,6 @@ async function init() {
 	// init renderer, camera, controls, scene
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 
@@ -63,7 +62,7 @@ async function init() {
 	} );
 
 	// load the envmap and model
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr' )
 		.then( texture => {
 

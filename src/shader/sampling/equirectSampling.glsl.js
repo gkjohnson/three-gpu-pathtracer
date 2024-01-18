@@ -24,14 +24,14 @@ export const equirectSamplingGLSL = /* glsl */`
 	}
 
 	// samples the color given env map with CDF and returns the pdf of the direction
-	float sampleEquirect( EquirectHdrInfo info, vec3 direction, out vec3 color ) {
+	float sampleEquirect( vec3 direction, inout vec3 color ) {
 
 		vec2 uv = equirectDirectionToUv( direction );
-		color = texture2D( info.map, uv ).rgb;
+		color = texture2D( envMapInfo.map, uv ).rgb;
 
-		float totalSum = info.totalSumWhole + info.totalSumDecimal;
+		float totalSum = envMapInfo.totalSum;
 		float lum = luminance( color );
-		ivec2 resolution = textureSize( info.map, 0 );
+		ivec2 resolution = textureSize( envMapInfo.map, 0 );
 		float pdf = lum / totalSum;
 
 		return float( resolution.x * resolution.y ) * pdf * equirectDirectionPdf( direction );
@@ -39,20 +39,20 @@ export const equirectSamplingGLSL = /* glsl */`
 	}
 
 	// samples a direction of the envmap with color and retrieves pdf
-	float sampleEquirectProbability( EquirectHdrInfo info, vec2 r, out vec3 color, out vec3 direction ) {
+	float sampleEquirectProbability( vec2 r, inout vec3 color, inout vec3 direction ) {
 
 		// sample env map cdf
-		float v = texture2D( info.marginalWeights, vec2( r.x, 0.0 ) ).x;
-		float u = texture2D( info.conditionalWeights, vec2( r.y, v ) ).x;
+		float v = texture2D( envMapInfo.marginalWeights, vec2( r.x, 0.0 ) ).x;
+		float u = texture2D( envMapInfo.conditionalWeights, vec2( r.y, v ) ).x;
 		vec2 uv = vec2( u, v );
 
 		vec3 derivedDirection = equirectUvToDirection( uv );
 		direction = derivedDirection;
-		color = texture2D( info.map, uv ).rgb;
+		color = texture2D( envMapInfo.map, uv ).rgb;
 
-		float totalSum = info.totalSumWhole + info.totalSumDecimal;
+		float totalSum = envMapInfo.totalSum;
 		float lum = luminance( color );
-		ivec2 resolution = textureSize( info.map, 0 );
+		ivec2 resolution = textureSize( envMapInfo.map, 0 );
 		float pdf = lum / totalSum;
 
 		return float( resolution.x * resolution.y ) * pdf * equirectDirectionPdf( direction );

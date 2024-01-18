@@ -30,7 +30,6 @@ async function init() {
 
 	// initialize renderer
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( { transparent: true } ) );
@@ -49,18 +48,22 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	// initialize render targs
-	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
+	// will be null if extension not supported
+	const floatLinearExtensionSupported = renderer.extensions.get( 'OES_texture_float_linear' );
 
-	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: THREE.FloatType, encoding: THREE.LinearEncoding } );
+	// initialize render targs
+	target1 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace } );
+
+	target2 = new THREE.WebGLRenderTarget( 1, 1, { type: floatLinearExtensionSupported ? THREE.FloatType : THREE.HalfFloatType, colorSpace: THREE.LinearSRGBColorSpace } );
 
 	materials = [];
 
 
+	const url = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
 	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf' )
+		.loadAsync( url )
 		.then( async gltf => {
 
 			const group = new THREE.Group();

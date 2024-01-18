@@ -5,28 +5,30 @@ export const traceSceneGLSL = /* glsl */`
 	#define LIGHT_HIT 2
 	#define FOG_HIT 3
 
+	// Passing the global variable 'lights' into this function caused shader program errors.
+	// So global variables like 'lights' and 'bvh' were moved out of the function parameters.
+	// For more information, refer to: https://github.com/gkjohnson/three-gpu-pathtracer/pull/457
 	int traceScene(
 
-		vec3 rayOrigin, vec3 rayDirection,
-		BVH bvh, LightsInfo lights, Material fogMaterial,
-		out uvec4 faceIndices, out vec3 faceNormal, out vec3 barycoord, out float side, out float dist,
-		out LightSampleRecord lightSampleRec
+		Ray ray, Material fogMaterial, inout SurfaceHit surfaceHit
 
 	) {
 
-		bool hit = bvhIntersectFirstHit( bvh, rayOrigin, rayDirection, faceIndices, faceNormal, barycoord, side, dist );
-		bool lightHit = lightsClosestHit( lights.tex, lights.count, rayOrigin, rayDirection, lightSampleRec );
+		int result = NO_HIT;
+		bool hit = bvhIntersectFirstHit( bvh, ray.origin, ray.direction, surfaceHit.faceIndices, surfaceHit.faceNormal, surfaceHit.barycoord, surfaceHit.side, surfaceHit.dist );
 
 		#if FEATURE_FOG
 
 		if ( fogMaterial.fogVolume ) {
 
+			// offset the distance so we don't run into issues with particles on the same surface
+			// as other objects
 			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
-			if ( particleDist + 1e-4 < dist && ( particleDist + 1e-4 < lightSampleRec.dist || ! lightHit ) ) {
+			if ( particleDist + RAY_OFFSET < surfaceHit.dist ) {
 
-				side = 1.0;
-				faceNormal = normalize( - rayDirection );
-				dist = particleDist;
+				surfaceHit.side = 1.0;
+				surfaceHit.faceNormal = normalize( - ray.direction );
+				surfaceHit.dist = particleDist;
 				return FOG_HIT;
 
 			}
@@ -35,19 +37,13 @@ export const traceSceneGLSL = /* glsl */`
 
 		#endif
 
-		if ( lightHit && ( lightSampleRec.dist < dist || ! hit ) ) {
-
-			return LIGHT_HIT;
-
-		}
-
 		if ( hit ) {
 
-			return SURFACE_HIT;
+			result = SURFACE_HIT;
 
 		}
 
-		return NO_HIT;
+		return result;
 
 	}
 

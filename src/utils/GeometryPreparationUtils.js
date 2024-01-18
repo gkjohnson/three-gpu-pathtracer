@@ -1,5 +1,5 @@
 import { BufferAttribute } from 'three';
-import { mergeBufferGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
 	const indexAttr = geometry.index;
@@ -176,6 +176,12 @@ export function mergeMeshes( meshes, options = {} ) {
 		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
+		if ( mesh.matrixWorld.determinant() < 0 ) {
+
+			geometry.index.array.reverse();
+
+		}
+
 		// ensure our geometry has common attributes
 		setCommonAttributes( geometry, {
 			attributes: options.attributes,
@@ -207,7 +213,7 @@ export function mergeMeshes( meshes, options = {} ) {
 
 	} );
 
-	const geometry = mergeBufferGeometries( transformedGeometry, false );
+	const geometry = mergeGeometries( transformedGeometry, false );
 	const textures = Array.from( textureSet );
 	return { geometry, materials, textures };
 

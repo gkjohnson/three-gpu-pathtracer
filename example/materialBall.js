@@ -155,7 +155,6 @@ async function init() {
 
 	renderer = new THREE.WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 
@@ -202,7 +201,7 @@ async function init() {
 
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 

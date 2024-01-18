@@ -4,10 +4,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [0.0.14] - Unreleased
+## Unreleased
+### Added
+- Support for rendering geometry with inverted scales.
+
+### Changed
+- Upgrade to three-mesh-bvh v0.7.0.
+- AreaLights no longer render the light surface.
+
+### Fixed
+- Models with a negative scale not rendering correctly.
+- Renderer crashing on MacOS devices.
+- Renderer crashing on Android devices.
+- Rendering not working at all on iOS devices due to lacking support for linearly interpolated Float32 textures.
+
+## [0.0.16] - 2023-07-21
+### Fixed
+- Reverted change that caused NaN values on some hardware.
+
+## [0.0.15] - 2023-05-20
+### Fixed
+- Missing file extension.
+
+### Added
+- `CompatibilityDetector` to determine whether the path tracer can run on the target platform.
+- `DEBUG_MODE` define to PhysicalPathTracingMaterial to render out ray depth.
+- `GradientMapMaterial` to map texture values to a color ramp.
+- Support for copy function to `ShapedAreaLight`, `PhysicalCamera`, and `PhysicalSpotLight`.
+
+### Changed
+- Fog hits no longer count as transparent surface bounces.
+- Remove precision workaround for Equirect map.
+- Significant refactoring to make more effective use of structs.
+
+## [0.0.14] - 2023-03-05
 ### Added
 - Support for volumetric fog material.
-- Disable sampling of the environment map if env intensity is set to 0.0 to improve light sampling.
+- Disable sampling of the environment map if env intensity is set to 0.0 to improve direct light sampling rate.
 
 ### Changed
 - Base color is now applied both on the way in and out of a transmissive material.

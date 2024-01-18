@@ -32,7 +32,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	}
 
-	struct LightSampleRecord {
+	struct LightRecord {
 
 		float dist;
 		vec3 direction;
@@ -42,24 +42,17 @@ export const lightSamplingGLSL = /* glsl */`
 
 	};
 
-	bool lightsClosestHit( sampler2D lights, uint lightCount, vec3 rayOrigin, vec3 rayDirection, out LightSampleRecord lightSampleRec ) {
+	bool intersectLightAtIndex( sampler2D lights, vec3 rayOrigin, vec3 rayDirection, uint l, inout LightRecord lightRec ) {
 
 		bool didHit = false;
-		uint l;
-		for ( l = 0u; l < lightCount; l ++ ) {
+		Light light = readLightInfo( lights, l );
 
-			Light light = readLightInfo( lights, l );
+		vec3 u = light.u;
+		vec3 v = light.v;
 
-			vec3 u = light.u;
-			vec3 v = light.v;
-
-			// check for backface
-			vec3 normal = normalize( cross( u, v ) );
-			if ( dot( normal, rayDirection ) < 0.0 ) {
-
-				continue;
-
-			}
+		// check for backface
+		vec3 normal = normalize( cross( u, v ) );
+		if ( dot( normal, rayDirection ) > 0.0 ) {
 
 			u *= 1.0 / dot( u, u );
 			v *= 1.0 / dot( v, v );
@@ -72,17 +65,13 @@ export const lightSamplingGLSL = /* glsl */`
 				( light.type == CIRC_AREA_LIGHT_TYPE && intersectsCircle( light.position, normal, u, v, rayOrigin, rayDirection, dist ) )
 			) {
 
-				if ( ! didHit || dist < lightSampleRec.dist ) {
-
-					float cosTheta = dot( rayDirection, normal );
-					didHit = true;
-					lightSampleRec.dist = dist;
-					lightSampleRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
-					lightSampleRec.emission = light.color * light.intensity;
-					lightSampleRec.direction = rayDirection;
-					lightSampleRec.type = light.type;
-
-				}
+				float cosTheta = dot( rayDirection, normal );
+				didHit = true;
+				lightRec.dist = dist;
+				lightRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
+				lightRec.emission = light.color * light.intensity;
+				lightRec.direction = rayDirection;
+				lightRec.type = light.type;
 
 			}
 
@@ -92,12 +81,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 	}
 
-	LightSampleRecord randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
-
-		LightSampleRecord lightSampleRec;
-		lightSampleRec.type = light.type;
-
-		lightSampleRec.emission = light.color * light.intensity;
+	LightRecord randomAreaLightSample( Light light, vec3 rayOrigin, vec2 ruv ) {
 
 		vec3 randomPos;
 		if( light.type == RECT_AREA_LIGHT_TYPE ) {
@@ -119,19 +103,24 @@ export const lightSamplingGLSL = /* glsl */`
 
 		vec3 toLight = randomPos - rayOrigin;
 		float lightDistSq = dot( toLight, toLight );
-		lightSampleRec.dist = sqrt( lightDistSq );
-
-		vec3 direction = toLight / lightSampleRec.dist;
-		lightSampleRec.direction = direction;
-
+		float dist = sqrt( lightDistSq );
+		vec3 direction = toLight / dist;
 		vec3 lightNormal = normalize( cross( light.u, light.v ) );
-		lightSampleRec.pdf = lightDistSq / ( light.area * dot( direction, lightNormal ) );
 
-		return lightSampleRec;
+		LightRecord lightRec;
+		lightRec.type = light.type;
+		lightRec.emission = light.color * light.intensity;
+		lightRec.dist = dist;
+		lightRec.direction = direction;
+
+		// TODO: the denominator is potentially zero
+		lightRec.pdf = lightDistSq / ( light.area * dot( direction, lightNormal ) );
+
+		return lightRec;
 
 	}
 
-	LightSampleRecord randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin, vec2 ruv ) {
+	LightRecord randomSpotLightSample( Light light, sampler2DArray iesProfiles, vec3 rayOrigin, vec2 ruv ) {
 
 		float radius = light.radius * sqrt( ruv.x );
 		float theta = ruv.y * 2.0 * PI;
@@ -159,18 +148,20 @@ export const lightSamplingGLSL = /* glsl */`
 			getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 
 		float distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
-		LightSampleRecord lightSampleRec;
-		lightSampleRec.type = light.type;
-		lightSampleRec.dist = dist;
-		lightSampleRec.direction = direction;
-		lightSampleRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
-		lightSampleRec.pdf = 1.0;
+		LightRecord lightRec;
+		lightRec.type = light.type;
+		lightRec.dist = dist;
+		lightRec.direction = direction;
+		lightRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
+		lightRec.pdf = 1.0;
 
-		return lightSampleRec;
+		return lightRec;
 
 	}
 
-	LightSampleRecord randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
+	LightRecord randomLightSample( sampler2D lights, sampler2DArray iesProfiles, uint lightCount, vec3 rayOrigin, vec3 ruv ) {
+
+		LightRecord result;
 
 		// pick a random light
 		uint l = uint( ruv.x * float( lightCount ) );
@@ -178,7 +169,7 @@ export const lightSamplingGLSL = /* glsl */`
 
 		if ( light.type == SPOT_LIGHT_TYPE ) {
 
-			return randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
+			result = randomSpotLightSample( light, iesProfiles, rayOrigin, ruv.yz );
 
 		} else if ( light.type == POINT_LIGHT_TYPE ) {
 
@@ -192,31 +183,33 @@ export const lightSamplingGLSL = /* glsl */`
 
 			}
 
-			LightSampleRecord rec;
+			LightRecord rec;
 			rec.direction = normalize( lightRay );
 			rec.dist = length( lightRay );
 			rec.pdf = 1.0;
 			rec.emission = light.color * light.intensity * distanceFalloff;
 			rec.type = light.type;
-			return rec;
+			result = rec;
 
 		} else if ( light.type == DIR_LIGHT_TYPE ) {
 
-			LightSampleRecord rec;
+			LightRecord rec;
 			rec.dist = 1e10;
 			rec.direction = light.u;
 			rec.pdf = 1.0;
 			rec.emission = light.color * light.intensity;
 			rec.type = light.type;
 
-			return rec;
+			result = rec;
 
 		} else {
 
 			// sample the light
-			return randomAreaLightSample( light, rayOrigin, ruv.yz );
+			result = randomAreaLightSample( light, rayOrigin, ruv.yz );
 
 		}
+
+		return result;
 
 	}
 

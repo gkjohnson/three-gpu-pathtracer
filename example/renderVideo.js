@@ -88,7 +88,6 @@ async function init() {
 	// initialize renderer, scene, camera
 	renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.outputEncoding = THREE.sRGBEncoding;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new THREE.Scene();
@@ -126,7 +125,7 @@ async function init() {
 	videoEl.style.display = 'none';
 
 	// model models and environment map
-	const envMapPromise = new RGBELoader().setDataType( THREE.FloatType )
+	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr' )
 		.then( texture => {
 

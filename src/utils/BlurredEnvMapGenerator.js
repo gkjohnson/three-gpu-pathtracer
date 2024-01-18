@@ -1,4 +1,4 @@
-import { WebGLRenderTarget, RGBAFormat, FloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
+import { WebGLRenderTarget, RGBAFormat, HalfFloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
 import { utilsGLSL } from '../shader/common/utils.glsl.js';
@@ -58,7 +58,7 @@ export class BlurredEnvMapGenerator {
 		this.renderer = renderer;
 		this.pmremGenerator = new PMREMGenerator( renderer );
 		this.copyQuad = new FullScreenQuad( new PMREMCopyMaterial() );
-		this.renderTarget = new WebGLRenderTarget( 1, 1, { type: FloatType, format: RGBAFormat } );
+		this.renderTarget = new WebGLRenderTarget( 1, 1, { type: HalfFloatType, format: RGBAFormat } );
 
 	}
 
@@ -95,10 +95,10 @@ export class BlurredEnvMapGenerator {
 		renderer.autoClear = prevClear;
 
 		// read the data back
-		const buffer = new Float32Array( width * height * 4 );
+		const buffer = new Uint16Array( width * height * 4 );
 		renderer.readRenderTargetPixels( renderTarget, 0, 0, width, height, buffer );
 
-		const result = new DataTexture( buffer, width, height, RGBAFormat, FloatType );
+		const result = new DataTexture( buffer, width, height, RGBAFormat, HalfFloatType );
 		result.minFilter = texture.minFilter;
 		result.magFilter = texture.magFilter;
 		result.wrapS = texture.wrapS;
