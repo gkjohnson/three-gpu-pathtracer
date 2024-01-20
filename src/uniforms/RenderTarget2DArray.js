@@ -2,7 +2,6 @@ import {
 	WebGLArrayRenderTarget,
 	RGBAFormat,
 	UnsignedByteType,
-	MeshBasicMaterial,
 	Color,
 	RepeatWrapping,
 	LinearFilter,
@@ -11,54 +10,6 @@ import {
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { reduceTexturesToUniqueSources } from './utils.js';
-
-class CopyMaterial extends ShaderMaterial {
-
-	get map() {
-
-		return this.uniforms.map.value;
-
-	}
-	set map( v ) {
-
-		this.uniforms.map.value = v;
-
-	}
-
-	constructor() {
-
-		super( {
-			uniforms: {
-
-				map: { value: null },
-
-			},
-
-			vertexShader: /* glsl */`
-				varying vec2 vUv;
-				void main() {
-
-					vUv = uv;
-					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-
-				}
-			`,
-
-			fragmentShader: /* glsl */`
-				uniform sampler2D map;
-				varying vec2 vUv;
-				void main() {
-
-					gl_FragColor = texture2D( map, vUv );
-
-				}
-			`
-		} );
-
-	}
-
-
-}
 
 const prevColor = new Color();
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
@@ -141,5 +92,53 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		this.fsQuad.dispose();
 
 	}
+
+}
+
+class CopyMaterial extends ShaderMaterial {
+
+	get map() {
+
+		return this.uniforms.map.value;
+
+	}
+	set map( v ) {
+
+		this.uniforms.map.value = v;
+
+	}
+
+	constructor() {
+
+		super( {
+			uniforms: {
+
+				map: { value: null },
+
+			},
+
+			vertexShader: /* glsl */`
+				varying vec2 vUv;
+				void main() {
+
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+				}
+			`,
+
+			fragmentShader: /* glsl */`
+				uniform sampler2D map;
+				varying vec2 vUv;
+				void main() {
+
+					gl_FragColor = texture2D( map, vUv );
+
+				}
+			`
+		} );
+
+	}
+
 
 }
