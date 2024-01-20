@@ -36,6 +36,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 			vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
 			albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
+
 		}
 
 		if ( material.vertexColors ) {

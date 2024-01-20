@@ -7,9 +7,58 @@ import {
 	RepeatWrapping,
 	LinearFilter,
 	NoToneMapping,
+	ShaderMaterial,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { reduceTexturesToUniqueSources } from './utils.js';
+
+class CopyMaterial extends ShaderMaterial {
+
+	get map() {
+
+		return this.uniforms.map.value;
+
+	}
+	set map( v ) {
+
+		this.uniforms.map.value = v;
+
+	}
+
+	constructor() {
+
+		super( {
+			uniforms: {
+
+				map: { value: null },
+
+			},
+
+			vertexShader: /* glsl */`
+				varying vec2 vUv;
+				void main() {
+
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+				}
+			`,
+
+			fragmentShader: /* glsl */`
+				uniform sampler2D map;
+				varying vec2 vUv;
+				void main() {
+
+					gl_FragColor = texture2D( map, vUv );
+
+				}
+			`
+		} );
+
+	}
+
+
+}
 
 const prevColor = new Color();
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
@@ -31,7 +80,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 		};
 
-		const fsQuad = new FullScreenQuad( new MeshBasicMaterial() );
+		const fsQuad = new FullScreenQuad( new CopyMaterial() );
 		this.fsQuad = fsQuad;
 
 	}
@@ -66,7 +115,6 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 				texture.matrix.identity();
 
 				fsQuad.material.map = texture;
-				fsQuad.material.transparent = true;
 
 				renderer.setRenderTarget( this, i );
 				fsQuad.render( renderer );
