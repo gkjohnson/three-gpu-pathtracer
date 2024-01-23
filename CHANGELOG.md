@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - Upgrade to three-mesh-bvh v0.7.0.
 - AreaLights no longer render the light surface.
+- Disabled sobol sampling functionality related to MacOS crashes. It can be re-enabled with the FEATURE_SOBOL define flag.
 
 ### Fixed
 - Models with a negative scale not rendering correctly.
