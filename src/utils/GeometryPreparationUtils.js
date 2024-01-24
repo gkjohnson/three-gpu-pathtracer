@@ -218,3 +218,91 @@ export function mergeMeshes( meshes, options = {} ) {
 	return { geometry, materials, textures };
 
 }
+
+function invertGeometry( geometry ) {
+
+	const index = geometry.index;
+	const position = geometry.attributes.position;
+	const normal = geometry.attributes.normal;
+	const tangent = geometry.attributes.tangent;
+
+	if ( index ) {
+
+		for ( let i = 0, l = index.count; i < l; i += 3 ) {
+
+			const a = index.getX( i );
+			const c = index.getX( i + 2 );
+
+			index.setX( i, c );
+			index.setX( i + 2, a );
+
+		}
+
+		if ( normal ) {
+
+			negateAttribute( normal );
+
+		}
+
+		if ( tangent ) {
+
+			// negateAttribute( tangent );
+
+		}
+
+	} else {
+
+		reverseAttribute( position );
+
+		if ( normal ) {
+
+			reverseAttribute( normal );
+			negateAttribute( normal );
+
+		}
+
+		if ( tangent ) {
+
+			reverseAttribute( tangent );
+			negateAttribute( tangent );
+
+		}
+
+	}
+
+	function reverseAttribute( attr ) {
+
+		const itemSize = attr.itemSize;
+		for ( let i = 0, l = attr.count; i < l; i += 3 ) {
+
+			for ( let c = 0; c < itemSize; c ++ ) {
+
+				const va = attr.getComponent( i, c );
+				const vc = attr.getComponent( i + 2, c );
+
+				attr.setComponent( i, c, vc );
+				attr.setComponent( i, c, va );
+
+			}
+
+		}
+
+	}
+
+	function negateAttribute( attr ) {
+
+		const itemSize = attr.itemSize;
+		for ( let i = 0, l = attr.count; i < l; i ++ ) {
+
+			for ( let c = 0; c < itemSize; c ++ ) {
+
+				const v = attr.getComponent( i, c );
+				attr.setComponent( i, c, v * - 1 );
+
+			}
+
+		}
+
+	}
+
+}
