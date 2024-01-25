@@ -74,13 +74,15 @@
 
 						if ( c.material.color.getHexString() === '7f4c0e' ) {
 
-							c.material.color.set( 0xc2801f ).multiplyScalar( 0.8 );
+							c.material.color.set( 0xc2801f ).multiplyScalar( 0.9 );
 							c.material.roughness = 0.45;
 							c.material.metalness = 0.6;
 
 						} else if ( c.material.color.getHexString() === '613708' )  {
 
-							c.material.color.set( 0xc2801f ).multiplyScalar( 0.5 );
+							c.material.color.set( 0xc2801f );
+							c.material.color.g *= 0.75;
+							c.material.color.b *= 0.75;
 							c.material.roughness = 0.45;
 							c.material.metalness = 0.6;
 
