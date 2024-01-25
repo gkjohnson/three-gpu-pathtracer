@@ -785,6 +785,7 @@ async function updateModel() {
 								color: material.color,
 								roughness: material.roughness || 0,
 								metalness: material.metalness || 0,
+								map: material.map || null,
 
 							} );
 
