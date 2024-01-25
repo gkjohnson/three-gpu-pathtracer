@@ -319,7 +319,7 @@ function buildGui() {
 
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
+	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( updateModel );
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
@@ -774,6 +774,23 @@ async function updateModel() {
 
 					model = res.scene;
 					model.scale.setScalar( 1 );
+
+					model.traverse( c => {
+
+						const { material } = c;
+						if ( material && material.isMeshPhongMaterial ) {
+
+							c.material = new MeshStandardMaterial( {
+
+								color: material.color,
+								roughness: material.roughness || 0,
+								metalness: material.metalness || 0,
+
+							} );
+
+						}
+
+					} );
 
 				},
 			);

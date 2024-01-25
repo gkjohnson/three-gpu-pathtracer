@@ -176,6 +176,7 @@ export function mergeMeshes( meshes, options = {} ) {
 		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
 		geometry.applyMatrix4( mesh.matrixWorld );
 
+		// reverse the winding direction of the triangles if the geometry is inverted
 		if ( mesh.matrixWorld.determinant() < 0 ) {
 
 			geometry.index.array.reverse();
