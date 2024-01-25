@@ -319,7 +319,7 @@ function buildGui() {
 
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
+	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( updateModel );
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
