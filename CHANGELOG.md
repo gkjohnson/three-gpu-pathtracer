@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Fixed
 - Transparent textures no longer have the color incorrectly premultiplied by the alpha.
+- Fix rounding error issue in tiled rendering logic causing some columns and rows of pixels to not be rendered to.
 
 ## [0.0.17] - 2024.01.18
 ### Added
