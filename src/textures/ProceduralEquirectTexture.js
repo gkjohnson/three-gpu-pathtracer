@@ -2,14 +2,13 @@ import {
 	ClampToEdgeWrapping,
 	Color,
 	DataTexture,
-	DataUtils,
 	EquirectangularReflectionMapping,
-	HalfFloatType,
 	LinearFilter,
 	RepeatWrapping,
 	RGBAFormat,
 	Spherical,
 	Vector2,
+	FloatType
 } from 'three';
 
 const _uv = new Vector2();
@@ -21,8 +20,8 @@ export class ProceduralEquirectTexture extends DataTexture {
 	constructor( width = 512, height = 512 ) {
 
 		super(
-			new Uint16Array( width * height * 4 ),
-			width, height, RGBAFormat, HalfFloatType, EquirectangularReflectionMapping,
+			new Float32Array( width * height * 4 ),
+			width, height, RGBAFormat, FloatType, EquirectangularReflectionMapping,
 			RepeatWrapping, ClampToEdgeWrapping, LinearFilter, LinearFilter,
 		);
 
@@ -54,10 +53,10 @@ export class ProceduralEquirectTexture extends DataTexture {
 
 				const i = y * width + x;
 				const i4 = 4 * i;
-				data[ i4 + 0 ] = DataUtils.toHalfFloat( _color.r );
-				data[ i4 + 1 ] = DataUtils.toHalfFloat( _color.g );
-				data[ i4 + 2 ] = DataUtils.toHalfFloat( _color.b );
-				data[ i4 + 3 ] = DataUtils.toHalfFloat( 1.0 );
+				data[ i4 + 0 ] = ( _color.r );
+				data[ i4 + 1 ] = ( _color.g );
+				data[ i4 + 2 ] = ( _color.b );
+				data[ i4 + 3 ] = ( 1.0 );
 
 			}
 
