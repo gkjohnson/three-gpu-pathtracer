@@ -1,6 +1,7 @@
 import { BufferGeometry } from 'three';
 import { StaticGeometryGenerator, MeshBVH } from 'three-mesh-bvh';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
+import { getDummyMesh } from './PathTracingSceneGenerator.js';
 
 export class DynamicPathTracingSceneGenerator {
 
@@ -10,9 +11,39 @@ export class DynamicPathTracingSceneGenerator {
 
 	}
 
-	constructor( scene ) {
+	constructor( objects ) {
 
-		this.objects = Array.isArray( scene ) ? scene : [ scene ];
+		// ensure the objects is an array
+		if ( ! Array.isArray( objects ) ) {
+
+			objects = [ objects ];
+
+		}
+
+		// find all objects in the scene
+		const finalObjects = [];
+		objects.forEach( obj => {
+
+			obj.traverseVisible( c => {
+
+				if ( c.isMesh ) {
+
+					finalObjects.push( c );
+
+				}
+
+			} );
+
+		} );
+
+		// use a dummy object for a fallback
+		if ( finalObjects.length === 0 ) {
+
+			finalObjects.push( getDummyMesh() );
+
+		}
+
+		this.objects = finalObjects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
 		this.materials = null;

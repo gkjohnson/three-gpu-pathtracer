@@ -1,6 +1,15 @@
-import { Mesh } from 'three';
+import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial } from 'three';
 import { SAH, MeshBVH, StaticGeometryGenerator } from 'three-mesh-bvh';
 import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
+
+const dummyMaterial = new MeshBasicMaterial();
+export function getDummyMesh() {
+
+	const emptyGeometry = new BufferGeometry();
+	emptyGeometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 9 ), 3 ) );
+	return new Mesh( emptyGeometry, dummyMaterial );
+
+}
 
 export class PathTracingSceneGenerator {
 
@@ -45,6 +54,12 @@ export class PathTracingSceneGenerator {
 				}
 
 			} );
+
+		}
+
+		if ( meshes.length === 0 ) {
+
+			meshes.push( getDummyMesh() );
 
 		}
 
