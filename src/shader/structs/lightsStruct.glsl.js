@@ -61,18 +61,16 @@ export const lightsStructGLSL = /* glsl */`
 			vec4 s4 = texelFetch1D( tex, i + 4u );
 			vec4 s5 = texelFetch1D( tex, i + 5u );
 			l.radius = s4.r;
-			l.near = s4.g;
-			l.decay = s4.b;
-			l.distance = s4.a;
+			l.decay = s4.g;
+			l.distance = s4.b;
+			l.coneCos = s4.a;
 
-			l.coneCos = s5.r;
-			l.penumbraCos = s5.g;
-			l.iesProfile = int( round( s5.b ) );
+			l.penumbraCos = s5.r;
+			l.iesProfile = int( round( s5.g ) );
 
 		} else {
 
 			l.radius = 0.0;
-			l.near = 0.0;
 			l.decay = 0.0;
 			l.distance = 0.0;
 
