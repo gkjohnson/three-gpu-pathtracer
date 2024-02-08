@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Transparent textures no longer have the color incorrectly premultiplied by the alpha.
 - Fix rounding error issue in tiled rendering logic causing some columns and rows of pixels to not be rendered to.
 - Improve hdr map info to be able to handle any texture type.
+- Path tracing scene generators no longer crash when an empty scene is provided.
+- Native three.js spot light not working correctly.
+- Env map clamping which was causing an incorrect circle of color to display at the poles.
 
 ## [0.0.17] - 2024.01.18
 ### Added
