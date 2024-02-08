@@ -1,4 +1,4 @@
-import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat, FloatType } from 'three';
+import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat, FloatType, ClampToEdgeWrapping } from 'three';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
@@ -187,7 +187,7 @@ export class EquirectHdrInfoUniform {
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
 		const map = preprocessEnvMap( hdr );
 		map.wrapS = RepeatWrapping;
-		map.wrapT = RepeatWrapping;
+		map.wrapT = ClampToEdgeWrapping;
 
 		const { width, height, data } = map.image;
 
