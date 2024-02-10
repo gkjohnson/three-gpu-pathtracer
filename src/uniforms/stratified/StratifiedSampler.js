@@ -35,52 +35,54 @@ export function shuffle( arr ) {
 
 // strataCount : The number of bins per dimension
 // dimensions  : The number of dimensions to generate stratified values for
-export function makeStratifiedSampler( strataCount, dimensions ) {
+// export function makeStratifiedSampler( strataCount, dimensions ) {
 
-	const strata = [];
-	const l = strataCount ** dimensions;
-	for ( let i = 0; i < l; i ++ ) {
+export class StratifiedSampler {
 
-		strata[ i ] = i;
+	constructor( strataCount, dimensions ) {
 
-	}
+		const strata = [];
+		const l = strataCount ** dimensions;
+		for ( let i = 0; i < l; i ++ ) {
 
-	let index = strata.length;
-
-	const sample = [];
-
-	function restart() {
-
-		index = 0;
-
-	}
-
-	function next() {
-
-		if ( index >= strata.length ) {
-
-			shuffle( strata );
-			restart();
+			strata[ i ] = i;
 
 		}
 
-		let stratum = strata[ index ++ ];
+		let index = strata.length;
 
-		for ( let i = 0; i < dimensions; i ++ ) {
+		const sample = [];
 
-			sample[ i ] = stratum % strataCount + Math.random();
-			stratum = Math.floor( stratum / strataCount );
+		this.strataCount = strataCount;
 
-		}
+		this.restart = function () {
 
-		return sample;
+			index = 0;
+
+		};
+
+		this.next = function () {
+
+			if ( index >= strata.length ) {
+
+				shuffle( strata );
+				this.restart();
+
+			}
+
+			let stratum = strata[ index ++ ];
+
+			for ( let i = 0; i < dimensions; i ++ ) {
+
+				sample[ i ] = stratum % strataCount + Math.random();
+				stratum = Math.floor( stratum / strataCount );
+
+			}
+
+			return sample;
+
+		};
 
 	}
-
-	return {
-		next,
-		restart,
-		strataCount
-	};
 
 }

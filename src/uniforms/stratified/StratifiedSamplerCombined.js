@@ -8,7 +8,7 @@ e.g. instead of sampling a 6D domain, we sample a 2D + 2D + 2D domain.
 This reaps many benefits of stratification while still allowing for small strata sizes.
 */
 
-import { makeStratifiedSampler } from './StratifiedSampler.js';
+import { StratifiedSampler } from './StratifiedSampler.js';
 
 export function makeStratifiedSamplerCombined( strataCount, listOfDimensions ) {
 
@@ -16,7 +16,7 @@ export function makeStratifiedSamplerCombined( strataCount, listOfDimensions ) {
 
 	for ( const dim of listOfDimensions ) {
 
-		strataObjs.push( makeStratifiedSampler( strataCount, dim ) );
+		strataObjs.push( new StratifiedSampler( strataCount, dim ) );
 
 	}
 

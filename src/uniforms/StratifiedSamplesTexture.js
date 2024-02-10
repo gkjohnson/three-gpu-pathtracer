@@ -31,6 +31,8 @@ export class StratifiedSamplesTexture extends DataTexture {
 
 		const dimensions = new Array( count * depth ).fill( 4 );
 		this.sampler = makeStratifiedSamplerCombined( strata, dimensions );
+
+		this.dispose();
 		this.next();
 
 	}
