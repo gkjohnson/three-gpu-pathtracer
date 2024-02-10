@@ -72,7 +72,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
 				FEATURE_FOG: 1,
-				FEATURE_SOBOL: 0,
+
+				// 0 = PCG
+				// 1 = Sobol
+				// 2 = Stratified List
+				RANDOM_TYPE: 0,
+
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -153,13 +158,19 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ materialStructGLSL }
 
 				// random
-				${ pcgGLSL }
-				#if FEATURE_SOBOL
+				#if RANDOM_TYPE == 2 	// Stratified List
 
+
+
+				#elif RANDOM_TYPE == 1 	// Sobol
+
+					${ pcgGLSL }
 					${ sobolCommonGLSL }
 					${ sobolSamplingGLSL }
 
-				#else
+				#else 					// PCG
+
+					${ pcgGLSL }
 
 					// Using the sobol functions seems to break the the compiler on MacOS
 					// - specifically the "sobolReverseBits" function.
