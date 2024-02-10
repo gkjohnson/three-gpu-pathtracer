@@ -44,6 +44,8 @@ function* renderTask() {
 		const h = _primaryTarget.height;
 		material.resolution.set( w * subW, h * subH );
 		material.sobolTexture = _sobolTarget.texture;
+		material.stratifiedTexture.init( 20, material.bounces + material.transmissiveBounces + 5 );
+		material.stratifiedTexture.next();
 		material.seed ++;
 
 		const tilesX = this.tiles.x || 1;
