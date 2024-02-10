@@ -14,13 +14,16 @@ export class StratifiedSamplerCombined {
 
 	constructor( strataCount, listOfDimensions ) {
 
-		const combined = [];
+		let total = 0;
 		const strataObjs = [];
 		for ( const dim of listOfDimensions ) {
 
+			total += strataCount ** dim;
 			strataObjs.push( new StratifiedSampler( strataCount, dim ) );
 
 		}
+
+		const combined = new Float32Array( total );
 
 		this.strataCount = strataCount;
 

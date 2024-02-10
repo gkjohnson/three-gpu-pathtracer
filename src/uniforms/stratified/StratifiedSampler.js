@@ -39,16 +39,16 @@ export class StratifiedSampler {
 
 	constructor( strataCount, dimensions ) {
 
-		const sample = [];
-		const strata = [];
 		const l = strataCount ** dimensions;
+		const sample = new Float32Array( dimensions );
+		const strata = new Uint16Array( l );
+		let index = l;
+
 		for ( let i = 0; i < l; i ++ ) {
 
 			strata[ i ] = i;
 
 		}
-
-		let index = strata.length;
 
 		this.strataCount = strataCount;
 
