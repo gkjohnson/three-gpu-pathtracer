@@ -80,62 +80,75 @@ export class DynamicPathTracingSceneGenerator {
 
 	dispose() {}
 
-	generate() {
+	prepScene() {
 
-		const { objects, staticGeometryGenerator, geometry, lights, bvhOptions, attributes } = this;
-		if ( this.bvh === null ) {
+		if ( this.bvh !== null ) {
 
-			for ( let i = 0, l = objects.length; i < l; i ++ ) {
+			return;
 
-				objects[ i ].traverse( c => {
+		}
 
-					if ( c.isMesh ) {
+		const { objects, staticGeometryGenerator, geometry, lights, attributes } = this;
+		for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
-						const normalMapRequired = ! ! c.material.normalMap;
-						setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+			objects[ i ].traverse( c => {
 
-					} else if (
-						c.isRectAreaLight ||
-						c.isSpotLight ||
-						c.isPointLight ||
-						c.isDirectionalLight
-					) {
+				if ( c.isMesh ) {
 
-						lights.push( c );
+					const normalMapRequired = ! ! c.material.normalMap;
+					setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
 
-					}
+				} else if (
+					c.isRectAreaLight ||
+					c.isSpotLight ||
+					c.isPointLight ||
+					c.isDirectionalLight
+				) {
 
-				} );
-
-			}
-
-			const textureSet = new Set();
-			const materials = staticGeometryGenerator.getMaterials();
-			materials.forEach( material => {
-
-				for ( const key in material ) {
-
-					const value = material[ key ];
-					if ( value && value.isTexture ) {
-
-						textureSet.add( value );
-
-					}
+					lights.push( c );
 
 				}
 
 			} );
 
-			staticGeometryGenerator.attributes = attributes;
-			staticGeometryGenerator.generate( geometry );
+		}
 
-			const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
-			geometry.setAttribute( 'materialIndex', materialIndexAttribute );
-			geometry.clearGroups();
+		const textureSet = new Set();
+		const materials = staticGeometryGenerator.getMaterials();
+		materials.forEach( material => {
 
+			for ( const key in material ) {
+
+				const value = material[ key ];
+				if ( value && value.isTexture ) {
+
+					textureSet.add( value );
+
+				}
+
+			}
+
+		} );
+
+		staticGeometryGenerator.attributes = attributes;
+		staticGeometryGenerator.generate( geometry );
+
+		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
+		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
+		geometry.clearGroups();
+
+		this.materials = materials;
+		this.textures = Array.from( textureSet );
+
+	}
+
+	generate() {
+
+		const { objects, staticGeometryGenerator, geometry, bvhOptions } = this;
+		if ( this.bvh === null ) {
+
+			this.prepScene();
 			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...bvhOptions } );
-			this.materials = materials;
-			this.textures = Array.from( textureSet );
 
 			return {
 				lights: this.lights,
