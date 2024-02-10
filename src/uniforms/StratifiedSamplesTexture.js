@@ -41,11 +41,7 @@ export class StratifiedSamplesTexture extends DataTexture {
 
 		const data = this.image.data;
 		const samples = this.sampler.next();
-		for ( let i = 0; i < samples.length; i ++ ) {
-
-			data[ i ] = samples[ i ];
-
-		}
+		data.set( samples );
 
 		this.needsUpdate = true;
 

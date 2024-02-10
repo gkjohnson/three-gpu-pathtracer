@@ -18,7 +18,7 @@ export class StratifiedSamplerCombined {
 		const strataObjs = [];
 		for ( const dim of listOfDimensions ) {
 
-			total += strataCount ** dim;
+			total += dim;
 			strataObjs.push( new StratifiedSampler( strataCount, dim ) );
 
 		}
