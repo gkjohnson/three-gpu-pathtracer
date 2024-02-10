@@ -41,10 +41,9 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 	void rng_initialize( vec2 screenCoord, int frame ) {
 
-		vec2 noiseSize = vec2( textureSize( stratifiedOffsetTexture, 0 ) );
-
 		// tile the small noise texture across the entire screen
-		pixelSeed = texture( stratifiedOffsetTexture, screenCoord / noiseSize ).r;
+		ivec2 noiseSize = ivec2( textureSize( stratifiedOffsetTexture, 0 ) );
+		pixelSeed = texelFetch( stratifiedOffsetTexture, ivec2( screenCoord.xy ) % noiseSize, 0 ).r;
 
 		WHITE_NOISE_SEED = uvec4( screenCoord, uint( frame ), uint( screenCoord.x ) + uint( screenCoord.y ) );
 
