@@ -40,7 +40,7 @@ export class StratifiedSampler {
 	constructor( strataCount, dimensions ) {
 
 		const l = strataCount ** dimensions;
-		const sample = new Float32Array( dimensions );
+		const samples = new Float32Array( dimensions );
 		const strata = new Uint16Array( l );
 		let index = l;
 
@@ -49,6 +49,8 @@ export class StratifiedSampler {
 			strata[ i ] = i;
 
 		}
+
+		this.samples = samples;
 
 		this.strataCount = strataCount;
 
@@ -71,12 +73,12 @@ export class StratifiedSampler {
 
 			for ( let i = 0; i < dimensions; i ++ ) {
 
-				sample[ i ] = ( stratum % strataCount + Math.random() ) / strataCount;
+				samples[ i ] = ( stratum % strataCount + Math.random() ) / strataCount;
 				stratum = Math.floor( stratum / strataCount );
 
 			}
 
-			return sample;
+			return samples;
 
 		};
 

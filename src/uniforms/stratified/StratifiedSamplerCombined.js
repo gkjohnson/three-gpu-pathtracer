@@ -25,6 +25,8 @@ export class StratifiedSamplerCombined {
 
 		const combined = new Float32Array( total );
 
+		this.samples = combined;
+
 		this.strataCount = strataCount;
 
 		this.next = function () {

@@ -25,12 +25,14 @@ export class StratifiedSamplesTexture extends DataTexture {
 
 		}
 
+		const dimensions = new Array( count * depth ).fill( 4 );
+		const sampler = new StratifiedSamplerCombined( strata, dimensions );
+
 		image.width = depth;
 		image.height = count;
-		image.data = new Float32Array( depth * count * 4 );
+		image.data = sampler.samples;
 
-		const dimensions = new Array( count * depth ).fill( 4 );
-		this.sampler = new StratifiedSamplerCombined( strata, dimensions );
+		this.sampler = sampler;
 
 		this.dispose();
 		this.next();
@@ -39,10 +41,7 @@ export class StratifiedSamplesTexture extends DataTexture {
 
 	next() {
 
-		const data = this.image.data;
-		const samples = this.sampler.next();
-		data.set( samples );
-
+		this.sampler.next();
 		this.needsUpdate = true;
 
 	}
