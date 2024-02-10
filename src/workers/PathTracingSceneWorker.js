@@ -11,6 +11,18 @@ export class PathTracingSceneWorker {
 
 	generate( scene, options = {} ) {
 
+		// ensure scene transforms are up to date
+		// TODO: remove this?
+		if ( Array.isArray( scene ) ) {
+
+			scene.forEach( s => s.updateMatrixWorld( true ) );
+
+		} else {
+
+			scene.updateMatrixWorld( true );
+
+		}
+
 		const { bvhGenerator } = this;
 		const sceneGenerator = new DynamicPathTracingSceneGenerator( scene );
 		sceneGenerator.prepScene();

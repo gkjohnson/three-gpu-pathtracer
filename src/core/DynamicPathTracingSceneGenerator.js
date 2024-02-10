@@ -32,8 +32,6 @@ export class DynamicPathTracingSceneGenerator {
 		const finalObjects = [];
 		objects.forEach( obj => {
 
-			obj.updateMatrixWorld( true );
-
 			obj.traverseVisible( c => {
 
 				if ( c.isMesh ) {
