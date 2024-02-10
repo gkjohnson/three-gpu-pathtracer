@@ -32,11 +32,23 @@ export class DynamicPathTracingSceneGenerator {
 		const finalObjects = [];
 		objects.forEach( obj => {
 
+			obj.updateMatrixWorld( true );
+
 			obj.traverseVisible( c => {
 
 				if ( c.isMesh ) {
 
-					finalObjects.push( c );
+					// handle inverted scales
+					const o = new Mesh( c.geometry, c.material );
+					o.matrixWorld.copy( c.matrixWorld );
+					finalObjects.push( o );
+
+					if ( c.matrixWorld.determinant() < 0 ) {
+
+						o.geometry = o.geometry.clone();
+						o.geometry.index.array.reverse();
+
+					}
 
 				}
 
