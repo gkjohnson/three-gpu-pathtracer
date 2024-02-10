@@ -1,23 +1,34 @@
-import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
-import { SAH } from 'three-mesh-bvh';
 import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js';
+import { DynamicPathTracingSceneGenerator } from '../core/DynamicPathTracingSceneGenerator.js';
 
-export class PathTracingSceneWorker extends PathTracingSceneGenerator {
+export class PathTracingSceneWorker {
 
 	constructor() {
 
-		super();
 		this.bvhGenerator = new GenerateMeshBVHWorker();
 
 	}
 
 	generate( scene, options = {} ) {
 
-		const { bvhGenerator } = this;
-		const { geometry, materials, textures, lights, spotLights } = this.prepScene( scene );
+		// ensure scene transforms are up to date
+		// TODO: remove this?
+		if ( Array.isArray( scene ) ) {
 
-		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
-		const bvhPromise = bvhGenerator.generate( geometry, bvhOptions );
+			scene.forEach( s => s.updateMatrixWorld( true ) );
+
+		} else {
+
+			scene.updateMatrixWorld( true );
+
+		}
+
+		const { bvhGenerator } = this;
+		const sceneGenerator = new DynamicPathTracingSceneGenerator( scene );
+		sceneGenerator.prepScene();
+
+		const { geometry, materials, textures, lights } = sceneGenerator;
+		const bvhPromise = bvhGenerator.generate( geometry, options );
 		return bvhPromise.then( bvh => {
 
 			return {
@@ -25,7 +36,6 @@ export class PathTracingSceneWorker extends PathTracingSceneGenerator {
 				materials,
 				textures,
 				lights,
-				spotLights,
 				bvh,
 			};
 
