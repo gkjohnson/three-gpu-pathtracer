@@ -40,7 +40,6 @@ export class StratifiedSampler {
 	constructor( strataCount, dimensions ) {
 
 		const l = strataCount ** dimensions;
-		const samples = new Float32Array( dimensions );
 		const strata = new Uint16Array( l );
 		let index = l;
 
@@ -50,7 +49,7 @@ export class StratifiedSampler {
 
 		}
 
-		this.samples = samples;
+		this.samples = new Float32Array( dimensions );
 
 		this.strataCount = strataCount;
 
@@ -61,6 +60,8 @@ export class StratifiedSampler {
 		};
 
 		this.next = function () {
+
+			const { samples } = this;
 
 			if ( index >= strata.length ) {
 

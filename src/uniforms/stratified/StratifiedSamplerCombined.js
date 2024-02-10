@@ -14,16 +14,25 @@ export class StratifiedSamplerCombined {
 
 	constructor( strataCount, listOfDimensions ) {
 
-		let total = 0;
-		const strataObjs = [];
+		let totalDim = 0;
 		for ( const dim of listOfDimensions ) {
 
-			total += dim;
-			strataObjs.push( new StratifiedSampler( strataCount, dim ) );
+			totalDim += dim;
 
 		}
 
-		const combined = new Float32Array( total );
+		const combined = new Float32Array( totalDim );
+		const strataObjs = [];
+		let offset = 0;
+		for ( const dim of listOfDimensions ) {
+
+			const sampler = new StratifiedSampler( strataCount, dim );
+			sampler.samples = new Float32Array( combined.buffer, offset, sampler.samples.length );
+			offset += sampler.samples.length * 4;
+			strataObjs.push( sampler );
+
+		}
+
 
 		this.samples = combined;
 
@@ -31,17 +40,9 @@ export class StratifiedSamplerCombined {
 
 		this.next = function () {
 
-			let i = 0;
-
 			for ( const strata of strataObjs ) {
 
-				const nums = strata.next();
-
-				for ( const num of nums ) {
-
-					combined[ i ++ ] = num;
-
-				}
+				strata.next();
 
 			}
 
