@@ -173,6 +173,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					${ sobolCommonGLSL }
 					${ sobolSamplingGLSL }
 
+					#define rand(v) sobol(v)
+					#define rand2(v) sobol2(v)
+					#define rand3(v) sobol3(v)
+					#define rand4(v) sobol4(v)
+
 				#else 					// PCG
 
 					${ pcgGLSL }
@@ -183,15 +188,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					uint sobolPathIndex = 0u;
 					uint sobolBounceIndex = 0u;
 
-					// #define rand sobol
-					// #define rand2 sobol2
-					// #define rand3 sobol3
-					// #define rand4 sobol4
-
-					#define sobol(v) pcgRand()
-					#define sobol2(v) pcgRand2()
-					#define sobol3(v) pcgRand3()
-					#define sobol4(v) pcgRand4()
+					#define rand(v) pcgRand()
+					#define rand2(v) pcgRand2()
+					#define rand3(v) pcgRand3()
+					#define rand4(v) pcgRand4()
 
 				#endif
 
@@ -378,7 +378,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( state.firstRay || state.transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( envRotation3x3 * ray.direction, sobol2( 2 ) ) * state.throughputColor;
+								gl_FragColor.rgb += sampleBackground( envRotation3x3 * ray.direction, rand2( 2 ) ) * state.throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {
@@ -469,7 +469,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						scatterRec = bsdfSample( - ray.direction, surf );
-						state.isShadowRay = scatterRec.specularPdf < sobol( 4 );
+						state.isShadowRay = scatterRec.specularPdf < rand( 4 );
 
 						bool isBelowSurface = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal ) < 0.0;
 						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, surfaceHit.dist );
@@ -539,7 +539,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						rrProb = sqrt( rrProb );
 						rrProb = max( rrProb, depthProb );
 						rrProb = min( rrProb, 1.0 );
-						if ( sobol( 8 ) > rrProb ) {
+						if ( rand( 8 ) > rrProb ) {
 
 							break;
 

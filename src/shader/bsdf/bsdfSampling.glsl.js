@@ -102,7 +102,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 	vec3 diffuseDirection( vec3 wo, SurfaceRecord surf ) {
 
-		vec3 lightDirection = sampleSphere( sobol2( 11 ) );
+		vec3 lightDirection = sampleSphere( rand2( 11 ) );
 		lightDirection.z += 1.0;
 		lightDirection = normalize( lightDirection );
 
@@ -147,7 +147,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( roughness ),
-			sobol2( 12 )
+			rand2( 12 )
 		);
 
 		// apply to new ray by reflecting off the new normal
@@ -184,7 +184,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( filteredRoughness ),
-			sobol2( 13 )
+			rand2( 13 )
 		);
 
 		vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
@@ -221,7 +221,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float roughness = surf.filteredRoughness;
 		float eta = surf.eta;
-		vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( sobol2( 13 ) ) * roughness );
+		vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( rand2( 13 ) ) * roughness );
 		vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
 
 		if ( surf.thinFilm ) {
@@ -262,7 +262,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( roughness ),
-			sobol2( 14 )
+			rand2( 14 )
 		);
 
 		// apply to new ray by reflecting off the new normal
@@ -413,7 +413,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
 			sampleRec.pdf = 1.0 / ( 4.0 * PI );
-			sampleRec.direction = sampleSphere( sobol2( 16 ) );
+			sampleRec.direction = sampleSphere( rand2( 16 ) );
 			sampleRec.color = surf.color / ( 4.0 * PI );
 			return sampleRec;
 
@@ -465,7 +465,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 wi;
 		vec3 clearcoatWi;
 
-		float r = sobol( 15 );
+		float r = rand( 15 );
 		if ( r <= cdf[0] ) { // diffuse
 
 			wi = diffuseDirection( wo, surf );

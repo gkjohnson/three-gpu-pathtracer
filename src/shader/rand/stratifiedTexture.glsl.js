@@ -33,28 +33,28 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 	}
 
-	vec4 sobol4( int v ) {
+	vec4 rand4( int v ) {
 
 		vec4 stratifiedSample = texelFetch( stratifiedTexture, ivec2( v, sobolBounceIndex ), 0 );
 		return fract( stratifiedSample + pixelSeed ); // blue noise + stratified samples
 
 	}
 
-	vec3 sobol3( int v ) {
+	vec3 rand3( int v ) {
 
-		return sobol4( v ).xyz;
-
-	}
-
-	vec2 sobol2( int v ) {
-
-		return sobol4( v ).xy;
+		return rand4( v ).xyz;
 
 	}
 
-	float sobol( int v ) {
+	vec2 rand2( int v ) {
 
-		return sobol4( v ).x;
+		return rand4( v ).xy;
+
+	}
+
+	float rand( int v ) {
+
+		return rand4( v ).x;
 
 	}
 
