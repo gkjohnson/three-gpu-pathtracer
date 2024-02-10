@@ -10,52 +10,54 @@ This reaps many benefits of stratification while still allowing for small strata
 
 import { StratifiedSampler } from './StratifiedSampler.js';
 
-export function makeStratifiedSamplerCombined( strataCount, listOfDimensions ) {
+// export function makeStratifiedSamplerCombined( strataCount, listOfDimensions ) {
 
-	const strataObjs = [];
+export class StratifiedSamplerCombined {
 
-	for ( const dim of listOfDimensions ) {
+	constructor( strataCount, listOfDimensions ) {
 
-		strataObjs.push( new StratifiedSampler( strataCount, dim ) );
+		const strataObjs = [];
 
-	}
+		for ( const dim of listOfDimensions ) {
 
-	const combined = [];
+			strataObjs.push( new StratifiedSampler( strataCount, dim ) );
 
-	function next() {
+		}
 
-		let i = 0;
+		const combined = [];
 
-		for ( const strata of strataObjs ) {
+		this.strataCount = strataCount;
 
-			const nums = strata.next();
+		this.next = function () {
 
-			for ( const num of nums ) {
+			let i = 0;
 
-				combined[ i ++ ] = num;
+			for ( const strata of strataObjs ) {
+
+				const nums = strata.next();
+
+				for ( const num of nums ) {
+
+					combined[ i ++ ] = num;
+
+				}
 
 			}
 
-		}
+			return combined;
 
-		return combined;
+		};
+
+		this.restart = function () {
+
+			for ( const strata of strataObjs ) {
+
+				strata.restart();
+
+			}
+
+		};
 
 	}
-
-	function restart() {
-
-		for ( const strata of strataObjs ) {
-
-			strata.restart();
-
-		}
-
-	}
-
-	return {
-		next,
-		restart,
-		strataCount
-	};
 
 }

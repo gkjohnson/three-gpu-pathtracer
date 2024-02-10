@@ -1,5 +1,5 @@
 import { DataTexture, FloatType, NearestFilter, RGBAFormat } from 'three';
-import { makeStratifiedSamplerCombined } from './stratified/StratifiedSamplerCombined.js';
+import { StratifiedSamplerCombined } from './stratified/StratifiedSamplerCombined.js';
 
 export class StratifiedSamplesTexture extends DataTexture {
 
@@ -30,7 +30,7 @@ export class StratifiedSamplesTexture extends DataTexture {
 		image.data = new Float32Array( depth * count * 4 );
 
 		const dimensions = new Array( count * depth ).fill( 4 );
-		this.sampler = makeStratifiedSamplerCombined( strata, dimensions );
+		this.sampler = new StratifiedSamplerCombined( strata, dimensions );
 
 		this.dispose();
 		this.next();
