@@ -1,7 +1,15 @@
-import { BufferGeometry } from 'three';
-import { StaticGeometryGenerator, MeshBVH } from 'three-mesh-bvh';
+import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
+import { StaticGeometryGenerator, MeshBVH, SAH } from 'three-mesh-bvh';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
-import { getDummyMesh } from './PathTracingSceneGenerator.js';
+
+const dummyMaterial = new MeshBasicMaterial();
+export function getDummyMesh() {
+
+	const emptyGeometry = new BufferGeometry();
+	emptyGeometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 9 ), 3 ) );
+	return new Mesh( emptyGeometry, dummyMaterial );
+
+}
 
 export class DynamicPathTracingSceneGenerator {
 
@@ -43,6 +51,11 @@ export class DynamicPathTracingSceneGenerator {
 
 		}
 
+		// options
+		this.bvhOptions = {};
+		this.attributes = [ 'position', 'normal', 'tangent', 'color', 'uv', 'uv2' ];
+
+		// state
 		this.objects = finalObjects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
@@ -69,10 +82,8 @@ export class DynamicPathTracingSceneGenerator {
 
 	generate() {
 
-		const { objects, staticGeometryGenerator, geometry, lights } = this;
+		const { objects, staticGeometryGenerator, geometry, lights, bvhOptions, attributes } = this;
 		if ( this.bvh === null ) {
-
-			const attributes = [ 'position', 'normal', 'tangent', 'uv', 'color' ];
 
 			for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
@@ -122,7 +133,7 @@ export class DynamicPathTracingSceneGenerator {
 			geometry.setAttribute( 'materialIndex', materialIndexAttribute );
 			geometry.clearGroups();
 
-			this.bvh = new MeshBVH( geometry );
+			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...bvhOptions } );
 			this.materials = materials;
 			this.textures = Array.from( textureSet );
 
