@@ -1,5 +1,5 @@
 import { BufferAttribute } from 'three';
-import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
 	const indexAttr = geometry.index;
@@ -51,25 +51,6 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 	}
 
 	return new BufferAttribute( materialArray, 1, false );
-
-}
-
-export function trimToAttributes( geometry, attributes ) {
-
-	// trim any unneeded attributes
-	if ( attributes ) {
-
-		for ( const key in geometry.attributes ) {
-
-			if ( ! attributes.includes( key ) ) {
-
-				geometry.deleteAttribute( key );
-
-			}
-
-		}
-
-	}
 
 }
 
@@ -135,87 +116,5 @@ export function setCommonAttributes( geometry, options ) {
 		geometry.setIndex( array );
 
 	}
-
-}
-
-export function mergeMeshes( meshes, options = {} ) {
-
-	options = { attributes: null, cloneGeometry: true, ...options };
-
-	const transformedGeometry = [];
-	const materialSet = new Set();
-	for ( let i = 0, l = meshes.length; i < l; i ++ ) {
-
-		// save any materials
-		const mesh = meshes[ i ];
-		if ( mesh.visible === false ) continue;
-
-		if ( Array.isArray( mesh.material ) ) {
-
-			mesh.material.forEach( m => materialSet.add( m ) );
-
-		} else {
-
-			materialSet.add( mesh.material );
-
-		}
-
-	}
-
-	const materials = Array.from( materialSet );
-	for ( let i = 0, l = meshes.length; i < l; i ++ ) {
-
-		// ensure the matrix world is up to date
-		const mesh = meshes[ i ];
-		if ( mesh.visible === false ) continue;
-
-		mesh.updateMatrixWorld();
-
-		// apply the matrix world to the geometry
-		const originalGeometry = meshes[ i ].geometry;
-		const geometry = options.cloneGeometry ? originalGeometry.clone() : originalGeometry;
-		geometry.applyMatrix4( mesh.matrixWorld );
-
-		// reverse the winding direction of the triangles if the geometry is inverted
-		if ( mesh.matrixWorld.determinant() < 0 ) {
-
-			geometry.index.array.reverse();
-
-		}
-
-		// ensure our geometry has common attributes
-		setCommonAttributes( geometry, {
-			attributes: options.attributes,
-			normalMapRequired: ! ! mesh.material.normalMap,
-		} );
-		trimToAttributes( geometry, options.attributes );
-
-		// create the material index attribute
-		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, mesh.material, materials );
-		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
-
-		transformedGeometry.push( geometry );
-
-	}
-
-	const textureSet = new Set();
-	materials.forEach( material => {
-
-		for ( const key in material ) {
-
-			const value = material[ key ];
-			if ( value && value.isTexture ) {
-
-				textureSet.add( value );
-
-			}
-
-		}
-
-	} );
-
-	const geometry = mergeGeometries( transformedGeometry, false );
-	const textures = Array.from( textureSet );
-	return { geometry, materials, textures };
 
 }
