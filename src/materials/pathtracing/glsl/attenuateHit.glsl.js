@@ -117,7 +117,7 @@ export const attenuateHitGLSL = /* glsl */`
 				bool useAlphaTest = alphaTest != 0.0;
 				float transmissionFactor = ( 1.0 - metalness ) * transmission;
 				if (
-					transmissionFactor < rand() && ! (
+					transmissionFactor < pcgRand() && ! (
 						// material sidedness
 						material.side != 0.0 && surfaceHit.side == material.side
 
@@ -125,7 +125,7 @@ export const attenuateHitGLSL = /* glsl */`
 						|| useAlphaTest && albedo.a < alphaTest
 
 						// opacity
-						|| material.transparent && ! useAlphaTest && albedo.a < rand()
+						|| material.transparent && ! useAlphaTest && albedo.a < pcgRand()
 					)
 				) {
 
