@@ -48,6 +48,7 @@ import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
 import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
 import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
 import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
+import { stratifiedTextureGLSL } from '../../shader/rand/stratifiedTexture.glsl.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -76,7 +77,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// 0 = PCG
 				// 1 = Sobol
 				// 2 = Stratified List
-				RANDOM_TYPE: 0,
+				RANDOM_TYPE: 2,
 
 				// 0 = Perspective
 				// 1 = Orthographic
@@ -119,6 +120,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				backgroundAlpha: { value: 1.0 },
 				sobolTexture: { value: null },
+				stratifiedTexture: { value: null },
+				stratifiedNoiseTexture: { value: null },
 			},
 
 			vertexShader: /* glsl */`
@@ -160,7 +163,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// random
 				#if RANDOM_TYPE == 2 	// Stratified List
 
-
+					${ stratifiedTextureGLSL }
 
 				#elif RANDOM_TYPE == 1 	// Sobol
 
