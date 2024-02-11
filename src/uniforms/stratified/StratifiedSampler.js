@@ -18,6 +18,7 @@ The fractional part is the random number.
 To obtain the stratified sample between [0, 1), divide the returned sample by the stratum count.
 */
 
+// TODO: it seems like we should shuffle within the strata?
 export function shuffle( arr ) {
 
 	for ( let i = arr.length - 1; i > 0; i -- ) {
