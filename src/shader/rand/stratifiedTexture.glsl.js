@@ -35,12 +35,7 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 	vec4 rand4( int v ) {
 
-		// TODO: this offset isn't exactly correct because it's shifting into space
-		// reserved for other stratified samplers. The full stratified sampler should be available here
-		ivec2 dim = textureSize( stratifiedTexture, 0 );
-		int offset = int( pixelSeed.r * float( dim.x ) );
-
-		ivec2 uv = ivec2( ( v + offset ) % dim.x, sobolBounceIndex );
+		ivec2 uv = ivec2( v, sobolBounceIndex );
 		vec4 stratifiedSample = texelFetch( stratifiedTexture, uv, 0 );
 		return fract( stratifiedSample + pixelSeed.g ); // blue noise + stratified samples
 
