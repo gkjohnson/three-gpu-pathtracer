@@ -37,7 +37,7 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 		ivec2 uv = ivec2( v, sobolBounceIndex );
 		vec4 stratifiedSample = texelFetch( stratifiedTexture, uv, 0 );
-		return fract( stratifiedSample + pixelSeed.g ); // blue noise + stratified samples
+		return fract( stratifiedSample + pixelSeed.r ); // blue noise + stratified samples
 
 	}
 
