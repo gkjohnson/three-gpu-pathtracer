@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Env map clamping which was causing an incorrect circle of color to display at the poles.
 
 ### Added
-- Support for stratified sampling
+- Support for stratified sampling in addition to PCG and Sobol under the RANDOM_TYPE flag.
 
 ## [0.0.17] - 2024.01.18
 ### Added
