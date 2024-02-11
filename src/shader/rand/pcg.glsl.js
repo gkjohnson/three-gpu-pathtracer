@@ -27,28 +27,28 @@ export const pcgGLSL = /* glsl */`
 	}
 
 	// returns [ 0, 1 ]
-	float rand() {
+	float pcgRand() {
 
 		pcg4d( WHITE_NOISE_SEED );
 		return float( WHITE_NOISE_SEED.x ) / float( 0xffffffffu );
 
 	}
 
-	vec2 rand2() {
+	vec2 pcgRand2() {
 
 		pcg4d( WHITE_NOISE_SEED );
 		return vec2( WHITE_NOISE_SEED.xy ) / float(0xffffffffu);
 
 	}
 
-	vec3 rand3() {
+	vec3 pcgRand3() {
 
 		pcg4d( WHITE_NOISE_SEED );
 		return vec3( WHITE_NOISE_SEED.xyz ) / float( 0xffffffffu );
 
 	}
 
-	vec4 rand4() {
+	vec4 pcgRand4() {
 
 		pcg4d( WHITE_NOISE_SEED );
 		return vec4( WHITE_NOISE_SEED ) / float( 0xffffffffu );

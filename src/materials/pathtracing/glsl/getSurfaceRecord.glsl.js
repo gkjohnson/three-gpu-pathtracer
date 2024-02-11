@@ -68,7 +68,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 			|| useAlphaTest && albedo.a < alphaTest
 
 			// opacity
-			|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
+			|| material.transparent && ! useAlphaTest && albedo.a < rand( 3 )
 		) {
 
 			return SKIP_SURFACE;
