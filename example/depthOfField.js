@@ -59,7 +59,6 @@ async function init() {
 	ptRenderer.camera = camera;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
 	ptRenderer.material.backgroundMap = gradientMap;
 	ptRenderer.material.environmentIntensity = 0.5;
 
