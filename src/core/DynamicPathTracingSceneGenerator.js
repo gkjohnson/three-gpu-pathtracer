@@ -28,37 +28,8 @@ export class DynamicPathTracingSceneGenerator {
 
 		}
 
-		// find all objects in the scene
-		const finalObjects = [];
-		objects.forEach( obj => {
-
-			obj.traverseVisible( c => {
-
-				if ( c.isMesh ) {
-
-					// handle inverted scales
-					const o = new Mesh( c.geometry, c.material );
-					o.matrixWorld.copy( c.matrixWorld );
-					finalObjects.push( o );
-
-					if ( c.matrixWorld.determinant() < 0 ) {
-
-						o.geometry = o.geometry.clone();
-						o.geometry.index.array.reverse();
-
-					}
-
-				} else if ( c.isLight ) {
-
-					finalObjects.push( c );
-
-				}
-
-			} );
-
-		} );
-
 		// use a dummy object for a fallback
+		const finalObjects = [ ...objects ];
 		if ( finalObjects.length === 0 ) {
 
 			finalObjects.push( getDummyMesh() );

@@ -71,6 +71,13 @@ export function setCommonAttributes( geometry, options ) {
 
 	}
 
+	if ( ! geometry.attributes.uv2 && ( attributes && attributes.includes( 'uv2' ) ) ) {
+
+		const vertCount = geometry.attributes.position.count;
+		geometry.setAttribute( 'uv2', new BufferAttribute( new Float32Array( vertCount * 2 ), 2, false ) );
+
+	}
+
 	if ( ! geometry.attributes.tangent && ( attributes && attributes.includes( 'tangent' ) ) ) {
 
 		if ( normalMapRequired ) {
