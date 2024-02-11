@@ -8,6 +8,9 @@ export const attenuateHitGLSL = /* glsl */`
 		out vec3 color
 	) {
 
+		// store the original bounce index so we can reset it after
+		uint originalBounceIndex = sobolBounceIndex;
+
 		int traversals = state.traversals;
 		int transmissiveTraversals = state.transmissiveTraversals;
 		bool isShadowRay = state.isShadowRay;
@@ -20,22 +23,25 @@ export const attenuateHitGLSL = /* glsl */`
 
 		color = vec3( 1.0 );
 
-		// TODO: we should be using sobol sampling here instead of rand but the sobol bounce and path indices need to be incremented
-		// and then reset.
+		bool result = true;
 		for ( int i = 0; i < traversals; i ++ ) {
+
+			sobolBounceIndex ++;
 
 			int hitType = traceScene( ray, fogMaterial, surfaceHit );
 
 			if ( hitType == FOG_HIT ) {
 
-				return true;
+				result = true;
+				break;
 
 			} else if ( hitType == SURFACE_HIT ) {
 
 				float totalDist = distance( startPoint, ray.origin + ray.direction * surfaceHit.dist );
 				if ( totalDist > rayDist ) {
 
-					return false;
+					result = false;
+					break;
 
 				}
 
@@ -117,7 +123,7 @@ export const attenuateHitGLSL = /* glsl */`
 				bool useAlphaTest = alphaTest != 0.0;
 				float transmissionFactor = ( 1.0 - metalness ) * transmission;
 				if (
-					transmissionFactor < pcgRand() && ! (
+					transmissionFactor < rand( 9 ) && ! (
 						// material sidedness
 						material.side != 0.0 && surfaceHit.side == material.side
 
@@ -125,11 +131,12 @@ export const attenuateHitGLSL = /* glsl */`
 						|| useAlphaTest && albedo.a < alphaTest
 
 						// opacity
-						|| material.transparent && ! useAlphaTest && albedo.a < pcgRand()
+						|| material.transparent && ! useAlphaTest && albedo.a < rand( 10 )
 					)
 				) {
 
-					return true;
+					result = true;
+					break;
 
 				}
 
@@ -155,13 +162,16 @@ export const attenuateHitGLSL = /* glsl */`
 
 			} else {
 
-				return false;
+				result = false;
+				break;
 
 			}
 
 		}
 
-		return true;
+		// reset the bounce index
+		sobolBounceIndex = originalBounceIndex;
+		return result;
 
 	}
 
