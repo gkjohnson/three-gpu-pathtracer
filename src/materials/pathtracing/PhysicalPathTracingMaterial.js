@@ -50,7 +50,7 @@ import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
 import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
 import { stratifiedTextureGLSL } from '../../shader/rand/stratifiedTexture.glsl.js';
 import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
-import { blueNoiseTexture } from './blueNoiseTexture.js';
+import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -123,7 +123,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				backgroundAlpha: { value: 1.0 },
 				sobolTexture: { value: null },
 				stratifiedTexture: { value: new StratifiedSamplesTexture() },
-				stratifiedOffsetTexture: { value: blueNoiseTexture },
+				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 1 ) },
 			},
 
 			vertexShader: /* glsl */`

@@ -44,7 +44,7 @@ export class BlueNoiseTexture extends DataTexture {
 
 				for ( let j = 0, l2 = bin.length; j < l2; j ++ ) {
 
-					const value = 255 * ( bin[ j ] / maxValue );
+					const value = bin[ j ] / maxValue;
 					for ( let c = i; c < 4; c ++ ) {
 
 						data[ j * 4 + c ] = value;
@@ -57,7 +57,7 @@ export class BlueNoiseTexture extends DataTexture {
 
 				for ( let j = 0, l2 = bin.length; j < l2; j ++ ) {
 
-					const value = 255 * ( bin[ j ] / maxValue );
+					const value = bin[ j ] / maxValue;
 					data[ j * 4 + i ] = value;
 
 				}
