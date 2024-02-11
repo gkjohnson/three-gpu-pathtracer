@@ -48,6 +48,10 @@ export class DynamicPathTracingSceneGenerator {
 
 					}
 
+				} else if ( c.isLight ) {
+
+					finalObjects.push( c );
+
 				}
 
 			} );
