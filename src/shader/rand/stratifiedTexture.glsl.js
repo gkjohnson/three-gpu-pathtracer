@@ -35,6 +35,8 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 	vec4 rand4( int v ) {
 
+		// TODO: this offset isn't exactly correct because it's shifting into space
+		// reserved for other stratified samplers. The full stratified sampler should be available here
 		ivec2 dim = textureSize( stratifiedTexture, 0 );
 		int offset = int( pixelSeed.r * float( dim.x ) );
 
