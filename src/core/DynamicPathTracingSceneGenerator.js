@@ -58,6 +58,9 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
+		finalObjects.length = 0;
+		finalObjects.push( ...objects );
+
 		// use a dummy object for a fallback
 		if ( finalObjects.length === 0 ) {
 
