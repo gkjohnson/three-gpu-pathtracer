@@ -275,6 +275,16 @@ function animate() {
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
 	model.mixer.update( delta );
 	model.scene.updateMatrixWorld();
+	model.scene.traverse( c => {
+
+		// TODO: why is this needed?
+		if ( c.skeleton ) {
+
+			c.skeleton.update();
+
+		}
+
+	} );
 
 	if ( params.autoPause ) {
 
