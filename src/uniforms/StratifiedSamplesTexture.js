@@ -9,7 +9,7 @@ export class StratifiedSamplesTexture extends DataTexture {
 		this.minFilter = NearestFilter;
 		this.magFilter = NearestFilter;
 
-		this.strata = 8;
+		this.strata = strata;
 		this.sampler = null;
 
 		this.init( count, depth, strata );
