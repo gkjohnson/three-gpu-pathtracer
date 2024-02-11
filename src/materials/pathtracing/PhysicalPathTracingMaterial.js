@@ -123,7 +123,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				backgroundAlpha: { value: 1.0 },
 				sobolTexture: { value: null },
 				stratifiedTexture: { value: new StratifiedSamplesTexture() },
-				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 1 ) },
+				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 2 ) },
 			},
 
 			vertexShader: /* glsl */`

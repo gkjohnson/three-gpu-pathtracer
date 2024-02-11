@@ -33,7 +33,6 @@ export class StratifiedSamplerCombined {
 
 		}
 
-
 		this.samples = combined;
 
 		this.strataCount = strataCount;

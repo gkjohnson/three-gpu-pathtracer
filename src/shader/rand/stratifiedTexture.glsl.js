@@ -6,7 +6,7 @@ export const stratifiedTextureGLSL = /* glsl */`
 	uint sobolPixelIndex = 0u;
 	uint sobolPathIndex = 0u;
 	uint sobolBounceIndex = 0u;
-	float pixelSeed = 0.0;
+	vec4 pixelSeed = vec4( 0 );
 	uvec4 WHITE_NOISE_SEED;
 
 	// TODO: remove pcg functions here
@@ -35,8 +35,12 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 	vec4 rand4( int v ) {
 
-		vec4 stratifiedSample = texelFetch( stratifiedTexture, ivec2( v, sobolBounceIndex ), 0 );
-		return fract( stratifiedSample + pixelSeed ); // blue noise + stratified samples
+		ivec2 dim = textureSize( stratifiedTexture, 0 );
+		int offset = int( pixelSeed.r * float( dim.x ) );
+
+		ivec2 uv = ivec2( ( v + offset ) % dim.x, sobolBounceIndex );
+		vec4 stratifiedSample = texelFetch( stratifiedTexture, uv, 0 );
+		return fract( stratifiedSample + pixelSeed.g ); // blue noise + stratified samples
 
 	}
 
@@ -64,7 +68,7 @@ export const stratifiedTextureGLSL = /* glsl */`
 
 		// tile the small noise texture across the entire screen
 		ivec2 noiseSize = ivec2( textureSize( stratifiedOffsetTexture, 0 ) );
-		pixelSeed = texelFetch( stratifiedOffsetTexture, ivec2( screenCoord.xy ) % noiseSize, 0 ).r;
+		pixelSeed = texelFetch( stratifiedOffsetTexture, ivec2( screenCoord.xy ) % noiseSize, 0 );
 
 	}
 
