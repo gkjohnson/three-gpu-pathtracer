@@ -76,11 +76,11 @@ async function init() {
 
 	// loading the
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr' )
 		.then( texture => {
 
 			const generator = new BlurredEnvMapGenerator( renderer );
-			const blurredTex = generator.generate( texture, 0.35 );
+			const blurredTex = generator.generate( texture, 0.1 );
 			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 			generator.dispose();
 
@@ -168,18 +168,6 @@ function loadModel( url ) {
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( url )
 		.then( gltf => {
-
-			// make the model white since the texture seems to dark for the env map
-			gltf.scene.traverse( c => {
-
-				if ( c.material ) {
-
-					c.material.metalness = 0;
-					c.material.map = null;
-
-				}
-
-			} );
 
 			// animations
 			const animations = gltf.animations;
@@ -275,6 +263,16 @@ function animate() {
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
 	model.mixer.update( delta );
 	model.scene.updateMatrixWorld();
+	model.scene.traverse( c => {
+
+		// TODO: why is this needed?
+		if ( c.skeleton ) {
+
+			c.skeleton.update();
+
+		}
+
+	} );
 
 	if ( params.autoPause ) {
 
