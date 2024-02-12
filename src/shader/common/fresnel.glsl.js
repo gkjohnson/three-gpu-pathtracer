@@ -81,7 +81,6 @@ export const fresnelGLSL = /* glsl */`
 
 	}
 
-	/*
 	// https://schuttejoe.github.io/post/disneybsdf/
 	float disneyFresnel( vec3 wo, vec3 wi, vec3 wh, float f0, float eta, float metalness ) {
 
@@ -94,5 +93,5 @@ export const fresnelGLSL = /* glsl */`
 		return mix( dielectricFresnel, metallicFresnel, metalness );
 
 	}
-	*/
+
 `;
