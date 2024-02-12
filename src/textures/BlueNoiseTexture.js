@@ -1,5 +1,34 @@
-import { DataTexture, FloatType, NearestFilter, RGBAFormat } from 'three';
+import { DataTexture, FloatType, NearestFilter, RGBAFormat, RGFormat, RedFormat } from 'three';
 import { BlueNoiseGenerator } from './blueNoise/BlueNoiseGenerator.js';
+
+function getStride( channels ) {
+
+	if ( channels >= 3 ) {
+
+		return 4;
+
+	} else {
+
+		return channels;
+
+	}
+
+}
+
+function getFormat( channels ) {
+
+	switch ( channels ) {
+
+	case 1:
+		return RedFormat;
+	case 2:
+		return RGFormat;
+	default:
+		return RGBAFormat;
+
+	}
+
+}
 
 export class BlueNoiseTexture extends DataTexture {
 
@@ -17,18 +46,20 @@ export class BlueNoiseTexture extends DataTexture {
 
 	update() {
 
-
 		const channels = this.channels;
 		const size = this.size;
 		const generator = new BlueNoiseGenerator();
 		generator.channels = channels;
 		generator.size = size;
 
-		if ( this.image.width !== size ) {
+		const stride = getStride( channels );
+		const format = getFormat( stride );
+		if ( this.image.width !== size || format !== this.format ) {
 
 			this.image.width = size;
 			this.image.height = size;
 			this.image.data = new Float32Array( ( size ** 2 ) * 4 );
+			this.format = format;
 			this.dispose();
 
 		}
@@ -40,27 +71,10 @@ export class BlueNoiseTexture extends DataTexture {
 			const bin = result.data;
 			const maxValue = result.maxValue;
 
-			if ( channels === 1 ) {
+			for ( let j = 0, l2 = bin.length; j < l2; j ++ ) {
 
-				for ( let j = 0, l2 = bin.length; j < l2; j ++ ) {
-
-					const value = bin[ j ] / maxValue;
-					for ( let c = i; c < 4; c ++ ) {
-
-						data[ j * 4 + c ] = value;
-
-					}
-
-				}
-
-			} else {
-
-				for ( let j = 0, l2 = bin.length; j < l2; j ++ ) {
-
-					const value = bin[ j ] / maxValue;
-					data[ j * 4 + i ] = value;
-
-				}
+				const value = bin[ j ] / maxValue;
+				data[ j * stride + i ] = value;
 
 			}
 
