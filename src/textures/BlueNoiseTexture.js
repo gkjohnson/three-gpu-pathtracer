@@ -58,7 +58,7 @@ export class BlueNoiseTexture extends DataTexture {
 
 			this.image.width = size;
 			this.image.height = size;
-			this.image.data = new Float32Array( ( size ** 2 ) * 4 );
+			this.image.data = new Float32Array( ( size ** 2 ) * stride );
 			this.format = format;
 			this.dispose();
 
