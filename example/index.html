@@ -167,14 +167,6 @@
 
 							if ( c.material ) {
 
-								if ( c.matrixWorld.determinant() < 0 ) {
-
-									c.geometry.index.array.reverse();
-									c.material = c.material.clone();
-									c.material.side = 1;
-
-								}
-
 								if ( c.material instanceof MeshPhysicalMaterial ) {
 
 									const material = c.material;
