@@ -94,8 +94,10 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// TODO: subsurface approx?
 
-		float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		color = ( 1.0 - F ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
+
 		return wi.z / PI;
 
 	}
@@ -206,7 +208,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		color = surf.transmission * surf.color;
 
 		// PDF
-		float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		if ( F >= 1.0 ) {
 
 			return 0.0;
@@ -297,7 +300,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
-		float fEstimate = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// float fEstimate = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		float fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 
 		float transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
 		float diffSpecularProb = 0.5 + 0.5 * metalness;
