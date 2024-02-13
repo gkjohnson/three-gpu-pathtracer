@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Support for stratified sampling in addition to PCG and Sobol under the RANDOM_TYPE flag.
 
+### Changed
+- Rendering objects with negative scales now requires three-mesh-bvh v0.7.2
+
 ## [0.0.17] - 2024.01.18
 ### Added
 - Support for rendering geometry with inverted scales.
