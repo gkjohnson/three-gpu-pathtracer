@@ -26,10 +26,17 @@ export const equirectSamplingGLSL = /* glsl */`
 	// samples the color given env map with CDF and returns the pdf of the direction
 	float sampleEquirect( vec3 direction, inout vec3 color ) {
 
+		float totalSum = envMapInfo.totalSum;
+		if ( totalSum == 0.0 ) {
+
+			color = vec3( 0.0 );
+			return 1.0;
+
+		}
+
 		vec2 uv = equirectDirectionToUv( direction );
 		color = texture2D( envMapInfo.map, uv ).rgb;
 
-		float totalSum = envMapInfo.totalSum;
 		float lum = luminance( color );
 		ivec2 resolution = textureSize( envMapInfo.map, 0 );
 		float pdf = lum / totalSum;

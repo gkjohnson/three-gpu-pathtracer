@@ -43,7 +43,7 @@ export const directLightContributionGLSL = /*glsl*/`
 
 			}
 
-		} else {
+		} else if ( envMapInfo.totalSum != 0.0 && environmentIntensity != 0.0 ) {
 
 			// find a sample in the environment map to include in the contribution
 			vec3 envColor, envDirection;

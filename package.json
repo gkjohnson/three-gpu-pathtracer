@@ -42,7 +42,7 @@
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.160.0",
-    "three-mesh-bvh": "0.7.2",
+    "three-mesh-bvh": "0.7.3",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
