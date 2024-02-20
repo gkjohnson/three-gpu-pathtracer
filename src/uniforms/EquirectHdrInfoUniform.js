@@ -1,4 +1,4 @@
-import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat } from 'three';
+import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat, FloatType, ClampToEdgeWrapping } from 'three';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
@@ -39,7 +39,7 @@ function colorToLuminance( r, g, b ) {
 }
 
 // ensures the data is all floating point values and flipY is false
-function preprocessEnvMap( envMap ) {
+function preprocessEnvMap( envMap, targetType = HalfFloatType ) {
 
 	const map = envMap.clone();
 	map.source = new Source( { ...map.image } );
@@ -48,17 +48,54 @@ function preprocessEnvMap( envMap ) {
 	// TODO: is there a simple way to avoid cloning and adjusting the env map data here?
 	// convert the data from half float uint 16 arrays to float arrays for cdf computation
 	let newData = data;
-	if ( map.type === HalfFloatType ) {
+	if ( map.type !== targetType ) {
 
-		newData = new Uint16Array( data.length );
-		for ( const i in data ) {
+		if ( targetType === HalfFloatType ) {
 
-			newData[ i ] = data[ i ];
+			newData = new Uint16Array( data.length );
+
+		} else {
+
+			newData = new Float32Array( data.length );
+
+		}
+
+		let maxIntValue;
+		if ( data instanceof Int8Array || data instanceof Int16Array || data instanceof Int32Array ) {
+
+			maxIntValue = 2 ** ( 8 * data.BYTES_PER_ELEMENT - 1 ) - 1;
+
+		} else {
+
+			maxIntValue = 2 ** ( 8 * data.BYTES_PER_ELEMENT ) - 1;
+
+		}
+
+		for ( let i = 0, l = data.length; i < l; i ++ ) {
+
+			let v = data[ i ];
+			if ( map.type === HalfFloatType ) {
+
+				v = DataUtils.fromHalfFloat( data[ i ] );
+
+			}
+
+			if ( map.type !== FloatType && map.type !== HalfFloatType ) {
+
+				v /= maxIntValue;
+
+			}
+
+			if ( targetType === HalfFloatType ) {
+
+				newData[ i ] = DataUtils.toHalfFloat( v );
+
+			}
 
 		}
 
 		map.image.data = newData;
-		map.type = HalfFloatType;
+		map.type = targetType;
 
 	}
 
@@ -150,7 +187,7 @@ export class EquirectHdrInfoUniform {
 		// https://pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Light_Sources#InfiniteAreaLights
 		const map = preprocessEnvMap( hdr );
 		map.wrapS = RepeatWrapping;
-		map.wrapT = RepeatWrapping;
+		map.wrapT = ClampToEdgeWrapping;
 
 		const { width, height, data } = map.image;
 

@@ -57,6 +57,13 @@ export class LightsInfoUniformStruct {
 			const baseIndex = i * LIGHT_PIXELS * 4;
 			let index = 0;
 
+			// initialize to 0
+			for ( let p = 0; p < LIGHT_PIXELS * 4; p ++ ) {
+
+				floatArray[ baseIndex + p ] = 0;
+
+			}
+
 			// sample 1
 		    // position
 			l.getWorldPosition( v );
@@ -121,7 +128,7 @@ export class LightsInfoUniformStruct {
 
 			} else if ( l.isSpotLight ) {
 
-				const radius = l.radius;
+				const radius = l.radius || 0;
 				eye.setFromMatrixPosition( l.matrixWorld );
 				target.setFromMatrixPosition( l.target.matrixWorld );
 				m.lookAt( eye, target, up );
@@ -151,24 +158,21 @@ export class LightsInfoUniformStruct {
 				// radius
 				floatArray[ baseIndex + ( index ++ ) ] = radius;
 
-				// near
-				floatArray[ baseIndex + ( index ++ ) ] = l.shadow.camera.near;
-
 				// decay
 				floatArray[ baseIndex + ( index ++ ) ] = l.decay;
 
 				// distance
 				floatArray[ baseIndex + ( index ++ ) ] = l.distance;
 
-				// sample 6
 				// coneCos
 				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle );
 
+				// sample 6
 				// penumbraCos
 				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle * ( 1 - l.penumbra ) );
 
 				// iesProfile
-				floatArray[ baseIndex + ( index ++ ) ] = iesTextures.indexOf( l.iesTexture );
+				floatArray[ baseIndex + ( index ++ ) ] = l.iesTexture ? iesTextures.indexOf( l.iesTexture ) : - 1;
 
 			} else if ( l.isPointLight ) {
 
@@ -185,7 +189,7 @@ export class LightsInfoUniformStruct {
 				index += 4;
 
 				// sample 5
-				index += 2;
+				index += 1;
 
 				floatArray[ baseIndex + ( index ++ ) ] = l.decay;
 				floatArray[ baseIndex + ( index ++ ) ] = l.distance;

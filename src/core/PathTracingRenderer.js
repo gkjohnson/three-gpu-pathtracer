@@ -3,9 +3,6 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 
-const _scissor = new Vector4();
-const _viewport = new Vector4();
-
 function* renderTask() {
 
 	const {
@@ -47,12 +44,21 @@ function* renderTask() {
 		const h = _primaryTarget.height;
 		material.resolution.set( w * subW, h * subH );
 		material.sobolTexture = _sobolTarget.texture;
+		material.stratifiedTexture.init( 20, material.bounces + material.transmissiveBounces + 5 );
+		material.stratifiedTexture.next();
 		material.seed ++;
 
 		const tilesX = this.tiles.x || 1;
 		const tilesY = this.tiles.y || 1;
 		const totalTiles = tilesX * tilesY;
-		const dprInv = ( 1 / _renderer.getPixelRatio() );
+
+		const pxSubW = Math.ceil( w * subW );
+		const pxSubH = Math.ceil( h * subH );
+		const pxSubX = Math.floor( subX * w );
+		const pxSubY = Math.floor( subY * h );
+
+		const pxTileW = Math.ceil( pxSubW / tilesX );
+		const pxTileH = Math.ceil( pxSubH / tilesY );
 
 		for ( let y = 0; y < tilesY; y ++ ) {
 
@@ -101,39 +107,27 @@ function* renderTask() {
 
 				}
 
+				// set the scissor and the viewport on the render target
+				// note that when using the webgl renderer set viewport the device pixel ratio
+				// is multiplied into the field causing some pixels to not be rendered
+				const reverseTy = tilesY - ty - 1;
+				_primaryTarget.scissor.set(
+					pxSubX + tx * pxTileW,
+					pxSubY + reverseTy * pxTileH,
+					Math.min( pxTileW, pxSubW - tx * pxTileW ),
+					Math.min( pxTileH, pxSubH - reverseTy * pxTileH ),
+				);
+
+				_primaryTarget.viewport.set(
+					pxSubX,
+					pxSubY,
+					pxSubW,
+					pxSubH,
+				);
+
 				// three.js renderer takes values relative to the current pixel ratio
 				_renderer.setRenderTarget( _primaryTarget );
 				_renderer.setScissorTest( true );
-
-				// set the scissor window for a subtile
-				_scissor.x = tx * w / tilesX;
-				_scissor.y = ( tilesY - ty - 1 ) * h / tilesY;
-				_scissor.z = w / tilesX;
-				_scissor.w = h / tilesY;
-
-				// adjust for the subframe
-				_scissor.x = subX * w + subW * _scissor.x;
-				_scissor.y = subY * h + subH * _scissor.y;
-				_scissor.z = subW * _scissor.z;
-				_scissor.w = subH * _scissor.w;
-
-				// round for floating point cases
-				_scissor.x = _scissor.x;
-				_scissor.y = _scissor.y;
-				_scissor.z = _scissor.z;
-				_scissor.w = _scissor.w;
-
-				// multiply inverse of DPR in because threes multiplies it in
-				_scissor.multiplyScalar( dprInv ).ceil();
-
-				_viewport.x = subX * w;
-				_viewport.y = subY * h;
-				_viewport.z = subW * w;
-				_viewport.w = subH * h;
-				_viewport.multiplyScalar( dprInv ).ceil();
-
-				_renderer.setScissor( _scissor );
-				_renderer.setViewport( _viewport );
 
 				_renderer.autoClear = false;
 				_fsQuad.render( _renderer );

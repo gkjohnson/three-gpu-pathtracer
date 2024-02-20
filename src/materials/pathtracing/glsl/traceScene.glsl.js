@@ -23,7 +23,7 @@ export const traceSceneGLSL = /* glsl */`
 
 			// offset the distance so we don't run into issues with particles on the same surface
 			// as other objects
-			float particleDist = intersectFogVolume( fogMaterial, sobol( 1 ) );
+			float particleDist = intersectFogVolume( fogMaterial, rand( 1 ) );
 			if ( particleDist + RAY_OFFSET < surfaceHit.dist ) {
 
 				surfaceHit.side = 1.0;

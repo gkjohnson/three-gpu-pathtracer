@@ -64,8 +64,37 @@
 				<div id="credits">--</div>
 			</div>
 		</div>
-		<script>
-			window.MODEL_LIST = {
+		<script type="module">
+
+			function mecaBricksGoldCorrection( model ) {
+
+				model.traverse( c => {
+
+					if ( c.material ) {
+
+						if ( c.material.color.getHexString() === '7f4c0e' ) {
+
+							c.material.color.set( 0xc2801f ).multiplyScalar( 0.9 );
+							c.material.roughness = 0.45;
+							c.material.metalness = 0.6;
+
+						} else if ( c.material.color.getHexString() === '613708' )  {
+
+							c.material.color.set( 0xc2801f );
+							c.material.color.g *= 0.75;
+							c.material.color.b *= 0.75;
+							c.material.roughness = 0.45;
+							c.material.metalness = 0.6;
+
+						}
+
+					}
+
+				} );
+
+			}
+
+			const MODEL_LIST = {
 
 				'X-Wing': {
 					opacityToTransmission: true,
@@ -93,21 +122,24 @@
 					rotation: [ Math.PI, - Math.PI / 2, 0 ],
 				},
 
-				// 'Blacksmith': {
-				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/21325 - Medieval Blacksmith.mpd',
-				// },
+				'MecaBricks Auspicious Dragon': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mecabricks/auspicious-dragon.dae',
+					postProcess: mecaBricksGoldCorrection,
+					credit: 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.',
 
-				// 'Tree House': {
-				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/21318 - Tree House.mpd',
-				// },
+				},
 
-				// 'Cafe Corner': {
-				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/10182-1 - Cafe Corner.mpd',
-				// },
+				'MecaBricks NASA Mars Rover': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mecabricks/nasa-mars-curiosity-rover.dae',
+					postProcess: mecaBricksGoldCorrection,
+					credit: 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.',
+				},
 
-				// 'Scorpion Pyramid': {
-				// 	url: 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/7327-1 - Scorpion Pyramid.mpd',
-				// },
+				'MecaBricks Apollo 11 Lander': {
+					url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mecabricks/apollo-11-lunar-lander/lunar-lander.dae',
+					postProcess: mecaBricksGoldCorrection,
+					credit: 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.',
+				},
 
 			};
 
@@ -221,9 +253,9 @@
 			modelNames.forEach( name => {
 
 				const cleanedName = name.replace( /.+?\s-\s/, '' ).replace( /\.mpd$/, '' );
-				if ( ! ( cleanedName in window.MODEL_LIST ) ) {
+				if ( ! ( cleanedName in MODEL_LIST ) ) {
 
-					window.MODEL_LIST[ cleanedName ] = {
+					MODEL_LIST[ cleanedName ] = {
 
 						opacityToTransmission: true,
 						ior: 1.4,
@@ -235,13 +267,18 @@
 
 			} );
 
+			for ( const key in MODEL_LIST ) {
 
-			for ( const key in window.MODEL_LIST ) {
+				const info = MODEL_LIST[ key ];
+				if ( ! info.credit ) {
 
-				const info = window.MODEL_LIST[ key ];
-				info.credit = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
+					info.credit = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
+
+				}
 
 			}
+
+			window.MODEL_LIST = MODEL_LIST;
 		</script>
 		<script src="./index.js" type="module"></script>
 	</body>

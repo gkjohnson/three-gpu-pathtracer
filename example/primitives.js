@@ -6,7 +6,6 @@ import {
 	PhysicalPathTracingMaterial,
 	GradientEquirectTexture,
 } from '..';
-import { ProceduralEquirectTexture } from '../src';
 
 // init scene, renderer, camera, controls, etc
 const scene = new THREE.Scene();

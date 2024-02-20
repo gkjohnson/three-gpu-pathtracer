@@ -186,7 +186,7 @@ export class MaterialsTexture extends DataTexture {
 
 		let index = 0;
 		const pixelCount = materials.length * MATERIAL_PIXELS;
-		const dimension = Math.ceil( Math.sqrt( pixelCount ) );
+		const dimension = Math.ceil( Math.sqrt( pixelCount ) ) || 1;
 		const { threeCompatibilityTransforms, image, features } = this;
 
 		// get the list of textures with unique sources

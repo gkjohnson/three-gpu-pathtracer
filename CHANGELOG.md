@@ -4,13 +4,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.0.19] - 2024.02.20
+### Fixed
+- Ensure materials texture is never a degenerate dimension.
+- Handle completely black environment maps so they do not corrupt the image.
+
+## [0.0.18] - 2024.02.20
+### Fixed
+- Transparent textures no longer have the color incorrectly premultiplied by the alpha.
+- Fix rounding error issue in tiled rendering logic causing some columns and rows of pixels to not be rendered to.
+- Improve hdr map info to be able to handle any texture type.
+- Path tracing scene generators no longer crash when an empty scene is provided.
+- Native three.js spot light not working correctly.
+- Env map clamping which was causing an incorrect circle of color to display at the poles.
+
+### Added
+- Support for stratified sampling in addition to PCG and Sobol under the RANDOM_TYPE flag.
+
+### Changed
+- Rendering objects with negative scales now requires three-mesh-bvh v0.7.2
+
+## [0.0.17] - 2024.01.18
 ### Added
 - Support for rendering geometry with inverted scales.
 
 ### Changed
 - Upgrade to three-mesh-bvh v0.7.0.
 - AreaLights no longer render the light surface.
+- Disabled sobol sampling functionality related to MacOS crashes. It can be re-enabled with the FEATURE_SOBOL define flag.
 
 ### Fixed
 - Models with a negative scale not rendering correctly.

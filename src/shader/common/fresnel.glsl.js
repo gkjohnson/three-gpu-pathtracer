@@ -69,30 +69,36 @@ export const fresnelGLSL = /* glsl */`
 
 	}
 
-	float evaluateFresnelWeight( float cosTheta, float eta, float f0 ) {
+	// TODO: disney fresnel was removed and replaced with this fresnel function to better align with
+	// the glTF but is causing blown out pixels. Should be revisited
+	// float evaluateFresnelWeight( float cosTheta, float eta, float f0 ) {
 
-		if ( totalInternalReflection( cosTheta, eta ) ) {
+	// 	if ( totalInternalReflection( cosTheta, eta ) ) {
+
+	// 		return 1.0;
+
+	// 	}
+
+	// 	return schlickFresnel( cosTheta, f0 );
+
+	// }
+
+	// https://schuttejoe.github.io/post/disneybsdf/
+	float disneyFresnel( vec3 wo, vec3 wi, vec3 wh, float f0, float eta, float metalness ) {
+
+		float dotHV = dot( wo, wh );
+		if ( totalInternalReflection( dotHV, eta ) ) {
 
 			return 1.0;
 
 		}
 
-		return schlickFresnel( cosTheta, f0 );
-
-	}
-
-	/*
-	// https://schuttejoe.github.io/post/disneybsdf/
-	float disneyFresnel( vec3 wo, vec3 wi, vec3 wh, float f0, float eta, float metalness ) {
-
-		float dotHV = dot( wo, wh );
 		float dotHL = dot( wi, wh );
-
 		float dielectricFresnel = dielectricFresnel( abs( dotHV ), eta );
 		float metallicFresnel = schlickFresnel( dotHL, f0 );
 
 		return mix( dielectricFresnel, metallicFresnel, metalness );
 
 	}
-	*/
+
 `;

@@ -48,6 +48,9 @@ import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
 import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
 import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
 import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
+import { stratifiedTextureGLSL } from '../../shader/rand/stratifiedTexture.glsl.js';
+import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
+import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -72,7 +75,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				FEATURE_DOF: 1,
 				FEATURE_BACKGROUND_MAP: 0,
 				FEATURE_FOG: 1,
-				FEATURE_SOBOL: 0,
+
+				// 0 = PCG
+				// 1 = Sobol
+				// 2 = Stratified List
+				RANDOM_TYPE: 2,
+
 				// 0 = Perspective
 				// 1 = Orthographic
 				// 2 = Equirectangular
@@ -114,6 +122,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				backgroundAlpha: { value: 1.0 },
 				sobolTexture: { value: null },
+				stratifiedTexture: { value: new StratifiedSamplesTexture() },
+				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 1 ) },
 			},
 
 			vertexShader: /* glsl */`
@@ -153,23 +163,35 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ materialStructGLSL }
 
 				// random
-				${ pcgGLSL }
-				#if FEATURE_SOBOL
+				#if RANDOM_TYPE == 2 	// Stratified List
 
+					${ stratifiedTextureGLSL }
+
+				#elif RANDOM_TYPE == 1 	// Sobol
+
+					${ pcgGLSL }
 					${ sobolCommonGLSL }
 					${ sobolSamplingGLSL }
 
-				#else
+					#define rand(v) sobol(v)
+					#define rand2(v) sobol2(v)
+					#define rand3(v) sobol3(v)
+					#define rand4(v) sobol4(v)
+
+				#else 					// PCG
+
+					${ pcgGLSL }
 
 					// Using the sobol functions seems to break the the compiler on MacOS
 					// - specifically the "sobolReverseBits" function.
 					uint sobolPixelIndex = 0u;
 					uint sobolPathIndex = 0u;
 					uint sobolBounceIndex = 0u;
-					float sobol( int v ) { return rand(); }
-					vec2 sobol2( int v ) { return rand2(); }
-					vec3 sobol3( int v ) { return rand3(); }
-					vec4 sobol4( int v ) { return rand4(); }
+
+					#define rand(v) pcgRand()
+					#define rand2(v) pcgRand2()
+					#define rand3(v) pcgRand3()
+					#define rand4(v) pcgRand4()
 
 				#endif
 
@@ -287,7 +309,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// inverse environment rotation
 					envRotation3x3 = mat3( environmentRotation );
 					invEnvRotation3x3 = inverse( envRotation3x3 );
-					lightsDenom = environmentIntensity == 0.0 && lights.count != 0u ? float( lights.count ) : float( lights.count + 1u );
+					lightsDenom =
+						( environmentIntensity == 0.0 || envMapInfo.totalSum == 0.0 ) && lights.count != 0u ?
+							float( lights.count ) :
+							float( lights.count + 1u );
 
 					// final color
 					gl_FragColor = vec4( 0, 0, 0, 1 );
@@ -356,7 +381,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( state.firstRay || state.transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( envRotation3x3 * ray.direction, sobol2( 2 ) ) * state.throughputColor;
+								gl_FragColor.rgb += sampleBackground( envRotation3x3 * ray.direction, rand2( 2 ) ) * state.throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {
@@ -447,7 +472,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						}
 
 						scatterRec = bsdfSample( - ray.direction, surf );
-						state.isShadowRay = scatterRec.specularPdf < sobol( 4 );
+						state.isShadowRay = scatterRec.specularPdf < rand( 4 );
 
 						bool isBelowSurface = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal ) < 0.0;
 						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, surfaceHit.dist );
@@ -517,7 +542,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						rrProb = sqrt( rrProb );
 						rrProb = max( rrProb, depthProb );
 						rrProb = min( rrProb, 1.0 );
-						if ( sobol( 8 ) > rrProb ) {
+						if ( rand( 8 ) > rrProb ) {
 
 							break;
 

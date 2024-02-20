@@ -12,7 +12,7 @@ export const cameraUtilsGLSL = /* glsl */`
 
 		// Jitter the camera ray by finding a uv coordinate at a random sample
 		// around this pixel's UV coordinate for AA
-		vec2 ruv = sobol2( 0 );
+		vec2 ruv = rand2( 0 );
 		vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
 		Ray ray;
 
@@ -57,7 +57,7 @@ export const cameraUtilsGLSL = /* glsl */`
 
 			// get the aperture sample
 			// if blades === 0 then we assume a circle
-			vec3 shapeUVW= sobol3( 1 );
+			vec3 shapeUVW= rand3( 1 );
 			int blades = physicalCamera.apertureBlades;
 			float anamorphicRatio = physicalCamera.anamorphicRatio;
 			vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularPolygon( blades, shapeUVW );

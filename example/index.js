@@ -20,6 +20,7 @@ import {
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -318,7 +319,7 @@ function buildGui() {
 
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
+	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( updateModel );
 
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
@@ -763,7 +764,39 @@ async function updateModel() {
 	};
 
 	const url = modelInfo.url;
-	if ( /(gltf|glb)$/i.test( url ) ) {
+	if ( /dae$/i.test( url ) ) {
+
+		manager.onLoad = onFinish;
+		new ColladaLoader( manager )
+			.load(
+				url,
+				res => {
+
+					model = res.scene;
+					model.scale.setScalar( 1 );
+
+					model.traverse( c => {
+
+						const { material } = c;
+						if ( material && material.isMeshPhongMaterial ) {
+
+							c.material = new MeshStandardMaterial( {
+
+								color: material.color,
+								roughness: material.roughness || 0,
+								metalness: material.metalness || 0,
+								map: material.map || null,
+
+							} );
+
+						}
+
+					} );
+
+				},
+			);
+
+	} else if ( /(gltf|glb)$/i.test( url ) ) {
 
 		manager.onLoad = onFinish;
 		new GLTFLoader( manager )

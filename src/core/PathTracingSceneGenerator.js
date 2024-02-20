@@ -1,73 +1,24 @@
-import { Mesh } from 'three';
-import { SAH, MeshBVH, StaticGeometryGenerator } from 'three-mesh-bvh';
-import { mergeMeshes } from '../utils/GeometryPreparationUtils.js';
+import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
 
 export class PathTracingSceneGenerator {
 
-	prepScene( scene ) {
+	generate( scene, options = {} ) {
 
-		scene = Array.isArray( scene ) ? scene : [ scene ];
+		// ensure scene transforms are up to date
+		// TODO: remove this?
+		if ( Array.isArray( scene ) ) {
 
-		const meshes = [];
-		const lights = [];
+			scene.forEach( s => s.updateMatrixWorld( true ) );
 
-		for ( let i = 0, l = scene.length; i < l; i ++ ) {
+		} else {
 
-			scene[ i ].traverseVisible( c => {
-
-				if ( c.isSkinnedMesh || c.isMesh && c.morphTargetInfluences ) {
-
-					const generator = new StaticGeometryGenerator( c );
-					generator.attributes = [ 'position', 'color', 'normal', 'tangent', 'uv', 'uv2' ];
-					generator.applyWorldTransforms = false;
-					const mesh = new Mesh(
-						generator.generate(),
-						c.material,
-					);
-					mesh.matrixWorld.copy( c.matrixWorld );
-					mesh.matrix.copy( c.matrixWorld );
-					mesh.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale );
-					meshes.push( mesh );
-
-				} else if ( c.isMesh ) {
-
-					meshes.push( c );
-
-				} else if (
-					c.isRectAreaLight ||
-					c.isSpotLight ||
-					c.isPointLight ||
-					c.isDirectionalLight
-				) {
-
-					lights.push( c );
-
-				}
-
-			} );
+			scene.updateMatrixWorld( true );
 
 		}
 
-		return {
-			...mergeMeshes( meshes, {
-				attributes: [ 'position', 'normal', 'tangent', 'uv', 'color' ],
-			} ),
-			lights,
-		};
-
-	}
-
-	generate( scene, options = {} ) {
-
-		const { materials, textures, geometry, lights } = this.prepScene( scene );
-		const bvhOptions = { strategy: SAH, ...options, maxLeafTris: 1 };
-		return {
-			scene,
-			materials,
-			textures,
-			lights,
-			bvh: new MeshBVH( geometry, bvhOptions ),
-		};
+		const generator = new DynamicPathTracingSceneGenerator( scene );
+		generator.bvhOptions = options;
+		return generator.generate();
 
 	}
 

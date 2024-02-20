@@ -94,15 +94,17 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// TODO: subsurface approx?
 
-		float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		color = ( 1.0 - F ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
+
 		return wi.z / PI;
 
 	}
 
 	vec3 diffuseDirection( vec3 wo, SurfaceRecord surf ) {
 
-		vec3 lightDirection = sampleSphere( sobol2( 11 ) );
+		vec3 lightDirection = sampleSphere( rand2( 11 ) );
 		lightDirection.z += 1.0;
 		lightDirection = normalize( lightDirection );
 
@@ -147,7 +149,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( roughness ),
-			sobol2( 12 )
+			rand2( 12 )
 		);
 
 		// apply to new ray by reflecting off the new normal
@@ -184,7 +186,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( filteredRoughness ),
-			sobol2( 13 )
+			rand2( 13 )
 		);
 
 		vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
@@ -206,7 +208,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 		color = surf.transmission * surf.color;
 
 		// PDF
-		float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		if ( F >= 1.0 ) {
 
 			return 0.0;
@@ -221,7 +224,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float roughness = surf.filteredRoughness;
 		float eta = surf.eta;
-		vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( sobol2( 13 ) ) * roughness );
+		vec3 halfVector = normalize( vec3( 0.0, 0.0, 1.0 ) + sampleSphere( rand2( 13 ) ) * roughness );
 		vec3 lightDirection = refract( normalize( - wo ), halfVector, eta );
 
 		if ( surf.thinFilm ) {
@@ -262,7 +265,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( roughness ),
-			sobol2( 14 )
+			rand2( 14 )
 		);
 
 		// apply to new ray by reflecting off the new normal
@@ -297,7 +300,8 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		float metalness = surf.metalness;
 		float transmission = surf.transmission;
-		float fEstimate = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// float fEstimate = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		float fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 
 		float transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
 		float diffSpecularProb = 0.5 + 0.5 * metalness;
@@ -413,7 +417,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 			ScatterRecord sampleRec;
 			sampleRec.specularPdf = 0.0;
 			sampleRec.pdf = 1.0 / ( 4.0 * PI );
-			sampleRec.direction = sampleSphere( sobol2( 16 ) );
+			sampleRec.direction = sampleSphere( rand2( 16 ) );
 			sampleRec.color = surf.color / ( 4.0 * PI );
 			return sampleRec;
 
@@ -465,7 +469,7 @@ export const bsdfSamplingGLSL = /* glsl */`
 		vec3 wi;
 		vec3 clearcoatWi;
 
-		float r = sobol( 15 );
+		float r = rand( 15 );
 		if ( r <= cdf[0] ) { // diffuse
 
 			wi = diffuseDirection( wo, surf );

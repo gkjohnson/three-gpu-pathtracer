@@ -36,6 +36,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 			vec3 uvPrime = material.mapTransform * vec3( uv, 1 );
 			albedo *= texture2D( textures, vec3( uvPrime.xy, material.map ) );
+
 		}
 
 		if ( material.vertexColors ) {
@@ -67,7 +68,7 @@ export const getSurfaceRecordGLSL = /* glsl */`
 			|| useAlphaTest && albedo.a < alphaTest
 
 			// opacity
-			|| material.transparent && ! useAlphaTest && albedo.a < sobol( 3 )
+			|| material.transparent && ! useAlphaTest && albedo.a < rand( 3 )
 		) {
 
 			return SKIP_SURFACE;
