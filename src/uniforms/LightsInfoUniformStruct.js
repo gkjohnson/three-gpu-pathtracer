@@ -58,7 +58,7 @@ export class LightsInfoUniformStruct {
 			let index = 0;
 
 			// initialize to 0
-			for ( let p = 0; p < LIGHT_PIXELS; p ++ ) {
+			for ( let p = 0; p < LIGHT_PIXELS * 4; p ++ ) {
 
 				floatArray[ baseIndex + p ] = 0;
 
