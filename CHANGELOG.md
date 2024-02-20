@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.0.18] - 2024.02.20
 ### Fixed
 - Transparent textures no longer have the color incorrectly premultiplied by the alpha.
 - Fix rounding error issue in tiled rendering logic causing some columns and rows of pixels to not be rendered to.
