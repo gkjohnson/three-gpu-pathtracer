@@ -309,7 +309,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// inverse environment rotation
 					envRotation3x3 = mat3( environmentRotation );
 					invEnvRotation3x3 = inverse( envRotation3x3 );
-					lightsDenom = environmentIntensity == 0.0 && lights.count != 0u ? float( lights.count ) : float( lights.count + 1u );
+					lightsDenom =
+						( environmentIntensity == 0.0 || envMapInfo.totalSum == 0.0 ) && lights.count != 0u ?
+							float( lights.count ) :
+							float( lights.count + 1u );
 
 					// final color
 					gl_FragColor = vec4( 0, 0, 0, 1 );
