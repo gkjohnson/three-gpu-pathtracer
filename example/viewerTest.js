@@ -24,8 +24,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
 
-const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
-const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
+const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/f2c4b9a8cb4cf9592396e4d3ccfadd11e7378500/packages/render-fidelity-tools/test/config.json';
+const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/f2c4b9a8cb4cf9592396e4d3ccfadd11e7378500/packages/render-fidelity-tools/test/config/';
 
 const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
@@ -566,7 +566,7 @@ async function updateModel() {
 	};
 
 	let modelUrl = new URL( modelInfo.model, BASE_URL ).toString();
-	modelUrl = modelUrl.replace( /.*?glTF-Sample-Assets/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main' );
+	modelUrl = modelUrl.replace( /.*?glTF-Sample-Models/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main' );
 
 	manager.onLoad = onFinish;
 
