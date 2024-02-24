@@ -209,14 +209,29 @@ export const bsdfSamplingGLSL = /* glsl */`
 
 		// PDF
 		// float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
-		float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
-		if ( F >= 1.0 ) {
+		// float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
+		// if ( F >= 1.0 ) {
+
+		// 	return 0.0;
+
+		// }
+
+		// return 1.0 / ( 1.0 - F );
+
+		// reverted to previous to transmission. The above was causing black pixels
+		float eta = surf.eta;
+		float f0 = surf.f0;
+		float cosTheta = min( wo.z, 1.0 );
+		float sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		float reflectance = schlickFresnel( cosTheta, f0 );
+		bool cannotRefract = eta * sinTheta > 1.0;
+		if ( cannotRefract ) {
 
 			return 0.0;
 
 		}
 
-		return 1.0 / ( 1.0 - F );
+		return 1.0 / ( 1.0 - reflectance );
 
 	}
 
