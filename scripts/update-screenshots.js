@@ -96,16 +96,10 @@ const argv = yargs( process.argv.slice( 2 ) )
 async function saveScreenshot( scenario, targetFolder ) {
 
 	const name = scenario.name;
-	const dimensions = Object.assign( { width: 768, height: 768 }, scenario.dimensions );
-
 	const args = argv.headless ? [ '--use-gl=egl', '--headless' ] : [];
 	const browser = await puppeteer.launch( {
 
-		defaultViewport: {
-			width: dimensions.width,
-			height: dimensions.height,
-			deviceScaleFactor: 1
-		},
+		defaultViewport: null,
 		args,
 		headless: argv.headless,
 
@@ -113,7 +107,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	const page = await browser.newPage();
 
-	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&tiles=1&samples=${ SAMPLES }#${ name }` );
+	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&tiles=4&samples=${ SAMPLES }#${ name }` );
 
 	try {
 
