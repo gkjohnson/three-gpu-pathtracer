@@ -104,7 +104,6 @@ async function saveScreenshot( scenario, targetFolder ) {
 		defaultViewport: {
 			width: dimensions.width,
 			height: dimensions.height,
-			deviceScaleFactor: 1
 		},
 		args,
 		headless: argv.headless,
@@ -113,7 +112,8 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	const page = await browser.newPage();
 
-	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&tiles=1&samples=${ SAMPLES }#${ name }` );
+	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&tiles=4&samples=${ SAMPLES }#${ name }` );
+	// await page._client.send( 'Emulation.clearDeviceMetricsOverride' );
 
 	try {
 
