@@ -11,7 +11,7 @@ const excludeList = [
 ];
 
 let totalTime = 0;
-const SAMPLES = 200;
+const SAMPLES = 64;
 const argv = yargs( process.argv.slice( 2 ) )
 	.usage( 'Usage: $0 <command> [options]' )
 	.option( 'output-path', {
