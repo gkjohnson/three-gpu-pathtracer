@@ -56,7 +56,6 @@ export class MaterialsTexture extends DataTexture {
 		this.minFilter = NearestFilter;
 		this.magFilter = NearestFilter;
 		this.generateMipmaps = false;
-		this.threeCompatibilityTransforms = false;
 		this.features = new MaterialFeatures();
 
 	}
@@ -117,47 +116,9 @@ export class MaterialsTexture extends DataTexture {
 
 		}
 
-		function getUVTransformTexture( material ) {
-
-			// https://github.com/mrdoob/three.js/blob/f3a832e637c98a404c64dae8174625958455e038/src/renderers/webgl/WebGLMaterials.js#L204-L306
-			// https://threejs.org/docs/#api/en/textures/Texture.offset
-			// fallback order of textures to use as a common uv transform
-			return material.map ||
-				material.specularMap ||
-				material.displacementMap ||
-				material.normalMap ||
-				material.bumpMap ||
-				material.roughnessMap ||
-				material.metalnessMap ||
-				material.alphaMap ||
-				material.emissiveMap ||
-				material.clearcoatMap ||
-				material.clearcoatNormalMap ||
-				material.clearcoatRoughnessMap ||
-				material.iridescenceMap ||
-				material.iridescenceThicknessMap ||
-				material.specularIntensityMap ||
-				material.specularColorMap ||
-				material.transmissionMap ||
-				material.thicknessMap ||
-				material.sheenColorMap ||
-				material.sheenRoughnessMap ||
-				null;
-
-		}
-
 		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
 
-			let texture;
-			if ( threeCompatibilityTransforms ) {
-
-				texture = getUVTransformTexture( material );
-
-			} else {
-
-				texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
-
-			}
+			const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
 
 			// check if texture exists
 			if ( texture ) {
@@ -187,7 +148,7 @@ export class MaterialsTexture extends DataTexture {
 		let index = 0;
 		const pixelCount = materials.length * MATERIAL_PIXELS;
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) ) || 1;
-		const { threeCompatibilityTransforms, image, features } = this;
+		const { image, features } = this;
 
 		// get the list of textures with unique sources
 		const uniqueTextures = reduceTexturesToUniqueSources( textures );
