@@ -101,10 +101,11 @@ async function saveScreenshot( scenario, targetFolder ) {
 	const args = argv.headless ? [ '--use-gl=egl', '--headless' ] : [];
 	const browser = await puppeteer.launch( {
 
-		defaultViewport: {
-			width: dimensions.width,
-			height: dimensions.height,
-		},
+		defaultViewport: null,
+		// defaultViewport: {
+		// 	width: dimensions.width,
+		// 	height: dimensions.height,
+		// },
 		args,
 		headless: argv.headless,
 
