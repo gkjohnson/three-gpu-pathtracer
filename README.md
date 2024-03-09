@@ -115,6 +115,7 @@ scene.updateMatrixWorld();
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
 const { bvh, textures, materials, lights } = generator.generate( scene );
+const geometry = bvh.geometry;
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
