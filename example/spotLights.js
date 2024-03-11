@@ -248,8 +248,7 @@ async function init() {
 
 			scene.add( result.scene );
 
-			const { bvh, textures, materials, lights } = result;
-			const geometry = bvh.geometry;
+			const { bvh, textures, materials, lights, geometry } = result;
 			const material = ptRenderer.material;
 
 			material.bvh.updateFrom( bvh );

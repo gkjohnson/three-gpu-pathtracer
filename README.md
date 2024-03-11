@@ -114,8 +114,7 @@ scene.updateMatrixWorld();
 
 // initialize the scene and update the material properties with the bvh, materials, etc
 const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials, lights } = generator.generate( scene );
-const geometry = bvh.geometry;
+const { bvh, textures, materials, lights, geometry } = generator.generate( scene );
 
 // update bvh and geometry attribute textures
 ptMaterial.bvh.updateFrom( bvh );
@@ -187,7 +186,7 @@ import { DynamicPathTracingSceneGenerator } from 'three-gpu-pathtracer';
 // ... initialize scene etc
 
 const generator = new DynamicPathTracingSceneGenerator( scene );
-const { bvh, textures, materials } = generator.generate( scene );
+const { bvh, textures, materials, geometry } = generator.generate( scene );
 
 // ... update path tracer and render
 ```
@@ -531,6 +530,7 @@ Takes the scene to convert.
 ```js
 generate() : {
 	bvh : MeshBVH,
+	geometry: BufferGeometry,
 	materials : Array<Material>,
 	textures : Array<Texture>
 }

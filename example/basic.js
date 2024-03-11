@@ -85,8 +85,7 @@ async function init() {
 
 			scene.add( result.scene );
 
-			const { bvh, textures, materials } = result;
-			const geometry = bvh.geometry;
+			const { bvh, textures, materials, geometry } = result;
 			const material = pathTracer.material;
 
 			material.bvh.updateFrom( bvh );

@@ -236,8 +236,7 @@ function regenerateScene() {
 	const { sceneGenerator } = model;
 	sceneInfo = sceneGenerator.generate();
 
-	const { bvh, textures, materials } = sceneInfo;
-	const geometry = bvh.geometry;
+	const { bvh, textures, materials, geometry } = sceneInfo;
 	const material = ptRenderer.material;
 
 	material.bvh.updateFrom( bvh );

@@ -491,8 +491,7 @@ async function updateModel() {
 		sceneInfo = result;
 		scene.add( sceneInfo.scene );
 
-		const { bvh, textures, materials, lights } = result;
-		const geometry = bvh.geometry;
+		const { bvh, textures, materials, lights, geometry } = result;
 		const material = ptRenderer.material;
 
 		material.bvh.updateFrom( bvh );

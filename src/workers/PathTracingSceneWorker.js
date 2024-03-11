@@ -37,6 +37,7 @@ export class PathTracingSceneWorker {
 				textures,
 				lights,
 				bvh,
+				geometry,
 			};
 
 		} );

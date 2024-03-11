@@ -138,6 +138,7 @@ export class DynamicPathTracingSceneGenerator {
 			return {
 				lights: this.lights,
 				bvh: this.bvh,
+				geometry: this.geometry,
 				materials: this.materials,
 				textures: this.textures,
 				objects,
@@ -151,6 +152,7 @@ export class DynamicPathTracingSceneGenerator {
 			return {
 				lights: this.lights,
 				bvh: this.bvh,
+				geometry: this.geometry,
 				materials: this.materials,
 				textures: this.textures,
 				objects,
