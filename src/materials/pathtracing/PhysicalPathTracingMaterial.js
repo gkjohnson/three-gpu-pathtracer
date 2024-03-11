@@ -15,15 +15,12 @@ import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
 
 // glsl
-import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
-import { equirectStructGLSL } from '../../shader/structs/equirectStruct.glsl.js';
-import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
-import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
-import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
+import * as StructsGLSL from '../../shader/structs/index.js';
 
 // material sampling
 import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
 import { fogGLSL } from '../../shader/bsdf/fog.glsl.js';
+import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
 
 // sampling
 import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
@@ -157,10 +154,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
-				${ cameraStructGLSL }
-				${ lightsStructGLSL }
-				${ equirectStructGLSL }
-				${ materialStructGLSL }
+				${ StructsGLSL.camera_struct }
+				${ StructsGLSL.lights_struct }
+				${ StructsGLSL.equirect_struct }
+				${ StructsGLSL.material_struct }
 
 				// random
 				#if RANDOM_TYPE == 2 	// Stratified List

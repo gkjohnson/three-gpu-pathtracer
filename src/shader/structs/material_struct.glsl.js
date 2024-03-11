@@ -1,4 +1,4 @@
-export const materialStructGLSL = /* glsl */ `
+export const material_struct = /* glsl */ `
 
 	struct Material {
 

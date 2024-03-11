@@ -2,7 +2,7 @@ import { TangentSpaceNormalMap, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import { MeshBVHUniformStruct, BVHShaderGLSL } from 'three-mesh-bvh';
 
-import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
+import * as StructsGLSL from '../../shader/structs/index.js';
 import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
 import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
 
@@ -102,7 +102,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
-				${ materialStructGLSL }
+				${ StructsGLSL.materials_struct }
 
 				// rand
 				${ pcgGLSL }
