@@ -102,7 +102,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
-				${ StructsGLSL.materials_struct }
+				${ StructsGLSL.material_struct }
 
 				// rand
 				${ RandomGLSL.pcg_functions }
