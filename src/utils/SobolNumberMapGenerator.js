@@ -1,7 +1,7 @@
 import { FloatType, NearestFilter, NoBlending, RGBAFormat, Vector2, WebGLRenderTarget } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
-import { sobolCommonGLSL, sobolGenerationGLSL } from '../shader/rand/sobol.glsl.js';
+import { sobol_common, sobol_point_generation } from '../shader/rand/sobol.glsl.js';
 
 class SobolNumbersMaterial extends MaterialBase {
 
@@ -30,8 +30,8 @@ class SobolNumbersMaterial extends MaterialBase {
 
 			fragmentShader: /* glsl */`
 
-				${ sobolCommonGLSL }
-				${ sobolGenerationGLSL }
+				${ sobol_common }
+				${ sobol_point_generation }
 
 				varying vec2 vUv;
 				uniform vec2 resolution;

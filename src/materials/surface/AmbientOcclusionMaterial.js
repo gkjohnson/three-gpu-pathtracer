@@ -4,7 +4,7 @@ import { MeshBVHUniformStruct, BVHShaderGLSL } from 'three-mesh-bvh';
 
 import * as StructsGLSL from '../../shader/structs/index.js';
 import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
-import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
+import * as RandomGLSL from '../../shader/rand/index.js';
 
 export class AmbientOcclusionMaterial extends MaterialBase {
 
@@ -105,7 +105,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				${ StructsGLSL.materials_struct }
 
 				// rand
-				${ pcgGLSL }
+				${ RandomGLSL.pcg_functions }
 
 				// common
 				${ shapeSamplingGLSL }

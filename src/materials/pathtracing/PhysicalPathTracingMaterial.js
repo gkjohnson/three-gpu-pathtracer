@@ -35,8 +35,7 @@ import { fresnelGLSL } from '../../shader/common/fresnel.glsl.js';
 import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
 
 // random glsl
-import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
-import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl.js';
+import * as RandomGLSL from '../../shader/rand/index.js';
 
 // path tracer utils
 import { renderStructsGLSL } from './glsl/renderStructs.glsl.js';
@@ -45,7 +44,6 @@ import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
 import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
 import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
 import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
-import { stratifiedTextureGLSL } from '../../shader/rand/stratifiedTexture.glsl.js';
 import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
 import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
 
@@ -162,13 +160,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// random
 				#if RANDOM_TYPE == 2 	// Stratified List
 
-					${ stratifiedTextureGLSL }
+					${ RandomGLSL.stratified_functions }
 
 				#elif RANDOM_TYPE == 1 	// Sobol
 
-					${ pcgGLSL }
-					${ sobolCommonGLSL }
-					${ sobolSamplingGLSL }
+					${ RandomGLSL.pcg_functions }
+					${ RandomGLSL.sobol_common }
+					${ RandomGLSL.sobol_functions }
 
 					#define rand(v) sobol(v)
 					#define rand2(v) sobol2(v)
@@ -177,7 +175,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#else 					// PCG
 
-					${ pcgGLSL }
+				${ RandomGLSL.pcg_functions }
 
 					// Using the sobol functions seems to break the the compiler on MacOS
 					// - specifically the "sobolReverseBits" function.

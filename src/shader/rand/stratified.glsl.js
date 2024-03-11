@@ -1,4 +1,4 @@
-export const stratifiedTextureGLSL = /* glsl */`
+export const stratified_functions = /* glsl */`
 
 	uniform sampler2D stratifiedTexture;
 	uniform sampler2D stratifiedOffsetTexture;
