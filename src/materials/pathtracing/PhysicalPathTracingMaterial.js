@@ -23,16 +23,10 @@ import { fogGLSL } from '../../shader/bsdf/fog.glsl.js';
 import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
 
 // sampling
-import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
-import { lightSamplingGLSL } from '../../shader/sampling/lightSampling.glsl.js';
-import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
+import * as SamplingGLSL from '../../shader/sampling/index.js';
 
 // common glsl
-import { intersectShapesGLSL } from '../../shader/common/intersectShapes.glsl.js';
-import { mathGLSL } from '../../shader/common/math.glsl.js';
-import { utilsGLSL } from '../../shader/common/utils.glsl.js';
-import { fresnelGLSL } from '../../shader/common/fresnel.glsl.js';
-import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
+import * as CommonGLSL from '../../shader/common/index.js';
 
 // random glsl
 import * as RandomGLSL from '../../shader/rand/index.js';
@@ -191,11 +185,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				#endif
 
 				// common
-				${ arraySamplerTexelFetchGLSL }
-				${ fresnelGLSL }
-				${ utilsGLSL }
-				${ mathGLSL }
-				${ intersectShapesGLSL }
+				${ CommonGLSL.texture_sample_functions }
+				${ CommonGLSL.fresnel_functions }
+				${ CommonGLSL.util_functions }
+				${ CommonGLSL.math_functions }
+				${ CommonGLSL.shape_intersection_functions }
 
 				// environment
 				uniform EquirectHdrInfo envMapInfo;
@@ -250,10 +244,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// sampling
 				${ fogMaterialBvhGLSL }
-				${ shapeSamplingGLSL }
+				${ SamplingGLSL.shape_sampling_functions }
 				${ bsdfSamplingGLSL }
-				${ equirectSamplingGLSL }
-				${ lightSamplingGLSL }
+				${ SamplingGLSL.equirect_functions }
+				${ SamplingGLSL.light_sampling_functions }
 				${ fogGLSL }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {

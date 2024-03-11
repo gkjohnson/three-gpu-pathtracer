@@ -1,4 +1,4 @@
-export const lightSamplingGLSL = /* glsl */`
+export const light_sampling_functions = /* glsl */`
 
 	float getSpotAttenuation( const in float coneCosine, const in float penumbraCosine, const in float angleCosine ) {
 
