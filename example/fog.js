@@ -102,8 +102,7 @@ async function init() {
 	sceneInfo = await generator.generate( group );
 	scene.add( sceneInfo.scene );
 
-	const { bvh, textures, materials } = sceneInfo;
-	const geometry = bvh.geometry;
+	const { bvh, textures, materials, geometry } = sceneInfo;
 	ptRenderer.material.environmentIntensity = 0.0;
 	ptRenderer.material.bvh.updateFrom( bvh );
 	ptRenderer.material.attributesArray.updateFrom(
