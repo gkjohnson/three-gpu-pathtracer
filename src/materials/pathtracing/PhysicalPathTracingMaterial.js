@@ -16,20 +16,14 @@ import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
 
 // glsl
 import * as StructsGLSL from '../../shader/structs/index.js';
+import * as SamplingGLSL from '../../shader/sampling/index.js';
+import * as CommonGLSL from '../../shader/common/index.js';
+import * as RandomGLSL from '../../shader/rand/index.js';
+
 
 // material sampling
-import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
-import { fogGLSL } from '../../shader/bsdf/fog.glsl.js';
-import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
-
-// sampling
-import * as SamplingGLSL from '../../shader/sampling/index.js';
-
-// common glsl
-import * as CommonGLSL from '../../shader/common/index.js';
-
-// random glsl
-import * as RandomGLSL from '../../shader/rand/index.js';
+import * as BSDFGLSL from '../../shader/bsdf/index.js';
+import * as PTBVHGLSL from '../../shader/bvh/index.js';
 
 // path tracer utils
 import { renderStructsGLSL } from './glsl/renderStructs.glsl.js';
@@ -150,6 +144,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ StructsGLSL.lights_struct }
 				${ StructsGLSL.equirect_struct }
 				${ StructsGLSL.material_struct }
+				${ StructsGLSL.surface_record_struct }
 
 				// random
 				#if RANDOM_TYPE == 2 	// Stratified List
@@ -243,12 +238,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				float lightsDenom;
 
 				// sampling
-				${ fogMaterialBvhGLSL }
 				${ SamplingGLSL.shape_sampling_functions }
-				${ bsdfSamplingGLSL }
 				${ SamplingGLSL.equirect_functions }
 				${ SamplingGLSL.light_sampling_functions }
-				${ fogGLSL }
+
+				${ PTBVHGLSL.inside_fog_volume_function }
+				${ BSDFGLSL.ggx_functions }
+				${ BSDFGLSL.sheen_functions }
+				${ BSDFGLSL.iridescence_functions }
+				${ BSDFGLSL.fog_functions }
+				${ BSDFGLSL.bsdf_functions }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 

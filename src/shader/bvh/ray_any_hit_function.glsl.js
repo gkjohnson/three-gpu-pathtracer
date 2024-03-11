@@ -1,4 +1,4 @@
-export const bvh_any_hit_function = /* glsl */`
+export const ray_any_hit_function = /* glsl */`
 
 	bool bvhIntersectAnyHit(
 		vec3 rayOrigin, vec3 rayDirection,

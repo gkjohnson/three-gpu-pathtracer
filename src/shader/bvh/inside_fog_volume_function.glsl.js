@@ -1,4 +1,4 @@
-export const fogMaterialBvhGLSL = /* glsl */`
+export const inside_fog_volume_function = /* glsl */`
 
 #ifndef FOG_CHECK_ITERATIONS
 #define FOG_CHECK_ITERATIONS 30

@@ -1,4 +1,3 @@
-export * from './bvh_any_hit_function.glsl.js';
 export * from './fresnel_functions.glsl.js';
 export * from './math_functions.glsl.js';
 export * from './shape_intersection_functions.glsl.js';
