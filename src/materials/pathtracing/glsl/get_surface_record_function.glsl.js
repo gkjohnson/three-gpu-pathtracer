@@ -1,5 +1,5 @@
 
-export const getSurfaceRecordGLSL = /* glsl */`
+export const get_surface_record_function = /* glsl */`
 
 	#define SKIP_SURFACE 0
 	#define HIT_SURFACE 1
