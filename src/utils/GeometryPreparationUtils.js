@@ -1,5 +1,5 @@
 import { BufferAttribute } from 'three';
-import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
 export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
 
 	const indexAttr = geometry.index;
