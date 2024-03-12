@@ -82,6 +82,10 @@ export const materialStructGLSL = /* glsl */ `
 		mat3 specularColorMapTransform;
 		mat3 specularIntensityMapTransform;
 
+		int bumpMap;
+		float bumpScale;
+		mat3 bumpMapTransform;
+
 	};
 
 	mat3 readTextureTransform( sampler2D tex, uint index ) {
@@ -101,7 +105,7 @@ export const materialStructGLSL = /* glsl */ `
 
 	Material readMaterialInfo( sampler2D tex, uint index ) {
 
-		uint i = index * 45u;
+		uint i = index * 48u;
 
 		vec4 s0 = texelFetch1D( tex, i + 0u );
 		vec4 s1 = texelFetch1D( tex, i + 1u );
@@ -200,6 +204,12 @@ export const materialStructGLSL = /* glsl */ `
 		m.iridescenceThicknessMapTransform = m.iridescenceThicknessMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 24u );
 		m.specularColorMapTransform = m.specularColorMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 26u );
 		m.specularIntensityMapTransform = m.specularIntensityMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 28u );
+
+		vec4 s15 = texelFetch1D( tex, firstTextureTransformIdx + 30u );
+		m.bumpMap = int( round( s15.r ) );
+		m.bumpScale = s15.g;
+		// s15.b, s15.a are not used
+		m.bumpMapTransform = m.bumpMap == - 1 ? mat3( 1.0 ) : readTextureTransform( tex, firstTextureTransformIdx + 31u );
 
 		return m;
 

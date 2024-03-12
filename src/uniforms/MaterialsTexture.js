@@ -1,7 +1,7 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, NearestFilter } from 'three';
 import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
 
-const MATERIAL_PIXELS = 45;
+const MATERIAL_PIXELS = 48;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 const MATTE_OFFSET = 14 * 4 + 0; // s14.r
@@ -456,6 +456,17 @@ export class MaterialsTexture extends DataTexture {
 
 			// specularIntensityMap transform 43
 			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
+
+			// sample 45
+			// bumpMap texture
+			floatArray[ index ++ ] = getTexture( m, 'bumpMap' );
+			// bumpScale
+			floatArray[ index ++ ] = getField( m, 'bumpScale', 1.0 );
+			// padding 2 index for alignment to 4
+			index ++;
+			index ++;
+			// bumpMap transform 46, 47
+			index += writeTextureMatrixToArray( m, 'bumpMap', floatArray, index );
 
 		}
 
