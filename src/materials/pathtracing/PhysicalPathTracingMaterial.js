@@ -13,27 +13,19 @@ import { IESProfilesTexture } from '../../uniforms/IESProfilesTexture.js';
 import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
 import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
+import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
+import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
 
-// glsl
+// general glsl
 import * as StructsGLSL from '../../shader/structs/index.js';
 import * as SamplingGLSL from '../../shader/sampling/index.js';
 import * as CommonGLSL from '../../shader/common/index.js';
 import * as RandomGLSL from '../../shader/rand/index.js';
-
-
-// material sampling
 import * as BSDFGLSL from '../../shader/bsdf/index.js';
 import * as PTBVHGLSL from '../../shader/bvh/index.js';
 
-// path tracer utils
-import { renderStructsGLSL } from './glsl/renderStructs.glsl.js';
-import { cameraUtilsGLSL } from './glsl/cameraUtils.glsl.js';
-import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
-import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
-import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
-import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
-import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
-import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
+// path tracer glsl
+import * as RenderGLSL from './glsl/index.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -78,32 +70,40 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			},
 
 			uniforms: {
-				resolution: { value: new Vector2() },
 
+				// path trace uniforms
+				resolution: { value: new Vector2() },
+				opacity: { value: 1 },
 				bounces: { value: 10 },
 				transmissiveBounces: { value: 10 },
-				physicalCamera: { value: new PhysicalCameraUniform() },
+				filterGlossyFactor: { value: 0.0 },
 
+				// camera uniforms
+				physicalCamera: { value: new PhysicalCameraUniform() },
+				cameraWorldMatrix: { value: new Matrix4() },
+				invProjectionMatrix: { value: new Matrix4() },
+
+				// scene uniforms
 				bvh: { value: new MeshBVHUniformStruct() },
 				attributesArray: { value: new AttributesTextureArray() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
+
+				// light uniforms
 				lights: { value: new LightsInfoUniformStruct() },
 				iesProfiles: { value: new IESProfilesTexture().texture },
-				cameraWorldMatrix: { value: new Matrix4() },
-				invProjectionMatrix: { value: new Matrix4() },
-				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 1.0 },
 				environmentRotation: { value: new Matrix4() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
+
+				// background uniforms
+				backgroundBlur: { value: 0.0 },
 				backgroundMap: { value: null },
-
-				seed: { value: 0 },
-				opacity: { value: 1 },
-				filterGlossyFactor: { value: 0.0 },
-
 				backgroundAlpha: { value: 1.0 },
+
+				// randomness uniforms
+				seed: { value: 0 },
 				sobolTexture: { value: null },
 				stratifiedTexture: { value: new StratifiedSamplesTexture() },
 				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 1 ) },
@@ -277,12 +277,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				${ renderStructsGLSL }
-				${ cameraUtilsGLSL }
-				${ traceSceneGLSL }
-				${ attenuateHitGLSL }
-				${ directLightContributionGLSL }
-				${ getSurfaceRecordGLSL }
+				${ RenderGLSL.render_structs }
+				${ RenderGLSL.camera_util_functions }
+				${ RenderGLSL.trace_scene_function }
+				${ RenderGLSL.attenuate_hit_function }
+				${ RenderGLSL.direct_light_contribution_function }
+				${ RenderGLSL.get_surface_record_function }
 
 				void main() {
 

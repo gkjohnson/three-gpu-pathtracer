@@ -1,4 +1,4 @@
-export const directLightContributionGLSL = /*glsl*/`
+export const direct_light_contribution_function = /*glsl*/`
 
 	vec3 directLightContribution( vec3 worldWo, SurfaceRecord surf, RenderState state, vec3 rayOrigin ) {
 

@@ -1,4 +1,4 @@
-export const traceSceneGLSL = /* glsl */`
+export const trace_scene_function = /* glsl */`
 
 	#define NO_HIT 0
 	#define SURFACE_HIT 1
@@ -9,9 +9,7 @@ export const traceSceneGLSL = /* glsl */`
 	// So global variables like 'lights' and 'bvh' were moved out of the function parameters.
 	// For more information, refer to: https://github.com/gkjohnson/three-gpu-pathtracer/pull/457
 	int traceScene(
-
 		Ray ray, Material fogMaterial, inout SurfaceHit surfaceHit
-
 	) {
 
 		int result = NO_HIT;
