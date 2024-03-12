@@ -80,8 +80,7 @@ export class DynamicPathTracingSceneGenerator {
 
 				if ( c.isMesh ) {
 
-					const normalMapRequired = ! ! c.material.normalMap;
-					setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+					setCommonAttributes( c.geometry, attributes );
 
 				} else if (
 					c.isRectAreaLight ||

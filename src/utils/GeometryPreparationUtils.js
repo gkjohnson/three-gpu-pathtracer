@@ -54,9 +54,22 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 
 }
 
-export function setCommonAttributes( geometry, options ) {
+export function setCommonAttributes( geometry, attributes ) {
 
-	const { attributes = [], normalMapRequired = false } = options;
+	if ( ! geometry.index ) {
+
+		// TODO: compute a typed array
+		const indexCount = geometry.attributes.position.count;
+		const array = new Array( indexCount );
+		for ( let i = 0; i < indexCount; i ++ ) {
+
+			array[ i ] = i;
+
+		}
+
+		geometry.setIndex( array );
+
+	}
 
 	if ( ! geometry.attributes.normal && ( attributes && attributes.includes( 'normal' ) ) ) {
 
@@ -80,14 +93,8 @@ export function setCommonAttributes( geometry, options ) {
 
 	if ( ! geometry.attributes.tangent && ( attributes && attributes.includes( 'tangent' ) ) ) {
 
-		if ( normalMapRequired ) {
-
-			// computeTangents requires an index buffer
-			if ( geometry.index === null ) {
-
-				geometry = mergeVertices( geometry );
-
-			}
+		// compute tangents requires a uv and normal buffer
+		if ( geometry.attributes.uv && geometry.attributes.normal ) {
 
 			geometry.computeTangents();
 
@@ -106,21 +113,6 @@ export function setCommonAttributes( geometry, options ) {
 		const array = new Float32Array( vertCount * 4 );
 		array.fill( 1.0 );
 		geometry.setAttribute( 'color', new BufferAttribute( array, 4 ) );
-
-	}
-
-	if ( ! geometry.index ) {
-
-		// TODO: compute a typed array
-		const indexCount = geometry.attributes.position.count;
-		const array = new Array( indexCount );
-		for ( let i = 0; i < indexCount; i ++ ) {
-
-			array[ i ] = i;
-
-		}
-
-		geometry.setIndex( array );
 
 	}
 
