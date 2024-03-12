@@ -129,10 +129,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			vertexShader: /* glsl */`
 
 				varying vec2 vUv;
+				varying vec3 vViewPosition;
 				void main() {
 
 					vec4 mvPosition = vec4( position, 1.0 );
 					mvPosition = modelViewMatrix * mvPosition;
+					vViewPosition = - mvPosition.xyz;
 					gl_Position = projectionMatrix * mvPosition;
 
 					vUv = uv;
@@ -247,6 +249,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				uniform float opacity;
 
 				varying vec2 vUv;
+				varying vec3 vViewPosition;
 
 				// globals
 				mat3 envRotation3x3;
@@ -457,7 +460,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						if (
 							getSurfaceRecord(
 								material, surfaceHit, attributesArray, state.accumulatedRoughness,
-								surf
+								surf, vViewPosition
 							) == SKIP_SURFACE
 						) {
 
