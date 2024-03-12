@@ -3,10 +3,22 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 	#define SKIP_SURFACE 0
 	#define HIT_SURFACE 1
+	vec3 perturbNormalArb( vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDirection ) {
+		// normalize is done to ensure that the bump map looks the same regardless of the texture's scale
+		vec3 vSigmaX = normalize( dFdx( surf_pos.xyz ) );
+		vec3 vSigmaY = normalize( dFdy( surf_pos.xyz ) );
+		vec3 vN = surf_norm; // normalized
+		vec3 R1 = cross( vSigmaY, vN );
+		vec3 R2 = cross( vN, vSigmaX );
+		float fDet = dot( vSigmaX, R1 ) * faceDirection;
+		vec3 vGrad = sign( fDet ) * ( dHdxy.x * R1 + dHdxy.y * R2 );
+		return normalize( abs( fDet ) * surf_norm - vGrad );
+	}
+
 	int getSurfaceRecord(
 		Material material, SurfaceHit surfaceHit, sampler2DArray attributesArray,
 		float accumulatedRoughness,
-		inout SurfaceRecord surf
+		inout SurfaceRecord surf, vec3 vViewPosition
 	) {
 
 		if ( material.fogVolume ) {
@@ -154,6 +166,21 @@ export const getSurfaceRecordGLSL = /* glsl */`
 
 			}
 
+		} else if( material.bumpMap != -1) {
+
+			vec3 uvPrime = material.bumpMapTransform * vec3( uv, 1 );
+			float bumpScale = material.bumpScale;
+			
+			vec2 dSTdx = dFdx( uvPrime.xy );
+			vec2 dSTdy = dFdy( uvPrime.xy );
+	
+			float Hll = bumpScale * texture2D( textures, vec3( uvPrime.xy, material.bumpMap ) ).x;
+			float dBx = bumpScale * texture2D( textures, vec3( uvPrime.xy + dSTdx, material.bumpMap ) ).x - Hll;
+			float dBy = bumpScale * texture2D( textures, vec3( uvPrime.xy + dSTdy, material.bumpMap ) ).x - Hll;
+	
+			vec2 dHdxy = vec2( dBx, dBy );
+			normal = perturbNormalArb( -vViewPosition, normal, dHdxy, surfaceHit.side );
+			
 		}
 
 		normal *= surfaceHit.side;
