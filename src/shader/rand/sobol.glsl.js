@@ -105,7 +105,7 @@ function generateSobolSampleFunctions( dim = 1 ) {
 
 }
 
-export const sobolCommonGLSL = /* glsl */`
+export const sobol_common = /* glsl */`
 
 	// Utils
 	const float SOBOL_FACTOR = 1.0 / 16777216.0;
@@ -130,7 +130,7 @@ export const sobolCommonGLSL = /* glsl */`
 
 `;
 
-export const sobolGenerationGLSL = /* glsl */`
+export const sobol_point_generation = /* glsl */`
 
 	const uint SOBOL_DIRECTIONS_1[ 32 ] = uint[ 32 ](
 		0x80000000u, 0xc0000000u, 0xa0000000u, 0xf0000000u,
@@ -197,7 +197,7 @@ export const sobolGenerationGLSL = /* glsl */`
 
 		}
 
-		// NOTEL this sobol "direction" is also available but we can't write out 5 components
+		// NOTE: this sobol "direction" is also available but we can't write out 5 components
 		// uint x = index & 0x00ffffffu;
 		uint x = sobolReverseBits( getMaskedSobol( index, SOBOL_DIRECTIONS_1 ) ) & 0x00ffffffu;
 		uint y = sobolReverseBits( getMaskedSobol( index, SOBOL_DIRECTIONS_2 ) ) & 0x00ffffffu;
@@ -210,7 +210,7 @@ export const sobolGenerationGLSL = /* glsl */`
 
 `;
 
-export const sobolSamplingGLSL = /* glsl */`
+export const sobol_functions = /* glsl */`
 
 	// Seeds
 	uniform sampler2D sobolTexture;

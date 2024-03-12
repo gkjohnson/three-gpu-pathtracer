@@ -13,44 +13,19 @@ import { IESProfilesTexture } from '../../uniforms/IESProfilesTexture.js';
 import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
 import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
-
-// glsl
-import { cameraStructGLSL } from '../../shader/structs/cameraStruct.glsl.js';
-import { equirectStructGLSL } from '../../shader/structs/equirectStruct.glsl.js';
-import { lightsStructGLSL } from '../../shader/structs/lightsStruct.glsl.js';
-import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
-import { fogMaterialBvhGLSL } from '../../shader/structs/fogMaterialBvh.glsl.js';
-
-// material sampling
-import { bsdfSamplingGLSL } from '../../shader/bsdf/bsdfSampling.glsl.js';
-import { fogGLSL } from '../../shader/bsdf/fog.glsl.js';
-
-// sampling
-import { equirectSamplingGLSL } from '../../shader/sampling/equirectSampling.glsl.js';
-import { lightSamplingGLSL } from '../../shader/sampling/lightSampling.glsl.js';
-import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
-
-// common glsl
-import { intersectShapesGLSL } from '../../shader/common/intersectShapes.glsl.js';
-import { mathGLSL } from '../../shader/common/math.glsl.js';
-import { utilsGLSL } from '../../shader/common/utils.glsl.js';
-import { fresnelGLSL } from '../../shader/common/fresnel.glsl.js';
-import { arraySamplerTexelFetchGLSL } from '../../shader/common/arraySamplerTexelFetch.glsl.js';
-
-// random glsl
-import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
-import { sobolCommonGLSL, sobolSamplingGLSL } from '../../shader/rand/sobol.glsl.js';
-
-// path tracer utils
-import { renderStructsGLSL } from './glsl/renderStructs.glsl.js';
-import { cameraUtilsGLSL } from './glsl/cameraUtils.glsl.js';
-import { attenuateHitGLSL } from './glsl/attenuateHit.glsl.js';
-import { traceSceneGLSL } from './glsl/traceScene.glsl.js';
-import { getSurfaceRecordGLSL } from './glsl/getSurfaceRecord.glsl.js';
-import { directLightContributionGLSL } from './glsl/directLightContribution.glsl.js';
-import { stratifiedTextureGLSL } from '../../shader/rand/stratifiedTexture.glsl.js';
 import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
 import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
+
+// general glsl
+import * as StructsGLSL from '../../shader/structs/index.js';
+import * as SamplingGLSL from '../../shader/sampling/index.js';
+import * as CommonGLSL from '../../shader/common/index.js';
+import * as RandomGLSL from '../../shader/rand/index.js';
+import * as BSDFGLSL from '../../shader/bsdf/index.js';
+import * as PTBVHGLSL from '../../shader/bvh/index.js';
+
+// path tracer glsl
+import * as RenderGLSL from './glsl/index.js';
 
 export class PhysicalPathTracingMaterial extends MaterialBase {
 
@@ -95,32 +70,40 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 			},
 
 			uniforms: {
-				resolution: { value: new Vector2() },
 
+				// path trace uniforms
+				resolution: { value: new Vector2() },
+				opacity: { value: 1 },
 				bounces: { value: 10 },
 				transmissiveBounces: { value: 10 },
-				physicalCamera: { value: new PhysicalCameraUniform() },
+				filterGlossyFactor: { value: 0.0 },
 
+				// camera uniforms
+				physicalCamera: { value: new PhysicalCameraUniform() },
+				cameraWorldMatrix: { value: new Matrix4() },
+				invProjectionMatrix: { value: new Matrix4() },
+
+				// scene uniforms
 				bvh: { value: new MeshBVHUniformStruct() },
 				attributesArray: { value: new AttributesTextureArray() },
 				materialIndexAttribute: { value: new UIntVertexAttributeTexture() },
 				materials: { value: new MaterialsTexture() },
 				textures: { value: new RenderTarget2DArray().texture },
+
+				// light uniforms
 				lights: { value: new LightsInfoUniformStruct() },
 				iesProfiles: { value: new IESProfilesTexture().texture },
-				cameraWorldMatrix: { value: new Matrix4() },
-				invProjectionMatrix: { value: new Matrix4() },
-				backgroundBlur: { value: 0.0 },
 				environmentIntensity: { value: 1.0 },
 				environmentRotation: { value: new Matrix4() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
+
+				// background uniforms
+				backgroundBlur: { value: 0.0 },
 				backgroundMap: { value: null },
-
-				seed: { value: 0 },
-				opacity: { value: 1 },
-				filterGlossyFactor: { value: 0.0 },
-
 				backgroundAlpha: { value: 1.0 },
+
+				// randomness uniforms
+				seed: { value: 0 },
 				sobolTexture: { value: null },
 				stratifiedTexture: { value: new StratifiedSamplesTexture() },
 				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 1 ) },
@@ -157,21 +140,22 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
-				${ cameraStructGLSL }
-				${ lightsStructGLSL }
-				${ equirectStructGLSL }
-				${ materialStructGLSL }
+				${ StructsGLSL.camera_struct }
+				${ StructsGLSL.lights_struct }
+				${ StructsGLSL.equirect_struct }
+				${ StructsGLSL.material_struct }
+				${ StructsGLSL.surface_record_struct }
 
 				// random
 				#if RANDOM_TYPE == 2 	// Stratified List
 
-					${ stratifiedTextureGLSL }
+					${ RandomGLSL.stratified_functions }
 
 				#elif RANDOM_TYPE == 1 	// Sobol
 
-					${ pcgGLSL }
-					${ sobolCommonGLSL }
-					${ sobolSamplingGLSL }
+					${ RandomGLSL.pcg_functions }
+					${ RandomGLSL.sobol_common }
+					${ RandomGLSL.sobol_functions }
 
 					#define rand(v) sobol(v)
 					#define rand2(v) sobol2(v)
@@ -180,7 +164,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				#else 					// PCG
 
-					${ pcgGLSL }
+				${ RandomGLSL.pcg_functions }
 
 					// Using the sobol functions seems to break the the compiler on MacOS
 					// - specifically the "sobolReverseBits" function.
@@ -196,11 +180,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				#endif
 
 				// common
-				${ arraySamplerTexelFetchGLSL }
-				${ fresnelGLSL }
-				${ utilsGLSL }
-				${ mathGLSL }
-				${ intersectShapesGLSL }
+				${ CommonGLSL.texture_sample_functions }
+				${ CommonGLSL.fresnel_functions }
+				${ CommonGLSL.util_functions }
+				${ CommonGLSL.math_functions }
+				${ CommonGLSL.shape_intersection_functions }
 
 				// environment
 				uniform EquirectHdrInfo envMapInfo;
@@ -254,12 +238,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				float lightsDenom;
 
 				// sampling
-				${ fogMaterialBvhGLSL }
-				${ shapeSamplingGLSL }
-				${ bsdfSamplingGLSL }
-				${ equirectSamplingGLSL }
-				${ lightSamplingGLSL }
-				${ fogGLSL }
+				${ SamplingGLSL.shape_sampling_functions }
+				${ SamplingGLSL.equirect_functions }
+				${ SamplingGLSL.light_sampling_functions }
+
+				${ PTBVHGLSL.inside_fog_volume_function }
+				${ BSDFGLSL.ggx_functions }
+				${ BSDFGLSL.sheen_functions }
+				${ BSDFGLSL.iridescence_functions }
+				${ BSDFGLSL.fog_functions }
+				${ BSDFGLSL.bsdf_functions }
 
 				float applyFilteredGlossy( float roughness, float accumulatedRoughness ) {
 
@@ -289,12 +277,12 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				}
 
-				${ renderStructsGLSL }
-				${ cameraUtilsGLSL }
-				${ traceSceneGLSL }
-				${ attenuateHitGLSL }
-				${ directLightContributionGLSL }
-				${ getSurfaceRecordGLSL }
+				${ RenderGLSL.render_structs }
+				${ RenderGLSL.camera_util_functions }
+				${ RenderGLSL.trace_scene_function }
+				${ RenderGLSL.attenuate_hit_function }
+				${ RenderGLSL.direct_light_contribution_function }
+				${ RenderGLSL.get_surface_record_function }
 
 				void main() {
 

@@ -1,4 +1,4 @@
-export const intersectShapesGLSL = /* glsl */`
+export const shape_intersection_functions = /* glsl */`
 
 	// Finds the point where the ray intersects the plane defined by u and v and checks if this point
 	// falls in the bounds of the rectangle on that same plane.

@@ -1,4 +1,4 @@
-export const attenuateHitGLSL = /* glsl */`
+export const attenuate_hit_function = /* glsl */`
 
 	// step through multiple surface hits and accumulate color attenuation based on transmissive surfaces
 	// returns true if a solid surface was hit

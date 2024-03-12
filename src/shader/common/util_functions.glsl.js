@@ -1,4 +1,4 @@
-export const utilsGLSL = /* glsl */`
+export const util_functions = /* glsl */`
 
 	// TODO: possibly this should be renamed something related to material or path tracing logic
 

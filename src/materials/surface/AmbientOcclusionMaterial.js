@@ -2,9 +2,9 @@ import { TangentSpaceNormalMap, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import { MeshBVHUniformStruct, BVHShaderGLSL } from 'three-mesh-bvh';
 
-import { materialStructGLSL } from '../../shader/structs/materialStruct.glsl.js';
-import { shapeSamplingGLSL } from '../../shader/sampling/shapeSampling.glsl.js';
-import { pcgGLSL } from '../../shader/rand/pcg.glsl.js';
+import * as StructsGLSL from '../../shader/structs/index.js';
+import * as SamplingGLSL from '../../shader/sampling/index.js';
+import * as RandomGLSL from '../../shader/rand/index.js';
 
 export class AmbientOcclusionMaterial extends MaterialBase {
 
@@ -59,7 +59,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				varying vec3 vNorm;
 				varying vec3 vPos;
 
-				#if defined(USE_NORMALMAP) && defined(USE_TANGENT)
+				#if defined( USE_NORMALMAP ) && defined( USE_TANGENT )
 
 					varying vec2 vUv;
 					varying vec4 vTan;
@@ -102,13 +102,13 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 				${ BVHShaderGLSL.bvh_ray_functions }
 
 				// uniform structs
-				${ materialStructGLSL }
+				${ StructsGLSL.material_struct }
 
 				// rand
-				${ pcgGLSL }
+				${ RandomGLSL.pcg_functions }
 
 				// common
-				${ shapeSamplingGLSL }
+				${ SamplingGLSL.shape_sampling_functions }
 
 				uniform BVH bvh;
 				uniform int seed;

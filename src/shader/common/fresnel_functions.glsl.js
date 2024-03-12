@@ -1,4 +1,4 @@
-export const fresnelGLSL = /* glsl */`
+export const fresnel_functions = /* glsl */`
 
 	bool totalInternalReflection( float cosTheta, float eta ) {
 

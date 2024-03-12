@@ -1,4 +1,4 @@
-export const equirectSamplingGLSL = /* glsl */`
+export const equirect_functions = /* glsl */`
 
 	// samples the the given environment map in the given direction
 	vec3 sampleEquirectColor( sampler2D envMap, vec3 direction ) {
@@ -65,5 +65,4 @@ export const equirectSamplingGLSL = /* glsl */`
 		return float( resolution.x * resolution.y ) * pdf * equirectDirectionPdf( direction );
 
 	}
-
 `;

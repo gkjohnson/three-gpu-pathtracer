@@ -1,4 +1,4 @@
-export const renderStructsGLSL = /* glsl */`
+export const render_structs = /* glsl */`
 
 	struct Ray {
 

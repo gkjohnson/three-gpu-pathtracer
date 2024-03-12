@@ -1,4 +1,4 @@
-export const cameraStructGLSL = /* glsl */`
+export const camera_struct = /* glsl */`
 
 	struct PhysicalCamera {
 

@@ -1,4 +1,4 @@
-export const cameraUtilsGLSL = /* glsl */`
+export const camera_util_functions = /* glsl */`
 
 	vec3 ndcToRayOrigin( vec2 coord ) {
 

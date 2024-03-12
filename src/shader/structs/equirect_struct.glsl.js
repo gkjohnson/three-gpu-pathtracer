@@ -1,4 +1,4 @@
-export const equirectStructGLSL = /* glsl */`
+export const equirect_struct = /* glsl */`
 
 	struct EquirectHdrInfo {
 
