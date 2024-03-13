@@ -81,17 +81,47 @@ export class WebGLPathTracer {
 
 		};
 
+		// pass through functions for the canvas
+		// TODO: how do we deal with setting the buffer size separately from the canvas?
+		[
+			'getPixelRatio',
+			'setPixelRatio',
+			'getSize',
+			'setSize',
+			'setViewport',
+			'getViewport',
+			'getScissor',
+			'setScissor',
+			'getScissorTest',
+			'setScissorTest',
+			'setDrawingBufferSize',
+			'getDrawingBufferSize',
+		].forEach( key => {
+
+		} );
+
+		// TODO: pass through fields for the path tracer
+		[
+			'filterGlossyFactor',
+			'alpha',
+			'tiles',
+		].forEach( key => {
+
+		} );
+
 	}
 
-	updateScene( camera, scene, {
+	updateScene( camera, scene, options = {} ) {
 
-		updateGeometry = true,
-		updateMaterials = true,
-		updateTextures = true,
-		updateLights = true,
-		updateCamera = true,
-
-	} ) {
+		options = {
+			updateGeometry: true,
+			updateMaterials: true,
+			updateTextures: true,
+			updateLights: true,
+			updateCamera: true,
+			updateEnvironment: true,
+			...options,
+		};
 
 		const generator = this._generator;
 		const pathTracer = this._pathTracer;
@@ -121,15 +151,11 @@ export class WebGLPathTracer {
 
 	}
 
-	setPixelRatio( ...args ) {
-
-		this._renderer.setPixelRatio( ...args );
-
-	}
-
 	dispose() {
 
 		this._renderQuad.dispose();
+		this._renderQuad.material.dispose();
+		this._pathTracer.dispose();
 
 		if ( this._ownRenderer ) {
 
