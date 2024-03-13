@@ -1,4 +1,4 @@
-export const pcgGLSL = /* glsl */`
+export const pcg_functions = /* glsl */`
 
 	// https://www.shadertoy.com/view/wltcRS
 	uvec4 WHITE_NOISE_SEED;

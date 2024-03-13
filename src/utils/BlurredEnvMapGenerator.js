@@ -1,7 +1,7 @@
 import { WebGLRenderTarget, RGBAFormat, HalfFloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
-import { utilsGLSL } from '../shader/common/utils.glsl.js';
+import * as CommonGLSL from '../shader/common/index.js';
 
 class PMREMCopyMaterial extends MaterialBase {
 
@@ -31,7 +31,7 @@ class PMREMCopyMaterial extends MaterialBase {
 				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-				${ utilsGLSL }
+				${ CommonGLSL.util_functions }
 
 				uniform sampler2D envMap;
 				uniform float blur;

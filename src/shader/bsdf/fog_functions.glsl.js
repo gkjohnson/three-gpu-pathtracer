@@ -1,4 +1,4 @@
-export const fogGLSL = /* glsl */`
+export const fog_functions = /* glsl */`
 
 	// returns the hit distance given the material density
 	float intersectFogVolume( Material material, float u ) {

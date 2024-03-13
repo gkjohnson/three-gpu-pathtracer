@@ -1,4 +1,4 @@
-export const lightsStructGLSL = /* glsl */`
+export const lights_struct = /* glsl */`
 
 	#define RECT_AREA_LIGHT_TYPE 0
 	#define CIRC_AREA_LIGHT_TYPE 1

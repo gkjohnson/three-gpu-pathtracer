@@ -1,7 +1,3 @@
-import { ggxGLSL } from './ggx.glsl.js';
-import { sheenGLSL } from './sheen.glsl.js';
-import { iridescenceGLSL } from './iridescence.glsl.js';
-
 /*
 wi     : incident vector or light vector (pointing toward the light)
 wo     : outgoing vector or view vector (pointing towards the camera)
@@ -13,71 +9,7 @@ f0     : Amount of light reflected when looking at a surface head on - "fresnel 
 f90    : Amount of light reflected at grazing angles
 */
 
-export const bsdfSamplingGLSL = /* glsl */`
-
-	struct SurfaceRecord {
-
-		// surface type
-		bool volumeParticle;
-
-		// geometry
-		vec3 faceNormal;
-		bool frontFace;
-		vec3 normal;
-		mat3 normalBasis;
-		mat3 normalInvBasis;
-
-		// cached properties
-		float eta;
-		float f0;
-
-		// material
-		float roughness;
-		float filteredRoughness;
-		float metalness;
-		vec3 color;
-		vec3 emission;
-
-		// transmission
-		float ior;
-		float transmission;
-		bool thinFilm;
-		vec3 attenuationColor;
-		float attenuationDistance;
-
-		// clearcoat
-		vec3 clearcoatNormal;
-		mat3 clearcoatBasis;
-		mat3 clearcoatInvBasis;
-		float clearcoat;
-		float clearcoatRoughness;
-		float filteredClearcoatRoughness;
-
-		// sheen
-		float sheen;
-		vec3 sheenColor;
-		float sheenRoughness;
-
-		// iridescence
-		float iridescence;
-		float iridescenceIor;
-		float iridescenceThickness;
-
-		// specular
-		vec3 specularColor;
-		float specularIntensity;
-	};
-
-	struct ScatterRecord {
-		float specularPdf;
-		float pdf;
-		vec3 direction;
-		vec3 color;
-	};
-
-	${ ggxGLSL }
-	${ sheenGLSL }
-	${ iridescenceGLSL }
+export const bsdf_functions = /* glsl */`
 
 	// diffuse
 	float diffuseEval( vec3 wo, vec3 wi, vec3 wh, SurfaceRecord surf, inout vec3 color ) {

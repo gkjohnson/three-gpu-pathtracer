@@ -1,4 +1,4 @@
-export const shapeSamplingGLSL = /* glsl */`
+export const shape_sampling_functions = /* glsl */`
 
 	vec3 sampleHemisphere( vec3 n, vec2 uv ) {
 

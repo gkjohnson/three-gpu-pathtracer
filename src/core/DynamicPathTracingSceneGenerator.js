@@ -80,8 +80,7 @@ export class DynamicPathTracingSceneGenerator {
 
 				if ( c.isMesh ) {
 
-					const normalMapRequired = ! ! c.material.normalMap;
-					setCommonAttributes( c.geometry, { attributes, normalMapRequired } );
+					setCommonAttributes( c.geometry, attributes );
 
 				} else if (
 					c.isRectAreaLight ||
@@ -129,36 +128,45 @@ export class DynamicPathTracingSceneGenerator {
 
 	generate() {
 
-		const { objects, staticGeometryGenerator, geometry, bvhOptions } = this;
+		const { objects, geometry } = this;
+
+		// update the skeleton animations in case WebGLRenderer is not running
+		// to update it.
+		objects.forEach( o => {
+
+			o.traverse( c => {
+
+				if ( c.isSkinnedMesh && c.skeleton ) {
+
+					c.skeleton.update();
+
+				}
+
+			} );
+
+		} );
+
 		if ( this.bvh === null ) {
 
 			this.prepScene();
-			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...bvhOptions } );
+			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
 
-			return {
-				lights: this.lights,
-				bvh: this.bvh,
-				geometry: this.geometry,
-				materials: this.materials,
-				textures: this.textures,
-				objects,
-			};
 
 		} else {
 
-			const { bvh } = this;
-			staticGeometryGenerator.generate( geometry );
-			bvh.refit();
-			return {
-				lights: this.lights,
-				bvh: this.bvh,
-				geometry: this.geometry,
-				materials: this.materials,
-				textures: this.textures,
-				objects,
-			};
+			this.staticGeometryGenerator.generate( geometry );
+			this.bvh.refit();
 
 		}
+
+		return {
+			lights: this.lights,
+			bvh: this.bvh,
+			geometry: this.geometry,
+			materials: this.materials,
+			textures: this.textures,
+			objects,
+		};
 
 	}
 
