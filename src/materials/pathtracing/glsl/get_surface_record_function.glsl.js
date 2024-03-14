@@ -1,5 +1,4 @@
-
-export const get_surface_record_function = /* glsl */`
+export const get_surface_record_function = /* glsl */ `
 
 	#define SKIP_SURFACE 0
 	#define HIT_SURFACE 1
@@ -168,19 +167,36 @@ export const get_surface_record_function = /* glsl */`
 
 		} else if( material.bumpMap != -1) {
 
-			vec3 uvPrime = material.bumpMapTransform * vec3( uv, 1 );
-			float bumpScale = material.bumpScale;
-			
-			vec2 dSTdx = dFdx( uvPrime.xy );
-			vec2 dSTdy = dFdy( uvPrime.xy );
-	
-			float Hll = bumpScale * texture2D( textures, vec3( uvPrime.xy, material.bumpMap ) ).x;
-			float dBx = bumpScale * texture2D( textures, vec3( uvPrime.xy + dSTdx, material.bumpMap ) ).x - Hll;
-			float dBy = bumpScale * texture2D( textures, vec3( uvPrime.xy + dSTdy, material.bumpMap ) ).x - Hll;
-	
-			vec2 dHdxy = vec2( dBx, dBy );
-			normal = perturbNormalArb( -vViewPosition, normal, dHdxy, surfaceHit.side );
-			
+			vec4 tangentSample = textureSampleBarycoord(
+				attributesArray,
+				ATTR_TANGENT,
+				surfaceHit.barycoord,
+				surfaceHit.faceIndices.xyz
+			);
+
+			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+			// resulting in NaNs and slow path tracing.
+			if ( length( tangentSample.xyz ) > 0.0 ) {
+
+				vec3 tangent = normalize( tangentSample.xyz );
+				vec3 bitangent = normalize( cross( normal, tangent ) * tangentSample.w );
+				mat3 vTBN = mat3( tangent, bitangent, normal );
+
+				vec3 uvPrime = material.bumpMapTransform * vec3( uv, 1 );
+				float bumpScale = material.bumpScale;
+					
+				vec2 dSTdx = dFdx( uvPrime.xy );
+				vec2 dSTdy = dFdy( uvPrime.xy );
+		
+				float Hll = bumpScale * texture2D( textures, vec3( uvPrime.xy, material.bumpMap ) ).x;
+				float dBx = bumpScale * texture2D( textures, vec3( uvPrime.xy + dSTdx, material.bumpMap ) ).x - Hll;
+				float dBy = bumpScale * texture2D( textures, vec3( uvPrime.xy + dSTdy, material.bumpMap ) ).x - Hll;
+				
+				vec2 dHdxy = vec2( dBx, dBy );
+				normal += vTBN * perturbNormalArb( -vViewPosition, (normal * 2.0 - 1.0), dHdxy ,  1.0 );
+				
+			}
+
 		}
 
 		normal *= surfaceHit.side;
