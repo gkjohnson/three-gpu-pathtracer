@@ -11,13 +11,13 @@ export class WebGLPathTracer {
 
 	get filterGlossyFactor() {
 
-		return this._pathTracer.filterGlossyFactor;
+		return this._pathTracer.material.filterGlossyFactor;
 
 	}
 
-	get filterGlossyFactor() {
+	set filterGlossyFactor( v ) {
 
-		return this._pathTracer.filterGlossyFactor;
+		this._pathTracer.material.filterGlossyFactor = v;
 
 	}
 
