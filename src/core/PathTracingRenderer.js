@@ -283,6 +283,12 @@ export class PathTracingRenderer {
 
 	}
 
+	getSize( target ) {
+
+		this._primaryTarget.getSize( target );
+
+	}
+
 	dispose() {
 
 		this._primaryTarget.dispose();

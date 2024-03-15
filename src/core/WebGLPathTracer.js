@@ -1,7 +1,11 @@
-import { CustomBlending, MeshBasicMaterial, WebGLRenderer } from 'three';
+import { CustomBlending, Matrix4, MeshBasicMaterial, Vector2, WebGLRenderer } from 'three';
 import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
+
+const _resolution = new Vector2();
+const _flipEnvMap = new Matrix4().makeScale( - 1, 1, 1 );
 
 export class WebGLPathTracer {
 
@@ -75,6 +79,10 @@ export class WebGLPathTracer {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
 
+		this.renderScale = 1;
+		this.synchronizeRenderSize = true;
+		this.renderToCanvas = true;
+		this.textureSize = new Vector2( 1024, 1024 );
 		this.renderSceneCallback = () => {
 
 			this._renderer.render( this.camera, this.scene );
@@ -82,7 +90,6 @@ export class WebGLPathTracer {
 		};
 
 		// pass through functions for the canvas
-		// TODO: how do we deal with setting the buffer size separately from the canvas?
 		[
 			'getPixelRatio',
 			'setPixelRatio',
@@ -98,38 +105,90 @@ export class WebGLPathTracer {
 			'getDrawingBufferSize',
 		].forEach( key => {
 
-		} );
-
-		// TODO: pass through fields for the path tracer
-		[
-			'filterGlossyFactor',
-			'alpha',
-			'tiles',
-		].forEach( key => {
+			this[ key ] = ( ...args ) => this._renderer[ key ]( ...args );
 
 		} );
 
 	}
 
-	updateScene( camera, scene, options = {} ) {
+	updateScene( camera, scene ) {
 
-		options = {
-			updateGeometry: true,
-			updateMaterials: true,
-			updateTextures: true,
-			updateLights: true,
-			updateCamera: true,
-			updateEnvironment: true,
-			...options,
-		};
-
-		const generator = this._generator;
+		const renderer = this._renderer;
 		const pathTracer = this._pathTracer;
 		const material = pathTracer.material;
+
+		// TODO: adjust this so we don't have to create a new tracer every time and the
+		// geometry results automatically expands to fit results
+		if ( scene !== this._previousScene ) {
+
+			this.generator = new DynamicPathTracingSceneGenerator( scene );
+
+		}
+
+		// set up
+		const {
+			lights,
+			materials,
+			textures,
+			geometry,
+			bvh,
+		} = this.generator.generate();
+
+		material.lights.updateFrom( lights );
+		material.bvh.updateFrom( bvh );
+		material.attributesArray.updateFrom(
+			geometry.attributes.normal,
+			geometry.attributes.tangent,
+			geometry.attributes.uv,
+			geometry.attributes.color,
+		);
+		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+		material.textures.setTextures( renderer, this.textureSize.x, this.textureSize.y, textures );
+		material.materials.updateFrom( materials, textures );
+
+		// update scene background
+		// material.backgroundRotation
+		// material.backgroundIntensity
+		material.backgroundBlur = scene.backgroundBlurriness;
+		if ( scene.background && ( scene.background.isColor || typeof scene.background === 'Number' ) ) {
+
+			this._colorBackground = this._colorBackground || new GradientEquirectTexture( 16 );
+			this._colorBackground.topColor.set( scene.background );
+			this._colorBackground.bottomColor.set( scene.background );
+			this._colorBackground.update();
+
+			material.background = this._colorBackground;
+
+		} else {
+
+			material.background = scene.background;
+
+		}
+
+		// update scene environment
+		material.environmentIntensity = scene.environmentIntensity || 1;
+		material.environmentRotation.makeRotationFromEuler( scene.environmentRotation ).multiply( _flipEnvMap );
+		if ( this._previousEnvironment !== scene.environment ) {
+
+			material.envMapInfo.updateFrom( scene.environment );
+
+		}
+
+		// camera update
+		pathTracer.camera = camera;
+
+		// save
+		this._previousScene = scene;
+		this._previousBackground = scene.background;
+		this._previousEnvironment = scene.environment;
+
+		this.reset();
 
 	}
 
 	renderSample() {
+
+		this._updateScale();
 
 		const pathTracer = this._pathTracer;
 		pathTracer.update();
@@ -160,6 +219,26 @@ export class WebGLPathTracer {
 		if ( this._ownRenderer ) {
 
 			this.renderer.dispose();
+
+		}
+
+	}
+
+	_updateScale() {
+
+		if ( this.synchronizeRenderSize ) {
+
+			this._renderer.getDrawingBufferSize( _resolution );
+
+			const w = Math.floor( this.renderScale * _resolution.x );
+			const h = Math.floor( this.renderScale * _resolution.h );
+
+			this._pathTracer.getSize( _resolution );
+			if ( _resolution.x !== w || _resolution.y !== h ) {
+
+				this._pathTracer.setSize( w, h );
+
+			}
 
 		}
 
