@@ -150,7 +150,7 @@ export class WebGLPathTracer {
 		// material.backgroundRotation
 		// material.backgroundIntensity
 		material.backgroundBlur = scene.backgroundBlurriness;
-		if ( scene.background && ( scene.background.isColor || typeof scene.background === 'Number' ) ) {
+		if ( scene.background && scene.background.isColor ) {
 
 			this._colorBackground = this._colorBackground || new GradientEquirectTexture( 16 );
 			this._colorBackground.topColor.set( scene.background );
