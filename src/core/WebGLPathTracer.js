@@ -72,7 +72,7 @@ export class WebGLPathTracer {
 
 		this._renderer = renderer;
 		this._generator = new DynamicPathTracingSceneGenerator();
-		this._pathTracer = new PathTracingRenderer();
+		this._pathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
 			map: null,
 			blending: CustomBlending,
