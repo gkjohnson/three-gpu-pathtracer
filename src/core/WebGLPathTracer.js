@@ -59,6 +59,7 @@ export class WebGLPathTracer {
 
 	constructor( renderer = null ) {
 
+		// create a new renderer if one was not provided
 		if ( renderer === null ) {
 
 			renderer = new WebGLRenderer( { alpha: true } );
@@ -70,6 +71,7 @@ export class WebGLPathTracer {
 
 		}
 
+		// members
 		this._renderer = renderer;
 		this._generator = new DynamicPathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
@@ -134,6 +136,7 @@ export class WebGLPathTracer {
 			bvh,
 		} = this.generator.generate();
 
+		// update scene information
 		material.lights.updateFrom( lights );
 		material.bvh.updateFrom( bvh );
 		material.attributesArray.updateFrom(
@@ -147,8 +150,6 @@ export class WebGLPathTracer {
 		material.materials.updateFrom( materials, textures );
 
 		// update scene background
-		// material.backgroundRotation
-		// material.backgroundIntensity
 		material.backgroundBlur = scene.backgroundBlurriness;
 		if ( scene.background && scene.background.isColor ) {
 
@@ -177,9 +178,8 @@ export class WebGLPathTracer {
 		// camera update
 		pathTracer.camera = camera;
 
-		// save
+		// save previously used items
 		this._previousScene = scene;
-		this._previousBackground = scene.background;
 		this._previousEnvironment = scene.environment;
 
 		this.reset();

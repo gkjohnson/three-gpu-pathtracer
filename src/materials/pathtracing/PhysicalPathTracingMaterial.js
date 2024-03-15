@@ -101,6 +101,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				backgroundBlur: { value: 0.0 },
 				backgroundMap: { value: null },
 				backgroundAlpha: { value: 1.0 },
+				// backgroundIntensity
+				// backgroundRotation
 
 				// randomness uniforms
 				seed: { value: 0 },
