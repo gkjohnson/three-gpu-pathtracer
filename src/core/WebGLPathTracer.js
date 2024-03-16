@@ -96,9 +96,10 @@ export class WebGLPathTracer {
 
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
+		this.rasterizeScene = true;
 		this.renderToCanvas = true;
 		this.textureSize = new Vector2( 1024, 1024 );
-		this.renderSceneCallback = () => {
+		this.rasterizeSceneCallback = () => {
 
 			this._renderer.render( this.scene, this.camera );
 
@@ -241,9 +242,9 @@ export class WebGLPathTracer {
 
 		if ( this.renderToCanvas ) {
 
-			if ( this.samples < 1 ) {
+			if ( this.samples < 1 && this.rasterizeScene ) {
 
-				this.renderSceneCallback();
+				this.rasterizeSceneCallback();
 
 			}
 
