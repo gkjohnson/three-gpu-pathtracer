@@ -1,4 +1,4 @@
-import { CustomBlending, Matrix4, MeshBasicMaterial, Vector2, WebGLRenderer } from 'three';
+import { Color, CustomBlending, Matrix4, MeshBasicMaterial, Vector2, WebGLRenderer } from 'three';
 import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -6,6 +6,7 @@ import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js'
 
 const _resolution = new Vector2();
 const _flipEnvMap = new Matrix4().makeScale( - 1, 1, 1 );
+const _color = new Color();
 
 export class WebGLPathTracer {
 
@@ -151,14 +152,33 @@ export class WebGLPathTracer {
 
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;
-		if ( scene.background && scene.background.isColor ) {
+		if ( scene.background === null || scene.background && scene.background.isColor ) {
 
 			this._colorBackground = this._colorBackground || new GradientEquirectTexture( 16 );
-			this._colorBackground.topColor.set( scene.background );
-			this._colorBackground.bottomColor.set( scene.background );
-			this._colorBackground.update();
 
-			material.background = this._colorBackground;
+			// get the background color from scene or renderer
+			let alpha;
+			if ( scene.background ) {
+
+				_color.copy( scene.background );
+				alpha = 1;
+
+			} else {
+
+				renderer.getClearColor( _color );
+				alpha = renderer.getClearAlpha();
+
+			}
+
+			// set the texture color
+			const colorBackground = this._colorBackground;
+			colorBackground.topColor.set( _color );
+			colorBackground.bottomColor.set( _color );
+			colorBackground.update();
+
+			// assign to material
+			material.background = colorBackground;
+			material.backgroundAlpha = alpha;
 
 		} else {
 
