@@ -56,7 +56,6 @@ camera.lookAt( 0, 0, 0 );
 const renderer = new WebGLPathTracer();
 document.body.appendChild( renderer.domElement );
 renderer.toneMapping = ACESFilmicToneMapping;
-renderer.setClearColor( 0xaaaaaa );
 renderer.tiles.set( 3 );
 renderer.updateScene( camera, scene );
 

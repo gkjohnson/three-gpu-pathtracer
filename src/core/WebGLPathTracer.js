@@ -193,12 +193,12 @@ export class WebGLPathTracer {
 			colorBackground.update();
 
 			// assign to material
-			material.background = colorBackground;
+			material.backgroundMap = colorBackground;
 			material.backgroundAlpha = alpha;
 
 		} else {
 
-			material.background = scene.background;
+			material.backgroundMap = scene.background;
 
 		}
 
