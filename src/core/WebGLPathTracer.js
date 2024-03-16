@@ -241,7 +241,11 @@ export class WebGLPathTracer {
 
 		if ( this.renderToCanvas ) {
 
-			this.renderSceneCallback();
+			if ( this.samples < 1 ) {
+
+				this.renderSceneCallback();
+
+			}
 
 			const renderer = this._renderer;
 			const quad = this._quad;
