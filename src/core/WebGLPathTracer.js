@@ -106,6 +106,10 @@ export class WebGLPathTracer {
 			'setScissorTest',
 			'setDrawingBufferSize',
 			'getDrawingBufferSize',
+			'getClearAlpha',
+			'setClearAlpha',
+			'getClearColor',
+			'setClearColor',
 		].forEach( key => {
 
 			this[ key ] = ( ...args ) => this._renderer[ key ]( ...args );
