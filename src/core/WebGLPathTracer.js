@@ -88,6 +88,7 @@ export class WebGLPathTracer {
 		this._renderer = renderer;
 		this._generator = null;
 		this._pathTracer = new PathTracingRenderer( renderer );
+		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
 			map: null,
 			blending: CustomBlending,
@@ -96,6 +97,8 @@ export class WebGLPathTracer {
 
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
+		this.dynamicLowRes = true;
+		this.lowResScale = 0.15;
 		this.rasterizeScene = true;
 		this.renderToCanvas = true;
 		this.textureSize = new Vector2( 1024, 1024 );
@@ -135,6 +138,7 @@ export class WebGLPathTracer {
 
 		const renderer = this._renderer;
 		const pathTracer = this._pathTracer;
+		const lowResPathTracer = this._lowResPathTracer;
 		const material = pathTracer.material;
 
 		// TODO: adjust this so we don't have to create a new tracer every time and the
@@ -222,6 +226,8 @@ export class WebGLPathTracer {
 
 		// camera update
 		pathTracer.camera = camera;
+		lowResPathTracer.camera = camera;
+		lowResPathTracer.material = pathTracer.material;
 
 		// save previously used items
 		this._previousScene = scene;
@@ -237,19 +243,35 @@ export class WebGLPathTracer {
 
 		this._updateScale();
 
+		const lowResPathTracer = this._lowResPathTracer;
 		const pathTracer = this._pathTracer;
 		pathTracer.update();
 
 		if ( this.renderToCanvas ) {
 
-			if ( this.samples < 1 && this.rasterizeScene ) {
+			const renderer = this._renderer;
+			const quad = this._quad;
+			if ( this.dynamicLowRes ) {
+
+				if ( lowResPathTracer.samples < 1 ) {
+
+					lowResPathTracer.update();
+
+				}
+
+				quad.material.map = lowResPathTracer.target.texture;
+
+				const autoClear = renderer.autoClear;
+				renderer.autoClear = false;
+				quad.render( renderer );
+				renderer.autoClear = autoClear;
+
+			} else if ( this.samples < 1 && this.rasterizeScene ) {
 
 				this.rasterizeSceneCallback();
 
 			}
 
-			const renderer = this._renderer;
-			const quad = this._quad;
 			quad.material.map = pathTracer.target.texture;
 
 			const autoClear = renderer.autoClear;
@@ -264,6 +286,7 @@ export class WebGLPathTracer {
 	reset() {
 
 		this._pathTracer.reset();
+		this._lowResPathTracer.reset();
 
 	}
 
@@ -293,7 +316,9 @@ export class WebGLPathTracer {
 			this._pathTracer.getSize( _resolution );
 			if ( _resolution.x !== w || _resolution.y !== h ) {
 
+				const lowResScale = this.lowResScale;
 				this._pathTracer.setSize( w, h );
+				this._lowResPathTracer.setSize( Math.floor( w * lowResScale ), Math.floor( h * lowResScale ) );
 
 			}
 
