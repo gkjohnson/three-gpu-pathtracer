@@ -58,6 +58,18 @@ export class WebGLPathTracer {
 
 	}
 
+	get toneMapping() {
+
+		return this._renderer.toneMapping;
+
+	}
+
+	set toneMapping( v ) {
+
+		this._renderer.toneMapping = v;
+
+	}
+
 	constructor( renderer = null ) {
 
 		// create a new renderer if one was not provided
@@ -74,7 +86,7 @@ export class WebGLPathTracer {
 
 		// members
 		this._renderer = renderer;
-		this._generator = new DynamicPathTracingSceneGenerator();
+		this._generator = null;
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
 			map: null,
@@ -88,7 +100,7 @@ export class WebGLPathTracer {
 		this.textureSize = new Vector2( 1024, 1024 );
 		this.renderSceneCallback = () => {
 
-			this._renderer.render( this.camera, this.scene );
+			this._renderer.render( this.scene, this.camera );
 
 		};
 
@@ -195,7 +207,15 @@ export class WebGLPathTracer {
 		material.environmentRotation.makeRotationFromEuler( scene.environmentRotation ).multiply( _flipEnvMap );
 		if ( this._previousEnvironment !== scene.environment ) {
 
-			material.envMapInfo.updateFrom( scene.environment );
+			if ( scene.environment ) {
+
+				material.envMapInfo.updateFrom( scene.environment );
+
+			} else {
+
+				material.environmentIntensity = 0;
+
+			}
 
 		}
 
@@ -205,6 +225,8 @@ export class WebGLPathTracer {
 		// save previously used items
 		this._previousScene = scene;
 		this._previousEnvironment = scene.environment;
+		this.scene = scene;
+		this.camera = camera;
 
 		this.reset();
 
@@ -219,10 +241,12 @@ export class WebGLPathTracer {
 
 		if ( this.renderToCanvas ) {
 
-			const renderer = this._renderer;
-			const quad = this._renderQuad;
-			quad.material.map = pathTracer.target;
-			quad.render( renderer );
+			this.renderSceneCallback();
+
+			// const renderer = this._renderer;
+			// const quad = this._quad;
+			// quad.material.map = pathTracer.target.texture;
+			// quad.render( renderer );
 
 		}
 
@@ -255,7 +279,7 @@ export class WebGLPathTracer {
 			this._renderer.getDrawingBufferSize( _resolution );
 
 			const w = Math.floor( this.renderScale * _resolution.x );
-			const h = Math.floor( this.renderScale * _resolution.h );
+			const h = Math.floor( this.renderScale * _resolution.y );
 
 			this._pathTracer.getSize( _resolution );
 			if ( _resolution.x !== w || _resolution.y !== h ) {
