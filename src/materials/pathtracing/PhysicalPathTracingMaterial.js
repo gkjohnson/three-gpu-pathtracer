@@ -76,7 +76,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				opacity: { value: 1 },
 				bounces: { value: 10 },
 				transmissiveBounces: { value: 10 },
-				filterGlossyFactor: { value: 0.0 },
+				filterGlossyFactor: { value: 0 },
 
 				// camera uniforms
 				physicalCamera: { value: new PhysicalCameraUniform() },
@@ -101,6 +101,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				backgroundBlur: { value: 0.0 },
 				backgroundMap: { value: null },
 				backgroundAlpha: { value: 1.0 },
+				// backgroundIntensity
+				// backgroundRotation
 
 				// randomness uniforms
 				seed: { value: 0 },

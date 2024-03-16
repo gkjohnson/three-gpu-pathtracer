@@ -2,6 +2,7 @@ import { RGBAFormat, FloatType, HalfFloatType, Color, Vector2, WebGLRenderTarget
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
+import { PhysicalPathTracingMaterial } from '../materials/pathtracing/PhysicalPathTracingMaterial.js';
 
 function* renderTask() {
 
@@ -238,7 +239,7 @@ export class PathTracingRenderer {
 		this._opacityFactor = 1.0;
 		this._renderer = renderer;
 		this._alpha = false;
-		this._fsQuad = new FullScreenQuad( null );
+		this._fsQuad = new FullScreenQuad( new PhysicalPathTracingMaterial() );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
 		this._currentTile = 0;
@@ -280,6 +281,13 @@ export class PathTracingRenderer {
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );
 		this.reset();
+
+	}
+
+	getSize( target ) {
+
+		target.x = this._primaryTarget.width;
+		target.y = this._primaryTarget.height;
 
 	}
 
