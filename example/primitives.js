@@ -38,6 +38,14 @@ ball3.position.x = 1;
 ground.position.y = - 0.54;
 scene.add( ball1, ball2, ball3, ground );
 
+// set the environment map
+const texture = new GradientEquirectTexture();
+texture.bottomColor.set( 0xffffff );
+texture.bottomColor.set( 0x666666 );
+texture.update();
+scene.environment = texture;
+scene.background = texture;
+
 // ensure scene matrices are up to date
 scene.updateMatrixWorld();
 
@@ -54,6 +62,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.setPixelRatio( devicePixelRatio );
 renderer.setSize( innerWidth, innerHeight );
 renderer.setClearColor( 0xaaaaaa );
+renderer.tiles.set( 3 );
 renderer.updateScene( camera, scene );
 
 // // initialize the path tracing material and renderer
@@ -90,14 +99,6 @@ renderer.updateScene( camera, scene );
 
 // // update the lights
 // ptMaterial.lights.updateFrom( lights );
-
-// set the environment map
-const texture = new GradientEquirectTexture();
-texture.bottomColor.set( 0xffffff );
-texture.bottomColor.set( 0x666666 );
-texture.update();
-scene.environment = texture;
-scene.background = texture;
 
 animate();
 

@@ -243,10 +243,10 @@ export class WebGLPathTracer {
 
 			this.renderSceneCallback();
 
-			// const renderer = this._renderer;
-			// const quad = this._quad;
-			// quad.material.map = pathTracer.target.texture;
-			// quad.render( renderer );
+			const renderer = this._renderer;
+			const quad = this._quad;
+			quad.material.map = pathTracer.target.texture;
+			quad.render( renderer );
 
 		}
 
