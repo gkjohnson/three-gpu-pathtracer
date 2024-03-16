@@ -250,7 +250,11 @@ export class WebGLPathTracer {
 			const renderer = this._renderer;
 			const quad = this._quad;
 			quad.material.map = pathTracer.target.texture;
+
+			const autoClear = renderer.autoClear;
+			renderer.autoClear = false;
 			quad.render( renderer );
+			renderer.autoClear = autoClear;
 
 		}
 
