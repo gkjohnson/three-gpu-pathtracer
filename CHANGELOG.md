@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - Reverted transmission BRDF function changes resulting in black artifacts.
 
+### Added
+- WebGLPathTracer class for more easily intializing a path tracer.
+
 ## [0.0.20] - 2024.02.21
 ### Fixed
 - Adjust peer dependency semver for three-mesh-bvh.
