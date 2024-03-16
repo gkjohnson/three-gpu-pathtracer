@@ -95,10 +95,11 @@ export class WebGLPathTracer {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
 
+		// options
+		this.dynamicLowRes = false;
+		this.lowResScale = 0.15;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
-		this.dynamicLowRes = true;
-		this.lowResScale = 0.15;
 		this.rasterizeScene = true;
 		this.renderToCanvas = true;
 		this.textureSize = new Vector2( 1024, 1024 );
@@ -251,6 +252,7 @@ export class WebGLPathTracer {
 
 			const renderer = this._renderer;
 			const quad = this._quad;
+			const autoClear = renderer.autoClear;
 			if ( this.dynamicLowRes ) {
 
 				if ( lowResPathTracer.samples < 1 ) {
@@ -259,12 +261,9 @@ export class WebGLPathTracer {
 
 				}
 
-				quad.material.map = lowResPathTracer.target.texture;
-
-				const autoClear = renderer.autoClear;
 				renderer.autoClear = false;
+				quad.material.map = lowResPathTracer.target.texture;
 				quad.render( renderer );
-				renderer.autoClear = autoClear;
 
 			} else if ( this.samples < 1 && this.rasterizeScene ) {
 
@@ -272,10 +271,8 @@ export class WebGLPathTracer {
 
 			}
 
-			quad.material.map = pathTracer.target.texture;
-
-			const autoClear = renderer.autoClear;
 			renderer.autoClear = false;
+			quad.material.map = pathTracer.target.texture;
 			quad.render( renderer );
 			renderer.autoClear = autoClear;
 
