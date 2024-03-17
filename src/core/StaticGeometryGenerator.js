@@ -379,6 +379,24 @@ function invertGeometry( geometry ) {
 
 	return geometry;
 
+}
+
+function flatTraverseMeshes( objects, cb ) {
+
+	for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+		const object = objects[ i ];
+		object.traverse( o => {
+
+			if ( o.isMesh ) {
+
+				cb( o );
+
+			}
+
+		} );
+
+	}
 
 }
 
@@ -480,15 +498,15 @@ class GeometryDiff {
 
 export class StaticGeometryGenerator {
 
-	constructor( meshes ) {
+	constructor( objects ) {
 
-		if ( ! Array.isArray( meshes ) ) {
+		if ( ! Array.isArray( objects ) ) {
 
-			meshes = [ meshes ];
+			objects = [ objects ];
 
 		}
 
-		this.meshes = meshes;
+		this.objects = objects;
 		this.useGroups = true;
 		this.applyWorldTransforms = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
@@ -501,7 +519,7 @@ export class StaticGeometryGenerator {
 	getMaterials() {
 
 		const materials = [];
-		this.meshes.forEach( mesh => {
+		flatTraverseMeshes( this.objects, mesh => {
 
 			if ( Array.isArray( mesh.material ) ) {
 
@@ -522,12 +540,10 @@ export class StaticGeometryGenerator {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
 		const skipAttributes = [];
-		const { meshes, useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
+		const { objects, useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
 		const unusedMeshes = new Set( _intermediateGeometry.keys() );
 		const mergeGeometry = [];
-		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
-
-			const mesh = meshes[ i ];
+		flatTraverseMeshes( objects, mesh => {
 
 			// get the intermediate geometry object to transform data into
 			unusedMeshes.delete( mesh );
@@ -564,7 +580,7 @@ export class StaticGeometryGenerator {
 
 			mergeGeometry.push( _intermediateGeometry );
 
-		}
+		} );
 
 		// if we've seen that the order of geometry has changed then make sure we don't
 		// skip the assignment of attributes.
