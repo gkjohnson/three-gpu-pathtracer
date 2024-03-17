@@ -547,7 +547,7 @@ export class StaticGeometryGenerator {
 
 			// get the intermediate geometry object to transform data into
 			unusedMeshes.delete( mesh );
-			if ( ! _intermediateGeometry.hash( mesh ) ) {
+			if ( ! _intermediateGeometry.has( mesh ) ) {
 
 				_intermediateGeometry.set( mesh, new BufferGeometry() );
 
@@ -578,7 +578,7 @@ export class StaticGeometryGenerator {
 
 			}
 
-			mergeGeometry.push( _intermediateGeometry );
+			mergeGeometry.push( geom );
 
 		} );
 

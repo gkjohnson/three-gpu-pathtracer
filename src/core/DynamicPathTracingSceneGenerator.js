@@ -1,5 +1,6 @@
 import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
-import { StaticGeometryGenerator, MeshBVH, SAH } from 'three-mesh-bvh';
+import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { StaticGeometryGenerator } from './StaticGeometryGenerator.js';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
 
 const dummyMaterial = new MeshBasicMaterial();
