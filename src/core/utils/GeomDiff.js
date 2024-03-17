@@ -35,14 +35,13 @@ function getGeometryHash( geometry ) {
 		.sort( ( a, b ) => {
 
 			if ( a.uuid > b.uuid ) return 1;
-			if ( b.uuid < b.uuid ) return - 1;
+			if ( a.uuid < b.uuid ) return - 1;
 			return 0;
 
 		} );
 
-	for ( const key in attributes ) {
+	for ( const attr of attributes ) {
 
-		const attr = attributes[ key ];
 		hash += `${ attr.uuid }_${ attr.version }|`;
 
 	}
