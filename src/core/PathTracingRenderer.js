@@ -67,6 +67,7 @@ function* renderTask() {
 
 				material.cameraWorldMatrix.copy( camera.matrixWorld );
 				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
+				material.physicalCamera.updateFrom( camera );
 
 				// Perspective camera (default)
 				let cameraType = 0;

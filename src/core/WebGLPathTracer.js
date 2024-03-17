@@ -88,12 +88,16 @@ export class WebGLPathTracer {
 		this._renderer = renderer;
 		this._generator = null;
 		this._pathTracer = new PathTracingRenderer( renderer );
+		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
 			map: null,
 			blending: CustomBlending,
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
 
+		// options
+		this.dynamicLowRes = false;
+		this.lowResScale = 0.15;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.rasterizeScene = true;
@@ -109,23 +113,45 @@ export class WebGLPathTracer {
 		[
 			'getPixelRatio',
 			'setPixelRatio',
+			'setDrawingBufferSize',
+			'getDrawingBufferSize',
 			'getSize',
 			'setSize',
+		].forEach( key => {
+
+			this[ key ] = ( ...args ) => {
+
+				this._renderer[ key ]( ...args );
+				if ( this.renderToCanvas ) {
+
+					this.reset();
+
+				}
+
+			};
+
+		} );
+
+		// Functions that require always resetting the render
+		[
 			'setViewport',
 			'getViewport',
 			'getScissor',
 			'setScissor',
 			'getScissorTest',
 			'setScissorTest',
-			'setDrawingBufferSize',
-			'getDrawingBufferSize',
 			'getClearAlpha',
 			'setClearAlpha',
 			'getClearColor',
 			'setClearColor',
 		].forEach( key => {
 
-			this[ key ] = ( ...args ) => this._renderer[ key ]( ...args );
+			this[ key ] = ( ...args ) => {
+
+				this._renderer[ key ]( ...args );
+				this.reset();
+
+			};
 
 		} );
 
@@ -135,6 +161,7 @@ export class WebGLPathTracer {
 
 		const renderer = this._renderer;
 		const pathTracer = this._pathTracer;
+		const lowResPathTracer = this._lowResPathTracer;
 		const material = pathTracer.material;
 
 		// TODO: adjust this so we don't have to create a new tracer every time and the
@@ -221,7 +248,11 @@ export class WebGLPathTracer {
 		}
 
 		// camera update
+		// TODO: these cameras should only be set once so we don't depend on movement
+		camera.updateMatrixWorld();
 		pathTracer.camera = camera;
+		lowResPathTracer.camera = camera;
+		lowResPathTracer.material = pathTracer.material;
 
 		// save previously used items
 		this._previousScene = scene;
@@ -237,23 +268,35 @@ export class WebGLPathTracer {
 
 		this._updateScale();
 
+		const lowResPathTracer = this._lowResPathTracer;
 		const pathTracer = this._pathTracer;
 		pathTracer.update();
 
 		if ( this.renderToCanvas ) {
 
-			if ( this.samples < 1 && this.rasterizeScene ) {
+			const renderer = this._renderer;
+			const quad = this._quad;
+			const autoClear = renderer.autoClear;
+			if ( this.dynamicLowRes ) {
+
+				if ( lowResPathTracer.samples < 1 ) {
+
+					lowResPathTracer.update();
+
+				}
+
+				renderer.autoClear = false;
+				quad.material.map = lowResPathTracer.target.texture;
+				quad.render( renderer );
+
+			} else if ( this.samples < 1 && this.rasterizeScene ) {
 
 				this.rasterizeSceneCallback();
 
 			}
 
-			const renderer = this._renderer;
-			const quad = this._quad;
-			quad.material.map = pathTracer.target.texture;
-
-			const autoClear = renderer.autoClear;
 			renderer.autoClear = false;
+			quad.material.map = pathTracer.target.texture;
 			quad.render( renderer );
 			renderer.autoClear = autoClear;
 
@@ -264,6 +307,7 @@ export class WebGLPathTracer {
 	reset() {
 
 		this._pathTracer.reset();
+		this._lowResPathTracer.reset();
 
 	}
 
@@ -293,7 +337,9 @@ export class WebGLPathTracer {
 			this._pathTracer.getSize( _resolution );
 			if ( _resolution.x !== w || _resolution.y !== h ) {
 
+				const lowResScale = this.lowResScale;
 				this._pathTracer.setSize( w, h );
+				this._lowResPathTracer.setSize( Math.floor( w * lowResScale ), Math.floor( h * lowResScale ) );
 
 			}
 
