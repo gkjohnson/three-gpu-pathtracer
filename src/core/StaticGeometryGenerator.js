@@ -382,6 +382,29 @@ function invertGeometry( geometry ) {
 
 }
 
+function getGeometryHash( geometry ) {
+
+	let hash = '';
+	const attributes = [ geometry.index, ...Object.values( geometry.attributes ) ]
+		.sort( ( a, b ) => {
+
+			if ( a.uuid > b.uuid ) return 1;
+			if ( b.uuid < b.uuid ) return - 1;
+			return 0;
+
+		} );
+
+	for ( const key in attributes ) {
+
+		const attr = attributes[ key ];
+		hash += `${ attr.uuid }_${ attr.version }|`;
+
+	}
+
+	return hash;
+
+}
+
 // Checks whether the geometry changed between this and last evaluation
 class GeometryDiff {
 
@@ -404,7 +427,7 @@ class GeometryDiff {
 		const skeleton = mesh.skeleton;
 		const primitiveCount = ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
 		this.matrixWorld.copy( mesh.matrixWorld );
-		this.geometryHash = geometry.attributes.position.version;
+		this.geometryHash = getGeometryHash( geometry );
 		this.primitiveCount = primitiveCount;
 
 		if ( skeleton ) {
@@ -445,7 +468,7 @@ class GeometryDiff {
 		const primitiveCount = ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
 		const identical =
 			this.matrixWorld.equals( mesh.matrixWorld ) &&
-			this.geometryHash === geometry.attributes.position.version &&
+			this.geometryHash === getGeometryHash( geometry ) &&
 			checkTypedArrayEquality( mesh.skeleton && mesh.skeleton.boneMatrices || null, this.boneMatrices ) &&
 			this.primitiveCount === primitiveCount;
 
@@ -465,27 +488,13 @@ export class StaticGeometryGenerator {
 
 		}
 
-		const finalMeshes = [];
-		meshes.forEach( object => {
-
-			object.traverseVisible( c => {
-
-				if ( c.isMesh ) {
-
-					finalMeshes.push( c );
-
-				}
-
-			} );
-
-		} );
-
-		this.meshes = finalMeshes;
+		this.meshes = meshes;
 		this.useGroups = true;
 		this.applyWorldTransforms = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
-		this._intermediateGeometry = new Array( finalMeshes.length ).fill().map( () => new BufferGeometry() );
+		this._intermediateGeometry = new Map();
 		this._diffMap = new WeakMap();
+		this._mergeOrder = [];
 
 	}
 
@@ -512,12 +521,25 @@ export class StaticGeometryGenerator {
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
-		let skipAttributes = [];
-		const { meshes, useGroups, _intermediateGeometry, _diffMap } = this;
+		const skipAttributes = [];
+		const { meshes, useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
+		const unusedMeshes = new Set( _intermediateGeometry.keys() );
+		const mergeGeometry = [];
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
-			const geom = _intermediateGeometry[ i ];
+
+			// get the intermediate geometry object to transform data into
+			unusedMeshes.delete( mesh );
+			if ( ! _intermediateGeometry.hash( mesh ) ) {
+
+				_intermediateGeometry.set( mesh, new BufferGeometry() );
+
+			}
+
+			// transform the geometry into the intermediate buffer geometry, saving whether
+			// or not it changed.
+			const geom = _intermediateGeometry.get( mesh );
 			const diff = _diffMap.get( mesh );
 			if ( ! diff || diff.didChange( mesh ) ) {
 
@@ -540,9 +562,26 @@ export class StaticGeometryGenerator {
 
 			}
 
+			mergeGeometry.push( _intermediateGeometry );
+
 		}
 
-		if ( _intermediateGeometry.length === 0 ) {
+		// if we've seen that the order of geometry has changed then make sure we don't
+		// skip the assignment of attributes.
+		for ( let i = 0, l = mergeGeometry.length; i < l; i ++ ) {
+
+			const newGeo = mergeGeometry[ i ];
+			const oldGeo = _mergeOrder[ i ];
+			if ( newGeo !== oldGeo ) {
+
+				skipAttributes[ i ] = false;
+
+			}
+
+		}
+
+		// If we have no geometry to merge then provide an empty geometry.
+		if ( mergeGeometry.length === 0 ) {
 
 			// if there are no geometries then just create a fake empty geometry to provide
 			targetGeometry.setIndex( null );
@@ -564,15 +603,25 @@ export class StaticGeometryGenerator {
 
 		} else {
 
-			mergeBufferGeometries( _intermediateGeometry, { useGroups, skipAttributes }, targetGeometry );
+			mergeBufferGeometries( mergeGeometry, { useGroups, skipAttributes }, targetGeometry );
 
 		}
 
+		// Mark all attributes as needing an update
 		for ( const key in targetGeometry.attributes ) {
 
 			targetGeometry.attributes[ key ].needsUpdate = true;
 
 		}
+
+		// Remove any unused intermediate meshes
+		unusedMeshes.forEach( key => {
+
+			_intermediateGeometry.delete( key );
+
+		} );
+
+		this._mergeOrder = mergeGeometry;
 
 		return targetGeometry;
 
