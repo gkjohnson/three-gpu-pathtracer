@@ -113,23 +113,45 @@ export class WebGLPathTracer {
 		[
 			'getPixelRatio',
 			'setPixelRatio',
+			'setDrawingBufferSize',
+			'getDrawingBufferSize',
 			'getSize',
 			'setSize',
+		].forEach( key => {
+
+			this[ key ] = ( ...args ) => {
+
+				this._renderer[ key ]( ...args );
+				if ( this.renderToCanvas ) {
+
+					this.reset();
+
+				}
+
+			};
+
+		} );
+
+		// Functions that require always resetting the render
+		[
 			'setViewport',
 			'getViewport',
 			'getScissor',
 			'setScissor',
 			'getScissorTest',
 			'setScissorTest',
-			'setDrawingBufferSize',
-			'getDrawingBufferSize',
 			'getClearAlpha',
 			'setClearAlpha',
 			'getClearColor',
 			'setClearColor',
 		].forEach( key => {
 
-			this[ key ] = ( ...args ) => this._renderer[ key ]( ...args );
+			this[ key ] = ( ...args ) => {
+
+				this._renderer[ key ]( ...args );
+				this.reset();
+
+			};
 
 		} );
 
@@ -226,6 +248,8 @@ export class WebGLPathTracer {
 		}
 
 		// camera update
+		// TODO: these cameras should only be set once so we don't depend on movement
+		camera.updateMatrixWorld();
 		pathTracer.camera = camera;
 		lowResPathTracer.camera = camera;
 		lowResPathTracer.material = pathTracer.material;

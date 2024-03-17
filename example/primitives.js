@@ -71,7 +71,6 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// update the camera and render one sample
-	camera.updateMatrixWorld();
 	renderer.renderSample();
 
 }
