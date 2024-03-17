@@ -164,6 +164,9 @@ export class WebGLPathTracer {
 		const lowResPathTracer = this._lowResPathTracer;
 		const material = pathTracer.material;
 
+		scene.updateMatrixWorld( true );
+		camera.updateMatrixWorld();
+
 		// TODO: adjust this so we don't have to create a new tracer every time and the
 		// geometry results automatically expands to fit results
 		if ( scene !== this._previousScene ) {
@@ -249,7 +252,6 @@ export class WebGLPathTracer {
 
 		// camera update
 		// TODO: these cameras should only be set once so we don't depend on movement
-		camera.updateMatrixWorld();
 		pathTracer.camera = camera;
 		lowResPathTracer.camera = camera;
 		lowResPathTracer.material = pathTracer.material;
