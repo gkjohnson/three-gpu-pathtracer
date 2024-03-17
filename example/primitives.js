@@ -46,9 +46,6 @@ texture.update();
 scene.environment = texture;
 scene.background = texture;
 
-// ensure scene matrices are up to date
-scene.updateMatrixWorld();
-
 const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
