@@ -112,11 +112,16 @@ function trimMismatchedAttributes( target, indexCount, attrCount ) {
 export function mergeGeometries( geometries, options = {}, targetGeometry = new BufferGeometry() ) {
 
 	// TODO: do we limit the attributes here?
+	const {
+		useGroups = false,
+		forceUpdateAll = false,
+		skipAssigningAttributes = [],
+	} = options;
+
+	// check if we can merge these geometries
+	validateMergeability( geometries );
+
 	const isIndexed = geometries[ 0 ].index !== null;
-	const { useGroups = false, skipAssigningAttributes = [] } = options;
-
-	validateMergeability();
-
 	const totalIndexCount = isIndexed ? getTotalIndexCount( geometries ) : - 1;
 	const totalAttributeCount = getTotalAttributeCount( geometries );
 	trimMismatchedAttributes( targetGeometry, totalIndexCount, totalAttributeCount );
