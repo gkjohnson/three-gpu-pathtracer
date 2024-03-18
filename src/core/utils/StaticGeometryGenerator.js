@@ -65,14 +65,16 @@ export class StaticGeometryGenerator {
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
-		const skipAttributes = [];
 		const { objects, useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
-		const unusedMeshes = new Set( _intermediateGeometry.keys() );
+
+		const skipAttributes = [];
 		const mergeGeometry = [];
 		const convertOptions = {
 			attributes: this.attributes,
 			applyWorldTransforms: this.applyWorldTransforms,
 		};
+
+		const unusedMeshes = new Set( _intermediateGeometry.keys() );
 		flatTraverseMeshes( objects, mesh => {
 
 			// get the intermediate geometry object to transform data into
@@ -112,15 +114,19 @@ export class StaticGeometryGenerator {
 
 		} );
 
-		// if we've seen that the order of geometry has changed then make sure we don't
-		// skip the assignment of attributes.
-		for ( let i = 0, l = mergeGeometry.length; i < l; i ++ ) {
+		// if we've seen that the order of geometry has changed then we need to update everything
+		let forceUpdate = _mergeOrder.length !== mergeGeometry.length;
+		if ( ! forceUpdate ) {
 
-			const newGeo = mergeGeometry[ i ];
-			const oldGeo = _mergeOrder[ i ];
-			if ( newGeo !== oldGeo ) {
+			for ( let i = 0, l = mergeGeometry.length; i < l; i ++ ) {
 
-				skipAttributes[ i ] = false;
+				const newGeo = mergeGeometry[ i ];
+				const oldGeo = _mergeOrder[ i ];
+				if ( newGeo !== oldGeo ) {
+
+					forceUpdate = true;
+
+				}
 
 			}
 
@@ -149,7 +155,7 @@ export class StaticGeometryGenerator {
 
 		} else {
 
-			mergeGeometries( mergeGeometry, { useGroups, skipAttributes }, targetGeometry );
+			mergeGeometries( mergeGeometry, { useGroups, forceUpdate, skipAttributes }, targetGeometry );
 
 		}
 
