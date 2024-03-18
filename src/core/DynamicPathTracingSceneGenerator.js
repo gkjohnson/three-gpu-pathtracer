@@ -118,6 +118,7 @@ export class DynamicPathTracingSceneGenerator {
 		staticGeometryGenerator.attributes = attributes;
 		staticGeometryGenerator.generate( geometry );
 
+		// TODO: this needs to modify the material index if possible
 		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
 		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
 		geometry.clearGroups();
