@@ -22,6 +22,28 @@ function flatTraverseMeshes( objects, cb ) {
 
 }
 
+function getMaterials( meshes ) {
+
+	const materials = [];
+	for ( let i = 0, l = meshes.length; i < l; i ++ ) {
+
+		const mesh = meshes[ i ];
+		if ( Array.isArray( mesh.material ) ) {
+
+			materials.push( ...mesh.material );
+
+		} else {
+
+			materials.push( mesh.material );
+
+		}
+
+	}
+
+	return materials;
+
+}
+
 export class StaticGeometryGenerator {
 
 	constructor( objects ) {
@@ -42,30 +64,38 @@ export class StaticGeometryGenerator {
 
 	}
 
-	getMaterials() {
+	_getMeshes() {
 
-		const materials = [];
+		const meshes = [];
 		flatTraverseMeshes( this.objects, mesh => {
 
-			if ( Array.isArray( mesh.material ) ) {
-
-				materials.push( ...mesh.material );
-
-			} else {
-
-				materials.push( mesh.material );
-
-			}
+			meshes.push( mesh );
 
 		} );
-		return materials;
+
+		// Sort the geometry so it's in a reliable order
+		meshes.sort( ( a, b ) => {
+
+			if ( a.uuid > b.uuid ) return 1;
+			if ( a.uuid < b.uuid ) return - 1;
+			return 0;
+
+		} );
+
+		return meshes;
+
+	}
+
+	getMaterials() {
+
+		return getMaterials( this._getMeshes() );
 
 	}
 
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
-		const { objects, useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
+		const { useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
 
 		const skipAttributes = [];
 		const mergeGeometry = [];
@@ -75,10 +105,14 @@ export class StaticGeometryGenerator {
 		};
 
 		const unusedMeshes = new Set( _intermediateGeometry.keys() );
-		flatTraverseMeshes( objects, mesh => {
+		const meshes = this._getMeshes();
 
-			// get the intermediate geometry object to transform data into
+		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
+
+			const mesh = meshes[ i ];
 			unusedMeshes.delete( mesh );
+
+			// initialize the intermediate geometry
 			if ( ! _intermediateGeometry.has( mesh ) ) {
 
 				_intermediateGeometry.set( mesh, new BufferGeometry() );
@@ -112,17 +146,7 @@ export class StaticGeometryGenerator {
 
 			mergeGeometry.push( geom );
 
-		} );
-
-		// Sort the geometry so it's in a reliable order
-		// TODO: we need ot make sure this aligns with materials
-		// mergeGeometry.sort( ( a, b ) => {
-
-		// 	if ( a.uuid > b.uuid ) return 1;
-		// 	if ( a.uuid < b.uuid ) return - 1;
-		// 	return 0;
-
-		// } );
+		}
 
 		// if we've seen that the order of geometry has changed then we need to update everything
 		let forceUpdate = _mergeOrder.length !== mergeGeometry.length;
@@ -189,7 +213,7 @@ export class StaticGeometryGenerator {
 		// TODO: return materials
 		return {
 			geometriesChanged: forceUpdate,
-			materials: null,
+			materials: getMaterials( meshes ),
 			geometry: targetGeometry,
 		};
 
