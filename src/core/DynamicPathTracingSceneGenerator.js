@@ -3,6 +3,57 @@ import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
 import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
 
+// collect the textures from the materials
+function getTextures( materials ) {
+
+	const textureSet = new Set();
+	for ( let i = 0, l = materials.length; i < l; i ++ ) {
+
+		const material = materials[ i ];
+		for ( const key in material ) {
+
+			const value = material[ key ];
+			if ( value && value.isTexture ) {
+
+				textureSet.add( value );
+
+			}
+
+		}
+
+	}
+
+	return Array.from( textureSet );
+
+}
+
+// collect the lights in the scene
+function getLights( objects ) {
+
+	const lights = [];
+	for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+		objects[ i ].traverse( c => {
+
+			if (
+				c.isRectAreaLight ||
+				c.isSpotLight ||
+				c.isPointLight ||
+				c.isDirectionalLight
+			) {
+
+				lights.push( c );
+
+			}
+
+		} );
+
+	}
+
+	return lights;
+
+}
+
 const dummyMaterial = new MeshBasicMaterial();
 export function getDummyMesh() {
 
@@ -45,9 +96,6 @@ export class DynamicPathTracingSceneGenerator {
 		this.objects = finalObjects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
-		this.materials = null;
-		this.textures = null;
-		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
@@ -57,9 +105,6 @@ export class DynamicPathTracingSceneGenerator {
 		this.bvh = null;
 		this.geometry.dispose();
 		this.geometry = new BufferGeometry();
-		this.materials = null;
-		this.textures = null;
-		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
@@ -68,7 +113,7 @@ export class DynamicPathTracingSceneGenerator {
 
 	generate() {
 
-		const { objects, staticGeometryGenerator, geometry, lights, attributes } = this;
+		const { objects, staticGeometryGenerator, geometry, attributes } = this;
 		staticGeometryGenerator.attributes = attributes;
 
 		// collect lights
@@ -81,15 +126,6 @@ export class DynamicPathTracingSceneGenerator {
 					// TODO: move to this to StaticGeometryGenerator
 					setCommonAttributes( c.geometry, attributes );
 
-				} else if (
-					c.isRectAreaLight ||
-					c.isSpotLight ||
-					c.isPointLight ||
-					c.isDirectionalLight
-				) {
-
-					lights.push( c );
-
 				}
 
 			} );
@@ -97,23 +133,10 @@ export class DynamicPathTracingSceneGenerator {
 		}
 
 		// generate the
-		const textureSet = new Set();
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
-		materials.forEach( material => {
-
-			for ( const key in material ) {
-
-				const value = material[ key ];
-				if ( value && value.isTexture ) {
-
-					textureSet.add( value );
-
-				}
-
-			}
-
-		} );
+		const textures = getTextures( materials );
+		const lights = getLights( objects );
 
 		// TODO: this needs to modify the material index if possible
 		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
@@ -139,11 +162,11 @@ export class DynamicPathTracingSceneGenerator {
 		this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
 
 		return {
-			lights: lights,
 			bvh: this.bvh,
-			geometry: geometry,
-			materials: materials,
-			textures: Array.from( textureSet ),
+			lights,
+			geometry,
+			materials,
+			textures,
 			objects,
 		};
 

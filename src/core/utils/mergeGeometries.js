@@ -98,7 +98,7 @@ function trimMismatchedAttributes( target, indexCount, attrCount ) {
 // Modified version of BufferGeometryUtils.mergeBufferGeometries that ignores morph targets and updates a attributes in place
 export function mergeGeometries( geometries, options = {}, targetGeometry = new BufferGeometry() ) {
 
-	// TODO: do we limit the attributes here?
+	// TODO: We should limit the attributes included here
 	const {
 		useGroups = false,
 		forceUpdateAll = false,
