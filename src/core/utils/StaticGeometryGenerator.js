@@ -114,6 +114,16 @@ export class StaticGeometryGenerator {
 
 		} );
 
+		// Sort the geometry so it's in a reliable order
+		// TODO: we need ot make sure this aligns with materials
+		// mergeGeometry.sort( ( a, b ) => {
+
+		// 	if ( a.uuid > b.uuid ) return 1;
+		// 	if ( a.uuid < b.uuid ) return - 1;
+		// 	return 0;
+
+		// } );
+
 		// if we've seen that the order of geometry has changed then we need to update everything
 		let forceUpdate = _mergeOrder.length !== mergeGeometry.length;
 		if ( ! forceUpdate ) {
@@ -125,6 +135,7 @@ export class StaticGeometryGenerator {
 				if ( newGeo !== oldGeo ) {
 
 					forceUpdate = true;
+					break;
 
 				}
 
@@ -175,7 +186,12 @@ export class StaticGeometryGenerator {
 
 		this._mergeOrder = mergeGeometry;
 
-		return targetGeometry;
+		// TODO: return materials
+		return {
+			geometriesChanged: forceUpdate,
+			materials: null,
+			geometry: targetGeometry,
+		};
 
 	}
 

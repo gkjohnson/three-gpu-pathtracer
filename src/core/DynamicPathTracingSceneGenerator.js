@@ -68,12 +68,6 @@ export class DynamicPathTracingSceneGenerator {
 
 	prepScene() {
 
-		if ( this.bvh !== null ) {
-
-			return;
-
-		}
-
 		const { objects, staticGeometryGenerator, geometry, lights, attributes } = this;
 		for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
@@ -81,6 +75,7 @@ export class DynamicPathTracingSceneGenerator {
 
 				if ( c.isMesh ) {
 
+					// TODO: move to this to StaticGeometryGenerator
 					setCommonAttributes( c.geometry, attributes );
 
 				} else if (
@@ -148,18 +143,8 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
-		if ( this.bvh === null ) {
-
-			this.prepScene();
-			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
-
-
-		} else {
-
-			this.staticGeometryGenerator.generate( geometry );
-			this.bvh.refit();
-
-		}
+		this.prepScene();
+		this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
 
 		return {
 			lights: this.lights,
