@@ -66,9 +66,12 @@ export class DynamicPathTracingSceneGenerator {
 
 	dispose() {}
 
-	prepScene() {
+	generate() {
 
 		const { objects, staticGeometryGenerator, geometry, lights, attributes } = this;
+		staticGeometryGenerator.attributes = attributes;
+
+		// collect lights
 		for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
 			objects[ i ].traverse( c => {
@@ -93,8 +96,10 @@ export class DynamicPathTracingSceneGenerator {
 
 		}
 
+		// generate the
 		const textureSet = new Set();
-		const materials = staticGeometryGenerator.getMaterials();
+		const result = staticGeometryGenerator.generate( geometry );
+		const materials = result.materials;
 		materials.forEach( material => {
 
 			for ( const key in material ) {
@@ -110,22 +115,10 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
-		staticGeometryGenerator.attributes = attributes;
-		staticGeometryGenerator.generate( geometry );
-
 		// TODO: this needs to modify the material index if possible
 		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
 		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
 		geometry.clearGroups();
-
-		this.materials = materials;
-		this.textures = Array.from( textureSet );
-
-	}
-
-	generate() {
-
-		const { objects, geometry } = this;
 
 		// update the skeleton animations in case WebGLRenderer is not running
 		// to update it.
@@ -143,15 +136,14 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
-		this.prepScene();
 		this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
 
 		return {
-			lights: this.lights,
+			lights: lights,
 			bvh: this.bvh,
-			geometry: this.geometry,
-			materials: this.materials,
-			textures: this.textures,
+			geometry: geometry,
+			materials: materials,
+			textures: Array.from( textureSet ),
 			objects,
 		};
 

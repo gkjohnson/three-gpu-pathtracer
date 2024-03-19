@@ -86,12 +86,6 @@ export class StaticGeometryGenerator {
 
 	}
 
-	getMaterials() {
-
-		return getMaterials( this._getMeshes() );
-
-	}
-
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
