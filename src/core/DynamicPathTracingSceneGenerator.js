@@ -143,7 +143,16 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
-		this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
+		// only generate a new bvh if the objects used have changed
+		if ( result.objectsChanged ) {
+
+			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
+
+		} else {
+
+			this.bvh.refit();
+
+		}
 
 		return {
 			bvh: this.bvh,

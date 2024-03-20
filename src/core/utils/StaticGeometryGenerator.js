@@ -4,6 +4,7 @@ import { GeometryDiff } from './GeomDiff.js';
 import { mergeGeometries } from './mergeGeometries.js';
 import { setCommonAttributes } from '../../utils/GeometryPreparationUtils.js';
 
+// iterate over only the meshes in the provided objects
 function flatTraverseMeshes( objects, cb ) {
 
 	for ( let i = 0, l = objects.length; i < l; i ++ ) {
@@ -23,6 +24,7 @@ function flatTraverseMeshes( objects, cb ) {
 
 }
 
+// return the set of materials used by the provided meshes
 function getMaterials( meshes ) {
 
 	const materials = [];
@@ -68,7 +70,8 @@ export class StaticGeometryGenerator {
 
 	_getMeshes() {
 
-		const meshes = [];
+
+		// iterate over only the meshes in the provided objectsconst meshes = [];
 		flatTraverseMeshes( this.objects, mesh => {
 
 			meshes.push( mesh );
@@ -123,6 +126,8 @@ export class StaticGeometryGenerator {
 
 				convertToStaticGeometry( mesh, convertOptions, geom );
 
+				// TODO: provide option for only generating the set of attributes that are present
+				// and are in the attributes array
 				if ( this.generateMissingAttributes ) {
 
 					setCommonAttributes( geom, this.attributes );
@@ -213,9 +218,8 @@ export class StaticGeometryGenerator {
 
 		this._mergeOrder = mergeGeometry;
 
-		// TODO: return materials
 		return {
-			geometriesChanged: forceUpdate,
+			objectsChanged: forceUpdate,
 			materials: getMaterials( meshes ),
 			geometry: targetGeometry,
 		};
