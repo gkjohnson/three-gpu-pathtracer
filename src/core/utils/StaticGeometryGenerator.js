@@ -70,8 +70,8 @@ export class StaticGeometryGenerator {
 
 	_getMeshes() {
 
-
-		// iterate over only the meshes in the provided objectsconst meshes = [];
+		// iterate over only the meshes in the provided objects
+		const meshes = [];
 		flatTraverseMeshes( this.objects, mesh => {
 
 			meshes.push( mesh );
