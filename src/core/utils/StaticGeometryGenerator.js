@@ -124,6 +124,7 @@ export class StaticGeometryGenerator {
 			const diff = _diffMap.get( mesh );
 			if ( ! diff || diff.didChange( mesh ) ) {
 
+				skipAttributes.push( false );
 				convertToStaticGeometry( mesh, convertOptions, geom );
 
 				// TODO: provide option for only generating the set of attributes that are present
@@ -134,15 +135,13 @@ export class StaticGeometryGenerator {
 
 				}
 
-				skipAttributes.push( false );
-
 				if ( ! diff ) {
 
 					_diffMap.set( mesh, new GeometryDiff( mesh ) );
 
 				} else {
 
-					diff.update();
+					diff.updateFrom( mesh );
 
 				}
 

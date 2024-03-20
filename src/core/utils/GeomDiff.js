@@ -50,6 +50,27 @@ function getGeometryHash( geometry ) {
 
 }
 
+function getSkeletonHash( mesh ) {
+
+	const skeleton = mesh.skeleton;
+	if ( skeleton ) {
+
+		if ( ! skeleton.boneTexture ) {
+
+			skeleton.computeBoneTexture();
+
+		}
+
+		return `${ skeleton.boneTexture.version }_${ skeleton.boneTexture.uuid }`;
+
+	} else {
+
+		return null;
+
+	}
+
+}
+
 // Checks whether the geometry changed between this and last evaluation
 export class GeometryDiff {
 
@@ -57,63 +78,32 @@ export class GeometryDiff {
 
 		this.matrixWorld = new Matrix4();
 		this.geometryHash = null;
-		this.boneMatrices = null;
+		this.skeletonHash = null;
 		this.primitiveCount = - 1;
-		this.mesh = mesh;
 
-		this.update();
+		this.updateFrom( mesh );
 
 	}
 
-	update() {
+	updateFrom( mesh ) {
 
-		const mesh = this.mesh;
 		const geometry = mesh.geometry;
-		const skeleton = mesh.skeleton;
 		const primitiveCount = ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
 		this.matrixWorld.copy( mesh.matrixWorld );
 		this.geometryHash = getGeometryHash( geometry );
 		this.primitiveCount = primitiveCount;
-
-		if ( skeleton ) {
-
-			// ensure the bone matrix array is updated to the appropriate length
-			if ( ! skeleton.boneTexture ) {
-
-				skeleton.computeBoneTexture();
-
-			}
-
-			skeleton.update();
-
-			// copy data if possible otherwise clone it
-			const boneMatrices = skeleton.boneMatrices;
-			if ( ! this.boneMatrices || this.boneMatrices.length !== boneMatrices.length ) {
-
-				this.boneMatrices = boneMatrices.slice();
-
-			} else {
-
-				this.boneMatrices.set( boneMatrices );
-
-			}
-
-		} else {
-
-			this.boneMatrices = null;
-
-		}
+		this.skeletonHash = getSkeletonHash( mesh );
 
 	}
 
-	didChange() {
+	didChange( mesh ) {
 
-		const mesh = this.mesh;
 		const geometry = mesh.geometry;
 		const primitiveCount = ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
 		const identical =
 			this.matrixWorld.equals( mesh.matrixWorld ) &&
 			this.geometryHash === getGeometryHash( geometry ) &&
+			this.skeletonHash === getSkeletonHash( mesh ) &&
 			checkTypedArrayEquality( mesh.skeleton && mesh.skeleton.boneMatrices || null, this.boneMatrices ) &&
 			this.primitiveCount === primitiveCount;
 
