@@ -134,15 +134,14 @@ export class StaticGeometryGenerator {
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
 		const { useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
 
+		const meshes = this._getMeshes();
 		const skipAssigningAttributes = [];
 		const mergeGeometry = [];
+		const unusedMeshKeys = new Set( _intermediateGeometry.keys() );
 		const convertOptions = {
 			attributes: this.attributes,
 			applyWorldTransforms: this.applyWorldTransforms,
 		};
-
-		const unusedMeshKeys = new Set( _intermediateGeometry.keys() );
-		const meshes = this._getMeshes();
 
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
