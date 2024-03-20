@@ -2,6 +2,7 @@ import { BufferAttribute, BufferGeometry } from 'three';
 import { convertToStaticGeometry } from './convertToStaticGeometry.js';
 import { GeometryDiff } from './GeomDiff.js';
 import { mergeGeometries } from './mergeGeometries.js';
+import { setCommonAttributes } from '../../utils/GeometryPreparationUtils.js';
 
 function flatTraverseMeshes( objects, cb ) {
 
@@ -57,6 +58,7 @@ export class StaticGeometryGenerator {
 		this.objects = objects;
 		this.useGroups = true;
 		this.applyWorldTransforms = true;
+		this.generateMissingAttributes = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
 		this._intermediateGeometry = new Map();
 		this._diffMap = new WeakMap();
@@ -120,6 +122,13 @@ export class StaticGeometryGenerator {
 			if ( ! diff || diff.didChange( mesh ) ) {
 
 				convertToStaticGeometry( mesh, convertOptions, geom );
+
+				if ( this.generateMissingAttributes ) {
+
+					setCommonAttributes( geom, this.attributes );
+
+				}
+
 				skipAttributes.push( false );
 
 				if ( ! diff ) {

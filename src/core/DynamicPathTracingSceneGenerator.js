@@ -1,7 +1,7 @@
 import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
-import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
+import { getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
 
 // collect the textures from the materials
 function getTextures( materials ) {
@@ -115,22 +115,6 @@ export class DynamicPathTracingSceneGenerator {
 
 		const { objects, staticGeometryGenerator, geometry, attributes } = this;
 		staticGeometryGenerator.attributes = attributes;
-
-		// collect lights
-		for ( let i = 0, l = objects.length; i < l; i ++ ) {
-
-			objects[ i ].traverse( c => {
-
-				if ( c.isMesh ) {
-
-					// TODO: move to this to StaticGeometryGenerator
-					setCommonAttributes( c.geometry, attributes );
-
-				}
-
-			} );
-
-		}
 
 		// generate the
 		const result = staticGeometryGenerator.generate( geometry );
