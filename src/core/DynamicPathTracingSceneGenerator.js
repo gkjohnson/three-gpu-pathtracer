@@ -1,7 +1,7 @@
 import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
-import { getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
+import { updateMaterialIndexAttribute } from '../utils/GeometryPreparationUtils.js';
 
 // collect the textures from the materials
 function getTextures( materials ) {
@@ -116,15 +116,13 @@ export class DynamicPathTracingSceneGenerator {
 		const { objects, staticGeometryGenerator, geometry, attributes } = this;
 		staticGeometryGenerator.attributes = attributes;
 
-		// generate the
+		// generate the geometry
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
 		const textures = getTextures( materials );
 		const lights = getLights( objects );
 
-		// TODO: this needs to modify the material index if possible
-		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
-		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
+		updateMaterialIndexAttribute( geometry, materials, materials );
 		geometry.clearGroups();
 
 		// update the skeleton animations in case WebGLRenderer is not running
@@ -156,6 +154,7 @@ export class DynamicPathTracingSceneGenerator {
 
 		return {
 			bvh: this.bvh,
+			objectsChanged: result.objectsChanged,
 			lights,
 			geometry,
 			materials,
