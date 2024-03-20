@@ -98,7 +98,6 @@ function trimMismatchedAttributes( target, indexCount, attrCount ) {
 // Modified version of BufferGeometryUtils.mergeBufferGeometries that ignores morph targets and updates a attributes in place
 export function mergeGeometries( geometries, options = {}, targetGeometry = new BufferGeometry() ) {
 
-	// TODO: We should limit the attributes included here
 	const {
 		useGroups = false,
 		forceUpdateAll = false,
@@ -138,10 +137,6 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 		}
 
 	}
-
-	// TODO: if we rearrange geometry and it results in the same sized attributes then
-	// we can't rely on the the "skip" capability. It may be okay to also pass in the previous
-	// offset position to determine if it's shifted but it may not be worth it.
 
 	// generate the final geometry
 	// skip the assigning any attributes for items in the above array
@@ -214,6 +209,5 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 		}
 
 	}
-
 
 }
