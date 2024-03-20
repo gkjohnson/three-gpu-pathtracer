@@ -148,6 +148,17 @@ export function convertToStaticGeometry( mesh, options = {}, targetGeometry = ne
 	const attributes = geometry.attributes;
 	const targetAttributes = targetGeometry.attributes;
 
+	// strip any unused and unneeded attributes
+	for ( const key in targetGeometry.attributes ) {
+
+		if ( ! options.attributes.includes( key ) ) {
+
+			targetGeometry.deleteAttribute( key );
+
+		}
+
+	}
+
 	// initialize the attributes if they don't exist
 	if ( ! targetGeometry.index && geometry.index ) {
 
