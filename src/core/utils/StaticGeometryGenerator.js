@@ -103,25 +103,26 @@ export class StaticGeometryGenerator {
 			applyWorldTransforms: this.applyWorldTransforms,
 		};
 
-		const unusedMeshes = new Set( _intermediateGeometry.keys() );
+		const unusedMeshKeys = new Set( _intermediateGeometry.keys() );
 		const meshes = this._getMeshes();
 
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
-			unusedMeshes.delete( mesh );
+			const meshKey = mesh.uuid;
+			unusedMeshKeys.delete( meshKey );
 
 			// initialize the intermediate geometry
-			if ( ! _intermediateGeometry.has( mesh ) ) {
+			if ( ! _intermediateGeometry.has( meshKey ) ) {
 
-				_intermediateGeometry.set( mesh, new BufferGeometry() );
+				_intermediateGeometry.set( meshKey, new BufferGeometry() );
 
 			}
 
 			// transform the geometry into the intermediate buffer geometry, saving whether
 			// or not it changed.
-			const geom = _intermediateGeometry.get( mesh );
-			const diff = _diffMap.get( mesh );
+			const geom = _intermediateGeometry.get( meshKey );
+			const diff = _diffMap.get( meshKey );
 			if ( ! diff || diff.didChange( mesh ) ) {
 
 				skipAttributes.push( false );
@@ -137,7 +138,7 @@ export class StaticGeometryGenerator {
 
 				if ( ! diff ) {
 
-					_diffMap.set( mesh, new GeometryDiff( mesh ) );
+					_diffMap.set( meshKey, new GeometryDiff( mesh ) );
 
 				} else {
 
@@ -201,15 +202,23 @@ export class StaticGeometryGenerator {
 
 		}
 
-		// Mark all attributes as needing an update
-		for ( const key in targetGeometry.attributes ) {
+		if ( forceUpdate ) {
 
-			targetGeometry.attributes[ key ].needsUpdate = true;
+			targetGeometry.dispose();
+
+		} else {
+
+			// Mark all attributes as needing an update
+			for ( const key in targetGeometry.attributes ) {
+
+				targetGeometry.attributes[ key ].needsUpdate = true;
+
+			}
 
 		}
 
 		// Remove any unused intermediate meshes
-		unusedMeshes.forEach( key => {
+		unusedMeshKeys.forEach( key => {
 
 			_intermediateGeometry.delete( key );
 			_diffMap.delete( key );
