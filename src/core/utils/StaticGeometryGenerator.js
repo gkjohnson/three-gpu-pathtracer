@@ -47,6 +47,44 @@ function getMaterials( meshes ) {
 
 }
 
+function mergeGeometryList( geometries, target, options ) {
+
+	// If we have no geometry to merge then provide an empty geometry.
+	if ( geometries.length === 0 ) {
+
+		// if there are no geometries then just create a fake empty geometry to provide
+		target.setIndex( null );
+
+		// remove all geometry
+		const attrs = target.attributes;
+		for ( const key in attrs ) {
+
+			target.deleteAttribute( key );
+
+		}
+
+		// create dummy attributes
+		for ( const key in this.attributes ) {
+
+			target.setAttribute( this.attributes[ key ], new BufferAttribute( new Float32Array( 0 ), 4, false ) );
+
+		}
+
+	} else {
+
+		mergeGeometries( geometries, options, target );
+
+	}
+
+	// Mark all attributes as needing an update
+	for ( const key in target.attributes ) {
+
+		target.attributes[ key ].needsUpdate = true;
+
+	}
+
+}
+
 export class StaticGeometryGenerator {
 
 	constructor( objects ) {
@@ -96,7 +134,7 @@ export class StaticGeometryGenerator {
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
 		const { useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
 
-		const skipAttributes = [];
+		const skipAssigningAttributes = [];
 		const mergeGeometry = [];
 		const convertOptions = {
 			attributes: this.attributes,
@@ -125,7 +163,7 @@ export class StaticGeometryGenerator {
 			const diff = _diffMap.get( meshKey );
 			if ( ! diff || diff.didChange( mesh ) ) {
 
-				skipAttributes.push( false );
+				skipAssigningAttributes.push( false );
 				convertToStaticGeometry( mesh, convertOptions, geom );
 
 				// TODO: provide option for only generating the set of attributes that are present
@@ -148,7 +186,7 @@ export class StaticGeometryGenerator {
 
 			} else {
 
-				skipAttributes.push( true );
+				skipAssigningAttributes.push( true );
 
 			}
 
@@ -176,44 +214,12 @@ export class StaticGeometryGenerator {
 		}
 
 		// If we have no geometry to merge then provide an empty geometry.
-		if ( mergeGeometry.length === 0 ) {
+		mergeGeometryList( mergeGeometry, targetGeometry, { useGroups, forceUpdate, skipAssigningAttributes } );
 
-			// if there are no geometries then just create a fake empty geometry to provide
-			targetGeometry.setIndex( null );
-
-			// remove all geometry
-			const attrs = targetGeometry.attributes;
-			for ( const key in attrs ) {
-
-				targetGeometry.deleteAttribute( key );
-
-			}
-
-			// create dummy attributes
-			for ( const key in this.attributes ) {
-
-				targetGeometry.setAttribute( this.attributes[ key ], new BufferAttribute( new Float32Array( 0 ), 4, false ) );
-
-			}
-
-		} else {
-
-			mergeGeometries( mergeGeometry, { useGroups, forceUpdate, skipAttributes }, targetGeometry );
-
-		}
-
+		// force update means the attribute buffer lengths have changed
 		if ( forceUpdate ) {
 
 			targetGeometry.dispose();
-
-		} else {
-
-			// Mark all attributes as needing an update
-			for ( const key in targetGeometry.attributes ) {
-
-				targetGeometry.attributes[ key ].needsUpdate = true;
-
-			}
 
 		}
 
