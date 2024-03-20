@@ -63,7 +63,7 @@ export class StaticGeometryGenerator {
 		this.generateMissingAttributes = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
 		this._intermediateGeometry = new Map();
-		this._diffMap = new WeakMap();
+		this._diffMap = new Map();
 		this._mergeOrder = [];
 
 	}
@@ -212,6 +212,7 @@ export class StaticGeometryGenerator {
 		unusedMeshes.forEach( key => {
 
 			_intermediateGeometry.delete( key );
+			_diffMap.delete( key );
 
 		} );
 
