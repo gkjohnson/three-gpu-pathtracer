@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry } from 'three';
 import { convertToStaticGeometry } from './convertToStaticGeometry.js';
 import { GeometryDiff } from './GeomDiff.js';
 import { mergeGeometries } from './mergeGeometries.js';
-import { setCommonAttributes } from '../../utils/GeometryPreparationUtils.js';
+import { setCommonAttributes } from './GeometryPreparationUtils.js';
 
 // iterate over only the meshes in the provided objects
 function flatTraverseMeshes( objects, cb ) {

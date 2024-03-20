@@ -1,7 +1,7 @@
 import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
-import { updateMaterialIndexAttribute } from '../utils/GeometryPreparationUtils.js';
+import { updateMaterialIndexAttribute } from './utils/GeometryPreparationUtils.js';
 
 // collect the textures from the materials
 function getTextures( materials ) {

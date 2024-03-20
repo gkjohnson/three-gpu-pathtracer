@@ -25,7 +25,6 @@ export * from './uniforms/LightsInfoUniformStruct.js';
 export * from './uniforms/IESProfilesTexture.js';
 
 // utils
-export * from './utils/GeometryPreparationUtils.js';
 export * from './utils/BlurredEnvMapGenerator.js';
 export * from './utils/IESLoader.js';
 
