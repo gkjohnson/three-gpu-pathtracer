@@ -161,19 +161,19 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 			for ( let i = 0, l = geometries.length; i < l; i ++ ) {
 
 				const geometry = geometries[ i ];
+				const index = geometry.getIndex();
 				const skip = ! forceUpdateAll && ! forceUpdateIndex && skipAssigningAttributes[ i ];
 				if ( ! skip ) {
 
-					const index = geometry.getIndex();
 					for ( let j = 0; j < index.count; ++ j ) {
 
-						targetIndex.setX( targetOffset, index.getX( j ) + indexOffset );
-						targetOffset ++;
+						targetIndex.setX( targetOffset + j, index.getX( j ) + indexOffset );
 
 					}
 
 				}
 
+				targetOffset += index.count;
 				indexOffset += geometry.getAttribute( 'position' ).count;
 
 			}
