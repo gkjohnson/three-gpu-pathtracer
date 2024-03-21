@@ -63,9 +63,9 @@ function mergeGeometryList( geometries, target, options ) {
 		}
 
 		// create dummy attributes
-		for ( const key in this.attributes ) {
+		for ( const key in options.attributes ) {
 
-			target.setAttribute( this.attributes[ key ], new BufferAttribute( new Float32Array( 0 ), 4, false ) );
+			target.setAttribute( options.attributes[ key ], new BufferAttribute( new Float32Array( 0 ), 4, false ) );
 
 		}
 
