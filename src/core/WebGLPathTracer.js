@@ -199,7 +199,7 @@ export class WebGLPathTracer {
 
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;
-		material.backgroundIntensity = scene.backgroundIntensity;
+		material.backgroundIntensity = scene.backgroundIntensity ?? 1;
 		material.backgroundRotation.makeRotationFromEuler( scene.backgroundRotation ).multiply( _flipEnvMap );
 		if ( scene.background === null || scene.background && scene.background.isColor ) {
 
@@ -236,7 +236,7 @@ export class WebGLPathTracer {
 		}
 
 		// update scene environment
-		material.environmentIntensity = scene.environmentIntensity;
+		material.environmentIntensity = scene.environmentIntensity ?? 1;
 		material.environmentRotation.makeRotationFromEuler( scene.environmentRotation ).multiply( _flipEnvMap );
 		if ( this._previousEnvironment !== scene.environment ) {
 
