@@ -8,6 +8,7 @@ export class BakedGeometry extends BufferGeometry {
 
 		super();
 		this.version = 0;
+		this.hash = null;
 		this._diff = new MeshDiff();
 
 	}
@@ -20,6 +21,7 @@ export class BakedGeometry extends BufferGeometry {
 			convertToStaticGeometry( mesh, options, this );
 			diff.updateFrom( mesh );
 			this.version ++;
+			this.hash = `${ this.uuid }_${ this.version }`;
 			return true;
 
 		} else {
