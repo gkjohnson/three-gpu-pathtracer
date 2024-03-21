@@ -100,7 +100,7 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 
 	const {
 		useGroups = false,
-		forceUpdateAll = false,
+		forceUpdate = false,
 		skipAssigningAttributes = [],
 		overwriteIndex = true,
 	} = options;
@@ -162,7 +162,7 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 
 				const geometry = geometries[ i ];
 				const index = geometry.getIndex();
-				const skip = ! forceUpdateAll && ! forceUpdateIndex && skipAssigningAttributes[ i ];
+				const skip = ! forceUpdate && ! forceUpdateIndex && skipAssigningAttributes[ i ];
 				if ( ! skip ) {
 
 					for ( let j = 0; j < index.count; ++ j ) {
@@ -186,13 +186,13 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 	const attributes = Object.keys( geometries[ 0 ].attributes );
 	for ( let i = 0, l = attributes.length; i < l; i ++ ) {
 
-		let forceUpdate = false;
+		let forceUpdateAttr = false;
 		const key = attributes[ i ];
 		if ( ! targetGeometry.getAttribute( key ) ) {
 
 			const firstAttr = geometries[ 0 ].getAttribute( key );
 			targetGeometry.setAttribute( key, createAttributeClone( firstAttr, totalAttributeCount ) );
-			forceUpdate = true;
+			forceUpdateAttr = true;
 
 		}
 
@@ -201,7 +201,7 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 		for ( let g = 0, l = geometries.length; g < l; g ++ ) {
 
 			const geometry = geometries[ g ];
-			const skip = ! forceUpdateAll && ! forceUpdate && skipAssigningAttributes[ i ];
+			const skip = ! forceUpdate && ! forceUpdateAttr && skipAssigningAttributes[ i ];
 			const attr = geometry.getAttribute( key );
  			if ( ! skip ) {
 
