@@ -101,8 +101,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				backgroundBlur: { value: 0.0 },
 				backgroundMap: { value: null },
 				backgroundAlpha: { value: 1.0 },
-				// backgroundIntensity
-				// backgroundRotation
+				backgroundIntensity: { value: 1.0 },
+				backgroundRotation: { value: new Matrix4() },
 
 				// randomness uniforms
 				seed: { value: 0 },
@@ -203,6 +203,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				#if FEATURE_BACKGROUND_MAP
 
 				uniform sampler2D backgroundMap;
+				uniform mat4 backgroundRotation;
+				uniform float backgroundIntensity;
 
 				#endif
 
@@ -237,6 +239,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// globals
 				mat3 envRotation3x3;
 				mat3 invEnvRotation3x3;
+				mat3 backgroundRotation3x3;
 				float lightsDenom;
 
 				// sampling
@@ -265,14 +268,16 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				vec3 sampleBackground( vec3 direction, vec2 uv ) {
 
-					vec3 sampleDir = normalize( direction + sampleHemisphere( direction, uv ) * 0.5 * backgroundBlur );
+					vec3 sampleDir = sampleHemisphere( direction, uv ) * 0.5 * backgroundBlur;
 
 					#if FEATURE_BACKGROUND_MAP
 
-					return sampleEquirectColor( backgroundMap, sampleDir );
+					sampleDir = normalize( backgroundRotation3x3 * direction + sampleDir );
+					return backgroundIntensity * sampleEquirectColor( backgroundMap, sampleDir );
 
 					#else
 
+					sampleDir = normalize( envRotation3x3 * direction + sampleDir );
 					return environmentIntensity * sampleEquirectColor( envMapInfo.map, sampleDir );
 
 					#endif
@@ -299,6 +304,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// inverse environment rotation
 					envRotation3x3 = mat3( environmentRotation );
 					invEnvRotation3x3 = inverse( envRotation3x3 );
+					backgroundRotation3x3 = mat3( backgroundRotation );
 					lightsDenom =
 						( environmentIntensity == 0.0 || envMapInfo.totalSum == 0.0 ) && lights.count != 0u ?
 							float( lights.count ) :
@@ -371,7 +377,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							if ( state.firstRay || state.transmissiveRay ) {
 
-								gl_FragColor.rgb += sampleBackground( envRotation3x3 * ray.direction, rand2( 2 ) ) * state.throughputColor;
+								gl_FragColor.rgb += sampleBackground( ray.direction, rand2( 2 ) ) * state.throughputColor;
 								gl_FragColor.a = backgroundAlpha;
 
 							} else {
