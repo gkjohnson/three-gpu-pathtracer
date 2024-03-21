@@ -1,6 +1,4 @@
 import { BufferAttribute, BufferGeometry } from 'three';
-import { convertToStaticGeometry } from './convertToStaticGeometry.js';
-import { MeshDiff } from './MeshDiff.js';
 import { mergeGeometries } from './mergeGeometries.js';
 import { setCommonAttributes } from './GeometryPreparationUtils.js';
 import { BakedGeometry } from './BakedGeometry.js';
@@ -102,6 +100,7 @@ export class StaticGeometryGenerator {
 		this.generateMissingAttributes = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
 		this._intermediateGeometry = new Map();
+		this._geometryMergeSets = new WeakMap();
 		this._mergeOrder = [];
 
 	}
@@ -129,7 +128,7 @@ export class StaticGeometryGenerator {
 
 	}
 
-	_updateIntermediateGeometries( skipAssigningAttributes = [] ) {
+	_updateIntermediateGeometries() {
 
 		const { _intermediateGeometry } = this;
 
@@ -158,8 +157,6 @@ export class StaticGeometryGenerator {
 			const geom = _intermediateGeometry.get( meshKey );
 			if ( geom.updateFrom( mesh, convertOptions ) ) {
 
-				skipAssigningAttributes.push( false );
-
 				// TODO: provide option for only generating the set of attributes that are present
 				// and are in the attributes array
 				if ( this.generateMissingAttributes ) {
@@ -167,10 +164,6 @@ export class StaticGeometryGenerator {
 					setCommonAttributes( geom, this.attributes );
 
 				}
-
-			} else {
-
-				skipAssigningAttributes.push( true );
 
 			}
 
@@ -187,39 +180,38 @@ export class StaticGeometryGenerator {
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
-		const { useGroups, _intermediateGeometry, _mergeOrder } = this;
+		const { useGroups, _intermediateGeometry, _geometryMergeSets } = this;
 
 		const meshes = this._getMeshes();
 		const skipAssigningAttributes = [];
 		const mergeGeometry = [];
+		const previousMergeInfo = _geometryMergeSets.get( targetGeometry ) || [];
 
 		// update all the intermediate static geometry representations
-		this._updateIntermediateGeometries( skipAssigningAttributes );
+		this._updateIntermediateGeometries();
 
-		// TODO: track a diff list for each passed in target geometry so we can call this safely
-		// and quickly on many geometries
 		// get the list of geometries to merge
+		let forceUpdate = false;
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
-			mergeGeometry.push( _intermediateGeometry.get( mesh.uuid ) );
+			const geom = _intermediateGeometry.get( mesh.uuid );
+			mergeGeometry.push( geom );
 
-		}
+			const info = previousMergeInfo[ i ];
+			console.log( info && info.version, geom.version )
+			if ( ! info || info.uuid !== geom.uuid ) {
 
-		// if we've seen that the order of geometry has changed then we need to update everything
-		let forceUpdate = _mergeOrder.length !== mergeGeometry.length;
-		if ( ! forceUpdate ) {
+				skipAssigningAttributes.push( false );
+				forceUpdate = true;
 
-			for ( let i = 0, l = mergeGeometry.length; i < l; i ++ ) {
+			} else if ( info.version !== geom.version ) {
 
-				const newGeo = mergeGeometry[ i ];
-				const oldGeo = _mergeOrder[ i ];
-				if ( newGeo !== oldGeo ) {
+				skipAssigningAttributes.push( false );
 
-					forceUpdate = true;
-					break;
+			} else {
 
-				}
+				skipAssigningAttributes.push( true );
 
 			}
 
@@ -235,7 +227,10 @@ export class StaticGeometryGenerator {
 
 		}
 
-		this._mergeOrder = mergeGeometry;
+		_geometryMergeSets.set( targetGeometry, mergeGeometry.map( g => ( {
+			version: g.version,
+			uuid: g.uuid,
+		} ) ) );
 
 		return {
 			objectsChanged: forceUpdate,

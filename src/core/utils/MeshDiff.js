@@ -104,11 +104,11 @@ export class MeshDiff {
 
 		const geometry = mesh.geometry;
 		const primitiveCount = ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
+
 		const identical =
 			this.matrixWorld.equals( mesh.matrixWorld ) &&
 			this.geometryHash === getGeometryHash( geometry ) &&
 			this.skeletonHash === getSkeletonHash( mesh ) &&
-			checkTypedArrayEquality( mesh.skeleton && mesh.skeleton.boneMatrices || null, this.boneMatrices ) &&
 			this.primitiveCount === primitiveCount;
 
 		return ! identical;
