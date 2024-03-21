@@ -239,7 +239,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				// globals
 				mat3 envRotation3x3;
 				mat3 invEnvRotation3x3;
-				mat3 backgroundRotation3x3;
 				float lightsDenom;
 
 				// sampling
@@ -272,7 +271,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 					#if FEATURE_BACKGROUND_MAP
 
-					sampleDir = normalize( backgroundRotation3x3 * direction + sampleDir );
+					sampleDir = normalize( mat3( backgroundRotation ) * direction + sampleDir );
 					return backgroundIntensity * sampleEquirectColor( backgroundMap, sampleDir );
 
 					#else
@@ -304,7 +303,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// inverse environment rotation
 					envRotation3x3 = mat3( environmentRotation );
 					invEnvRotation3x3 = inverse( envRotation3x3 );
-					backgroundRotation3x3 = mat3( backgroundRotation );
 					lightsDenom =
 						( environmentIntensity == 0.0 || envMapInfo.totalSum == 0.0 ) && lights.count != 0u ?
 							float( lights.count ) :

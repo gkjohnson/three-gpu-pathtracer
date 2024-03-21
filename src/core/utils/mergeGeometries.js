@@ -201,7 +201,7 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 		for ( let g = 0, l = geometries.length; g < l; g ++ ) {
 
 			const geometry = geometries[ g ];
-			const skip = ! forceUpdate && ! forceUpdateAttr && skipAssigningAttributes[ i ];
+			const skip = ! forceUpdate && ! forceUpdateAttr && skipAssigningAttributes[ g ];
 			const attr = geometry.getAttribute( key );
  			if ( ! skip ) {
 
