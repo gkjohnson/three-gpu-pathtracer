@@ -1,11 +1,13 @@
-import { GenerateMeshBVHWorker } from 'three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { DynamicPathTracingSceneGenerator } from '../core/DynamicPathTracingSceneGenerator.js';
 
 export class PathTracingSceneWorker {
 
 	constructor() {
 
-		this.bvhGenerator = new GenerateMeshBVHWorker();
+		this.bvhGenerator = new ParallelMeshBVHWorker();
+		this.bvhGenerator.generateBVH = false;
+		this.bvh = null;
 
 	}
 
@@ -25,22 +27,25 @@ export class PathTracingSceneWorker {
 
 		const { bvhGenerator } = this;
 		const sceneGenerator = new DynamicPathTracingSceneGenerator( scene );
-		sceneGenerator.prepScene();
+		const results = sceneGenerator.generate();
+		if ( ! this.bvh || results.objectsChanged ) {
 
-		const { geometry, materials, textures, lights } = sceneGenerator;
-		const bvhPromise = bvhGenerator.generate( geometry, options );
-		return bvhPromise.then( bvh => {
+			const bvhPromise = bvhGenerator.generate( results.geometry, options );
+			return bvhPromise.then( bvh => {
 
-			return {
-				scene,
-				materials,
-				textures,
-				lights,
-				bvh,
-				geometry,
-			};
+				results.bvh = bvh;
+				this.bvh = bvh;
 
-		} );
+				return results;
+
+			} );
+
+		} else {
+
+			this.bvh.refit();
+			return results;
+
+		}
 
 	}
 

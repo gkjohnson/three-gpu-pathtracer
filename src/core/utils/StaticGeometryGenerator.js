@@ -98,6 +98,7 @@ export class StaticGeometryGenerator {
 		this.useGroups = true;
 		this.applyWorldTransforms = true;
 		this.generateMissingAttributes = true;
+		this.overwriteIndex = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
 		this._intermediateGeometry = new Map();
 		this._geometryMergeSets = new WeakMap();
@@ -180,7 +181,7 @@ export class StaticGeometryGenerator {
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
-		const { useGroups, _intermediateGeometry, _geometryMergeSets } = this;
+		const { useGroups, overwriteIndex, _intermediateGeometry, _geometryMergeSets } = this;
 
 		const meshes = this._getMeshes();
 		const skipAssigningAttributes = [];
@@ -199,7 +200,6 @@ export class StaticGeometryGenerator {
 			mergeGeometry.push( geom );
 
 			const info = previousMergeInfo[ i ];
-			console.log( info && info.version, geom.version )
 			if ( ! info || info.uuid !== geom.uuid ) {
 
 				skipAssigningAttributes.push( false );
@@ -218,7 +218,7 @@ export class StaticGeometryGenerator {
 		}
 
 		// If we have no geometry to merge then provide an empty geometry.
-		mergeGeometryList( mergeGeometry, targetGeometry, { useGroups, forceUpdate, skipAssigningAttributes } );
+		mergeGeometryList( mergeGeometry, targetGeometry, { useGroups, forceUpdate, skipAssigningAttributes, overwriteIndex } );
 
 		// force update means the attribute buffer lengths have changed
 		if ( forceUpdate ) {

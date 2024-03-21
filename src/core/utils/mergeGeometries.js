@@ -102,6 +102,7 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 		useGroups = false,
 		forceUpdateAll = false,
 		skipAssigningAttributes = [],
+		overwriteIndex = true,
 	} = options;
 
 	// check if we can merge these geometries
@@ -151,27 +152,31 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 
 		}
 
-		// copy the index data to the target geometry
-		let targetOffset = 0;
-		let indexOffset = 0;
-		const targetIndex = targetGeometry.getIndex();
-		for ( let i = 0, l = geometries.length; i < l; i ++ ) {
+		if ( forceUpdateIndex || overwriteIndex ) {
 
-			const geometry = geometries[ i ];
-			const skip = ! forceUpdateAll && ! forceUpdateIndex && skipAssigningAttributes[ i ];
-			if ( ! skip ) {
+			// copy the index data to the target geometry
+			let targetOffset = 0;
+			let indexOffset = 0;
+			const targetIndex = targetGeometry.getIndex();
+			for ( let i = 0, l = geometries.length; i < l; i ++ ) {
 
-				const index = geometry.getIndex();
-				for ( let j = 0; j < index.count; ++ j ) {
+				const geometry = geometries[ i ];
+				const skip = ! forceUpdateAll && ! forceUpdateIndex && skipAssigningAttributes[ i ];
+				if ( ! skip ) {
 
-					targetIndex.setX( targetOffset, index.getX( j ) + indexOffset );
-					targetOffset ++;
+					const index = geometry.getIndex();
+					for ( let j = 0; j < index.count; ++ j ) {
+
+						targetIndex.setX( targetOffset, index.getX( j ) + indexOffset );
+						targetOffset ++;
+
+					}
 
 				}
 
-			}
+				indexOffset += geometry.getAttribute( 'position' ).count;
 
-			indexOffset += geometry.getAttribute( 'position' ).count;
+			}
 
 		}
 

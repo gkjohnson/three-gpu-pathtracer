@@ -91,6 +91,7 @@ export class DynamicPathTracingSceneGenerator {
 		// options
 		this.bvhOptions = {};
 		this.attributes = [ 'position', 'normal', 'tangent', 'color', 'uv', 'uv2' ];
+		this.generateBVH = true;
 
 		// state
 		this.objects = finalObjects;
@@ -116,15 +117,6 @@ export class DynamicPathTracingSceneGenerator {
 		const { objects, staticGeometryGenerator, geometry, attributes } = this;
 		staticGeometryGenerator.attributes = attributes;
 
-		// generate the geometry
-		const result = staticGeometryGenerator.generate( geometry );
-		const materials = result.materials;
-		const textures = getTextures( materials );
-		const lights = getLights( objects );
-
-		updateMaterialIndexAttribute( geometry, materials, materials );
-		geometry.clearGroups();
-
 		// update the skeleton animations in case WebGLRenderer is not running
 		// to update it.
 		objects.forEach( o => {
@@ -141,14 +133,27 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
+		// generate the geometry
+		const result = staticGeometryGenerator.generate( geometry );
+		const materials = result.materials;
+		const textures = getTextures( materials );
+		const lights = getLights( objects );
+
+		updateMaterialIndexAttribute( geometry, materials, materials );
+		geometry.clearGroups();
+
 		// only generate a new bvh if the objects used have changed
-		if ( result.objectsChanged ) {
+		if ( this.generateBVH ) {
 
-			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
+			if ( result.objectsChanged ) {
 
-		} else {
+				this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, indirect: true, ...this.bvhOptions } );
 
-			this.bvh.refit();
+			} else {
+
+				this.bvh.refit();
+
+			}
 
 		}
 

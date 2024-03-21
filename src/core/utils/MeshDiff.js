@@ -1,33 +1,5 @@
 import { Matrix4 } from 'three';
 
-function checkTypedArrayEquality( a, b ) {
-
-	if ( a === null || b === null ) {
-
-		return a === b;
-
-	}
-
-	if ( a.length !== b.length ) {
-
-		return false;
-
-	}
-
-	for ( let i = 0, l = a.length; i < l; i ++ ) {
-
-		if ( a[ i ] !== b[ i ] ) {
-
-			return false;
-
-		}
-
-	}
-
-	return true;
-
-}
-
 function getGeometryHash( geometry ) {
 
 	let hash = '';

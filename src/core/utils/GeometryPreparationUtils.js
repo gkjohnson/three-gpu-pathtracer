@@ -16,7 +16,6 @@ export function updateMaterialIndexAttribute( geometry, materials, allMaterials 
 	let materialIndexAttribute = geometry.getAttribute( 'materialIndex' );
 	if ( ! materialIndexAttribute || materialIndexAttribute.count !== vertCount ) {
 
-
 		// use an array with the minimum precision required to store all material id references.
 		let array;
 		if ( allMaterials.length <= 255 ) {
