@@ -72,16 +72,20 @@ function getSkeletonHash( mesh ) {
 }
 
 // Checks whether the geometry changed between this and last evaluation
-export class GeometryDiff {
+export class MeshDiff {
 
-	constructor( mesh ) {
+	constructor( mesh = null ) {
 
 		this.matrixWorld = new Matrix4();
 		this.geometryHash = null;
 		this.skeletonHash = null;
 		this.primitiveCount = - 1;
 
-		this.updateFrom( mesh );
+		if ( mesh !== null ) {
+
+			this.updateFrom( mesh );
+
+		}
 
 	}
 

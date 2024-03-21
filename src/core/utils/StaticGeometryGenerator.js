@@ -1,8 +1,9 @@
 import { BufferAttribute, BufferGeometry } from 'three';
 import { convertToStaticGeometry } from './convertToStaticGeometry.js';
-import { GeometryDiff } from './GeomDiff.js';
+import { MeshDiff } from './MeshDiff.js';
 import { mergeGeometries } from './mergeGeometries.js';
 import { setCommonAttributes } from './GeometryPreparationUtils.js';
+import { BakedGeometry } from './BakedGeometry.js';
 
 // iterate over only the meshes in the provided objects
 function flatTraverseMeshes( objects, cb ) {
@@ -101,7 +102,6 @@ export class StaticGeometryGenerator {
 		this.generateMissingAttributes = true;
 		this.attributes = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv2' ];
 		this._intermediateGeometry = new Map();
-		this._diffMap = new Map();
 		this._mergeOrder = [];
 
 	}
@@ -129,14 +129,11 @@ export class StaticGeometryGenerator {
 
 	}
 
-	generate( targetGeometry = new BufferGeometry() ) {
+	_updateIntermediateGeometries( skipAssigningAttributes = [] ) {
 
-		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
-		const { useGroups, _intermediateGeometry, _diffMap, _mergeOrder } = this;
+		const { _intermediateGeometry } = this;
 
 		const meshes = this._getMeshes();
-		const skipAssigningAttributes = [];
-		const mergeGeometry = [];
 		const unusedMeshKeys = new Set( _intermediateGeometry.keys() );
 		const convertOptions = {
 			attributes: this.attributes,
@@ -152,18 +149,16 @@ export class StaticGeometryGenerator {
 			// initialize the intermediate geometry
 			if ( ! _intermediateGeometry.has( meshKey ) ) {
 
-				_intermediateGeometry.set( meshKey, new BufferGeometry() );
+				_intermediateGeometry.set( meshKey, new BakedGeometry() );
 
 			}
 
 			// transform the geometry into the intermediate buffer geometry, saving whether
 			// or not it changed.
 			const geom = _intermediateGeometry.get( meshKey );
-			const diff = _diffMap.get( meshKey );
-			if ( ! diff || diff.didChange( mesh ) ) {
+			if ( geom.updateFrom( mesh, convertOptions ) ) {
 
 				skipAssigningAttributes.push( false );
-				convertToStaticGeometry( mesh, convertOptions, geom );
 
 				// TODO: provide option for only generating the set of attributes that are present
 				// and are in the attributes array
@@ -173,23 +168,41 @@ export class StaticGeometryGenerator {
 
 				}
 
-				if ( ! diff ) {
-
-					_diffMap.set( meshKey, new GeometryDiff( mesh ) );
-
-				} else {
-
-					diff.updateFrom( mesh );
-
-				}
-
 			} else {
 
 				skipAssigningAttributes.push( true );
 
 			}
 
-			mergeGeometry.push( geom );
+		}
+
+		unusedMeshKeys.forEach( key => {
+
+			_intermediateGeometry.delete( key );
+
+		} );
+
+	}
+
+	generate( targetGeometry = new BufferGeometry() ) {
+
+		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
+		const { useGroups, _intermediateGeometry, _mergeOrder } = this;
+
+		const meshes = this._getMeshes();
+		const skipAssigningAttributes = [];
+		const mergeGeometry = [];
+
+		// update all the intermediate static geometry representations
+		this._updateIntermediateGeometries( skipAssigningAttributes );
+
+		// TODO: track a diff list for each passed in target geometry so we can call this safely
+		// and quickly on many geometries
+		// get the list of geometries to merge
+		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
+
+			const mesh = meshes[ i ];
+			mergeGeometry.push( _intermediateGeometry.get( mesh.uuid ) );
 
 		}
 
@@ -221,14 +234,6 @@ export class StaticGeometryGenerator {
 			targetGeometry.dispose();
 
 		}
-
-		// Remove any unused intermediate meshes
-		unusedMeshKeys.forEach( key => {
-
-			_intermediateGeometry.delete( key );
-			_diffMap.delete( key );
-
-		} );
 
 		this._mergeOrder = mergeGeometry;
 
