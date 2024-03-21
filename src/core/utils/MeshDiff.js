@@ -1,16 +1,24 @@
 import { Matrix4 } from 'three';
 
+function attributeSort( a, b ) {
+
+	if ( a.uuid > b.uuid ) return 1;
+	if ( a.uuid < b.uuid ) return - 1;
+	return 0;
+
+}
+
 function getGeometryHash( geometry ) {
 
 	let hash = '';
-	const attributes = [ geometry.index, ...Object.values( geometry.attributes ) ]
-		.sort( ( a, b ) => {
+	const attributes = Object.values( geometry.attributes );
+	if ( geometry.index ) {
 
-			if ( a.uuid > b.uuid ) return 1;
-			if ( a.uuid < b.uuid ) return - 1;
-			return 0;
+		attributes.push( geometry.index );
 
-		} );
+	}
+
+	attributes.sort( attributeSort );
 
 	for ( const attr of attributes ) {
 
