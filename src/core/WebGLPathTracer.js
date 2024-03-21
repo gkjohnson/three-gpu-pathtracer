@@ -103,9 +103,9 @@ export class WebGLPathTracer {
 		this.rasterizeScene = true;
 		this.renderToCanvas = true;
 		this.textureSize = new Vector2( 1024, 1024 );
-		this.rasterizeSceneCallback = () => {
+		this.rasterizeSceneCallback = ( scene, camera ) => {
 
-			this._renderer.render( this.scene, this.camera );
+			this._renderer.render( scene, camera );
 
 		};
 
@@ -163,6 +163,9 @@ export class WebGLPathTracer {
 		const pathTracer = this._pathTracer;
 		const lowResPathTracer = this._lowResPathTracer;
 		const material = pathTracer.material;
+
+		scene.updateMatrixWorld( true );
+		camera.updateMatrixWorld();
 
 		// TODO: adjust this so we don't have to create a new tracer every time and the
 		// geometry results automatically expands to fit results
@@ -251,7 +254,6 @@ export class WebGLPathTracer {
 
 		// camera update
 		// TODO: these cameras should only be set once so we don't depend on movement
-		camera.updateMatrixWorld();
 		pathTracer.camera = camera;
 		lowResPathTracer.camera = camera;
 		lowResPathTracer.material = pathTracer.material;
@@ -293,7 +295,7 @@ export class WebGLPathTracer {
 
 			} else if ( this.samples < 1 && this.rasterizeScene ) {
 
-				this.rasterizeSceneCallback();
+				this.rasterizeSceneCallback( this.scene, this.camera );
 
 			}
 

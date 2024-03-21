@@ -1,6 +1,6 @@
 import { BufferAttribute } from 'three';
 
-export function getGroupMaterialIndicesAttribute( geometry, materials, allMaterials ) {
+export function updateMaterialIndexAttribute( geometry, materials, allMaterials ) {
 
 	const indexAttr = geometry.index;
 	const posAttr = geometry.attributes.position;
@@ -13,18 +13,28 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 
 	}
 
-	// use an array with the minimum precision required to store all material id references.
-	let materialArray;
-	if ( allMaterials.length <= 255 ) {
+	let materialIndexAttribute = geometry.getAttribute( 'materialIndex' );
+	if ( ! materialIndexAttribute || materialIndexAttribute.count !== vertCount ) {
 
-		materialArray = new Uint8Array( vertCount );
+		// use an array with the minimum precision required to store all material id references.
+		let array;
+		if ( allMaterials.length <= 255 ) {
 
-	} else {
+			array = new Uint8Array( vertCount );
 
-		materialArray = new Uint16Array( vertCount );
+		} else {
+
+			array = new Uint16Array( vertCount );
+
+		}
+
+		materialIndexAttribute = new BufferAttribute( array, 1, false );
+		geometry.deleteAttribute( 'materialIndex' );
+		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
 
 	}
 
+	const materialArray = materialIndexAttribute.array;
 	for ( let i = 0; i < groups.length; i ++ ) {
 
 		const group = groups[ i ];
@@ -49,8 +59,6 @@ export function getGroupMaterialIndicesAttribute( geometry, materials, allMateri
 		}
 
 	}
-
-	return new BufferAttribute( materialArray, 1, false );
 
 }
 

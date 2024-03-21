@@ -1,6 +1,58 @@
 import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
-import { StaticGeometryGenerator, MeshBVH, SAH } from 'three-mesh-bvh';
-import { setCommonAttributes, getGroupMaterialIndicesAttribute } from '../utils/GeometryPreparationUtils.js';
+import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
+import { updateMaterialIndexAttribute } from './utils/GeometryPreparationUtils.js';
+
+// collect the textures from the materials
+function getTextures( materials ) {
+
+	const textureSet = new Set();
+	for ( let i = 0, l = materials.length; i < l; i ++ ) {
+
+		const material = materials[ i ];
+		for ( const key in material ) {
+
+			const value = material[ key ];
+			if ( value && value.isTexture ) {
+
+				textureSet.add( value );
+
+			}
+
+		}
+
+	}
+
+	return Array.from( textureSet );
+
+}
+
+// collect the lights in the scene
+function getLights( objects ) {
+
+	const lights = [];
+	for ( let i = 0, l = objects.length; i < l; i ++ ) {
+
+		objects[ i ].traverse( c => {
+
+			if (
+				c.isRectAreaLight ||
+				c.isSpotLight ||
+				c.isPointLight ||
+				c.isDirectionalLight
+			) {
+
+				lights.push( c );
+
+			}
+
+		} );
+
+	}
+
+	return lights;
+
+}
 
 const dummyMaterial = new MeshBasicMaterial();
 export function getDummyMesh() {
@@ -39,14 +91,12 @@ export class DynamicPathTracingSceneGenerator {
 		// options
 		this.bvhOptions = {};
 		this.attributes = [ 'position', 'normal', 'tangent', 'color', 'uv', 'uv2' ];
+		this.generateBVH = true;
 
 		// state
 		this.objects = finalObjects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
-		this.materials = null;
-		this.textures = null;
-		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
@@ -56,79 +106,16 @@ export class DynamicPathTracingSceneGenerator {
 		this.bvh = null;
 		this.geometry.dispose();
 		this.geometry = new BufferGeometry();
-		this.materials = null;
-		this.textures = null;
-		this.lights = [];
 		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
 
 	}
 
 	dispose() {}
 
-	prepScene() {
-
-		if ( this.bvh !== null ) {
-
-			return;
-
-		}
-
-		const { objects, staticGeometryGenerator, geometry, lights, attributes } = this;
-		for ( let i = 0, l = objects.length; i < l; i ++ ) {
-
-			objects[ i ].traverse( c => {
-
-				if ( c.isMesh ) {
-
-					setCommonAttributes( c.geometry, attributes );
-
-				} else if (
-					c.isRectAreaLight ||
-					c.isSpotLight ||
-					c.isPointLight ||
-					c.isDirectionalLight
-				) {
-
-					lights.push( c );
-
-				}
-
-			} );
-
-		}
-
-		const textureSet = new Set();
-		const materials = staticGeometryGenerator.getMaterials();
-		materials.forEach( material => {
-
-			for ( const key in material ) {
-
-				const value = material[ key ];
-				if ( value && value.isTexture ) {
-
-					textureSet.add( value );
-
-				}
-
-			}
-
-		} );
-
-		staticGeometryGenerator.attributes = attributes;
-		staticGeometryGenerator.generate( geometry );
-
-		const materialIndexAttribute = getGroupMaterialIndicesAttribute( geometry, materials, materials );
-		geometry.setAttribute( 'materialIndex', materialIndexAttribute );
-		geometry.clearGroups();
-
-		this.materials = materials;
-		this.textures = Array.from( textureSet );
-
-	}
-
 	generate() {
 
-		const { objects, geometry } = this;
+		const { objects, staticGeometryGenerator, geometry, attributes } = this;
+		staticGeometryGenerator.attributes = attributes;
 
 		// update the skeleton animations in case WebGLRenderer is not running
 		// to update it.
@@ -146,25 +133,41 @@ export class DynamicPathTracingSceneGenerator {
 
 		} );
 
-		if ( this.bvh === null ) {
+		// generate the geometry
+		const result = staticGeometryGenerator.generate( geometry );
+		const materials = result.materials;
+		const textures = getTextures( materials );
+		const lights = getLights( objects );
 
-			this.prepScene();
-			this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, ...this.bvhOptions } );
+		updateMaterialIndexAttribute( geometry, materials, materials );
 
+		// only generate a new bvh if the objects used have changed
+		if ( this.generateBVH ) {
 
-		} else {
+			if ( result.objectsChanged ) {
 
-			this.staticGeometryGenerator.generate( geometry );
-			this.bvh.refit();
+				this.bvh = new MeshBVH( geometry, {
+					strategy: SAH,
+					maxLeafTris: 1,
+					indirect: true,
+					...this.bvhOptions,
+				} );
+
+			} else {
+
+				this.bvh.refit();
+
+			}
 
 		}
 
 		return {
-			lights: this.lights,
 			bvh: this.bvh,
-			geometry: this.geometry,
-			materials: this.materials,
-			textures: this.textures,
+			objectsChanged: result.objectsChanged,
+			lights,
+			geometry,
+			materials,
+			textures,
 			objects,
 		};
 
