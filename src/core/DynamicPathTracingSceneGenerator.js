@@ -140,14 +140,18 @@ export class DynamicPathTracingSceneGenerator {
 		const lights = getLights( objects );
 
 		updateMaterialIndexAttribute( geometry, materials, materials );
-		geometry.clearGroups();
 
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {
 
 			if ( result.objectsChanged ) {
 
-				this.bvh = new MeshBVH( geometry, { strategy: SAH, maxLeafTris: 1, indirect: true, ...this.bvhOptions } );
+				this.bvh = new MeshBVH( geometry, {
+					strategy: SAH,
+					maxLeafTris: 1,
+					indirect: true,
+					...this.bvhOptions,
+				} );
 
 			} else {
 
