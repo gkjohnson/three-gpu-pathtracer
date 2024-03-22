@@ -1,15 +1,14 @@
 import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, ShapedAreaLight } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
-let renderer, controls, transformControls, transformControlsScene, areaLights, sceneInfo, ptRenderer, camera, fsQuad, enabledLights;
+let renderer, controls, transformControls, transformControlsScene, areaLights, ptRenderer, camera;
+let scene;
 let samplesEl, loadingEl;
 const params = {
 
@@ -63,28 +62,22 @@ init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
+
+	scene = new THREE.Scene();
 
 	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 0.0, 0.6, 2.65 );
-
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = camera;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-	} ) );
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	controls.update();
@@ -98,17 +91,19 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr' )
 		.then( texture => {
 
-			ptRenderer.material.envMapInfo.updateFrom( texture );
+			texture.mapping = THREE.EquirectangularReflectionMapping;
+			scene.background = texture;
+			scene.environment = texture;
 
 		} );
 
 	const group = new THREE.Group();
-
 	const box = new THREE.Box3();
-	const { scene } = await new GLTFLoader()
+	const gltf = await new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb' );
 
+	scene.add( gltf.scene );
 	scene.traverse( c => {
 
 		if ( c.material ) c.material.map = null;
@@ -116,7 +111,6 @@ async function init() {
 	} );
 
 	scene.scale.setScalar( 0.01 );
-	// scene.rotation.x = - Math.PI / 2;
 	scene.position.x = 0.05;
 	scene.updateMatrixWorld( true );
 
@@ -130,12 +124,6 @@ async function init() {
 	const floor = new THREE.Mesh( floorGeom, floorMat );
 	floor.position.y = - 0.025;
 	group.add( floor );
-
-	// const redBoxGeom = new THREE.BoxBufferGeometry( 0.1, 2, 2 );
-	// const redBoxMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0xFF0000 ) } );
-	// const redBox = new THREE.Mesh( redBoxGeom, redBoxMat );
-	// redBox.position.set( - 1.5, 1.0, 0.0 );
-	// // group.add( redBox );
 
 	group.updateMatrixWorld();
 
@@ -160,8 +148,8 @@ async function init() {
 	transformControls = new TransformControls( camera, renderer.domElement );
 	transformControls.addEventListener( 'objectChange', () => {
 
-		ptRenderer.material.lights.updateFrom( areaLights );
-		ptRenderer.reset();
+		// TODO: is it important to skip updating everything but lights here?
+		renderer.updateScene( camera, scene );
 
 	} );
 	transformControls.addEventListener( 'dragging-changed', ( e ) => controls.enabled = ! e.value );
@@ -187,38 +175,8 @@ async function init() {
 	transformControlsScene = new THREE.Scene();
 	transformControlsScene.add( transformControls );
 
-	const generator = new PathTracingSceneWorker();
-	const generatorPromise = generator.generate( group, {
-		onProgress( v ) {
-
-			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
-
-		}
-	} ).then( result => {
-
-		sceneInfo = result;
-
-		const { bvh, textures, materials, lights, geometry } = result;
-		const material = ptRenderer.material;
-
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.lights.updateFrom( lights );
-		material.lightCount = lights.length;
-
-		generator.dispose();
-
-	} );
-
-	await Promise.all( [ generatorPromise, envMapPromise ] );
+	await Promise.all( [ envMapPromise ] );
+	renderer.updateScene( camera, scene );
 
 	document.getElementById( 'loading' ).remove();
 
@@ -235,18 +193,18 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
@@ -256,9 +214,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( () => {
 
-		ptRenderer.material.defines.FEATURE_MIS = params.multipleImportanceSampling ? 1 : 0;
-		ptRenderer.material.needsUpdate = true;
-		ptRenderer.reset();
+		renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	} );
 	ptFolder.close();
@@ -266,13 +222,15 @@ async function init() {
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
+		scene.backgroundRotation.y = v;
+		scene.environmentRotation.y = v;
+		// renderer.material.environmentRotation.makeRotationY( v );
+		// renderer.reset();
 
 	} );
 	envFolder.close();
@@ -313,12 +271,7 @@ function updateLights() {
 	areaLights[ 1 ].height = params.areaLight2Height;
 	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
 
-	enabledLights = [];
-	if ( params.areaLight1Enabled ) enabledLights.push( areaLights[ 0 ] );
-	if ( params.areaLight2Enabled ) enabledLights.push( areaLights[ 1 ] );
-
-	ptRenderer.material.lights.updateFrom( enabledLights );
-	ptRenderer.reset();
+	renderer.updateScene( camera, scene );
 
 }
 
@@ -329,11 +282,10 @@ function onResize() {
 	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
+	renderer.renderScale = scale;
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
+
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -343,27 +295,12 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.lights.updateFrom( enabledLights );
+	renderer.bounces = params.bounces;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundBlurriness = 0.35;
+	renderer.updateScene( camera, scene );
 
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
-	ptRenderer.material.bounces = params.bounces;
-
-	camera.updateMatrixWorld();
-
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-		ptRenderer.update();
-
-	}
-
-	renderer.autoClear = false;
-	fsQuad.render( renderer );
-	renderer.render( transformControlsScene, camera );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
