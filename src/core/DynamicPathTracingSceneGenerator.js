@@ -80,21 +80,13 @@ export class DynamicPathTracingSceneGenerator {
 
 		}
 
-		// use a dummy object for a fallback
-		const finalObjects = [ ...objects ];
-		if ( finalObjects.length === 0 ) {
-
-			finalObjects.push( getDummyMesh() );
-
-		}
-
 		// options
 		this.bvhOptions = {};
 		this.attributes = [ 'position', 'normal', 'tangent', 'color', 'uv', 'uv2' ];
 		this.generateBVH = true;
 
 		// state
-		this.objects = finalObjects;
+		this.objects = objects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
 		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
