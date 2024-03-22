@@ -61,17 +61,11 @@ async function init() {
 
 		} );
 
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf' )
 		.then( gltf => {
 
-			return generator.generate( gltf.scene );
-
-		} )
-		.then( result => {
-
-			scene.add( result.scene );
+			scene.add( gltf.scene );
 
 		} );
 
