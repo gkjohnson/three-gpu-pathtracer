@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import { ACESFilmicToneMapping, Scene, EquirectangularReflectionMapping } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, WebGLPathTracer } from '../src/index.js';
@@ -27,9 +27,9 @@ async function init() {
 
 	// init renderer, camera, controls, scene
 	renderer = new WebGLPathTracer();
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.filterGlossyFactor = 0.5;
-	renderer.renderScale = resolutionScale; // TODO: causing dark outlines
+	renderer.renderScale = resolutionScale;
 	renderer.setClearColor( 0, 0 );
 	renderer.tiles.set( tiles, tiles );
 	document.body.appendChild( renderer.domElement );
@@ -41,7 +41,7 @@ async function init() {
 	controls.target.y = 10;
 	controls.update();
 
-	scene = new THREE.Scene();
+	scene = new Scene();
 	scene.backgroundBlurriness = 0.05;
 
 	controls.addEventListener( 'change', () => {
@@ -55,7 +55,7 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr' )
 		.then( texture => {
 
-			texture.mapping = THREE.EquirectangularReflectionMapping;
+			texture.mapping = EquirectangularReflectionMapping;
 			scene.background = texture;
 			scene.environment = texture;
 
