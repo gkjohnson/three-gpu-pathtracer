@@ -84,21 +84,6 @@ function mergeGeometryList( geometries, target, options ) {
 
 }
 
-let dummyMesh = null;
-export function getDummyMesh() {
-
-	if ( ! dummyMesh ) {
-
-		const dummyMaterial = new MeshBasicMaterial();
-		const emptyGeometry = new BufferGeometry();
-		emptyGeometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 9 ), 3 ) );
-		dummyMesh = new Mesh( emptyGeometry, dummyMaterial );
-
-	}
-
-	return dummyMesh;
-
-}
 
 export class StaticGeometryGenerator {
 
@@ -119,6 +104,23 @@ export class StaticGeometryGenerator {
 		this._intermediateGeometry = new Map();
 		this._geometryMergeSets = new WeakMap();
 		this._mergeOrder = [];
+		this._dummyMesh = null;
+
+	}
+
+	_getDummyMesh() {
+
+		// return a consistent dummy mesh
+		if ( ! this._dummyMesh ) {
+
+			const dummyMaterial = new MeshBasicMaterial();
+			const emptyGeometry = new BufferGeometry();
+			emptyGeometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 9 ), 3 ) );
+			this._dummyMesh = new Mesh( emptyGeometry, dummyMaterial );
+
+		}
+
+		return this._dummyMesh;
 
 	}
 
