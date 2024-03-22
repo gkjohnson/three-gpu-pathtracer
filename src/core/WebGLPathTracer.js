@@ -1,11 +1,10 @@
-import { Color, CustomBlending, Matrix4, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
+import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
 import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
 
 const _resolution = new Vector2();
-const _flipEnvMap = new Matrix4().makeScale( - 1, 1, 1 );
 const _color = new Color();
 
 export class WebGLPathTracer {
@@ -203,7 +202,7 @@ export class WebGLPathTracer {
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;
 		material.backgroundIntensity = scene.backgroundIntensity ?? 1;
-		material.backgroundRotation.makeRotationFromEuler( scene.backgroundRotation ).multiply( _flipEnvMap );
+		material.backgroundRotation.makeRotationFromEuler( scene.backgroundRotation ).invert();
 		if ( scene.background === null || scene.background && scene.background.isColor ) {
 
 			this._colorBackground = this._colorBackground || new GradientEquirectTexture( 16 );
@@ -241,7 +240,7 @@ export class WebGLPathTracer {
 
 		// update scene environment
 		material.environmentIntensity = scene.environmentIntensity ?? 1;
-		material.environmentRotation.makeRotationFromEuler( scene.environmentRotation ).multiply( _flipEnvMap );
+		material.environmentRotation.makeRotationFromEuler( scene.environmentRotation ).invert();
 		if ( this._previousEnvironment !== scene.environment ) {
 
 			if ( scene.environment ) {
