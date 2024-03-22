@@ -28,8 +28,9 @@ async function init() {
 	// init renderer, camera, controls, scene
 	renderer = new WebGLPathTracer();
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
-	renderer.setClearColor( 0, 0 );
 	renderer.filterGlossyFactor = 0.5;
+	renderer.renderScale = resolutionScale; // TODO: causing dark outlines
+	renderer.setClearColor( 0, 0 );
 	renderer.tiles.set( tiles, tiles );
 	document.body.appendChild( renderer.domElement );
 
@@ -92,11 +93,10 @@ function onResize() {
 	// update rendering resolution
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = resolutionScale;
 	const dpr = window.devicePixelRatio;
 
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr * scale );
+	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 	camera.aspect = aspect;
