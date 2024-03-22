@@ -1,4 +1,4 @@
-import { BufferGeometry, MeshBasicMaterial, BufferAttribute, Mesh } from 'three';
+import { BufferGeometry } from 'three';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
 import { updateMaterialIndexAttribute } from './utils/GeometryPreparationUtils.js';
@@ -51,15 +51,6 @@ function getLights( objects ) {
 	}
 
 	return lights;
-
-}
-
-const dummyMaterial = new MeshBasicMaterial();
-export function getDummyMesh() {
-
-	const emptyGeometry = new BufferGeometry();
-	emptyGeometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 9 ), 3 ) );
-	return new Mesh( emptyGeometry, dummyMaterial );
 
 }
 

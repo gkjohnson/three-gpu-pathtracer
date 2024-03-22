@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry } from 'three';
+import { BufferAttribute, BufferGeometry, Mesh, MeshBasicMaterial } from 'three';
 import { mergeGeometries } from './mergeGeometries.js';
 import { setCommonAttributes } from './GeometryPreparationUtils.js';
 import { BakedGeometry } from './BakedGeometry.js';
@@ -84,6 +84,22 @@ function mergeGeometryList( geometries, target, options ) {
 
 }
 
+let dummyMesh = null;
+export function getDummyMesh() {
+
+	if ( ! dummyMesh ) {
+
+		const dummyMaterial = new MeshBasicMaterial();
+		const emptyGeometry = new BufferGeometry();
+		emptyGeometry.setAttribute( 'position', new BufferAttribute( new Float32Array( 9 ), 3 ) );
+		dummyMesh = new Mesh( emptyGeometry, dummyMaterial );
+
+	}
+
+	return dummyMesh;
+
+}
+
 export class StaticGeometryGenerator {
 
 	constructor( objects ) {
@@ -124,6 +140,12 @@ export class StaticGeometryGenerator {
 			return 0;
 
 		} );
+
+		if ( meshes.length === 0 ) {
+
+			meshes.push( getDummyMesh() );
+
+		}
 
 		return meshes;
 
