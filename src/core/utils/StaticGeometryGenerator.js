@@ -145,7 +145,7 @@ export class StaticGeometryGenerator {
 
 		if ( meshes.length === 0 ) {
 
-			meshes.push( getDummyMesh() );
+			meshes.push( this._getDummyMesh() );
 
 		}
 
