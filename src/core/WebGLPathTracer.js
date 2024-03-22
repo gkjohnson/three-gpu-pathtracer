@@ -1,4 +1,4 @@
-import { Color, CustomBlending, Matrix4, MeshBasicMaterial, Vector2, WebGLRenderer } from 'three';
+import { Color, CustomBlending, Matrix4, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
 import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -155,6 +155,9 @@ export class WebGLPathTracer {
 
 		} );
 
+		// initialize the scene so it doesn't fail
+		this.updateScene( new PerspectiveCamera(), new Scene() );
+
 	}
 
 	updateScene( camera, scene ) {
@@ -232,6 +235,7 @@ export class WebGLPathTracer {
 		} else {
 
 			material.backgroundMap = scene.background;
+			material.backgroundAlpha = 1;
 
 		}
 
