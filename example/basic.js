@@ -1,12 +1,11 @@
 import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera } from '../src/index.js';
+import { PhysicalCamera, WebGLPathTracer } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
-let renderer, controls, pathTracer, blitQuad, camera, scene, samplesEl;
+let renderer, controls, camera, scene, samplesEl;
 
 let tiles = 2;
 let resolutionScale = Math.max( 1 / window.devicePixelRatio, 0.5 );
@@ -27,9 +26,11 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 
 	// init renderer, camera, controls, scene
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer = new WebGLPathTracer();
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
+	renderer.filterGlossyFactor = 0.5;
+	renderer.tiles.set( tiles, tiles );
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PhysicalCamera( 75, 1, 0.025, 500 );
@@ -42,22 +43,9 @@ async function init() {
 	scene = new THREE.Scene();
 	scene.backgroundBlurriness = 0.05;
 
-	// init path tracer
-	pathTracer = new PathTracingRenderer( renderer );
-	pathTracer.material = new PhysicalPathTracingMaterial();
-	pathTracer.material.filterGlossyFactor = 0.5;
-	pathTracer.material.backgroundBlur = 0.05;
-	pathTracer.tiles.set( tiles, tiles );
-	pathTracer.camera = camera;
-
-	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: pathTracer.target.texture,
-		blending: THREE.CustomBlending,
-	} ) );
-
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		renderer.reset();
 
 	} );
 
@@ -69,7 +57,6 @@ async function init() {
 			texture.mapping = THREE.EquirectangularReflectionMapping;
 			scene.background = texture;
 			scene.environment = texture;
-			pathTracer.material.envMapInfo.updateFrom( texture );
 
 		} );
 
@@ -85,26 +72,12 @@ async function init() {
 
 			scene.add( result.scene );
 
-			const { bvh, textures, materials, geometry } = result;
-			const material = pathTracer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
-
 		} );
 
 	// wait for the scene to be rady
 	await Promise.all( [ gltfPromise, envMapPromise ] );
+
+	renderer.updateScene( camera, scene );
 
 	document.getElementById( 'loading' ).remove();
 	window.addEventListener( 'resize', onResize );
@@ -122,11 +95,8 @@ function onResize() {
 	const scale = resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	pathTracer.setSize( w * scale * dpr, h * scale * dpr );
-	pathTracer.reset();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr * scale );
 
 	const aspect = w / h;
 	camera.aspect = aspect;
@@ -137,21 +107,8 @@ function onResize() {
 function animate() {
 
 	requestAnimationFrame( animate );
+	renderer.renderSample();
 
-	camera.updateMatrixWorld();
-	pathTracer.update();
-
-	if ( pathTracer.samples < 1 ) {
-
-		renderer.render( scene, camera );
-
-	}
-
-	renderer.autoClear = false;
-	blitQuad.material.map = pathTracer.target.texture;
-	blitQuad.render( renderer );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
