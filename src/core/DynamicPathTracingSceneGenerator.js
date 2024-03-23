@@ -35,14 +35,18 @@ function getLights( objects ) {
 
 		objects[ i ].traverse( c => {
 
-			if (
-				c.isRectAreaLight ||
-				c.isSpotLight ||
-				c.isPointLight ||
-				c.isDirectionalLight
-			) {
+			if ( c.visible ) {
 
-				lights.push( c );
+				if (
+					c.isRectAreaLight ||
+					c.isSpotLight ||
+					c.isPointLight ||
+					c.isDirectionalLight
+				) {
+
+					lights.push( c );
+
+				}
 
 			}
 
@@ -160,5 +164,6 @@ export class DynamicPathTracingSceneGenerator {
 
 	}
 
-
 }
+
+export { NO_CHANGE, GEOMETRY_ADJUSTED, GEOMETRY_REBUILT };

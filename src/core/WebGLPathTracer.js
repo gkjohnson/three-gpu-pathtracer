@@ -1,5 +1,5 @@
 import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
-import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
+import { DynamicPathTracingSceneGenerator, NO_CHANGE } from './DynamicPathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
@@ -183,6 +183,7 @@ export class WebGLPathTracer {
 		const pathTracer = this._pathTracer;
 		const lowResPathTracer = this._lowResPathTracer;
 		const material = pathTracer.material;
+		const textureSize = this.textureSize;
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
@@ -202,21 +203,28 @@ export class WebGLPathTracer {
 			textures,
 			geometry,
 			bvh,
+			changeType,
 		} = this.generator.generate();
 
 		// update scene information
 		material.lights.updateFrom( lights );
 		material.lightCount = lights.length;
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, this.textureSize.x, this.textureSize.y, textures );
+		material.textures.setTextures( renderer, textureSize.x, textureSize.y, textures );
 		material.materials.updateFrom( materials, textures );
+
+		if ( changeType !== NO_CHANGE ) {
+
+			material.bvh.updateFrom( bvh );
+			material.attributesArray.updateFrom(
+				geometry.attributes.normal,
+				geometry.attributes.tangent,
+				geometry.attributes.uv,
+				geometry.attributes.color,
+			);
+
+			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+
+		}
 
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;

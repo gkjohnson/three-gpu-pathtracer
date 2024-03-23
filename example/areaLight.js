@@ -265,12 +265,14 @@ async function init() {
 
 function updateLights() {
 
+	areaLights[ 0 ].visible = params.areaLight1Enabled;
 	areaLights[ 0 ].isCircular = params.areaLight1IsCircular;
 	areaLights[ 0 ].intensity = params.areaLight1Intensity;
 	areaLights[ 0 ].width = params.areaLight1Width;
 	areaLights[ 0 ].height = params.areaLight1Height;
 	areaLights[ 0 ].color.set( params.areaLight1Color ).convertSRGBToLinear();
 
+	areaLights[ 1 ].visible = params.areaLight2Enabled;
 	areaLights[ 1 ].isCircular = params.areaLight2IsCircular;
 	areaLights[ 1 ].intensity = params.areaLight2Intensity;
 	areaLights[ 1 ].width = params.areaLight2Width;
@@ -304,6 +306,7 @@ function animate() {
 	renderer.bounces = params.bounces;
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
 	scene.backgroundBlurriness = 0.35;
 
 	renderer.updateScene( camera, scene );
