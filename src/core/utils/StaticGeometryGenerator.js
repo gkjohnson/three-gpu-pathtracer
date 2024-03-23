@@ -93,13 +93,7 @@ export class StaticGeometryGenerator {
 
 	constructor( objects ) {
 
-		if ( ! Array.isArray( objects ) ) {
-
-			objects = [ objects ];
-
-		}
-
-		this.objects = objects;
+		this.objects = null;
 		this.useGroups = true;
 		this.applyWorldTransforms = true;
 		this.generateMissingAttributes = true;
@@ -109,6 +103,8 @@ export class StaticGeometryGenerator {
 		this._geometryMergeSets = new WeakMap();
 		this._mergeOrder = [];
 		this._dummyMesh = null;
+
+		this.setObjects( objects || [] );
 
 	}
 
@@ -203,6 +199,20 @@ export class StaticGeometryGenerator {
 			_intermediateGeometry.delete( key );
 
 		} );
+
+	}
+
+	setObjects( objects ) {
+
+		if ( Array.isArray( objects ) ) {
+
+			this.objects = [ ...objects ];
+
+		} else {
+
+			this.objects = [ objects ];
+
+		}
 
 	}
 

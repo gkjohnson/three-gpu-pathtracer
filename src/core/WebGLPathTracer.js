@@ -116,7 +116,7 @@ export class WebGLPathTracer {
 
 		// members
 		this._renderer = renderer;
-		this._generator = null;
+		this._generator = new DynamicPathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
@@ -195,19 +195,13 @@ export class WebGLPathTracer {
 		const renderer = this._renderer;
 		const pathTracer = this._pathTracer;
 		const lowResPathTracer = this._lowResPathTracer;
+		const generator = this._generator;
 		const material = pathTracer.material;
 		const textureSize = this.textureSize;
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
-
-		// TODO: adjust this so we don't have to create a new tracer every time and the
-		// geometry results automatically expands to fit results
-		if ( scene !== this._previousScene ) {
-
-			this.generator = new DynamicPathTracingSceneGenerator( scene );
-
-		}
+		generator.setObjects( scene );
 
 		// set up
 		const {
@@ -217,7 +211,7 @@ export class WebGLPathTracer {
 			geometry,
 			bvh,
 			bvhChanged,
-		} = this.generator.generate();
+		} = generator.generate();
 
 		// update scene information
 		material.lights.updateFrom( lights );

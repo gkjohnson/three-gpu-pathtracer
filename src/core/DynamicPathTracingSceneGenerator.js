@@ -68,23 +68,15 @@ export class DynamicPathTracingSceneGenerator {
 
 	constructor( objects ) {
 
-		// ensure the objects is an array
-		if ( ! Array.isArray( objects ) ) {
-
-			objects = [ objects ];
-
-		}
-
 		// options
 		this.bvhOptions = {};
 		this.attributes = [ 'position', 'normal', 'tangent', 'color', 'uv', 'uv2' ];
 		this.generateBVH = true;
 
 		// state
-		this.objects = objects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
-		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
+		this.staticGeometryGenerator = new StaticGeometryGenerator( objects );
 
 	}
 
@@ -99,9 +91,16 @@ export class DynamicPathTracingSceneGenerator {
 
 	dispose() {}
 
+	setObjects( objects ) {
+
+		this.staticGeometryGenerator.setObjects( objects );
+
+	}
+
 	generate() {
 
-		const { objects, staticGeometryGenerator, geometry, attributes } = this;
+		const { staticGeometryGenerator, geometry, attributes } = this;
+		const objects = staticGeometryGenerator.objects;
 		staticGeometryGenerator.attributes = attributes;
 
 		// update the skeleton animations in case WebGLRenderer is not running
