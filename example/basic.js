@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
 let renderer, controls, camera, scene, samplesEl;
 
@@ -31,6 +32,7 @@ async function init() {
 	renderer.renderScale = resolutionScale;
 	renderer.setClearColor( 0, 0 );
 	renderer.tiles.set( tiles, tiles );
+	renderer.setBVHWorker( new ParallelMeshBVHWorker() );
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PhysicalCamera( 75, 1, 0.025, 500 );
@@ -71,7 +73,7 @@ async function init() {
 	// wait for the scene to be rady
 	await Promise.all( [ gltfPromise, envMapPromise ] );
 
-	renderer.updateScene( camera, scene );
+	await renderer.updateSceneAsync( camera, scene );
 
 	document.getElementById( 'loading' ).remove();
 	window.addEventListener( 'resize', onResize );

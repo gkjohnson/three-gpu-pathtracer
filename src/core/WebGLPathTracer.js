@@ -198,18 +198,41 @@ export class WebGLPathTracer {
 
 	updateScene( camera, scene ) {
 
-		const renderer = this._renderer;
-		const pathTracer = this._pathTracer;
-		const lowResPathTracer = this._lowResPathTracer;
-		const generator = this._generator;
-		const material = pathTracer.material;
-		const textureSize = this.textureSize;
-
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
+
+		const generator = this._generator;
 		generator.setObjects( scene );
 
-		// set up
+		if ( this._buildAsync ) {
+
+			return generator.generateAsync().then( result => {
+
+				return this._updateFromResults( scene, camera, result );
+
+			} );
+
+		} else {
+
+			const result = generator.generate();
+			return this._updateFromResults( scene, camera, result );
+
+		}
+
+	}
+
+	updateSceneAsync( ...args ) {
+
+		this._buildAsync = true;
+		const result = this.updateScene( ...args );
+		this._buildAsync = false;
+
+		return result;
+
+	}
+
+	_updateFromResults( scene, camera, results ) {
+
 		const {
 			lights,
 			materials,
@@ -217,7 +240,13 @@ export class WebGLPathTracer {
 			geometry,
 			bvh,
 			bvhChanged,
-		} = generator.generate();
+		} = results;
+
+		const renderer = this._renderer;
+		const pathTracer = this._pathTracer;
+		const lowResPathTracer = this._lowResPathTracer;
+		const material = pathTracer.material;
+		const textureSize = this.textureSize;
 
 		// update scene information
 		material.lights.updateFrom( lights );

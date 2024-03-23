@@ -78,6 +78,8 @@ export class DynamicPathTracingSceneGenerator {
 		this.geometry = new BufferGeometry();
 		this.staticGeometryGenerator = new StaticGeometryGenerator( objects );
 		this._bvhWorker = null;
+		this._pendingGenerate = null;
+		this._buildAsync = false;
 
 	}
 
