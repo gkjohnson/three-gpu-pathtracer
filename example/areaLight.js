@@ -13,16 +13,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
-let renderer, controls, transformControls, transformControlsScene, areaLights, camera;
+let renderer, controls, areaLights, camera;
 let scene;
 let samplesEl, loadingEl;
 const params = {
-
-	controls: true,
 
 	areaLight1Enabled: true,
 	areaLight1IsCircular: false,
@@ -61,14 +58,6 @@ if ( aspectRatio < 0.65 ) {
 }
 
 init();
-
-// other sculptures
-// * https://sketchfab.com/3d-models/nile-42e02439c61049d681c897441d40aaa1
-// * https://sketchfab.com/3d-models/statue-of-bacchus-09f1c94f43e0400c8916149bab297918
-// https://sketchfab.com/3d-models/2-aliens-figure-a58af7bd939d46fca4eb46e43588944f
-// * https://sketchfab.com/3d-models/lowe-4afeca000f444619ad581a30aa4fd17e
-// * https://sketchfab.com/3d-models/laocoon-and-his-sons-649111a9a7b74ddab3937292be5545fc
-// * https://sketchfab.com/3d-models/mercury-about-to-kill-argos-by-b-thorvaldsen-bdcd0813bf54467fb879ee1681a3a6d3
 
 async function init() {
 
@@ -152,36 +141,6 @@ async function init() {
 
 	areaLights = [ areaLight1, areaLight2 ];
 
-	transformControls = new TransformControls( camera, renderer.domElement );
-	transformControls.addEventListener( 'objectChange', () => {
-
-		// TODO: is it important to skip updating everything but lights here?
-		renderer.updateScene( camera, scene );
-
-	} );
-	transformControls.addEventListener( 'dragging-changed', ( e ) => controls.enabled = ! e.value );
-	transformControls.attach( areaLight1 );
-	transformControls.setSize( 0.5 );
-
-	window.addEventListener( 'keydown', function ( event ) {
-
-		switch ( event.key ) {
-
-		case 'w':
-			transformControls.setMode( 'translate' );
-			break;
-
-		case 'e':
-			transformControls.setMode( 'rotate' );
-			break;
-
-		}
-
-	} );
-
-	transformControlsScene = new Scene();
-	transformControlsScene.add( transformControls );
-
 	await Promise.all( [ envMapPromise ] );
 	renderer.updateScene( camera, scene );
 
@@ -191,12 +150,6 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'controls' ).onChange( v => {
-
-		transformControls.enabled = v;
-		transformControls.visible = v;
-
-	} );
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
