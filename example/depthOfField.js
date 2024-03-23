@@ -1,22 +1,17 @@
 import {
 	Vector2,
 	Vector3,
-	WebGLRenderer,
 	ACESFilmicToneMapping,
 	Scene,
-	MeshBasicMaterial,
-	CustomBlending,
 	Group,
 	SphereGeometry,
 	MeshStandardMaterial,
 	Mesh,
 	Raycaster,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
