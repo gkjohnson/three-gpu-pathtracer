@@ -9,6 +9,19 @@ const _color = new Color();
 
 export class WebGLPathTracer {
 
+	get multipleImportanceSampling() {
+
+		return Boolean( this._pathTracer.material.defines.FEATURE_MIS );
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		this._pathTracer.material.setDefine( 'FEATURE_MIS', v ? 1 : 0 );
+		this._pathTracer.material.needsUpdate = true;
+
+	}
+
 	get filterGlossyFactor() {
 
 		return this._pathTracer.material.filterGlossyFactor;
@@ -77,9 +90,14 @@ export class WebGLPathTracer {
 			renderer = new WebGLRenderer( { alpha: true } );
 			this._ownRenderer = true;
 
-		} else {
+		} else if ( renderer.isWebGLRenderer ) {
 
 			this._ownRenderer = false;
+
+		} else {
+
+			renderer = new WebGLRenderer( { ...renderer, alpha: true } );
+			this._ownRenderer = true;
 
 		}
 
@@ -188,6 +206,7 @@ export class WebGLPathTracer {
 
 		// update scene information
 		material.lights.updateFrom( lights );
+		material.lightCount = lights.length;
 		material.bvh.updateFrom( bvh );
 		material.attributesArray.updateFrom(
 			geometry.attributes.normal,

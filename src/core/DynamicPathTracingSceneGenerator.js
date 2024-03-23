@@ -1,6 +1,6 @@
 import { BufferGeometry } from 'three';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
-import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
+import { StaticGeometryGenerator, NO_CHANGE, GEOMETRY_ADJUSTED, GEOMETRY_REBUILT } from './utils/StaticGeometryGenerator.js';
 import { updateMaterialIndexAttribute } from './utils/GeometryPreparationUtils.js';
 
 // collect the textures from the materials
@@ -122,12 +122,16 @@ export class DynamicPathTracingSceneGenerator {
 		const textures = getTextures( materials );
 		const lights = getLights( objects );
 
-		updateMaterialIndexAttribute( geometry, materials, materials );
+		if ( result.changeType !== NO_CHANGE ) {
+
+			updateMaterialIndexAttribute( geometry, materials, materials );
+
+		}
 
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {
 
-			if ( result.objectsChanged ) {
+			if ( result.changeType === GEOMETRY_REBUILT ) {
 
 				this.bvh = new MeshBVH( geometry, {
 					strategy: SAH,
@@ -136,7 +140,7 @@ export class DynamicPathTracingSceneGenerator {
 					...this.bvhOptions,
 				} );
 
-			} else {
+			} else if ( result.changeType === GEOMETRY_ADJUSTED ) {
 
 				this.bvh.refit();
 
@@ -145,8 +149,8 @@ export class DynamicPathTracingSceneGenerator {
 		}
 
 		return {
+			changeType: result.changeType,
 			bvh: this.bvh,
-			objectsChanged: result.objectsChanged,
 			lights,
 			geometry,
 			materials,

@@ -3,6 +3,10 @@ import { mergeGeometries } from './mergeGeometries.js';
 import { setCommonAttributes } from './GeometryPreparationUtils.js';
 import { BakedGeometry } from './BakedGeometry.js';
 
+export const NO_CHANGE = 0;
+export const GEOMETRY_ADJUSTED = 1;
+export const GEOMETRY_REBUILT = 2;
+
 // iterate over only the meshes in the provided objects
 function flatTraverseMeshes( objects, cb ) {
 
@@ -256,8 +260,12 @@ export class StaticGeometryGenerator {
 			uuid: g.uuid,
 		} ) ) );
 
+		let changeType = NO_CHANGE;
+		if ( forceUpdate ) changeType = GEOMETRY_REBUILT;
+		else if ( skipAssigningAttributes.includes( false ) ) changeType = GEOMETRY_ADJUSTED;
+
 		return {
-			objectsChanged: forceUpdate,
+			changeType,
 			materials: getMaterials( meshes ),
 			geometry: targetGeometry,
 		};

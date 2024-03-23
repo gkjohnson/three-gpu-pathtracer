@@ -7,7 +7,7 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
-let renderer, controls, transformControls, transformControlsScene, areaLights, ptRenderer, camera;
+let renderer, controls, transformControls, transformControlsScene, areaLights, camera;
 let scene;
 let samplesEl, loadingEl;
 const params = {
@@ -97,7 +97,6 @@ async function init() {
 
 		} );
 
-	const group = new THREE.Group();
 	const box = new THREE.Box3();
 	const gltf = await new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
@@ -110,22 +109,20 @@ async function init() {
 
 	} );
 
-	scene.scale.setScalar( 0.01 );
-	scene.position.x = 0.05;
-	scene.updateMatrixWorld( true );
+	gltf.scene.scale.setScalar( 0.01 );
+	gltf.scene.position.x = 0.05;
+	gltf.scene.updateMatrixWorld( true );
 
 	box.setFromObject( scene );
-	scene.position.y -= box.min.y;
-
-	group.add( scene );
+	gltf.scene.position.y -= box.min.y;
 
 	const floorGeom = new THREE.CylinderGeometry( 3.5, 3.5, 0.05, 60 );
 	const floorMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
 	const floor = new THREE.Mesh( floorGeom, floorMat );
 	floor.position.y = - 0.025;
-	group.add( floor );
+	scene.add( floor );
 
-	group.updateMatrixWorld();
+	scene.updateMatrixWorld();
 
 	const areaLight1 = new ShapedAreaLight( new THREE.Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
 	areaLight1.position.x = 1.5;
@@ -134,14 +131,14 @@ async function init() {
 	areaLight1.rotateZ( - Math.PI / 4 );
 	areaLight1.rotateX( - Math.PI / 2 );
 	areaLight1.isCircular = false;
-	group.add( areaLight1 );
+	scene.add( areaLight1 );
 
 	const areaLight2 = new ShapedAreaLight( new THREE.Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
 	areaLight2.position.y = 1.25;
 	areaLight2.position.z = - 1.5;
 	areaLight2.rotateX( Math.PI );
 	areaLight2.isCircular = false;
-	group.add( areaLight2 );
+	scene.add( areaLight2 );
 
 	areaLights = [ areaLight1, areaLight2 ];
 
@@ -178,7 +175,7 @@ async function init() {
 	await Promise.all( [ envMapPromise ] );
 	renderer.updateScene( camera, scene );
 
-	document.getElementById( 'loading' ).remove();
+	loadingEl.remove();
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
@@ -229,8 +226,7 @@ async function init() {
 
 		scene.backgroundRotation.y = v;
 		scene.environmentRotation.y = v;
-		// renderer.material.environmentRotation.makeRotationY( v );
-		// renderer.reset();
+		renderer.reset();
 
 	} );
 	envFolder.close();
@@ -299,7 +295,9 @@ function animate() {
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundBlurriness = 0.35;
+
 	renderer.updateScene( camera, scene );
+	renderer.renderSample();
 
 	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 

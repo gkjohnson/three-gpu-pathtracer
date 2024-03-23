@@ -6,6 +6,14 @@ const CIRC_AREA_LIGHT = 1;
 const SPOT_LIGHT = 2;
 const DIR_LIGHT = 3;
 const POINT_LIGHT = 4;
+
+const u = new Vector3();
+const v = new Vector3();
+const m = new Matrix4();
+const worldQuaternion = new Quaternion();
+const eye = new Vector3();
+const target = new Vector3();
+const up = new Vector3( 0, 1, 0 );
 export class LightsInfoUniformStruct {
 
 	constructor() {
@@ -41,14 +49,6 @@ export class LightsInfoUniformStruct {
 		}
 
 		const floatArray = tex.image.data;
-
-		const u = new Vector3();
-		const v = new Vector3();
-		const m = new Matrix4();
-		const worldQuaternion = new Quaternion();
-		const eye = new Vector3();
-		const target = new Vector3();
-		const up = new Vector3( 0, 1, 0 );
 
 		for ( let i = 0, l = lights.length; i < l; i ++ ) {
 
