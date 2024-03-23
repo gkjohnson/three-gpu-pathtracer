@@ -1,4 +1,14 @@
-import * as THREE from 'three';
+import {
+	ACESFilmicToneMapping,
+	Box3,
+	Color,
+	CylinderGeometry,
+	EquirectangularReflectionMapping,
+	Mesh,
+	MeshStandardMaterial,
+	PerspectiveCamera,
+	Scene,
+} from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -63,13 +73,13 @@ init();
 async function init() {
 
 	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
 
-	scene = new THREE.Scene();
+	scene = new Scene();
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 0.0, 0.6, 2.65 );
 
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -91,13 +101,13 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr' )
 		.then( texture => {
 
-			texture.mapping = THREE.EquirectangularReflectionMapping;
+			texture.mapping = EquirectangularReflectionMapping;
 			scene.background = texture;
 			scene.environment = texture;
 
 		} );
 
-	const box = new THREE.Box3();
+	const box = new Box3();
 	const gltf = await new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb' );
@@ -116,15 +126,15 @@ async function init() {
 	box.setFromObject( scene );
 	gltf.scene.position.y -= box.min.y;
 
-	const floorGeom = new THREE.CylinderGeometry( 3.5, 3.5, 0.05, 60 );
-	const floorMat = new THREE.MeshPhysicalMaterial( { color: new THREE.Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
-	const floor = new THREE.Mesh( floorGeom, floorMat );
+	const floorGeom = new CylinderGeometry( 3.5, 3.5, 0.05, 60 );
+	const floorMat = new MeshStandardMaterial( { color: new Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
+	const floor = new Mesh( floorGeom, floorMat );
 	floor.position.y = - 0.025;
 	scene.add( floor );
 
 	scene.updateMatrixWorld();
 
-	const areaLight1 = new ShapedAreaLight( new THREE.Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
+	const areaLight1 = new ShapedAreaLight( new Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
 	areaLight1.position.x = 1.5;
 	areaLight1.position.y = 1.0;
 	areaLight1.position.z = - 0.5;
@@ -133,7 +143,7 @@ async function init() {
 	areaLight1.isCircular = false;
 	scene.add( areaLight1 );
 
-	const areaLight2 = new ShapedAreaLight( new THREE.Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
+	const areaLight2 = new ShapedAreaLight( new Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
 	areaLight2.position.y = 1.25;
 	areaLight2.position.z = - 1.5;
 	areaLight2.rotateX( Math.PI );
@@ -169,7 +179,7 @@ async function init() {
 
 	} );
 
-	transformControlsScene = new THREE.Scene();
+	transformControlsScene = new Scene();
 	transformControlsScene.add( transformControls );
 
 	await Promise.all( [ envMapPromise ] );
