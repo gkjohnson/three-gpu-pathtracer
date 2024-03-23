@@ -153,7 +153,7 @@ export class DynamicPathTracingSceneGenerator {
 		}
 
 		return {
-			changeType: result.changeType,
+			bvhChanged: result.changeType !== NO_CHANGE,
 			bvh: this.bvh,
 			lights,
 			geometry,
@@ -165,5 +165,3 @@ export class DynamicPathTracingSceneGenerator {
 	}
 
 }
-
-export { NO_CHANGE, GEOMETRY_ADJUSTED, GEOMETRY_REBUILT };

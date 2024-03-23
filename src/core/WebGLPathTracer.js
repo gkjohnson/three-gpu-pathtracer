@@ -1,5 +1,5 @@
 import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
-import { DynamicPathTracingSceneGenerator, NO_CHANGE } from './DynamicPathTracingSceneGenerator.js';
+import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
@@ -21,6 +21,19 @@ export class WebGLPathTracer {
 		this._pathTracer.material.needsUpdate = true;
 
 	}
+
+	get bounces() {
+
+		return this._pathTracer.bounces;
+
+	}
+
+	set bounces( v ) {
+
+		this._pathTracer.bounces = v;
+
+	}
+
 
 	get filterGlossyFactor() {
 
@@ -203,7 +216,7 @@ export class WebGLPathTracer {
 			textures,
 			geometry,
 			bvh,
-			changeType,
+			bvhChanged,
 		} = this.generator.generate();
 
 		// update scene information
@@ -212,7 +225,7 @@ export class WebGLPathTracer {
 		material.textures.setTextures( renderer, textureSize.x, textureSize.y, textures );
 		material.materials.updateFrom( materials, textures );
 
-		if ( changeType !== NO_CHANGE ) {
+		if ( bvhChanged ) {
 
 			material.bvh.updateFrom( bvh );
 			material.attributesArray.updateFrom(
