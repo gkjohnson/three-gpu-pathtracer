@@ -2,7 +2,6 @@ import { ACESFilmicToneMapping, Scene, EquirectangularReflectionMapping } from '
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, WebGLPathTracer } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
 let renderer, controls, camera, scene, samplesEl;
