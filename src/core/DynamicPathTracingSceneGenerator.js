@@ -199,11 +199,11 @@ export class DynamicPathTracingSceneGenerator {
 
 				if ( this._buildAsync ) {
 
-					this.bvh = new MeshBVH( geometry, bvhOptions );
+					this.bvh = this._bvhWorker.generate( geometry, bvhOptions );
 
 				} else {
 
-					this.bvh = this._bvhWorker.generate( geometry, bvhOptions );
+					this.bvh = new MeshBVH( geometry, bvhOptions );
 
 				}
 
