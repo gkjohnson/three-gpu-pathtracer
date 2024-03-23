@@ -107,7 +107,7 @@ export class DynamicPathTracingSceneGenerator {
 
 	}
 
-	async generateAsync() {
+	async generateAsync( onProgress = null ) {
 
 		if ( ! this._bvhWorker ) {
 
@@ -126,7 +126,8 @@ export class DynamicPathTracingSceneGenerator {
 					await this.bvh;
 					this._pendingGenerate = null;
 
-					return this.generateAsync();
+					// TODO: support multiple callbacks queued?
+					return this.generateAsync( onProgress );
 
 				} );
 
@@ -137,7 +138,7 @@ export class DynamicPathTracingSceneGenerator {
 		} else {
 
 			this._buildAsync = true;
-			const result = this.generate();
+			const result = this.generate( onProgress );
 			this._buildAsync = false;
 
 			result.bvh = this.bvh = await result.bvh;
@@ -147,7 +148,7 @@ export class DynamicPathTracingSceneGenerator {
 
 	}
 
-	generate() {
+	generate( onProgress = null ) {
 
 		const { staticGeometryGenerator, geometry, attributes } = this;
 		const objects = staticGeometryGenerator.objects;
@@ -196,6 +197,7 @@ export class DynamicPathTracingSceneGenerator {
 					strategy: SAH,
 					maxLeafTris: 1,
 					indirect: true,
+					onProgress,
 					...this.bvhOptions,
 				};
 

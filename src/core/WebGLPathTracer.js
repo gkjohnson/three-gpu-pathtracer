@@ -196,7 +196,7 @@ export class WebGLPathTracer {
 
 	}
 
-	updateScene( camera, scene ) {
+	updateScene( camera, scene, options = {} ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
@@ -206,7 +206,7 @@ export class WebGLPathTracer {
 
 		if ( this._buildAsync ) {
 
-			return generator.generateAsync().then( result => {
+			return generator.generateAsync( options.onProgress ).then( result => {
 
 				return this._updateFromResults( scene, camera, result );
 

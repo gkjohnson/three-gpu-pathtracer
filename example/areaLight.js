@@ -15,6 +15,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
 let renderer, controls, areaLights, camera;
 let scene;
@@ -64,6 +65,7 @@ async function init() {
 	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.tiles.set( params.tiles, params.tiles );
+	renderer.setBVHWorker( new ParallelMeshBVHWorker() );
 	document.body.appendChild( renderer.domElement );
 
 	scene = new Scene();
@@ -142,7 +144,13 @@ async function init() {
 	areaLights = [ areaLight1, areaLight2 ];
 
 	await Promise.all( [ envMapPromise ] );
-	renderer.updateScene( camera, scene );
+	await renderer.updateSceneAsync( camera, scene, {
+		onProgress: v => {
+
+			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
+
+		}
+	} );
 
 	loadingEl.remove();
 
