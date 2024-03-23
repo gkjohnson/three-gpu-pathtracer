@@ -190,6 +190,12 @@ export class WebGLPathTracer {
 
 	}
 
+	setBVHWorker( worker ) {
+
+		this._generator.setBVHWorker( worker );
+
+	}
+
 	updateScene( camera, scene ) {
 
 		const renderer = this._renderer;

@@ -105,7 +105,7 @@ export class DynamicPathTracingSceneGenerator {
 
 	}
 
-	generateAsync() {
+	async generateAsync() {
 
 		if ( ! this._bvhWorker ) {
 
@@ -113,7 +113,35 @@ export class DynamicPathTracingSceneGenerator {
 
 		}
 
-		// TODO
+		if ( this.bvh instanceof Promise ) {
+
+			// if a bvh is already being generated we can wait for that to finish
+			// and build another with the latest data while sharing the results.
+			if ( ! this._pendingGenerate ) {
+
+				this._pendingGenerate = new Promise( async () => {
+
+					await this.bvh;
+					this._pendingGenerate = null;
+
+					return this.generateAsync();
+
+				} );
+
+			}
+
+			return this._pendingGenerate;
+
+		} else {
+
+			this._buildAsync = true;
+			const result = this.generate();
+			this._buildAsync = false;
+
+			result.bvh = this.bvh = await result.bvh;
+			return result;
+
+		}
 
 	}
 
@@ -154,14 +182,30 @@ export class DynamicPathTracingSceneGenerator {
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {
 
+			if ( this.bvh instanceof Promise ) {
+
+				throw new Error( 'PathTracingSceneGenerator: BVH is already building asynchronously.' );
+
+			}
+
 			if ( result.changeType === GEOMETRY_REBUILT ) {
 
-				this.bvh = new MeshBVH( geometry, {
+				const bvhOptions = {
 					strategy: SAH,
 					maxLeafTris: 1,
 					indirect: true,
 					...this.bvhOptions,
-				} );
+				};
+
+				if ( this._buildAsync ) {
+
+					this.bvh = new MeshBVH( geometry, bvhOptions );
+
+				} else {
+
+					this.bvh = this._bvhWorker.generate( geometry, bvhOptions );
+
+				}
 
 			} else if ( result.changeType === GEOMETRY_ADJUSTED ) {
 
