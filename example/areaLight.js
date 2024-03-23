@@ -203,17 +203,8 @@ async function init() {
 		renderer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		renderer.reset();
-
-	} );
-	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( () => {
-
-		renderer.reset();
-
-	} );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( updateScene );
+	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( updateScene );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -222,48 +213,39 @@ async function init() {
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( () => {
 
 		renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+		renderer.reset();
 
 	} );
 	ptFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( () => {
-
-		renderer.reset();
-
-	} );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		scene.backgroundRotation.y = v;
-		scene.environmentRotation.y = v;
-		renderer.reset();
-
-	} );
+	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( updateScene );
+	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( updateScene );
 	envFolder.close();
 
 	const areaLight1Folder = gui.addFolder( 'Area Light 1' );
-	areaLight1Folder.add( params, 'areaLight1Enabled' ).name( 'enable' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1IsCircular' ).name( 'isCircular' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
-	areaLight1Folder.addColor( params, 'areaLight1Color' ).name( 'color' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1Width', 0, 5 ).name( 'width' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1Height', 0, 5 ).name( 'height' ).onChange( updateLights );
+	areaLight1Folder.add( params, 'areaLight1Enabled' ).name( 'enable' ).onChange( updateScene );
+	areaLight1Folder.add( params, 'areaLight1IsCircular' ).name( 'isCircular' ).onChange( updateScene );
+	areaLight1Folder.add( params, 'areaLight1Intensity', 0, 200 ).name( 'intensity' ).onChange( updateScene );
+	areaLight1Folder.addColor( params, 'areaLight1Color' ).name( 'color' ).onChange( updateScene );
+	areaLight1Folder.add( params, 'areaLight1Width', 0, 5 ).name( 'width' ).onChange( updateScene );
+	areaLight1Folder.add( params, 'areaLight1Height', 0, 5 ).name( 'height' ).onChange( updateScene );
 
 	const areaLight2Folder = gui.addFolder( 'Area Light 2' );
-	areaLight2Folder.add( params, 'areaLight2Enabled' ).name( 'enable' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2IsCircular' ).name( 'isCircular' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
-	areaLight2Folder.addColor( params, 'areaLight2Color' ).name( 'color' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2Width', 0, 5 ).name( 'width' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2Height', 0, 5 ).name( 'height' ).onChange( updateLights );
+	areaLight2Folder.add( params, 'areaLight2Enabled' ).name( 'enable' ).onChange( updateScene );
+	areaLight2Folder.add( params, 'areaLight2IsCircular' ).name( 'isCircular' ).onChange( updateScene );
+	areaLight2Folder.add( params, 'areaLight2Intensity', 0, 200 ).name( 'intensity' ).onChange( updateScene );
+	areaLight2Folder.addColor( params, 'areaLight2Color' ).name( 'color' ).onChange( updateScene );
+	areaLight2Folder.add( params, 'areaLight2Width', 0, 5 ).name( 'width' ).onChange( updateScene );
+	areaLight2Folder.add( params, 'areaLight2Height', 0, 5 ).name( 'height' ).onChange( updateScene );
 
-	updateLights();
+	updateScene();
 
 	animate();
 
 }
 
-function updateLights() {
+function updateScene() {
 
 	areaLights[ 0 ].visible = params.areaLight1Enabled;
 	areaLights[ 0 ].isCircular = params.areaLight1IsCircular;
@@ -278,6 +260,13 @@ function updateLights() {
 	areaLights[ 1 ].width = params.areaLight2Width;
 	areaLights[ 1 ].height = params.areaLight2Height;
 	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
+
+	renderer.bounces = params.bounces;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
+	scene.backgroundRotation.y = params.environmentRotation;
+	scene.environmentRotation.y = params.environmentRotation;
 
 	renderer.updateScene( camera, scene );
 
@@ -302,14 +291,6 @@ function onResize() {
 function animate() {
 
 	requestAnimationFrame( animate );
-
-	renderer.bounces = params.bounces;
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.backgroundIntensity = params.environmentIntensity;
-	scene.backgroundBlurriness = 0.35;
-
-	renderer.updateScene( camera, scene );
 	renderer.renderSample();
 
 	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
