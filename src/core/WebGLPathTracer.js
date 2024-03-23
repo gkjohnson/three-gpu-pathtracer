@@ -338,6 +338,8 @@ export class WebGLPathTracer {
 
 		this.reset();
 
+		return results;
+
 	}
 
 	renderSample() {

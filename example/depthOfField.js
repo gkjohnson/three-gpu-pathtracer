@@ -16,7 +16,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, camera, scene;
+let renderer, controls, camera, scene, bvh;
 let samplesEl;
 const mouse = new Vector2();
 const focusPoint = new Vector3();
@@ -71,7 +71,12 @@ async function init() {
 	controls.update();
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		if ( params.autoFocus ) {
+
+			camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
+			reset();
+
+		}
 
 	} );
 
@@ -135,7 +140,7 @@ async function init() {
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
-	renderer.updateScene( camera, scene );
+	reset();
 
 	document.getElementById( 'loading' ).remove();
 
@@ -153,12 +158,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( v => {
-
-		renderer.resolutionScale = v;
-		renderer.reset();
-
-	} );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( reset );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( reset ).listen();
@@ -194,9 +194,8 @@ function onMouseDown( e ) {
 function onMouseUp( e ) {
 
 	const deltaMouse = Math.abs( mouse.x - e.clientX ) + Math.abs( mouse.y - e.clientY );
-	if ( deltaMouse < 2 && sceneInfo ) {
+	if ( deltaMouse < 2 && bvh ) {
 
-		const bvh = sceneInfo.bvh;
 		const raycaster = new Raycaster();
 		raycaster.setFromCamera( {
 
@@ -235,21 +234,15 @@ function reset() {
 
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	renderer.bounces = params.bounces;
+	renderer.renderScale = params.resolutionScale;
 
-	renderer.updateScene( camera, scene );
+	bvh = renderer.updateScene( camera, scene ).bvh;
 
 }
 
 function animate() {
 
 	requestAnimationFrame( animate );
-
-	if ( params.autoFocus ) {
-
-		camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
-		reset();
-
-	}
 
 	renderer.renderSample();
 
