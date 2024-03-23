@@ -77,11 +77,13 @@ export class DynamicPathTracingSceneGenerator {
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
 		this.staticGeometryGenerator = new StaticGeometryGenerator( objects );
+		this._bvhWorker = null;
 
 	}
 
 	reset() {
 
+		console.log( 'TODO: remove this function since it will not be needed' );
 		this.bvh = null;
 		this.geometry.dispose();
 		this.geometry = new BufferGeometry();
@@ -94,6 +96,24 @@ export class DynamicPathTracingSceneGenerator {
 	setObjects( objects ) {
 
 		this.staticGeometryGenerator.setObjects( objects );
+
+	}
+
+	setBVHWorker( bvhWorker ) {
+
+		this._bvhWorker = bvhWorker;
+
+	}
+
+	generateAsync() {
+
+		if ( ! this._bvhWorker ) {
+
+			throw new Error( 'PathTracingSceneGenerator: "setBVHWorker" must be called before "generateAsync" can be called.' );
+
+		}
+
+		// TODO
 
 	}
 
