@@ -244,6 +244,7 @@ function onResize() {
 function animate() {
 
 	requestAnimationFrame( animate );
+	camera.updateMatrixWorld();
 	renderer.renderSample();
 
 	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
