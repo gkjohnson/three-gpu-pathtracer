@@ -12,13 +12,13 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-let renderer, controls, areaLights, scene, ptRenderer, camera;
+let renderer, controls, areaLights, scene, camera;
 let samplesEl, loadingEl;
 const params = {
 
@@ -67,12 +67,11 @@ async function init() {
 	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.tiles.set( params.tiles, params.tiles );
+	renderer.setBVHWorker( new ParallelMeshBVHWorker() );
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 0.0, 0.6, 2.65 );
-
-	ptRenderer = renderer._pathTracer;
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
@@ -94,15 +93,9 @@ async function init() {
 		.then( texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;
-			ptRenderer.material.backgroundMap = texture;
-			ptRenderer.material.envMapInfo.updateFrom( texture );
-			ptRenderer.material.needsUpdate = true;
-			ptRenderer.material.backgroundIntensity = params.environmentIntensity;
 
 			scene.background = texture;
 			scene.environment = texture;
-			scene.backgroundIntensity = params.environmentIntensity;
-			scene.environmentIntensity = params.environmentIntensity;
 
 		} );
 
@@ -156,9 +149,8 @@ async function init() {
 
 	areaLights = [ areaLight1, areaLight2 ];
 
-	const generator = new PathTracingSceneWorker();
-	const generatorPromise = generator.generate( group, {
-		onProgress( v ) {
+	const generatorPromise = renderer.updateSceneAsync( camera, scene, {
+		onProgress: v => {
 
 			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
 
@@ -183,22 +175,12 @@ async function init() {
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( updateLights );
 	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( updateLights );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( () => {
-
-		renderer.multipleImportanceSampling = params.multipleImportanceSampling;
-		renderer.reset();
-
-	} );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( updateLights );
 	ptFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( updateLights );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		updateLights();
-
-	} );
+	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( updateLights );
 	envFolder.close();
 
 	const areaLight1Folder = gui.addFolder( 'Area Light 1' );
@@ -240,7 +222,10 @@ function updateLights() {
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	renderer.bounces = params.bounces;
 	renderer.renderScale = params.resolutionScale;
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 
+	scene.environmentRotation.y = params.environmentRotation;
+	scene.backgroundRotation.y = params.environmentRotation;
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
 
