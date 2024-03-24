@@ -34,16 +34,6 @@ const params = {
 
 };
 
-if ( window.location.hash.includes( 'transmission' ) ) {
-
-	params.material1.metalness = 0.0;
-	params.material1.roughness = 0.05;
-	params.material1.transmission = 1.0;
-	params.material1.color = '#ffffff';
-	params.bounces = 10;
-
-}
-
 const orthoWidth = 5;
 
 // clamp value for mobile
@@ -186,28 +176,11 @@ async function init() {
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
-
-	} );
+	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
+	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( reset );
+	gui.add( params, 'environmentRotation', 0, 40 ).onChange( reset );
 	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( updateIntensity );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	gui.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
 	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -220,6 +193,7 @@ async function init() {
 	} );
 
 	updateIntensity();
+	reset();
 
 	animate();
 
@@ -306,9 +280,18 @@ function updateCamera( cameraProjection ) {
 	}
 
 	ptRenderer.camera = activeCamera;
+	reset();
 
-	window.CAMERA = activeCamera;
+}
 
+function reset() {
+
+	ptRenderer.material.environmentRotation.makeRotationY( params.environmentRotation );
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
+	ptRenderer.material.environmentIntensity = params.environmentIntensity;
+	ptRenderer.material.environmentBlur = 0.35;
+	ptRenderer.material.bounces = params.bounces;
 	ptRenderer.reset();
 
 }
@@ -316,13 +299,6 @@ function updateCamera( cameraProjection ) {
 function animate() {
 
 	requestAnimationFrame( animate );
-
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
-	ptRenderer.material.bounces = params.bounces;
 
 	activeCamera.updateMatrixWorld();
 
