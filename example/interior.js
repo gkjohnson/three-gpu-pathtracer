@@ -167,8 +167,6 @@ async function init() {
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
-	updateCamera( params.cameraProjection );
-
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
@@ -186,11 +184,7 @@ async function init() {
 		onResize();
 
 	} );
-	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
-
-		updateCamera( v );
-
-	} );
+	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( reset );
 
 	updateIntensity();
 	reset();
@@ -235,8 +229,9 @@ function updateIntensity() {
 
 }
 
-function updateCamera( cameraProjection ) {
+function reset() {
 
+	const cameraProjection = params.cameraProjection;
 	if ( cameraProjection === 'Perspective' ) {
 
 		if ( activeCamera === orthoCamera ) {
@@ -280,11 +275,6 @@ function updateCamera( cameraProjection ) {
 	}
 
 	ptRenderer.camera = activeCamera;
-	reset();
-
-}
-
-function reset() {
 
 	ptRenderer.material.environmentRotation.makeRotationY( params.environmentRotation );
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
