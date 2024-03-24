@@ -212,12 +212,14 @@ function updateLights() {
 	areaLights[ 0 ].width = params.areaLight1Width;
 	areaLights[ 0 ].height = params.areaLight1Height;
 	areaLights[ 0 ].color.set( params.areaLight1Color ).convertSRGBToLinear();
+	areaLights[ 0 ].visible = params.areaLight1Enabled;
 
 	areaLights[ 1 ].isCircular = params.areaLight2IsCircular;
 	areaLights[ 1 ].intensity = params.areaLight2Intensity;
 	areaLights[ 1 ].width = params.areaLight2Width;
 	areaLights[ 1 ].height = params.areaLight2Height;
 	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
+	areaLights[ 1 ].visible = params.areaLight2Enabled;
 
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	renderer.bounces = params.bounces;
