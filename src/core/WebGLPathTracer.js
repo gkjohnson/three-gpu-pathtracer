@@ -24,13 +24,13 @@ export class WebGLPathTracer {
 
 	get bounces() {
 
-		return this._pathTracer.bounces;
+		return this._pathTracer.material.bounces;
 
 	}
 
 	set bounces( v ) {
 
-		this._pathTracer.bounces = v;
+		this._pathTracer.material.bounces = v;
 
 	}
 
