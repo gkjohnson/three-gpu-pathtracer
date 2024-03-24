@@ -130,7 +130,7 @@ function reset() {
 	spotLight.color.set( params.lightColor );
 
 	renderer.renderScale = params.resolutionScale;
-	renderer.multipleImportanceSampling = renderer.multipleImportanceSampling;
+	renderer.multipleImportanceSampling = params.mis;
 	renderer.bounces = params.bounces;
 	renderer.updateScene( camera, scene );
 
