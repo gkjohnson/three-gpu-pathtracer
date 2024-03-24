@@ -3,6 +3,10 @@ import { mergeGeometries } from './mergeGeometries.js';
 import { setCommonAttributes } from './GeometryPreparationUtils.js';
 import { BakedGeometry } from './BakedGeometry.js';
 
+export const NO_CHANGE = 0;
+export const GEOMETRY_ADJUSTED = 1;
+export const GEOMETRY_REBUILT = 2;
+
 // iterate over only the meshes in the provided objects
 function flatTraverseMeshes( objects, cb ) {
 
@@ -89,13 +93,7 @@ export class StaticGeometryGenerator {
 
 	constructor( objects ) {
 
-		if ( ! Array.isArray( objects ) ) {
-
-			objects = [ objects ];
-
-		}
-
-		this.objects = objects;
+		this.objects = null;
 		this.useGroups = true;
 		this.applyWorldTransforms = true;
 		this.generateMissingAttributes = true;
@@ -105,6 +103,8 @@ export class StaticGeometryGenerator {
 		this._geometryMergeSets = new WeakMap();
 		this._mergeOrder = [];
 		this._dummyMesh = null;
+
+		this.setObjects( objects || [] );
 
 	}
 
@@ -202,6 +202,20 @@ export class StaticGeometryGenerator {
 
 	}
 
+	setObjects( objects ) {
+
+		if ( Array.isArray( objects ) ) {
+
+			this.objects = [ ...objects ];
+
+		} else {
+
+			this.objects = [ objects ];
+
+		}
+
+	}
+
 	generate( targetGeometry = new BufferGeometry() ) {
 
 		// track which attributes have been updated and which to skip to avoid unnecessary attribute copies
@@ -256,8 +270,12 @@ export class StaticGeometryGenerator {
 			uuid: g.uuid,
 		} ) ) );
 
+		let changeType = NO_CHANGE;
+		if ( forceUpdate ) changeType = GEOMETRY_REBUILT;
+		else if ( skipAssigningAttributes.includes( false ) ) changeType = GEOMETRY_ADJUSTED;
+
 		return {
-			objectsChanged: forceUpdate,
+			changeType,
 			materials: getMaterials( meshes ),
 			geometry: targetGeometry,
 		};

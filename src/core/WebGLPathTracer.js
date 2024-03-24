@@ -9,6 +9,31 @@ const _color = new Color();
 
 export class WebGLPathTracer {
 
+	get multipleImportanceSampling() {
+
+		return Boolean( this._pathTracer.material.defines.FEATURE_MIS );
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		this._pathTracer.material.setDefine( 'FEATURE_MIS', v ? 1 : 0 );
+
+	}
+
+	get bounces() {
+
+		return this._pathTracer.material.bounces;
+
+	}
+
+	set bounces( v ) {
+
+		this._pathTracer.material.bounces = v;
+
+	}
+
+
 	get filterGlossyFactor() {
 
 		return this._pathTracer.material.filterGlossyFactor;
@@ -77,15 +102,20 @@ export class WebGLPathTracer {
 			renderer = new WebGLRenderer( { alpha: true } );
 			this._ownRenderer = true;
 
-		} else {
+		} else if ( renderer.isWebGLRenderer ) {
 
 			this._ownRenderer = false;
+
+		} else {
+
+			renderer = new WebGLRenderer( { ...renderer, alpha: true } );
+			this._ownRenderer = true;
 
 		}
 
 		// members
 		this._renderer = renderer;
-		this._generator = null;
+		this._generator = new DynamicPathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
@@ -159,45 +189,83 @@ export class WebGLPathTracer {
 
 	}
 
-	updateScene( camera, scene ) {
+	setBVHWorker( worker ) {
 
-		const renderer = this._renderer;
-		const pathTracer = this._pathTracer;
-		const lowResPathTracer = this._lowResPathTracer;
-		const material = pathTracer.material;
+		this._generator.setBVHWorker( worker );
+
+	}
+
+	updateScene( camera, scene, options = {} ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
 
-		// TODO: adjust this so we don't have to create a new tracer every time and the
-		// geometry results automatically expands to fit results
-		if ( scene !== this._previousScene ) {
+		const generator = this._generator;
+		generator.setObjects( scene );
 
-			this.generator = new DynamicPathTracingSceneGenerator( scene );
+		if ( this._buildAsync ) {
+
+			return generator.generateAsync( options.onProgress ).then( result => {
+
+				return this._updateFromResults( scene, camera, result );
+
+			} );
+
+		} else {
+
+			const result = generator.generate();
+			return this._updateFromResults( scene, camera, result );
 
 		}
 
-		// set up
+	}
+
+	updateSceneAsync( ...args ) {
+
+		this._buildAsync = true;
+		const result = this.updateScene( ...args );
+		this._buildAsync = false;
+
+		return result;
+
+	}
+
+	_updateFromResults( scene, camera, results ) {
+
 		const {
 			lights,
 			materials,
 			textures,
 			geometry,
 			bvh,
-		} = this.generator.generate();
+			bvhChanged,
+		} = results;
+
+		const renderer = this._renderer;
+		const pathTracer = this._pathTracer;
+		const lowResPathTracer = this._lowResPathTracer;
+		const material = pathTracer.material;
+		const textureSize = this.textureSize;
 
 		// update scene information
 		material.lights.updateFrom( lights );
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, this.textureSize.x, this.textureSize.y, textures );
+		material.lightCount = lights.length;
+		material.textures.setTextures( renderer, textureSize.x, textureSize.y, textures );
 		material.materials.updateFrom( materials, textures );
+
+		if ( bvhChanged ) {
+
+			material.bvh.updateFrom( bvh );
+			material.attributesArray.updateFrom(
+				geometry.attributes.normal,
+				geometry.attributes.tangent,
+				geometry.attributes.uv,
+				geometry.attributes.color,
+			);
+
+			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+
+		}
 
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;
@@ -268,6 +336,8 @@ export class WebGLPathTracer {
 		this.camera = camera;
 
 		this.reset();
+
+		return results;
 
 	}
 

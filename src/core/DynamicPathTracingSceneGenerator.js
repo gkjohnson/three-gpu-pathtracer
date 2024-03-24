@@ -1,6 +1,6 @@
 import { BufferGeometry } from 'three';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
-import { StaticGeometryGenerator } from './utils/StaticGeometryGenerator.js';
+import { StaticGeometryGenerator, NO_CHANGE, GEOMETRY_ADJUSTED, GEOMETRY_REBUILT } from './utils/StaticGeometryGenerator.js';
 import { updateMaterialIndexAttribute } from './utils/GeometryPreparationUtils.js';
 
 // collect the textures from the materials
@@ -35,14 +35,18 @@ function getLights( objects ) {
 
 		objects[ i ].traverse( c => {
 
-			if (
-				c.isRectAreaLight ||
-				c.isSpotLight ||
-				c.isPointLight ||
-				c.isDirectionalLight
-			) {
+			if ( c.visible ) {
 
-				lights.push( c );
+				if (
+					c.isRectAreaLight ||
+					c.isSpotLight ||
+					c.isPointLight ||
+					c.isDirectionalLight
+				) {
+
+					lights.push( c );
+
+				}
 
 			}
 
@@ -64,28 +68,24 @@ export class DynamicPathTracingSceneGenerator {
 
 	constructor( objects ) {
 
-		// ensure the objects is an array
-		if ( ! Array.isArray( objects ) ) {
-
-			objects = [ objects ];
-
-		}
-
 		// options
 		this.bvhOptions = {};
 		this.attributes = [ 'position', 'normal', 'tangent', 'color', 'uv', 'uv2' ];
 		this.generateBVH = true;
 
 		// state
-		this.objects = objects;
 		this.bvh = null;
 		this.geometry = new BufferGeometry();
-		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
+		this.staticGeometryGenerator = new StaticGeometryGenerator( objects );
+		this._bvhWorker = null;
+		this._pendingGenerate = null;
+		this._buildAsync = false;
 
 	}
 
 	reset() {
 
+		console.log( 'TODO: remove this function since it will not be needed' );
 		this.bvh = null;
 		this.geometry.dispose();
 		this.geometry = new BufferGeometry();
@@ -95,9 +95,63 @@ export class DynamicPathTracingSceneGenerator {
 
 	dispose() {}
 
-	generate() {
+	setObjects( objects ) {
 
-		const { objects, staticGeometryGenerator, geometry, attributes } = this;
+		this.staticGeometryGenerator.setObjects( objects );
+
+	}
+
+	setBVHWorker( bvhWorker ) {
+
+		this._bvhWorker = bvhWorker;
+
+	}
+
+	async generateAsync( onProgress = null ) {
+
+		if ( ! this._bvhWorker ) {
+
+			throw new Error( 'PathTracingSceneGenerator: "setBVHWorker" must be called before "generateAsync" can be called.' );
+
+		}
+
+		if ( this.bvh instanceof Promise ) {
+
+			// if a bvh is already being generated we can wait for that to finish
+			// and build another with the latest data while sharing the results.
+			if ( ! this._pendingGenerate ) {
+
+				this._pendingGenerate = new Promise( async () => {
+
+					await this.bvh;
+					this._pendingGenerate = null;
+
+					// TODO: support multiple callbacks queued?
+					return this.generateAsync( onProgress );
+
+				} );
+
+			}
+
+			return this._pendingGenerate;
+
+		} else {
+
+			this._buildAsync = true;
+			const result = this.generate( onProgress );
+			this._buildAsync = false;
+
+			result.bvh = this.bvh = await result.bvh;
+			return result;
+
+		}
+
+	}
+
+	generate( onProgress = null ) {
+
+		const { staticGeometryGenerator, geometry, attributes } = this;
+		const objects = staticGeometryGenerator.objects;
 		staticGeometryGenerator.attributes = attributes;
 
 		// update the skeleton animations in case WebGLRenderer is not running
@@ -122,21 +176,42 @@ export class DynamicPathTracingSceneGenerator {
 		const textures = getTextures( materials );
 		const lights = getLights( objects );
 
-		updateMaterialIndexAttribute( geometry, materials, materials );
+		if ( result.changeType !== NO_CHANGE ) {
+
+			updateMaterialIndexAttribute( geometry, materials, materials );
+
+		}
 
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {
 
-			if ( result.objectsChanged ) {
+			if ( this.bvh instanceof Promise ) {
 
-				this.bvh = new MeshBVH( geometry, {
+				throw new Error( 'PathTracingSceneGenerator: BVH is already building asynchronously.' );
+
+			}
+
+			if ( result.changeType === GEOMETRY_REBUILT ) {
+
+				const bvhOptions = {
 					strategy: SAH,
 					maxLeafTris: 1,
 					indirect: true,
+					onProgress,
 					...this.bvhOptions,
-				} );
+				};
 
-			} else {
+				if ( this._buildAsync ) {
+
+					this.bvh = this._bvhWorker.generate( geometry, bvhOptions );
+
+				} else {
+
+					this.bvh = new MeshBVH( geometry, bvhOptions );
+
+				}
+
+			} else if ( result.changeType === GEOMETRY_ADJUSTED ) {
 
 				this.bvh.refit();
 
@@ -145,8 +220,8 @@ export class DynamicPathTracingSceneGenerator {
 		}
 
 		return {
+			bvhChanged: result.changeType !== NO_CHANGE,
 			bvh: this.bvh,
-			objectsChanged: result.objectsChanged,
 			lights,
 			geometry,
 			materials,
@@ -155,6 +230,5 @@ export class DynamicPathTracingSceneGenerator {
 		};
 
 	}
-
 
 }
