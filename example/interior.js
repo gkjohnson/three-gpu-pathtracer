@@ -1,4 +1,13 @@
-import * as THREE from 'three';
+import {
+	WebGLRenderer,
+	ACESFilmicToneMapping,
+	PerspectiveCamera,
+	OrthographicCamera,
+	MeshBasicMaterial,
+	Group,
+	Box3,
+	Vector3,
+} from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -51,15 +60,15 @@ init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	perspectiveCamera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
+	perspectiveCamera = new PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
 	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
 
 	const orthoHeight = orthoWidth / aspectRatio;
-	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.copy( perspectiveCamera.position );
 
 	equirectCamera = new EquirectCamera();
@@ -71,7 +80,7 @@ async function init() {
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 	} ) );
 
@@ -122,15 +131,15 @@ async function init() {
 
 			} );
 
-			const group = new THREE.Group();
+			const group = new Group();
 			group.add( gltf.scene );
 
-			const box = new THREE.Box3();
+			const box = new Box3();
 			box.setFromObject( gltf.scene );
 
 			group.updateMatrixWorld();
 
-			const center = new THREE.Vector3();
+			const center = new Vector3();
 			box.getCenter( center );
 
 			gltf.scene.position.addScaledVector( center, - 0.5 );
