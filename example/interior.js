@@ -15,7 +15,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sphericalControls, sceneInfo, ptRenderer, activeCamera, fsQuad, scene;
+let renderer, controls, sphericalControls, ptRenderer, activeCamera, scene;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let samplesEl;
 const params = {
