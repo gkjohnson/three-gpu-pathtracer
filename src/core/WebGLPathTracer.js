@@ -18,7 +18,6 @@ export class WebGLPathTracer {
 	set multipleImportanceSampling( v ) {
 
 		this._pathTracer.material.setDefine( 'FEATURE_MIS', v ? 1 : 0 );
-		this._pathTracer.material.needsUpdate = true;
 
 	}
 
