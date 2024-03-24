@@ -1,19 +1,11 @@
-import {
-	WebGLRenderer,
-	ACESFilmicToneMapping,
-	MeshBasicMaterial,
-	CustomBlending,
-	Scene,
-} from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { ACESFilmicToneMapping, Scene } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-let renderer, controls, sceneInfo, ptRenderer, blitQuad;
+let renderer, controls;
 let camera, scene, fogMaterial, spotLight;
 let samplesEl;
 
@@ -140,7 +132,7 @@ function reset() {
 	renderer.renderScale = params.resolutionScale;
 	renderer.multipleImportanceSampling = renderer.multipleImportanceSampling;
 	renderer.bounces = params.bounces;
-	renderer.reset();
+	renderer.updateScene( camera, scene );
 
 }
 
