@@ -108,6 +108,7 @@ async function init() {
 			scene.environment = texture;
 			scene.backgroundIntensity = params.environmentIntensity;
 			scene.environmentIntensity = params.environmentIntensity;
+			ptRenderer.material.backgroundAlpha = 1;
 
 		} );
 
