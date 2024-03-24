@@ -18,7 +18,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
-let renderer, controls, areaLights, sceneInfo, scene, ptRenderer, camera, enabledLights;
+let renderer, controls, areaLights, sceneInfo, scene, ptRenderer, camera;
 let samplesEl, loadingEl;
 const params = {
 
@@ -66,6 +66,7 @@ async function init() {
 
 	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -73,14 +74,13 @@ async function init() {
 
 	ptRenderer = renderer._pathTracer;
 	ptRenderer.camera = camera;
-	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	controls.update();
@@ -200,7 +200,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
@@ -209,9 +209,8 @@ async function init() {
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( () => {
 
-		ptRenderer.material.defines.FEATURE_MIS = params.multipleImportanceSampling ? 1 : 0;
-		ptRenderer.material.needsUpdate = true;
-		ptRenderer.reset();
+		renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+		renderer.reset();
 
 	} );
 	ptFolder.close();
@@ -265,6 +264,9 @@ function updateLights() {
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	renderer.bounces = params.bounces;
 	renderer.renderScale = params.resolutionScale;
+
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.backgroundIntensity;
 
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
