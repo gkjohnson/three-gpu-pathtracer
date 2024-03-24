@@ -6,16 +6,12 @@ import {
 	EquirectangularReflectionMapping,
 	Group,
 	Mesh,
-	MeshBasicMaterial,
-	MeshPhysicalMaterial,
 	MeshStandardMaterial,
 	PerspectiveCamera,
 	Scene,
-	WebGLRenderer,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
+import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -208,21 +204,9 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
-
-	} );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( updateLights );
+	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( updateLights );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( () => {
 
 		ptRenderer.material.defines.FEATURE_MIS = params.multipleImportanceSampling ? 1 : 0;
@@ -233,15 +217,11 @@ async function init() {
 	ptFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( updateLights );
 	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
 		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
+		updateLights();
 
 	} );
 	envFolder.close();
@@ -282,11 +262,14 @@ function updateLights() {
 	areaLights[ 1 ].height = params.areaLight2Height;
 	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
 
-	enabledLights = [];
-	if ( params.areaLight1Enabled ) enabledLights.push( areaLights[ 0 ] );
-	if ( params.areaLight2Enabled ) enabledLights.push( areaLights[ 1 ] );
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	renderer.bounces = params.bounces;
+	renderer.renderScale = params.resolutionScale;
 
-	ptRenderer.material.lights.updateFrom( enabledLights );
+	ptRenderer.material.environmentIntensity = params.environmentIntensity;
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.lights.updateFrom( areaLights );
+
 	ptRenderer.reset();
 
 }
@@ -295,14 +278,10 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -311,14 +290,6 @@ function onResize() {
 function animate() {
 
 	requestAnimationFrame( animate );
-
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.lights.updateFrom( enabledLights );
-
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
-	ptRenderer.material.bounces = params.bounces;
 
 	camera.updateMatrixWorld();
 	renderer.renderSample();
