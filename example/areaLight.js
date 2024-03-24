@@ -18,7 +18,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
-let renderer, controls, areaLights, sceneInfo, scene, ptRenderer, camera;
+let renderer, controls, areaLights, scene, ptRenderer, camera;
 let samplesEl, loadingEl;
 const params = {
 
@@ -73,7 +73,6 @@ async function init() {
 	camera.position.set( 0.0, 0.6, 2.65 );
 
 	ptRenderer = renderer._pathTracer;
-	ptRenderer.camera = camera;
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
@@ -104,7 +103,6 @@ async function init() {
 			scene.environment = texture;
 			scene.backgroundIntensity = params.environmentIntensity;
 			scene.environmentIntensity = params.environmentIntensity;
-			ptRenderer.material.backgroundAlpha = 1;
 
 		} );
 
@@ -165,28 +163,6 @@ async function init() {
 			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
 
 		}
-	} ).then( result => {
-
-		sceneInfo = result;
-
-		const { bvh, textures, materials, lights, geometry } = result;
-		const material = ptRenderer.material;
-
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer._renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.lights.updateFrom( lights );
-		material.lightCount = lights.length;
-
-		generator.dispose();
-
 	} );
 
 	await Promise.all( [ generatorPromise, envMapPromise ] );
@@ -266,13 +242,9 @@ function updateLights() {
 	renderer.renderScale = params.resolutionScale;
 
 	scene.environmentIntensity = params.environmentIntensity;
-	scene.backgroundIntensity = params.backgroundIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
 
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.lights.updateFrom( areaLights );
-
-	ptRenderer.reset();
+	renderer.updateScene( camera, scene );
 
 }
 
@@ -296,6 +268,6 @@ function animate() {
 	camera.updateMatrixWorld();
 	renderer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
