@@ -24,7 +24,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 let renderer, controls, sceneInfo, ptRenderer, blitQuad, materials;
 let perspectiveCamera, database;
 let envMap, envMapGenerator, scene;
-let samplesEl, materialEl, imgEl, infoEl;
+let samplesEl, imgEl, infoEl;
 
 const params = {
 	hideInfo: false,
@@ -89,7 +89,6 @@ async function init() {
 	scene = new Scene();
 
 	samplesEl = document.getElementById( 'samples' );
-	materialEl = document.getElementById( 'materialInfo' );
 	imgEl = document.getElementById( 'materialImage' );
 	infoEl = document.getElementById( 'info' );
 
@@ -346,8 +345,6 @@ function applyMaterialInfo( info, material ) {
 
 	const cleanName = info.name.replace( /\s+/g, '-' ).replace( /[()]+/g, '' );
 	imgEl.src = `https://physicallybased.info/reference/render/${ cleanName }-cycles.png`;
-	materialEl.innerText = `${ info.description }`;
-	materialEl.style.display = info.description ? 'inline-block' : 'none';
 
 }
 
