@@ -345,7 +345,7 @@ function applyMaterialInfo( info, material ) {
 	}
 
 	const cleanName = info.name.replace( /\s+/g, '-' ).replace( /[()]+/g, '' );
-	imgEl.src = `https://physicallybased.info/reference/render/${ cleanName }-cycles.webp`;
+	imgEl.src = `https://physicallybased.info/reference/render/${ cleanName }-cycles.png`;
 	materialEl.innerText = `${ info.description }`;
 	materialEl.style.display = info.description ? 'inline-block' : 'none';
 
