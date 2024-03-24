@@ -118,7 +118,145 @@ const blurredEnvMap = generator.generate( envMap, 0.35 );
 
 ## WebGLPathTracer
 
-TODO
+### constructor
+
+```
+constructor( renderer = null : WebGLRenderer | WebGLContextOptions )
+```
+
+Pass through functions and fields:
+
+```js
+// members
+toneMapping,
+domElement,
+
+// functions
+getPixelRatio,
+setPixelRatio,
+setDrawingBufferSize,
+getDrawingBufferSize,
+getSize,
+setSize,
+setViewport,
+getViewport,
+getScissor,
+setScissor,
+getScissorTest,
+setScissorTest,
+getClearAlpha,
+setClearAlpha,
+getClearColor,
+setClearColor,
+```
+
+### .bounces
+
+```js
+bounces = 10 : Number
+```
+
+### .filteredGlossyFactor
+
+```js
+filteredGlossyFactor = 0 : Number
+```
+
+### .tiles
+
+```js
+tiles = ( 1, 1 ) : Vector2
+```
+
+### .dynamicLowRes
+
+```js
+dynamicLowRes = false : Boolean
+```
+
+### .lowResScale
+
+```js
+lowResScale = 0.1 : Number
+```
+
+### .renderScale
+
+```js
+renderScale = 1 : Number
+```
+
+### .synchronizeRenderSize
+
+```js
+synchronizeRenderSize = true : Boolean
+```
+
+### .rasterizeScene
+
+```js
+rasterizeScene = true : Boolean
+```
+
+### .renderToCanvas
+
+```js
+renderToCanvas = true : Boolean
+```
+
+### .textureSize
+
+```js
+textureSize = ( 1024, 1024 ) : Vector2
+
+```
+### .samples
+
+```js
+get samples : Number
+```
+
+### .target
+
+```js
+get target : WebGLRenderTarget
+```
+
+### .updateScene
+
+```js
+updateScene( camera : Camera, scene : Scene ) : void
+```
+
+### .updateSceneAsync
+
+```js
+updateSceneAsync(
+	camera : Camera,
+	scene : Scene,
+	options = {
+		onProgress = null : value => void,
+	} : Object
+) : void
+```
+
+### .renderSample
+
+```js
+renderSample() : void
+```
+
+### .reset
+
+```js
+reset() : void
+```
+
+### .dispose
+
+```js
+dispose() : void
+```
 
 ## PhysicalCamera
 
