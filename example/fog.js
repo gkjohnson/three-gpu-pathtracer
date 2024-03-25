@@ -1,12 +1,19 @@
-import { ACESFilmicToneMapping, Scene } from 'three';
+import {
+	ACESFilmicToneMapping,
+	MeshBasicMaterial,
+	CustomBlending,
+	Scene,
+	PerspectiveCamera,
+} from 'three';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
+import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-let renderer, controls;
-let camera, scene, fogMaterial, spotLight;
+let renderer, controls, sceneInfo, ptRenderer, blitQuad;
+let perspectiveCamera, scene, fogMaterial, spotLight, PT;
 let samplesEl;
 
 const params = {
@@ -31,22 +38,31 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
+	PT = new WebGLPathTracer( { antialias: true } );
+	renderer = PT._renderer;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.setClearColor( 0, 0 );
-	renderer.tiles.set( params.tiles, params.tiles );
-	renderer.setBVHWorker( new ParallelMeshBVHWorker() );
 	renderer.setClearColor( 0, 1 );
+	PT.updateScene( new PerspectiveCamera(), new Scene() );
+	PT.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PhysicalCamera( 75, aspect, 0.025, 500 );
-	camera.position.set( 0, 1, 6 );
+	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
+	perspectiveCamera.position.set( 0, 1, 6 );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	ptRenderer = PT._pathTracer;
+	ptRenderer.camera = perspectiveCamera;
+
+	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
+		map: ptRenderer.target.texture,
+		blending: CustomBlending,
+		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
+	} ) );
+
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		PT.reset();
 
 	} );
 
@@ -55,6 +71,7 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 	fogMaterial = new FogVolumeMaterial();
 
+	const generator = new PathTracingSceneWorker();
 	const envMat = new MeshStandardMaterial( { color: 0x999999, roughness: 1, metalness: 0 } );
 	const fogMesh = new Mesh( new BoxGeometry( 8, 4.05, 8 ), fogMaterial );
 	const floor = new Mesh( new CylinderGeometry( 5, 5, 0.1, 40 ), envMat );
@@ -86,13 +103,30 @@ async function init() {
 
 	const group = new Group();
 	group.add( fogMesh, floor, lightGroup );
-	scene.add( group );
 
 	group.updateMatrixWorld();
-	await renderer.updateSceneAsync( camera, scene );
+	sceneInfo = await generator.generate( group );
+	scene.add( sceneInfo.scene );
+
+	const { bvh, textures, materials, geometry } = sceneInfo;
+	ptRenderer.material.environmentIntensity = 0.0;
+	ptRenderer.material.bvh.updateFrom( bvh );
+	ptRenderer.material.attributesArray.updateFrom(
+		geometry.attributes.normal,
+		geometry.attributes.tangent,
+		geometry.attributes.uv,
+		geometry.attributes.color,
+	);
+	ptRenderer.material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+	ptRenderer.material.textures.setTextures( renderer, 2048, 2048, textures );
+	ptRenderer.material.materials.updateFrom( materials, textures );
+	ptRenderer.material.lights.updateFrom( sceneInfo.lights );
+
+	generator.dispose();
+
+	reset();
 
 	onResize();
-	reset();
 
 	window.addEventListener( 'resize', onResize );
 
@@ -104,10 +138,10 @@ async function init() {
 	ptFolder.add( params, 'mis' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		ptRenderer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( reset );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
 
 	const fogFolder = gui.addFolder( 'fog' );
 	fogFolder.addColor( params, 'color' ).onChange( reset );
@@ -129,10 +163,16 @@ function reset() {
 	spotLight.intensity = params.lightIntensity;
 	spotLight.color.set( params.lightColor );
 
-	renderer.renderScale = params.resolutionScale;
-	renderer.multipleImportanceSampling = params.mis;
-	renderer.bounces = params.bounces;
-	renderer.updateScene( camera, scene );
+	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.mis ) );
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.lights.updateFrom( sceneInfo.lights );
+	perspectiveCamera.updateMatrixWorld();
+
+	ptRenderer.material.bounces = params.bounces;
+
+	PT.renderScale = params.resolutionScale;
+
+	PT.reset();
 
 }
 
@@ -146,10 +186,10 @@ function onResize() {
 	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
-	camera.aspect = aspect;
-	camera.updateProjectionMatrix();
+	perspectiveCamera.aspect = aspect;
+	perspectiveCamera.updateProjectionMatrix();
 
-	renderer.reset();
+	PT.reset();
 
 }
 
@@ -157,13 +197,10 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	camera.updateMatrixWorld();
-	renderer.renderSample();
-
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	PT.renderSample();
+	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
 
 }
-
 
 
 
