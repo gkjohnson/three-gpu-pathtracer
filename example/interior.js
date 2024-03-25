@@ -1,14 +1,21 @@
-import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import {
+	ACESFilmicToneMapping,
+	PerspectiveCamera,
+	OrthographicCamera,
+	Group,
+	Box3,
+	Vector3,
+	EquirectangularReflectionMapping,
+	Scene,
+} from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, EquirectCamera } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { EquirectCamera, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sphericalControls, sceneInfo, ptRenderer, activeCamera, fsQuad;
+let renderer, controls, sphericalControls, activeCamera, scene;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let samplesEl;
 const params = {
@@ -24,16 +31,6 @@ const params = {
 	cameraProjection: 'Perspective'
 
 };
-
-if ( window.location.hash.includes( 'transmission' ) ) {
-
-	params.material1.metalness = 0.0;
-	params.material1.roughness = 0.05;
-	params.material1.transmission = 1.0;
-	params.material1.color = '#ffffff';
-	params.bounces = 10;
-
-}
 
 const orthoWidth = 5;
 
@@ -51,36 +48,30 @@ init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLPathTracer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.dynamicLowRes = true;
+	renderer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
 
-	perspectiveCamera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
+	perspectiveCamera = new PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
 	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
 
 	const orthoHeight = orthoWidth / aspectRatio;
-	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.copy( perspectiveCamera.position );
 
-	equirectCamera = new EquirectCamera();
 	// Almost, but not quite on top of the control target.
 	// This allows for full rotation without moving the camera very much.
+	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
-
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
 	perspectiveCamera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	controls.update();
@@ -90,22 +81,25 @@ async function init() {
 	equirectCamera.lookAt( sphericalControls.target );
 	sphericalControls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 	sphericalControls.update();
 
 	samplesEl = document.getElementById( 'samples' );
 
+	scene = new Scene();
+
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 
-			ptRenderer.material.envMapInfo.updateFrom( texture );
+			texture.mapping = EquirectangularReflectionMapping;
+			scene.background = texture;
+			scene.environment = texture;
 
 		} );
 
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb' )
@@ -122,95 +116,53 @@ async function init() {
 
 			} );
 
-			const group = new THREE.Group();
+			const group = new Group();
 			group.add( gltf.scene );
 
-			const box = new THREE.Box3();
+			const box = new Box3();
 			box.setFromObject( gltf.scene );
 
 			group.updateMatrixWorld();
 
-			const center = new THREE.Vector3();
+			const center = new Vector3();
 			box.getCenter( center );
 
 			gltf.scene.position.addScaledVector( center, - 0.5 );
 			group.updateMatrixWorld();
 
-			return generator.generate( group );
-
-		} )
-		.then( result => {
-
-			sceneInfo = result;
-
-			const { bvh, textures, materials, geometry } = result;
-			const material = ptRenderer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
+			scene.add( group );
 
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
+	renderer.updateScene( perspectiveCamera, scene );
 
 	document.getElementById( 'loading' ).remove();
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
-	updateCamera( params.cameraProjection );
-
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( updateIntensity );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
+	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( reset );
+	gui.add( params, 'environmentRotation', 0, 40 ).onChange( reset );
+	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( reset );
+	gui.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
 	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
 
 	} );
-	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
-
-		updateCamera( v );
-
-	} );
+	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( reset );
 
 	updateIntensity();
+	reset();
 
 	animate();
 
@@ -220,14 +172,10 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 
@@ -243,17 +191,24 @@ function onResize() {
 
 function updateIntensity() {
 
-	sceneInfo.materials.forEach( material => {
+	scene.traverse( c => {
 
-		material.emissiveIntensity = params.emissiveIntensity;
+		const material = c.material;
+		if ( material ) {
+
+			material.emissiveIntensity = params.emissiveIntensity;
+
+		}
 
 	} );
-	ptRenderer.reset();
 
 }
 
-function updateCamera( cameraProjection ) {
+function reset() {
 
+	updateIntensity();
+
+	const cameraProjection = params.cameraProjection;
 	if ( cameraProjection === 'Perspective' ) {
 
 		if ( activeCamera === orthoCamera ) {
@@ -296,11 +251,16 @@ function updateCamera( cameraProjection ) {
 
 	}
 
-	ptRenderer.camera = activeCamera;
+	renderer.renderScale = params.resolutionScale;
 
-	window.CAMERA = activeCamera;
+	scene.environmentRotation.y = params.environmentRotation;
+	scene.backgroundRotation.y = params.environmentRotation;
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	renderer.bounces = params.bounces;
 
-	ptRenderer.reset();
+	renderer.updateScene( activeCamera, scene );
 
 }
 
@@ -308,26 +268,10 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
-	ptRenderer.material.bounces = params.bounces;
-
 	activeCamera.updateMatrixWorld();
+	renderer.renderSample();
 
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-		ptRenderer.update();
-
-	}
-
-	renderer.autoClear = false;
-	fsQuad.render( renderer );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
 

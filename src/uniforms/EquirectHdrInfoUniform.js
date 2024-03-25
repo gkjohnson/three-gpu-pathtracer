@@ -136,15 +136,15 @@ export class EquirectHdrInfoUniform {
 
 		// Default to a white texture and associated weights so we don't
 		// just render black initially.
-		const whiteTex = new DataTexture( toHalfFloatArray( new Float32Array( [ 1, 1, 1, 1 ] ) ), 1, 1 );
-		whiteTex.type = HalfFloatType;
-		whiteTex.format = RGBAFormat;
-		whiteTex.minFilter = LinearFilter;
-		whiteTex.magFilter = LinearFilter;
-		whiteTex.wrapS = RepeatWrapping;
-		whiteTex.wrapT = RepeatWrapping;
-		whiteTex.generateMipmaps = false;
-		whiteTex.needsUpdate = true;
+		const blackTex = new DataTexture( toHalfFloatArray( new Float32Array( [ 0, 0, 0, 0 ] ) ), 1, 1 );
+		blackTex.type = HalfFloatType;
+		blackTex.format = RGBAFormat;
+		blackTex.minFilter = LinearFilter;
+		blackTex.magFilter = LinearFilter;
+		blackTex.wrapS = RepeatWrapping;
+		blackTex.wrapT = RepeatWrapping;
+		blackTex.generateMipmaps = false;
+		blackTex.needsUpdate = true;
 
 		// Stores a map of [0, 1] value -> cumulative importance row & pdf
 		// used to sampling a random value to a relevant row to sample from
@@ -166,10 +166,10 @@ export class EquirectHdrInfoUniform {
 		conditionalWeights.generateMipmaps = false;
 		conditionalWeights.needsUpdate = true;
 
-		this.map = whiteTex;
+		this.map = blackTex;
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
-		this.totalSum = 1;
+		this.totalSum = 0;
 
 	}
 
