@@ -169,7 +169,7 @@ export class EquirectHdrInfoUniform {
 		this.map = blackTex;
 		this.marginalWeights = marginalWeights;
 		this.conditionalWeights = conditionalWeights;
-		this.totalSum = 1;
+		this.totalSum = 0;
 
 	}
 
