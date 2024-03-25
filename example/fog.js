@@ -1,18 +1,19 @@
 import {
 	ACESFilmicToneMapping,
-	MeshBasicMaterial,
-	CustomBlending,
 	Scene,
 	PerspectiveCamera,
+	BoxGeometry,
+	CylinderGeometry,
+	Group,
+	Mesh,
+	MeshStandardMaterial,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial } from 'three';
 
-let renderer, controls, sceneInfo, ptRenderer, blitQuad;
+let renderer, controls, sceneInfo, ptRenderer;
 let perspectiveCamera, scene, fogMaterial, spotLight, PT;
 let samplesEl;
 
@@ -52,12 +53,6 @@ async function init() {
 
 	ptRenderer = PT._pathTracer;
 	ptRenderer.camera = perspectiveCamera;
-
-	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -101,12 +96,10 @@ async function init() {
 
 	}
 
-	const group = new Group();
-	group.add( fogMesh, floor, lightGroup );
+	scene.add( fogMesh, floor, lightGroup );
 
-	group.updateMatrixWorld();
-	sceneInfo = await generator.generate( group );
-	scene.add( sceneInfo.scene );
+	scene.updateMatrixWorld();
+	sceneInfo = await generator.generate( scene );
 
 	const { bvh, textures, materials, geometry } = sceneInfo;
 	ptRenderer.material.environmentIntensity = 0.0;
