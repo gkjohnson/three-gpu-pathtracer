@@ -1,9 +1,6 @@
 import {
-	WebGLRenderer,
 	ACESFilmicToneMapping,
 	PerspectiveCamera,
-	MeshBasicMaterial,
-	CustomBlending,
 	Scene,
 	Group,
 	Box3,
@@ -12,24 +9,22 @@ import {
 	MeshPhysicalMaterial,
 	NoToneMapping,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, BlurredEnvMapGenerator } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, blitQuad, materials;
+let renderer, controls, materials;
 let perspectiveCamera, database;
 let envMap, envMapGenerator, scene;
 let samplesEl, imgEl, infoEl;
 
 const params = {
+	material: null,
 	hideInfo: false,
 	acesToneMapping: true,
-	stableNoise: false,
 	tiles: 2,
 	bounces: 5,
 	multipleImportanceSampling: true,
@@ -58,31 +53,21 @@ init();
 
 async function init() {
 
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	renderer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = perspectiveCamera;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
-
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 
@@ -92,7 +77,7 @@ async function init() {
 	imgEl = document.getElementById( 'materialImage' );
 	infoEl = document.getElementById( 'info' );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr' )
@@ -100,11 +85,8 @@ async function init() {
 
 			envMap = texture;
 
-			updateEnvBlur();
-
 		} );
 
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
@@ -161,30 +143,7 @@ async function init() {
 
 			materials = [ material1, material2, floor.material ];
 
-			return generator.generate( group );
-
-		} )
-		.then( result => {
-
-			sceneInfo = result;
-
-			scene.add( result.scene );
-
-			const { bvh, textures, materials, geometry } = result;
-			const material = ptRenderer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
+			scene.add( group );
 
 		} );
 
@@ -203,55 +162,34 @@ async function init() {
 
 	await Promise.all( [ databasePromise, gltfPromise, envMapPromise ] );
 
+	const materialNames = Object.keys( database );
+	params.material = materialNames[ 0 ];
+
 	document.getElementById( 'loading' ).remove();
 
+	updateEnvBlur();
+	reset();
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-
-	const materialNames = Object.keys( database );
-	params.material = materialNames[ 0 ];
-	gui.add( params, 'material', materialNames ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	gui.add( params, 'material', materialNames ).onChange( reset );
 	gui.add( params, 'hideInfo' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
 		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
-		blitQuad.material.needsUpdate = true;
 
 	} );
-	ptFolder.add( params, 'stableNoise' ).onChange( value => {
-
-		ptRenderer.stableNoise = value;
-
-	} );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
-		ptRenderer.reset();
-
-	} );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -259,27 +197,14 @@ async function init() {
 	} );
 
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
-
-	} );
+	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset );
+	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( reset );
 	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
 
 		updateEnvBlur();
 
 	} );
-	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( reset );
 
 	animate();
 
@@ -289,17 +214,12 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
-
 	perspectiveCamera.aspect = aspect;
 	perspectiveCamera.updateProjectionMatrix();
 
@@ -308,9 +228,15 @@ function onResize() {
 function updateEnvBlur() {
 
 	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+	if ( scene.environment ) {
+
+		scene.environment.dispose();
+
+	}
+
 	scene.environment = blurredTex;
-	ptRenderer.reset();
+	scene.background = blurredTex;
+	reset();
 
 }
 
@@ -348,12 +274,11 @@ function applyMaterialInfo( info, material ) {
 
 }
 
-function animate() {
-
-	requestAnimationFrame( animate );
+function reset() {
 
 	infoEl.style.visibility = params.hideInfo ? 'hidden' : 'visible';
 
+	console.log( params.material )
 	const materialInfo = database[ params.material ];
 	const [ shellMaterial, coreMaterial ] = materials;
 
@@ -362,13 +287,14 @@ function animate() {
 	coreMaterial.roughness = 1.0;
 	coreMaterial.metalness = 0.0;
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.backgroundBlur = params.backgroundBlur;
-	ptRenderer.material.bounces = params.bounces;
-	ptRenderer.material.physicalCamera.updateFrom( perspectiveCamera );
-
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	renderer.renderScale = params.resolutionScale;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	renderer.bounces = params.bounces;
+	scene.environmentRotation.y = params.environmentRotation;
+	scene.backgroundRotation.y = params.environmentRotation;
+	scene.backgroundIntensity = params.environmentIntensity;
+	scene.environmentIntensity = params.environmentIntensity;
 	perspectiveCamera.updateMatrixWorld();
 
 	if ( params.backgroundAlpha < 1.0 ) {
@@ -381,23 +307,15 @@ function animate() {
 
 	}
 
-	ptRenderer.update();
-
-	if ( ptRenderer.samples < 1 ) {
-
-		renderer.render( scene, perspectiveCamera );
-
-	}
-
-	renderer.autoClear = false;
-	blitQuad.material.map = ptRenderer.target.texture;
-	blitQuad.render( renderer );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	renderer.updateScene( perspectiveCamera, scene );
 
 }
 
+function animate() {
 
+	requestAnimationFrame( animate );
+	renderer.renderSample();
 
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
+}
