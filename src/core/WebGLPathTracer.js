@@ -234,6 +234,7 @@ export class WebGLPathTracer {
 
 		const {
 			lights,
+			iesTextures,
 			materials,
 			textures,
 			geometry,
@@ -248,7 +249,7 @@ export class WebGLPathTracer {
 		const textureSize = this.textureSize;
 
 		// update scene information
-		material.lights.updateFrom( lights );
+		material.lights.updateFrom( lights, iesTextures );
 		material.lightCount = lights.length;
 		material.textures.setTextures( renderer, textureSize.x, textureSize.y, textures );
 		material.materials.updateFrom( materials, textures );
