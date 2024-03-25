@@ -278,7 +278,6 @@ function reset() {
 
 	infoEl.style.visibility = params.hideInfo ? 'hidden' : 'visible';
 
-	console.log( params.material )
 	const materialInfo = database[ params.material ];
 	const [ shellMaterial, coreMaterial ] = materials;
 

@@ -145,7 +145,7 @@ async function init() {
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
