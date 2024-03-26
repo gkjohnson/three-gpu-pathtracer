@@ -1,18 +1,26 @@
-import * as THREE from 'three';
+import {
+	ACESFilmicToneMapping,
+	OrthographicCamera,
+	CustomBlending,
+	Scene,
+	Box3,
+	Mesh,
+	CylinderGeometry,
+	MeshPhysicalMaterial,
+	NoToneMapping,
+} from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
+let renderer, controls, activeCamera, denoiseQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
-let PT_PROGRAM_ID;
 
 const orthoWidth = 5;
 
@@ -153,53 +161,56 @@ init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLPathTracer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
+	renderer.tiles.set( params.tiles, params.tiles );
+	renderer.renderToCanvasCallback = ( target, renderer, quad ) => {
+
+		denoiseQuad.material.sigma = params.denoiseSigma;
+		denoiseQuad.material.threshold = params.denoiseThreshold;
+		denoiseQuad.material.kSigma = params.denoiseKSigma;
+
+		const autoClear = renderer.autoClear;
+		const finalQuad = params.denoiseEnabled ? denoiseQuad : quad;
+		renderer.autoClear = false;
+		finalQuad.material.map = target.texture;
+		finalQuad.render( renderer );
+		renderer.autoClear = autoClear;
+
+	};
+
 	document.body.appendChild( renderer.domElement );
+
+	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
+		map: null,
+		blending: CustomBlending,
+		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
+	} ) );
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
 	const orthoHeight = orthoWidth / aspect;
-	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 4, 2, 3 );
 
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 4, 2, 3 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.alpha = true;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: THREE.CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
-
-	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
-		map: ptRenderer.target.texture,
-		blending: THREE.CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
-
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 
-	scene = new THREE.Scene();
+	scene = new Scene();
 
 	samplesEl = document.getElementById( 'samples' );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
@@ -207,36 +218,31 @@ async function init() {
 
 			envMap = texture;
 
-			updateEnvBlur();
-
 		} );
 
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
 		.then( gltf => {
 
-			const group = new THREE.Group();
-
 			gltf.scene.scale.setScalar( 0.01 );
 			gltf.scene.updateMatrixWorld();
-			group.add( gltf.scene );
+			scene.add( gltf.scene );
 
-			const box = new THREE.Box3();
+			const box = new Box3();
 			box.setFromObject( gltf.scene );
 
-			const floor = new THREE.Mesh(
-				new THREE.CylinderGeometry( 3, 3, 0.05, 200 ),
-				new THREE.MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
+			const floor = new Mesh(
+				new CylinderGeometry( 3, 3, 0.05, 200 ),
+				new MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.03;
-			group.add( floor );
+			scene.add( floor );
 
-			const material1 = new THREE.MeshPhysicalMaterial();
-			const material2 = new THREE.MeshPhysicalMaterial();
+			const material1 = new MeshPhysicalMaterial();
+			const material2 = new MeshPhysicalMaterial();
 
 			gltf.scene.traverse( c => {
 
@@ -268,34 +274,13 @@ async function init() {
 
 			materials = [ material1, material2, floor.material ];
 
-			return generator.generate( group );
-
-		} )
-		.then( result => {
-
-			sceneInfo = result;
-
-			scene.add( result.scene );
-
-			const { bvh, textures, materials, geometry } = result;
-			const material = ptRenderer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
-
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
+
+	updateCamera( params.cameraProjection );
+	updateEnvBlur();
+	reset();
 
 	document.getElementById( 'loading' ).remove();
 	document.body.classList.add( 'checkerboard' );
@@ -304,48 +289,22 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
 
-	updateCamera( params.cameraProjection );
-
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
-		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-		blitQuad.material.needsUpdate = true;
+		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	ptFolder.add( params, 'stableNoise' ).onChange( value => {
-
-		ptRenderer.stableNoise = value;
-
-	} );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
-		ptRenderer.reset();
-
-	} );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( value => {
-
-		ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', value );
-		ptRenderer.reset();
-
-	} );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
+	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( reset );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -359,34 +318,16 @@ async function init() {
 	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
 	denoiseFolder.close();
 
-
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
-
-	} );
+	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset );
+	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( reset );
 	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
 
 		updateEnvBlur();
 
 	} );
-	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( reset );
+	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( reset );
 	envFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
 
 		if ( v ) {
@@ -495,14 +436,10 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 
@@ -517,66 +454,6 @@ function onResize() {
 }
 
 function reset() {
-
-	ptRenderer.reset();
-
-}
-
-function updateEnvBlur() {
-
-	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-	scene.environment = blurredTex;
-	ptRenderer.reset();
-
-}
-
-function updateCamera( cameraProjection ) {
-
-	if ( cameraProjection === 'Perspective' ) {
-
-		if ( activeCamera ) {
-
-			perspectiveCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = perspectiveCamera;
-
-	} else if ( cameraProjection === 'Orthographic' ) {
-
-		if ( activeCamera ) {
-
-			orthoCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = orthoCamera;
-
-	} else { // Equirect
-
-		if ( activeCamera ) {
-
-			equirectCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = equirectCamera;
-
-	}
-
-	controls.object = activeCamera;
-	ptRenderer.camera = activeCamera;
-
-	controls.update();
-
-	reset();
-
-}
-
-function animate() {
-
-	requestAnimationFrame( animate );
 
 	const m1 = materials[ 0 ];
 	m1.color.set( params.material1.color ).convertSRGBToLinear();
@@ -630,19 +507,27 @@ function animate() {
 	m3.roughness = params.material3.roughness;
 	m3.transparent = m3.opacity < 1;
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	renderer.transparentTraversals = params.transparentTraversals;
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	renderer.bounces = params.bounces;
+	renderer.renderScale = params.resolutionScale;
+
+	// TODO: remove this
+	const ptRenderer = renderer._pathTracer;
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
 	ptRenderer.material.materials.setMatte( 1, params.material2.matte );
 	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
 	ptRenderer.material.materials.setCastShadow( 0, params.material1.castShadow );
 	ptRenderer.material.materials.setCastShadow( 1, params.material2.castShadow );
 
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.backgroundBlur = params.backgroundBlur;
-	ptRenderer.material.bounces = params.bounces;
-	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
-	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
+	scene.backgroundBlurriness = params.backgroundBlur;
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
+	scene.environmentRotation.y = params.environmentRotation;
+	scene.backgroundRotation.y = params.environmentRotation;
+
+	renderer.setClearAlpha( params.backgroundAlpha );
 
 	activeCamera.updateMatrixWorld();
 
@@ -656,64 +541,65 @@ function animate() {
 
 	}
 
-	// Get the path tracing shader id. It will be the next program compiled and used here.
-	if ( PT_PROGRAM_ID === undefined ) {
-
-		PT_PROGRAM_ID = renderer.info.programs.length;
-
-	}
-
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-		ptRenderer.update();
-
-	}
-
-	if ( ! window.DEBUG_SHADERS ) {
-
-		const gl = renderer.getContext();
-		const DEBUG_SHADERS = {};
-
-		const programs = renderer.info.programs;
-		const ptProgram = programs[ PT_PROGRAM_ID ];
-		DEBUG_SHADERS.context = gl;
-
-		DEBUG_SHADERS.vertexShader = ptProgram.vertexShader;
-		DEBUG_SHADERS.fragmentShader = ptProgram.fragmentShader;
-
-		DEBUG_SHADERS.vertexShaderSource = gl.getShaderSource( ptProgram.vertexShader );
-		DEBUG_SHADERS.fragmentShaderSource = gl.getShaderSource( ptProgram.fragmentShader );
-
-		const shaderDebugExt = gl.getExtension( 'WEBGL_debug_shaders' );
-		DEBUG_SHADERS.debugVertexShaderSource = shaderDebugExt.getTranslatedShaderSource( ptProgram.vertexShader );
-		DEBUG_SHADERS.debugFragmentShaderSource = shaderDebugExt.getTranslatedShaderSource( ptProgram.fragmentShader );
-
-		window.DEBUG_SHADERS = DEBUG_SHADERS;
-		console.log( 'Original and translated debug shaders added to window.DEBUG_SHADERS object.' );
-
-	}
-
-	if ( ptRenderer.samples < 1 ) {
-
-		renderer.render( scene, activeCamera );
-
-	}
-
-	denoiseQuad.material.sigma = params.denoiseSigma;
-	denoiseQuad.material.threshold = params.denoiseThreshold;
-	denoiseQuad.material.kSigma = params.denoiseKSigma;
-
-	const quad = params.denoiseEnabled ? denoiseQuad : blitQuad;
-
-	renderer.autoClear = false;
-	quad.material.map = ptRenderer.target.texture;
-	quad.render( renderer );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	renderer.updateScene( activeCamera, scene );
 
 }
 
+function updateEnvBlur() {
 
+	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
+	scene.environment = blurredTex;
+	scene.background = blurredTex;
+	reset();
 
+}
 
+function updateCamera( cameraProjection ) {
+
+	if ( cameraProjection === 'Perspective' ) {
+
+		if ( activeCamera ) {
+
+			perspectiveCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = perspectiveCamera;
+
+	} else if ( cameraProjection === 'Orthographic' ) {
+
+		if ( activeCamera ) {
+
+			orthoCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = orthoCamera;
+
+	} else { // Equirect
+
+		if ( activeCamera ) {
+
+			equirectCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = equirectCamera;
+
+	}
+
+	controls.object = activeCamera;
+
+	controls.update();
+
+	reset();
+
+}
+
+function animate() {
+
+	requestAnimationFrame( animate );
+	renderer.renderSample();
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+
+}

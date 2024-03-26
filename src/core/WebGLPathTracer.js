@@ -21,6 +21,18 @@ export class WebGLPathTracer {
 
 	}
 
+	get transparentTraversals() {
+
+		return this._pathTracer.material.defines.transparentTraversals;
+
+	}
+
+	set transparentTraversals( v ) {
+
+		this._pathTracer.material.setDefine( 'TRANSPARENT_TRAVERSALS', v );
+
+	}
+
 	get bounces() {
 
 		return this._pathTracer.material.bounces;
@@ -117,6 +129,8 @@ export class WebGLPathTracer {
 		this._renderer = renderer;
 		this._generator = new DynamicPathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
+		this._pathTracer.alpha = renderer.getContextAttributes().alpha;
+
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
 			map: null,
@@ -135,6 +149,16 @@ export class WebGLPathTracer {
 		this.rasterizeSceneCallback = ( scene, camera ) => {
 
 			this._renderer.render( scene, camera );
+
+		};
+
+		this.renderToCanvasCallback = ( target, renderer, quad ) => {
+
+			const autoClear = renderer.autoClear;
+			renderer.autoClear = false;
+			quad.material.map = target.texture;
+			quad.render( renderer );
+			renderer.autoClear = autoClear;
 
 		};
 
@@ -355,7 +379,6 @@ export class WebGLPathTracer {
 
 			const renderer = this._renderer;
 			const quad = this._quad;
-			const autoClear = renderer.autoClear;
 			if ( this.dynamicLowRes ) {
 
 				if ( lowResPathTracer.samples < 1 ) {
@@ -364,7 +387,6 @@ export class WebGLPathTracer {
 
 				}
 
-				renderer.autoClear = false;
 				quad.material.map = lowResPathTracer.target.texture;
 				quad.render( renderer );
 
@@ -374,10 +396,7 @@ export class WebGLPathTracer {
 
 			}
 
-			renderer.autoClear = false;
-			quad.material.map = pathTracer.target.texture;
-			quad.render( renderer );
-			renderer.autoClear = autoClear;
+			this.renderToCanvasCallback( pathTracer.target, renderer, quad );
 
 		}
 
