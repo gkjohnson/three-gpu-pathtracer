@@ -221,12 +221,7 @@ function animate() {
 
 	}
 
-	floorPlane.material.color.set( params.floorColor );
-	floorPlane.material.roughness = params.floorRoughness;
-	floorPlane.material.metalness = params.floorMetalness;
-	floorPlane.material.opacity = params.floorOpacity;
-
-	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
+	if ( renderer.samples < 1.0 || ! params.enable ) {
 
 		renderer.render( scene, activeCamera );
 
@@ -234,18 +229,12 @@ function animate() {
 
 	if ( params.enable && delaySamples === 0 ) {
 
-		const samples = Math.floor( ptRenderer.samples );
+		const samples = Math.floor( renderer.samples );
 		samplesEl.innerText = `samples: ${ samples }`;
-
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-		ptRenderer.material.bounces = params.bounces;
-		ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 
 		activeCamera.updateMatrixWorld();
 
-		if ( ! params.pause || ptRenderer.samples < 1 ) {
+		if ( ! params.pause || renderer.samples < 1 ) {
 
 			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
@@ -265,7 +254,7 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
 
@@ -276,6 +265,21 @@ function resetRenderer() {
 		delaySamples = 1;
 
 	}
+
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	renderer.bounces = params.bounces;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+
+	floorPlane.material.color.set( params.floorColor );
+	floorPlane.material.roughness = params.floorRoughness;
+	floorPlane.material.metalness = params.floorMetalness;
+	floorPlane.material.opacity = params.floorOpacity;
+
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.environmentIntensity = params.environmentIntensity;
+	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
+	ptRenderer.material.environmentRotation.makeRotationY( params.environmentRotation );
+	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
 
 	ptRenderer.reset();
 
@@ -320,27 +324,14 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		resetRenderer();
-
-	} );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( resetRenderer );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
@@ -351,12 +342,12 @@ function buildGui() {
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.tiles.x = v;
+		renderer.tiles.x = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.tiles.y = v;
+		renderer.tiles.y = v;
 
 	} );
 	resolutionFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
@@ -374,17 +365,8 @@ function buildGui() {
 		resetRenderer();
 
 	} ).name( 'env map blur' );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( () => {
-
-		resetRenderer();
-
-	} ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		resetRenderer();
-
-	} );
+	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( resetRenderer ).name( 'intensity' );
+	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( resetRenderer() );
 	environmentFolder.open();
 
 	const backgroundFolder = gui.addFolder( 'background' );
@@ -421,12 +403,7 @@ function buildGui() {
 		resetRenderer();
 
 	} );
-	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( v => {
-
-		ptRenderer.material.backgroundAlpha = v;
-		resetRenderer();
-
-	} );
+	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( resetRenderer );
 	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
 
 		if ( v ) document.body.classList.add( 'checkerboard' );
@@ -435,26 +412,10 @@ function buildGui() {
 	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( () => {
-
-		resetRenderer();
-
-	} );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
-	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
+	floorFolder.addColor( params, 'floorColor' ).onChange( resetRenderer );
+	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( resetRenderer );
+	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( resetRenderer );
+	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( resetRenderer );
 	floorFolder.close();
 
 }
