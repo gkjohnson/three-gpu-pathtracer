@@ -20,7 +20,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
 let pathTracer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, ptRenderer, materials;
-let camera;
+let camera, renderer;
 let scene;
 let iesTextures;
 let samplesEl;
@@ -79,13 +79,13 @@ init();
 async function init() {
 
 	// init renderer
-	const renderer = new WebGLRenderer();
+	renderer = new WebGLRenderer();
 	renderer.shadowMap.enabled = true;
 	renderer.physicallyCorrectLights = true;
+	renderer.shadowMap.type = PCFSoftShadowMap;
 
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
-	pathTracer.shadowMap.type = PCFSoftShadowMap;
 	pathTracer.setClearColor( 0, 0 );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
@@ -108,13 +108,14 @@ async function init() {
 	} );
 
 	scene = new Scene();
+	scene.backgroundBlurriness = 0.1;
 	transformControlsScene = new Scene();
 
 	samplesEl = document.getElementById( 'samples' );
 
 	// load the env map
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;
@@ -130,8 +131,6 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf' )
 		.then( gltf => {
 
-			const group = new Group();
-
 			// objects
 			gltf.scene.scale.setScalar( 1 );
 			gltf.scene.updateMatrixWorld();
@@ -141,7 +140,7 @@ async function init() {
 				c.receiveShadow = true;
 
 			} );
-			group.add( gltf.scene );
+			scene.add( gltf.scene );
 
 			const box = new Box3();
 			box.setFromObject( gltf.scene );
@@ -155,7 +154,7 @@ async function init() {
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.25;
 			floor.receiveShadow = true;
-			group.add( floor );
+			scene.add( floor );
 
 			const wall = new Mesh(
 				new BoxGeometry( 14, 6, 0.5 ),
@@ -168,7 +167,7 @@ async function init() {
 			wall.position.x = 0.0;
 			wall.position.y = box.min.y + 3;
 			wall.position.z = box.min.z - 0.5;
-			group.add( wall );
+			scene.add( wall );
 
 			// transform controls
 			function makeTransformControls( object ) {
@@ -210,7 +209,7 @@ async function init() {
 			spotLight.shadow.camera.far = 10.0;
 			spotLight.shadow.focus = 1.0;
 			spotLight.castShadow = true;
-			group.add( spotLight );
+			scene.add( spotLight );
 
 			spotLights.push( spotLight );
 			lights.push( spotLight );
@@ -221,7 +220,7 @@ async function init() {
 			targetObject.position.z = 0.05;
 			targetObject.updateMatrixWorld();
 			spotLight.updateMatrixWorld();
-			group.add( targetObject );
+			scene.add( targetObject );
 
 			spotLightHelper = new SpotLightHelper( spotLight );
 			transformControlsScene.add( spotLightHelper );
@@ -248,6 +247,8 @@ async function init() {
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
+
+	reset();
 
 	document.getElementById( 'loading' ).remove();
 
@@ -312,7 +313,7 @@ function onResize() {
 	const dpr = window.devicePixelRatio;
 
 	pathTracer.setSize( w, h );
-	pathTracer.setPixelRatio( dpr );
+	pathTracer.setPixelRatio( dpr * params.resolutionScale );
 
 	const aspect = w / h;
 
@@ -337,14 +338,10 @@ function reset() {
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
 
-	pathTracer.renderScale = params.resolutionScale;
+	// pathTracer.renderScale = params.resolutionScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.material.bounces = params.bounces;
-
-	// update path tracer
-	// TODO: does this work?
-	ptRenderer.material.lights.updateFrom( lights, iesTextures );
+	pathTracer.bounces = params.bounces;
 
 	// update objects
 	spotLightHelper.update();
@@ -357,9 +354,11 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	camera.updateMatrixWorld();
 	pathTracer.renderSample();
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
-	pathTracer.autoClear = false;
+	renderer.autoClear = false;
 	transformControlsScene.children.forEach( c => {
 
 		c.visible = c instanceof SpotLightHelper ? params.showLightHelper : params.showTransformControls;
@@ -367,8 +366,7 @@ function animate() {
 
 	} );
 
-	pathTracer.render( transformControlsScene, camera );
-	pathTracer.autoClear = true;
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	renderer.render( transformControlsScene, camera );
+	renderer.autoClear = true;
 
 }
