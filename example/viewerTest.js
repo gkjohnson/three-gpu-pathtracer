@@ -18,7 +18,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, WebGLPathTracer } from '../src/index.js';
+import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -182,12 +182,6 @@ function animate() {
 
 	}
 
-	if ( pathTracer.samples < 1.0 || ! params.enable ) {
-
-		renderer.render( scene, camera );
-
-	}
-
 	if ( params.enable && delaySamples === 0 ) {
 
 		const samples = Math.floor( ptRenderer.samples );
@@ -209,9 +203,10 @@ function animate() {
 		fsQuad.render( renderer );
 		pathTracer.autoClear = true;
 
-	} else if ( delaySamples > 0 ) {
+	} else if ( delaySamples > 0 || ! params.enable ) {
 
-		delaySamples --;
+		delaySamples = Math.max( delaySamples - 1, 0 );
+		renderer.render( scene, camera );
 
 	}
 
