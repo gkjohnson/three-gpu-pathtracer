@@ -300,7 +300,7 @@ async function init() {
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		renderer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
@@ -321,17 +321,8 @@ async function init() {
 	denoiseFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		reset();
-
-	} );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		reset();
-
-	} );
+	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset() );
+	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( reset );
 	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
 
 		updateEnvBlur();
@@ -536,6 +527,8 @@ function reset() {
 	scene.backgroundBlurriness = params.backgroundBlur;
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
+	scene.environmentRotation.y = params.environmentRotation;
+
 	renderer.setClearAlpha( params.backgroundAlpha );
 
 	activeCamera.updateMatrixWorld();
