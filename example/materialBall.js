@@ -303,7 +303,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset() );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
 	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( reset );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
@@ -319,7 +319,7 @@ async function init() {
 	denoiseFolder.close();
 
 	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset() );
+	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset );
 	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( reset );
 	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
 
