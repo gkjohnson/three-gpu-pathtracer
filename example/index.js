@@ -10,7 +10,6 @@ import {
 	PlaneGeometry,
 	Group,
 	MeshPhysicalMaterial,
-	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
@@ -27,7 +26,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
+import { MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -198,7 +197,6 @@ async function init() {
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
 	scene.background = backgroundMap;
-	ptRenderer.tiles.set( params.tilesX, params.tilesY );
 
 	updateCamera( params.cameraProjection );
 	updateModel();
@@ -291,7 +289,7 @@ function onResize() {
 	const dpr = window.devicePixelRatio;
 
 	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
+	resetRenderer();
 
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio * scale );
@@ -325,7 +323,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
@@ -335,12 +333,12 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 
@@ -373,18 +371,18 @@ function buildGui() {
 	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0 ).onChange( () => {
 
 		updateEnvBlur();
-		ptRenderer.reset();
+		resetRenderer();
 
 	} ).name( 'env map blur' );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
 		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	environmentFolder.open();
@@ -404,7 +402,7 @@ function buildGui() {
 
 		}
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
@@ -412,7 +410,7 @@ function buildGui() {
 		backgroundMap.topColor.set( v );
 		backgroundMap.update();
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
@@ -420,13 +418,13 @@ function buildGui() {
 		backgroundMap.bottomColor.set( v );
 		backgroundMap.update();
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( v => {
 
 		ptRenderer.material.backgroundAlpha = v;
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
@@ -439,22 +437,22 @@ function buildGui() {
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.addColor( params, 'floorColor' ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	floorFolder.close();
@@ -475,7 +473,7 @@ function updateEnvMap() {
 
 			envMap = texture;
 			updateEnvBlur();
-			ptRenderer.reset();
+			resetRenderer();
 
 		} );
 
@@ -756,7 +754,7 @@ async function updateModel() {
 
 		}
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	};
 
