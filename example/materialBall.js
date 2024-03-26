@@ -215,8 +215,6 @@ async function init() {
 
 			envMap = texture;
 
-			updateEnvBlur();
-
 		} );
 
 	const generator = new PathTracingSceneWorker();
@@ -301,14 +299,16 @@ async function init() {
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
 
+	updateCamera( params.cameraProjection );
+	updateEnvBlur();
+	reset();
+
 	document.getElementById( 'loading' ).remove();
 	document.body.classList.add( 'checkerboard' );
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
-
-	updateCamera( params.cameraProjection );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
@@ -583,7 +583,7 @@ function reset() {
 
 	}
 
-	ptRenderer.reset();
+	renderer.updateScene( activeCamera, scene );
 
 }
 
@@ -592,7 +592,7 @@ function updateEnvBlur() {
 	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
 	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 	scene.environment = blurredTex;
-	ptRenderer.reset();
+	reset();
 
 }
 
