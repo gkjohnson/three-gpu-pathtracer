@@ -1,11 +1,9 @@
 import {
-	WebGLRenderer,
 	ACESFilmicToneMapping,
 	OrthographicCamera,
 	MeshBasicMaterial,
 	CustomBlending,
 	Scene,
-	Group,
 	Box3,
 	Mesh,
 	CylinderGeometry,
@@ -15,7 +13,7 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -182,8 +180,6 @@ async function init() {
 	equirectCamera.position.set( - 4, 2, 3 );
 
 	ptRenderer = renderer._pathTracer;
-	ptRenderer.alpha = true;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
@@ -338,16 +334,8 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		reset();
-
-	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		reset();
-
-	} );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset() );
 	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', value );
