@@ -175,7 +175,7 @@ async function init() {
 				const transformControls = new TransformControls( camera, pathTracer.domElement );
 				transformControls.addEventListener( 'objectChange', () => {
 
-					pathTracer.reset();
+					reset();
 
 				} );
 
