@@ -17,7 +17,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, ptRenderer, activeCamera, denoiseQuad, materials;
+let renderer, controls, activeCamera, denoiseQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -198,8 +198,6 @@ async function init() {
 
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 4, 2, 3 );
-
-	ptRenderer = renderer._pathTracer;
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -438,14 +436,10 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 
@@ -517,7 +511,10 @@ function reset() {
 	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	renderer.bounces = params.bounces;
+	renderer.renderScale = params.resolutionScale;
 
+	// TODO: remove this
+	const ptRenderer = renderer._pathTracer;
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
 	ptRenderer.material.materials.setMatte( 1, params.material2.matte );
 	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
@@ -528,6 +525,7 @@ function reset() {
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
 	scene.environmentRotation.y = params.environmentRotation;
+	scene.backgroundRotation.y = params.environmentRotation;
 
 	renderer.setClearAlpha( params.backgroundAlpha );
 
@@ -550,8 +548,8 @@ function reset() {
 function updateEnvBlur() {
 
 	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 	scene.environment = blurredTex;
+	scene.background = blurredTex;
 	reset();
 
 }
@@ -591,7 +589,6 @@ function updateCamera( cameraProjection ) {
 	}
 
 	controls.object = activeCamera;
-	ptRenderer.camera = activeCamera;
 
 	controls.update();
 
@@ -606,7 +603,3 @@ function animate() {
 	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
-
-
-
-
