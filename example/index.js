@@ -123,7 +123,7 @@ const params = {
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
-let ptRenderer, controls, scene;
+let controls, scene;
 let envMap, envMapGenerator, backgroundMap;
 let loadingModel = false;
 let delaySamples = 0;
@@ -160,8 +160,6 @@ async function init() {
 	backgroundMap.topColor.set( params.bgGradientTop );
 	backgroundMap.bottomColor.set( params.bgGradientBottom );
 	backgroundMap.update();
-
-	ptRenderer = renderer._pathTracer;
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
@@ -246,17 +244,18 @@ function resetRenderer() {
 	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 	renderer.bounces = params.bounces;
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	renderer.renderScale = params.resolutionScale;
 
 	floorPlane.material.color.set( params.floorColor );
 	floorPlane.material.roughness = params.floorRoughness;
 	floorPlane.material.metalness = params.floorMetalness;
 	floorPlane.material.opacity = params.floorOpacity;
 
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
-	ptRenderer.material.environmentRotation.makeRotationY( params.environmentRotation );
-	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
+	// TODO: this cannot set the background alpha of a background texture
+	// renderer.setClearColor( params.backgroundAlpha );
 
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.environmentRotation.y = params.environmentRotation;
 	if ( params.backgroundType === 'Gradient' ) {
 
 		backgroundMap.topColor.set( params.bgGradientTop );
@@ -264,16 +263,16 @@ function resetRenderer() {
 		backgroundMap.update();
 
 		scene.background = backgroundMap;
-		ptRenderer.material.backgroundMap = backgroundMap;
+		scene.backgroundIntensity = 1;
+		scene.environmentRotation.y = 0;
 
 	} else {
 
 		scene.background = scene.environment;
-		ptRenderer.material.backgroundMap = scene.environment;
+		scene.backgroundIntensity = params.environmentIntensity;
+		scene.backgroundRotation.y = params.environmentRotation;
 
 	}
-
-	ptRenderer.camera = activeCamera;
 
 	renderer.updateScene( activeCamera, scene );
 
@@ -283,14 +282,10 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	resetRenderer();
-
 	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 	perspectiveCamera.aspect = aspect;
