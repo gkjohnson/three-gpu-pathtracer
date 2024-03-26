@@ -536,7 +536,7 @@ async function updateModel() {
 	if ( scene.children.length ) {
 
 		const children = [ ... scene.children ];
-		children.forEach( c => c.remove() );
+		children.forEach( c => scene.remove( c ) );
 
 	}
 
