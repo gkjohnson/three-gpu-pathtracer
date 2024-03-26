@@ -333,7 +333,7 @@ async function init() {
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
-		ptRenderer.reset();
+		reset();
 
 	} );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
@@ -344,18 +344,18 @@ async function init() {
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		reset();
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		reset();
 
 	} );
 	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( value => {
 
 		ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', value );
-		ptRenderer.reset();
+		reset();
 
 	} );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
@@ -371,17 +371,16 @@ async function init() {
 	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
 	denoiseFolder.close();
 
-
 	const envFolder = gui.addFolder( 'Environment' );
 	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
-		ptRenderer.reset();
+		reset();
 
 	} );
 	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( v => {
 
 		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
+		reset();
 
 	} );
 	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
@@ -389,16 +388,8 @@ async function init() {
 		updateEnvBlur();
 
 	} );
-	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( reset );
+	envFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( reset );
 	envFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
 
 		if ( v ) {
@@ -530,66 +521,6 @@ function onResize() {
 
 function reset() {
 
-	ptRenderer.reset();
-
-}
-
-function updateEnvBlur() {
-
-	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-	scene.environment = blurredTex;
-	ptRenderer.reset();
-
-}
-
-function updateCamera( cameraProjection ) {
-
-	if ( cameraProjection === 'Perspective' ) {
-
-		if ( activeCamera ) {
-
-			perspectiveCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = perspectiveCamera;
-
-	} else if ( cameraProjection === 'Orthographic' ) {
-
-		if ( activeCamera ) {
-
-			orthoCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = orthoCamera;
-
-	} else { // Equirect
-
-		if ( activeCamera ) {
-
-			equirectCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = equirectCamera;
-
-	}
-
-	controls.object = activeCamera;
-	ptRenderer.camera = activeCamera;
-
-	controls.update();
-
-	reset();
-
-}
-
-function animate() {
-
-	requestAnimationFrame( animate );
-
 	const m1 = materials[ 0 ];
 	m1.color.set( params.material1.color ).convertSRGBToLinear();
 	m1.emissive.set( params.material1.emissive ).convertSRGBToLinear();
@@ -667,6 +598,66 @@ function animate() {
 		scene.background = scene.environment;
 
 	}
+
+	ptRenderer.reset();
+
+}
+
+function updateEnvBlur() {
+
+	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
+	ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+	scene.environment = blurredTex;
+	ptRenderer.reset();
+
+}
+
+function updateCamera( cameraProjection ) {
+
+	if ( cameraProjection === 'Perspective' ) {
+
+		if ( activeCamera ) {
+
+			perspectiveCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = perspectiveCamera;
+
+	} else if ( cameraProjection === 'Orthographic' ) {
+
+		if ( activeCamera ) {
+
+			orthoCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = orthoCamera;
+
+	} else { // Equirect
+
+		if ( activeCamera ) {
+
+			equirectCamera.position.copy( activeCamera.position );
+
+		}
+
+		activeCamera = equirectCamera;
+
+	}
+
+	controls.object = activeCamera;
+	ptRenderer.camera = activeCamera;
+
+	controls.update();
+
+	reset();
+
+}
+
+function animate() {
+
+	requestAnimationFrame( animate );
 
 	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
 
