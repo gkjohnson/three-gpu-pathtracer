@@ -31,6 +31,7 @@ function getTextures( materials ) {
 function getLights( objects ) {
 
 	const lights = [];
+	const iesSet = new Set();
 	for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
 		objects[ i ].traverse( c => {
@@ -46,6 +47,12 @@ function getLights( objects ) {
 
 					lights.push( c );
 
+					if ( c.iesTexture ) {
+
+						iesSet.add( c.iesTexture );
+
+					}
+
 				}
 
 			}
@@ -54,7 +61,15 @@ function getLights( objects ) {
 
 	}
 
-	return lights;
+	const iesTextures = Array.from( iesSet ).sort( ( a, b ) => {
+
+		if ( a.uuid < b.uuid ) return 1;
+		if ( a.uuid > b.uuid ) return - 1;
+		return 0;
+
+	} );
+
+	return { lights, iesTextures };
 
 }
 
@@ -174,7 +189,7 @@ export class DynamicPathTracingSceneGenerator {
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
 		const textures = getTextures( materials );
-		const lights = getLights( objects );
+		const { lights, iesTextures } = getLights( objects );
 
 		if ( result.changeType !== NO_CHANGE ) {
 
@@ -223,6 +238,7 @@ export class DynamicPathTracingSceneGenerator {
 			bvhChanged: result.changeType !== NO_CHANGE,
 			bvh: this.bvh,
 			lights,
+			iesTextures,
 			geometry,
 			materials,
 			textures,
