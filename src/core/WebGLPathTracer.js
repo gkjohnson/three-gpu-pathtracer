@@ -250,6 +250,7 @@ export class WebGLPathTracer {
 
 		// update scene information
 		material.lights.updateFrom( lights, iesTextures );
+		material.iesProfiles.updateFrom( renderer, iesTextures );
 		material.lightCount = lights.length;
 		material.textures.setTextures( renderer, textureSize.x, textureSize.y, textures );
 		material.materials.updateFrom( materials, textures );
