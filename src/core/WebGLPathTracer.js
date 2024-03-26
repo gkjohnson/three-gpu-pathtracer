@@ -21,6 +21,18 @@ export class WebGLPathTracer {
 
 	}
 
+	get transparentTraversals() {
+
+		return this._pathTracer.material.defines.transparentTraversals;
+
+	}
+
+	set transparentTraversals( v ) {
+
+		return this._pathTracer.material.setDefine( 'TRANSPARENT_TRAVERSALS', v );
+
+	}
+
 	get bounces() {
 
 		return this._pathTracer.material.bounces;
@@ -117,6 +129,8 @@ export class WebGLPathTracer {
 		this._renderer = renderer;
 		this._generator = new DynamicPathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
+		this._pathTracer.alpha = renderer.getContextAttributes().alpha;
+
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
 			map: null,

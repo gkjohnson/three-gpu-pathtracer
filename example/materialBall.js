@@ -166,6 +166,7 @@ async function init() {
 	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
+	renderer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( renderer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
@@ -180,9 +181,6 @@ async function init() {
 	equirectCamera.position.set( - 4, 2, 3 );
 
 	ptRenderer = renderer._pathTracer;
-	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -556,6 +554,9 @@ function reset() {
 	m3.metalness = params.material3.metalness;
 	m3.roughness = params.material3.roughness;
 	m3.transparent = m3.opacity < 1;
+
+	renderer.transparentTraversals = params.transparentTraversals;
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
