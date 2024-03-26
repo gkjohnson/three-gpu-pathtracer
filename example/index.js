@@ -13,8 +13,6 @@ import {
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
-	MeshBasicMaterial,
-	CustomBlending
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -25,9 +23,7 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const envMaps = {
@@ -125,9 +121,9 @@ const params = {
 };
 
 let creditEl, loadingEl, samplesEl;
-let floorPlane, gui, stats, sceneInfo;
+let floorPlane, gui, stats;
 let renderer, orthoCamera, perspectiveCamera, activeCamera;
-let ptRenderer, fsQuad, controls, scene;
+let ptRenderer, controls, scene;
 let envMap, envMapGenerator, backgroundMap;
 let loadingModel = false;
 let delaySamples = 0;
@@ -167,16 +163,20 @@ async function init() {
 
 	ptRenderer = renderer._pathTracer;
 
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
-
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
-	controls.addEventListener( 'change', resetRenderer );
+	controls.addEventListener( 'change', () => {
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+		if ( params.tilesX * params.tilesY !== 1.0 ) {
+
+			delaySamples = 5;
+
+		}
+
+		renderer.reset();
+
+	} );
+
+	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -220,36 +220,20 @@ function animate() {
 
 	}
 
-	if ( renderer.samples < 1.0 || ! params.enable ) {
-
-		renderer.render( scene, activeCamera );
-
-	}
-
 	if ( params.enable && delaySamples === 0 ) {
-
-		const samples = Math.floor( renderer.samples );
-		samplesEl.innerText = `samples: ${ samples }`;
 
 		activeCamera.updateMatrixWorld();
 
 		if ( ! params.pause || renderer.samples < 1 ) {
 
-			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-				ptRenderer.update();
-
-			}
+			renderer.renderSample();
 
 		}
 
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-	} else if ( delaySamples > 0 ) {
+	} else {
 
 		delaySamples --;
+		renderer._renderer.render( scene, activeCamera );
 
 	}
 
@@ -258,12 +242,6 @@ function animate() {
 }
 
 function resetRenderer() {
-
-	if ( params.tilesX * params.tilesY !== 1.0 ) {
-
-		delaySamples = 1;
-
-	}
 
 	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 	renderer.bounces = params.bounces;
@@ -274,7 +252,6 @@ function resetRenderer() {
 	floorPlane.material.metalness = params.floorMetalness;
 	floorPlane.material.opacity = params.floorOpacity;
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
 	ptRenderer.material.environmentRotation.makeRotationY( params.environmentRotation );
@@ -296,10 +273,9 @@ function resetRenderer() {
 
 	}
 
-	ptRenderer.material.envMapInfo.updateFrom( scene.environment );
 	ptRenderer.camera = activeCamera;
 
-	ptRenderer.reset();
+	renderer.updateScene( activeCamera, scene );
 
 }
 
@@ -562,12 +538,12 @@ async function updateModel() {
 
 	} );
 
-	if ( sceneInfo ) {
+	if ( scene.children.length ) {
 
-		scene.remove( sceneInfo.scene );
+		const children = [ ... scene.children ];
+		children.forEach( c => c.remove() );
 
 	}
-
 
 	const onFinish = async () => {
 
@@ -640,33 +616,7 @@ async function updateModel() {
 		const reducer = new MaterialReducer();
 		reducer.process( group );
 
-		const generator = new PathTracingSceneWorker();
-		const result = await generator.generate( group, { onProgress: v => {
-
-			const percent = Math.floor( 100 * v );
-			loadingEl.innerText = `Building BVH : ${ percent }%`;
-
-		} } );
-
-		sceneInfo = result;
-		scene.add( sceneInfo.scene );
-
-		const { bvh, textures, materials, lights, geometry } = result;
-		const material = ptRenderer.material;
-
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.lights.updateFrom( lights );
-
-		generator.dispose();
+		scene.add( group );
 
 		loadingEl.style.visibility = 'hidden';
 
