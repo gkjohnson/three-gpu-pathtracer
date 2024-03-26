@@ -29,7 +29,7 @@ export class WebGLPathTracer {
 
 	set transparentTraversals( v ) {
 
-		return this._pathTracer.material.setDefine( 'TRANSPARENT_TRAVERSALS', v );
+		this._pathTracer.material.setDefine( 'TRANSPARENT_TRAVERSALS', v );
 
 	}
 
