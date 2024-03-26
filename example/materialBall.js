@@ -97,7 +97,7 @@ const params = {
 	samplesPerFrame: 1,
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
-	transparentTraversals: 20,
+	transmissiveBounces: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	backgroundAlpha: 1,
@@ -304,7 +304,7 @@ async function init() {
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
-	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( reset );
+	ptFolder.add( params, 'transmissiveBounces', 0, 40, 1 ).onChange( reset );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -507,7 +507,7 @@ function reset() {
 	m3.roughness = params.material3.roughness;
 	m3.transparent = m3.opacity < 1;
 
-	renderer.transparentTraversals = params.transparentTraversals;
+	renderer.transmissiveBounces = params.transmissiveBounces;
 	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
 	renderer.filterGlossyFactor = params.filterGlossyFactor;
 	renderer.bounces = params.bounces;
