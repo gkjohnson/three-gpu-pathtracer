@@ -1,4 +1,17 @@
-import * as THREE from 'three';
+import {
+	WebGLRenderer,
+	ACESFilmicToneMapping,
+	OrthographicCamera,
+	MeshBasicMaterial,
+	CustomBlending,
+	Scene,
+	Group,
+	Box3,
+	Mesh,
+	CylinderGeometry,
+	MeshPhysicalMaterial,
+	NoToneMapping,
+} from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -153,8 +166,8 @@ init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
 
@@ -163,7 +176,7 @@ async function init() {
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
 	const orthoHeight = orthoWidth / aspect;
-	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
+	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 4, 2, 3 );
 
 	equirectCamera = new EquirectCamera();
@@ -176,15 +189,15 @@ async function init() {
 	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
-	blitQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
-		blending: THREE.CustomBlending,
+		blending: CustomBlending,
 		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: ptRenderer.target.texture,
-		blending: THREE.CustomBlending,
+		blending: CustomBlending,
 		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
@@ -195,7 +208,7 @@ async function init() {
 
 	} );
 
-	scene = new THREE.Scene();
+	scene = new Scene();
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -217,26 +230,26 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
 		.then( gltf => {
 
-			const group = new THREE.Group();
+			const group = new Group();
 
 			gltf.scene.scale.setScalar( 0.01 );
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
 
-			const box = new THREE.Box3();
+			const box = new Box3();
 			box.setFromObject( gltf.scene );
 
-			const floor = new THREE.Mesh(
-				new THREE.CylinderGeometry( 3, 3, 0.05, 200 ),
-				new THREE.MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
+			const floor = new Mesh(
+				new CylinderGeometry( 3, 3, 0.05, 200 ),
+				new MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.03;
 			group.add( floor );
 
-			const material1 = new THREE.MeshPhysicalMaterial();
-			const material2 = new THREE.MeshPhysicalMaterial();
+			const material1 = new MeshPhysicalMaterial();
+			const material2 = new MeshPhysicalMaterial();
 
 			gltf.scene.traverse( c => {
 
@@ -309,7 +322,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
-		renderer.toneMapping = value ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
 		blitQuad.material.needsUpdate = true;
 
 	} );
