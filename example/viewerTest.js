@@ -18,7 +18,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -60,7 +60,7 @@ const params = {
 
 let creditEl, loadingEl, samplesEl, containerEl, imgEl;
 let gui, stats, sceneInfo;
-let renderer, camera;
+let pathTracer, camera, renderer;
 let ptRenderer, fsQuad, controls, scene;
 let loadingModel = false;
 let delaySamples = 0;
@@ -86,9 +86,13 @@ async function init() {
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
-	containerEl.appendChild( renderer.domElement );
+
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.tiles.set( params.tilesX, params.tilesY );
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	containerEl.appendChild( pathTracer.domElement );
 
 	// init scene
 	scene = new Scene();
@@ -99,14 +103,8 @@ async function init() {
 	camera.position.set( - 1, 0.25, 1 );
 
 	// init path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = pathTracer._pathTracer;
 	ptRenderer.camera = camera;
-	ptRenderer.alpha = true;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.tiles.set( params.tilesX, params.tilesY );
-
 
 	// init fsquad
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
@@ -164,7 +162,7 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
 
@@ -175,8 +173,8 @@ function animate() {
 	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
-	imgEl.style.width = renderer.domElement.style.width;
-	imgEl.style.height = renderer.domElement.style.height;
+	imgEl.style.width = pathTracer.domElement.style.width;
+	imgEl.style.height = pathTracer.domElement.style.height;
 
 	if ( loadingModel ) {
 
@@ -184,7 +182,7 @@ function animate() {
 
 	}
 
-	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
+	if ( pathTracer.samples < 1.0 || ! params.enable ) {
 
 		renderer.render( scene, camera );
 
@@ -194,13 +192,6 @@ function animate() {
 
 		const samples = Math.floor( ptRenderer.samples );
 		samplesEl.innerText = `samples: ${ samples }`;
-
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.filterGlossyFactor = 0.5;
-		ptRenderer.material.bounces = params.bounces;
-		ptRenderer.material.transmissiveBounces = params.transmissiveBounces;
-		ptRenderer.material.physicalCamera.updateFrom( camera );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 
 		camera.updateMatrixWorld();
 
@@ -214,9 +205,9 @@ function animate() {
 
 		}
 
-		renderer.autoClear = false;
+		pathTracer.autoClear = false;
 		fsQuad.render( renderer );
-		renderer.autoClear = true;
+		pathTracer.autoClear = true;
 
 	} else if ( delaySamples > 0 ) {
 
@@ -245,6 +236,13 @@ function resetRenderer() {
 		delaySamples = 1;
 
 	}
+
+	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	ptRenderer.material.filterGlossyFactor = 0.5;
+	ptRenderer.material.bounces = params.bounces;
+	ptRenderer.material.transmissiveBounces = params.transmissiveBounces;
+	ptRenderer.material.physicalCamera.updateFrom( camera );
+	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 
 	ptRenderer.reset();
 
@@ -279,33 +277,33 @@ function buildGui() {
 
 		const { width, height } = dimensions;
 		ptRenderer.setSize( width * dpr * v, height * dpr * v );
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
 
 		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		pathTracer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( () => {
 
-		ptRenderer.reset();
+		resetRenderer();
 
 	} );
 
@@ -526,8 +524,8 @@ async function updateModel() {
 
 		const dpr = window.devicePixelRatio;
 		const { width, height } = dimensions;
-		renderer.setSize( width, height );
-		renderer.setPixelRatio( dpr );
+		pathTracer.setSize( width, height );
+		pathTracer.setPixelRatio( dpr );
 		ptRenderer.setSize( width * dpr * params.scale, height * dpr * params.scale );
 		camera.aspect = width / height;
 		camera.fov = verticalFoV;
@@ -546,7 +544,7 @@ async function updateModel() {
 
 		} else {
 
-			renderer.setClearAlpha( 0 );
+			pathTracer.setClearAlpha( 0 );
 			scene.background = null;
 			ptRenderer.material.backgroundAlpha = 0;
 
