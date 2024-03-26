@@ -366,7 +366,7 @@ function buildGui() {
 
 	} ).name( 'env map blur' );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( resetRenderer ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( resetRenderer() );
+	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( resetRenderer );
 	environmentFolder.open();
 
 	const backgroundFolder = gui.addFolder( 'background' );
