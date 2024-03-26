@@ -27,7 +27,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture } from '../src/index.js';
+import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
@@ -143,9 +143,12 @@ async function init() {
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
+	renderer.tiles.set( params.tilesX, params.tilesY );
+	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	renderer.transmissiveBounces = 10;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new Scene();
@@ -163,13 +166,8 @@ async function init() {
 	backgroundMap.bottomColor.set( params.bgGradientBottom );
 	backgroundMap.update();
 
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.alpha = true;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
+	ptRenderer = renderer._pathTracer;
 	ptRenderer.material.backgroundMap = backgroundMap;
-	ptRenderer.material.transmissiveBounces = 10;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
