@@ -166,7 +166,6 @@ async function init() {
 	backgroundMap.update();
 
 	ptRenderer = renderer._pathTracer;
-	ptRenderer.material.backgroundMap = backgroundMap;
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -281,6 +280,25 @@ function resetRenderer() {
 	ptRenderer.material.environmentRotation.makeRotationY( params.environmentRotation );
 	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
 
+	if ( params.backgroundType === 'Gradient' ) {
+
+		backgroundMap.topColor.set( params.bgGradientTop );
+		backgroundMap.bottomColor.set( params.bgGradientBottom );
+		backgroundMap.update();
+
+		scene.background = backgroundMap;
+		ptRenderer.material.backgroundMap = backgroundMap;
+
+	} else {
+
+		scene.background = scene.environment;
+		ptRenderer.material.backgroundMap = scene.environment;
+
+	}
+
+	ptRenderer.material.envMapInfo.updateFrom( scene.environment );
+	ptRenderer.camera = activeCamera;
+
 	ptRenderer.reset();
 
 }
@@ -362,7 +380,6 @@ function buildGui() {
 	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0 ).onChange( () => {
 
 		updateEnvBlur();
-		resetRenderer();
 
 	} ).name( 'env map blur' );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( resetRenderer ).name( 'intensity' );
@@ -370,39 +387,9 @@ function buildGui() {
 	environmentFolder.open();
 
 	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( v => {
-
-		if ( v === 'Gradient' ) {
-
-			scene.background = backgroundMap;
-			ptRenderer.material.backgroundMap = backgroundMap;
-
-		} else {
-
-			scene.background = scene.environment;
-			ptRenderer.material.backgroundMap = null;
-
-		}
-
-		resetRenderer();
-
-	} );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( v => {
-
-		backgroundMap.topColor.set( v );
-		backgroundMap.update();
-
-		resetRenderer();
-
-	} );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( v => {
-
-		backgroundMap.bottomColor.set( v );
-		backgroundMap.update();
-
-		resetRenderer();
-
-	} );
+	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( resetRenderer );
+	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( resetRenderer );
+	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( resetRenderer );
 	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( resetRenderer );
 	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
 
@@ -434,7 +421,6 @@ function updateEnvMap() {
 
 			envMap = texture;
 			updateEnvBlur();
-			resetRenderer();
 
 		} );
 
@@ -443,14 +429,8 @@ function updateEnvMap() {
 function updateEnvBlur() {
 
 	const blurredEnvMap = envMapGenerator.generate( envMap, params.environmentBlur );
-	ptRenderer.material.envMapInfo.updateFrom( blurredEnvMap );
-
 	scene.environment = blurredEnvMap;
-	if ( params.backgroundType !== 'Gradient' ) {
-
-		scene.background = blurredEnvMap;
-
-	}
+	resetRenderer();
 
 }
 
@@ -479,8 +459,6 @@ function updateCamera( cameraProjection ) {
 	}
 
 	controls.object = activeCamera;
-	ptRenderer.camera = activeCamera;
-
 	controls.update();
 
 	resetRenderer();
