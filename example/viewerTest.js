@@ -5,8 +5,6 @@ import {
 	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
-	MeshBasicMaterial,
-	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
 	BufferAttribute,
@@ -19,7 +17,6 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
@@ -61,7 +58,7 @@ const params = {
 let creditEl, loadingEl, samplesEl, containerEl, imgEl;
 let gui, stats, sceneInfo;
 let pathTracer, camera, renderer;
-let ptRenderer, fsQuad, controls, scene;
+let ptRenderer, controls, scene;
 let loadingModel = false;
 let delaySamples = 0;
 let models;
@@ -105,12 +102,6 @@ async function init() {
 	// init path tracer
 	ptRenderer = pathTracer._pathTracer;
 	ptRenderer.camera = camera;
-
-	// init fsquad
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending
-	} ) );
 
 	// init controls
 	controls = new OrbitControls( camera, containerEl );
@@ -184,24 +175,14 @@ function animate() {
 
 	if ( params.enable && delaySamples === 0 ) {
 
-		const samples = Math.floor( ptRenderer.samples );
+		pathTracer.enablePathTracing = params.enable;
+		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+
+		const samples = Math.floor( pathTracer.samples );
 		samplesEl.innerText = `samples: ${ samples }`;
 
 		camera.updateMatrixWorld();
-
-		if ( ! params.pause || ptRenderer.samples < 1 ) {
-
-			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-				ptRenderer.update();
-
-			}
-
-		}
-
-		pathTracer.autoClear = false;
-		fsQuad.render( renderer );
-		pathTracer.autoClear = true;
+		pathTracer.renderSample();
 
 	} else if ( delaySamples > 0 || ! params.enable ) {
 
@@ -210,7 +191,7 @@ function animate() {
 
 	}
 
-	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
 		requestAnimationFrame( () => {
 
@@ -220,7 +201,7 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }
 
@@ -233,11 +214,12 @@ function resetRenderer() {
 	}
 
 	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.filterGlossyFactor = 0.5;
-	ptRenderer.material.bounces = params.bounces;
-	ptRenderer.material.transmissiveBounces = params.transmissiveBounces;
 	ptRenderer.material.physicalCamera.updateFrom( camera );
 	ptRenderer.material.environmentIntensity = params.environmentIntensity;
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.filterGlossyFactor = 0.5;
+	pathTracer.bounces = params.bounces;
+	pathTracer.transmissiveBounces = params.transmissiveBounces;
 
 	ptRenderer.reset();
 
@@ -275,32 +257,15 @@ function buildGui() {
 		resetRenderer();
 
 	} );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		resetRenderer();
-
-	} );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		pathTracer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
-	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
-	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( () => {
-
-		resetRenderer();
-
-	} );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( resetRenderer );
 
 	const comparisonFolder = gui.addFolder( 'comparison' );
 	comparisonFolder.add( params, 'displayImage' );
@@ -320,12 +285,12 @@ function buildGui() {
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.tiles.x = v;
+		pathTracer.tiles.x = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.tiles.y = v;
+		pathTracer.tiles.y = v;
 
 	} );
 	resolutionFolder.open();
