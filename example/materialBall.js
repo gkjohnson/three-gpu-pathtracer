@@ -1,7 +1,6 @@
 import {
 	ACESFilmicToneMapping,
 	OrthographicCamera,
-	MeshBasicMaterial,
 	CustomBlending,
 	Scene,
 	Box3,
@@ -18,7 +17,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
+let renderer, controls, ptRenderer, activeCamera, denoiseQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -166,7 +165,28 @@ async function init() {
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
 	renderer.tiles.set( params.tiles, params.tiles );
+	renderer.renderToCanvasCallback = ( target, renderer, quad ) => {
+
+		denoiseQuad.material.sigma = params.denoiseSigma;
+		denoiseQuad.material.threshold = params.denoiseThreshold;
+		denoiseQuad.material.kSigma = params.denoiseKSigma;
+
+		const autoClear = renderer.autoClear;
+		const finalQuad = params.denoiseEnabled ? denoiseQuad : quad;
+		renderer.autoClear = false;
+		finalQuad.material.map = target.texture;
+		finalQuad.render( renderer );
+		renderer.autoClear = autoClear;
+
+	};
+
 	document.body.appendChild( renderer.domElement );
+
+	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
+		map: null,
+		blending: CustomBlending,
+		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
+	} ) );
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PhysicalCamera( 75, aspect, 0.025, 500 );
@@ -181,22 +201,10 @@ async function init() {
 
 	ptRenderer = renderer._pathTracer;
 
-	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending,
-		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
-
-	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending,
-		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
-
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		renderer.reset();
 
 	} );
 
@@ -287,20 +295,9 @@ async function init() {
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
 		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
-		blitQuad.material.needsUpdate = true;
 
 	} );
-	ptFolder.add( params, 'stableNoise' ).onChange( value => {
-
-		ptRenderer.stableNoise = value;
-
-	} );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( value => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( value ) );
-		reset();
-
-	} );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		ptRenderer.tiles.set( value, value );
@@ -309,12 +306,7 @@ async function init() {
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset() );
-	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( value => {
-
-		ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', value );
-		reset();
-
-	} );
+	ptFolder.add( params, 'transparentTraversals', 0, 40, 1 ).onChange( reset );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -617,31 +609,8 @@ function updateCamera( cameraProjection ) {
 function animate() {
 
 	requestAnimationFrame( animate );
-
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-		ptRenderer.update();
-
-	}
-
-	if ( ptRenderer.samples < 1 ) {
-
-		renderer._renderer.render( scene, activeCamera );
-
-	}
-
-	denoiseQuad.material.sigma = params.denoiseSigma;
-	denoiseQuad.material.threshold = params.denoiseThreshold;
-	denoiseQuad.material.kSigma = params.denoiseKSigma;
-
-	const quad = params.denoiseEnabled ? denoiseQuad : blitQuad;
-
-	renderer.autoClear = false;
-	quad.material.map = ptRenderer.target.texture;
-	quad.render( renderer._renderer );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	renderer.renderSample();
+	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
 
 }
 

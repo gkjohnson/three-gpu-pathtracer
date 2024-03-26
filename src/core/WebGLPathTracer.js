@@ -152,14 +152,11 @@ export class WebGLPathTracer {
 
 		};
 
-		this.renderToCanvasCallback = ( target, renderer ) => {
+		this.renderToCanvasCallback = ( target, renderer, quad ) => {
 
-			const pathTracer = this._pathTracer;
-			const quad = this._quad;
 			const autoClear = renderer.autoClear;
-
 			renderer.autoClear = false;
-			quad.material.map = pathTracer.target.texture;
+			quad.material.map = target.texture;
 			quad.render( renderer );
 			renderer.autoClear = autoClear;
 
@@ -399,7 +396,7 @@ export class WebGLPathTracer {
 
 			}
 
-			this.renderToCanvasCallback( pathTracer.target, renderer );
+			this.renderToCanvasCallback( pathTracer.target, renderer, quad );
 
 		}
 
