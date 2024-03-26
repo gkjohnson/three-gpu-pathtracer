@@ -152,6 +152,19 @@ export class WebGLPathTracer {
 
 		};
 
+		this.renderToCanvasCallback = ( target, renderer ) => {
+
+			const pathTracer = this._pathTracer;
+			const quad = this._quad;
+			const autoClear = renderer.autoClear;
+
+			renderer.autoClear = false;
+			quad.material.map = pathTracer.target.texture;
+			quad.render( renderer );
+			renderer.autoClear = autoClear;
+
+		};
+
 		// pass through functions for the canvas
 		[
 			'getPixelRatio',
@@ -369,7 +382,6 @@ export class WebGLPathTracer {
 
 			const renderer = this._renderer;
 			const quad = this._quad;
-			const autoClear = renderer.autoClear;
 			if ( this.dynamicLowRes ) {
 
 				if ( lowResPathTracer.samples < 1 ) {
@@ -378,7 +390,6 @@ export class WebGLPathTracer {
 
 				}
 
-				renderer.autoClear = false;
 				quad.material.map = lowResPathTracer.target.texture;
 				quad.render( renderer );
 
@@ -388,10 +399,7 @@ export class WebGLPathTracer {
 
 			}
 
-			renderer.autoClear = false;
-			quad.material.map = pathTracer.target.texture;
-			quad.render( renderer );
-			renderer.autoClear = autoClear;
+			this.renderToCanvasCallback( pathTracer.target, renderer );
 
 		}
 

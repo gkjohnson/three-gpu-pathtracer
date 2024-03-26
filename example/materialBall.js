@@ -13,13 +13,12 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sceneInfo, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
+let renderer, controls, ptRenderer, activeCamera, blitQuad, denoiseQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -215,7 +214,6 @@ async function init() {
 
 		} );
 
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
@@ -269,29 +267,6 @@ async function init() {
 			} );
 
 			materials = [ material1, material2, floor.material ];
-
-			return generator.generate( scene );
-
-		} )
-		.then( result => {
-
-			sceneInfo = result;
-
-			const { bvh, textures, materials, geometry } = result;
-			const material = ptRenderer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer._renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
 
 		} );
 
@@ -557,20 +532,19 @@ function reset() {
 
 	renderer.transparentTraversals = params.transparentTraversals;
 	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	renderer.filterGlossyFactor = params.filterGlossyFactor;
+	renderer.bounces = params.bounces;
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
 	ptRenderer.material.materials.setMatte( 1, params.material2.matte );
 	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
 	ptRenderer.material.materials.setCastShadow( 0, params.material1.castShadow );
 	ptRenderer.material.materials.setCastShadow( 1, params.material2.castShadow );
 
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.backgroundBlur = params.backgroundBlur;
-	ptRenderer.material.bounces = params.bounces;
-	ptRenderer.material.backgroundAlpha = params.backgroundAlpha;
-	ptRenderer.material.physicalCamera.updateFrom( activeCamera );
+	scene.backgroundBlurriness = params.backgroundBlur;
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
+	renderer.setClearAlpha( params.backgroundAlpha );
 
 	activeCamera.updateMatrixWorld();
 
