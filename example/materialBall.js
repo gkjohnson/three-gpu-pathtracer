@@ -15,7 +15,7 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial } from '../src/index.js';
+import { PathTracingRenderer, PhysicalPathTracingMaterial, PhysicalCamera, BlurredEnvMapGenerator, EquirectCamera, DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
 import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -165,7 +165,7 @@ init();
 
 async function init() {
 
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLPathTracer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearColor( 0, 0 );
 	document.body.appendChild( renderer.domElement );
@@ -181,7 +181,7 @@ async function init() {
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 4, 2, 3 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = renderer._pathTracer;
 	ptRenderer.alpha = true;
 	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.material.setDefine( 'TRANSPARENT_TRAVERSALS', params.transparentTraversals );
@@ -191,13 +191,13 @@ async function init() {
 	blitQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
+		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: ptRenderer.target.texture,
 		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
+		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
@@ -211,7 +211,7 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
@@ -229,11 +229,9 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
 		.then( gltf => {
 
-			const group = new Group();
-
 			gltf.scene.scale.setScalar( 0.01 );
 			gltf.scene.updateMatrixWorld();
-			group.add( gltf.scene );
+			scene.add( gltf.scene );
 
 			const box = new Box3();
 			box.setFromObject( gltf.scene );
@@ -245,7 +243,7 @@ async function init() {
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.03;
-			group.add( floor );
+			scene.add( floor );
 
 			const material1 = new MeshPhysicalMaterial();
 			const material2 = new MeshPhysicalMaterial();
@@ -280,14 +278,12 @@ async function init() {
 
 			materials = [ material1, material2, floor.material ];
 
-			return generator.generate( group );
+			return generator.generate( scene );
 
 		} )
 		.then( result => {
 
 			sceneInfo = result;
-
-			scene.add( result.scene );
 
 			const { bvh, textures, materials, geometry } = result;
 			const material = ptRenderer.material;
@@ -300,7 +296,7 @@ async function init() {
 				geometry.attributes.color,
 			);
 			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
+			material.textures.setTextures( renderer._renderer, 2048, 2048, textures );
 			material.materials.updateFrom( materials, textures );
 
 			generator.dispose();
@@ -667,7 +663,7 @@ function animate() {
 
 	if ( ptRenderer.samples < 1 ) {
 
-		renderer.render( scene, activeCamera );
+		renderer._renderer.render( scene, activeCamera );
 
 	}
 
@@ -679,7 +675,7 @@ function animate() {
 
 	renderer.autoClear = false;
 	quad.material.map = ptRenderer.target.texture;
-	quad.render( renderer );
+	quad.render( renderer._renderer );
 	renderer.autoClear = true;
 
 	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
