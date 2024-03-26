@@ -21,15 +21,15 @@ export class WebGLPathTracer {
 
 	}
 
-	get transparentTraversals() {
+	get transmissiveBounces() {
 
-		return this._pathTracer.material.defines.transparentTraversals;
+		return this._pathTracer.material.transmissiveBounces;
 
 	}
 
-	set transparentTraversals( v ) {
+	set transmissiveBounces( v ) {
 
-		this._pathTracer.material.setDefine( 'TRANSPARENT_TRAVERSALS', v );
+		this._pathTracer.material.transmissiveBounces = v;
 
 	}
 
