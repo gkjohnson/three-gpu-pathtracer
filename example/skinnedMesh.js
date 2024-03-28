@@ -14,14 +14,14 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, BlurredEnvMapGenerator } from '../src/index.js';
+import { DynamicPathTracingSceneGenerator, BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 
 let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, model;
-let samplesEl;
+let samplesEl, pathTracer;
 let counter = 0;
 const params = {
 
@@ -54,18 +54,19 @@ async function init() {
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.multipleImportanceSampling = false;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.filterGlossyFactor = 0.25;
+
 	scene = new Scene();
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
 
 	// initialize path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = pathTracer._pathTracer;
 	ptRenderer.camera = camera;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.filterGlossyFactor = 0.25;
-	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -94,6 +95,8 @@ async function init() {
 			const generator = new BlurredEnvMapGenerator( renderer );
 			const blurredTex = generator.generate( texture, 0.1 );
 			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
+			ptRenderer.material.backgroundAlpha = 1;
+			ptRenderer.material.backgroundMap = null;
 			generator.dispose();
 
 			scene.background = blurredTex;
