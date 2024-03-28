@@ -1,4 +1,17 @@
-import * as THREE from 'three';
+import {
+	Vector3,
+	WebGLRenderer,
+	ACESFilmicToneMapping,
+	Scene,
+	PerspectiveCamera,
+	MeshBasicMaterial,
+	EquirectangularReflectionMapping,
+	AnimationMixer,
+	Group,
+	Mesh,
+	PlaneGeometry,
+	MeshStandardMaterial,
+} from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -18,7 +31,7 @@ let samplesEl, videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
-const UP_AXIS = new THREE.Vector3( 0, 1, 0 );
+const UP_AXIS = new Vector3( 0, 1, 0 );
 
 const params = {
 
@@ -86,13 +99,13 @@ init();
 async function init() {
 
 	// initialize renderer, scene, camera
-	renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	scene = new THREE.Scene();
+	scene = new Scene();
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5, 8, 12 );
 
 	// initialize path tracer
@@ -103,7 +116,7 @@ async function init() {
 	ptRenderer.material.backgroundBlur = 0.1;
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		transparent: true,
 	} ) );
@@ -131,7 +144,7 @@ async function init() {
 
 			ptRenderer.material.envMapInfo.updateFrom( texture );
 
-			texture.mapping = THREE.EquirectangularReflectionMapping;
+			texture.mapping = EquirectangularReflectionMapping;
 			scene.background = texture;
 			scene.environment = texture;
 
@@ -219,7 +232,7 @@ function loadModel( url ) {
 
 			// initialize animations
 			const animations = gltf.animations;
-			const mixer = new THREE.AnimationMixer( gltf.scene );
+			const mixer = new AnimationMixer( gltf.scene );
 			const clip = animations[ 0 ];
 			const action = mixer.clipAction( clip );
 			action.play();
@@ -229,13 +242,13 @@ function loadModel( url ) {
 			params.duration = animationDuration;
 
 			// add floor
-			const group = new THREE.Group();
+			const group = new Group();
 			group.add( gltf.scene );
 
 			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new THREE.Mesh(
-				new THREE.PlaneGeometry(),
-				new THREE.MeshStandardMaterial( {
+			const floorPlane = new Mesh(
+				new PlaneGeometry(),
+				new MeshStandardMaterial( {
 					map: floorTex,
 					transparent: true,
 					color: 0xdddddd,
