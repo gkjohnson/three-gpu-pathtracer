@@ -17,7 +17,6 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
 import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -330,7 +329,6 @@ async function updateModel() {
 
 	const {
 		verticalFoV = 45,
-		renderSkybox = false,
 		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
 	} = modelInfo;
 
