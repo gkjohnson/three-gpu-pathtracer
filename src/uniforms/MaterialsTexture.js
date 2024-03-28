@@ -1,5 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, NearestFilter } from 'three';
 import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
+import { bufferToHash } from '../utils/bufferToHash.js';
 
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
@@ -459,7 +460,17 @@ export class MaterialsTexture extends DataTexture {
 
 		}
 
-		this.needsUpdate = true;
+		// check if the contents have changed
+		const hash = bufferToHash( floatArray.buffer );
+		if ( this.hash !== hash ) {
+
+			this.hash = hash;
+			this.needsUpdate = true;
+			return true;
+
+		}
+
+		return false;
 
 	}
 

@@ -1,4 +1,5 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quaternion, Matrix4, NearestFilter } from 'three';
+import { bufferToHash } from '../utils/bufferToHash';
 
 const LIGHT_PIXELS = 6;
 const RECT_AREA_LIGHT = 0;
@@ -210,8 +211,18 @@ export class LightsInfoUniformStruct {
 
 		}
 
-		tex.needsUpdate = true;
 		this.count = lights.length;
+
+		const hash = bufferToHash( floatArray.buffer );
+		if ( this.hash !== hash ) {
+
+			this.hash = hash;
+			tex.needsUpdate = true;
+			return true;
+
+		}
+
+		return false;
 
 	}
 
