@@ -118,7 +118,6 @@ async function init() {
 	modelPromise = modelPromise.then( res => model = res );
 
 	await Promise.all( [ envMapPromise, modelPromise ] );
-	scene.add( model.scene );
 
 	document.getElementById( 'loading' ).remove();
 
@@ -193,8 +192,7 @@ function loadModel( url ) {
 			action.paused = params.pause;
 
 			// add floor
-			const group = new Group();
-			group.add( gltf.scene );
+			scene.add( gltf.scene );
 
 			const floorTex = generateRadialFloorTexture( 2048 );
 			const floorPlane = new Mesh(
@@ -210,13 +208,12 @@ function loadModel( url ) {
 			floorPlane.scale.setScalar( 50 );
 			floorPlane.rotation.x = - Math.PI / 2;
 			floorPlane.position.y = 0.075;
-			group.add( floorPlane );
+			scene.add( floorPlane );
 
 			// create the scene generator for updating skinned meshes quickly
-			const sceneGenerator = new DynamicPathTracingSceneGenerator( group );
+			const sceneGenerator = new DynamicPathTracingSceneGenerator( scene );
 
 			return {
-				scene: group,
 				sceneGenerator,
 				mixer,
 				action,
@@ -248,24 +245,8 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { sceneGenerator } = model;
-	sceneInfo = sceneGenerator.generate();
+	pathTracer.updateScene( camera, scene );
 
-	const { bvh, textures, materials, geometry } = sceneInfo;
-	const material = ptRenderer.material;
-
-	material.bvh.updateFrom( bvh );
-	material.attributesArray.updateFrom(
-		geometry.attributes.normal,
-		geometry.attributes.tangent,
-		geometry.attributes.uv,
-		geometry.attributes.color,
-	);
-	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-	material.textures.setTextures( renderer, 2048, 2048, textures );
-	material.materials.updateFrom( materials, textures );
-
-	ptRenderer.reset();
 
 }
 
@@ -276,17 +257,6 @@ function animate() {
 	// step the animation forward
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
 	model.mixer.update( delta );
-	model.scene.updateMatrixWorld();
-	model.scene.traverse( c => {
-
-		// TODO: why is this needed?
-		if ( c.skeleton ) {
-
-			c.skeleton.update();
-
-		}
-
-	} );
 
 	if ( params.autoPause ) {
 
@@ -318,7 +288,7 @@ function animate() {
 
 		}
 
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+		// ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
 		ptRenderer.material.environmentIntensity = params.environmentIntensity;
 		ptRenderer.material.bounces = params.bounces;
 
