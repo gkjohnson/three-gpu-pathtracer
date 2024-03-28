@@ -3,14 +3,12 @@ import {
 	ACESFilmicToneMapping,
 	Scene,
 	PerspectiveCamera,
-	MeshBasicMaterial,
 	Clock,
 	AnimationMixer,
 	Mesh,
 	PlaneGeometry,
 	MeshStandardMaterial,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
@@ -19,7 +17,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 
-let renderer, controls, ptRenderer, camera, scene, clock;
+let renderer, controls, camera, scene, clock;
 let samplesEl, pathTracer, mixer, mixerAction;
 let counter = 0;
 const params = {
@@ -62,9 +60,6 @@ async function init() {
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
-
-	// initialize path tracer
-	ptRenderer = pathTracer._pathTracer;
 
 	// initialize controls
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -130,9 +125,10 @@ async function init() {
 		pathTracer.reset();
 
 	} );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
+	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( v => {
 
-		onResize();
+		pathTracer.renderScale = v;
+		pathTracer.reset();
 
 	} );
 	gui.add( params, 'autoPause' ).listen();
@@ -209,14 +205,11 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -267,7 +260,6 @@ function animate() {
 			regenerateScene();
 
 		}
-
 
 		camera.updateMatrixWorld();
 		pathTracer.renderSample();
