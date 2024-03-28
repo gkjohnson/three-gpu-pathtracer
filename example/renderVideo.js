@@ -4,17 +4,15 @@ import {
 	ACESFilmicToneMapping,
 	Scene,
 	PerspectiveCamera,
-	MeshBasicMaterial,
 	EquirectangularReflectionMapping,
 	AnimationMixer,
 	Mesh,
 	PlaneGeometry,
 	MeshStandardMaterial,
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, WebGLPathTracer } from '../src/index.js';
+import { WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -25,7 +23,7 @@ import CanvasCapture from 'canvas-capture';
 // use CanvasCapture.
 const requestAnimationFrame = window.requestAnimationFrame;
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, gui, model, pathTracer;
+let renderer, controls, camera, scene, gui, model, pathTracer;
 let samplesEl, videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
@@ -112,22 +110,12 @@ async function init() {
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5, 8, 12 );
 
-	// initialize path tracer
-	ptRenderer = pathTracer._pathTracer;
-	ptRenderer.camera = camera;
-	ptRenderer.material.backgroundBlur = 0.1;
-
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		transparent: true,
-	} ) );
-
 	// initialize controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( - 0.15, 4.5, - 0.08 );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
 	controls.update();
@@ -142,8 +130,6 @@ async function init() {
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr' )
 		.then( texture => {
-
-			ptRenderer.material.envMapInfo.updateFrom( texture );
 
 			texture.mapping = EquirectangularReflectionMapping;
 			scene.background = texture;
@@ -163,6 +149,7 @@ async function init() {
 
 	// prep for rendering
 	document.getElementById( 'loading' ).remove();
+	window.addEventListener( 'resize', onResize );
 
 	onResize();
 	rebuildGUI();
@@ -188,7 +175,7 @@ function rebuildGUI() {
 	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
-	animationFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize ).disable( recording );
+	animationFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
 	animationFolder.add( params, recording ? 'stop' : 'record' );
 
 	// dynamic parameters
@@ -200,11 +187,7 @@ function rebuildGUI() {
 	} );
 	renderFolder.add( params, 'samples', 1, 500, 1 );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	renderFolder.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
 
 }
 
@@ -262,7 +245,6 @@ function loadModel( url ) {
 
 			// create the scene generator for updating skinned meshes quickly
 			return {
-				sceneGenerator: new DynamicPathTracingSceneGenerator( scene ),
 				mixer,
 				action,
 			};
@@ -277,17 +259,15 @@ function onResize() {
 
 	const w = Math.min( 700, window.innerWidth );
 	const h = Math.floor( w * 3 / 4 );
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
+
+	console.log( w );
 
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
-	renderer.setSize( w, h, false );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
+	renderer.setSize( w, h );
+	renderer.setPixelRatio( dpr );
 
 	// update the dom elements
 	renderer.domElement.style.width = `${ w }px`;
@@ -297,31 +277,9 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { sceneGenerator } = model;
-	scene.updateMatrixWorld( true );
-	sceneInfo = sceneGenerator.generate();
-
+	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.bounces = params.bounces;
-
-	const { bvh, textures, materials, geometry } = sceneInfo;
-	const material = ptRenderer.material;
-
-	material.bvh.updateFrom( bvh );
-	material.attributesArray.updateFrom(
-		geometry.attributes.normal,
-		geometry.attributes.tangent,
-		geometry.attributes.uv,
-		geometry.attributes.color,
-	);
-	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-	material.textures.setTextures( renderer, 2048, 2048, textures );
-	material.materials.updateFrom( materials, textures );
-
-	ptRenderer.material.envMapInfo.updateFrom( scene.environment );
-	ptRenderer.material.backgroundMap = null;
-	ptRenderer.material.environmentIntensity = 1;
-
-	ptRenderer.reset();
+	pathTracer.updateScene( camera, scene );
 
 }
 
@@ -343,12 +301,12 @@ function animate() {
 		camera.updateMatrixWorld();
 
 		// if we're recording and we hit the target samples then record the frame step the animation forward
-		if ( isRecording && ptRenderer.samples >= params.samples ) {
+		if ( isRecording && pathTracer.samples >= params.samples ) {
 
 			CanvasCapture.recordFrame();
 			recordedFrames ++;
 
-			// stop recording if we've hit enough frames
+			//  stop recording if we've hit enough frames
 			if ( recordedFrames >= params.frameRate * params.duration ) {
 
 				CanvasCapture.stopRecord();
@@ -371,19 +329,7 @@ function animate() {
 
 		}
 
-		ptRenderer.update();
-
-		// rasterize if we don't have a full path trace render
-		if ( ptRenderer.samples < 1 ) {
-
-			renderer.render( scene, camera );
-
-		}
-
-		// render the path traced image
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
+		pathTracer.renderSample();
 
 	}
 
@@ -392,7 +338,7 @@ function animate() {
 
 		const total = Math.ceil( params.frameRate * params.duration );
 		const percStride = 1 / total;
-		const samplesPerc = ptRenderer.samples / params.samples;
+		const samplesPerc = pathTracer.samples / params.samples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		samplesEl.innerText = `Frame Samples        : ${ Math.floor( pathTracer.samples ) }\n`;
 		samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
