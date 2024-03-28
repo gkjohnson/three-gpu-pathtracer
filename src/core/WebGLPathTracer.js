@@ -139,6 +139,8 @@ export class WebGLPathTracer {
 		} ) );
 
 		// options
+		this.enablePathTracing = true;
+		this.pausePathTracing = false;
 		this.dynamicLowRes = false;
 		this.lowResScale = 0.15;
 		this.renderScale = 1;
@@ -373,7 +375,11 @@ export class WebGLPathTracer {
 
 		const lowResPathTracer = this._lowResPathTracer;
 		const pathTracer = this._pathTracer;
-		pathTracer.update();
+		if ( ! this.pausePathTracing && this.enablePathTracing ) {
+
+			pathTracer.update();
+
+		}
 
 		if ( this.renderToCanvas ) {
 
@@ -396,7 +402,11 @@ export class WebGLPathTracer {
 
 			}
 
-			this.renderToCanvasCallback( pathTracer.target, renderer, quad );
+			if ( this.enablePathTracing ) {
+
+				this.renderToCanvasCallback( pathTracer.target, renderer, quad );
+
+			}
 
 		}
 

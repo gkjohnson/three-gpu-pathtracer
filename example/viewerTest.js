@@ -5,21 +5,19 @@ import {
 	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
-	MeshBasicMaterial,
-	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
 	BufferAttribute,
 	Group,
+	Sphere,
+	Box3,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
@@ -59,9 +57,9 @@ const params = {
 };
 
 let creditEl, loadingEl, samplesEl, containerEl, imgEl;
-let gui, stats, sceneInfo;
-let renderer, camera;
-let ptRenderer, fsQuad, controls, scene;
+let gui, stats, model;
+let pathTracer, camera, renderer;
+let controls, scene;
 let loadingModel = false;
 let delaySamples = 0;
 let models;
@@ -86,9 +84,13 @@ async function init() {
 
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
-	containerEl.appendChild( renderer.domElement );
+
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.tiles.set( params.tilesX, params.tilesY );
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	containerEl.appendChild( pathTracer.domElement );
 
 	// init scene
 	scene = new Scene();
@@ -97,22 +99,6 @@ async function init() {
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PerspectiveCamera( 60, aspect, 0.01, 500 );
 	camera.position.set( - 1, 0.25, 1 );
-
-	// init path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = camera;
-	ptRenderer.alpha = true;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.tiles.set( params.tilesX, params.tilesY );
-
-
-	// init fsquad
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending
-	} ) );
 
 	// init controls
 	controls = new OrbitControls( camera, containerEl );
@@ -164,7 +150,7 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
 
@@ -175,8 +161,8 @@ function animate() {
 	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
-	imgEl.style.width = renderer.domElement.style.width;
-	imgEl.style.height = renderer.domElement.style.height;
+	imgEl.style.width = pathTracer.domElement.style.width;
+	imgEl.style.height = pathTracer.domElement.style.height;
 
 	if ( loadingModel ) {
 
@@ -184,47 +170,25 @@ function animate() {
 
 	}
 
-	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
+	if ( params.enable && delaySamples === 0 ) {
 
+		pathTracer.enablePathTracing = params.enable;
+		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+
+		const samples = Math.floor( pathTracer.samples );
+		samplesEl.innerText = `samples: ${ samples }`;
+
+		camera.updateMatrixWorld();
+		pathTracer.renderSample();
+
+	} else if ( delaySamples > 0 || ! params.enable ) {
+
+		delaySamples = Math.max( delaySamples - 1, 0 );
 		renderer.render( scene, camera );
 
 	}
 
-	if ( params.enable && delaySamples === 0 ) {
-
-		const samples = Math.floor( ptRenderer.samples );
-		samplesEl.innerText = `samples: ${ samples }`;
-
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.filterGlossyFactor = 0.5;
-		ptRenderer.material.bounces = params.bounces;
-		ptRenderer.material.transmissiveBounces = params.transmissiveBounces;
-		ptRenderer.material.physicalCamera.updateFrom( camera );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-
-		camera.updateMatrixWorld();
-
-		if ( ! params.pause || ptRenderer.samples < 1 ) {
-
-			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-				ptRenderer.update();
-
-			}
-
-		}
-
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-	} else if ( delaySamples > 0 ) {
-
-		delaySamples --;
-
-	}
-
-	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
 		requestAnimationFrame( () => {
 
@@ -234,7 +198,7 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }
 
@@ -246,7 +210,28 @@ function resetRenderer() {
 
 	}
 
-	ptRenderer.reset();
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.filterGlossyFactor = 0.5;
+	pathTracer.bounces = params.bounces;
+	pathTracer.transmissiveBounces = params.transmissiveBounces;
+	pathTracer.renderScale = scale;
+
+	scene.backgroundIntensity = params.environmentIntensity;
+	scene.environmentIntensity = params.environmentIntensity;
+
+	if ( models[ params.model ]?.renderSkybox ) {
+
+		scene.background = scene.environment;
+
+	} else {
+
+		scene.background = null;
+		pathTracer.setClearAlpha( 0 );
+
+	}
+
+	pathTracer.updateScene( camera, scene );
+
 
 }
 
@@ -271,43 +256,16 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( v => {
-
-		const dpr = window.devicePixelRatio;
-		let { dimensions = {} } = models[ params.model ];
-		dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
-
-		const { width, height } = dimensions;
-		ptRenderer.setSize( width * dpr * v, height * dpr * v );
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		ptRenderer.reset();
-
-	} );
+	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		pathTracer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( resetRenderer );
 
 	const comparisonFolder = gui.addFolder( 'comparison' );
 	comparisonFolder.add( params, 'displayImage' );
@@ -327,12 +285,12 @@ function buildGui() {
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.tiles.x = v;
+		pathTracer.tiles.x = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.tiles.y = v;
+		pathTracer.tiles.y = v;
 
 	} );
 	resolutionFolder.open();
@@ -357,7 +315,7 @@ async function updateModel() {
 
 	}
 
-	let model, envMap;
+	let envMap;
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
 
@@ -371,7 +329,6 @@ async function updateModel() {
 
 	const {
 		verticalFoV = 45,
-		renderSkybox = false,
 		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
 	} = modelInfo;
 
@@ -410,9 +367,9 @@ async function updateModel() {
 
 	} );
 
-	if ( sceneInfo ) {
+	if ( model ) {
 
-		scene.remove( sceneInfo.scene );
+		scene.remove( model );
 
 	}
 
@@ -479,35 +436,7 @@ async function updateModel() {
 
 		model = targetGroup;
 		model.updateMatrixWorld( true );
-
-		const generator = new PathTracingSceneWorker();
-		const result = await generator.generate( model, { onProgress: v => {
-
-			const percent = Math.floor( 100 * v );
-			loadingEl.innerText = `Building BVH : ${ percent }%`;
-
-		} } );
-
-		sceneInfo = result;
-		scene.add( sceneInfo.scene );
-
-		const { bvh, textures, materials, lights, geometry } = result;
-		const material = ptRenderer.material;
-
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.envMapInfo.updateFrom( envMap );
-		material.lights.updateFrom( lights );
-
-		generator.dispose();
+		scene.add( model );
 
 		loadingEl.style.visibility = 'hidden';
 
@@ -515,10 +444,13 @@ async function updateModel() {
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
-		geometry.computeBoundingSphere();
+		const box = new Box3();
+		const sphere = new Sphere();
+		box.setFromObject( model );
+		box.getBoundingSphere( sphere );
 
 		// mirror the model-viewer near / far planes
-		const radius = Math.max( orbit.radius, geometry.boundingSphere.radius );
+		const radius = Math.max( orbit.radius, sphere.radius );
 		camera.near = 2 * radius / 1000;
 		camera.far = 2 * radius;
 		camera.updateProjectionMatrix();
@@ -526,9 +458,8 @@ async function updateModel() {
 
 		const dpr = window.devicePixelRatio;
 		const { width, height } = dimensions;
-		renderer.setSize( width, height );
-		renderer.setPixelRatio( dpr );
-		ptRenderer.setSize( width * dpr * params.scale, height * dpr * params.scale );
+		pathTracer.setSize( width, height );
+		pathTracer.setPixelRatio( dpr );
 		camera.aspect = width / height;
 		camera.fov = verticalFoV;
 		camera.updateProjectionMatrix();
@@ -539,20 +470,8 @@ async function updateModel() {
 
 		envMap.mapping = EquirectangularReflectionMapping;
 		scene.environment = envMap;
-		if ( renderSkybox ) {
 
-			scene.background = envMap;
-			ptRenderer.material.backgroundAlpha = 1;
-
-		} else {
-
-			renderer.setClearAlpha( 0 );
-			scene.background = null;
-			ptRenderer.material.backgroundAlpha = 0;
-
-		}
-
-		ptRenderer.reset();
+		resetRenderer();
 
 		containerEl.style.display = 'flex';
 		loadingModel = false;
