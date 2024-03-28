@@ -1,4 +1,4 @@
-import { Matrix4, Vector2 } from 'three';
+import { ClampToEdgeWrapping, HalfFloatType, Matrix4, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import {
 	MeshBVHUniformStruct, UIntVertexAttributeTexture,
@@ -9,7 +9,6 @@ import {
 import { PhysicalCameraUniform } from '../../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../../uniforms/LightsInfoUniformStruct.js';
-import { IESProfilesTexture } from '../../uniforms/IESProfilesTexture.js';
 import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
 import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
@@ -92,7 +91,11 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 				// light uniforms
 				lights: { value: new LightsInfoUniformStruct() },
-				iesProfiles: { value: new IESProfilesTexture().texture },
+				iesProfiles: { value: new RenderTarget2DArray( 360, 180, {
+					type: HalfFloatType,
+					wrapS: ClampToEdgeWrapping,
+					wrapT: ClampToEdgeWrapping,
+				} ).texture },
 				environmentIntensity: { value: 1.0 },
 				environmentRotation: { value: new Matrix4() },
 				envMapInfo: { value: new EquirectHdrInfoUniform() },
