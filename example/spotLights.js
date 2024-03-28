@@ -88,6 +88,7 @@ async function init() {
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.setClearColor( 0, 0 );
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.textureSize.set( 2048, 2048 );
 
 	document.body.appendChild( pathTracer.domElement );
 
