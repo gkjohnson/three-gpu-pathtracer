@@ -58,7 +58,7 @@ const params = {
 };
 
 let creditEl, loadingEl, samplesEl, containerEl, imgEl;
-let gui, stats, sceneInfo;
+let gui, stats, sceneInfo, model;
 let pathTracer, camera, renderer;
 let ptRenderer, controls, scene;
 let loadingModel = false;
@@ -215,15 +215,28 @@ function resetRenderer() {
 
 	}
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-	ptRenderer.material.physicalCamera.updateFrom( camera );
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.bounces = params.bounces;
 	pathTracer.transmissiveBounces = params.transmissiveBounces;
+	pathTracer.renderScale = scale;
+
+	scene.backgroundIntensity = params.environmentIntensity;
+	scene.environmentIntensity = params.environmentIntensity;
+
+	if ( models[ params.model ]?.renderSkybox ) {
+
+		scene.background = scene.environment;
+
+	} else {
+
+		scene.background = null;
+		pathTracer.setClearAlpha( 0 );
+
+	}
 
 	pathTracer.updateScene( camera, scene );
+
 
 }
 
@@ -248,17 +261,7 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( v => {
-
-		const dpr = window.devicePixelRatio;
-		let { dimensions = {} } = models[ params.model ];
-		dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
-
-		const { width, height } = dimensions;
-		ptRenderer.setSize( width * dpr * v, height * dpr * v );
-		resetRenderer();
-
-	} );
+	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( resetRenderer() );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
@@ -317,7 +320,7 @@ async function updateModel() {
 
 	}
 
-	let model, envMap;
+	let envMap;
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
 
@@ -370,9 +373,9 @@ async function updateModel() {
 
 	} );
 
-	if ( sceneInfo ) {
+	if ( model ) {
 
-		scene.remove( sceneInfo.scene );
+		scene.remove( model );
 
 	}
 
@@ -439,17 +442,7 @@ async function updateModel() {
 
 		model = targetGroup;
 		model.updateMatrixWorld( true );
-
-		const generator = new PathTracingSceneWorker();
-		const result = await generator.generate( model, { onProgress: v => {
-
-			const percent = Math.floor( 100 * v );
-			loadingEl.innerText = `Building BVH : ${ percent }%`;
-
-		} } );
-
-		sceneInfo = result;
-		scene.add( sceneInfo.scene );
+		scene.add( model );
 
 		loadingEl.style.visibility = 'hidden';
 
@@ -459,7 +452,7 @@ async function updateModel() {
 
 		const box = new Box3();
 		const sphere = new Sphere();
-		box.setFromObject( sceneInfo.scene );
+		box.setFromObject( model );
 		box.getBoundingSphere( sphere );
 
 		// mirror the model-viewer near / far planes
@@ -473,7 +466,6 @@ async function updateModel() {
 		const { width, height } = dimensions;
 		pathTracer.setSize( width, height );
 		pathTracer.setPixelRatio( dpr );
-		ptRenderer.setSize( width * dpr * params.scale, height * dpr * params.scale );
 		camera.aspect = width / height;
 		camera.fov = verticalFoV;
 		camera.updateProjectionMatrix();
