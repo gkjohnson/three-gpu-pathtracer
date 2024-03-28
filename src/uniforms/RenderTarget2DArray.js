@@ -78,7 +78,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 			const texture = uniqueTextures[ i ];
 			const hash = getTextureHash( texture );
-			if ( texture && hashes[ i ] !== hash ) {
+			if ( texture && ( hashes[ i ] !== hash || texture.isWebGLRenderTarget ) ) {
 
 				// revert to default texture transform before rendering
 				texture.matrixAutoUpdate = false;
