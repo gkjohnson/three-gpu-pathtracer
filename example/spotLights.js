@@ -18,7 +18,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-let pathTracer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, ptRenderer, materials;
+let pathTracer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, materials;
 let camera, renderer;
 let scene;
 let iesTextures;
