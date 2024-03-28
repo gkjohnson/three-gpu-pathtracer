@@ -1,15 +1,24 @@
-import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import {
+	WebGLRenderer,
+	ACESFilmicToneMapping,
+	Scene,
+	PerspectiveCamera,
+	Clock,
+	AnimationMixer,
+	Mesh,
+	PlaneGeometry,
+	MeshStandardMaterial,
+} from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, BlurredEnvMapGenerator } from '../src/index.js';
+import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, model;
-let samplesEl;
+let renderer, controls, camera, scene, clock;
+let samplesEl, pathTracer, mixer, mixerAction;
 let counter = 0;
 const params = {
 
@@ -38,41 +47,33 @@ init();
 async function init() {
 
 	// initialize renderer, scene, camera
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	scene = new THREE.Scene();
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.multipleImportanceSampling = false;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.filterGlossyFactor = 0.25;
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	scene = new Scene();
+
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
-
-	// initialize path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = camera;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.filterGlossyFactor = 0.25;
-	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		transparent: true,
-	} ) );
 
 	// initialize controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
 	controls.update();
 
 	samplesEl = document.getElementById( 'samples' );
 
-	clock = new THREE.Clock();
+	clock = new Clock();
 
 	// loading the
 	const envMapPromise = new RGBELoader()
@@ -81,7 +82,6 @@ async function init() {
 
 			const generator = new BlurredEnvMapGenerator( renderer );
 			const blurredTex = generator.generate( texture, 0.1 );
-			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
 			generator.dispose();
 
 			scene.background = blurredTex;
@@ -100,10 +100,7 @@ async function init() {
 
 	}
 
-	modelPromise = modelPromise.then( res => model = res );
-
 	await Promise.all( [ envMapPromise, modelPromise ] );
-	scene.add( model.scene );
 
 	document.getElementById( 'loading' ).remove();
 
@@ -114,23 +111,24 @@ async function init() {
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
 	gui.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
+	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( v => {
 
-		onResize();
+		pathTracer.renderScale = v;
+		pathTracer.reset();
 
 	} );
 	gui.add( params, 'autoPause' ).listen();
@@ -152,7 +150,7 @@ async function init() {
 
 function setPause( v ) {
 
-	model.action.paused = v;
+	mixerAction.paused = v;
 	params.pause = v;
 	if ( v ) {
 
@@ -171,20 +169,19 @@ function loadModel( url ) {
 
 			// animations
 			const animations = gltf.animations;
-			const mixer = new THREE.AnimationMixer( gltf.scene );
+			mixer = new AnimationMixer( gltf.scene );
 
-			const action = mixer.clipAction( animations[ 0 ] );
-			action.play();
-			action.paused = params.pause;
+			mixerAction = mixer.clipAction( animations[ 0 ] );
+			mixerAction.play();
+			mixerAction.paused = params.pause;
 
 			// add floor
-			const group = new THREE.Group();
-			group.add( gltf.scene );
+			scene.add( gltf.scene );
 
 			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new THREE.Mesh(
-				new THREE.PlaneGeometry(),
-				new THREE.MeshStandardMaterial( {
+			const floorPlane = new Mesh(
+				new PlaneGeometry(),
+				new MeshStandardMaterial( {
 					map: floorTex,
 					transparent: true,
 					color: 0xdddddd,
@@ -195,17 +192,7 @@ function loadModel( url ) {
 			floorPlane.scale.setScalar( 50 );
 			floorPlane.rotation.x = - Math.PI / 2;
 			floorPlane.position.y = 0.075;
-			group.add( floorPlane );
-
-			// create the scene generator for updating skinned meshes quickly
-			const sceneGenerator = new DynamicPathTracingSceneGenerator( group );
-
-			return {
-				scene: group,
-				sceneGenerator,
-				mixer,
-				action,
-			};
+			scene.add( floorPlane );
 
 		} );
 
@@ -218,14 +205,11 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const scale = params.resolutionScale;
 	const dpr = window.devicePixelRatio;
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -233,24 +217,9 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { sceneGenerator } = model;
-	sceneInfo = sceneGenerator.generate();
-
-	const { bvh, textures, materials, geometry } = sceneInfo;
-	const material = ptRenderer.material;
-
-	material.bvh.updateFrom( bvh );
-	material.attributesArray.updateFrom(
-		geometry.attributes.normal,
-		geometry.attributes.tangent,
-		geometry.attributes.uv,
-		geometry.attributes.color,
-	);
-	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-	material.textures.setTextures( renderer, 2048, 2048, textures );
-	material.materials.updateFrom( materials, textures );
-
-	ptRenderer.reset();
+	scene.environmentIntensity = params.environmentIntensity;
+	pathTracer.bounces = params.bounces;
+	pathTracer.updateScene( camera, scene );
 
 }
 
@@ -260,18 +229,7 @@ function animate() {
 
 	// step the animation forward
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
-	model.mixer.update( delta );
-	model.scene.updateMatrixWorld();
-	model.scene.traverse( c => {
-
-		// TODO: why is this needed?
-		if ( c.skeleton ) {
-
-			c.skeleton.update();
-
-		}
-
-	} );
+	mixer.update( delta );
 
 	if ( params.autoPause ) {
 
@@ -303,30 +261,10 @@ function animate() {
 
 		}
 
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-		ptRenderer.material.bounces = params.bounces;
-
 		camera.updateMatrixWorld();
+		pathTracer.renderSample();
 
-		// update samples
-		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-			ptRenderer.update();
-
-		}
-
-		if ( ptRenderer.samples < 1 ) {
-
-			renderer.render( scene, camera );
-
-		}
-
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-		samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+		samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 	}
 
