@@ -58,9 +58,9 @@ const params = {
 };
 
 let creditEl, loadingEl, samplesEl, containerEl, imgEl;
-let gui, stats, sceneInfo, model;
+let gui, stats, model;
 let pathTracer, camera, renderer;
-let ptRenderer, controls, scene;
+let controls, scene;
 let loadingModel = false;
 let delaySamples = 0;
 let models;
@@ -100,10 +100,6 @@ async function init() {
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PerspectiveCamera( 60, aspect, 0.01, 500 );
 	camera.position.set( - 1, 0.25, 1 );
-
-	// init path tracer
-	ptRenderer = pathTracer._pathTracer;
-	ptRenderer.camera = camera;
 
 	// init controls
 	controls = new OrbitControls( camera, containerEl );
@@ -476,18 +472,6 @@ async function updateModel() {
 
 		envMap.mapping = EquirectangularReflectionMapping;
 		scene.environment = envMap;
-		if ( renderSkybox ) {
-
-			scene.background = envMap;
-			ptRenderer.material.backgroundAlpha = 1;
-
-		} else {
-
-			pathTracer.setClearAlpha( 0 );
-			scene.background = null;
-			ptRenderer.material.backgroundAlpha = 0;
-
-		}
 
 		resetRenderer();
 
