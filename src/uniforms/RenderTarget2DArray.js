@@ -14,18 +14,19 @@ import { reduceTexturesToUniqueSources } from './utils.js';
 const prevColor = new Color();
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
-	constructor( ...args ) {
+	constructor( width, height, depth, options ) {
 
-		super( ...args );
+		super( width, height, depth, {
+			format: RGBAFormat,
+			type: UnsignedByteType,
+			minFilter: LinearFilter,
+			magFilter: LinearFilter,
+			wrapS: RepeatWrapping,
+			wrapT: RepeatWrapping,
+			...options,
+		} );
 
-		const tex = this.texture;
-		tex.format = RGBAFormat;
-		tex.type = UnsignedByteType;
-		tex.minFilter = LinearFilter;
-		tex.magFilter = LinearFilter;
-		tex.wrapS = RepeatWrapping;
-		tex.wrapT = RepeatWrapping;
-		tex.setTextures = ( ...args ) => {
+		this.texture.setTextures = ( ...args ) => {
 
 			this.setTextures( ...args );
 

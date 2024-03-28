@@ -9,7 +9,6 @@ import {
 	WebGLArrayRenderTarget,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { IESLoader } from '../utils/IESLoader.js';
 
 const prevColor = new Color();
 export class IESProfilesTexture extends WebGLArrayRenderTarget {
@@ -35,8 +34,6 @@ export class IESProfilesTexture extends WebGLArrayRenderTarget {
 
 		const fsQuad = new FullScreenQuad( new MeshBasicMaterial() );
 		this.fsQuad = fsQuad;
-
-		this.iesLoader = new IESLoader();
 
 	}
 
