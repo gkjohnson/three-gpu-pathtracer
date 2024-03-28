@@ -110,12 +110,16 @@ async function init() {
 
 			} );
 
-			return new PathTracingSceneGenerator( group ).generate();
+			group.updateMatrixWorld( true );
+
+			return {
+				...new PathTracingSceneGenerator( group ).generate(),
+				scene: group,
+			};
 
 		} )
 		.then( result => {
 
-			console.log( result )
 			const { bvh } = result;
 
 			const bvhUniform = new MeshBVHUniformStruct();
@@ -151,8 +155,6 @@ async function init() {
 
 			} );
 			scene.add( group );
-
-			generator.dispose();
 
 		} );
 
