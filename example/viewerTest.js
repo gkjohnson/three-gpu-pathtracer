@@ -9,6 +9,8 @@ import {
 	MathUtils,
 	BufferAttribute,
 	Group,
+	Sphere,
+	Box3,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -221,7 +223,7 @@ function resetRenderer() {
 	pathTracer.bounces = params.bounces;
 	pathTracer.transmissiveBounces = params.transmissiveBounces;
 
-	ptRenderer.reset();
+	pathTracer.updateScene( camera, scene );
 
 }
 
@@ -449,34 +451,19 @@ async function updateModel() {
 		sceneInfo = result;
 		scene.add( sceneInfo.scene );
 
-		const { bvh, textures, materials, lights, geometry } = result;
-		const material = ptRenderer.material;
-
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.envMapInfo.updateFrom( envMap );
-		material.lights.updateFrom( lights );
-
-		generator.dispose();
-
 		loadingEl.style.visibility = 'hidden';
 
 		creditEl.innerHTML = modelInfo.credit || '';
 		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
 		buildGui();
 
-		geometry.computeBoundingSphere();
+		const box = new Box3();
+		const sphere = new Sphere();
+		box.setFromObject( sceneInfo.scene );
+		box.getBoundingSphere( sphere );
 
 		// mirror the model-viewer near / far planes
-		const radius = Math.max( orbit.radius, geometry.boundingSphere.radius );
+		const radius = Math.max( orbit.radius, sphere.radius );
 		camera.near = 2 * radius / 1000;
 		camera.far = 2 * radius;
 		camera.updateProjectionMatrix();
@@ -510,7 +497,7 @@ async function updateModel() {
 
 		}
 
-		ptRenderer.reset();
+		resetRenderer();
 
 		containerEl.style.display = 'flex';
 		loadingModel = false;
