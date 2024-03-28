@@ -6,7 +6,6 @@ import {
 	MeshBasicMaterial,
 	Clock,
 	AnimationMixer,
-	Group,
 	Mesh,
 	PlaneGeometry,
 	MeshStandardMaterial,
@@ -14,14 +13,14 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
+import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, model;
-let samplesEl, pathTracer;
+let renderer, controls, ptRenderer, camera, scene, clock;
+let samplesEl, pathTracer, mixer, mixerAction;
 let counter = 0;
 const params = {
 
@@ -66,19 +65,13 @@ async function init() {
 
 	// initialize path tracer
 	ptRenderer = pathTracer._pathTracer;
-	ptRenderer.camera = camera;
-
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		transparent: true,
-	} ) );
 
 	// initialize controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
 	controls.update();
@@ -94,9 +87,6 @@ async function init() {
 
 			const generator = new BlurredEnvMapGenerator( renderer );
 			const blurredTex = generator.generate( texture, 0.1 );
-			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-			ptRenderer.material.backgroundAlpha = 1;
-			ptRenderer.material.backgroundMap = null;
 			generator.dispose();
 
 			scene.background = blurredTex;
@@ -115,8 +105,6 @@ async function init() {
 
 	}
 
-	modelPromise = modelPromise.then( res => model = res );
-
 	await Promise.all( [ envMapPromise, modelPromise ] );
 
 	document.getElementById( 'loading' ).remove();
@@ -128,18 +116,18 @@ async function init() {
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
 	gui.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		pathTracer.reset();
 
 	} );
 	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
@@ -166,7 +154,7 @@ async function init() {
 
 function setPause( v ) {
 
-	model.action.paused = v;
+	mixerAction.paused = v;
 	params.pause = v;
 	if ( v ) {
 
@@ -185,11 +173,11 @@ function loadModel( url ) {
 
 			// animations
 			const animations = gltf.animations;
-			const mixer = new AnimationMixer( gltf.scene );
+			mixer = new AnimationMixer( gltf.scene );
 
-			const action = mixer.clipAction( animations[ 0 ] );
-			action.play();
-			action.paused = params.pause;
+			mixerAction = mixer.clipAction( animations[ 0 ] );
+			mixerAction.play();
+			mixerAction.paused = params.pause;
 
 			// add floor
 			scene.add( gltf.scene );
@@ -209,15 +197,6 @@ function loadModel( url ) {
 			floorPlane.rotation.x = - Math.PI / 2;
 			floorPlane.position.y = 0.075;
 			scene.add( floorPlane );
-
-			// create the scene generator for updating skinned meshes quickly
-			const sceneGenerator = new DynamicPathTracingSceneGenerator( scene );
-
-			return {
-				sceneGenerator,
-				mixer,
-				action,
-			};
 
 		} );
 
@@ -245,8 +224,9 @@ function onResize() {
 
 function regenerateScene() {
 
+	scene.environmentIntensity = params.environmentIntensity;
+	pathTracer.bounces = params.bounces;
 	pathTracer.updateScene( camera, scene );
-
 
 }
 
@@ -256,7 +236,7 @@ function animate() {
 
 	// step the animation forward
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
-	model.mixer.update( delta );
+	mixer.update( delta );
 
 	if ( params.autoPause ) {
 
@@ -288,30 +268,11 @@ function animate() {
 
 		}
 
-		// ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-		ptRenderer.material.bounces = params.bounces;
 
 		camera.updateMatrixWorld();
+		pathTracer.renderSample();
 
-		// update samples
-		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-			ptRenderer.update();
-
-		}
-
-		if ( ptRenderer.samples < 1 ) {
-
-			renderer.render( scene, camera );
-
-		}
-
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-		samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+		samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 	}
 
