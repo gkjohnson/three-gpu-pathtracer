@@ -15,7 +15,7 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial } from '../src/index.js';
+import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -26,7 +26,7 @@ import CanvasCapture from 'canvas-capture';
 // use CanvasCapture.
 const requestAnimationFrame = window.requestAnimationFrame;
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, gui, model;
+let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, gui, model, pathTracer;
 let samplesEl, videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
@@ -103,18 +103,20 @@ async function init() {
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.filterGlossyFactor = 0.25;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+
 	scene = new Scene();
+	scene.backgroundBlurriness = 0.1;
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5, 8, 12 );
 
 	// initialize path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
+	ptRenderer = pathTracer._pathTracer;
 	ptRenderer.camera = camera;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.filterGlossyFactor = 0.25;
 	ptRenderer.material.backgroundBlur = 0.1;
-	ptRenderer.tiles.set( params.tiles, params.tiles );
 
 	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
@@ -159,7 +161,6 @@ async function init() {
 		} );
 
 	await Promise.all( [ envMapPromise, modelPromise ] );
-	scene.add( model.scene );
 
 	// prep for rendering
 	document.getElementById( 'loading' ).remove();
@@ -242,8 +243,7 @@ function loadModel( url ) {
 			params.duration = animationDuration;
 
 			// add floor
-			const group = new Group();
-			group.add( gltf.scene );
+			scene.add( gltf.scene );
 
 			const floorTex = generateRadialFloorTexture( 2048 );
 			const floorPlane = new Mesh(
@@ -259,12 +259,11 @@ function loadModel( url ) {
 			floorPlane.scale.setScalar( 50 );
 			floorPlane.rotation.x = - Math.PI / 2;
 			floorPlane.position.y = 0.075;
-			group.add( floorPlane );
+			scene.add( floorPlane );
 
 			// create the scene generator for updating skinned meshes quickly
 			return {
-				scene: group,
-				sceneGenerator: new DynamicPathTracingSceneGenerator( group ),
+				sceneGenerator: new DynamicPathTracingSceneGenerator( scene ),
 				mixer,
 				action,
 			};
@@ -299,7 +298,7 @@ function onResize() {
 
 function regenerateScene() {
 
-	const { scene, sceneGenerator } = model;
+	const { sceneGenerator } = model;
 	scene.updateMatrixWorld( true );
 	sceneInfo = sceneGenerator.generate();
 
@@ -316,6 +315,10 @@ function regenerateScene() {
 	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 	material.textures.setTextures( renderer, 2048, 2048, textures );
 	material.materials.updateFrom( materials, textures );
+
+	ptRenderer.material.envMapInfo.updateFrom( scene.environment );
+	ptRenderer.material.backgroundMap = null;
+	ptRenderer.material.environmentIntensity = 1;
 
 	ptRenderer.reset();
 
