@@ -1,4 +1,16 @@
-import * as THREE from 'three';
+import {
+	WebGLRenderer,
+	ACESFilmicToneMapping,
+	Scene,
+	PerspectiveCamera,
+	MeshBasicMaterial,
+	Clock,
+	AnimationMixer,
+	Group,
+	Mesh,
+	PlaneGeometry,
+	MeshStandardMaterial,
+} from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -38,13 +50,13 @@ init();
 async function init() {
 
 	// initialize renderer, scene, camera
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	scene = new THREE.Scene();
+	scene = new Scene();
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
 
 	// initialize path tracer
@@ -55,7 +67,7 @@ async function init() {
 	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
+	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: ptRenderer.target.texture,
 		transparent: true,
 	} ) );
@@ -72,7 +84,7 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	clock = new THREE.Clock();
+	clock = new Clock();
 
 	// loading the
 	const envMapPromise = new RGBELoader()
@@ -171,20 +183,20 @@ function loadModel( url ) {
 
 			// animations
 			const animations = gltf.animations;
-			const mixer = new THREE.AnimationMixer( gltf.scene );
+			const mixer = new AnimationMixer( gltf.scene );
 
 			const action = mixer.clipAction( animations[ 0 ] );
 			action.play();
 			action.paused = params.pause;
 
 			// add floor
-			const group = new THREE.Group();
+			const group = new Group();
 			group.add( gltf.scene );
 
 			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new THREE.Mesh(
-				new THREE.PlaneGeometry(),
-				new THREE.MeshStandardMaterial( {
+			const floorPlane = new Mesh(
+				new PlaneGeometry(),
+				new MeshStandardMaterial( {
 					map: floorTex,
 					transparent: true,
 					color: 0xdddddd,
