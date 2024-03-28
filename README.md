@@ -76,82 +76,22 @@ On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just wor
 
 ```js
 import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import {
-	PathTracingSceneGenerator,
-	PathTracingRenderer,
-	PhysicalPathTracingMaterial,
-} from 'three-gpu-pathtracer';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
-// init scene, renderer, camera, controls, etc
+// init scene, camera, controls, etc
 
-renderer.outputEncoding = THREE.sRGBEncoding;
+renderer = new THREE.WebGLRenderer();
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
-// initialize the path tracing material and renderer
-const ptMaterial = new PhysicalPathTracingMaterial();
-const ptRenderer = new PathTracingRenderer( renderer );
-ptRenderer.setSize( window.innerWidth, window.innerHeight );
-ptRenderer.camera = camera;
-ptRenderer.material = ptMaterial;
-
-// if rendering transparent background
-ptRenderer.alpha = true;
-
-// init quad for rendering to the canvas
-const fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-	map: ptRenderer.target.texture,
-
-	// if rendering transparent background
-	blending: THREE.CustomBlending,
-} ) );
-
-// ensure scene matrices are up to date
-scene.updateMatrixWorld();
-
-// initialize the scene and update the material properties with the bvh, materials, etc
-const generator = new PathTracingSceneGenerator();
-const { bvh, textures, materials, lights, geometry } = generator.generate( scene );
-
-// update bvh and geometry attribute textures
-ptMaterial.bvh.updateFrom( bvh );
-ptMaterial.attributesArray.updateFrom(
-	geometry.attributes.normal,
-	geometry.attributes.tangent,
-	geometry.attributes.uv,
-	geometry.attributes.color,
-);
-
-// update materials and texture arrays
-ptMaterial.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-ptMaterial.textures.setTextures( renderer, 2048, 2048, textures );
-ptMaterial.materials.updateFrom( materials, textures );
-
-// update the lights
-ptMaterial.lights.updateFrom( lights );
-
-// set the environment map
-const texture = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
-ptRenderer.material.envMapInfo.updateFrom( texture );
+pathTracer = new WebGLPathTracer( renderer );
+pathTracer.updateScene( camera, scene );
 
 animate();
 
-// ...
-
 function animate() {
 
-	// if the camera position changes call "ptRenderer.reset()"
-
-	// update the camera and render one sample
-	camera.updateMatrixWorld();
-	ptRenderer.update();
-
-	// if using alpha = true then the target texture will change every frame
-	// so we must retrieve it before render.
-	fsQuad.material.map = ptRenderer.target.texture;
-
-	// copy the current state of the path tracer to canvas to display
-	fsQuad.render( renderer );
+	requestAnimationFrame( animate );
+	pathTracer.renderSample();
 
 }
 ```
@@ -173,77 +113,53 @@ const blurredEnvMap = generator.generate( envMap, 0.35 );
 
 ```
 
-## Dynamic Scenes
-
-Using the dynamic scene generator the same, frequently updated scene can be converted into a single reusable geometry multiple times and BVH refit which greatly improves subsequent scene updates. See `DynamicPathTracingSceneGenerator` docs for more info.
-
-```js
-import { DynamicPathTracingSceneGenerator } from 'three-gpu-pathtracer';
-
-// ... initialize scene etc
-
-const generator = new DynamicPathTracingSceneGenerator( scene );
-const { bvh, textures, materials, geometry } = generator.generate( scene );
-
-// ... update path tracer and render
-```
-
-## Asynchronous Scene Generation
-
-_NOTE WebWorker syntax is inconsistently supported across bundlers and sometimes not supported at all so the PathTracingSceneWorker class is not exported from the package root. If needed the code from src/worker can be copied and modified to accomodate a particular build process._
-
-```js
-import { PathTracingSceneWorker } from 'three-gpu-pathtracer/src/workers/PathTracingSceneWorker.js';
-
-// ...
-
-// initialize the scene and update the material properties with the bvh, materials, etc
-const generator = new PathTracingSceneWorker();
-const { bvh, textures, materials, lights } = await generator.generate( scene );
-
-// ...
-```
-
 # Exports
 
-## PathTracingRenderer
+## WebGLPathTracer
 
-Utility class for tracking and rendering a path traced scene to a render target.
+### constructor
 
-### .samples
-
-```js
-readonly samples : Number
+```
+constructor( renderer : WebGLRenderer )
 ```
 
-Number of samples per pixel that have been rendered to the target.
-
-### .target
+Pass through functions and fields:
 
 ```js
-readonly target : WebGLRenderTarget
+// members
+toneMapping,
+domElement,
+
+// functions
+getPixelRatio,
+setPixelRatio,
+setDrawingBufferSize,
+getDrawingBufferSize,
+getSize,
+setSize,
+setViewport,
+getViewport,
+getScissor,
+setScissor,
+getScissorTest,
+setScissorTest,
+getClearAlpha,
+setClearAlpha,
+getClearColor,
+setClearColor,
 ```
 
-The target being rendered to. The size of the target is updated with `setSize` and is initialized to a FloatType texture.
-
-> **Note**
-> Target will swap render targets after every full sample when alpha is enabled.
-
-### .camera
+### .bounces
 
 ```js
-camera = null : Camera
+bounces = 10 : Number
 ```
 
-The camera to render with. The view offset of the camera will be updated every sample to enable anti aliasing.
-
-### .material
+### .filteredGlossyFactor
 
 ```js
-material = null : ShaderMaterial
+filteredGlossyFactor = 0 : Number
 ```
-
-The Path Tracing material to render. This is expected to be a full screen quad material that respects the "opacity" field for every pixel so samples can be accumulated over time. The material is also expected to have `cameraWorldMatrix` and `invProjectionMatrix` fields of type `Matrix4`.
 
 ### .tiles
 
@@ -251,159 +167,88 @@ The Path Tracing material to render. This is expected to be a full screen quad m
 tiles = ( 1, 1 ) : Vector2
 ```
 
-Number of tiles on x and y to render to. Can be used to improve the responsiveness of a page while still rendering a high resolution target.
-
-### .stableNoise
+### .dynamicLowRes
 
 ```js
-stableNoise = false : Boolean
+dynamicLowRes = false : Boolean
 ```
 
-Whether to reset the random seed to `0` when restarting the render. If true then a consistent random sample pattern will appear when moving the camera, for example.
-
-### .stableTiles
+### .lowResScale
 
 ```js
-stableTiles = true : Boolean
+lowResScale = 0.1 : Number
 ```
 
-Whether the initial tile is reset to the top left tile when moving the camera or if it should continue to shift every frame.
-
-### .alpha
+### .renderScale
 
 ```js
-alpha = false : Boolean
+renderScale = 1 : Number
 ```
 
-Whether to support rendering scenes with transparent backgrounds. When transparent backgrounds are used two extra render targets are used, custom blending is performed, and PathTracingRenderer.target will change on every completed sample.
-
-> **Note**
-> When a transparent background is used the material used for the final render to the canvas must use the same "premultipliedAlpha" setting as the canvas otherwise the final image may look incorrect.
-
-### constructor
+### .synchronizeRenderSize
 
 ```js
-constructor( renderer : WebGLRenderer )
+synchronizeRenderSize = true : Boolean
 ```
 
-### .setSize
+### .rasterizeScene
 
 ```js
-setSize( size : Vector2 ) : void
+rasterizeScene = true : Boolean
 ```
 
-Sets the size of the target to render to.
-
-### .update
+### .renderToCanvas
 
 ```js
-update()
+renderToCanvas = true : Boolean
 ```
 
-Renders a single sample to the target.
+### .textureSize
+
+```js
+textureSize = ( 1024, 1024 ) : Vector2
+
+```
+### .samples
+
+```js
+get samples : Number
+```
+
+### .target
+
+```js
+get target : WebGLRenderTarget
+```
+
+### .updateScene
+
+```js
+updateScene( camera : Camera, scene : Scene ) : void
+```
+
+### .updateSceneAsync
+
+```js
+updateSceneAsync(
+	camera : Camera,
+	scene : Scene,
+	options = {
+		onProgress = null : value => void,
+	} : Object
+) : void
+```
+
+### .renderSample
+
+```js
+renderSample() : void
+```
 
 ### .reset
 
 ```js
 reset() : void
-```
-
-Resets and restarts the render from scratch.
-
-## QuiltPathTracingRenderer
-
-Renderer that supports rendering to a quilt renderer to rendering on displays such as the Looking Glass display.
-
-### .viewCount
-
-```js
-viewCount = 48 : Number
-```
-
-The number of views to be rendered. If this is less than the product of the quiltDimensions then there will be gaps at the end of the quilt.
-
-### .quiltDimensions
-```js
-quiltDimensions = Vector2( 8, 6 ) : Vector2
-```
-
-The number of quilt patches in each dimension.
-
-### .viewCone
-```js
-viewCone = 35 * DEG2RAD : Number
-```
-
-The total angle sweep for the camera views rendered across the quilt.
-
-### .viewFoV
-
-```js
-viewFoV = 14 * DEG2RAD : Number
-```
-
-The camera field of view to render.
-
-### .displayDistance
-
-```js
-displayDistance = 1 : Number
-```
-
-The distance of the viewer to the display.
-
-### .displayAspect
-
-```js
-displayAspect = 0.75 : Number
-```
-
-The aspect ratio of the display.
-
-### .setFromDisplayView
-
-```js
-setFromDisplayView(
-	displayDistance : Number,
-	displayWidth : Number,
-	displayHeight : Number,
-) : void
-```
-
-Updates the `displayDistance`, `displayAspect`, and the `viewFoV` from viewer and display information.
-
-## PathTracingSceneGenerator
-
-Utility class for generating the set of data required for initializing the path tracing material with a bvh, geometry, materials, and textures.
-
-### .generate
-
-```js
-generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
-	bvh : MeshBVH,
-	materials : Array<Material>,
-	textures : Array<Texture>,
-	lights : Array<Light>
-}
-```
-
-Merges the geometry in the given scene with an additional "materialIndex" attribute that references the associated material array. Also produces a set of textures referenced by the scene materials.
-
-## PathTracingSceneWorker
-
-_extends PathTracingSceneGenerator_
-
-See note in [Asyncronous Generation](#asynchronous-generation) use snippet.
-
-### .generate
-
-```js
-async generate( scene : Object3D | Array<Object3D>, options = {} : Object ) : {
-	bvh : MeshBVH,
-	materials : Array<Material>,
-	textures : Array<Texture>,
-	lights : Array<Light>
-}
 ```
 
 ### .dispose
@@ -506,43 +351,6 @@ isCircular = false : Boolean
 
 Whether the area light should be rendered as a circle or a rectangle.
 
-## DynamicPathTracingSceneGenerator
-
-A variation of the path tracing scene generator intended for quickly regenerating a scene BVH representation that updates frequently. Ie those with animated objects or animated skinned geometry.
-
-In order to quickly update a dynamic scene the same BVH is reused across updates by refitting rather than regenerating. This is significantly faster but also results in a less optimal BVH after significant changes.
-
-If geometry or materials are added or removed from the scene then `reset` must be called.
-
-### constructor
-
-```js
-constructor( scene : Object3D | Array<Object3D> )
-```
-
-Takes the scene to convert.
-
-### .generate
-
-```js
-generate() : {
-	bvh : MeshBVH,
-	geometry: BufferGeometry,
-	materials : Array<Material>,
-	textures : Array<Texture>
-}
-```
-
-Generates and refits the bvh to the current scene state. The same bvh, materials, and textures objects are returns after the initial call until `reset` is called.
-
-### .reset
-
-```js
-reset() : void
-```
-
-Resets the generator so a new BVH is generated. This must be called when geometry, objects, or materials are added or removed from the scene.
-
 ## IESLoader
 
 _extends Loader_
@@ -621,74 +429,6 @@ setDefine( name : string, value = undefined : any ) : void
 
 Sets the define of the given name to the provided value. If the value is set to null or undefined then it is deleted from the defines of the material. If the define changed from the previous value then `Material.needsUpdate` is set to `true`.
 
-## PhysicalPathTracingMaterial
-
-_extends MaterialBase_
-
-**Uniforms**
-
-```js
-{
-	// The number of ray bounces to test. Higher is better quality but slower performance.
-	// TransmissiveBounces indicates the number of additional transparent or translucent surfaces
-	// the ray can pass through.
-	bounces = 3 : Number,
-	transmissiveBounces = 10 : Number,
-
-	// The number of additional transmissive ray bounces to allow on top of existing bounces for object opacity / transmission.
-	transmissiveBounces = 5 : Number,
-
-	// The physical camera parameters to use
-	physicalCamera : PhysicalCameraUniform,
-
-	// Geometry and BVH information
-	bvh: MeshBVHUniformStruct,
-	attributesArray: AttributesTextureArray,
-	materialIndexAttribute: UIntVertexAttributeTexture,
-	materials: MaterialsTexture,
-	textures: RenderTarget2DArray,
-
-	// Light information
-	lights: LightsInfoUniformStruct,
-	iesProfiles: IESProfilesTexture,
-
-	// Environment Map information
-	envMapInfo: EquirectHdrInfoUniform,
-	environmentRotation: Matrix4,
-	environmentIntensity = 1: Number,
-
-	// background blur
-	backgroundBlur = 0: Number,
-
-	// Factor for alleviating bright pixels from rays that hit diffuse surfaces then
-	// specular surfaces. Setting this higher alleviates fireflies but will remove some
-	// specular caustics.
-	filterGlossyFactor = 0: Number,
-
-	// The equirectangular map to render as the background.
-	backgroundMap = null: Texture,
-
-	// The transparency to render the background with. Note that the "alpha" option
-	// must be set to true on PathTracingRenderer for this field to work properly.
-	backgroundAlpha: 1.0,
-}
-```
-
-**Defines**
-
-```js
-{
-
-	// Whether to use multiple importance sampling to help the image converge more quickly.
-	FEATURE_MIS = 1 : Number,
-
-	// Whether to use russian roulette path termination. Path termination will kick in after
-	// a minimum three bounces have been performed.
-	FEATURE_RUSSIAN_ROULETTE = 1 : Number,
-
-}
-```
-
 ## FogVolumeMaterial
 
 _extends MeshStandardMaterial_
@@ -725,151 +465,6 @@ Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPit
 }
 ```
 
-## RenderTarget2DArray
-
-_extends WebGLArrayRenderTarget_
-
-A convenience extension from `WebGLArrayRenderTarget` that affords easily creating a uniform texture array from an array of textures.
-
-### .setTextures
-
-```js
-setTextures(
-	renderer : WebGLRenderer,
-	width : Number,
-	height : Number,
-	textures : Array<Texture>
-) : void
-```
-
-Takes the rendering context to update the target for, the target dimensions of the texture array, and the array of textures to render into the 2D texture array. Every texture is stretched to the dimensions of the texture array at the same index they are provided in.
-
-## PhysicalCameraUniform
-
-Uniform for storing the camera parameters for use with the shader.
-
-### .updateFrom
-
-```js
-updateFrom( camera : PerspectiveCamera | PhysicalCamera ) : void
-```
-
-Copies all fields from the passed PhysicalCamera if available otherwise the defaults are used.
-
-## AttributesTextureArray
-
-A combined texture array used to store normal, tangent, uv, and color attributes in the same texture sampler array rather than separate samplers. Necessary to save texture slots.
-
-Normals, tangents, uvs, and color attribute data are stored in the 1st, 2nd, 3rd, and 4th layers of the array respectively.
-
-### .updateNormalAttribute
-
-```js
-updateNormalAttribute( attr : BufferAttribute ) : void
-```
-
-### .updateTangentAttribute
-
-```js
-updateTangentAttribute( attr : BufferAttribute ) : void
-```
-
-### .updateUvAttribute
-
-```js
-updateUvAttribute( attr : BufferAttribute ) : void
-```
-
-### .updateColorAttribute
-
-```js
-updateColorAttribute( attr : BufferAttribute ) : void
-```
-
-### .updateFrom
-
-```js
-updateFrom(
-	normal : BufferAttribute,
-	tangent : BufferAttribute,
-	uv : BufferAttribute,
-	color : BufferAttribute
-) : void
-```
-
-## MaterialsTexture
-
-_extends DataTexture_
-
-Helper texture uniform for encoding materials as texture data.
-
-### .setMatte
-
-```js
-setMatte( index : Number, matte : Boolean ) : void
-```
-
-Sets whether or not the material of the given index is matte or not. When "true" the background is rendered in place of the material.
-
-### .setCastShadow
-
-```js
-setCastShadow( index : Number, enabled : Boolean ) : void
-```
-
-Sets whether or not the material of the given index will cast shadows. When "false" materials will not cast shadows on diffuse surfaces but will still be reflected. This is a good setting for lighting enclosed interiors with environment lighting.
-
-### .updateFrom
-
-```js
-updateFrom( materials : Array<Material>, textures : Array<Texture> ) : void
-```
-
-Updates the size and values of the texture to align with the provided set of materials and textures.
-
-The "matte" and "side" values must be updated explicitly.
-
-> **Note**
-> In order for volume transmission to work the "attenuationDistance" must be set to a value less than Infinity or "thickness" must be set to a value greater than 0.
-
-## LightsInfoUniformStruct
-
-Helper uniform for encoding lights as texture data with count.
-
-### .updateFrom
-
-```js
-updateFrom( lights : Array<Light>, iesTextures = [] : Array<Texture> ) : void
-```
-
-Updates the size and values of the texture to align with the provided set of lights and IES textures.
-
-## EquirectHdrInfoUniform
-
-Stores the environment map contents along with the intensity distribution information to support multiple importance sampling.
-
-### .updateFrom
-
-```js
-updateFrom( environmentMap : Texture ) : void
-```
-
-Takes an environment map to process into something usable by the path tracer. Is expected to be a DataTexture so the data can be read.
-
-## Functions
-
-### mergeMeshes
-
-```js
-mergeMeshes( meshes : Array<Mesh> ) : {
-	materials : Array<Material>,
-	textures : Array<Textures>,
-	geometry : BufferGeometry
-}
-```
-
-Merges the set of meshes into a single geometry with a `materialIndex` vertex attribute included on the geometry identifying the associated material in the returned `materials` array.
-
 ## CompatibilityDetector
 
 Detects whether the path tracer can run on the current device by checking whether struct precision is reliable and the material shader will compile.
@@ -892,24 +487,6 @@ detect() : {
 ```
 
 Returns `pass === true` if the path tracer can run. If it cannot run then a message is returned indicating why.
-
-## Shader Chunks
-
-**shaderMaterialSampling**
-
-Set of functions for performing material scatter and PDF sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderMaterialSampling.js) for full list of functions.
-
-**shaderLightSampling**
-
-Set of functions for performing light sampling. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderLightSampling.js) for full list of functions.
-
-**shaderStructs**
-
-Material and light struct definition for use with uniforms. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderStructs.js) for full list of functions.
-
-**shaderUtils**
-
-Set of randomness and other light transport utilities for use in a shader. See the [implementation](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/shader/shaderUtils.js) for full list of functions.
 
 # Gotchas
 
