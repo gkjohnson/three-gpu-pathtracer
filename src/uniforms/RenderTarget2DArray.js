@@ -23,6 +23,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 			magFilter: LinearFilter,
 			wrapS: RepeatWrapping,
 			wrapT: RepeatWrapping,
+			generateMipmaps: false,
 			...options,
 		} );
 
@@ -140,6 +141,5 @@ class CopyMaterial extends ShaderMaterial {
 		} );
 
 	}
-
 
 }
