@@ -4,7 +4,6 @@ import {
 	PCFSoftShadowMap,
 	Scene,
 	EquirectangularReflectionMapping,
-	Group,
 	Box3,
 	Mesh,
 	CylinderGeometry,
@@ -265,7 +264,7 @@ async function init() {
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
