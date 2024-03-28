@@ -149,9 +149,8 @@ async function init() {
 
 	// prep for rendering
 	document.getElementById( 'loading' ).remove();
-	window.addEventListener( 'resize', onResize );
 
-	onResize();
+	initializeSize();
 	rebuildGUI();
 
 	animate();
@@ -255,18 +254,17 @@ function loadModel( url ) {
 
 }
 
-function onResize() {
+function initializeSize() {
 
+	// only size this once because we don't want it to change during rendering
 	const w = Math.min( 700, window.innerWidth );
 	const h = Math.floor( w * 3 / 4 );
 	const dpr = window.devicePixelRatio;
 
-	console.log( w );
-
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
-	renderer.setSize( w, h );
+	renderer.setSize( w, h, false );
 	renderer.setPixelRatio( dpr );
 
 	// update the dom elements
