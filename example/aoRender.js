@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/surface/AmbientOcclusionMaterial.js';
@@ -60,7 +60,6 @@ async function init() {
 
 
 	const url = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( url )
@@ -111,11 +110,12 @@ async function init() {
 
 			} );
 
-			return generator.generate( group );
+			return new PathTracingSceneGenerator( group ).generate();
 
 		} )
 		.then( result => {
 
+			console.log( result )
 			const { bvh } = result;
 
 			const bvhUniform = new MeshBVHUniformStruct();

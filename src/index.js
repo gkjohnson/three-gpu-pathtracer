@@ -2,7 +2,6 @@
 export * from './core/PathTracingRenderer.js';
 export * from './core/QuiltPathTracingRenderer.js';
 export * from './core/PathTracingSceneGenerator.js';
-export * from './core/DynamicPathTracingSceneGenerator.js';
 export * from './core/MaterialReducer.js';
 export * from './core/WebGLPathTracer.js';
 

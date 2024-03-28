@@ -23,7 +23,7 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
 import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -277,7 +277,7 @@ async function init() {
 			const reducer = new MaterialReducer();
 			reducer.process( group );
 
-			generator = new PathTracingSceneWorker();
+			generator = new PathTracingSceneGenerator();
 			return generator.generate( group, { onProgress: v => {
 
 				const percent = Math.floor( 100 * v );

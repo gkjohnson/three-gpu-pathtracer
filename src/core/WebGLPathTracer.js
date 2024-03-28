@@ -1,5 +1,5 @@
 import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
-import { DynamicPathTracingSceneGenerator } from './DynamicPathTracingSceneGenerator.js';
+import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
@@ -127,7 +127,7 @@ export class WebGLPathTracer {
 
 		// members
 		this._renderer = renderer;
-		this._generator = new DynamicPathTracingSceneGenerator();
+		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._pathTracer.alpha = renderer.getContextAttributes().alpha;
 
