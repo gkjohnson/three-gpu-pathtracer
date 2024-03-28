@@ -257,7 +257,7 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( resetRenderer() );
+	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
