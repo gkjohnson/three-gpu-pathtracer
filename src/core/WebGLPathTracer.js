@@ -1,4 +1,4 @@
-import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2, WebGLRenderer } from 'three';
+import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2 } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -106,24 +106,7 @@ export class WebGLPathTracer {
 
 	}
 
-	constructor( renderer = null ) {
-
-		// create a new renderer if one was not provided
-		if ( renderer === null ) {
-
-			renderer = new WebGLRenderer( { alpha: true } );
-			this._ownRenderer = true;
-
-		} else if ( renderer.isWebGLRenderer ) {
-
-			this._ownRenderer = false;
-
-		} else {
-
-			renderer = new WebGLRenderer( { ...renderer, alpha: true } );
-			this._ownRenderer = true;
-
-		}
+	constructor( renderer ) {
 
 		// members
 		this._renderer = renderer;
@@ -424,12 +407,6 @@ export class WebGLPathTracer {
 		this._renderQuad.dispose();
 		this._renderQuad.material.dispose();
 		this._pathTracer.dispose();
-
-		if ( this._ownRenderer ) {
-
-			this.renderer.dispose();
-
-		}
 
 	}
 

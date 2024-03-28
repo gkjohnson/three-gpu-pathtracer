@@ -1,11 +1,11 @@
-import { ACESFilmicToneMapping, Scene, EquirectangularReflectionMapping } from 'three';
+import { ACESFilmicToneMapping, Scene, EquirectangularReflectionMapping, WebGLRenderer } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-let renderer, controls, camera, scene, samplesEl;
+let pathTracer, controls, camera, scene, samplesEl;
 
 let tiles = 2;
 let resolutionScale = Math.max( 1 / window.devicePixelRatio, 0.5 );
@@ -26,19 +26,20 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 
 	// init renderer, camera, controls, scene
-	renderer = new WebGLPathTracer();
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.filterGlossyFactor = 0.5;
-	renderer.renderScale = resolutionScale;
-	renderer.setClearColor( 0, 0 );
-	renderer.tiles.set( tiles, tiles );
-	renderer.setBVHWorker( new ParallelMeshBVHWorker() );
-	document.body.appendChild( renderer.domElement );
+	const renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.filterGlossyFactor = 0.5;
+	pathTracer.renderScale = resolutionScale;
+	pathTracer.setClearColor( 0, 0 );
+	pathTracer.tiles.set( tiles, tiles );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+	document.body.appendChild( pathTracer.domElement );
 
 	camera = new PhysicalCamera( 75, 1, 0.025, 500 );
 	camera.position.set( 8, 9, 24 );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( camera, pathTracer.domElement );
 	controls.target.y = 10;
 	controls.update();
 
@@ -47,7 +48,7 @@ async function init() {
 
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 
@@ -73,7 +74,7 @@ async function init() {
 	// wait for the scene to be rady
 	await Promise.all( [ gltfPromise, envMapPromise ] );
 
-	await renderer.updateSceneAsync( camera, scene );
+	await pathTracer.updateSceneAsync( camera, scene );
 
 	document.getElementById( 'loading' ).remove();
 	window.addEventListener( 'resize', onResize );
@@ -90,8 +91,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 	camera.aspect = aspect;
@@ -102,8 +103,8 @@ function onResize() {
 function animate() {
 
 	requestAnimationFrame( animate );
-	renderer.renderSample();
+	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }

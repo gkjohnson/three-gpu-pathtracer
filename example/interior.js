@@ -7,6 +7,7 @@ import {
 	Vector3,
 	EquirectangularReflectionMapping,
 	Scene,
+	WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -15,7 +16,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, sphericalControls, activeCamera, scene;
+let pathTracer, controls, sphericalControls, activeCamera, scene;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let samplesEl;
 const params = {
@@ -48,11 +49,12 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.dynamicLowRes = true;
-	renderer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( renderer.domElement );
+	const renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.dynamicLowRes = true;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	document.body.appendChild( pathTracer.domElement );
 
 	perspectiveCamera = new PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
 	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
@@ -66,22 +68,22 @@ async function init() {
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
 	perspectiveCamera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 	controls.update();
 
-	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
+	sphericalControls = new OrbitControls( equirectCamera, pathTracer.domElement );
 	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
 	equirectCamera.lookAt( sphericalControls.target );
 	sphericalControls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 	sphericalControls.update();
@@ -135,7 +137,7 @@ async function init() {
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
-	renderer.updateScene( perspectiveCamera, scene );
+	pathTracer.updateScene( perspectiveCamera, scene );
 
 	document.getElementById( 'loading' ).remove();
 
@@ -145,7 +147,7 @@ async function init() {
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
@@ -174,8 +176,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 
@@ -251,16 +253,16 @@ function reset() {
 
 	}
 
-	renderer.renderScale = params.resolutionScale;
+	pathTracer.renderScale = params.resolutionScale;
 
 	scene.environmentRotation.y = params.environmentRotation;
 	scene.backgroundRotation.y = params.environmentRotation;
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	renderer.bounces = params.bounces;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.bounces = params.bounces;
 
-	renderer.updateScene( activeCamera, scene );
+	pathTracer.updateScene( activeCamera, scene );
 
 }
 
@@ -269,9 +271,9 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	activeCamera.updateMatrixWorld();
-	renderer.renderSample();
+	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }
 

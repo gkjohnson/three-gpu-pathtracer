@@ -8,6 +8,7 @@ import {
 	CylinderGeometry,
 	MeshPhysicalMaterial,
 	NoToneMapping,
+	WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -16,7 +17,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, materials;
+let pathTracer, controls, materials;
 let perspectiveCamera, database;
 let envMap, envMapGenerator, scene;
 let samplesEl, imgEl, infoEl;
@@ -53,21 +54,22 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.setClearColor( 0, 0 );
-	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
-	renderer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( renderer.domElement );
+	const renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.setClearColor( 0, 0 );
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	document.body.appendChild( pathTracer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 
@@ -77,7 +79,7 @@ async function init() {
 	imgEl = document.getElementById( 'materialImage' );
 	infoEl = document.getElementById( 'info' );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
+	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr' )
@@ -179,13 +181,13 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
-		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
+		pathTracer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
@@ -216,8 +218,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 	perspectiveCamera.aspect = aspect;
@@ -286,10 +288,10 @@ function reset() {
 	coreMaterial.roughness = 1.0;
 	coreMaterial.metalness = 0.0;
 
-	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
-	renderer.renderScale = params.resolutionScale;
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	renderer.bounces = params.bounces;
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.bounces = params.bounces;
 	scene.environmentRotation.y = params.environmentRotation;
 	scene.backgroundRotation.y = params.environmentRotation;
 	scene.backgroundIntensity = params.environmentIntensity;
@@ -306,15 +308,15 @@ function reset() {
 
 	}
 
-	renderer.updateScene( perspectiveCamera, scene );
+	pathTracer.updateScene( perspectiveCamera, scene );
 
 }
 
 function animate() {
 
 	requestAnimationFrame( animate );
-	renderer.renderSample();
+	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }

@@ -13,6 +13,7 @@ import {
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
+	WebGLRenderer,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -122,7 +123,7 @@ const params = {
 
 let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats;
-let renderer, orthoCamera, perspectiveCamera, activeCamera;
+let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene;
 let envMap, envMapGenerator, backgroundMap;
 let loadingModel = false;
@@ -138,13 +139,14 @@ async function init() {
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.physicallyCorrectLights = true;
-	renderer.tiles.set( params.tilesX, params.tilesY );
-	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
-	renderer.transmissiveBounces = 10;
-	document.body.appendChild( renderer.domElement );
+	renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.physicallyCorrectLights = true;
+	pathTracer.tiles.set( params.tilesX, params.tilesY );
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.transmissiveBounces = 10;
+	document.body.appendChild( pathTracer.domElement );
 
 	scene = new Scene();
 
@@ -161,7 +163,7 @@ async function init() {
 	backgroundMap.bottomColor.set( params.bgGradientBottom );
 	backgroundMap.update();
 
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.addEventListener( 'change', () => {
 
 		if ( params.tilesX * params.tilesY !== 1.0 ) {
@@ -170,11 +172,11 @@ async function init() {
 
 		}
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
+	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -222,29 +224,29 @@ function animate() {
 
 		activeCamera.updateMatrixWorld();
 
-		if ( ! params.pause || renderer.samples < 1 ) {
+		if ( ! params.pause || pathTracer.samples < 1 ) {
 
-			renderer.renderSample();
+			pathTracer.renderSample();
 
 		}
 
 	} else {
 
 		delaySamples --;
-		renderer._renderer.render( scene, activeCamera );
+		renderer.render( scene, activeCamera );
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }
 
 function resetRenderer() {
 
-	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
-	renderer.bounces = params.bounces;
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	renderer.renderScale = params.resolutionScale;
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.bounces = params.bounces;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.renderScale = params.resolutionScale;
 
 	floorPlane.material.color.set( params.floorColor );
 	floorPlane.material.roughness = params.floorRoughness;
@@ -274,7 +276,7 @@ function resetRenderer() {
 
 	}
 
-	renderer.updateScene( activeCamera, scene );
+	pathTracer.updateScene( activeCamera, scene );
 
 }
 
@@ -284,8 +286,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 	perspectiveCamera.aspect = aspect;
@@ -316,7 +318,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		pathTracer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );
@@ -331,12 +333,12 @@ function buildGui() {
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
 
-		renderer.tiles.x = v;
+		pathTracer.tiles.x = v;
 
 	} );
 	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
 
-		renderer.tiles.y = v;
+		pathTracer.tiles.y = v;
 
 	} );
 	resolutionFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
@@ -508,7 +510,7 @@ async function updateModel() {
 	const modelInfo = models[ params.model ];
 
 	loadingModel = true;
-	renderer.domElement.style.visibility = 'hidden';
+	pathTracer.domElement.style.visibility = 'hidden';
 	samplesEl.innerText = '--';
 	creditEl.innerText = '--';
 	loadingEl.innerText = 'Loading';
@@ -631,7 +633,7 @@ async function updateModel() {
 		buildGui();
 
 		loadingModel = false;
-		renderer.domElement.style.visibility = 'visible';
+		pathTracer.domElement.style.visibility = 'visible';
 		if ( params.checkerboardTransparency ) {
 
 			document.body.classList.add( 'checkerboard' );
