@@ -83,16 +83,18 @@ import { WebGLPathTracer } from 'three-gpu-pathtracer';
 
 // init scene, camera, controls, etc
 
-renderer = new WebGLPathTracer();
+renderer = new THREE.WebGLRenderer();
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.updateScene( camera, scene );
+
+pathTracer = new WebGLPathTracer( renderer );
+pathTracer.updateScene( camera, scene );
 
 animate();
 
 function animate() {
 
 	requestAnimationFrame( animate );
-	renderer.renderSample();
+	pathTracer.renderSample();
 
 }
 ```
@@ -121,7 +123,7 @@ const blurredEnvMap = generator.generate( envMap, 0.35 );
 ### constructor
 
 ```
-constructor( renderer = null : WebGLRenderer | WebGLContextOptions )
+constructor( renderer : WebGLRenderer )
 ```
 
 Pass through functions and fields:
