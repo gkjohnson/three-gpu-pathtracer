@@ -1,4 +1,4 @@
-import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping } from 'three';
+import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGLRenderer } from 'three';
 import { WebGLPathTracer, GradientEquirectTexture } from '..';
 
 // init scene, renderer, camera, controls, etc
@@ -50,11 +50,12 @@ const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGLPathTracer();
-document.body.appendChild( renderer.domElement );
-renderer.toneMapping = ACESFilmicToneMapping;
-renderer.tiles.set( 3, 3 );
-renderer.updateScene( camera, scene );
+const renderer = new WebGLRenderer( { antialias: true } );
+const pathTracer = new WebGLPathTracer( renderer );
+document.body.appendChild( pathTracer.domElement );
+pathTracer.toneMapping = ACESFilmicToneMapping;
+pathTracer.tiles.set( 3, 3 );
+pathTracer.updateScene( camera, scene );
 
 onResize();
 
@@ -68,7 +69,7 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// update the camera and render one sample
-	renderer.renderSample();
+	pathTracer.renderSample();
 
 }
 
@@ -78,8 +79,8 @@ function onResize() {
 	const w = window.innerWidth;
 	const h = window.innerHeight;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( window.devicePixelRatio );
 
 	const aspect = w / h;
 	camera.aspect = aspect;

@@ -8,6 +8,7 @@ import {
 	CylinderGeometry,
 	MeshPhysicalMaterial,
 	NoToneMapping,
+	WebGLRenderer,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -17,7 +18,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, activeCamera, denoiseQuad, materials;
+let pathTracer, controls, activeCamera, denoiseQuad, materials;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let envMap, envMapGenerator, scene;
 let samplesEl;
@@ -161,11 +162,12 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.setClearColor( 0, 0 );
-	renderer.tiles.set( params.tiles, params.tiles );
-	renderer.renderToCanvasCallback = ( target, renderer, quad ) => {
+	const renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.setClearColor( 0, 0 );
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {
 
 		denoiseQuad.material.sigma = params.denoiseSigma;
 		denoiseQuad.material.threshold = params.denoiseThreshold;
@@ -180,12 +182,12 @@ async function init() {
 
 	};
 
-	document.body.appendChild( renderer.domElement );
+	document.body.appendChild( pathTracer.domElement );
 
 	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: null,
 		blending: CustomBlending,
-		premultipliedAlpha: renderer._renderer.getContextAttributes().premultipliedAlpha,
+		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
 	const aspect = window.innerWidth / window.innerHeight;
@@ -199,10 +201,10 @@ async function init() {
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 4, 2, 3 );
 
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 
@@ -210,7 +212,7 @@ async function init() {
 
 	samplesEl = document.getElementById( 'samples' );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer._renderer );
+	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
@@ -292,13 +294,13 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
-		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
+		pathTracer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
@@ -438,8 +440,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 
@@ -507,14 +509,14 @@ function reset() {
 	m3.roughness = params.material3.roughness;
 	m3.transparent = m3.opacity < 1;
 
-	renderer.transmissiveBounces = params.transmissiveBounces;
-	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	renderer.bounces = params.bounces;
-	renderer.renderScale = params.resolutionScale;
+	pathTracer.transmissiveBounces = params.transmissiveBounces;
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.bounces = params.bounces;
+	pathTracer.renderScale = params.resolutionScale;
 
 	// TODO: remove this
-	const ptRenderer = renderer._pathTracer;
+	const ptRenderer = pathTracer._pathTracer;
 	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
 	ptRenderer.material.materials.setMatte( 1, params.material2.matte );
 	ptRenderer.material.materials.setMatte( 2, params.material3.matte );
@@ -527,7 +529,7 @@ function reset() {
 	scene.environmentRotation.y = params.environmentRotation;
 	scene.backgroundRotation.y = params.environmentRotation;
 
-	renderer.setClearAlpha( params.backgroundAlpha );
+	pathTracer.setClearAlpha( params.backgroundAlpha );
 
 	activeCamera.updateMatrixWorld();
 
@@ -541,7 +543,7 @@ function reset() {
 
 	}
 
-	renderer.updateScene( activeCamera, scene );
+	pathTracer.updateScene( activeCamera, scene );
 
 }
 
@@ -599,7 +601,7 @@ function updateCamera( cameraProjection ) {
 function animate() {
 
 	requestAnimationFrame( animate );
-	renderer.renderSample();
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	pathTracer.renderSample();
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }

@@ -9,6 +9,7 @@ import {
 	MeshStandardMaterial,
 	PerspectiveCamera,
 	Scene,
+	WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
@@ -18,7 +19,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-let renderer, controls, areaLights, scene, camera;
+let pathTracer, controls, areaLights, scene, camera;
 let samplesEl, loadingEl;
 const params = {
 
@@ -64,21 +65,22 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.tiles.set( params.tiles, params.tiles );
-	renderer.setBVHWorker( new ParallelMeshBVHWorker() );
-	document.body.appendChild( renderer.domElement );
+	const renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+	document.body.appendChild( pathTracer.domElement );
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 0.0, 0.6, 2.65 );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( camera, pathTracer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 	controls.update();
@@ -149,7 +151,7 @@ async function init() {
 
 	areaLights = [ areaLight1, areaLight2 ];
 
-	const generatorPromise = renderer.updateSceneAsync( camera, scene, {
+	const generatorPromise = pathTracer.updateSceneAsync( camera, scene, {
 		onProgress: v => {
 
 			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
@@ -168,7 +170,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
@@ -221,17 +223,17 @@ function updateLights() {
 	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
 	areaLights[ 1 ].visible = params.areaLight2Enabled;
 
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	renderer.bounces = params.bounces;
-	renderer.renderScale = params.resolutionScale;
-	renderer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.bounces = params.bounces;
+	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	scene.environmentRotation.y = params.environmentRotation;
 	scene.backgroundRotation.y = params.environmentRotation;
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
 
-	renderer.updateScene( camera, scene );
+	pathTracer.updateScene( camera, scene );
 
 }
 
@@ -241,8 +243,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -253,8 +255,8 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	camera.updateMatrixWorld();
-	renderer.renderSample();
+	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }

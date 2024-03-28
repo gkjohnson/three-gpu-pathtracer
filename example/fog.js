@@ -7,12 +7,13 @@ import {
 	Group,
 	Mesh,
 	MeshStandardMaterial,
+	WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls;
+let pathTracer, controls;
 let camera, scene, fogMaterial, spotLight;
 let samplesEl;
 
@@ -38,21 +39,22 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.setClearColor( 0, 1 );
-	renderer.updateScene( new PerspectiveCamera(), new Scene() );
-	renderer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( renderer.domElement );
+	const renderer = new WebGLRenderer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.setClearColor( 0, 1 );
+	pathTracer.updateScene( new PerspectiveCamera(), new Scene() );
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	document.body.appendChild( pathTracer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PhysicalCamera( 75, aspect, 0.025, 500 );
 	camera.position.set( 0, 1, 6 );
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( camera, pathTracer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		renderer.reset();
+		pathTracer.reset();
 
 	} );
 
@@ -108,7 +110,7 @@ async function init() {
 	ptFolder.add( params, 'mis' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( reset );
@@ -133,11 +135,11 @@ function reset() {
 	spotLight.intensity = params.lightIntensity;
 	spotLight.color.set( params.lightColor );
 
-	renderer.multipleImportanceSampling = params.mis;
-	renderer.bounces = params.bounces;
+	pathTracer.multipleImportanceSampling = params.mis;
+	pathTracer.bounces = params.bounces;
 
-	renderer.renderScale = params.resolutionScale;
-	renderer.updateScene( camera, scene );
+	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.updateScene( camera, scene );
 
 }
 
@@ -147,14 +149,14 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
 
-	renderer.reset();
+	pathTracer.reset();
 
 }
 
@@ -162,8 +164,8 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	renderer.renderSample();
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	pathTracer.renderSample();
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }
 

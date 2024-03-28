@@ -16,7 +16,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let renderer, controls, camera, scene, bvh;
+let pathTracer, controls, camera, scene, bvh;
 let samplesEl;
 const mouse = new Vector2();
 const focusPoint = new Vector3();
@@ -45,10 +45,11 @@ init();
 
 async function init() {
 
-	renderer = new WebGLPathTracer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( renderer.domElement );
+	const renderer = new WebGLPathTracer( { antialias: true } );
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.toneMapping = ACESFilmicToneMapping;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	document.body.appendChild( pathTracer.domElement );
 
 	camera = new PhysicalCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 0.262, 0.5276, - 1.1606 );
@@ -66,7 +67,7 @@ async function init() {
 	scene.background = gradientMap;
 	scene.environmentIntensity = 0.5;
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( camera, pathTracer.domElement );
 	controls.target.set( - 0.182, 0.147, 0.06 );
 	controls.update();
 	controls.addEventListener( 'change', () => {
@@ -86,7 +87,7 @@ async function init() {
 		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
 		.then( texture => {
 
-			const generator = new BlurredEnvMapGenerator( renderer._renderer );
+			const generator = new BlurredEnvMapGenerator( renderer );
 			const blurredTex = generator.generate( texture, 0.35 );
 			generator.dispose();
 			texture.dispose();
@@ -146,14 +147,14 @@ async function init() {
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
-	renderer.domElement.addEventListener( 'mouseup', onMouseUp );
-	renderer.domElement.addEventListener( 'mousedown', onMouseDown );
+	pathTracer.domElement.addEventListener( 'mouseup', onMouseUp );
+	pathTracer.domElement.addEventListener( 'mousedown', onMouseDown );
 
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		renderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
@@ -223,8 +224,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	pathTracer.setSize( w, h );
+	pathTracer.setPixelRatio( dpr );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
@@ -232,11 +233,11 @@ function onResize() {
 
 function reset() {
 
-	renderer.filterGlossyFactor = params.filterGlossyFactor;
-	renderer.bounces = params.bounces;
-	renderer.renderScale = params.resolutionScale;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.bounces = params.bounces;
+	pathTracer.renderScale = params.resolutionScale;
 
-	bvh = renderer.updateScene( camera, scene ).bvh;
+	bvh = pathTracer.updateScene( camera, scene ).bvh;
 
 }
 
@@ -244,9 +245,9 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	renderer.renderSample();
+	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( renderer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 
 }
 
