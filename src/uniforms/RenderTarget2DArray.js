@@ -12,6 +12,12 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { reduceTexturesToUniqueSources } from './utils.js';
 
 const prevColor = new Color();
+function getTextureHash( texture ) {
+
+	return texture ? `${ texture.uuid }:${ texture.version }` : null;
+
+}
+
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	constructor( width, height, options ) {
@@ -33,6 +39,8 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 		};
 
+		this.hashes = [ null ];
+
 		const fsQuad = new FullScreenQuad( new CopyMaterial() );
 		this.fsQuad = fsQuad;
 
@@ -52,16 +60,25 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		// resize the render target and ensure we don't have an empty texture
 		// render target depth must be >= 1 to avoid unbound texture error on android devices
 		const depth = uniqueTextures.length || 1;
-		this.setSize( width, height, depth );
+		if ( width !== this.width || height !== this.height || this.depth !== depth ) {
+
+			this.setSize( width, height, depth );
+			this.hashes = new Array( depth ).fill( null );
+
+		}
+
 		renderer.setClearColor( 0, 0 );
 		renderer.toneMapping = NoToneMapping;
 
 		// render each texture into each layer of the target
 		const fsQuad = this.fsQuad;
+		const hashes = this.hashes;
+		let updated = false;
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
 			const texture = uniqueTextures[ i ];
-			if ( texture ) {
+			const hash = getTextureHash( texture );
+			if ( texture && ( hashes[ i ] !== hash || texture.isWebGLRenderTarget ) ) {
 
 				// revert to default texture transform before rendering
 				texture.matrixAutoUpdate = false;
@@ -76,6 +93,10 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 				texture.updateMatrix();
 				texture.matrixAutoUpdate = true;
 
+				// ensure textures are not updated unnecessarily
+				hashes[ i ] = hash;
+				updated = true;
+
 			}
 
 		}
@@ -85,6 +106,8 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		renderer.setClearColor( prevColor, prevAlpha );
 		renderer.setRenderTarget( prevRenderTarget );
 		renderer.toneMapping = prevToneMapping;
+
+		return updated;
 
 	}
 
