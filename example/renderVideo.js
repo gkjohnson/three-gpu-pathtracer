@@ -7,7 +7,6 @@ import {
 	MeshBasicMaterial,
 	EquirectangularReflectionMapping,
 	AnimationMixer,
-	Group,
 	Mesh,
 	PlaneGeometry,
 	MeshStandardMaterial,
@@ -15,7 +14,7 @@ import {
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, WebGLPathTracer } from '../src/index.js';
+import { DynamicPathTracingSceneGenerator, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -66,7 +65,7 @@ const params = {
 		} );
 
 		// reinitialize recording variables
-		ptRenderer.reset();
+		pathTracer.reset();
 		recordedFrames = 0;
 		rebuildGUI();
 
@@ -196,7 +195,7 @@ function rebuildGUI() {
 	const renderFolder = gui.addFolder( 'rendering' );
 	renderFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
 	renderFolder.add( params, 'samples', 1, 500, 1 );
@@ -302,6 +301,8 @@ function regenerateScene() {
 	scene.updateMatrixWorld( true );
 	sceneInfo = sceneGenerator.generate();
 
+	pathTracer.bounces = params.bounces;
+
 	const { bvh, textures, materials, geometry } = sceneInfo;
 	const material = ptRenderer.material;
 
@@ -338,46 +339,39 @@ function animate() {
 
 		videoEl.style.display = 'none';
 		controls.enabled = ! isRecording;
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.bounces = params.bounces;
 
 		camera.updateMatrixWorld();
 
-		// render the samples
-		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
+		// if we're recording and we hit the target samples then record the frame step the animation forward
+		if ( isRecording && ptRenderer.samples >= params.samples ) {
 
-			// if we're recording and we hit the target samples then record the frame step the animation forward
-			if ( isRecording && ptRenderer.samples >= params.samples ) {
+			CanvasCapture.recordFrame();
+			recordedFrames ++;
 
-				CanvasCapture.recordFrame();
-				recordedFrames ++;
+			// stop recording if we've hit enough frames
+			if ( recordedFrames >= params.frameRate * params.duration ) {
 
-				// stop recording if we've hit enough frames
-				if ( recordedFrames >= params.frameRate * params.duration ) {
+				CanvasCapture.stopRecord();
 
-					CanvasCapture.stopRecord();
-
-					recordedFrames = 0;
-					rebuildGUI();
-
-				}
-
-				// update the camera transform and update the geometry
-				const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
-				camera.position.applyAxisAngle( UP_AXIS, angle );
-				controls.update();
-				camera.updateMatrixWorld();
-
-				const delta = 1 / params.frameRate;
-				model.mixer.update( delta );
-
-				regenerateScene();
+				recordedFrames = 0;
+				rebuildGUI();
 
 			}
 
-			ptRenderer.update();
+			// update the camera transform and update the geometry
+			const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
+			camera.position.applyAxisAngle( UP_AXIS, angle );
+			controls.update();
+			camera.updateMatrixWorld();
+
+			const delta = 1 / params.frameRate;
+			model.mixer.update( delta );
+
+			regenerateScene();
 
 		}
+
+		ptRenderer.update();
 
 		// rasterize if we don't have a full path trace render
 		if ( ptRenderer.samples < 1 ) {
@@ -400,14 +394,14 @@ function animate() {
 		const percStride = 1 / total;
 		const samplesPerc = ptRenderer.samples / params.samples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-		samplesEl.innerText = `Frame Samples        : ${ Math.floor( ptRenderer.samples ) }\n`;
+		samplesEl.innerText = `Frame Samples        : ${ Math.floor( pathTracer.samples ) }\n`;
 		samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
 		samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
 
 	} else {
 
 		samplesEl.innerText = '';
-		samplesEl.innerText += `Samples : ${ Math.floor( ptRenderer.samples ) }`;
+		samplesEl.innerText += `Samples : ${ Math.floor( pathTracer.samples ) }`;
 
 	}
 
