@@ -301,7 +301,7 @@ async function init() {
 				geometry.attributes.color,
 			);
 			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
+			material.textures.setTextures( renderer, textures, 2048, 2048 );
 			material.materials.updateFrom( materials, textures );
 
 			generator.dispose();

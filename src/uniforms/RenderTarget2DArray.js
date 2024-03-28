@@ -14,9 +14,9 @@ import { reduceTexturesToUniqueSources } from './utils.js';
 const prevColor = new Color();
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
-	constructor( width, height, depth, options ) {
+	constructor( width, height, options ) {
 
-		super( width, height, depth, {
+		super( width, height, 1, {
 			format: RGBAFormat,
 			type: UnsignedByteType,
 			minFilter: LinearFilter,
@@ -38,7 +38,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	}
 
-	setTextures( renderer, width, height, textures ) {
+	setTextures( renderer, textures, width = this.width, height = this.height ) {
 
 		// get the list of textures with unique sources
 		const uniqueTextures = reduceTexturesToUniqueSources( textures );
