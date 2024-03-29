@@ -98,27 +98,6 @@ export class PathTracingSceneGenerator {
 
 	}
 
-	reset() {
-
-		console.log( 'TODO: remove this function since it will not be needed' );
-		this.bvh = null;
-		this.geometry.dispose();
-		this.geometry = new BufferGeometry();
-		this.staticGeometryGenerator = new StaticGeometryGenerator( this.objects );
-
-	}
-
-	dispose() {
-
-		this.reset();
-		if ( this._bvhWorker ) {
-
-			this._bvhWorker.dispose();
-
-		}
-
-	}
-
 	setObjects( objects ) {
 
 		this.staticGeometryGenerator.setObjects( objects );
@@ -128,6 +107,12 @@ export class PathTracingSceneGenerator {
 	setBVHWorker( bvhWorker ) {
 
 		this._bvhWorker = bvhWorker;
+
+	}
+
+	setMikkTSpace( mikktSpace ) {
+
+		this.staticGeometryGenerator.setMikkTSpace( mikktSpace );
 
 	}
 
