@@ -65,27 +65,6 @@ function* renderTask() {
 
 			for ( let x = 0; x < tilesX; x ++ ) {
 
-				// Perspective camera (default)
-				let cameraType = 0;
-
-				// An orthographic projection matrix will always have the bottom right element == 1
-				// And a perspective projection matrix will always have the bottom right element == 0
-				if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
-
-					// Orthographic
-					cameraType = 1;
-
-				}
-
-				if ( camera.isEquirectCamera ) {
-
-					// Equirectangular
-					cameraType = 2;
-
-				}
-
-				material.setDefine( 'CAMERA_TYPE', cameraType );
-
 				// store og state
 				const ogRenderTarget = _renderer.getRenderTarget();
 				const ogAutoClear = _renderer.autoClear;
@@ -269,8 +248,30 @@ export class PathTracingRenderer {
 		material.cameraWorldMatrix.copy( camera.matrixWorld );
 		material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
 		material.physicalCamera.updateFrom( camera );
-		this.camera = this;
-		this.reset();
+
+		// Perspective camera (default)
+		let cameraType = 0;
+
+		// An orthographic projection matrix will always have the bottom right element == 1
+		// And a perspective projection matrix will always have the bottom right element == 0
+		if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
+
+			// Orthographic
+			cameraType = 1;
+
+		}
+
+		if ( camera.isEquirectCamera ) {
+
+			// Equirectangular
+			cameraType = 2;
+
+		}
+
+		material.setDefine( 'CAMERA_TYPE', cameraType );
+
+		this.camera = camera;
+		// this.reset();
 
 	}
 
