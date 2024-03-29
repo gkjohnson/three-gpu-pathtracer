@@ -1,4 +1,5 @@
 import { Matrix4 } from 'three';
+import { bufferToHash } from '../../utils/bufferToHash.js';
 
 function attributeSort( a, b ) {
 
@@ -41,7 +42,10 @@ function getSkeletonHash( mesh ) {
 
 		}
 
-		return `${ skeleton.boneTexture.version }_${ skeleton.boneTexture.uuid }`;
+		// we can't use the texture version here because it will change even
+		// when the bones haven't
+		const dataHash = bufferToHash( skeleton.boneTexture.image.data.buffer );
+		return `${ dataHash }_${ skeleton.boneTexture.uuid }`;
 
 	} else {
 
