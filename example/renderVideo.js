@@ -63,8 +63,8 @@ const params = {
 		} );
 
 		// reinitialize recording variables
-		pathTracer.reset();
 		recordedFrames = 0;
+		regenerateScene();
 		rebuildGUI();
 
 	},
@@ -115,7 +115,7 @@ async function init() {
 	controls.target.set( - 0.15, 4.5, - 0.08 );
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		regenerateScene();
 
 	} );
 	controls.update();
@@ -141,7 +141,6 @@ async function init() {
 		.then( result => {
 
 			model = result;
-			regenerateScene();
 
 		} );
 
@@ -270,6 +269,8 @@ function initializeSize() {
 	// update the dom elements
 	renderer.domElement.style.width = `${ w }px`;
 	videoEl.style.width = `${ w }px`;
+
+	regenerateScene();
 
 }
 

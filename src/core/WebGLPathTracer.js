@@ -335,9 +335,8 @@ export class WebGLPathTracer {
 		}
 
 		// camera update
-		// TODO: these cameras should only be set once so we don't depend on movement
-		pathTracer.camera = camera;
-		lowResPathTracer.camera = camera;
+		pathTracer.setCamera( camera );
+		lowResPathTracer.setCamera( camera );
 		lowResPathTracer.material = pathTracer.material;
 
 		// save previously used items

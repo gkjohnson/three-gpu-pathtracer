@@ -71,22 +71,22 @@ async function init() {
 	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
 	perspectiveCamera.lookAt( controls.target );
+	controls.update();
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		pathTracer.updateScene( activeCamera, scene );
 
 	} );
-	controls.update();
 
 	sphericalControls = new OrbitControls( equirectCamera, pathTracer.domElement );
 	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
 	equirectCamera.lookAt( sphericalControls.target );
+	sphericalControls.update();
 	sphericalControls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		pathTracer.updateScene( activeCamera, scene );
 
 	} );
-	sphericalControls.update();
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -188,6 +188,8 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
+
+	reset();
 
 }
 

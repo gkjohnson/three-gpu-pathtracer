@@ -231,8 +231,6 @@ export class PathTracingSceneGenerator {
 
 				} else {
 
-					console.log( bvhOptions );
-
 					this.bvh = new MeshBVH( geometry, bvhOptions );
 
 				}

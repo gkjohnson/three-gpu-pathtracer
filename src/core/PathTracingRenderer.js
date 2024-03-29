@@ -15,7 +15,6 @@ function* renderTask() {
 		_sobolTarget,
 		_subframe,
 		alpha,
-		camera,
 		material,
 	} = this;
 	const _ogScissor = new Vector4();
@@ -64,31 +63,6 @@ function* renderTask() {
 		for ( let y = 0; y < tilesY; y ++ ) {
 
 			for ( let x = 0; x < tilesX; x ++ ) {
-
-				material.cameraWorldMatrix.copy( camera.matrixWorld );
-				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
-				material.physicalCamera.updateFrom( camera );
-
-				// Perspective camera (default)
-				let cameraType = 0;
-
-				// An orthographic projection matrix will always have the bottom right element == 1
-				// And a perspective projection matrix will always have the bottom right element == 0
-				if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
-
-					// Orthographic
-					cameraType = 1;
-
-				}
-
-				if ( camera.isEquirectCamera ) {
-
-					// Equirectangular
-					cameraType = 2;
-
-				}
-
-				material.setDefine( 'CAMERA_TYPE', cameraType );
 
 				// store og state
 				const ogRenderTarget = _renderer.getRenderTarget();
@@ -264,6 +238,39 @@ export class PathTracingRenderer {
 				type: floatLinearExtensionSupported ? FloatType : HalfFloatType,
 			} ),
 		];
+
+	}
+
+	setCamera( camera ) {
+
+		const { material } = this;
+		material.cameraWorldMatrix.copy( camera.matrixWorld );
+		material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
+		material.physicalCamera.updateFrom( camera );
+
+		// Perspective camera (default)
+		let cameraType = 0;
+
+		// An orthographic projection matrix will always have the bottom right element == 1
+		// And a perspective projection matrix will always have the bottom right element == 0
+		if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
+
+			// Orthographic
+			cameraType = 1;
+
+		}
+
+		if ( camera.isEquirectCamera ) {
+
+			// Equirectangular
+			cameraType = 2;
+
+		}
+
+		material.setDefine( 'CAMERA_TYPE', cameraType );
+
+		this.camera = camera;
+		// this.reset();
 
 	}
 

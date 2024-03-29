@@ -172,7 +172,7 @@ async function init() {
 
 		}
 
-		pathTracer.reset();
+		resetRenderer();
 
 	} );
 
@@ -297,6 +297,8 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
+
+	resetRenderer();
 
 }
 

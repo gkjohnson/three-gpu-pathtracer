@@ -48,7 +48,7 @@ async function init() {
 
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		pathTracer.updateScene( camera, scene );
 
 	} );
 
@@ -97,6 +97,8 @@ function onResize() {
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
+
+	pathTracer.updateScene( camera, scene );
 
 }
 

@@ -66,7 +66,7 @@ async function init() {
 	camera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		regenerateScene();
 
 	} );
 	controls.update();
@@ -212,6 +212,8 @@ function onResize() {
 
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
+
+	regenerateScene();
 
 }
 

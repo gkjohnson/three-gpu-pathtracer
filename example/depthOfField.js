@@ -8,6 +8,7 @@ import {
 	MeshStandardMaterial,
 	Mesh,
 	Raycaster,
+	WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -45,7 +46,7 @@ init();
 
 async function init() {
 
-	const renderer = new WebGLPathTracer( { antialias: true } );
+	const renderer = new WebGLRenderer( { antialias: true } );
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -228,6 +229,8 @@ function onResize() {
 	pathTracer.setPixelRatio( dpr );
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
+
+	bvh = pathTracer.updateScene( camera, scene ).bvh;
 
 }
 
