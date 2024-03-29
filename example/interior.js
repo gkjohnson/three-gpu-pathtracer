@@ -73,7 +73,7 @@ async function init() {
 	perspectiveCamera.lookAt( controls.target );
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		reset();
 
 	} );
 	controls.update();
@@ -83,7 +83,7 @@ async function init() {
 	equirectCamera.lookAt( sphericalControls.target );
 	sphericalControls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		reset();
 
 	} );
 	sphericalControls.update();
@@ -188,6 +188,8 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
+
+	reset();
 
 }
 
