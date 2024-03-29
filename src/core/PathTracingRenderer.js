@@ -65,10 +65,6 @@ function* renderTask() {
 
 			for ( let x = 0; x < tilesX; x ++ ) {
 
-				material.cameraWorldMatrix.copy( camera.matrixWorld );
-				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
-				material.physicalCamera.updateFrom( camera );
-
 				// Perspective camera (default)
 				let cameraType = 0;
 
@@ -264,6 +260,17 @@ export class PathTracingRenderer {
 				type: floatLinearExtensionSupported ? FloatType : HalfFloatType,
 			} ),
 		];
+
+	}
+
+	setCamera( camera ) {
+
+		const { material } = this;
+		material.cameraWorldMatrix.copy( camera.matrixWorld );
+		material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
+		material.physicalCamera.updateFrom( camera );
+		this.camera = this;
+		this.reset();
 
 	}
 
