@@ -69,7 +69,7 @@ async function init() {
 	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		reset();
 
 	} );
 
@@ -224,6 +224,7 @@ function onResize() {
 	const aspect = w / h;
 	perspectiveCamera.aspect = aspect;
 	perspectiveCamera.updateProjectionMatrix();
+	reset();
 
 }
 

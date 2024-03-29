@@ -204,7 +204,7 @@ async function init() {
 	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		reset();
 
 	} );
 
@@ -452,6 +452,8 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
+
+	reset();
 
 }
 
