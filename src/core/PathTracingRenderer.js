@@ -15,7 +15,6 @@ function* renderTask() {
 		_sobolTarget,
 		_subframe,
 		alpha,
-		camera,
 		material,
 	} = this;
 	const _ogScissor = new Vector4();
