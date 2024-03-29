@@ -86,4 +86,6 @@ function onResize() {
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
 
+	pathTracer.updateScene( camera, scene );
+
 }

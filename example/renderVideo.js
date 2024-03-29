@@ -63,7 +63,7 @@ const params = {
 		} );
 
 		// reinitialize recording variables
-		pathTracer.reset();
+		pathTracer.updateScene( camera, scene );
 		recordedFrames = 0;
 		rebuildGUI();
 
@@ -115,7 +115,7 @@ async function init() {
 	controls.target.set( - 0.15, 4.5, - 0.08 );
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.reset();
+		pathTracer.updateScene( camera, scene );
 
 	} );
 	controls.update();
