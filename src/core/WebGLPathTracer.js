@@ -1,11 +1,10 @@
-import { Color, CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2 } from 'three';
+import { CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2 } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
 
 const _resolution = new Vector2();
-const _color = new Color();
 
 export class WebGLPathTracer {
 
@@ -100,6 +99,7 @@ export class WebGLPathTracer {
 		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._pathTracer.alpha = renderer.getContextAttributes().alpha;
+		this._clearBackground = null;
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
@@ -134,7 +134,7 @@ export class WebGLPathTracer {
 
 		};
 
-		// TODO: remove some of these pass through functinos
+		// TODO: remove some of these pass through functions
 		// pass through functions for the canvas
 		[
 			'getPixelRatio',
@@ -262,33 +262,28 @@ export class WebGLPathTracer {
 		material.backgroundBlur = scene.backgroundBlurriness;
 		material.backgroundIntensity = scene.backgroundIntensity ?? 1;
 		material.backgroundRotation.makeRotationFromEuler( scene.backgroundRotation ).invert();
-		if ( scene.background === null || scene.background && scene.background.isColor ) {
+		if ( scene.background === null ) {
+
+			material.backgroundMap = null;
+			material.backgroundAlpha = 0;
+
+		} else if ( scene.background.isColor ) {
 
 			this._colorBackground = this._colorBackground || new GradientEquirectTexture( 16 );
 
-			// get the background color from scene or renderer
-			let alpha;
-			if ( scene.background ) {
+			const colorBackground = this._colorBackground;
+			if ( colorBackground.topColor.equals( scene.background ) ) {
 
-				_color.copy( scene.background );
-				alpha = 1;
-
-			} else {
-
-				renderer.getClearColor( _color );
-				alpha = renderer.getClearAlpha();
+				// set the texture color
+				colorBackground.topColor.set( scene.background );
+				colorBackground.bottomColor.set( scene.background );
+				colorBackground.update();
 
 			}
 
-			// set the texture color
-			const colorBackground = this._colorBackground;
-			colorBackground.topColor.set( _color );
-			colorBackground.bottomColor.set( _color );
-			colorBackground.update();
-
 			// assign to material
 			material.backgroundMap = colorBackground;
-			material.backgroundAlpha = alpha;
+			material.backgroundAlpha = 1;
 
 		} else {
 
