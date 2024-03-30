@@ -45,7 +45,6 @@ export class WebGLPathTracer {
 
 	}
 
-
 	get filterGlossyFactor() {
 
 		return this._pathTracer.material.filterGlossyFactor;
@@ -79,18 +78,6 @@ export class WebGLPathTracer {
 	get domElement() {
 
 		return this._renderer.domElement;
-
-	}
-
-	get alpha() {
-
-		return this._pathTracer.alpha;
-
-	}
-
-	set alpha( v ) {
-
-		this._pathTracer.alpha = v;
 
 	}
 
@@ -147,12 +134,11 @@ export class WebGLPathTracer {
 
 		};
 
+		// TODO: remove some of these pass through functinos
 		// pass through functions for the canvas
 		[
 			'getPixelRatio',
 			'setPixelRatio',
-			'setDrawingBufferSize',
-			'getDrawingBufferSize',
 			'getSize',
 			'setSize',
 		].forEach( key => {
@@ -172,12 +158,6 @@ export class WebGLPathTracer {
 
 		// Functions that require always resetting the render
 		[
-			'setViewport',
-			'getViewport',
-			'getScissor',
-			'setScissor',
-			'getScissorTest',
-			'setScissorTest',
 			'getClearAlpha',
 			'setClearAlpha',
 			'getClearColor',
