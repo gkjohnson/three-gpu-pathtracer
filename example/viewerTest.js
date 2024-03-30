@@ -226,7 +226,6 @@ function resetRenderer() {
 	} else {
 
 		scene.background = null;
-		pathTracer.setClearAlpha( 0 );
 
 	}
 

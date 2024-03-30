@@ -57,7 +57,6 @@ async function init() {
 	const renderer = new WebGLRenderer( { antialias: true } );
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
-	pathTracer.setClearColor( 0, 0 );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( pathTracer.domElement );

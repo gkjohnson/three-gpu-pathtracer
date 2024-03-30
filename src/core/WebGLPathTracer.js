@@ -156,23 +156,6 @@ export class WebGLPathTracer {
 
 		} );
 
-		// Functions that require always resetting the render
-		[
-			'getClearAlpha',
-			'setClearAlpha',
-			'getClearColor',
-			'setClearColor',
-		].forEach( key => {
-
-			this[ key ] = ( ...args ) => {
-
-				this._renderer[ key ]( ...args );
-				this.reset();
-
-			};
-
-		} );
-
 		// initialize the scene so it doesn't fail
 		this.updateScene( new PerspectiveCamera(), new Scene() );
 

@@ -85,7 +85,6 @@ async function init() {
 
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
-	pathTracer.setClearColor( 0, 0 );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
 

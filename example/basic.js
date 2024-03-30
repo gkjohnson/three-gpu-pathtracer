@@ -31,7 +31,6 @@ async function init() {
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.renderScale = resolutionScale;
-	pathTracer.setClearColor( 0, 0 );
 	pathTracer.tiles.set( tiles, tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 	document.body.appendChild( pathTracer.domElement );

@@ -8,6 +8,7 @@ import {
 	Mesh,
 	MeshStandardMaterial,
 	WebGLRenderer,
+	Color,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
@@ -42,7 +43,6 @@ async function init() {
 	const renderer = new WebGLRenderer( { antialias: true } );
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
-	pathTracer.setClearColor( 0, 1 );
 	pathTracer.updateScene( new PerspectiveCamera(), new Scene() );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	document.body.appendChild( pathTracer.domElement );
@@ -59,6 +59,7 @@ async function init() {
 	} );
 
 	scene = new Scene();
+	scene.background = new Color( 0 );
 
 	samplesEl = document.getElementById( 'samples' );
 	fogMaterial = new FogVolumeMaterial();

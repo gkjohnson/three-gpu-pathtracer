@@ -165,7 +165,6 @@ async function init() {
 	const renderer = new WebGLRenderer( { antialias: true } );
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
-	pathTracer.setClearColor( 0, 0 );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {
 
@@ -531,7 +530,8 @@ function reset() {
 	scene.environmentRotation.y = params.environmentRotation;
 	scene.backgroundRotation.y = params.environmentRotation;
 
-	pathTracer.setClearAlpha( params.backgroundAlpha );
+	// TODO: remove this
+	// pathTracer.setClearAlpha( params.backgroundAlpha );
 
 	activeCamera.updateMatrixWorld();
 
