@@ -27,10 +27,10 @@ async function init() {
 
 	// init renderer, camera, controls, scene
 	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.renderScale = resolutionScale;
 	pathTracer.tiles.set( tiles, tiles );

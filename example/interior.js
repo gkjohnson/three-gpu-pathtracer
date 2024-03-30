@@ -50,10 +50,10 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.dynamicLowRes = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 

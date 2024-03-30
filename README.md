@@ -126,9 +126,6 @@ constructor( renderer : WebGLRenderer )
 Pass through functions and fields:
 
 ```js
-// members
-toneMapping,
-
 // functions
 getPixelRatio,
 setPixelRatio,

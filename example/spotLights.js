@@ -82,10 +82,10 @@ async function init() {
 	renderer.shadowMap.enabled = true;
 	renderer.physicallyCorrectLights = true;
 	renderer.shadowMap.type = PCFSoftShadowMap;
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
 

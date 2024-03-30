@@ -51,10 +51,10 @@ camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
 const renderer = new WebGLRenderer( { antialias: true } );
+renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 
 const pathTracer = new WebGLPathTracer( renderer );
-pathTracer.toneMapping = ACESFilmicToneMapping;
 pathTracer.tiles.set( 3, 3 );
 pathTracer.updateScene( camera, scene );
 

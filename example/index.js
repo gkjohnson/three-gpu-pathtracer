@@ -140,10 +140,10 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 
 	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.physicallyCorrectLights = true;
 	pathTracer.tiles.set( params.tilesX, params.tilesY );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
@@ -321,7 +321,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
-		pathTracer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );

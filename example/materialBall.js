@@ -163,10 +163,10 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {
 
@@ -293,7 +293,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
-		pathTracer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );

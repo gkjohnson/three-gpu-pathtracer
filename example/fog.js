@@ -41,10 +41,10 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.updateScene( new PerspectiveCamera(), new Scene() );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
