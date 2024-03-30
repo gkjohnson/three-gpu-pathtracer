@@ -50,11 +50,12 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.dynamicLowRes = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( pathTracer.domElement );
 
 	perspectiveCamera = new PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
 	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
@@ -68,7 +69,7 @@ async function init() {
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
-	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
 	perspectiveCamera.lookAt( controls.target );
 	controls.update();
@@ -78,7 +79,7 @@ async function init() {
 
 	} );
 
-	sphericalControls = new OrbitControls( equirectCamera, pathTracer.domElement );
+	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
 	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
 	equirectCamera.lookAt( sphericalControls.target );
 	sphericalControls.update();

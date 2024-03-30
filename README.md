@@ -126,27 +126,11 @@ constructor( renderer : WebGLRenderer )
 Pass through functions and fields:
 
 ```js
-// members
-toneMapping,
-domElement,
-
 // functions
 getPixelRatio,
 setPixelRatio,
-setDrawingBufferSize,
-getDrawingBufferSize,
 getSize,
 setSize,
-setViewport,
-getViewport,
-getScissor,
-setScissor,
-getScissorTest,
-setScissorTest,
-getClearAlpha,
-setClearAlpha,
-getClearColor,
-setClearColor,
 ```
 
 ### .bounces

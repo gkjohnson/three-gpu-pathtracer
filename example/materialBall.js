@@ -163,9 +163,10 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
-	pathTracer.setClearColor( 0, 0 );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {
 
@@ -181,8 +182,6 @@ async function init() {
 		renderer.autoClear = autoClear;
 
 	};
-
-	document.body.appendChild( pathTracer.domElement );
 
 	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: null,
@@ -201,7 +200,7 @@ async function init() {
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 4, 2, 3 );
 
-	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
 		reset();
@@ -294,7 +293,7 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
 
-		pathTracer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
@@ -531,7 +530,8 @@ function reset() {
 	scene.environmentRotation.y = params.environmentRotation;
 	scene.backgroundRotation.y = params.environmentRotation;
 
-	pathTracer.setClearAlpha( params.backgroundAlpha );
+	// TODO: remove this
+	// pathTracer.setClearAlpha( params.backgroundAlpha );
 
 	activeCamera.updateMatrixWorld();
 

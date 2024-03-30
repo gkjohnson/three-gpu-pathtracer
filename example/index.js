@@ -140,13 +140,14 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 
 	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.physicallyCorrectLights = true;
 	pathTracer.tiles.set( params.tilesX, params.tilesY );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
-	document.body.appendChild( pathTracer.domElement );
 
 	scene = new Scene();
 
@@ -163,7 +164,7 @@ async function init() {
 	backgroundMap.bottomColor.set( params.bgGradientBottom );
 	backgroundMap.update();
 
-	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
 		if ( params.tilesX * params.tilesY !== 1.0 ) {
@@ -320,7 +321,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
-		pathTracer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );
@@ -512,7 +513,7 @@ async function updateModel() {
 	const modelInfo = models[ params.model ];
 
 	loadingModel = true;
-	pathTracer.domElement.style.visibility = 'hidden';
+	renderer.domElement.style.visibility = 'hidden';
 	samplesEl.innerText = '--';
 	creditEl.innerText = '--';
 	loadingEl.innerText = 'Loading';
@@ -635,7 +636,7 @@ async function updateModel() {
 		buildGui();
 
 		loadingModel = false;
-		pathTracer.domElement.style.visibility = 'visible';
+		renderer.domElement.style.visibility = 'visible';
 		if ( params.checkerboardTransparency ) {
 
 			document.body.classList.add( 'checkerboard' );
