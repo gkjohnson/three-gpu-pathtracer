@@ -37,6 +37,7 @@ export class MaterialBase extends ShaderMaterial {
 
 				delete this.defines[ name ];
 				this.needsUpdate = true;
+				return true;
 
 			}
 
@@ -46,10 +47,13 @@ export class MaterialBase extends ShaderMaterial {
 
 				this.defines[ name ] = value;
 				this.needsUpdate = true;
+				return true;
 
 			}
 
 		}
+
+		return false;
 
 	}
 
