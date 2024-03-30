@@ -66,16 +66,17 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-	document.body.appendChild( pathTracer.domElement );
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 0.0, 0.6, 2.65 );
 
-	controls = new OrbitControls( camera, pathTracer.domElement );
+	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
 	camera.lookAt( controls.target );
 	controls.update();

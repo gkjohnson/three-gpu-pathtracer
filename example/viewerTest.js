@@ -85,12 +85,12 @@ async function init() {
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.physicallyCorrectLights = true;
+	containerEl.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tilesX, params.tilesY );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	containerEl.appendChild( pathTracer.domElement );
 
 	// init scene
 	scene = new Scene();
@@ -161,8 +161,8 @@ function animate() {
 	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
-	imgEl.style.width = pathTracer.domElement.style.width;
-	imgEl.style.height = pathTracer.domElement.style.height;
+	imgEl.style.width = renderer.domElement.style.width;
+	imgEl.style.height = renderer.domElement.style.height;
 
 	if ( loadingModel ) {
 

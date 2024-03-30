@@ -47,10 +47,11 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( pathTracer.domElement );
 
 	camera = new PhysicalCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 0.262, 0.5276, - 1.1606 );
@@ -68,7 +69,7 @@ async function init() {
 	scene.background = gradientMap;
 	scene.environmentIntensity = 0.5;
 
-	controls = new OrbitControls( camera, pathTracer.domElement );
+	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( - 0.182, 0.147, 0.06 );
 	controls.update();
 	controls.addEventListener( 'change', () => {
@@ -148,8 +149,8 @@ async function init() {
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
-	pathTracer.domElement.addEventListener( 'mouseup', onMouseUp );
-	pathTracer.domElement.addEventListener( 'mousedown', onMouseDown );
+	renderer.domElement.addEventListener( 'mouseup', onMouseUp );
+	renderer.domElement.addEventListener( 'mousedown', onMouseDown );
 
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );

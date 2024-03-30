@@ -74,12 +74,6 @@ export class WebGLPathTracer {
 
 	}
 
-	get domElement() {
-
-		return this._renderer.domElement;
-
-	}
-
 	get toneMapping() {
 
 		return this._renderer.toneMapping;

@@ -51,8 +51,9 @@ camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
 const renderer = new WebGLRenderer( { antialias: true } );
+document.body.appendChild( renderer.domElement );
+
 const pathTracer = new WebGLPathTracer( renderer );
-document.body.appendChild( pathTracer.domElement );
 pathTracer.toneMapping = ACESFilmicToneMapping;
 pathTracer.tiles.set( 3, 3 );
 pathTracer.updateScene( camera, scene );

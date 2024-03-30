@@ -82,13 +82,12 @@ async function init() {
 	renderer.shadowMap.enabled = true;
 	renderer.physicallyCorrectLights = true;
 	renderer.shadowMap.type = PCFSoftShadowMap;
+	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
-
-	document.body.appendChild( pathTracer.domElement );
 
 	// init camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -97,7 +96,7 @@ async function init() {
 	camera.bokehSize = 0;
 
 	// init controls
-	controls = new OrbitControls( camera, pathTracer.domElement );
+	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.y = 1.5;
 	controls.update();
 	controls.addEventListener( 'change', () => {
@@ -171,7 +170,7 @@ async function init() {
 			// transform controls
 			function makeTransformControls( object ) {
 
-				const transformControls = new TransformControls( camera, pathTracer.domElement );
+				const transformControls = new TransformControls( camera, renderer.domElement );
 				transformControls.addEventListener( 'objectChange', () => {
 
 					reset();

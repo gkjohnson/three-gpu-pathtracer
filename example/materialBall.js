@@ -163,6 +163,8 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -181,8 +183,6 @@ async function init() {
 
 	};
 
-	document.body.appendChild( pathTracer.domElement );
-
 	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
 		map: null,
 		blending: CustomBlending,
@@ -200,7 +200,7 @@ async function init() {
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 4, 2, 3 );
 
-	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
 		reset();

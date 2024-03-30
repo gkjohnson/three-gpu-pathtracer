@@ -55,17 +55,18 @@ init();
 async function init() {
 
 	const renderer = new WebGLRenderer( { antialias: true } );
+	document.body.appendChild( renderer.domElement );
+
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.toneMapping = ACESFilmicToneMapping;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	document.body.appendChild( pathTracer.domElement );
 
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
-	controls = new OrbitControls( perspectiveCamera, pathTracer.domElement );
+	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
 		reset();
