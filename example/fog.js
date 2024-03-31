@@ -45,7 +45,7 @@ async function init() {
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.updateScene( new PerspectiveCamera(), new Scene() );
+	pathTracer.setScene( new PerspectiveCamera(), new Scene() );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
 	const aspect = window.innerWidth / window.innerHeight;
@@ -141,7 +141,7 @@ function reset() {
 	pathTracer.bounces = params.bounces;
 
 	pathTracer.renderScale = params.resolutionScale;
-	pathTracer.updateScene( scene, camera );
+	pathTracer.setScene( scene, camera );
 
 }
 

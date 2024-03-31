@@ -545,7 +545,7 @@ function reset() {
 
 	}
 
-	pathTracer.updateScene( activeCamera, scene );
+	pathTracer.setScene( activeCamera, scene );
 
 }
 

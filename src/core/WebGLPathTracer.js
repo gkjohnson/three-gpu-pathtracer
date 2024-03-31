@@ -133,7 +133,7 @@ export class WebGLPathTracer {
 		};
 
 		// initialize the scene so it doesn't fail
-		this.updateScene( new Scene(), new PerspectiveCamera() );
+		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
 
@@ -143,7 +143,7 @@ export class WebGLPathTracer {
 
 	}
 
-	updateScene( scene, camera, options = {} ) {
+	setScene( scene, camera, options = {} ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
@@ -168,10 +168,10 @@ export class WebGLPathTracer {
 
 	}
 
-	updateSceneAsync( ...args ) {
+	setSceneAsync( ...args ) {
 
 		this._buildAsync = true;
-		const result = this.updateScene( ...args );
+		const result = this.setScene( ...args );
 		this._buildAsync = false;
 
 		return result;

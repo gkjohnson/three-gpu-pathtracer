@@ -82,7 +82,7 @@ async function init() {
 	controls.update();
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.updateScene( scene, camera );
+		pathTracer.setScene( scene, camera );
 
 	} );
 
@@ -152,7 +152,7 @@ async function init() {
 
 	areaLights = [ areaLight1, areaLight2 ];
 
-	const generatorPromise = pathTracer.updateSceneAsync( scene, camera, {
+	const generatorPromise = pathTracer.setSceneAsync( scene, camera, {
 		onProgress: v => {
 
 			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
@@ -234,7 +234,7 @@ function updateLights() {
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
 
-	pathTracer.updateScene( scene, camera );
+	pathTracer.setScene( scene, camera );
 
 }
 
@@ -249,7 +249,7 @@ function onResize() {
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
-	pathTracer.updateScene( scene, camera );
+	pathTracer.setScene( scene, camera );
 
 }
 

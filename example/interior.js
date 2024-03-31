@@ -75,7 +75,7 @@ async function init() {
 	controls.update();
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.updateScene( activeCamera, scene );
+		pathTracer.setScene( activeCamera, scene );
 
 	} );
 
@@ -85,7 +85,7 @@ async function init() {
 	sphericalControls.update();
 	sphericalControls.addEventListener( 'change', () => {
 
-		pathTracer.updateScene( activeCamera, scene );
+		pathTracer.setScene( activeCamera, scene );
 
 	} );
 
@@ -138,7 +138,7 @@ async function init() {
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
-	pathTracer.updateScene( perspectiveCamera, scene );
+	pathTracer.setScene( perspectiveCamera, scene );
 
 	document.getElementById( 'loading' ).remove();
 
@@ -265,7 +265,7 @@ function reset() {
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
 
-	pathTracer.updateScene( activeCamera, scene );
+	pathTracer.setScene( activeCamera, scene );
 
 }
 

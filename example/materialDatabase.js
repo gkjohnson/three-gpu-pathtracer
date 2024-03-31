@@ -309,7 +309,7 @@ function reset() {
 
 	}
 
-	pathTracer.updateScene( perspectiveCamera, scene );
+	pathTracer.setScene( perspectiveCamera, scene );
 
 }
 

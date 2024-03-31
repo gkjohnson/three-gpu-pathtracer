@@ -56,7 +56,7 @@ document.body.appendChild( renderer.domElement );
 
 const pathTracer = new WebGLPathTracer( renderer );
 pathTracer.tiles.set( 3, 3 );
-pathTracer.updateScene( scene, camera );
+pathTracer.setScene( scene, camera );
 
 onResize();
 
@@ -87,6 +87,6 @@ function onResize() {
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
 
-	pathTracer.updateScene( scene, camera );
+	pathTracer.setScene( scene, camera );
 
 }
