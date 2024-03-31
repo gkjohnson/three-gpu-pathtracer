@@ -81,7 +81,7 @@ export class WebGLPathTracer {
 		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._pathTracer.alpha = renderer.getContextAttributes().alpha;
-		this._clearBackground = null;
+		this._queueReset = false;
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
@@ -317,6 +317,14 @@ export class WebGLPathTracer {
 
 		this._updateScale();
 
+		if ( this._queueReset ) {
+
+			this._pathTracer.reset();
+			this._lowResPathTracer.reset();
+			this._queueReset = false;
+
+		}
+
 		const lowResPathTracer = this._lowResPathTracer;
 		const pathTracer = this._pathTracer;
 		if ( ! this.pausePathTracing && this.enablePathTracing ) {
@@ -359,8 +367,7 @@ export class WebGLPathTracer {
 
 	reset() {
 
-		this._pathTracer.reset();
-		this._lowResPathTracer.reset();
+		this._queueReset = true;
 
 	}
 
