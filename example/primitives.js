@@ -80,8 +80,8 @@ function onResize() {
 	const w = window.innerWidth;
 	const h = window.innerHeight;
 
-	pathTracer.setSize( w, h );
-	pathTracer.setPixelRatio( window.devicePixelRatio );
+	renderer.setSize( w, h );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
 	const aspect = w / h;
 	camera.aspect = aspect;
