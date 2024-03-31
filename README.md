@@ -123,16 +123,6 @@ const blurredEnvMap = generator.generate( envMap, 0.35 );
 constructor( renderer : WebGLRenderer )
 ```
 
-Pass through functions and fields:
-
-```js
-// functions
-getPixelRatio,
-setPixelRatio,
-getSize,
-setSize,
-```
-
 ### .bounces
 
 ```js
