@@ -346,7 +346,7 @@ function reset() {
 	// update objects
 	spotLightHelper.update();
 
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 }
 

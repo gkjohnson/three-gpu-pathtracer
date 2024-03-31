@@ -229,7 +229,7 @@ function resetRenderer() {
 
 	}
 
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 
 }

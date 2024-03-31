@@ -117,7 +117,7 @@ export class WebGLPathTracer {
 		};
 
 		// initialize the scene so it doesn't fail
-		this.updateScene( new PerspectiveCamera(), new Scene() );
+		this.updateScene( new Scene(), new PerspectiveCamera() );
 
 	}
 
@@ -127,7 +127,7 @@ export class WebGLPathTracer {
 
 	}
 
-	updateScene( camera, scene, options = {} ) {
+	updateScene( scene, camera, options = {} ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();

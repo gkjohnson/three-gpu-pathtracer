@@ -221,7 +221,7 @@ function regenerateScene() {
 
 	scene.environmentIntensity = params.environmentIntensity;
 	pathTracer.bounces = params.bounces;
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 }
 

@@ -47,6 +47,10 @@ async function init() {
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
 	camera.position.set( 8, 9, 24 );
 
+	// scene
+	scene = new Scene();
+	scene.backgroundBlurriness = 0.05;
+
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.y = 10;
@@ -54,27 +58,23 @@ async function init() {
 
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.updateScene( camera, scene );
+		pathTracer.updateScene( scene, camera );
 
 	} );
 
-	// load the env map and model
+	// load the environment map and model
 	const [ gltf, envTexture ] = await Promise.all( [
 		new GLTFLoader().loadAsync( MODEL_URL ),
 		new RGBELoader().loadAsync( ENV_URL ),
 	] );
 
-	// scene
-	scene = new Scene();
-	scene.backgroundBlurriness = 0.05;
-	scene.add( gltf.scene );
-
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.background = envTexture;
 	scene.environment = envTexture;
+	scene.add( gltf.scene );
 
 	// initialize the path tracer
-	await pathTracer.updateSceneAsync( camera, scene, {
+	await pathTracer.updateSceneAsync( scene, camera, {
 		onProgress: v => loader.setPercentage( v ),
 	} );
 
@@ -98,7 +98,7 @@ function onResize() {
 	camera.updateProjectionMatrix();
 
 	// update camera
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 }
 
