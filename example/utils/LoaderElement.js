@@ -58,6 +58,11 @@ function initializeStyles() {
 		.loader-container .credits:empty {
 			display: none;
 		}
+
+		.loader-container .credits,
+		.loader-container .samples {
+			color: rgba( 255, 255, 255, 0.5 );
+		}
 	`;
 	document.head.appendChild( _styleElement );
 

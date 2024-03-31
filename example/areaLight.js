@@ -18,9 +18,14 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
+
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb';
+const CREDITS = 'Model courtesy of Virtual Museums of Małopolska';
 
 let pathTracer, renderer, controls, areaLight, scene, camera;
-let samplesEl, loadingEl;
+let loader;
 
 const params = {
 
@@ -47,6 +52,9 @@ init();
 
 async function init() {
 
+	loader = new LoaderElement();
+	loader.attach( document.body );
+
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
@@ -67,35 +75,24 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
-	samplesEl = document.getElementById( 'samples' );
-	loadingEl = document.getElementById( 'loading' );
-
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr' )
-		.then( texture => {
-
-			texture.mapping = EquirectangularReflectionMapping;
-
-			scene.background = texture;
-			scene.environment = texture;
-
-		} );
-
+	// init scene
 	scene = new Scene();
 	scene.environmentIntensity = 0.03;
 	scene.backgroundIntensity = 0.03;
 
-	const floorGeom = new CylinderGeometry( 3.5, 3.5, 0.05, 60 );
-	const floorMat = new MeshStandardMaterial( { color: new Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
-	const floor = new Mesh( floorGeom, floorMat );
-	floor.position.y = - 0.025;
-	scene.add( floor );
+	// load the assets
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+	] );
 
+	// update the env map
+	envTexture.mapping = EquirectangularReflectionMapping;
+	scene.background = envTexture;
+	scene.environment = envTexture;
+
+	// position the model
 	const box = new Box3();
-	const gltf = await new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb' );
-
 	gltf.scene.traverse( c => {
 
 		if ( c.material ) c.material.map = null;
@@ -105,13 +102,18 @@ async function init() {
 	gltf.scene.scale.setScalar( 0.01 );
 	gltf.scene.position.x = 0.05;
 	gltf.scene.updateMatrixWorld( true );
-
 	box.setFromObject( gltf.scene );
 	gltf.scene.position.y -= box.min.y;
-
 	scene.add( gltf.scene );
-	scene.updateMatrixWorld();
 
+	// set the floor
+	const floorGeom = new CylinderGeometry( 3.5, 3.5, 0.05, 60 );
+	const floorMat = new MeshStandardMaterial( { color: new Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
+	const floor = new Mesh( floorGeom, floorMat );
+	floor.position.y = - 0.025;
+	scene.add( floor );
+
+	// initialize lights
 	areaLight = new ShapedAreaLight( new Color( 0xffffff ), 5.0, 1.0, 1.0 );
 	areaLight.position.x = 1.5;
 	areaLight.position.y = 1.0;
@@ -128,21 +130,19 @@ async function init() {
 	redLight.isCircular = false;
 	scene.add( redLight );
 
-	const generatorPromise = pathTracer.setSceneAsync( scene, camera, {
+	// initialize scene
+	await pathTracer.setSceneAsync( scene, camera, {
 		onProgress: v => {
 
-			loadingEl.innerText = `Generating BVH ${ Math.round( 100 * v ) }%`;
+			loader.setPercentage( v );
 
 		}
 	} );
 
-	await Promise.all( [ generatorPromise, envMapPromise ] );
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
 
-	document.getElementById( 'loading' ).remove();
-
-	onResize();
-	window.addEventListener( 'resize', onResize );
-
+	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
@@ -150,27 +150,29 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( updateLights );
-	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( updateLights );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( updateLights );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( updateLights );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
 
 	const areaLightFolder = gui.addFolder( 'Area Light 1' );
-	areaLightFolder.add( params, 'enabled' ).name( 'enable' ).onChange( updateLights );
-	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( updateLights );
-	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
-	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( updateLights );
-	areaLightFolder.add( params, 'width', 0, 5 ).name( 'width' ).onChange( updateLights );
-	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( updateLights );
+	areaLightFolder.add( params, 'enabled' ).name( 'enable' ).onChange( onParamsChange );
+	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( onParamsChange );
+	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( onParamsChange );
+	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( onParamsChange );
+	areaLightFolder.add( params, 'width', 0, 5 ).name( 'width' ).onChange( onParamsChange );
+	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( onParamsChange );
 
-	updateLights();
+	onParamsChange();
+	onResize();
+	window.addEventListener( 'resize', onResize );
 
 	animate();
 
 }
 
-function updateLights() {
+function onParamsChange() {
 
 	areaLight.isCircular = params.isCircular;
 	areaLight.intensity = params.intensity;
@@ -184,7 +186,7 @@ function updateLights() {
 	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
-	pathTracer.setScene( scene, camera );
+	pathTracer.updateLights();
 
 }
 
@@ -205,6 +207,6 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
