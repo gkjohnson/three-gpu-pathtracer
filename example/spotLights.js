@@ -310,8 +310,8 @@ function onResize() {
 	const h = window.innerHeight;
 	const dpr = window.devicePixelRatio;
 
-	pathTracer.setSize( w, h );
-	pathTracer.setPixelRatio( dpr * params.resolutionScale );
+	renderer.setSize( w, h );
+	renderer.setPixelRatio( dpr * params.resolutionScale );
 
 	const aspect = w / h;
 

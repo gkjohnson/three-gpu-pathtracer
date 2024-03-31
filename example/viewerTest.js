@@ -457,8 +457,8 @@ async function updateModel() {
 
 		const dpr = window.devicePixelRatio;
 		const { width, height } = dimensions;
-		pathTracer.setSize( width, height );
-		pathTracer.setPixelRatio( dpr );
+		renderer.setSize( width, height );
+		renderer.setPixelRatio( dpr );
 		camera.aspect = width / height;
 		camera.fov = verticalFoV;
 		camera.updateProjectionMatrix();
