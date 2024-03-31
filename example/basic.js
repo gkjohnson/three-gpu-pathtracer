@@ -50,7 +50,6 @@ async function init() {
 	// scene
 	scene = new Scene();
 	scene.backgroundBlurriness = 0.05;
-	scene.add( gltf.scene );
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -72,6 +71,7 @@ async function init() {
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.background = envTexture;
 	scene.environment = envTexture;
+	scene.add( gltf.scene );
 
 	// initialize the path tracer
 	await pathTracer.updateSceneAsync( scene, camera, {
