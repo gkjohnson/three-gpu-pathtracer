@@ -58,7 +58,7 @@ async function init() {
 
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.updateScene( scene, camera );
+		pathTracer.updateCamera();
 
 	} );
 
@@ -98,7 +98,7 @@ function onResize() {
 	camera.updateProjectionMatrix();
 
 	// update camera
-	pathTracer.updateScene( scene, camera );
+	pathTracer.updateCamera();
 
 }
 

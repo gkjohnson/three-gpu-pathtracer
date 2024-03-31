@@ -6,6 +6,19 @@ import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js'
 
 const _resolution = new Vector2();
 
+function getIesTextures( lights ) {
+
+	const textures = lights.map( l => l.iesTexture || null ).filter( t => t );
+	return Array.from( new Set( textures ) ).sort( ( a, b ) => {
+
+		if ( a.uuid < b.uuid ) return 1;
+		if ( a.uuid > b.uuid ) return - 1;
+		return 0;
+
+	} );
+
+}
+
 export class WebGLPathTracer {
 
 	get multipleImportanceSampling() {
@@ -89,6 +102,9 @@ export class WebGLPathTracer {
 			blending: CustomBlending,
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
+		this._materials = null;
+		this._lights = null;
+		this._textures = null;
 
 		// options
 		this.enablePathTracing = true;
@@ -162,11 +178,48 @@ export class WebGLPathTracer {
 
 	}
 
+	updateCamera() {
+
+		const camera = this.camera;
+		camera.updateMatrixWorld();
+
+		this._pathTracer.setCamera( camera );
+		this._lowResPathTracer.setCamera( camera );
+		this.reset();
+
+	}
+
+	updateMaterials() {
+
+		// TODO: we should recompute the needed textures here instead of in the generator
+		const material = this._pathTracer.material;
+		const renderer = this._renderer;
+		const textures = this._textures;
+		const materials = this._materials;
+		const textureSize = this.textureSize;
+		material.textures.setTextures( renderer, textures, textureSize.x, textureSize.y );
+		material.materials.updateFrom( materials, textures );
+		this.reset();
+
+	}
+
+	updateLights() {
+
+		// TODO: we should re-traverse the scene to find the necessary lights here
+		const lights = this._lights;
+		const iesTextures = getIesTextures( lights );
+		const renderer = this._renderer;
+		const material = this._pathTracer.material;
+		material.lights.updateFrom( lights, iesTextures );
+		material.iesProfiles.setTextures( renderer, iesTextures );
+		this.reset();
+
+	}
+
 	_updateFromResults( scene, camera, results ) {
 
 		const {
 			lights,
-			iesTextures,
 			materials,
 			textures,
 			geometry,
@@ -174,6 +227,11 @@ export class WebGLPathTracer {
 			bvhChanged,
 		} = results;
 
+		this._materials = materials;
+		this._lights = lights;
+		this._textures = textures;
+
+		const iesTextures = getIesTextures( lights );
 		const renderer = this._renderer;
 		const pathTracer = this._pathTracer;
 		const lowResPathTracer = this._lowResPathTracer;
@@ -255,7 +313,6 @@ export class WebGLPathTracer {
 		// camera update
 		pathTracer.setCamera( camera );
 		lowResPathTracer.setCamera( camera );
-		lowResPathTracer.material = pathTracer.material;
 
 		// save previously used items
 		this._previousScene = scene;
@@ -289,6 +346,7 @@ export class WebGLPathTracer {
 
 				if ( lowResPathTracer.samples < 1 ) {
 
+					lowResPathTracer.material = pathTracer.material;
 					lowResPathTracer.update();
 
 				}
@@ -302,7 +360,7 @@ export class WebGLPathTracer {
 
 			}
 
-			if ( this.enablePathTracing ) {
+			if ( this.enablePathTracing && this.samples >= 1 ) {
 
 				this.renderToCanvasCallback( pathTracer.target, renderer, quad );
 
