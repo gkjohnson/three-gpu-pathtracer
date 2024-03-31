@@ -4,7 +4,6 @@ import {
 	Color,
 	CylinderGeometry,
 	EquirectangularReflectionMapping,
-	Group,
 	Mesh,
 	MeshStandardMaterial,
 	PerspectiveCamera,
@@ -18,75 +17,55 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
 
-let pathTracer, renderer, controls, areaLights, scene, camera;
+let pathTracer, renderer, controls, areaLight, scene, camera;
 let samplesEl, loadingEl;
+
 const params = {
 
-	controls: true,
+	// area light settings
+	enabled: true,
+	isCircular: false,
+	intensity: 2,
+	color: '#ffffff',
+	width: 1,
+	height: 1,
 
-	areaLight1Enabled: true,
-	areaLight1IsCircular: false,
-	areaLight1Intensity: 2,
-	areaLight1Color: '#ffffff',
-	areaLight1Width: 1,
-	areaLight1Height: 1,
-
-	areaLight2Enabled: true,
-	areaLight2IsCircular: false,
-	areaLight2Intensity: 10,
-	areaLight2Color: '#ff0000',
-	areaLight2Width: 1.25,
-	areaLight2Height: 2.75,
-
-	environmentIntensity: 0.03,
-	environmentRotation: 0,
-
+	// path tracer settings
 	bounces: 5,
-	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
-	multipleImportanceSampling: true
+	multipleImportanceSampling: true,
+
+	...getScaledSettings(),
 
 };
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.bounces = Math.min( params.bounces, 10 );
-	params.resolutionScale *= 0.5;
-	params.tiles = 3;
-
-}
 
 init();
 
 async function init() {
 
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
+	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 0.0, 0.6, 2.65 );
 
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( 0, 0.33, - 0.08 );
-	camera.lookAt( controls.target );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
-	controls.addEventListener( 'change', () => {
-
-		pathTracer.setScene( scene, camera );
-
-	} );
-
-	camera.lookAt( - 0.15, 0.33, - 0.08 );
 
 	samplesEl = document.getElementById( 'samples' );
 	loadingEl = document.getElementById( 'loading' );
@@ -103,15 +82,14 @@ async function init() {
 		} );
 
 	scene = new Scene();
-
-	const group = new Group();
-	scene.add( group );
+	scene.environmentIntensity = 0.03;
+	scene.backgroundIntensity = 0.03;
 
 	const floorGeom = new CylinderGeometry( 3.5, 3.5, 0.05, 60 );
 	const floorMat = new MeshStandardMaterial( { color: new Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
 	const floor = new Mesh( floorGeom, floorMat );
 	floor.position.y = - 0.025;
-	group.add( floor );
+	scene.add( floor );
 
 	const box = new Box3();
 	const gltf = await new GLTFLoader()
@@ -131,26 +109,24 @@ async function init() {
 	box.setFromObject( gltf.scene );
 	gltf.scene.position.y -= box.min.y;
 
-	group.add( gltf.scene );
-	group.updateMatrixWorld();
+	scene.add( gltf.scene );
+	scene.updateMatrixWorld();
 
-	const areaLight1 = new ShapedAreaLight( new Color( 0xFFFFFF ), 5.0, 1.0, 1.0 );
-	areaLight1.position.x = 1.5;
-	areaLight1.position.y = 1.0;
-	areaLight1.position.z = - 0.5;
-	areaLight1.rotateZ( - Math.PI / 4 );
-	areaLight1.rotateX( - Math.PI / 2 );
-	areaLight1.isCircular = false;
-	group.add( areaLight1 );
+	areaLight = new ShapedAreaLight( new Color( 0xffffff ), 5.0, 1.0, 1.0 );
+	areaLight.position.x = 1.5;
+	areaLight.position.y = 1.0;
+	areaLight.position.z = - 0.5;
+	areaLight.rotateZ( - Math.PI / 4 );
+	areaLight.rotateX( - Math.PI / 2 );
+	areaLight.isCircular = false;
+	scene.add( areaLight );
 
-	const areaLight2 = new ShapedAreaLight( new Color( 0xFF0000 ), 15.0, 1.25, 2.75 );
-	areaLight2.position.y = 1.25;
-	areaLight2.position.z = - 1.5;
-	areaLight2.rotateX( Math.PI );
-	areaLight2.isCircular = false;
-	group.add( areaLight2 );
-
-	areaLights = [ areaLight1, areaLight2 ];
+	const redLight = new ShapedAreaLight( new Color( 0xff0000 ), 15.0, 1.25, 2.75 );
+	redLight.position.y = 1.25;
+	redLight.position.z = - 1.5;
+	redLight.rotateX( Math.PI );
+	redLight.isCircular = false;
+	scene.add( redLight );
 
 	const generatorPromise = pathTracer.setSceneAsync( scene, camera, {
 		onProgress: v => {
@@ -174,33 +150,19 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( updateLights );
 	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( updateLights );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( updateLights );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( updateLights );
 	ptFolder.close();
 
-	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 3 ).onChange( updateLights );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( updateLights );
-	envFolder.close();
-
-	const areaLight1Folder = gui.addFolder( 'Area Light 1' );
-	areaLight1Folder.add( params, 'areaLight1Enabled' ).name( 'enable' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1IsCircular' ).name( 'isCircular' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
-	areaLight1Folder.addColor( params, 'areaLight1Color' ).name( 'color' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1Width', 0, 5 ).name( 'width' ).onChange( updateLights );
-	areaLight1Folder.add( params, 'areaLight1Height', 0, 5 ).name( 'height' ).onChange( updateLights );
-
-	const areaLight2Folder = gui.addFolder( 'Area Light 2' );
-	areaLight2Folder.add( params, 'areaLight2Enabled' ).name( 'enable' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2IsCircular' ).name( 'isCircular' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2Intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
-	areaLight2Folder.addColor( params, 'areaLight2Color' ).name( 'color' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2Width', 0, 5 ).name( 'width' ).onChange( updateLights );
-	areaLight2Folder.add( params, 'areaLight2Height', 0, 5 ).name( 'height' ).onChange( updateLights );
+	const areaLightFolder = gui.addFolder( 'Area Light 1' );
+	areaLightFolder.add( params, 'enabled' ).name( 'enable' ).onChange( updateLights );
+	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( updateLights );
+	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( updateLights );
+	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( updateLights );
+	areaLightFolder.add( params, 'width', 0, 5 ).name( 'width' ).onChange( updateLights );
+	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( updateLights );
 
 	updateLights();
 
@@ -210,29 +172,17 @@ async function init() {
 
 function updateLights() {
 
-	areaLights[ 0 ].isCircular = params.areaLight1IsCircular;
-	areaLights[ 0 ].intensity = params.areaLight1Intensity;
-	areaLights[ 0 ].width = params.areaLight1Width;
-	areaLights[ 0 ].height = params.areaLight1Height;
-	areaLights[ 0 ].color.set( params.areaLight1Color ).convertSRGBToLinear();
-	areaLights[ 0 ].visible = params.areaLight1Enabled;
-
-	areaLights[ 1 ].isCircular = params.areaLight2IsCircular;
-	areaLights[ 1 ].intensity = params.areaLight2Intensity;
-	areaLights[ 1 ].width = params.areaLight2Width;
-	areaLights[ 1 ].height = params.areaLight2Height;
-	areaLights[ 1 ].color.set( params.areaLight2Color ).convertSRGBToLinear();
-	areaLights[ 1 ].visible = params.areaLight2Enabled;
+	areaLight.isCircular = params.isCircular;
+	areaLight.intensity = params.intensity;
+	areaLight.width = params.width;
+	areaLight.height = params.height;
+	areaLight.color.set( params.color ).convertSRGBToLinear();
+	areaLight.visible = params.enabled;
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-
-	scene.environmentRotation.y = params.environmentRotation;
-	scene.backgroundRotation.y = params.environmentRotation;
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.backgroundIntensity = params.environmentIntensity;
 
 	pathTracer.setScene( scene, camera );
 
@@ -240,16 +190,12 @@ function updateLights() {
 
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
-
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
-	camera.aspect = w / h;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 
-	pathTracer.setScene( scene, camera );
+	pathTracer.updateCamera();
 
 }
 
@@ -257,7 +203,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	camera.updateMatrixWorld();
 	pathTracer.renderSample();
 
 	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;

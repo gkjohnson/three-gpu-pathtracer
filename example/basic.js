@@ -54,13 +54,8 @@ async function init() {
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.y = 10;
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
-
-	controls.addEventListener( 'change', () => {
-
-		pathTracer.updateCamera();
-
-	} );
 
 	// load the environment map and model
 	const [ gltf, envTexture ] = await Promise.all( [
