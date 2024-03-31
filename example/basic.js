@@ -78,6 +78,7 @@ async function init() {
 		onProgress: v => loader.setPercentage( v ),
 	} );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 
