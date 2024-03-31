@@ -141,7 +141,7 @@ function reset() {
 	pathTracer.bounces = params.bounces;
 
 	pathTracer.renderScale = params.resolutionScale;
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 }
 

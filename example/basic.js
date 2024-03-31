@@ -59,7 +59,7 @@ async function init() {
 
 	controls.addEventListener( 'change', () => {
 
-		pathTracer.updateScene( camera, scene );
+		pathTracer.updateScene( scene, camera );
 
 	} );
 
@@ -74,7 +74,7 @@ async function init() {
 	scene.environment = envTexture;
 
 	// initialize the path tracer
-	await pathTracer.updateSceneAsync( camera, scene, {
+	await pathTracer.updateSceneAsync( scene, camera, {
 		onProgress: v => loader.setPercentage( v ),
 	} );
 
@@ -98,7 +98,7 @@ function onResize() {
 	camera.updateProjectionMatrix();
 
 	// update camera
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 }
 

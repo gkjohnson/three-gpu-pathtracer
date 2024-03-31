@@ -231,7 +231,7 @@ function onResize() {
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
-	bvh = pathTracer.updateScene( camera, scene ).bvh;
+	bvh = pathTracer.updateScene( scene, camera ).bvh;
 
 }
 
@@ -241,7 +241,7 @@ function reset() {
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.resolutionScale;
 
-	bvh = pathTracer.updateScene( camera, scene ).bvh;
+	bvh = pathTracer.updateScene( scene, camera ).bvh;
 
 }
 

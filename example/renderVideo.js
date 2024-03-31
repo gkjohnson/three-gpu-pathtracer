@@ -278,7 +278,7 @@ function regenerateScene() {
 
 	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.bounces = params.bounces;
-	pathTracer.updateScene( camera, scene );
+	pathTracer.updateScene( scene, camera );
 
 }
 
