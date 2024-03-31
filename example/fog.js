@@ -14,7 +14,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from '../src/index.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let pathTracer, controls;
+let pathTracer, renderer, controls;
 let camera, scene, fogMaterial, spotLight;
 let samplesEl;
 
@@ -40,7 +40,7 @@ init();
 
 async function init() {
 
-	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 

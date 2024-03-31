@@ -17,7 +17,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let pathTracer, controls, camera, scene, bvh;
+let pathTracer, renderer, controls, camera, scene, bvh;
 let samplesEl;
 const mouse = new Vector2();
 const focusPoint = new Vector3();
@@ -46,7 +46,7 @@ init();
 
 async function init() {
 
-	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 

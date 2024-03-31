@@ -16,7 +16,7 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-let pathTracer, controls, sphericalControls, activeCamera, scene;
+let pathTracer, renderer, controls, sphericalControls, activeCamera, scene;
 let perspectiveCamera, orthoCamera, equirectCamera;
 let samplesEl;
 const params = {
@@ -49,7 +49,7 @@ init();
 
 async function init() {
 
-	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 

@@ -17,8 +17,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 
-let renderer, controls, camera, scene, clock;
-let samplesEl, pathTracer, mixer, mixerAction;
+let pathTracer, renderer, controls, camera, scene, clock;
+let samplesEl, mixer, mixerAction;
 let counter = 0;
 const params = {
 

@@ -19,7 +19,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-let pathTracer, controls, areaLights, scene, camera;
+let pathTracer, renderer, controls, areaLights, scene, camera;
 let samplesEl, loadingEl;
 const params = {
 
@@ -65,7 +65,7 @@ init();
 
 async function init() {
 
-	const renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 

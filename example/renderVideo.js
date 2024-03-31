@@ -23,7 +23,7 @@ import CanvasCapture from 'canvas-capture';
 // use CanvasCapture.
 const requestAnimationFrame = window.requestAnimationFrame;
 
-let renderer, controls, camera, scene, gui, model, pathTracer;
+let pathTracer, renderer, controls, camera, scene, gui, model;
 let samplesEl, videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
