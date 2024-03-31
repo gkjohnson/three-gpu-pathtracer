@@ -1,50 +1,56 @@
-import { ACESFilmicToneMapping, Scene, EquirectangularReflectionMapping, WebGLRenderer } from 'three';
+import {
+	ACESFilmicToneMapping,
+	Scene,
+	EquirectangularReflectionMapping,
+	WebGLRenderer,
+	PerspectiveCamera,
+} from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
+import { WebGLPathTracer } from '..';
 
-let pathTracer, controls, camera, scene, samplesEl;
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
+const CREDITS = 'Model by "nyancube" on Sketchfab';
+const DESCRIPTION = 'Simple path tracing example scene setup with background blur.';
 
-let tiles = 2;
-let resolutionScale = Math.max( 1 / window.devicePixelRatio, 0.5 );
-
-// adjust performance parameters for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	resolutionScale = 1 / window.devicePixelRatio;
-	tiles = 3;
-
-}
+let pathTracer, renderer, controls;
+let camera, scene;
+let loader;
 
 init();
 
 async function init() {
 
-	samplesEl = document.getElementById( 'samples' );
+	const { tiles, renderScale } = getScaledSettings();
 
-	// init renderer, camera, controls, scene
-	const renderer = new WebGLRenderer( { antialias: true } );
+	loader = new LoaderElement();
+	loader.attach( document.body );
+
+	// renderer
+	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.renderScale = resolutionScale;
+	pathTracer.renderScale = renderScale;
 	pathTracer.tiles.set( tiles, tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
-	camera = new PhysicalCamera( 75, 1, 0.025, 500 );
+	// camera
+	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
 	camera.position.set( 8, 9, 24 );
 
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.y = 10;
 	controls.update();
-
-	scene = new Scene();
-	scene.backgroundBlurriness = 0.05;
 
 	controls.addEventListener( 'change', () => {
 
@@ -52,31 +58,29 @@ async function init() {
 
 	} );
 
-	// load the envmap and model
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr' )
-		.then( texture => {
+	// load the env map and model
+	const [ gltf, envTexture ] = await Promise.all( [
+		new GLTFLoader().loadAsync( MODEL_URL ),
+		new RGBELoader().loadAsync( ENV_URL ),
+	] );
 
-			texture.mapping = EquirectangularReflectionMapping;
-			scene.background = texture;
-			scene.environment = texture;
+	// scene
+	scene = new Scene();
+	scene.backgroundBlurriness = 0.05;
+	scene.add( gltf.scene );
 
-		} );
+	envTexture.mapping = EquirectangularReflectionMapping;
+	scene.background = envTexture;
+	scene.environment = envTexture;
 
-	const gltfPromise = new GLTFLoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf' )
-		.then( gltf => {
+	// initialize the path tracer
+	await pathTracer.updateSceneAsync( camera, scene, {
+		onProgress: v => loader.setPercentage( v ),
+	} );
 
-			scene.add( gltf.scene );
+	loader.setCredits( CREDITS );
+	loader.setDescription( DESCRIPTION );
 
-		} );
-
-	// wait for the scene to be rady
-	await Promise.all( [ gltfPromise, envMapPromise ] );
-
-	await pathTracer.updateSceneAsync( camera, scene );
-
-	document.getElementById( 'loading' ).remove();
 	window.addEventListener( 'resize', onResize );
 
 	onResize();
@@ -86,18 +90,14 @@ async function init() {
 
 function onResize() {
 
-	// update rendering resolution
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
+	// update resolution
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
-
-	const aspect = w / h;
-	camera.aspect = aspect;
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 
+	// update camera
 	pathTracer.updateScene( camera, scene );
 
 }
@@ -105,8 +105,9 @@ function onResize() {
 function animate() {
 
 	requestAnimationFrame( animate );
+
 	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
