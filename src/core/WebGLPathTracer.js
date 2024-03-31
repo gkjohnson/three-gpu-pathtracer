@@ -116,28 +116,6 @@ export class WebGLPathTracer {
 
 		};
 
-		// TODO: remove some of these pass through functions
-		// pass through functions for the canvas
-		[
-			'getPixelRatio',
-			'setPixelRatio',
-			'getSize',
-			'setSize',
-		].forEach( key => {
-
-			this[ key ] = ( ...args ) => {
-
-				this._renderer[ key ]( ...args );
-				if ( this.renderToCanvas ) {
-
-					this.reset();
-
-				}
-
-			};
-
-		} );
-
 		// initialize the scene so it doesn't fail
 		this.updateScene( new PerspectiveCamera(), new Scene() );
 
