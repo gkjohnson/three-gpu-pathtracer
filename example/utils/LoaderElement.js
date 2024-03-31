@@ -122,7 +122,7 @@ export class LoaderElement {
 
 		}
 
-		if ( perc === 1 ) {
+		if ( perc >= 1 ) {
 
 			this._container.classList.remove( 'loading' );
 

@@ -1,5 +1,5 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, NearestFilter } from 'three';
-import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
+import { getTextureHash } from '../core/utils/sceneUpdateUtils.js';
 import { bufferToHash } from '../utils/bufferToHash.js';
 
 const MATERIAL_PIXELS = 45;
@@ -101,7 +101,7 @@ export class MaterialsTexture extends DataTexture {
 			if ( key in material && material[ key ] ) {
 
 				const hash = getTextureHash( material[ key ] );
-				return uniqueTextureLookup[ hash ];
+				return textureLookUp[ hash ];
 
 			} else {
 
@@ -151,12 +151,11 @@ export class MaterialsTexture extends DataTexture {
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) ) || 1;
 		const { image, features } = this;
 
-		// get the list of textures with unique sources
-		const uniqueTextures = reduceTexturesToUniqueSources( textures );
-		const uniqueTextureLookup = {};
-		for ( let i = 0, l = uniqueTextures.length; i < l; i ++ ) {
+		// index the list of textures based on shareable source
+		const textureLookUp = {};
+		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
-			uniqueTextureLookup[ getTextureHash( uniqueTextures[ i ] ) ] = i;
+			textureLookUp[ getTextureHash( textures[ i ] ) ] = i;
 
 		}
 
