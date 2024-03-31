@@ -3,73 +3,9 @@ import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
+import { getIesTextures, getLights, getTextures } from './utils/sceneUpdateUtils.js';
 
 const _resolution = new Vector2();
-function uuidSort( a, b ) {
-
-	if ( a.uuid < b.uuid ) return 1;
-	if ( a.uuid > b.uuid ) return - 1;
-	return 0;
-
-}
-
-function getIesTextures( lights ) {
-
-	const textures = lights.map( l => l.iesTexture || null ).filter( t => t );
-	const textureSet = new Set( textures );
-	return Array.from( textureSet ).sort( uuidSort );
-
-}
-
-function getTextures( materials ) {
-
-	const textureSet = new Set();
-	for ( let i = 0, l = materials.length; i < l; i ++ ) {
-
-		const material = materials[ i ];
-		for ( const key in material ) {
-
-			const value = material[ key ];
-			if ( value && value.isTexture ) {
-
-				textureSet.add( value );
-
-			}
-
-		}
-
-	}
-
-	return Array.from( textureSet ).sort( uuidSort );
-
-}
-
-function getLights( scene ) {
-
-	const lights = [];
-	scene.traverse( c => {
-
-		if ( c.visible ) {
-
-			if (
-				c.isRectAreaLight ||
-				c.isSpotLight ||
-				c.isPointLight ||
-				c.isDirectionalLight
-			) {
-
-				lights.push( c );
-
-			}
-
-		}
-
-	} );
-
-	return lights.sort( uuidSort );
-
-}
-
 export class WebGLPathTracer {
 
 	get multipleImportanceSampling() {

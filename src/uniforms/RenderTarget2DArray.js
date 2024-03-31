@@ -9,7 +9,6 @@ import {
 	ShaderMaterial,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { reduceTexturesToUniqueSources } from './utils.js';
 
 const prevColor = new Color();
 function getTextureHash( texture ) {
@@ -48,9 +47,6 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	setTextures( renderer, textures, width = this.width, height = this.height ) {
 
-		// get the list of textures with unique sources
-		const uniqueTextures = reduceTexturesToUniqueSources( textures );
-
 		// save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
 		const prevToneMapping = renderer.toneMapping;
@@ -59,7 +55,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 		// resize the render target and ensure we don't have an empty texture
 		// render target depth must be >= 1 to avoid unbound texture error on android devices
-		const depth = uniqueTextures.length || 1;
+		const depth = textures.length || 1;
 		if ( width !== this.width || height !== this.height || this.depth !== depth ) {
 
 			this.setSize( width, height, depth );
@@ -76,7 +72,7 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 		let updated = false;
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
-			const texture = uniqueTextures[ i ];
+			const texture = textures[ i ];
 			const hash = getTextureHash( texture );
 			if ( texture && ( hashes[ i ] !== hash || texture.isWebGLRenderTarget ) ) {
 
