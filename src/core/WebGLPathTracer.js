@@ -5,17 +5,68 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
 
 const _resolution = new Vector2();
+function uuidSort( a, b ) {
+
+	if ( a.uuid < b.uuid ) return 1;
+	if ( a.uuid > b.uuid ) return - 1;
+	return 0;
+
+}
 
 function getIesTextures( lights ) {
 
 	const textures = lights.map( l => l.iesTexture || null ).filter( t => t );
-	return Array.from( new Set( textures ) ).sort( ( a, b ) => {
+	const textureSet = new Set( textures );
+	return Array.from( textureSet ).sort( uuidSort );
 
-		if ( a.uuid < b.uuid ) return 1;
-		if ( a.uuid > b.uuid ) return - 1;
-		return 0;
+}
+
+function getTextures( materials ) {
+
+	const textureSet = new Set();
+	for ( let i = 0, l = materials.length; i < l; i ++ ) {
+
+		const material = materials[ i ];
+		for ( const key in material ) {
+
+			const value = material[ key ];
+			if ( value && value.isTexture ) {
+
+				textureSet.add( value );
+
+			}
+
+		}
+
+	}
+
+	return Array.from( textureSet ).sort( uuidSort );
+
+}
+
+function getLights( scene ) {
+
+	const lights = [];
+	scene.traverse( c => {
+
+		if ( c.visible ) {
+
+			if (
+				c.isRectAreaLight ||
+				c.isSpotLight ||
+				c.isPointLight ||
+				c.isDirectionalLight
+			) {
+
+				lights.push( c );
+
+			}
+
+		}
 
 	} );
+
+	return lights.sort( uuidSort );
 
 }
 
@@ -103,8 +154,6 @@ export class WebGLPathTracer {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
 		this._materials = null;
-		this._lights = null;
-		this._textures = null;
 
 		// options
 		this.enablePathTracing = true;
@@ -191,12 +240,15 @@ export class WebGLPathTracer {
 
 	updateMaterials() {
 
-		// TODO: we should recompute the needed textures here instead of in the generator
 		const material = this._pathTracer.material;
 		const renderer = this._renderer;
-		const textures = this._textures;
 		const materials = this._materials;
 		const textureSize = this.textureSize;
+
+		// TODO: reduce texture sources here - we don't want to do this in the
+		// textures array because we need to pass the textures array into the
+		// material target
+		const textures = getTextures( materials );
 		material.textures.setTextures( renderer, textures, textureSize.x, textureSize.y );
 		material.materials.updateFrom( materials, textures );
 		this.reset();
@@ -205,11 +257,12 @@ export class WebGLPathTracer {
 
 	updateLights() {
 
-		// TODO: we should re-traverse the scene to find the necessary lights here
-		const lights = this._lights;
-		const iesTextures = getIesTextures( lights );
+		const scene = this.scene;
 		const renderer = this._renderer;
 		const material = this._pathTracer.material;
+
+		const lights = getLights( scene );
+		const iesTextures = getIesTextures( lights );
 		material.lights.updateFrom( lights, iesTextures );
 		material.iesProfiles.setTextures( renderer, iesTextures );
 		this.reset();
@@ -228,8 +281,6 @@ export class WebGLPathTracer {
 		} = results;
 
 		this._materials = materials;
-		this._lights = lights;
-		this._textures = textures;
 
 		const iesTextures = getIesTextures( lights );
 		const renderer = this._renderer;
