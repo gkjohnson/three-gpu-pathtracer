@@ -68,6 +68,7 @@ async function init() {
 	scene = new Scene();
 	scene.backgroundBlurriness = 0.05;
 	scene.add( gltf.scene );
+
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.background = envTexture;
 	scene.environment = envTexture;
