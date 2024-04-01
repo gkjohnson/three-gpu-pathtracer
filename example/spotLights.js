@@ -9,14 +9,14 @@ import {
 	CylinderGeometry,
 	MeshStandardMaterial,
 	BoxGeometry,
-	SpotLightHelper,
+	PerspectiveCamera,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, PhysicalSpotLight, IESLoader, WebGLPathTracer } from '../src/index.js';
+import { PhysicalSpotLight, IESLoader, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf';
 const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr';
@@ -33,7 +33,7 @@ const IES_PROFILE_URLS = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/00c6ce79e1d2cdf3a1fb491aaaa47ae0.ies',
 ];
 
-let pathTracer, renderer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, materials;
+let pathTracer, renderer, controls, spotLight, lights, spotLights;
 let camera;
 let scene;
 let iesTextures;
@@ -41,29 +41,12 @@ let samplesEl;
 
 // gui parameters
 const params = {
-
-	floorMaterial: {
-		color: '#555555',
-		roughness: 0.05,
-		metalness: 0.4,
-	},
-	wallMaterial: {
-		color: '#a06464',
-		roughness: 0.4,
-		metalness: 0.1,
-	},
-
-	enabled: true,
 	multipleImportanceSampling: true,
-	environmentIntensity: 0.1,
 	bounces: 3,
-	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.5,
 	tiles: 2,
 	iesProfile: - 1,
-	showTransformControls: false,
-	showLightHelper: false,
+	...getScaledSettings(),
 };
 
 // adjust performance parameters for mobile
@@ -79,7 +62,7 @@ init();
 
 async function init() {
 
-	// init renderer
+	// renderer
 	renderer = new WebGLRenderer();
 	renderer.shadowMap.enabled = true;
 	renderer.physicallyCorrectLights = true;
@@ -87,29 +70,32 @@ async function init() {
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
+	pathTracer.filterGlossyFactor = 0.5;
 
-	// init camera
+	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PhysicalCamera( 75, aspect, 0.025, 500 );
+	camera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
 	camera.position.set( - 2, 4, 8 ).multiplyScalar( 0.8 );
-	camera.bokehSize = 0;
 
-	// init controls
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.y = 1.5;
 	controls.update();
 	controls.addEventListener( 'change', () => {
 
-		reset();
+		pathTracer.updateCamera();
 
 	} );
 
+	// scene
 	scene = new Scene();
 	scene.backgroundBlurriness = 0.1;
-	transformControlsScene = new Scene();
+	scene.environmentIntensity = 0.1;
+	scene.backgroundIntensity = 0.1;
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -148,17 +134,18 @@ async function init() {
 			// init environment
 			const floor = new Mesh(
 				new CylinderGeometry( 8, 8, 0.5, 200 ),
-				new MeshStandardMaterial( { color: 0xffffff, roughness: 0.5, metalness: 0.2 } ),
+				new MeshStandardMaterial( { color: 0x555555, roughness: 0.05, metalness: 0.4 } ),
 			);
 			floor.geometry = floor.geometry.toNonIndexed();
 			floor.geometry.clearGroups();
 			floor.position.y = box.min.y - 0.25;
 			floor.receiveShadow = true;
+			floor.material.color.convertSRGBToLinear();
 			scene.add( floor );
 
 			const wall = new Mesh(
 				new BoxGeometry( 14, 6, 0.5 ),
-				new MeshStandardMaterial( { color: 0xffffff, roughness: 0, metalness: 1.0 } ),
+				new MeshStandardMaterial( { color: 0xa06464, roughness: 0.4, metalness: 0.1 } ),
 			);
 			wall.castShadow = true;
 			wall.receiveShadow = true;
@@ -167,28 +154,8 @@ async function init() {
 			wall.position.x = 0.0;
 			wall.position.y = box.min.y + 3;
 			wall.position.z = box.min.z - 0.5;
+			wall.material.color.convertSRGBToLinear();
 			scene.add( wall );
-
-			// transform controls
-			function makeTransformControls( object ) {
-
-				const transformControls = new TransformControls( camera, renderer.domElement );
-				transformControls.addEventListener( 'objectChange', () => {
-
-					reset();
-
-				} );
-
-				transformControls.addEventListener( 'dragging-changed', ( e ) => {
-
-					controls.enabled = ! e.value;
-
-				} );
-
-				transformControls.attach( object );
-				transformControlsScene.add( transformControls );
-
-			}
 
 			// spot light
 			lights = [];
@@ -222,23 +189,6 @@ async function init() {
 			spotLight.updateMatrixWorld();
 			scene.add( targetObject );
 
-			spotLightHelper = new SpotLightHelper( spotLight );
-			transformControlsScene.add( spotLightHelper );
-
-			makeTransformControls( spotLight );
-			makeTransformControls( targetObject );
-
-			// ies textures
-			const iesPromises = IES_PROFILE_URLS.map( url => {
-
-				return new IESLoader().loadAsync( url );
-
-			} );
-
-			materials = [ floor.material, wall.material ];
-
-			return Promise.all( iesPromises );
-
 		} )
 		.then( _iesTextures => {
 
@@ -246,59 +196,45 @@ async function init() {
 
 		} );
 
-	await Promise.all( [ gltfPromise, envMapPromise ] );
 
-	reset();
+	// ies textures
+	const iesLoader = new IESLoader();
+	const iesPromise = Promise
+		.all( IES_PROFILE_URLS.map( url => iesLoader.loadAsync( url ) ) )
+		.then( textures => iesTextures = textures );
+
+	await Promise.all( [ gltfPromise, envMapPromise, iesPromise ] );
+
+	onParamsChange();
+	onResize();
+	window.addEventListener( 'resize', onResize );
 
 	document.getElementById( 'loading' ).remove();
 
 	// gui
-	onResize();
-	window.addEventListener( 'resize', onResize );
 	const gui = new GUI();
-	gui.add( params, 'enabled' );
-	gui.add( params, 'showTransformControls' );
-	gui.add( params, 'showLightHelper' );
-
 	const ptFolder = gui.addFolder( 'Path Tracing' );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( reset );
-
-	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset );
-
-	const matFolder1 = gui.addFolder( 'Floor Material' );
-	matFolder1.addColor( params.floorMaterial, 'color' ).onChange( reset );
-	matFolder1.add( params.floorMaterial, 'roughness', 0, 1 ).onChange( reset );
-	matFolder1.add( params.floorMaterial, 'metalness', 0, 1 ).onChange( reset );
-	matFolder1.close();
-
-	const matFolder2 = gui.addFolder( 'Wall Material' );
-	matFolder2.addColor( params.wallMaterial, 'color' ).onChange( reset );
-	matFolder2.add( params.wallMaterial, 'roughness', 0, 1 ).onChange( reset );
-	matFolder2.add( params.wallMaterial, 'metalness', 0, 1 ).onChange( reset );
-	matFolder2.close();
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
-	lightFolder.addColor( spotLight, 'color' ).onChange( reset );
-	lightFolder.add( spotLight, 'intensity', 0.0, 200.0, 0.01 ).onChange( reset );
-	lightFolder.add( spotLight, 'radius', 0.0, 10.0 ).onChange( reset );
-	lightFolder.add( spotLight, 'decay', 0.0, 2.0 ).onChange( reset );
-	lightFolder.add( spotLight, 'distance', 0.0, 20.0 ).onChange( reset );
-	lightFolder.add( spotLight, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
-	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( reset );
+	lightFolder.addColor( spotLight, 'color' ).onChange( onParamsChange );
+	lightFolder.add( spotLight, 'intensity', 0.0, 200.0, 0.01 ).onChange( onParamsChange );
+	lightFolder.add( spotLight, 'radius', 0.0, 10.0 ).onChange( onParamsChange );
+	lightFolder.add( spotLight, 'decay', 0.0, 2.0 ).onChange( onParamsChange );
+	lightFolder.add( spotLight, 'distance', 0.0, 20.0 ).onChange( onParamsChange );
+	lightFolder.add( spotLight, 'angle', 0.0, Math.PI / 2.0 ).onChange( onParamsChange );
+	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( onParamsChange );
 	lightFolder.add( params, 'iesProfile', - 1, IES_PROFILE_URLS.length - 1, 1 ).onChange( v => {
 
 		spotLight.iesTexture = v === - 1 ? null : iesTextures[ v ];
-		reset();
+		onParamsChange();
 
 	} );
 
@@ -308,46 +244,20 @@ async function init() {
 
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
-
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr * params.resolutionScale );
-
-	const aspect = w / h;
-
-	camera.aspect = aspect;
+	// TODO: we need to handle the interpolation of the float texture more intelligently to avoid
+	// extra bright hot spots
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio * params.resolutionScale );
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
-
-	reset();
 
 }
 
-function reset() {
-
-	// update materials
-	const m0 = materials[ 0 ];
-	m0.color.set( params.floorMaterial.color ).convertSRGBToLinear();
-	m0.metalness = params.floorMaterial.metalness;
-	m0.roughness = params.floorMaterial.roughness;
-
-	const m1 = materials[ 1 ];
-	m1.color.set( params.wallMaterial.color ).convertSRGBToLinear();
-	m1.metalness = params.wallMaterial.metalness;
-	m1.roughness = params.wallMaterial.roughness;
-
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.backgroundIntensity = params.environmentIntensity;
+function onParamsChange() {
 
 	// pathTracer.renderScale = params.resolutionScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-
-	// update objects
-	spotLightHelper.update();
-
 	pathTracer.setScene( scene, camera );
 
 }
@@ -359,16 +269,5 @@ function animate() {
 	camera.updateMatrixWorld();
 	pathTracer.renderSample();
 	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
-
-	renderer.autoClear = false;
-	transformControlsScene.children.forEach( c => {
-
-		c.visible = c instanceof SpotLightHelper ? params.showLightHelper : params.showTransformControls;
-		if ( 'enabled' in c ) c.enabled = params.showTransformControls;
-
-	} );
-
-	renderer.render( transformControlsScene, camera );
-	renderer.autoClear = true;
 
 }
