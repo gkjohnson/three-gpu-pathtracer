@@ -16,13 +16,21 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
+
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
+const MORPH_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
+const SKINNED_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf';
+const CREDITS = 'Model by DailyArt on Sketchfab';
+const DESCRIPTION = 'Rendering deformable geometry with path tracing.';
 
 let pathTracer, renderer, controls, camera, scene, clock;
-let samplesEl, mixer, mixerAction;
+let mixer, mixerAction;
+let loader;
 let counter = 0;
 const params = {
 
-	environmentIntensity: 1,
 	bounces: 5,
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
@@ -30,101 +38,103 @@ const params = {
 	autoPause: true,
 	pause: false,
 	continuous: false,
+	...getScaledSettings(),
 
 };
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.resolutionScale *= 0.5;
-	params.tiles = 2;
-
-}
 
 init();
 
 async function init() {
 
-	// initialize renderer, scene, camera
+	loader = new LoaderElement();
+	loader.setDescription( DESCRIPTION );
+	loader.attach( document.body );
+
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.filterGlossyFactor = 0.25;
 
+	// scene
 	scene = new Scene();
 
+	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
 
-	// initialize controls
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	camera.lookAt( controls.target );
-	controls.addEventListener( 'change', () => {
-
-		regenerateScene();
-
-	} );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
-	samplesEl = document.getElementById( 'samples' );
-
+	// clock
 	clock = new Clock();
 
-	// loading the
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr' )
-		.then( texture => {
+	// load assets
+	const modelUrl = window.location.hash === '#morphtarget' ? MORPH_URL : SKINNED_URL;
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( modelUrl )
+	] );
 
-			const generator = new BlurredEnvMapGenerator( renderer );
-			const blurredTex = generator.generate( texture, 0.1 );
-			generator.dispose();
+	// update env map
+	const generator = new BlurredEnvMapGenerator( renderer );
+	const blurredTex = generator.generate( envTexture, 0.1 );
+	scene.background = blurredTex;
+	scene.environment = blurredTex;
+	generator.dispose();
 
-			scene.background = blurredTex;
-			scene.environment = blurredTex;
+	// animations
+	const animations = gltf.animations;
+	mixer = new AnimationMixer( gltf.scene );
 
-		} );
+	mixerAction = mixer.clipAction( animations[ 0 ] );
+	mixerAction.play();
+	mixerAction.paused = params.pause;
 
-	let modelPromise;
-	if ( window.location.hash === '#morphtarget' ) {
+	// initialize scene
+	scene.add( gltf.scene );
 
-		modelPromise = loadModel( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb' );
+	const floorTex = generateRadialFloorTexture( 2048 );
+	const floorPlane = new Mesh(
+		new PlaneGeometry(),
+		new MeshStandardMaterial( {
+			map: floorTex,
+			transparent: true,
+			color: 0xdddddd,
+			roughness: 0.15,
+			metalness: 1.0
+		} )
+	);
+	floorPlane.scale.setScalar( 50 );
+	floorPlane.rotation.x = - Math.PI / 2;
+	floorPlane.position.y = 0.075;
+	scene.add( floorPlane );
 
-	} else {
+	// initial generation
+	pathTracer.setScene( scene, camera );
 
-		modelPromise = loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' );
-
-	}
-
-	await Promise.all( [ envMapPromise, modelPromise ] );
-
-	document.getElementById( 'loading' ).remove();
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
-	// init gui
+	// gui
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
-
-		pathTracer.reset();
-
-	} );
-	gui.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
-
-		pathTracer.reset();
-
-	} );
+	gui.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
 	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
@@ -160,66 +170,20 @@ function setPause( v ) {
 
 }
 
-function loadModel( url ) {
-
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( url )
-		.then( gltf => {
-
-			// animations
-			const animations = gltf.animations;
-			mixer = new AnimationMixer( gltf.scene );
-
-			mixerAction = mixer.clipAction( animations[ 0 ] );
-			mixerAction.play();
-			mixerAction.paused = params.pause;
-
-			// add floor
-			scene.add( gltf.scene );
-
-			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new Mesh(
-				new PlaneGeometry(),
-				new MeshStandardMaterial( {
-					map: floorTex,
-					transparent: true,
-					color: 0xdddddd,
-					roughness: 0.15,
-					metalness: 1.0
-				} )
-			);
-			floorPlane.scale.setScalar( 50 );
-			floorPlane.rotation.x = - Math.PI / 2;
-			floorPlane.position.y = 0.075;
-			scene.add( floorPlane );
-
-		} );
-
-	return gltfPromise;
-
-}
-
-
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
-
-	camera.aspect = w / h;
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 
-	regenerateScene();
+	pathTracer.updateCamera();
 
 }
 
 function regenerateScene() {
 
-	scene.environmentIntensity = params.environmentIntensity;
 	pathTracer.bounces = params.bounces;
 	pathTracer.setScene( scene, camera );
 
@@ -253,6 +217,7 @@ function animate() {
 	if ( ! params.pause && ! params.continuous ) {
 
 		renderer.render( scene, camera );
+		loader.setSamples( 0 );
 
 	} else {
 
@@ -263,10 +228,8 @@ function animate() {
 
 		}
 
-		camera.updateMatrixWorld();
 		pathTracer.renderSample();
-
-		samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+		loader.setSamples( pathTracer.samples );
 
 	}
 

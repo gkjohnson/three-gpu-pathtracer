@@ -219,6 +219,7 @@ function onResize() {
 	renderer.setPixelRatio( window.devicePixelRatio * params.resolutionScale );
 	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
+	pathTracer.updateCamera();
 
 }
 

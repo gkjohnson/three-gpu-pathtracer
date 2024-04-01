@@ -104,6 +104,8 @@ export class LoaderElement {
 		this._samples = samplesEl;
 		this._container = container;
 
+		this.setPercentage( 0 );
+
 	}
 
 	attach( container ) {
