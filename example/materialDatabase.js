@@ -2,61 +2,49 @@ import {
 	ACESFilmicToneMapping,
 	PerspectiveCamera,
 	Scene,
-	Group,
 	Box3,
 	Mesh,
 	CylinderGeometry,
 	MeshPhysicalMaterial,
-	NoToneMapping,
 	WebGLRenderer,
 	EquirectangularReflectionMapping,
 	Color,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
+import { WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb';
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr';
 const DB_URL = 'https://api.physicallybased.info/materials';
+const CREDITS = 'Materials courtesy of "physicallybased.info"';
 
 let pathTracer, renderer, controls, shellMaterial;
-let camera, database;
-let envMap, scene;
-let samplesEl, imgEl, infoEl;
-let loader;
+let camera, database, scene;
+let loader, imgEl;
 
 const params = {
 	material: null,
-	hideInfo: false,
 	tiles: 2,
 	bounces: 5,
 	multipleImportanceSampling: true,
 	resolutionScale: 1 / window.devicePixelRatio,
-	environmentBlur: 0,
-	environmentIntensity: 1,
-	environmentRotation: 0,
-	backgroundBlur: 0.1,
-	filterGlossyFactor: 0.5,
+	...getScaledSettings(),
 };
-
-// adjust performance parameters for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.bounces = Math.max( params.bounces, 6 );
-	params.resolutionScale *= 0.5;
-	params.tiles = 2;
-	params.hideInfo = true;
-
-}
 
 init();
 
 async function init() {
+
+	loader = new LoaderElement();
+	loader.attach( document.body );
+
+	imgEl = document.getElementById( 'materialImage' );
 
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
@@ -67,7 +55,7 @@ async function init() {
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
+	pathTracer.filterGlossyFactor = 0.5;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -80,10 +68,6 @@ async function init() {
 
 	// scene
 	scene = new Scene();
-
-	samplesEl = document.getElementById( 'samples' );
-	imgEl = document.getElementById( 'materialImage' );
-	infoEl = document.getElementById( 'info' );
 
 	// load assets
 	const [ envTexture, gltf, dbJson ] = await Promise.all( [
@@ -149,15 +133,18 @@ async function init() {
 	dbJson.forEach( mat => database[ mat.name ] = mat );
 	params.material = Object.keys( database )[ 0 ];
 
-	document.getElementById( 'loading' ).remove();
+	// initialize scene
+	pathTracer.setScene( scene, camera );
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
 
 	onParamsChange();
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
+	// gui
 	const gui = new GUI();
 	gui.add( params, 'material', Object.keys( database ) ).onChange( onParamsChange );
-	gui.add( params, 'hideInfo' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
@@ -167,11 +154,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
-
-	} );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
 	animate();
 
@@ -179,17 +162,11 @@ async function init() {
 
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
-
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
-
-	const aspect = w / h;
-	camera.aspect = aspect;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
-	onParamsChange();
+	pathTracer.updateCamera();
 
 }
 
@@ -229,28 +206,12 @@ function applyMaterialInfo( info, material ) {
 
 function onParamsChange() {
 
-	infoEl.style.visibility = params.hideInfo ? 'hidden' : 'visible';
-
-	const materialInfo = database[ params.material ];
-	applyMaterialInfo( materialInfo, shellMaterial );
+	applyMaterialInfo( database[ params.material ], shellMaterial );
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.renderScale = params.resolutionScale;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-	camera.updateMatrixWorld();
-
-	if ( params.backgroundAlpha < 1.0 ) {
-
-		scene.background = null;
-
-	} else {
-
-		scene.background = scene.environment;
-
-	}
-
-	pathTracer.setScene( scene, camera );
+	pathTracer.updateMaterials();
 
 }
 
@@ -258,7 +219,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 	pathTracer.renderSample();
-
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
