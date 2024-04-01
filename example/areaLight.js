@@ -144,7 +144,7 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	const ptFolder = gui.addFolder( 'Path Tracing' );
+	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
@@ -156,7 +156,7 @@ async function init() {
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
 
-	const areaLightFolder = gui.addFolder( 'Area Light 1' );
+	const areaLightFolder = gui.addFolder( 'Area Light' );
 	areaLightFolder.add( params, 'enabled' ).name( 'enable' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( onParamsChange );
