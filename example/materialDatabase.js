@@ -9,6 +9,7 @@ import {
 	MeshPhysicalMaterial,
 	NoToneMapping,
 	WebGLRenderer,
+	EquirectangularReflectionMapping,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -19,6 +20,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb';
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr';
+const DB_URL = 'https://api.physicallybased.info/materials';
 
 let pathTracer, renderer, controls, materials;
 let camera, database;
@@ -82,111 +84,96 @@ async function init() {
 	imgEl = document.getElementById( 'materialImage' );
 	infoEl = document.getElementById( 'info' );
 
-	const envMapPromise = new RGBELoader()
-		.loadAsync( ENV_URL )
-		.then( texture => {
+	const [ envTexture, gltf, db ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+		fetch( DB_URL ).then( res => res.json() ),
+	] );
 
-			envMap = texture;
+	// background
+	envTexture.mapping = EquirectangularReflectionMapping;
+	scene.background = envTexture;
+	scene.environment = envTexture;
 
-		} );
+	// scene initialization
+	const group = new Group();
 
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( MODEL_URL )
-		.then( gltf => {
+	gltf.scene.scale.setScalar( 0.01 );
+	gltf.scene.updateMatrixWorld();
+	group.add( gltf.scene );
 
-			const group = new Group();
+	const box = new Box3();
+	box.setFromObject( gltf.scene );
 
-			gltf.scene.scale.setScalar( 0.01 );
-			gltf.scene.updateMatrixWorld();
-			group.add( gltf.scene );
+	const floor = new Mesh(
+		new CylinderGeometry( 3, 3, 0.05, 200 ),
+		new MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
+	);
+	floor.geometry = floor.geometry.toNonIndexed();
+	floor.geometry.clearGroups();
+	floor.position.y = box.min.y - 0.03;
+	group.add( floor );
 
-			const box = new Box3();
-			box.setFromObject( gltf.scene );
+	const material1 = new MeshPhysicalMaterial();
+	const material2 = new MeshPhysicalMaterial();
 
-			const floor = new Mesh(
-				new CylinderGeometry( 3, 3, 0.05, 200 ),
-				new MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
-			);
-			floor.geometry = floor.geometry.toNonIndexed();
-			floor.geometry.clearGroups();
-			floor.position.y = box.min.y - 0.03;
-			group.add( floor );
+	gltf.scene.traverse( c => {
 
-			const material1 = new MeshPhysicalMaterial();
-			const material2 = new MeshPhysicalMaterial();
+		// the vertex normals on the material ball are off...
+		// TODO: precompute the vertex normals so they are correct on load
+		if ( c.geometry ) {
 
-			gltf.scene.traverse( c => {
+			c.geometry.computeVertexNormals();
 
-				// the vertex normals on the material ball are off...
-				// TODO: precompute the vertex normals so they are correct on load
-				if ( c.geometry ) {
+		}
 
-					c.geometry.computeVertexNormals();
+		if ( c.name === 'Sphere_1' ) {
 
-				}
+			c.material = material2;
 
-				if ( c.name === 'Sphere_1' ) {
+		} else {
 
-					c.material = material2;
+			c.material = material1;
 
-				} else {
+		}
 
-					c.material = material1;
+		if ( c.name === 'subsphere_1' ) {
 
-				}
+			c.material = material2;
 
-				if ( c.name === 'subsphere_1' ) {
+		}
 
-					c.material = material2;
+	} );
 
-				}
+	materials = [ material1, material2, floor.material ];
 
-			} );
+	scene.add( group );
 
-			materials = [ material1, material2, floor.material ];
-
-			scene.add( group );
-
-		} );
-
-	const databasePromise = fetch( 'https://api.physicallybased.info/materials' )
-		.then( res => res.json() )
-		.then( json => {
-
-			database = {};
-			json.forEach( mat => {
-
-				database[ mat.name ] = mat;
-
-			} );
-
-		} );
-
-	await Promise.all( [ databasePromise, gltfPromise, envMapPromise ] );
+	// database set up
+	database = {};
+	db.forEach( mat => database[ mat.name ] = mat );
 
 	const materialNames = Object.keys( database );
 	params.material = materialNames[ 0 ];
 
 	document.getElementById( 'loading' ).remove();
 
-	updateEnvBlur();
-	reset();
+	onParamsChange();
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'material', materialNames ).onChange( reset );
+	gui.add( params, 'material', materialNames ).onChange( onParamsChange );
 	gui.add( params, 'hideInfo' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
+	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
@@ -209,15 +196,7 @@ function onResize() {
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
-	reset();
-
-}
-
-function updateEnvBlur() {
-
-	scene.environment = envMap;
-	scene.background = envMap;
-	reset();
+	onParamsChange();
 
 }
 
@@ -255,7 +234,7 @@ function applyMaterialInfo( info, material ) {
 
 }
 
-function reset() {
+function onParamsChange() {
 
 	infoEl.style.visibility = params.hideInfo ? 'hidden' : 'visible';
 
