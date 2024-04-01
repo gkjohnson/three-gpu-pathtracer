@@ -18,14 +18,10 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-let pathTracer, renderer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, materials;
-let camera;
-let scene;
-let iesTextures;
-let samplesEl;
-
-// ies library profiles
-const iesProfileURLs = [
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf';
+const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr';
+const CREDITS = '';
+const IES_PROFILE_URLS = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/0646706b3d2d9658994fc4ad80681dec.ies',
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/06b4cfdc8805709e767b5e2e904be8ad.ies',
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/007cfb11e343e2f42e3b476be4ab684e.ies',
@@ -36,6 +32,12 @@ const iesProfileURLs = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/1a936937a49c63374e6d4fbed9252b29.ies',
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/00c6ce79e1d2cdf3a1fb491aaaa47ae0.ies',
 ];
+
+let pathTracer, renderer, controls, transformControlsScene, spotLight, lights, spotLights, spotLightHelper, materials;
+let camera;
+let scene;
+let iesTextures;
+let samplesEl;
 
 // gui parameters
 const params = {
@@ -113,7 +115,7 @@ async function init() {
 
 	// load the env map
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
+		.loadAsync( ENV_URL )
 		.then( texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;
@@ -126,7 +128,7 @@ async function init() {
 
 	// load the geometry
 	const gltfPromise = new GLTFLoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf' )
+		.loadAsync( MODEL_URL )
 		.then( gltf => {
 
 			// objects
@@ -227,7 +229,7 @@ async function init() {
 			makeTransformControls( targetObject );
 
 			// ies textures
-			const iesPromises = iesProfileURLs.map( url => {
+			const iesPromises = IES_PROFILE_URLS.map( url => {
 
 				return new IESLoader().loadAsync( url );
 
@@ -293,7 +295,7 @@ async function init() {
 	lightFolder.add( spotLight, 'distance', 0.0, 20.0 ).onChange( reset );
 	lightFolder.add( spotLight, 'angle', 0.0, Math.PI / 2.0 ).onChange( reset );
 	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( reset );
-	lightFolder.add( params, 'iesProfile', - 1, iesProfileURLs.length - 1, 1 ).onChange( v => {
+	lightFolder.add( params, 'iesProfile', - 1, IES_PROFILE_URLS.length - 1, 1 ).onChange( v => {
 
 		spotLight.iesTexture = v === - 1 ? null : iesTextures[ v ];
 		reset();
