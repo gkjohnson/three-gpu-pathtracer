@@ -8,7 +8,7 @@ export function getScaledSettings() {
 	if ( aspectRatio < 0.65 ) {
 
 		tiles = 3;
-		renderScale = 1 / window.devicePixelRatio;
+		renderScale = 0.5 / window.devicePixelRatio;
 
 	}
 

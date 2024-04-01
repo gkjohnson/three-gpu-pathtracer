@@ -3,7 +3,6 @@ import {
 	Vector3,
 	ACESFilmicToneMapping,
 	Scene,
-	Group,
 	SphereGeometry,
 	MeshStandardMaterial,
 	Mesh,
@@ -16,43 +15,49 @@ import { PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLP
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+
+const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb';
+const CREDITS = 'Model by tipatat on Sketchfab';
+const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
 let pathTracer, renderer, controls, camera, scene, bvh;
-let samplesEl;
+let loader;
 const mouse = new Vector2();
 const focusPoint = new Vector3();
 const params = {
 
 	bounces: 3,
-	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	autoFocus: true,
 
+	...getScaledSettings(),
+
 };
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.bounces = Math.max( params.bounces, 6 );
-	params.resolutionScale *= 0.5;
-	params.tiles = 2;
-
-}
 
 init();
 
 async function init() {
 
+	loader = new LoaderElement();
+	loader.attach( document.body );
+
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
+	// camera
 	camera = new PhysicalCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( - 0.262, 0.5276, - 1.1606 );
 	camera.apertureBlades = 6;
@@ -60,15 +65,18 @@ async function init() {
 	camera.focusDistance = 1.1878;
 	focusPoint.set( - 0.5253353217832674, 0.3031596413506029, 0.000777794185259223 );
 
+	// background
 	const gradientMap = new GradientEquirectTexture();
 	gradientMap.topColor.set( 0x390f20 ).convertSRGBToLinear();
 	gradientMap.bottomColor.set( 0x151b1f ).convertSRGBToLinear();
 	gradientMap.update();
 
+	// scene
 	scene = new Scene();
 	scene.background = gradientMap;
 	scene.environmentIntensity = 0.5;
 
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( - 0.182, 0.147, 0.06 );
 	controls.update();
@@ -77,109 +85,97 @@ async function init() {
 		if ( params.autoFocus ) {
 
 			camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
-			reset();
+
+		}
+
+		pathTracer.updateCamera();
+
+	} );
+
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL )
+	] );
+
+	// set up environment map
+	const generator = new BlurredEnvMapGenerator( renderer );
+	const blurredTex = generator.generate( envTexture, 0.35 );
+	generator.dispose();
+	envTexture.dispose();
+
+	scene.environment = blurredTex;
+
+	// create bright points around the scene
+	const geometry = new SphereGeometry( 1, 10, 10 );
+	const mat = new MeshStandardMaterial( { emissiveIntensity: 10, emissive: 0xffffff } );
+	for ( let i = 0; i < 300; i ++ ) {
+
+		const m = new Mesh( geometry, mat );
+		m.scale.setScalar( 0.075 * Math.random() + 0.03 );
+		m.position.randomDirection().multiplyScalar( 30 + Math.random() * 15 );
+		scene.add( m );
+
+	}
+
+	gltf.scene.scale.setScalar( 0.5 );
+	gltf.scene.traverse( c => {
+
+		if ( c.material ) {
+
+			c.material.roughness = 0.05;
+			c.material.metalness = 0.05;
 
 		}
 
 	} );
+	scene.add( gltf.scene );
+	scene.updateMatrixWorld( true );
 
-	samplesEl = document.getElementById( 'samples' );
+	// update the scene
+	const results = await pathTracer.setSceneAsync( scene, camera, {
+		onProgress: v => loader.setPercentage( v ),
+	} );
+	bvh = results.bvh;
 
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
-		.then( texture => {
-
-			const generator = new BlurredEnvMapGenerator( renderer );
-			const blurredTex = generator.generate( texture, 0.35 );
-			generator.dispose();
-			texture.dispose();
-
-			scene.environment = blurredTex;
-
-		} );
-
-
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb' )
-		.then( gltf => {
-
-			const group = new Group();
-
-			const geometry = new SphereGeometry( 1, 10, 10 );
-			const mat = new MeshStandardMaterial( {
-				emissiveIntensity: 10,
-				emissive: 0xffffff
-			} );
-			for ( let i = 0; i < 300; i ++ ) {
-
-				const m = new Mesh(
-					geometry,
-					mat
-				);
-				m.scale.setScalar( 0.075 * Math.random() + 0.03 );
-				m.position.randomDirection().multiplyScalar( 30 + Math.random() * 15 );
-				group.add( m );
-
-			}
-
-			gltf.scene.scale.setScalar( 0.5 );
-			gltf.scene.updateMatrixWorld();
-			group.add( gltf.scene );
-
-			gltf.scene.traverse( c => {
-
-				if ( c.material ) {
-
-					c.material.roughness = 0.05;
-					c.material.metalness = 0.05;
-
-				}
-
-			} );
-
-			scene.add( group );
-
-		} );
-
-	await Promise.all( [ gltfPromise, envMapPromise ] );
-	reset();
-
-	document.getElementById( 'loading' ).remove();
-
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
+	loader.setDescription( DESCRIPTION );
+	onParamsChange();
 	onResize();
+
 	window.addEventListener( 'resize', onResize );
 	renderer.domElement.addEventListener( 'mouseup', onMouseUp );
 	renderer.domElement.addEventListener( 'mousedown', onMouseDown );
 
+	// gui
 	const gui = new GUI();
-	const ptFolder = gui.addFolder( 'Path Tracing' );
+	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( reset );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( reset ).listen();
+	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( onParamsChange ).listen();
 	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
 
 		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
+		pathTracer.updateCamera();
 		this.updateDisplay();
-		reset();
+
 
 	} );
-	cameraFolder.add( camera, 'apertureRotation', 0, 12.5 ).onChange( reset );
-	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 10.0 ).onChange( reset );
-	cameraFolder.add( camera, 'bokehSize', 0, 100 ).onChange( reset ).listen();
-	cameraFolder.add( camera, 'fStop', 0.02, 20 ).onChange( reset ).listen();
+	cameraFolder.add( camera, 'apertureRotation', 0, 12.5 ).onChange( onParamsChange );
+	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 10.0 ).onChange( onParamsChange );
+	cameraFolder.add( camera, 'bokehSize', 0, 100 ).onChange( onParamsChange ).listen();
+	cameraFolder.add( camera, 'fStop', 0.02, 20 ).onChange( onParamsChange ).listen();
 	cameraFolder.add( camera, 'fov', 25, 100 ).onChange( () => {
 
 		camera.updateProjectionMatrix();
-		reset();
+		pathTracer.updateCamera();
 
 	} ).listen();
 	cameraFolder.add( params, 'autoFocus' );
@@ -188,6 +184,7 @@ async function init() {
 
 }
 
+// mouse events for focusing on clicked poin
 function onMouseDown( e ) {
 
 	mouse.set( e.clientX, e.clientY );
@@ -212,7 +209,7 @@ function onMouseUp( e ) {
 
 			focusPoint.copy( hit.point );
 			camera.focusDistance = hit.distance - camera.near;
-			reset();
+			pathTracer.updateCamera();
 
 		}
 
@@ -222,26 +219,22 @@ function onMouseUp( e ) {
 
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
-
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
-	camera.aspect = w / h;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 
-	bvh = pathTracer.setScene( scene, camera ).bvh;
+	pathTracer.updateCamera();
 
 }
 
-function reset() {
+function onParamsChange() {
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.resolutionScale;
 
-	bvh = pathTracer.setScene( scene, camera ).bvh;
+	pathTracer.reset();
 
 }
 
@@ -251,10 +244,6 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
-
-
-
-
