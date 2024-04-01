@@ -21,8 +21,8 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr';
 
 let pathTracer, renderer, controls, materials;
-let perspectiveCamera, database;
-let envMap, envMapGenerator, scene;
+let camera, database;
+let envMap, scene;
 let samplesEl, imgEl, infoEl;
 let loader;
 
@@ -47,8 +47,6 @@ if ( aspectRatio < 0.65 ) {
 	params.bounces = Math.max( params.bounces, 6 );
 	params.resolutionScale *= 0.5;
 	params.tiles = 2;
-	params.multipleImportanceSampling = false;
-	params.environmentBlur = 0.35;
 	params.hideInfo = true;
 
 }
@@ -70,11 +68,11 @@ async function init() {
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	perspectiveCamera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 4, 2, 3 );
+	camera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
+	camera.position.set( - 4, 2, 3 );
 
 	// controls
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// scene
@@ -83,8 +81,6 @@ async function init() {
 	samplesEl = document.getElementById( 'samples' );
 	imgEl = document.getElementById( 'materialImage' );
 	infoEl = document.getElementById( 'info' );
-
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const envMapPromise = new RGBELoader()
 		.loadAsync( ENV_URL )
@@ -211,8 +207,8 @@ function onResize() {
 	renderer.setPixelRatio( dpr );
 
 	const aspect = w / h;
-	perspectiveCamera.aspect = aspect;
-	perspectiveCamera.updateProjectionMatrix();
+	camera.aspect = aspect;
+	camera.updateProjectionMatrix();
 	reset();
 
 }
@@ -275,7 +271,7 @@ function reset() {
 	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-	perspectiveCamera.updateMatrixWorld();
+	camera.updateMatrixWorld();
 
 	if ( params.backgroundAlpha < 1.0 ) {
 
@@ -287,7 +283,7 @@ function reset() {
 
 	}
 
-	pathTracer.setScene( scene, perspectiveCamera );
+	pathTracer.setScene( scene, camera );
 
 }
 
