@@ -18,16 +18,23 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import CanvasCapture from 'canvas-capture';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
+
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb';
+const CREDITS = 'Model by DailyArt on Sketchfab';
 
 // CCapture seems to replace the requestAnimationFrame callback which breaks the ability to render and
 // use CanvasCapture.
 const requestAnimationFrame = window.requestAnimationFrame;
 
-let pathTracer, renderer, controls, camera, scene, gui, model;
-let samplesEl, videoEl;
+let pathTracer, renderer, controls, camera, scene, gui, mixer;
+let videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
+let loader;
 const UP_AXIS = new Vector3( 0, 1, 0 );
 
 const params = {
@@ -79,75 +86,100 @@ const params = {
 	bounces: 5,
 	samplesPerFrame: 1,
 	resolutionScale: 1,
+	...getScaledSettings(),
 
 };
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.resolutionScale *= 0.5;
-	params.tiles = 2;
-
-}
 
 init();
 
 async function init() {
 
-	// initialize renderer, scene, camera
+	loader = new LoaderElement();
+	loader.attach( document.body );
+
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
+	// scene
 	scene = new Scene();
 	scene.backgroundBlurriness = 0.1;
 
+	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5, 8, 12 );
 
-	// initialize controls
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( - 0.15, 4.5, - 0.08 );
-	controls.addEventListener( 'change', () => {
-
-		regenerateScene();
-
-	} );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
 	// get dom elements
-	samplesEl = document.getElementById( 'samples' );
-
 	videoEl = document.getElementsByTagName( 'video' )[ 0 ];
 	videoEl.style.display = 'none';
 
-	// model models and environment map
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr' )
-		.then( texture => {
+	// load assets
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+	] );
 
-			texture.mapping = EquirectangularReflectionMapping;
-			scene.background = texture;
-			scene.environment = texture;
+	envTexture.mapping = EquirectangularReflectionMapping;
+	scene.background = envTexture;
+	scene.environment = envTexture;
 
-		} );
+	// fix the material state
+	gltf.scene.traverse( c => {
 
-	const modelPromise = await loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb' )
-		.then( result => {
+		if ( c.material ) {
 
-			model = result;
+			c.material.transparent = false;
+			c.material.depthWrite = true;
 
-		} );
+		}
 
-	await Promise.all( [ envMapPromise, modelPromise ] );
+	} );
+	gltf.scene.scale.setScalar( 0.3 );
+	scene.add( gltf.scene );
+
+	// add floor
+	const floorTex = generateRadialFloorTexture( 2048 );
+	const floorPlane = new Mesh(
+		new PlaneGeometry(),
+		new MeshStandardMaterial( {
+			map: floorTex,
+			transparent: true,
+			color: 0xdddddd,
+			roughness: 0.15,
+			metalness: 0.95
+		} )
+	);
+	floorPlane.scale.setScalar( 50 );
+	floorPlane.rotation.x = - Math.PI / 2;
+	floorPlane.position.y = 0.075;
+	scene.add( floorPlane );
+
+	// initialize animations
+	const animations = gltf.animations;
+	const clip = animations[ 0 ];
+	mixer = new AnimationMixer( gltf.scene );
+	mixer.clipAction( clip ).play();
+
+	// save the duration of the animation
+	animationDuration = parseFloat( clip.duration.toFixed( 2 ) );
+	params.duration = animationDuration;
 
 	// prep for rendering
-	document.getElementById( 'loading' ).remove();
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
+	pathTracer.setScene( scene, camera );
 
 	initializeSize();
 	rebuildGUI();
@@ -189,88 +221,22 @@ function rebuildGUI() {
 
 }
 
-function loadModel( url ) {
-
-	// load the gltf model
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( url )
-		.then( gltf => {
-
-			// make the model white since the texture seems to dark for the env map
-			// TODO: remove this
-			gltf.scene.traverse( c => {
-
-				if ( c.material ) {
-
-					c.material.transparent = false;
-					c.material.depthWrite = true;
-
-				}
-
-			} );
-			gltf.scene.scale.setScalar( 0.3 );
-
-			// initialize animations
-			const animations = gltf.animations;
-			const mixer = new AnimationMixer( gltf.scene );
-			const clip = animations[ 0 ];
-			const action = mixer.clipAction( clip );
-			action.play();
-
-			// save the duration of the animation
-			animationDuration = parseFloat( clip.duration.toFixed( 2 ) );
-			params.duration = animationDuration;
-
-			// add floor
-			scene.add( gltf.scene );
-
-			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new Mesh(
-				new PlaneGeometry(),
-				new MeshStandardMaterial( {
-					map: floorTex,
-					transparent: true,
-					color: 0xdddddd,
-					roughness: 0.15,
-					metalness: 0.95
-				} )
-			);
-			floorPlane.scale.setScalar( 50 );
-			floorPlane.rotation.x = - Math.PI / 2;
-			floorPlane.position.y = 0.075;
-			scene.add( floorPlane );
-
-			// create the scene generator for updating skinned meshes quickly
-			return {
-				mixer,
-				action,
-			};
-
-		} );
-
-	return gltfPromise;
-
-}
-
 function initializeSize() {
 
 	// only size this once because we don't want it to change during rendering
 	const w = Math.min( 700, window.innerWidth );
 	const h = Math.floor( w * 3 / 4 );
-	const dpr = window.devicePixelRatio;
-
 	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
 	renderer.setSize( w, h, false );
-	renderer.setPixelRatio( dpr );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
 	// update the dom elements
 	renderer.domElement.style.width = `${ w }px`;
 	videoEl.style.width = `${ w }px`;
 
-	regenerateScene();
+	pathTracer.updateCamera();
 
 }
 
@@ -322,7 +288,7 @@ function animate() {
 			camera.updateMatrixWorld();
 
 			const delta = 1 / params.frameRate;
-			model.mixer.update( delta );
+			mixer.update( delta );
 
 			regenerateScene();
 
@@ -339,14 +305,12 @@ function animate() {
 		const percStride = 1 / total;
 		const samplesPerc = pathTracer.samples / params.samples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-		samplesEl.innerText = `Frame Samples        : ${ Math.floor( pathTracer.samples ) }\n`;
-		samplesEl.innerText += `Frames Rendered      : ${ recordedFrames } / ${ total }\n`;
-		samplesEl.innerText += `Rendering Completion : ${ ( percentDone * 100 ).toFixed( 2 ) }%`;
+		loader.setPercentage( percentDone );
 
 	} else {
 
-		samplesEl.innerText = '';
-		samplesEl.innerText += `Samples : ${ Math.floor( pathTracer.samples ) }`;
+		loader.setPercentage( 1 );
+		loader.setSamples( pathTracer.samples );
 
 	}
 
