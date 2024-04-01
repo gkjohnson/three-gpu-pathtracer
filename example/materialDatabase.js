@@ -17,15 +17,18 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb';
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr';
+
 let pathTracer, renderer, controls, materials;
 let perspectiveCamera, database;
 let envMap, envMapGenerator, scene;
 let samplesEl, imgEl, infoEl;
+let loader;
 
 const params = {
 	material: null,
 	hideInfo: false,
-	acesToneMapping: true,
 	tiles: 2,
 	bounces: 5,
 	multipleImportanceSampling: true,
@@ -54,25 +57,27 @@ init();
 
 async function init() {
 
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 
+	// camera
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 4, 2, 3 );
 
+	// controls
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
-	controls.addEventListener( 'change', () => {
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
-		reset();
-
-	} );
-
+	// scene
 	scene = new Scene();
 
 	samplesEl = document.getElementById( 'samples' );
@@ -82,7 +87,7 @@ async function init() {
 	envMapGenerator = new BlurredEnvMapGenerator( renderer );
 
 	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr' )
+		.loadAsync( ENV_URL )
 		.then( texture => {
 
 			envMap = texture;
@@ -91,7 +96,7 @@ async function init() {
 
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb' )
+		.loadAsync( MODEL_URL )
 		.then( gltf => {
 
 			const group = new Group();
@@ -179,34 +184,18 @@ async function init() {
 	gui.add( params, 'hideInfo' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
-	ptFolder.add( params, 'acesToneMapping' ).onChange( value => {
-
-		renderer.toneMapping = value ? ACESFilmicToneMapping : NoToneMapping;
-
-	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( reset );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
 	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
 
 	} );
-
-	const envFolder = gui.addFolder( 'Environment' );
-	envFolder.add( params, 'environmentIntensity', 0, 10 ).onChange( reset );
-	envFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( reset );
-	envFolder.add( params, 'environmentBlur', 0, 1 ).onChange( () => {
-
-		updateEnvBlur();
-
-	} );
-	envFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( reset );
 
 	animate();
 
@@ -230,15 +219,8 @@ function onResize() {
 
 function updateEnvBlur() {
 
-	const blurredTex = envMapGenerator.generate( envMap, params.environmentBlur );
-	if ( scene.environment ) {
-
-		scene.environment.dispose();
-
-	}
-
-	scene.environment = blurredTex;
-	scene.background = blurredTex;
+	scene.environment = envMap;
+	scene.background = envMap;
 	reset();
 
 }
@@ -293,10 +275,6 @@ function reset() {
 	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-	scene.environmentRotation.y = params.environmentRotation;
-	scene.backgroundRotation.y = params.environmentRotation;
-	scene.backgroundIntensity = params.environmentIntensity;
-	scene.environmentIntensity = params.environmentIntensity;
 	perspectiveCamera.updateMatrixWorld();
 
 	if ( params.backgroundAlpha < 1.0 ) {
@@ -309,7 +287,7 @@ function reset() {
 
 	}
 
-	pathTracer.setScene( perspectiveCamera, scene );
+	pathTracer.setScene( scene, perspectiveCamera );
 
 }
 
