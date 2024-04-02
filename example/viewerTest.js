@@ -113,22 +113,8 @@ async function init() {
 	modelDatabase = {};
 	scenarios.forEach( s => modelDatabase[ s.name ] = s );
 
-	// initialize model
-	params.model = scenarios[ 0 ].name;
-	if ( window.location.hash ) {
-
-		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
-		if ( modelName in modelDatabase ) {
-
-			params.model = modelName;
-
-		}
-
-	}
-
-	window.addEventListener( 'hashchange', () => updateModel() );
-
-	updateModel();
+	window.addEventListener( 'hashchange', onHashChange );
+	onHashChange();
 
 	animate();
 
@@ -183,6 +169,30 @@ function animate() {
 
 }
 
+function onHashChange() {
+
+	if ( params.model === window.location.hash ) {
+
+		return;
+
+	}
+
+	params.model = Object.keys( modelDatabase )[ 0 ];
+	if ( window.location.hash ) {
+
+		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
+		if ( modelName in modelDatabase ) {
+
+			params.model = modelName;
+
+		}
+
+	}
+
+	updateModel();
+
+}
+
 function onParamsChange() {
 
 	if ( pathTracer.tiles !== 1.0 ) {
@@ -227,7 +237,11 @@ function buildGui() {
 	}
 
 	gui = new GUI();
-	gui.add( params, 'model', Object.keys( modelDatabase ) ).onChange( updateModel );
+	gui.add( params, 'model', Object.keys( modelDatabase ) ).onChange( v => {
+
+		window.location.hash = v;
+
+	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
@@ -442,8 +456,6 @@ async function updateModel() {
 	camera.updateProjectionMatrix();
 	controls.update();
 
-	containerEl.style.display = 'flex';
-
 	await pathTracer.setSceneAsync( scene, camera, {
 		onProgress: v => {
 
@@ -454,6 +466,7 @@ async function updateModel() {
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
+	containerEl.style.display = 'flex';
 	loadingModel = false;
 
 	onParamsChange();

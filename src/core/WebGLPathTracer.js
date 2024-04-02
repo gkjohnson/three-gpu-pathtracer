@@ -80,7 +80,6 @@ export class WebGLPathTracer {
 		this._renderer = renderer;
 		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
-		this._pathTracer.alpha = renderer.getContextAttributes().alpha;
 		this._queueReset = false;
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
@@ -333,6 +332,9 @@ export class WebGLPathTracer {
 			pathTracer.update();
 
 		}
+
+		pathTracer.alpha = this._renderer.getContextAttributes().alpha && pathTracer.material.background !== 1;
+		lowResPathTracer.alpha = pathTracer.alpha;
 
 		if ( this.renderToCanvas ) {
 
