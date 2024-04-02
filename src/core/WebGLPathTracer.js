@@ -1,9 +1,10 @@
-import { CustomBlending, MeshBasicMaterial, PerspectiveCamera, Scene, Vector2 } from 'three';
+import { CustomBlending, PerspectiveCamera, Scene, Vector2 } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
 import { getIesTextures, getLights, getTextures } from './utils/sceneUpdateUtils.js';
+import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
 
 const _resolution = new Vector2();
 export class WebGLPathTracer {
@@ -83,7 +84,7 @@ export class WebGLPathTracer {
 		this._queueReset = false;
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
-		this._quad = new FullScreenQuad( new MeshBasicMaterial( {
+		this._quad = new FullScreenQuad( new ClampedInterpolationMaterial( {
 			map: null,
 			blending: CustomBlending,
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
