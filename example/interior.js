@@ -1,7 +1,6 @@
 import {
 	ACESFilmicToneMapping,
 	PerspectiveCamera,
-	OrthographicCamera,
 	Group,
 	Box3,
 	Vector3,
@@ -15,10 +14,12 @@ import { EquirectCamera, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
 
 let pathTracer, renderer, controls, sphericalControls, activeCamera, scene;
-let perspectiveCamera, orthoCamera, equirectCamera;
+let camera, equirectCamera;
 let samplesEl;
+
 const params = {
 
 	environmentIntensity: 0,
@@ -29,65 +30,46 @@ const params = {
 	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.25,
 	tiles: 2,
-	cameraProjection: 'Perspective'
+	cameraProjection: 'Perspective',
+	...getScaledSettings(),
 
 };
-
-const orthoWidth = 5;
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.bounces = Math.min( params.bounces, 10 );
-	params.resolutionScale *= 0.5;
-	params.tiles = 3;
-
-}
 
 init();
 
 async function init() {
 
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.dynamicLowRes = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
-	perspectiveCamera = new PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
-	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
-
-	const orthoHeight = orthoWidth / aspectRatio;
-	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
-	orthoCamera.position.copy( perspectiveCamera.position );
+	// camera
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera.position.set( 0.4, 0.6, 2.65 );
 
 	// Almost, but not quite on top of the control target.
 	// This allows for full rotation without moving the camera very much.
 	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	// controls
+	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
-	perspectiveCamera.lookAt( controls.target );
+	camera.lookAt( controls.target );
 	controls.update();
-	controls.addEventListener( 'change', () => {
-
-		pathTracer.setScene( activeCamera, scene );
-
-	} );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
 	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
 	equirectCamera.lookAt( sphericalControls.target );
 	sphericalControls.update();
-	sphericalControls.addEventListener( 'change', () => {
-
-		pathTracer.setScene( activeCamera, scene );
-
-	} );
+	sphericalControls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	samplesEl = document.getElementById( 'samples' );
 
@@ -138,7 +120,7 @@ async function init() {
 		} );
 
 	await Promise.all( [ gltfPromise, envMapPromise ] );
-	pathTracer.setScene( perspectiveCamera, scene );
+	pathTracer.setScene( scene, camera );
 
 	document.getElementById( 'loading' ).remove();
 
@@ -152,20 +134,20 @@ async function init() {
 
 	} );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( reset );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( reset );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( reset );
-	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( reset );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( reset );
+	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
+	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( onParamsChange );
+	gui.add( params, 'environmentRotation', 0, 40 ).onChange( onParamsChange );
+	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( onParamsChange );
+	gui.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
 	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
 
 		onResize();
 
 	} );
-	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( reset );
+	gui.add( params, 'cameraProjection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
 
 	updateIntensity();
-	reset();
+	onParamsChange();
 
 	animate();
 
@@ -173,24 +155,13 @@ async function init() {
 
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( dpr );
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
 
-	const aspect = w / h;
-
-	perspectiveCamera.aspect = aspect;
-	perspectiveCamera.updateProjectionMatrix();
-
-	const orthoHeight = orthoWidth / aspect;
-	orthoCamera.top = orthoHeight / 2;
-	orthoCamera.bottom = orthoHeight / - 2;
-	orthoCamera.updateProjectionMatrix();
-
-	reset();
+	pathTracer.updateCamera();
 
 }
 
@@ -209,31 +180,14 @@ function updateIntensity() {
 
 }
 
-function reset() {
+function onParamsChange() {
 
 	updateIntensity();
 
 	const cameraProjection = params.cameraProjection;
 	if ( cameraProjection === 'Perspective' ) {
 
-		if ( activeCamera === orthoCamera ) {
-
-			perspectiveCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = perspectiveCamera;
-		controls.object = activeCamera;
-
-	} else if ( cameraProjection === 'Orthographic' ) {
-
-		if ( activeCamera === perspectiveCamera ) {
-
-			orthoCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = orthoCamera;
+		activeCamera = camera;
 		controls.object = activeCamera;
 
 	}
@@ -265,7 +219,7 @@ function reset() {
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
 
-	pathTracer.setScene( activeCamera, scene );
+	pathTracer.setScene( scene, activeCamera );
 
 }
 
