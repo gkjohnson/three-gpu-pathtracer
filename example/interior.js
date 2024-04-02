@@ -15,25 +15,23 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { LoaderElement } from './utils/LoaderElement.js';
 
-const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr';
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb';
+const CREDITS = 'Interior scene by <a href="https://twitter.com/charlesforman">Charles Forman</a>';
 
 let pathTracer, renderer, controls, sphericalControls, activeCamera, scene;
-let camera, equirectCamera;
-let samplesEl;
+let camera, equirectCamera, loader;
 
 const params = {
 
-	environmentIntensity: 0,
-	environmentRotation: 0,
-	emissiveIntensity: 12,
+	environmentIntensity: 1,
+	emissiveIntensity: 5,
 	bounces: 20,
-	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.25,
 	tiles: 2,
-	cameraProjection: 'Perspective',
+	projection: 'Perspective',
 	...getScaledSettings(),
 
 };
@@ -41,6 +39,9 @@ const params = {
 init();
 
 async function init() {
+
+	loader = new LoaderElement();
+	loader.attach( document.body );
 
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
@@ -50,6 +51,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.dynamicLowRes = true;
+	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
@@ -74,8 +76,6 @@ async function init() {
 	equirectCamera.lookAt( sphericalControls.target );
 	sphericalControls.update();
 	sphericalControls.addEventListener( 'change', () => pathTracer.updateCamera() );
-
-	samplesEl = document.getElementById( 'samples' );
 
 	scene = new Scene();
 
@@ -113,30 +113,32 @@ async function init() {
 
 	gltf.scene.position.addScaledVector( center, - 0.5 );
 
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera, {
+		onProgress: v => loader.setPercentage( v ),
+	} );
 
-	document.getElementById( 'loading' ).remove();
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
 
 	onResize();
+	onParamsChange();
 	window.addEventListener( 'resize', onResize );
 
 	// gui
 	const gui = new GUI();
-	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( onParamsChange );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( onParamsChange );
-	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( onParamsChange );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
-	gui.add( params, 'cameraProjection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
-	onParamsChange();
+	const sceneFolder = gui.addFolder( 'Scene' );
+	sceneFolder.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
+	sceneFolder.add( params, 'environmentIntensity', 0, 25 ).onChange( onParamsChange );
+	sceneFolder.add( params, 'emissiveIntensity', 0, 50 ).onChange( onParamsChange );
 
 	animate();
 
@@ -154,38 +156,24 @@ function onResize() {
 
 }
 
-function updateIntensity() {
-
-
-}
-
 function onParamsChange() {
 
-	updateIntensity();
-
-	const cameraProjection = params.cameraProjection;
-	if ( cameraProjection === 'Perspective' ) {
+	const projection = params.projection;
+	if ( projection === 'Perspective' ) {
 
 		activeCamera = camera;
-		controls.object = activeCamera;
 
-	}
+		sphericalControls.enabled = false;
+		controls.enabled = true;
+		controls.update();
 
-	if ( cameraProjection === 'Equirectangular' ) {
+	} else if ( projection === 'Equirectangular' ) {
 
 		activeCamera = equirectCamera;
 
 		controls.enabled = false;
 		sphericalControls.enabled = true;
-
 		sphericalControls.update();
-
-	} else {
-
-		sphericalControls.enabled = false;
-		controls.enabled = true;
-
-		controls.update();
 
 	}
 
@@ -200,14 +188,10 @@ function onParamsChange() {
 
 	} );
 
-	pathTracer.renderScale = params.resolutionScale;
-
-	scene.environmentRotation.y = params.environmentRotation;
-	scene.backgroundRotation.y = params.environmentRotation;
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
+	pathTracer.renderScale = params.resolutionScale;
 
 	pathTracer.setScene( scene, activeCamera );
 
@@ -219,7 +203,7 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
 

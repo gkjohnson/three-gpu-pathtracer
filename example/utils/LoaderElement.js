@@ -59,6 +59,7 @@ function initializeStyles() {
 			display: none;
 		}
 
+		.loader-container .credits a,
 		.loader-container .credits,
 		.loader-container .samples {
 			color: rgba( 255, 255, 255, 0.75 );
@@ -149,13 +150,13 @@ export class LoaderElement {
 
 	setCredits( credits ) {
 
-		this._credits.innerText = credits;
+		this._credits.innerHTML = credits;
 
 	}
 
 	setDescription( description ) {
 
-		this._description.innerText = description;
+		this._description.innerHTML = description;
 
 	}
 
