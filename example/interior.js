@@ -1,7 +1,6 @@
 import {
 	ACESFilmicToneMapping,
 	PerspectiveCamera,
-	Group,
 	Box3,
 	Vector3,
 	EquirectangularReflectionMapping,
@@ -15,6 +14,10 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+
+const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb';
 
 let pathTracer, renderer, controls, sphericalControls, activeCamera, scene;
 let camera, equirectCamera;
@@ -48,6 +51,7 @@ async function init() {
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.dynamicLowRes = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -75,58 +79,48 @@ async function init() {
 
 	scene = new Scene();
 
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
-		.then( texture => {
+	// load assets
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+	] );
 
-			texture.mapping = EquirectangularReflectionMapping;
-			scene.background = texture;
-			scene.environment = texture;
+	// set environment
+	envTexture.mapping = EquirectangularReflectionMapping;
+	scene.background = envTexture;
+	scene.environment = envTexture;
 
-		} );
+	// set scene
+	gltf.scene.traverse( c => {
 
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb' )
-		.then( gltf => {
+		if ( c.material ) {
 
-			gltf.scene.traverse( c => {
+			// set the thickness so volume rendering is used for transmissive objects.
+			c.material.thickness = 1.0;
 
-				if ( c.material ) {
+		}
 
-					// set the thickness so volume rendering is used for transmissive objects.
-					c.material.thickness = 1.0;
+	} );
 
-				}
+	scene.add( gltf.scene );
+	scene.updateMatrixWorld();
 
-			} );
+	const box = new Box3();
+	box.setFromObject( gltf.scene );
 
-			const group = new Group();
-			group.add( gltf.scene );
+	const center = new Vector3();
+	box.getCenter( center );
 
-			const box = new Box3();
-			box.setFromObject( gltf.scene );
+	gltf.scene.position.addScaledVector( center, - 0.5 );
 
-			group.updateMatrixWorld();
-
-			const center = new Vector3();
-			box.getCenter( center );
-
-			gltf.scene.position.addScaledVector( center, - 0.5 );
-			group.updateMatrixWorld();
-
-			scene.add( group );
-
-		} );
-
-	await Promise.all( [ gltfPromise, envMapPromise ] );
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	document.getElementById( 'loading' ).remove();
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
+	// gui
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
@@ -139,14 +133,9 @@ async function init() {
 	gui.add( params, 'environmentRotation', 0, 40 ).onChange( onParamsChange );
 	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( onParamsChange );
 	gui.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
-
-	} );
+	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 	gui.add( params, 'cameraProjection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
 
-	updateIntensity();
 	onParamsChange();
 
 	animate();
@@ -167,16 +156,6 @@ function onResize() {
 
 function updateIntensity() {
 
-	scene.traverse( c => {
-
-		const material = c.material;
-		if ( material ) {
-
-			material.emissiveIntensity = params.emissiveIntensity;
-
-		}
-
-	} );
 
 }
 
@@ -210,6 +189,17 @@ function onParamsChange() {
 
 	}
 
+	scene.traverse( c => {
+
+		const material = c.material;
+		if ( material ) {
+
+			material.emissiveIntensity = params.emissiveIntensity;
+
+		}
+
+	} );
+
 	pathTracer.renderScale = params.resolutionScale;
 
 	scene.environmentRotation.y = params.environmentRotation;
@@ -227,7 +217,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	activeCamera.updateMatrixWorld();
 	pathTracer.renderSample();
 
 	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
