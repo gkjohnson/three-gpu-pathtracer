@@ -128,6 +128,12 @@ export class WebGLPathTracer {
 
 	}
 
+	setMikkTSpace( mikktSpace ) {
+
+		this._generator.setMikkTSpace( mikktSpace );
+
+	}
+
 	setScene( scene, camera, options = {} ) {
 
 		scene.updateMatrixWorld( true );
@@ -205,46 +211,10 @@ export class WebGLPathTracer {
 
 	}
 
-	_updateFromResults( scene, camera, results ) {
+	updateEnvironment() {
 
-		const {
-			lights,
-			materials,
-			textures,
-			geometry,
-			bvh,
-			bvhChanged,
-		} = results;
-
-		this._materials = materials;
-
-		const iesTextures = getIesTextures( lights );
-		const renderer = this._renderer;
-		const pathTracer = this._pathTracer;
-		const lowResPathTracer = this._lowResPathTracer;
-		const material = pathTracer.material;
-		const textureSize = this.textureSize;
-
-		// update scene information
-		material.lights.updateFrom( lights, iesTextures );
-		material.iesProfiles.setTextures( renderer, iesTextures );
-		material.lightCount = lights.length;
-		material.textures.setTextures( renderer, textures, textureSize.x, textureSize.y );
-		material.materials.updateFrom( materials, textures );
-
-		if ( bvhChanged ) {
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-
-		}
+		const scene = this.scene;
+		const material = this._pathTracer.material;
 
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;
@@ -297,17 +267,48 @@ export class WebGLPathTracer {
 
 		}
 
-		// camera update
-		pathTracer.setCamera( camera );
-		lowResPathTracer.setCamera( camera );
+		this._previousEnvironment = scene.environment;
+		this.reset();
+
+	}
+
+	_updateFromResults( scene, camera, results ) {
+
+		const {
+			materials,
+			geometry,
+			bvh,
+			bvhChanged,
+		} = results;
+
+		this._materials = materials;
+
+		const pathTracer = this._pathTracer;
+		const material = pathTracer.material;
+
+		if ( bvhChanged ) {
+
+			material.bvh.updateFrom( bvh );
+			material.attributesArray.updateFrom(
+				geometry.attributes.normal,
+				geometry.attributes.tangent,
+				geometry.attributes.uv,
+				geometry.attributes.color,
+			);
+
+			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+
+		}
 
 		// save previously used items
 		this._previousScene = scene;
-		this._previousEnvironment = scene.environment;
 		this.scene = scene;
 		this.camera = camera;
 
-		this.reset();
+		this.updateCamera();
+		this.updateMaterials();
+		this.updateEnvironment();
+		this.updateLights();
 
 		return results;
 
