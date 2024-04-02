@@ -84,7 +84,7 @@ renderer = new THREE.WebGLRenderer();
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 pathTracer = new WebGLPathTracer( renderer );
-pathTracer.updateScene( camera, scene );
+pathTracer.updateScene( scene, camera );
 
 animate();
 
@@ -138,7 +138,7 @@ filteredGlossyFactor = 0 : Number
 ### .tiles
 
 ```js
-tiles = ( 1, 1 ) : Vector2
+tiles = ( 3, 3 ) : Vector2
 ```
 
 ### .dynamicLowRes
@@ -181,8 +181,8 @@ renderToCanvas = true : Boolean
 
 ```js
 textureSize = ( 1024, 1024 ) : Vector2
-
 ```
+
 ### .samples
 
 ```js
@@ -192,25 +192,49 @@ get samples : Number
 ### .target
 
 ```js
-get target : WebGLRenderTarget
+readonly target : WebGLRenderTarget
 ```
 
-### .updateScene
+### .setScene
 
 ```js
-updateScene( camera : Camera, scene : Scene ) : void
+updateScene( scene : Scene, camera : Camera ) : void
 ```
 
-### .updateSceneAsync
+### .setSceneAsync
 
 ```js
 updateSceneAsync(
-	camera : Camera,
 	scene : Scene,
+	camera : Camera,
 	options = {
 		onProgress = null : value => void,
 	} : Object
 ) : void
+```
+
+### .updateCamera
+
+```js
+updateCamera() : void
+```
+
+### .updateMaterials
+
+```js
+updateMaterials() : void
+```
+
+### .updateEnvironment
+
+```js
+updateEnvironment() : void
+```
+
+### .updateLights
+
+```js
+updateLights() : void
 ```
 
 ### .renderSample

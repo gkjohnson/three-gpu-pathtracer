@@ -204,7 +204,7 @@ export class PathTracingRenderer {
 	constructor( renderer ) {
 
 		this.camera = null;
-		this.tiles = new Vector2( 1, 1 );
+		this.tiles = new Vector2( 3, 3 );
 
 		this.stableNoise = false;
 		this.stableTiles = true;
