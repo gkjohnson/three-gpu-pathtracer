@@ -10,9 +10,26 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 		return this.uniforms.map.value;
 
 	}
+
 	set map( v ) {
 
 		this.uniforms.map.value = v;
+
+	}
+
+	get opacity() {
+
+		return this.uniforms.opacity.value;
+
+	}
+
+	set opacity( v ) {
+
+		if ( this.uniforms ) {
+
+			this.uniforms.opacity.value = v;
+
+		}
 
 	}
 
@@ -22,6 +39,7 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 			uniforms: {
 
 				map: { value: null },
+				opacity: { value: 1 },
 
 			},
 
@@ -37,6 +55,7 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 
 			fragmentShader: /* glsl */`
 				uniform sampler2D map;
+				uniform float opacity;
 				varying vec2 vUv;
 
 				vec4 clampedTexelFatch( sampler2D map, ivec2 px, int lod ) {
@@ -79,6 +98,8 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 					);
 
 					gl_FragColor = mix( p1, p2, alpha.y );
+					gl_FragColor.a *= opacity;
+					#include <premultiplied_alpha_fragment>
 
 				}
 			`
