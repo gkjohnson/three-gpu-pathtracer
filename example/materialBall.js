@@ -29,11 +29,11 @@ let camera, scene, loader;
 const params = {
 
 	material1: {
-		color: '#ffc766',
+		color: '#ffe6bd',
 		emissive: '#000000',
 		emissiveIntensity: 1,
-		roughness: 0.3,
-		metalness: 0.8,
+		roughness: 0,
+		metalness: 1,
 		ior: 1.495,
 		transmission: 0.0,
 		thinFilm: false,
