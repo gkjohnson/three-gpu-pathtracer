@@ -34,6 +34,10 @@ const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRati
 
 const params = {
 
+	enable: true,
+	bounces: 10,
+	transmissiveBounces: 10,
+	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	tiles: tiles,
@@ -41,12 +45,6 @@ const params = {
 
 	model: '',
 	checkerboardTransparency: true,
-
-	enable: true,
-	bounces: 10,
-	transmissiveBounces: 10,
-	pause: false,
-
 	displayImage: false,
 	imageMode: 'overlay',
 	imageOpacity: 1.0,
@@ -127,6 +125,8 @@ async function init() {
 		}
 
 	}
+
+	window.addEventListener( 'hashchange', () => updateModel() );
 
 	updateModel();
 
@@ -260,9 +260,7 @@ function buildGui() {
 		'stellar'
 	] ).onChange( updateImage );
 	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
-
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
+	comparisonFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
 
 }
 
