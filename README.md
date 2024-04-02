@@ -129,11 +129,15 @@ constructor( renderer : WebGLRenderer )
 bounces = 10 : Number
 ```
 
+Max number of lights bounces to trace.
+
 ### .filteredGlossyFactor
 
 ```js
 filteredGlossyFactor = 0 : Number
 ```
+
+Factor for alleviating bright pixels from rays that hit diffuse surfaces then specular surfaces. Setting this higher alleviates fireflies but will remove some specular caustics.
 
 ### .tiles
 
@@ -141,11 +145,15 @@ filteredGlossyFactor = 0 : Number
 tiles = ( 3, 3 ) : Vector2
 ```
 
+Number of tiles on x and y to render to. Can be used to improve the responsiveness of a page while still rendering a high resolution target.
+
 ### .dynamicLowRes
 
 ```js
 dynamicLowRes = false : Boolean
 ```
+
+Whether to render an extra low resolution of the scene while the full resolution renders. The scale is defined by `lowResScale`.
 
 ### .lowResScale
 
@@ -153,11 +161,7 @@ dynamicLowRes = false : Boolean
 lowResScale = 0.1 : Number
 ```
 
-### .renderScale
-
-```js
-renderScale = 1 : Number
-```
+The scale to render the low resolution pass at.
 
 ### .synchronizeRenderSize
 
@@ -165,11 +169,15 @@ renderScale = 1 : Number
 synchronizeRenderSize = true : Boolean
 ```
 
-### .rasterizeScene
+Whether to automatically update the sie of the path traced buffer when the canvas size changes.
+
+### .renderScale
 
 ```js
-rasterizeScene = true : Boolean
+renderScale = 1 : Number
 ```
+
+The scale to render the path traced image at. Only relevant if `synchronizeRenderSize` is true.
 
 ### .renderToCanvas
 
@@ -177,17 +185,31 @@ rasterizeScene = true : Boolean
 renderToCanvas = true : Boolean
 ```
 
+Whether to automatically render the path traced buffer to the canvas when `renderSample` is called.
+
+### .rasterizeScene
+
+```js
+rasterizeScene = true : Boolean
+```
+
+Whether to automatically rasterize the scene with the three.js renderer while the path traced buffer is rendering.
+
 ### .textureSize
 
 ```js
 textureSize = ( 1024, 1024 ) : Vector2
 ```
 
+The dimensions to expand or shrink all textures to so all scene textures can be packed into a single texture array.
+
 ### .samples
 
 ```js
-get samples : Number
+readonly samples : Number
 ```
+
+The number of samples that have been rendered.
 
 ### .target
 
@@ -195,16 +217,22 @@ get samples : Number
 readonly target : WebGLRenderTarget
 ```
 
+The path traced render target. This potentially changes every call to `renderSample`.
+
 ### .setScene
 
 ```js
-updateScene( scene : Scene, camera : Camera ) : void
+setScene( scene : Scene, camera : Camera ) : void
 ```
+
+Sets the scene and camera to render. Must be called again when the camera object changes, the geometry in the scene changes, or new materials are assigned.
+
+While only changed data is updated it is still a relatively expensive function. Prefer to use the other "update" functions where possible.
 
 ### .setSceneAsync
 
 ```js
-updateSceneAsync(
+setSceneAsync(
 	scene : Scene,
 	camera : Camera,
 	options = {
@@ -213,11 +241,15 @@ updateSceneAsync(
 ) : void
 ```
 
+Asynchronous version of `setScene`. Requires calling `setBVHWorker` first.
+
 ### .updateCamera
 
 ```js
 updateCamera() : void
 ```
+
+Updates the camera parameters. Must be called if any of the parameters on the previously set camera change.
 
 ### .updateMaterials
 
@@ -225,17 +257,23 @@ updateCamera() : void
 updateMaterials() : void
 ```
 
+Updates the material properties. Must be called when properties change for any materials already being used.
+
 ### .updateEnvironment
 
 ```js
 updateEnvironment() : void
 ```
 
+Updates lighting from the scene environment and background properties. Must be called if any associated scene settings change on the set scene object.
+
 ### .updateLights
 
 ```js
 updateLights() : void
 ```
+
+Updates lights used in path tracing. Must be called if any lights are added or removed or properties change.
 
 ### .renderSample
 
