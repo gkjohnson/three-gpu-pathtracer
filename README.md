@@ -281,17 +281,23 @@ Updates lights used in path tracing. Must be called if any lights are added or r
 renderSample() : void
 ```
 
+Render a single sample to the path tracer target. If `renderToCanvas` is true then the image is rendered to the canvas.
+
 ### .reset
 
 ```js
 reset() : void
 ```
 
+Restart the rendering.
+
 ### .dispose
 
 ```js
 dispose() : void
 ```
+
+Dispose the path tracer assets. Any materials or textures used must be disposed separately.
 
 ## PhysicalCamera
 
