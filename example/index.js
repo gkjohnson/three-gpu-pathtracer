@@ -217,9 +217,7 @@ function animate() {
 
 	}
 
-	if ( params.enable && delaySamples === 0 ) {
-
-		activeCamera.updateMatrixWorld();
+	if ( params.enable && delaySamples <= 0 ) {
 
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
