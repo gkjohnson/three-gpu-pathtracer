@@ -169,6 +169,13 @@ export class WebGLPathTracer {
 
 	}
 
+	setCamera( camera ) {
+
+		this.camera = camera;
+		this.updateCamera();
+
+	}
+
 	updateCamera() {
 
 		const camera = this.camera;

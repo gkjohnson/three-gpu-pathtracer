@@ -8,7 +8,6 @@ import {
 	Mesh,
 	MeshStandardMaterial,
 	PlaneGeometry,
-	Group,
 	MeshPhysicalMaterial,
 	Scene,
 	PerspectiveCamera,
@@ -29,6 +28,7 @@ import { MaterialReducer, GradientEquirectTexture, WebGLPathTracer } from '../sr
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -75,7 +75,7 @@ const models = window.MODEL_LIST || {};
 let initialModel = Object.keys( models )[ 0 ];
 if ( window.location.hash ) {
 
-	const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
+	const modelName = decodeURI( window.location.hash.substring( 1 ) );
 	if ( modelName in models ) {
 
 		initialModel = modelName;
@@ -90,7 +90,6 @@ const params = {
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
 	tiles: 2,
-	samplesPerFrame: 1,
 
 	model: initialModel,
 
@@ -128,8 +127,7 @@ const params = {
 let floorPlane, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
-let envMap, gradientMap;
-let loadingModel = false;
+let gradientMap;
 let delaySamples = 0;
 let loader;
 
@@ -149,6 +147,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 	pathTracer.physicallyCorrectLights = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
@@ -185,6 +184,7 @@ async function init() {
 
 	// scene
 	scene = new Scene();
+	scene.background = gradientMap;
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -200,13 +200,12 @@ async function init() {
 	);
 	floorPlane.scale.setScalar( 5 );
 	floorPlane.rotation.x = - Math.PI / 2;
-	scene.add( floorPlane )
+	scene.add( floorPlane );
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
-	scene.background = gradientMap;
 
-	updateCamera( params.cameraProjection );
+	updateCameraProjection( params.cameraProjection );
 	updateModel();
 	updateEnvMap();
 	onResize();
@@ -223,7 +222,7 @@ function animate() {
 
 	stats.update();
 
-	if ( loadingModel ) {
+	if ( ! model ) {
 
 		return;
 
@@ -291,7 +290,8 @@ function onParamsChange() {
 
 	}
 
-	pathTracer.setScene( scene, activeCamera );
+	pathTracer.updateMaterials();
+	pathTracer.updateEnvironment();
 
 }
 
@@ -313,7 +313,7 @@ function onResize() {
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
 
-	onParamsChange();
+	pathTracer.updateCamera();
 
 }
 
@@ -329,7 +329,7 @@ function buildGui() {
 
 	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( updateModel );
 
-	const pathTracingFolder = gui.addFolder( 'path tracing' );
+	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
@@ -340,25 +340,22 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-
-	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
+	pathTracingFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onResize();
 
 	} );
-	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	resolutionFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
+	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.set( v, v );
 
 	} );
-	resolutionFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
+	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
-		updateCamera( v );
+		updateCameraProjection( v );
 
 	} );
-	resolutionFolder.open();
+	pathTracingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
@@ -396,20 +393,18 @@ function updateEnvMap() {
 			if ( scene.environment ) {
 
 				scene.environment.dispose();
-				envMap.dispose();
 
 			}
 
-			envMap = texture;
 			texture.mapping = EquirectangularReflectionMapping;
 			scene.environment = texture;
-			onParamsChange();
+			pathTracer.updateEnvironment();
 
 		} );
 
 }
 
-function updateCamera( cameraProjection ) {
+function updateCameraProjection( cameraProjection ) {
 
 	// sync position
 	if ( activeCamera ) {
@@ -430,11 +425,10 @@ function updateCamera( cameraProjection ) {
 
 	}
 
-	// TODO: how do we just update the camera without updating the whole scene?
 	controls.object = activeCamera;
 	controls.update();
 
-	onParamsChange();
+	pathTracer.setCamera( activeCamera );
 
 }
 
@@ -505,10 +499,10 @@ async function updateModel() {
 
 	}
 
-	const manager = new LoadingManager();
+	window.location.hash = params.model;
+
 	const modelInfo = models[ params.model ];
 
-	loadingModel = true;
 	renderer.domElement.style.visibility = 'hidden';
 	loader.setPercentage( 0 );
 
@@ -538,220 +532,220 @@ async function updateModel() {
 
 	}
 
-	const onFinish = async () => {
+	try {
 
-		if ( modelInfo.removeEmission ) {
+		model = await loadModel( modelInfo.url, v => {
 
-			model.traverse( c => {
+			loader.setPercentage( 0.5 * v );
 
-				if ( c.material ) {
+		} );
 
-					c.material.emissiveMap = null;
-					c.material.emissiveIntensity = 0;
+	} catch ( err ) {
 
-				}
+		loader.setCredits( 'Failed to load model:' + err.message );
+		loader.setPercentage( 1 );
 
-			} );
+	}
 
-		}
-
-		if ( modelInfo.opacityToTransmission ) {
-
-			convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
-
-		}
+	// update after model load
+	// TODO: clean up
+	if ( modelInfo.removeEmission ) {
 
 		model.traverse( c => {
 
 			if ( c.material ) {
 
-				// set the thickness so we render the material as a volumetric object
-				c.material.thickness = 1.0;
+				c.material.emissiveMap = null;
+				c.material.emissiveIntensity = 0;
 
 			}
 
 		} );
 
-		if ( modelInfo.postProcess ) {
+	}
 
-			modelInfo.postProcess( model );
+	if ( modelInfo.opacityToTransmission ) {
 
-		}
+		convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
 
-		// rotate model after so it doesn't affect the bounding sphere scale
-		if ( modelInfo.rotation ) {
+	}
 
-			model.rotation.set( ...modelInfo.rotation );
+	model.traverse( c => {
 
-		}
+		if ( c.material ) {
 
-		// center the model
-		const box = new Box3();
-		box.setFromObject( model );
-		model.position
-			.addScaledVector( box.min, - 0.5 )
-			.addScaledVector( box.max, - 0.5 );
-
-		const sphere = new Sphere();
-		box.getBoundingSphere( sphere );
-
-		model.scale.setScalar( 1 / sphere.radius );
-		model.position.multiplyScalar( 1 / sphere.radius );
-
-		box.setFromObject( model );
-
-		model.updateMatrixWorld();
-		floorPlane.position.y = box.min.y;
-
-		const reducer = new MaterialReducer();
-		reducer.process( model );
-
-		scene.add( model );
-
-		loader.setPercentage( 1 );
-		loader.setCredits( modelInfo.credit || '' );
-		params.bounces = modelInfo.bounces || 5;
-		params.floorColor = modelInfo.floorColor || '#111111';
-		params.floorRoughness = modelInfo.floorRoughness || 0.2;
-		params.floorMetalness = modelInfo.floorMetalness || 0.2;
-		params.bgGradientTop = modelInfo.gradientTop || '#111111';
-		params.bgGradientBottom = modelInfo.gradientBot || '#000000';
-
-		gradientMap.topColor.set( params.bgGradientTop );
-		gradientMap.bottomColor.set( params.bgGradientBottom );
-		gradientMap.update();
-
-		buildGui();
-
-		loadingModel = false;
-		renderer.domElement.style.visibility = 'visible';
-		if ( params.checkerboardTransparency ) {
-
-			document.body.classList.add( 'checkerboard' );
+			// set the thickness so we render the material as a volumetric object
+			c.material.thickness = 1.0;
 
 		}
 
-		onParamsChange();
+	} );
 
-	};
+	if ( modelInfo.postProcess ) {
 
-	const url = modelInfo.url;
+		modelInfo.postProcess( model );
+
+	}
+
+	// rotate model after so it doesn't affect the bounding sphere scale
+	if ( modelInfo.rotation ) {
+
+		model.rotation.set( ...modelInfo.rotation );
+
+	}
+
+	// center the model
+	const box = new Box3();
+	box.setFromObject( model );
+	model.position
+		.addScaledVector( box.min, - 0.5 )
+		.addScaledVector( box.max, - 0.5 );
+
+	const sphere = new Sphere();
+	box.getBoundingSphere( sphere );
+
+	model.scale.setScalar( 1 / sphere.radius );
+	model.position.multiplyScalar( 1 / sphere.radius );
+
+	box.setFromObject( model );
+
+	model.updateMatrixWorld();
+	floorPlane.position.y = box.min.y;
+
+	const reducer = new MaterialReducer();
+	reducer.process( model );
+
+	scene.add( model );
+
+	await pathTracer.setSceneAsync( scene, activeCamera, {
+
+		onProgress: v => loader.setPercentage( 0.5 + 0.5 * v ),
+
+	} );
+
+	loader.setPercentage( 1 );
+	loader.setCredits( modelInfo.credit || '' );
+	params.bounces = modelInfo.bounces || 5;
+	params.floorColor = modelInfo.floorColor || '#111111';
+	params.floorRoughness = modelInfo.floorRoughness || 0.2;
+	params.floorMetalness = modelInfo.floorMetalness || 0.2;
+	params.bgGradientTop = modelInfo.gradientTop || '#111111';
+	params.bgGradientBottom = modelInfo.gradientBot || '#000000';
+
+	gradientMap.topColor.set( params.bgGradientTop );
+	gradientMap.bottomColor.set( params.bgGradientBottom );
+	gradientMap.update();
+
+	buildGui();
+	onParamsChange();
+
+	renderer.domElement.style.visibility = 'visible';
+	if ( params.checkerboardTransparency ) {
+
+		document.body.classList.add( 'checkerboard' );
+
+	}
+
+}
+
+async function loadModel( url, onProgress ) {
+
+	// TODO: clean up
+	const manager = new LoadingManager();
 	if ( /dae$/i.test( url ) ) {
 
-		manager.onLoad = onFinish;
-		new ColladaLoader( manager )
-			.load(
-				url,
-				res => {
+		const complete = new Promise( resolve => manager.onLoad = resolve );
+		const res = await new ColladaLoader( manager ).loadAsync( url, progress => {
 
-					model = res.scene;
-					model.scale.setScalar( 1 );
+			if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-					model.traverse( c => {
-
-						const { material } = c;
-						if ( material && material.isMeshPhongMaterial ) {
-
-							c.material = new MeshStandardMaterial( {
-
-								color: material.color,
-								roughness: material.roughness || 0,
-								metalness: material.metalness || 0,
-								map: material.map || null,
-
-							} );
-
-						}
-
-					} );
-
-				},
-			);
-
-	} else if ( /(gltf|glb)$/i.test( url ) ) {
-
-		manager.onLoad = onFinish;
-		new GLTFLoader( manager )
-			.setMeshoptDecoder( MeshoptDecoder )
-			.load(
-				url,
-				gltf => {
-
-					model = gltf.scene;
-
-				},
-				progress => {
-
-					if ( progress.total !== 0 && progress.total >= progress.loaded ) {
-
-						loader.setPercentage( 0.5 * progress.loaded / progress.total );
-
-					}
-
-				},
-			);
-
-	} else if ( /mpd$/i.test( url ) ) {
-
-		let failed = false;
-		manager.onProgress = ( url, loaded, total ) => {
-
-			if ( failed ) {
-
-				return;
+				onProgress( progress.loaded / progress.total );
 
 			}
 
-			loader.setPercentage( 0.5 * loaded / total );
+		} );
+		await complete;
+
+		res.scene.scale.setScalar( 1 );
+		res.scene.traverse( c => {
+
+			const { material } = c;
+			if ( material && material.isMeshPhongMaterial ) {
+
+				c.material = new MeshStandardMaterial( {
+
+					color: material.color,
+					roughness: material.roughness || 0,
+					metalness: material.metalness || 0,
+					map: material.map || null,
+
+				} );
+
+			}
+
+		} );
+
+		return res.scene;
+
+	} else if ( /(gltf|glb)$/i.test( url ) ) {
+
+		const complete = new Promise( resolve => manager.onLoad = resolve );
+		const gltf = await new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder ).loadAsync( url, progress => {
+
+			if ( progress.total !== 0 && progress.total >= progress.loaded ) {
+
+				onProgress( progress.loaded / progress.total );
+
+			}
+
+		} );
+		await complete;
+
+		return gltf.scene;
+
+	} else if ( /mpd$/i.test( url ) ) {
+
+		manager.onProgress = ( url, loaded, total ) => {
+
+			loader.setPercentage( loaded / total );
 
 		};
 
+		const complete = new Promise( resolve => manager.onLoad = resolve );
 		const ldrawLoader = new LDrawLoader( manager );
 		await ldrawLoader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
-		ldrawLoader
+		const result = await ldrawLoader
 			.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
-			.load(
-				url,
-				result => {
+			.loadAsync( url );
+		await complete;
 
-					model = LDrawUtils.mergeObject( result );
-					model.rotation.set( Math.PI, 0, 0 );
+		const model = LDrawUtils.mergeObject( result );
+		model.rotation.set( Math.PI, 0, 0 );
 
-					const toRemove = [];
-					model.traverse( c => {
+		const toRemove = [];
+		model.traverse( c => {
 
-						if ( c.isLineSegments ) {
+			if ( c.isLineSegments ) {
 
-							toRemove.push( c );
+				toRemove.push( c );
 
-						}
+			}
 
-						if ( c.isMesh ) {
+			if ( c.isMesh ) {
 
-							c.material.roughness *= 0.25;
+				c.material.roughness *= 0.25;
 
-						}
+			}
 
-					} );
+		} );
 
-					toRemove.forEach( c => {
+		toRemove.forEach( c => {
 
-						c.parent.remove( c );
+			c.parent.remove( c );
 
-					} );
+		} );
 
-					onFinish();
-
-				},
-				undefined,
-				err => {
-
-					failed = true;
-					ldrawLoader.setCredits( 'Failed to load model: ' + err.message );
-
-				}
-
-			);
+		return model;
 
 	}
 
