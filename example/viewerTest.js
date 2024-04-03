@@ -171,12 +171,6 @@ function animate() {
 
 function onHashChange() {
 
-	if ( params.model === window.location.hash ) {
-
-		return;
-
-	}
-
 	params.model = Object.keys( modelDatabase )[ 0 ];
 	if ( window.location.hash ) {
 
@@ -321,8 +315,6 @@ async function updateModel() {
 		envMap.dispose();
 
 	}
-
-	window.location.hash = params.model;
 
 	const modelInfo = modelDatabase[ params.model ];
 	const {

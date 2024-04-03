@@ -72,18 +72,6 @@ const envMaps = {
 
 const models = window.MODEL_LIST || {};
 
-let initialModel = Object.keys( models )[ 0 ];
-if ( window.location.hash ) {
-
-	const modelName = decodeURI( window.location.hash.substring( 1 ) );
-	if ( modelName in models ) {
-
-		initialModel = modelName;
-
-	}
-
-}
-
 const params = {
 
 	multipleImportanceSampling: true,
@@ -91,7 +79,7 @@ const params = {
 	resolutionScale: 1 / window.devicePixelRatio,
 	tiles: 2,
 
-	model: initialModel,
+	model: '',
 
 	envMap: envMaps[ 'Aristea Wreck Puresky' ],
 
@@ -206,13 +194,14 @@ async function init() {
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
-	updateModel();
+	onHashChange();
 	updateEnvMap();
 	onResize();
 
 	animate();
 
 	window.addEventListener( 'resize', onResize );
+	window.addEventListener( 'hashchange', onHashChange );
 
 }
 
@@ -295,6 +284,31 @@ function onParamsChange() {
 
 }
 
+function onHashChange() {
+
+	let hashModel = '';
+	if ( window.location.hash ) {
+
+		const modelName = decodeURI( window.location.hash.substring( 1 ) );
+		if ( modelName in models ) {
+
+			hashModel = modelName;
+
+		}
+
+	}
+
+	if ( ! ( hashModel in models ) ) {
+
+		hashModel = Object.keys( models )[ 0 ];
+
+	}
+
+	params.model = hashModel;
+	updateModel();
+
+}
+
 function onResize() {
 
 	const w = window.innerWidth;
@@ -327,7 +341,11 @@ function buildGui() {
 
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( updateModel );
+	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( v => {
+
+		window.location.hash = v;
+
+	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
@@ -499,8 +517,6 @@ async function updateModel() {
 
 	}
 
-	window.location.hash = params.model;
-
 	const modelInfo = models[ params.model ];
 
 	renderer.domElement.style.visibility = 'hidden';
@@ -606,15 +622,11 @@ async function updateModel() {
 
 	model.scale.setScalar( 1 / sphere.radius );
 	model.position.multiplyScalar( 1 / sphere.radius );
-
 	box.setFromObject( model );
-
-	model.updateMatrixWorld();
 	floorPlane.position.y = box.min.y;
 
 	const reducer = new MaterialReducer();
 	reducer.process( model );
-
 	scene.add( model );
 
 	await pathTracer.setSceneAsync( scene, activeCamera, {
