@@ -14,6 +14,7 @@ import {
 	PerspectiveCamera,
 	OrthographicCamera,
 	WebGLRenderer,
+	EquirectangularReflectionMapping,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -24,8 +25,10 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { MaterialReducer, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
+import { MaterialReducer, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -86,8 +89,7 @@ const params = {
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	resolutionScale: 1 / window.devicePixelRatio,
-	tilesX: 2,
-	tilesY: 2,
+	tiles: 2,
 	samplesPerFrame: 1,
 
 	model: initialModel,
@@ -98,7 +100,6 @@ const params = {
 	gradientBottom: '#ffffff',
 
 	environmentIntensity: 1.0,
-	environmentBlur: 0.0,
 	environmentRotation: 0,
 
 	cameraProjection: 'Perspective',
@@ -106,7 +107,8 @@ const params = {
 	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
-	backgroundAlpha: 1.0,
+	backgroundBlur: 0.0,
+	transparentBackground: false,
 	checkerboardTransparency: true,
 
 	enable: true,
@@ -119,15 +121,17 @@ const params = {
 	floorRoughness: 0.2,
 	floorMetalness: 0.2,
 
+	...getScaledSettings(),
+
 };
 
-let creditEl, loadingEl, samplesEl;
 let floorPlane, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
-let controls, scene;
-let envMap, envMapGenerator, backgroundMap;
+let controls, scene, model;
+let envMap, gradientMap;
 let loadingModel = false;
 let delaySamples = 0;
+let loader;
 
 const orthoWidth = 2;
 
@@ -135,22 +139,22 @@ init();
 
 async function init() {
 
-	creditEl = document.getElementById( 'credits' );
-	loadingEl = document.getElementById( 'loading' );
-	samplesEl = document.getElementById( 'samples' );
+	loader = new LoaderElement();
+	loader.attach( document.body );
 
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
+	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.physicallyCorrectLights = true;
-	pathTracer.tiles.set( params.tilesX, params.tilesY );
+	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
 
-	scene = new Scene();
-
+	// camera
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
 	perspectiveCamera.position.set( - 1, 0.25, 1 );
@@ -159,25 +163,28 @@ async function init() {
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
 	orthoCamera.position.set( - 1, 0.25, 1 );
 
-	backgroundMap = new GradientEquirectTexture();
-	backgroundMap.topColor.set( params.bgGradientTop );
-	backgroundMap.bottomColor.set( params.bgGradientBottom );
-	backgroundMap.update();
+	// background map
+	gradientMap = new GradientEquirectTexture();
+	gradientMap.topColor.set( params.bgGradientTop );
+	gradientMap.bottomColor.set( params.bgGradientBottom );
+	gradientMap.update();
 
+	// controls
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		if ( params.tilesX * params.tilesY !== 1.0 ) {
+		if ( params.tiles * params.tiles !== 1.0 ) {
 
 			delaySamples = 5;
 
 		}
 
-		resetRenderer();
+		pathTracer.updateCamera();
 
 	} );
 
-	envMapGenerator = new BlurredEnvMapGenerator( renderer );
+	// scene
+	scene = new Scene();
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
@@ -193,10 +200,11 @@ async function init() {
 	);
 	floorPlane.scale.setScalar( 5 );
 	floorPlane.rotation.x = - Math.PI / 2;
+	scene.add( floorPlane )
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
-	scene.background = backgroundMap;
+	scene.background = gradientMap;
 
 	updateCamera( params.cameraProjection );
 	updateModel();
@@ -238,11 +246,11 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
 
-function resetRenderer() {
+function onParamsChange() {
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
@@ -254,18 +262,17 @@ function resetRenderer() {
 	floorPlane.material.metalness = params.floorMetalness;
 	floorPlane.material.opacity = params.floorOpacity;
 
-	// TODO: this cannot set the background alpha of a background texture
-	// renderer.setClearColor( params.backgroundAlpha );
-
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.environmentRotation.y = params.environmentRotation;
+	scene.backgroundBlurriness = params.backgroundBlur;
+
 	if ( params.backgroundType === 'Gradient' ) {
 
-		backgroundMap.topColor.set( params.bgGradientTop );
-		backgroundMap.bottomColor.set( params.bgGradientBottom );
-		backgroundMap.update();
+		gradientMap.topColor.set( params.bgGradientTop );
+		gradientMap.bottomColor.set( params.bgGradientBottom );
+		gradientMap.update();
 
-		scene.background = backgroundMap;
+		scene.background = gradientMap;
 		scene.backgroundIntensity = 1;
 		scene.environmentRotation.y = 0;
 
@@ -277,7 +284,14 @@ function resetRenderer() {
 
 	}
 
-	pathTracer.setScene( activeCamera, scene );
+	if ( params.transparentBackground ) {
+
+		scene.background = null;
+		renderer.setClearAlpha( 0 );
+
+	}
+
+	pathTracer.setScene( scene, activeCamera );
 
 }
 
@@ -299,7 +313,7 @@ function onResize() {
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
 
-	resetRenderer();
+	onParamsChange();
 
 }
 
@@ -318,14 +332,14 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'path tracing' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( resetRenderer );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( resetRenderer );
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
 
 	const resolutionFolder = gui.addFolder( 'resolution' );
 	resolutionFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
@@ -334,14 +348,9 @@ function buildGui() {
 
 	} );
 	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
+	resolutionFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
-		pathTracer.tiles.x = v;
-
-	} );
-	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
-
-		pathTracer.tiles.y = v;
+		pathTracer.tiles.set( v, v );
 
 	} );
 	resolutionFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
@@ -353,20 +362,16 @@ function buildGui() {
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentBlur', 0.0, 1.0 ).onChange( () => {
-
-		updateEnvBlur();
-
-	} ).name( 'env map blur' );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( resetRenderer ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( resetRenderer );
+	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
+	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
 	environmentFolder.open();
 
 	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( resetRenderer );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( resetRenderer );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( resetRenderer );
-	backgroundFolder.add( params, 'backgroundAlpha', 0, 1 ).onChange( resetRenderer );
+	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( onParamsChange );
+	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( onParamsChange );
+	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( onParamsChange );
+	backgroundFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
+	backgroundFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
 	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
 
 		if ( v ) document.body.classList.add( 'checkerboard' );
@@ -375,10 +380,10 @@ function buildGui() {
 	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( resetRenderer );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( resetRenderer );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( resetRenderer );
-	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( resetRenderer );
+	floorFolder.addColor( params, 'floorColor' ).onChange( onParamsChange );
+	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( onParamsChange );
+	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( onParamsChange );
+	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( onParamsChange );
 	floorFolder.close();
 
 }
@@ -388,7 +393,7 @@ function updateEnvMap() {
 	new RGBELoader()
 		.load( params.envMap, texture => {
 
-			if ( scene.environmentMap ) {
+			if ( scene.environment ) {
 
 				scene.environment.dispose();
 				envMap.dispose();
@@ -396,48 +401,40 @@ function updateEnvMap() {
 			}
 
 			envMap = texture;
-			updateEnvBlur();
+			texture.mapping = EquirectangularReflectionMapping;
+			scene.environment = texture;
+			onParamsChange();
 
 		} );
 
 }
 
-function updateEnvBlur() {
-
-	const blurredEnvMap = envMapGenerator.generate( envMap, params.environmentBlur );
-	scene.environment = blurredEnvMap;
-	resetRenderer();
-
-}
-
 function updateCamera( cameraProjection ) {
 
+	// sync position
+	if ( activeCamera ) {
+
+		perspectiveCamera.position.copy( activeCamera.position );
+		orthoCamera.position.copy( activeCamera.position );
+
+	}
+
+	// set active camera
 	if ( cameraProjection === 'Perspective' ) {
-
-		if ( activeCamera ) {
-
-			perspectiveCamera.position.copy( activeCamera.position );
-
-		}
 
 		activeCamera = perspectiveCamera;
 
 	} else {
 
-		if ( activeCamera ) {
-
-			orthoCamera.position.copy( activeCamera.position );
-
-		}
-
 		activeCamera = orthoCamera;
 
 	}
 
+	// TODO: how do we just update the camera without updating the whole scene?
 	controls.object = activeCamera;
 	controls.update();
 
-	resetRenderer();
+	onParamsChange();
 
 }
 
@@ -508,40 +505,36 @@ async function updateModel() {
 
 	}
 
-	let model;
 	const manager = new LoadingManager();
 	const modelInfo = models[ params.model ];
 
 	loadingModel = true;
 	renderer.domElement.style.visibility = 'hidden';
-	samplesEl.innerText = '--';
-	creditEl.innerText = '--';
-	loadingEl.innerText = 'Loading';
-	loadingEl.style.visibility = 'visible';
+	loader.setPercentage( 0 );
 
-	scene.traverse( c => {
+	if ( model ) {
 
-		if ( c.material ) {
+		model.traverse( c => {
 
-			const material = c.material;
-			for ( const key in material ) {
+			if ( c.material ) {
 
-				if ( material[ key ] && material[ key ].isTexture ) {
+				const material = c.material;
+				for ( const key in material ) {
 
-					material[ key ].dispose();
+					if ( material[ key ] && material[ key ].isTexture ) {
+
+						material[ key ].dispose();
+
+					}
 
 				}
 
 			}
 
-		}
+		} );
 
-	} );
-
-	if ( scene.children.length ) {
-
-		const children = [ ... scene.children ];
-		children.forEach( c => scene.remove( c ) );
+		scene.remove( model );
+		model = null;
 
 	}
 
@@ -608,20 +601,15 @@ async function updateModel() {
 		box.setFromObject( model );
 
 		model.updateMatrixWorld();
-
-		const group = new Group();
 		floorPlane.position.y = box.min.y;
-		group.add( model, floorPlane );
 
 		const reducer = new MaterialReducer();
-		reducer.process( group );
+		reducer.process( model );
 
-		scene.add( group );
+		scene.add( model );
 
-		loadingEl.style.visibility = 'hidden';
-
-		creditEl.innerHTML = modelInfo.credit || '';
-		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
+		loader.setPercentage( 1 );
+		loader.setCredits( modelInfo.credit || '' );
 		params.bounces = modelInfo.bounces || 5;
 		params.floorColor = modelInfo.floorColor || '#111111';
 		params.floorRoughness = modelInfo.floorRoughness || 0.2;
@@ -629,9 +617,9 @@ async function updateModel() {
 		params.bgGradientTop = modelInfo.gradientTop || '#111111';
 		params.bgGradientBottom = modelInfo.gradientBot || '#000000';
 
-		backgroundMap.topColor.set( params.bgGradientTop );
-		backgroundMap.bottomColor.set( params.bgGradientBottom );
-		backgroundMap.update();
+		gradientMap.topColor.set( params.bgGradientTop );
+		gradientMap.bottomColor.set( params.bgGradientBottom );
+		gradientMap.update();
 
 		buildGui();
 
@@ -643,7 +631,7 @@ async function updateModel() {
 
 		}
 
-		resetRenderer();
+		onParamsChange();
 
 	};
 
@@ -696,8 +684,7 @@ async function updateModel() {
 
 					if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-						const percent = Math.floor( 100 * progress.loaded / progress.total );
-						loadingEl.innerText = `Loading : ${ percent }%`;
+						loader.setPercentage( 0.5 * progress.loaded / progress.total );
 
 					}
 
@@ -715,14 +702,13 @@ async function updateModel() {
 
 			}
 
-			const percent = Math.floor( 100 * loaded / total );
-			loadingEl.innerText = `Loading : ${ percent }%`;
+			loader.setPercentage( 0.5 * loaded / total );
 
 		};
 
-		const loader = new LDrawLoader( manager );
-		await loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
-		loader
+		const ldrawLoader = new LDrawLoader( manager );
+		await ldrawLoader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
+		ldrawLoader
 			.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
 			.load(
 				url,
@@ -761,7 +747,7 @@ async function updateModel() {
 				err => {
 
 					failed = true;
-					loadingEl.innerText = 'Failed to load model. ' + err.message;
+					ldrawLoader.setCredits( 'Failed to load model: ' + err.message );
 
 				}
 

@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 	<head>
 		<title>PBR Path Tracing - LDraw Models</title>
@@ -8,38 +9,6 @@
 				margin: 0;
 				padding: 0;
 				background-color: #111;
-			}
-
-			#info {
-				position: absolute;
-				bottom: 0;
-				left: 0;
-				font-family: 'Courier New', Courier, monospace;
-				color: white;
-				pointer-events: none;
-			}
-
-			#samples, #credits {
-
-				opacity: 0.5;
-				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
-				padding: 5px;
-				display: inline-block;
-
-			}
-
-			#loading {
-				position: absolute;
-				left: 50%;
-				top: 50%;
-				transform: translate(-50%, -50%);
-				color: white;
-				font-family: 'Courier New', Courier, monospace;
-			}
-
-			a {
-				color: white;
-				pointer-events: all;
 			}
 
 			.checkerboard {
@@ -55,15 +24,6 @@
 
 	</head>
 	<body>
-		<div id="loading">LOADING</div>
-		<div id="info">
-			<div>
-				<div id="samples">--</div>
-			</div>
-			<div>
-				<div id="credits">--</div>
-			</div>
-		</div>
 		<script type="module">
 
 			function mecaBricksGoldCorrection( model ) {
