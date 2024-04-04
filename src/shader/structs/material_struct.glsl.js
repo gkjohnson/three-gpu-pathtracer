@@ -176,7 +176,7 @@ export const material_struct = /* glsl */ `
 		m.side = s13.a;
 
 		m.matte = bool( s14.r );
-		m.castShadow = ! bool( s14.g );
+		m.castShadow = bool( s14.g );
 		m.vertexColors = bool( int( s14.b ) & 1 );
 		m.flatShading = bool( int( s14.b ) & 2 );
 		m.fogVolume = bool( int( s14.b ) & 4 );
