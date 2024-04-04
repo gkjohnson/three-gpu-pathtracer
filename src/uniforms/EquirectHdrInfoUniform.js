@@ -171,6 +171,11 @@ export class EquirectHdrInfoUniform {
 		this.conditionalWeights = conditionalWeights;
 		this.totalSum = 0;
 
+		// TODO: Add support for float or half float types here. We need to pass this into
+		// the preprocess function and ensure our CDF and MDF textures are appropriately sized
+		// Ideally we wouldn't upscale a bit depth if we didn't need to.
+		// this.type = HalfFloatType;
+
 	}
 
 	dispose() {

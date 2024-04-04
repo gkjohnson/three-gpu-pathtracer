@@ -283,6 +283,17 @@ updateMaterials() : void
 
 Updates the material properties. Must be called when properties change for any materials already being used.
 
+Note that materials used with WebGLPathTracer support the following additional properties:
+
+```js
+// Whether to render the object as completely transparent against the rest
+// of the environment so other objects can be composited later
+matte = false : Boolean;
+
+// Whether the object should cast a shadow
+castShadow = true : Boolean;
+```
+
 ### .updateEnvironment
 
 ```js

@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AddEquation, AdditiveBlending } from 'three';
+import { PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending, FloatType, HalfFloatType } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -102,7 +102,7 @@ export class WebGLPathTracer {
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
 		this.dynamicLowRes = false;
-		this.lowResScale = 0.15;
+		this.lowResScale = 0.25;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.rasterizeScene = true;
