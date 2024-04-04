@@ -407,8 +407,8 @@ export class MaterialsTexture extends DataTexture {
 			}
 
 			// sample 14
-			index ++; // matte
-			index ++; // shadow
+			floatArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
+			floatArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
 			floatArray[ index ++ ] = Number( m.vertexColors ) | ( Number( m.flatShading ) << 1 ); // vertexColors & flatShading
 			floatArray[ index ++ ] = Number( m.transparent ); // transparent
 
