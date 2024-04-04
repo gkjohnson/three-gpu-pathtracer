@@ -61,39 +61,6 @@ export class MaterialsTexture extends DataTexture {
 
 	}
 
-	setCastShadow( materialIndex, cast ) {
-
-		// invert the shadow value so we default to "true" when initializing a material
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
-		array[ index ] = ! cast ? 1 : 0;
-
-	}
-
-	getCastShadow( materialIndex ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
-		return ! Boolean( array[ index ] );
-
-	}
-
-	setMatte( materialIndex, matte ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + MATTE_OFFSET;
-		array[ index ] = matte ? 1 : 0;
-
-	}
-
-	getMatte( materialIndex ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + MATTE_OFFSET;
-		return Boolean( array[ index ] );
-
-	}
-
 	updateFrom( materials, textures ) {
 
 		function getTexture( material, key, def = - 1 ) {

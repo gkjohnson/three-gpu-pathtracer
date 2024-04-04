@@ -28,7 +28,7 @@ let camera, scene, loader;
 
 const params = {
 
-	material1: {
+	materialProperties: {
 		color: '#ffe6bd',
 		emissive: '#000000',
 		emissiveIntensity: 1,
@@ -68,30 +68,30 @@ const params = {
 
 if ( window.location.hash.includes( 'transmission' ) ) {
 
-	params.material1.metalness = 0.0;
-	params.material1.roughness = 0.23;
-	params.material1.transmission = 1.0;
-	params.material1.color = '#ffffff';
+	params.materialProperties.metalness = 0.0;
+	params.materialProperties.roughness = 0.23;
+	params.materialProperties.transmission = 1.0;
+	params.materialProperties.color = '#ffffff';
 
 	params.bounces = 10;
 	params.tiles = 2;
 
 } else if ( window.location.hash.includes( 'iridescent' ) ) {
 
-	params.material1.color = '#474747';
-	params.material1.roughness = 0.25;
-	params.material1.metalness = 1.0;
-	params.material1.iridescence = 1.0;
-	params.material1.iridescenceIOR = 2.2;
+	params.materialProperties.color = '#474747';
+	params.materialProperties.roughness = 0.25;
+	params.materialProperties.metalness = 1.0;
+	params.materialProperties.iridescence = 1.0;
+	params.materialProperties.iridescenceIOR = 2.2;
 
 } else if ( window.location.hash.includes( 'acrylic' ) ) {
 
-	params.material1.color = '#ffffff';
-	params.material1.roughness = 0;
-	params.material1.metalness = 0;
-	params.material1.transmission = 1.0;
-	params.material1.attenuationDistance = 0.75;
-	params.material1.attenuationColor = '#2a6dc6';
+	params.materialProperties.color = '#ffffff';
+	params.materialProperties.roughness = 0;
+	params.materialProperties.metalness = 0;
+	params.materialProperties.transmission = 1.0;
+	params.materialProperties.attenuationDistance = 0.75;
+	params.materialProperties.attenuationColor = '#2a6dc6';
 
 	params.bounces = 20;
 	params.tiles = 3;
@@ -244,29 +244,29 @@ async function init() {
 	denoiseFolder.close();
 
 	const matFolder1 = gui.addFolder( 'Shell Material' );
-	matFolder1.addColor( params.material1, 'color' ).onChange( onParamsChange );
-	matFolder1.addColor( params.material1, 'emissive' ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'roughness', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'metalness', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'opacity', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'transmission', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'thinFilm', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'attenuationDistance', 0.05, 2.0 ).onChange( onParamsChange );
-	matFolder1.addColor( params.material1, 'attenuationColor' ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'ior', 0.9, 3.0 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'clearcoat', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'clearcoatRoughness', 0, 1 ).onChange( onParamsChange );
-	matFolder1.addColor( params.material1, 'sheenColor' ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'sheenRoughness', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'iridescence', 0.0, 1.0 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'iridescenceIOR', 0.1, 3.0 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'iridescenceThickness', 0.0, 1200.0 ).onChange( onParamsChange );
-	matFolder1.addColor( params.material1, 'specularColor' ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'specularIntensity', 0.0, 1.0 ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'matte' ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'flatShading' ).onChange( onParamsChange );
-	matFolder1.add( params.material1, 'castShadow' ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'color' ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'emissive' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'roughness', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'metalness', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'opacity', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'transmission', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'thinFilm', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.05, 2.0 ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'attenuationColor' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'ior', 0.9, 3.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'clearcoat', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'clearcoatRoughness', 0, 1 ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'sheenColor' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'sheenRoughness', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'iridescence', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'iridescenceIOR', 0.1, 3.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'iridescenceThickness', 0.0, 1200.0 ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'specularColor' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'specularIntensity', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
 
 	animate();
@@ -284,27 +284,28 @@ function onResize() {
 
 function onParamsChange() {
 
-	shellMaterial.color.set( params.material1.color ).convertSRGBToLinear();
-	shellMaterial.emissive.set( params.material1.emissive ).convertSRGBToLinear();
-	shellMaterial.emissiveIntensity = params.material1.emissiveIntensity;
-	shellMaterial.metalness = params.material1.metalness;
-	shellMaterial.roughness = params.material1.roughness;
-	shellMaterial.transmission = params.material1.transmission;
-	shellMaterial.attenuationDistance = params.material1.thinFilm ? Infinity : params.material1.attenuationDistance;
-	shellMaterial.attenuationColor.set( params.material1.attenuationColor );
-	shellMaterial.ior = params.material1.ior;
-	shellMaterial.opacity = params.material1.opacity;
-	shellMaterial.clearcoat = params.material1.clearcoat;
-	shellMaterial.clearcoatRoughness = params.material1.clearcoatRoughness;
-	shellMaterial.sheenColor.set( params.material1.sheenColor ).convertSRGBToLinear();
-	shellMaterial.sheenRoughness = params.material1.sheenRoughness;
-	shellMaterial.iridescence = params.material1.iridescence;
-	shellMaterial.iridescenceIOR = params.material1.iridescenceIOR;
-	shellMaterial.iridescenceThicknessRange = [ 0, params.material1.iridescenceThickness ];
-	shellMaterial.specularColor.set( params.material1.specularColor ).convertSRGBToLinear();
-	shellMaterial.specularIntensity = params.material1.specularIntensity;
+	const materialProperties = params.materialProperties;
+	shellMaterial.color.set( materialProperties.color );
+	shellMaterial.emissive.set( materialProperties.emissive );
+	shellMaterial.emissiveIntensity = materialProperties.emissiveIntensity;
+	shellMaterial.metalness = materialProperties.metalness;
+	shellMaterial.roughness = materialProperties.roughness;
+	shellMaterial.transmission = materialProperties.transmission;
+	shellMaterial.attenuationDistance = materialProperties.thinFilm ? Infinity : materialProperties.attenuationDistance;
+	shellMaterial.attenuationColor.set( materialProperties.attenuationColor );
+	shellMaterial.ior = materialProperties.ior;
+	shellMaterial.opacity = materialProperties.opacity;
+	shellMaterial.clearcoat = materialProperties.clearcoat;
+	shellMaterial.clearcoatRoughness = materialProperties.clearcoatRoughness;
+	shellMaterial.sheenColor.set( materialProperties.sheenColor );
+	shellMaterial.sheenRoughness = materialProperties.sheenRoughness;
+	shellMaterial.iridescence = materialProperties.iridescence;
+	shellMaterial.iridescenceIOR = materialProperties.iridescenceIOR;
+	shellMaterial.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
+	shellMaterial.specularColor.set( materialProperties.specularColor );
+	shellMaterial.specularIntensity = materialProperties.specularIntensity;
 	shellMaterial.transparent = shellMaterial.opacity < 1;
-	shellMaterial.flatShading = params.material1.flatShading;
+	shellMaterial.flatShading = materialProperties.flatShading;
 
 	pathTracer.transmissiveBounces = params.transmissiveBounces;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
@@ -312,10 +313,9 @@ function onParamsChange() {
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.resolutionScale;
 
-	// TODO: remove this
-	const ptRenderer = pathTracer._pathTracer;
-	ptRenderer.material.materials.setMatte( 0, params.material1.matte );
-	ptRenderer.material.materials.setCastShadow( 0, params.material1.castShadow );
+	// note: custom properties
+	shellMaterial.matte = materialProperties.matte;
+	shellMaterial.castShadow = materialProperties.castShadow;
 
 	pathTracer.updateMaterials();
 	pathTracer.setScene( scene, camera );
