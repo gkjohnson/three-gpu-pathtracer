@@ -97,7 +97,7 @@ export class WebGLPathTracer {
 
 		// options
 		this.renderDelay = 100;
-		this.samplesDelay = 5;
+		this.minSamples = 5;
 		this.fadeDuration = 500;
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
@@ -362,15 +362,15 @@ export class WebGLPathTracer {
 		if ( this.renderToCanvas ) {
 
 			const renderer = this._renderer;
-			const samplesDelay = this.samplesDelay;
-			if ( elapsedTime > this.renderDelay && this.samples >= this.samplesDelay ) {
+			const minSamples = this.minSamples;
+			if ( elapsedTime > this.renderDelay && this.samples >= this.minSamples ) {
 
 				quad.material.opacity = Math.min( quad.material.opacity + delta / this.fadeDuration, 1 );
 
 			}
 
 			// render the fallback if we haven't rendered enough samples, are paused, or are occluded
-			if ( ! this.enablePathTracing || this.samples < samplesDelay || quad.material.opacity < 1 ) {
+			if ( ! this.enablePathTracing || this.samples < minSamples || quad.material.opacity < 1 ) {
 
 				if ( this.dynamicLowRes ) {
 

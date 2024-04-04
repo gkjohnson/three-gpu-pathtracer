@@ -153,7 +153,23 @@ Number of tiles on x and y to render to. Can be used to improve the responsivene
 renderDelay = 100 : Number
 ```
 
-Number of milliseconds to delay rendering after the path tracer has been reset.
+Number of milliseconds to delay rendering samples after the path tracer has been reset.
+
+### .fadeDuration
+
+```js
+fadeDuration = 500 : Number
+```
+
+How long to take to fade the fully path traced scene in in milliseconds wen rendering to the canvas.
+
+### .minSamples
+
+```js
+minSamples = 5 : Number
+```
+
+How many samples to render before displaying to the canvas.
 
 ### .dynamicLowRes
 
