@@ -1,4 +1,4 @@
-import { CustomBlending, PerspectiveCamera, Scene, Vector2 } from 'three';
+import { CustomBlending, PerspectiveCamera, Scene, Vector2, Clock } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -82,6 +82,7 @@ export class WebGLPathTracer {
 		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._queueReset = false;
+		this._clock = new Clock();
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._quad = new FullScreenQuad( new ClampedInterpolationMaterial( {
@@ -92,6 +93,7 @@ export class WebGLPathTracer {
 		this._materials = null;
 
 		// options
+		this.renderDelay = 100;
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
 		this.dynamicLowRes = false;
@@ -111,7 +113,6 @@ export class WebGLPathTracer {
 
 			const autoClear = renderer.autoClear;
 			renderer.autoClear = false;
-			quad.material.map = target.texture;
 			quad.render( renderer );
 			renderer.autoClear = autoClear;
 
@@ -323,19 +324,25 @@ export class WebGLPathTracer {
 
 	renderSample() {
 
+		const lowResPathTracer = this._lowResPathTracer;
+		const pathTracer = this._pathTracer;
+		const clock = this._clock;
+		const quad = this._quad;
+
 		this._updateScale();
 
 		if ( this._queueReset ) {
 
-			this._pathTracer.reset();
-			this._lowResPathTracer.reset();
+			pathTracer.reset();
+			lowResPathTracer.reset();
 			this._queueReset = false;
+
+			clock.start();
 
 		}
 
-		const lowResPathTracer = this._lowResPathTracer;
-		const pathTracer = this._pathTracer;
-		if ( ! this.pausePathTracing && this.enablePathTracing ) {
+		const elapsedTime = clock.getElapsedTime() * 1e3;
+		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay < elapsedTime ) {
 
 			pathTracer.update();
 
@@ -347,7 +354,6 @@ export class WebGLPathTracer {
 		if ( this.renderToCanvas ) {
 
 			const renderer = this._renderer;
-			const quad = this._quad;
 			if ( this.dynamicLowRes ) {
 
 				if ( lowResPathTracer.samples < 1 ) {
@@ -368,6 +374,7 @@ export class WebGLPathTracer {
 
 			if ( this.enablePathTracing && this.samples >= 1 ) {
 
+				quad.material.map = pathTracer.target.texture;
 				this.renderToCanvasCallback( pathTracer.target, renderer, quad );
 
 			}

@@ -116,7 +116,6 @@ let floorPlane, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
-let delaySamples = 0;
 let loader;
 
 const orthoWidth = 2;
@@ -159,12 +158,6 @@ async function init() {
 	// controls
 	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
-
-		if ( params.tiles * params.tiles !== 1.0 ) {
-
-			delaySamples = 5;
-
-		}
 
 		pathTracer.updateCamera();
 
@@ -217,7 +210,7 @@ function animate() {
 
 	}
 
-	if ( params.enable && delaySamples <= 0 ) {
+	if ( params.enable ) {
 
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
@@ -227,7 +220,6 @@ function animate() {
 
 	} else {
 
-		delaySamples --;
 		renderer.render( scene, activeCamera );
 
 	}
@@ -641,10 +633,6 @@ async function updateModel() {
 	params.floorMetalness = modelInfo.floorMetalness || 0.2;
 	params.bgGradientTop = modelInfo.gradientTop || '#111111';
 	params.bgGradientBottom = modelInfo.gradientBot || '#000000';
-
-	gradientMap.topColor.set( params.bgGradientTop );
-	gradientMap.bottomColor.set( params.bgGradientBottom );
-	gradientMap.update();
 
 	buildGui();
 	onParamsChange();
