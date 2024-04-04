@@ -1,4 +1,4 @@
-import { CustomBlending, PerspectiveCamera, Scene, Vector2, Clock } from 'three';
+import { PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AddEquation, AdditiveBlending } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -85,15 +85,20 @@ export class WebGLPathTracer {
 		this._clock = new Clock();
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
+		this._lowResPathTracer.tiles.set( 1, 1 );
 		this._quad = new FullScreenQuad( new ClampedInterpolationMaterial( {
 			map: null,
-			blending: CustomBlending,
+			transparent: true,
+			blending: NoBlending,
+
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
 		this._materials = null;
 
 		// options
 		this.renderDelay = 100;
+		this.samplesDelay = 5;
+		this.fadeDuration = 500;
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
 		this.dynamicLowRes = false;
@@ -111,10 +116,10 @@ export class WebGLPathTracer {
 
 		this.renderToCanvasCallback = ( target, renderer, quad ) => {
 
-			const autoClear = renderer.autoClear;
+			const currentAutoClear = renderer.autoClear;
 			renderer.autoClear = false;
 			quad.render( renderer );
-			renderer.autoClear = autoClear;
+			renderer.autoClear = currentAutoClear;
 
 		};
 
@@ -337,10 +342,13 @@ export class WebGLPathTracer {
 			lowResPathTracer.reset();
 			this._queueReset = false;
 
+			quad.material.opacity = 0;
 			clock.start();
 
 		}
 
+		// render the path tracing sample after enough time has passed
+		const delta = clock.getDelta() * 1e3;
 		const elapsedTime = clock.getElapsedTime() * 1e3;
 		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay < elapsedTime ) {
 
@@ -354,28 +362,53 @@ export class WebGLPathTracer {
 		if ( this.renderToCanvas ) {
 
 			const renderer = this._renderer;
-			if ( this.dynamicLowRes ) {
+			const samplesDelay = this.samplesDelay;
+			if ( elapsedTime > this.renderDelay && this.samples >= this.samplesDelay ) {
 
-				if ( lowResPathTracer.samples < 1 ) {
-
-					lowResPathTracer.material = pathTracer.material;
-					lowResPathTracer.update();
-
-				}
-
-				quad.material.map = lowResPathTracer.target.texture;
-				quad.render( renderer );
-
-			} else if ( this.samples < 1 && this.rasterizeScene ) {
-
-				this.rasterizeSceneCallback( this.scene, this.camera );
+				quad.material.opacity = Math.min( quad.material.opacity + delta / this.fadeDuration, 1 );
 
 			}
 
-			if ( this.enablePathTracing && this.samples >= 1 ) {
+			// render the fallback if we haven't rendered enough samples, are paused, or are occluded
+			if ( ! this.enablePathTracing || this.samples < samplesDelay || quad.material.opacity < 1 ) {
+
+				if ( this.dynamicLowRes ) {
+
+					if ( lowResPathTracer.samples < 1 ) {
+
+						lowResPathTracer.material = pathTracer.material;
+						lowResPathTracer.update();
+
+					}
+
+					const currentOpacity = quad.material.opacity;
+					quad.material.opacity = 1 - quad.material.opacity;
+					quad.material.map = lowResPathTracer.target.texture;
+					quad.render( renderer );
+					quad.material.opacity = currentOpacity;
+
+				} else if ( this.rasterizeScene ) {
+
+					this.rasterizeSceneCallback( this.scene, this.camera );
+
+				}
+
+			}
+
+
+			if ( this.enablePathTracing && quad.material.opacity > 0 ) {
+
+				if ( quad.material.opacity < 1 ) {
+
+					// use additive blending when the low res texture is rendered so we can fade the
+					// background out while the full res fades in
+					quad.material.blending = this.dynamicLowRes ? AdditiveBlending : NormalBlending;
+
+				}
 
 				quad.material.map = pathTracer.target.texture;
 				this.renderToCanvasCallback( pathTracer.target, renderer, quad );
+				quad.material.blending = NoBlending;
 
 			}
 
@@ -399,6 +432,7 @@ export class WebGLPathTracer {
 
 	_updateScale() {
 
+		// update the path tracer scale if it has changed
 		if ( this.synchronizeRenderSize ) {
 
 			this._renderer.getDrawingBufferSize( _resolution );

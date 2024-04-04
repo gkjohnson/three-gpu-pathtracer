@@ -55,7 +55,6 @@ renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 
 const pathTracer = new WebGLPathTracer( renderer );
-pathTracer.tiles.set( 3, 3 );
 pathTracer.setScene( scene, camera );
 
 onResize();
