@@ -38,6 +38,7 @@ const MAX_SAMPLES = 150;
 const params = {
 	hdr: true,
 	environmentIntensity: 3,
+	...getScaledSettings(),
 };
 
 let pathTracer, renderer, controls;
@@ -51,8 +52,6 @@ let currUrl = null;
 init();
 
 async function init() {
-
-	const { tiles, renderScale } = getScaledSettings();
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
@@ -68,9 +67,9 @@ async function init() {
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.bounces = 5;
-	pathTracer.fadeDuration = 0;
-	pathTracer.renderScale = renderScale;
-	pathTracer.tiles.set( tiles, tiles );
+	pathTracer.minSamples = 1;
+	pathTracer.renderScale = params.renderScale;
+	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// camera
@@ -146,6 +145,17 @@ async function init() {
 
 	const gui = new GUI();
 	gui.add( params, 'hdr' );
+	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+		pathTracer.reset();
+
+	} );
+	gui.add( params, 'tiles', 1, 5, 1 ).onChange( v => {
+
+		pathTracer.tiles.setScalar( v );
+
+	} );
 	gui.add( params, 'environmentIntensity', 0, 5 ).onChange( v => {
 
 		scene.environmentIntensity = v;
@@ -200,7 +210,6 @@ function animate() {
 
 	}
 
-	console.log( pathTracer.samples % 1 )
 	if ( ! encoding && pathTracer.samples >= pathTracer.minSamples && params.hdr && pathTracer.samples < MAX_SAMPLES && pathTracer.samples % 1 === 0 ) {
 
 		encodingId ++;
