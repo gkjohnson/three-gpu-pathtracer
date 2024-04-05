@@ -11,6 +11,8 @@ import {
 	PlaneGeometry,
 	MeshStandardMaterial,
 	DoubleSide,
+	Color,
+	LoadingManager,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -22,11 +24,21 @@ import { compress, encode, findTextureMinMax } from '@monogrid/gainmap-js/dist/e
 import { encodeJPEGMetadata } from '@monogrid/gainmap-js/dist/libultrahdr.js';
 import { WebGLPathTracer } from '..';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
+import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
 const CREDITS = 'Model by "nyancube" on Sketchfab';
-const DESCRIPTION = 'Simple path tracing example scene setup with background blur.';
+const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
+
+const MAX_SAMPLES = 150;
+
+const params = {
+	hdr: true,
+	environmentIntensity: 3,
+};
 
 let pathTracer, renderer, controls;
 let camera, scene;
@@ -55,6 +67,8 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
+	pathTracer.bounces = 5;
+	pathTracer.fadeDuration = 0;
 	pathTracer.renderScale = renderScale;
 	pathTracer.tiles.set( tiles, tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
@@ -65,7 +79,8 @@ async function init() {
 
 	// scene
 	scene = new Scene();
-	scene.backgroundBlurriness = 0.05;
+	scene.backgroundBlurriness = 0.1;
+	scene.background = new Color( 0x111111 );
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -84,10 +99,25 @@ async function init() {
 		new RGBELoader().loadAsync( ENV_URL ),
 	] );
 
+	const model = gltf.scene;
+
+	// const manager = new LoadingManager();
+	// const complete = new Promise( resolve => manager.onLoad = resolve );
+	// const ldrawLoader = new LDrawLoader( manager );
+	// await ldrawLoader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
+	// let model = await ldrawLoader
+	// 	.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
+	// 	.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd' );
+	// await complete;
+
+	// model = LDrawUtils.mergeObject( model );
+	// model.rotation.set( Math.PI, 0, 0 );
+	// model.scale.setScalar( 0.05 );
+
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.environment = envTexture;
 	scene.environmentIntensity = 3;
-	scene.add( gltf.scene );
+	scene.add( model );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	const floorPlane = new Mesh(
@@ -96,8 +126,8 @@ async function init() {
 			map: floorTex,
 			transparent: true,
 			color: 0xffffff,
-			roughness: 0.1,
-			metalness: 0.8,
+			roughness: 0.05,
+			metalness: 0.9,
 			side: DoubleSide,
 		} ),
 	);
@@ -113,6 +143,16 @@ async function init() {
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
+
+	const gui = new GUI();
+	gui.add( params, 'hdr' );
+	gui.add( params, 'environmentIntensity', 0, 5 ).onChange( v => {
+
+		scene.environmentIntensity = v;
+		pathTracer.updateEnvironment();
+		resetHdr();
+
+	} );
 
 	window.addEventListener( 'resize', onResize );
 
@@ -139,12 +179,12 @@ function onResize() {
 
 function resetHdr() {
 
+	encodingId ++;
 	if ( activeImage ) {
 
 		activeImage = false;
 		URL.revokeObjectURL( currUrl );
-		imageEl.src = '';
-		imageEl.classList.remove( 'show' );
+		imageEl.src = 'null';
 
 	}
 
@@ -154,9 +194,14 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	pathTracer.renderSample();
+	if ( pathTracer.samples < MAX_SAMPLES ) {
 
-	if ( ! encoding && pathTracer.samples >= pathTracer.minSamples ) {
+		pathTracer.renderSample();
+
+	}
+
+	console.log( pathTracer.samples % 1 )
+	if ( ! encoding && pathTracer.samples >= pathTracer.minSamples && params.hdr && pathTracer.samples < MAX_SAMPLES && pathTracer.samples % 1 === 0 ) {
 
 		encodingId ++;
 		encoding = true;
@@ -166,7 +211,7 @@ function animate() {
 		encodeHDR( image ).then( array => {
 
 			encoding = false;
-			if ( encodingId === currentId ) {
+			if ( encodingId === currentId && params.hdr ) {
 
 				if ( currUrl ) {
 
@@ -186,6 +231,18 @@ function animate() {
 		} );
 
 	}
+
+	if ( activeImage && params.hdr ) {
+
+		imageEl.classList.add( 'show' );
+
+	} else {
+
+		imageEl.classList.remove( 'show' );
+
+	}
+
+	// imageEl.style.visibility = params.hdr ? 'visible' : 'hidden';
 
 	loader.setSamples( pathTracer.samples );
 
