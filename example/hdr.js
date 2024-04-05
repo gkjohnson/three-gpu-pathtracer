@@ -60,7 +60,6 @@ async function init() {
 
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
