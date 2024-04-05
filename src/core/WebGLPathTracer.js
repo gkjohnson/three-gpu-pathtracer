@@ -419,6 +419,7 @@ export class WebGLPathTracer {
 	reset() {
 
 		this._queueReset = true;
+		this._pathTracer.samples = 0;
 
 	}
 

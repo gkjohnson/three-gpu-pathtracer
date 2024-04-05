@@ -27,13 +27,13 @@ function* renderTask() {
 
 		if ( alpha ) {
 
-			blendMaterial.opacity = this._opacityFactor / ( this._samples + 1 );
+			blendMaterial.opacity = this._opacityFactor / ( this.samples + 1 );
 			material.blending = NoBlending;
 			material.opacity = 1;
 
 		} else {
 
-			material.opacity = this._opacityFactor / ( this._samples + 1 );
+			material.opacity = this._opacityFactor / ( this.samples + 1 );
 			material.blending = NormalBlending;
 
 		}
@@ -127,12 +127,12 @@ function* renderTask() {
 
 				}
 
-				this._samples += ( 1 / totalTiles );
+				this.samples += ( 1 / totalTiles );
 
 				// round the samples value if we've finished the tiles
 				if ( x === tilesX - 1 && y === tilesY - 1 ) {
 
-					this._samples = Math.round( this._samples );
+					this.samples = Math.round( this.samples );
 
 				}
 
@@ -195,12 +195,6 @@ export class PathTracingRenderer {
 
 	}
 
-	get samples() {
-
-		return this._samples;
-
-	}
-
 	constructor( renderer ) {
 
 		this.camera = null;
@@ -209,7 +203,7 @@ export class PathTracingRenderer {
 		this.stableNoise = false;
 		this.stableTiles = true;
 
-		this._samples = 0;
+		this.samples = 0;
 		this._subframe = new Vector4( 0, 0, 1, 1 );
 		this._opacityFactor = 1.0;
 		this._renderer = renderer;
@@ -334,7 +328,7 @@ export class PathTracingRenderer {
 		_renderer.setClearColor( ogClearColor, ogClearAlpha );
 		_renderer.setRenderTarget( ogRenderTarget );
 
-		this._samples = 0;
+		this.samples = 0;
 		this._task = null;
 
 		if ( this.stableNoise ) {
