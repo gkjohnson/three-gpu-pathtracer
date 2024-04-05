@@ -27,7 +27,6 @@ const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
 const CREDITS = 'Model by "nyancube" on Sketchfab';
 const DESCRIPTION = 'Simple path tracing example scene setup with background blur.';
-const MAX_SAMPLES = 150;
 
 let pathTracer, renderer, controls;
 let camera, scene;
@@ -155,13 +154,9 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	console.log( pathTracer.samples );
+	pathTracer.renderSample();
 
-	if ( pathTracer.samples < MAX_SAMPLES ) {
-
-		pathTracer.renderSample();
-
-	} else if ( ! encoding && ! activeImage ) {
+	if ( ! encoding && pathTracer.samples >= pathTracer.minSamples ) {
 
 		encodingId ++;
 		encoding = true;
@@ -172,6 +167,12 @@ function animate() {
 
 			encoding = false;
 			if ( encodingId === currentId ) {
+
+				if ( currUrl ) {
+
+					URL.revokeObjectURL( currUrl );
+
+				}
 
 				const blob = new Blob( [ array ], { type: 'octet/stream' } );
 				currUrl = URL.createObjectURL( blob );
@@ -186,7 +187,6 @@ function animate() {
 
 	}
 
-	loader.setPercentage( pathTracer.samples / MAX_SAMPLES );
 	loader.setSamples( pathTracer.samples );
 
 }
@@ -228,7 +228,7 @@ async function encodeHDR( image ) {
 	const encodingResult = encode( {
 		image,
 		// this will encode the full HDR range
-		maxContentBoost: Math.max.apply( this, textureMax )
+		maxContentBoost: Math.max.apply( this, textureMax ) || 1
 	} );
 
 	// obtain the RAW RGBA SDR buffer and create an ImageData
