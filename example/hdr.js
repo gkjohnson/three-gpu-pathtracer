@@ -28,7 +28,7 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const CREDITS = 'Model courtesy of Caltech/NASA-JPL';
 const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
 
-const MAX_SAMPLES = 64;
+const MAX_SAMPLES = 45;
 
 const params = {
 	pause: false,
@@ -45,7 +45,6 @@ const params = {
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
-let generatedSecond = - 1;
 
 init();
 
@@ -130,7 +129,11 @@ async function init() {
 	loader.setDescription( DESCRIPTION );
 
 	const gui = new GUI();
-	gui.add( params, 'pause' );
+	gui.add( params, 'pause' ).onChange( () => {
+
+		resetHdr();
+
+	} );
 	gui.add( params, 'hdr' );
 	gui.add( params, 'sdrToneMapping' ).onChange( v => {
 
@@ -141,12 +144,14 @@ async function init() {
 
 		pathTracer.renderScale = v;
 		pathTracer.reset();
+		resetHdr();
 
 	} );
 	gui.add( params, 'bounces', 1, 10 ).onChange( v => {
 
 		pathTracer.bounces = v;
 		pathTracer.reset();
+		resetHdr();
 
 	} );
 	gui.add( params, 'tiles', 1, 6, 1 ).onChange( v => {
@@ -198,20 +203,14 @@ function animate() {
 	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || params.pause;
 	pathTracer.renderSample();
 
-	const second = ~ ~ window.performance.now();
-
 	if (
 		! hdrGenerator.encoding &&
-		pathTracer.samples >= pathTracer.minSamples &&
 		params.hdr &&
-		pathTracer.samples < MAX_SAMPLES &&
-		pathTracer.samples % 1 === 0 &&
-		! params.pause &&
-		generatedSecond !== second
+		( pathTracer.samples === MAX_SAMPLES || params.pause )
 	) {
 
+		// NOTE: this can be called repeatedly but takes up to 200 ms
 		hdrGenerator.updateFrom( pathTracer.target );
-		generatedSecond = second;
 
 	}
 
