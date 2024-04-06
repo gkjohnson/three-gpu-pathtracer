@@ -1,18 +1,15 @@
 import {
-	ACESFilmicToneMapping,
 	Scene,
 	EquirectangularReflectionMapping,
 	WebGLRenderer,
 	PerspectiveCamera,
-	RGBAFormat,
-	LinearSRGBColorSpace,
-	FloatType,
 	Mesh,
 	PlaneGeometry,
 	MeshStandardMaterial,
 	DoubleSide,
 	Color,
-	LoadingManager,
+	ACESFilmicToneMapping,
+	NoToneMapping,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -20,13 +17,12 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { compress, encode, findTextureMinMax } from '@monogrid/gainmap-js/dist/encode.js';
-import { encodeJPEGMetadata } from '@monogrid/gainmap-js/dist/libultrahdr.js';
 import { WebGLPathTracer } from '..';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
+import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
@@ -36,18 +32,16 @@ const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR 
 const MAX_SAMPLES = 150;
 
 const params = {
+	pause: false,
 	hdr: true,
+	sdrToneMapping: false,
 	environmentIntensity: 3,
 	...getScaledSettings(),
 };
 
 let pathTracer, renderer, controls;
 let camera, scene;
-let loader, imageEl;
-let encoding = false;
-let encodingId = 0;
-let activeImage = false;
-let currUrl = null;
+let loader, hdrGenerator;
 
 init();
 
@@ -55,8 +49,6 @@ async function init() {
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
-
-	imageEl = document.querySelector( 'img' );
 
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
@@ -70,6 +62,9 @@ async function init() {
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+
+	// generator
+	hdrGenerator = new HDRImageGenerator( renderer, document.querySelector( 'img' ) );
 
 	// camera
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
@@ -143,7 +138,13 @@ async function init() {
 	loader.setDescription( DESCRIPTION );
 
 	const gui = new GUI();
+	gui.add( params, 'pause' );
 	gui.add( params, 'hdr' );
+	gui.add( params, 'sdrToneMapping' ).onChange( v => {
+
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+
+	} );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
@@ -188,14 +189,7 @@ function onResize() {
 
 function resetHdr() {
 
-	encodingId ++;
-	if ( activeImage ) {
-
-		activeImage = false;
-		URL.revokeObjectURL( currUrl );
-		imageEl.src = 'null';
-
-	}
+	hdrGenerator.reset();
 
 }
 
@@ -203,144 +197,32 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	if ( pathTracer.samples < MAX_SAMPLES ) {
+	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || params.pause;
+	pathTracer.renderSample();
 
-		pathTracer.renderSample();
+	if (
+		! hdrGenerator.encoding &&
+		pathTracer.samples >= pathTracer.minSamples &&
+		params.hdr &&
+		pathTracer.samples < MAX_SAMPLES &&
+		pathTracer.samples % 1 === 0 &&
+		! params.pause
+	) {
 
-	}
-
-	if ( ! encoding && pathTracer.samples >= pathTracer.minSamples && params.hdr && pathTracer.samples < MAX_SAMPLES && pathTracer.samples % 1 === 0 ) {
-
-		encodingId ++;
-		encoding = true;
-
-		const currentId = encodingId;
-		const image = readRenderTargetAsImage( pathTracer.target );
-		encodeHDR( image ).then( array => {
-
-			encoding = false;
-			if ( encodingId === currentId && params.hdr ) {
-
-				if ( currUrl ) {
-
-					URL.revokeObjectURL( currUrl );
-
-				}
-
-				const blob = new Blob( [ array ], { type: 'octet/stream' } );
-				currUrl = URL.createObjectURL( blob );
-				imageEl.src = currUrl;
-
-				activeImage = true;
-				imageEl.classList.add( 'show' );
-
-			}
-
-		} );
+		hdrGenerator.updateFrom( pathTracer.target );
 
 	}
 
-	if ( activeImage && params.hdr ) {
+	if ( hdrGenerator.completeImage && params.hdr ) {
 
-		imageEl.classList.add( 'show' );
+		hdrGenerator.image.classList.add( 'show' );
 
 	} else {
 
-		imageEl.classList.remove( 'show' );
+		hdrGenerator.image.classList.remove( 'show' );
 
 	}
 
-	// imageEl.style.visibility = params.hdr ? 'visible' : 'hidden';
-
 	loader.setSamples( pathTracer.samples );
-
-}
-
-function readRenderTargetAsImage( target ) {
-
-	// based on EXR file result
-	// {
-	// 	header: EXRHeader,
-	// 	width: EXRDecoder.width,
-	// 	height: EXRDecoder.height,
-	// 	data: EXRDecoder.byteArray,
-	// 	format: EXRDecoder.format,
-	// 	colorSpace: EXRDecoder.colorSpace,
-	// 	type: this.type,
-	// };
-
-	const buffer = new Float32Array( target.width * target.height * 4 );
-	renderer.readRenderTargetPixels( target, 0, 0, target.width, target.height, buffer );
-	return {
-		header: {},
-		width: target.width,
-		height: target.height,
-		data: buffer,
-		format: RGBAFormat,
-		colorSpace: LinearSRGBColorSpace,
-		type: FloatType,
-
-	};
-
-}
-
-async function encodeHDR( image ) {
-
-	// find RAW RGB Max value of a texture
-	const textureMax = await findTextureMinMax( image );
-
-	// Encode the gainmap
-	const encodingResult = encode( {
-		image,
-		// this will encode the full HDR range
-		maxContentBoost: Math.max.apply( this, textureMax ) || 1
-	} );
-
-	// obtain the RAW RGBA SDR buffer and create an ImageData
-	const sdrImageData = new ImageData(
-		encodingResult.sdr.toArray(),
-		encodingResult.sdr.width,
-		encodingResult.sdr.height
-	);
-	// obtain the RAW RGBA Gain map buffer and create an ImageData
-	const gainMapImageData = new ImageData(
-		encodingResult.gainMap.toArray(),
-		encodingResult.gainMap.width,
-		encodingResult.gainMap.height
-	);
-
-	// parallel compress the RAW buffers into the specified mimeType
-	const mimeType = 'image/jpeg';
-	const quality = 0.9;
-
-	const [ sdr, gainMap ] = await Promise.all( [
-		compress( {
-			source: sdrImageData,
-			mimeType,
-			quality,
-			flipY: true // output needs to be flipped
-		} ),
-		compress( {
-			source: gainMapImageData,
-			mimeType,
-			quality,
-			flipY: true // output needs to be flipped
-		} )
-	] );
-
-	// obtain the metadata which will be embedded into
-	// and XMP tag inside the final JPEG file
-	const metadata = encodingResult.getMetadata();
-
-	// embed the compressed images + metadata into a single
-	// JPEG file
-	const jpegBuffer = await encodeJPEGMetadata( {
-		...encodingResult,
-		...metadata,
-		sdr,
-		gainMap
-	} );
-
-	return jpegBuffer;
 
 }
