@@ -243,7 +243,7 @@ export class WebGLPathTracer {
 			this._colorBackground = this._colorBackground || new GradientEquirectTexture( 16 );
 
 			const colorBackground = this._colorBackground;
-			if ( colorBackground.topColor.equals( scene.background ) ) {
+			if ( ! colorBackground.topColor.equals( scene.background ) ) {
 
 				// set the texture color
 				colorBackground.topColor.set( scene.background );
