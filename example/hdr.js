@@ -15,33 +15,34 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { WebGLPathTracer } from '..';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
-import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb';
 const CREDITS = 'Model by "nyancube" on Sketchfab';
 const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
 
-const MAX_SAMPLES = 150;
+const MAX_SAMPLES = 64;
 
 const params = {
 	pause: false,
 	hdr: true,
 	sdrToneMapping: false,
-	environmentIntensity: 3,
-	...getScaledSettings(),
+	environmentIntensity: 15,
+	tiles: 4,
+	bounces: 5,
+	renderScale: 1,
 };
 
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
+let generatedSecond = - 1;
 
 init();
 
@@ -57,7 +58,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.bounces = 5;
+	pathTracer.bounces = params.bounces;
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -67,8 +68,8 @@ async function init() {
 	hdrGenerator = new HDRImageGenerator( renderer, document.querySelector( 'img' ) );
 
 	// camera
-	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
-	camera.position.set( 8, 9, 24 );
+	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
+	camera.position.set( 20, 23, 35 );
 
 	// scene
 	scene = new Scene();
@@ -77,7 +78,7 @@ async function init() {
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.y = 10;
+	controls.target.y = 3;
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
@@ -88,29 +89,18 @@ async function init() {
 
 	// load the environment map and model
 	const [ gltf, envTexture ] = await Promise.all( [
-		new GLTFLoader().loadAsync( MODEL_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
 		new RGBELoader().loadAsync( ENV_URL ),
 	] );
 
 	const model = gltf.scene;
-
-	// const manager = new LoadingManager();
-	// const complete = new Promise( resolve => manager.onLoad = resolve );
-	// const ldrawLoader = new LDrawLoader( manager );
-	// await ldrawLoader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
-	// let model = await ldrawLoader
-	// 	.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )
-	// 	.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd' );
-	// await complete;
-
-	// model = LDrawUtils.mergeObject( model );
-	// model.rotation.set( Math.PI, 0, 0 );
-	// model.scale.setScalar( 0.05 );
+	model.scale.setScalar( 10 );
 
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.environment = envTexture;
-	scene.environmentIntensity = 3;
+	scene.environmentIntensity = params.environmentIntensity;
 	scene.add( model );
+	model.updateMatrixWorld( true );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	const floorPlane = new Mesh(
@@ -118,9 +108,9 @@ async function init() {
 		new MeshStandardMaterial( {
 			map: floorTex,
 			transparent: true,
-			color: 0xffffff,
-			roughness: 0.05,
-			metalness: 0.9,
+			color: 0x111111,
+			roughness: 0.1,
+			metalness: 0.1,
 			side: DoubleSide,
 		} ),
 	);
@@ -129,7 +119,7 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	await pathTracer.setSceneAsync( scene, camera, {
+	await pathTracer.setScene( scene, camera, {
 		onProgress: v => loader.setPercentage( v ),
 	} );
 
@@ -151,12 +141,18 @@ async function init() {
 		pathTracer.reset();
 
 	} );
-	gui.add( params, 'tiles', 1, 5, 1 ).onChange( v => {
+	gui.add( params, 'bounces', 1, 10 ).onChange( v => {
+
+		pathTracer.bounces = v;
+		pathTracer.reset();
+
+	} );
+	gui.add( params, 'tiles', 1, 6, 1 ).onChange( v => {
 
 		pathTracer.tiles.setScalar( v );
 
 	} );
-	gui.add( params, 'environmentIntensity', 0, 5 ).onChange( v => {
+	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
 
 		scene.environmentIntensity = v;
 		pathTracer.updateEnvironment();
@@ -200,16 +196,20 @@ function animate() {
 	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || params.pause;
 	pathTracer.renderSample();
 
+	const second = ~ ~ window.performance.now();
+
 	if (
 		! hdrGenerator.encoding &&
 		pathTracer.samples >= pathTracer.minSamples &&
 		params.hdr &&
 		pathTracer.samples < MAX_SAMPLES &&
 		pathTracer.samples % 1 === 0 &&
-		! params.pause
+		! params.pause &&
+		generatedSecond !== second
 	) {
 
 		hdrGenerator.updateFrom( pathTracer.target );
+		generatedSecond = second;
 
 	}
 
