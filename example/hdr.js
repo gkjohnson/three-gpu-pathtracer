@@ -200,13 +200,14 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || params.pause;
+	const doPause = params.pause && pathTracer.samples >= 1;
+	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
 	if (
 		! hdrGenerator.encoding &&
 		params.hdr &&
-		( pathTracer.samples === MAX_SAMPLES || params.pause )
+		( pathTracer.samples === MAX_SAMPLES || doPause )
 	) {
 
 		// NOTE: this can be called repeatedly but takes up to 200 ms
