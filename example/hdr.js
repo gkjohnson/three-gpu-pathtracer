@@ -34,7 +34,7 @@ const params = {
 	hdr: true,
 	sdrToneMapping: false,
 	environmentIntensity: 15,
-	tiles: 4,
+	tiles: 6,
 	bounces: 5,
 	renderScale: 1,
 };
@@ -69,7 +69,7 @@ async function init() {
 
 	// camera
 	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
-	camera.position.set( 20, 23, 35 );
+	camera.position.set( 20, 24, 35 ).multiplyScalar( 0.8 );
 
 	// scene
 	scene = new Scene();
@@ -78,7 +78,7 @@ async function init() {
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.y = 3;
+	controls.target.y = 6;
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
@@ -93,14 +93,13 @@ async function init() {
 		new RGBELoader().loadAsync( ENV_URL ),
 	] );
 
-	const model = gltf.scene;
-	model.scale.setScalar( 10 );
-
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.environment = envTexture;
 	scene.environmentIntensity = params.environmentIntensity;
+
+	const model = gltf.scene;
+	model.scale.setScalar( 10 );
 	scene.add( model );
-	model.updateMatrixWorld( true );
 
 	const floorTex = generateRadialFloorTexture( 2048 );
 	const floorPlane = new Mesh(
