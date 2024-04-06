@@ -21,6 +21,7 @@ import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb';
@@ -34,9 +35,11 @@ const params = {
 	hdr: true,
 	sdrToneMapping: false,
 	environmentIntensity: 15,
-	tiles: 6,
+	tiles: 3,
 	bounces: 5,
 	renderScale: 1,
+
+	...getScaledSettings(),
 };
 
 let pathTracer, renderer, controls;
