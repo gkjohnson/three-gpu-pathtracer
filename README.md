@@ -30,6 +30,8 @@ _More features and capabilities in progress!_
 
 [Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/depthOfField.html)
 
+[HDR Image](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/hdr.html)
+
 **Features**
 
 [Skinned Geometry Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/skinnedMesh.html)
