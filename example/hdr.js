@@ -28,7 +28,7 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const CREDITS = 'Model courtesy of Caltech/NASA-JPL';
 const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
 
-const MAX_SAMPLES = 45;
+const MAX_SAMPLES = 200;
 
 const params = {
 	pause: false,
@@ -45,6 +45,7 @@ const params = {
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
+let activeImage = false;
 
 init();
 
@@ -193,6 +194,7 @@ function onResize() {
 function resetHdr() {
 
 	hdrGenerator.reset();
+	activeImage = false;
 
 }
 
@@ -207,11 +209,13 @@ function animate() {
 	if (
 		! hdrGenerator.encoding &&
 		params.hdr &&
-		( pathTracer.samples === MAX_SAMPLES || doPause )
+		( pathTracer.samples === MAX_SAMPLES || doPause ) &&
+		! activeImage
 	) {
 
 		// NOTE: this can be called repeatedly but takes up to 200 ms
 		hdrGenerator.updateFrom( pathTracer.target );
+		activeImage = true;
 
 	}
 
