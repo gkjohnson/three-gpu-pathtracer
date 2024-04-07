@@ -28,7 +28,7 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const CREDITS = 'Model courtesy of NASA/Caltech-JPL';
 const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
 
-const MAX_SAMPLES = 200;
+const MAX_SAMPLES = 45;
 
 const params = {
 	pause: false,
