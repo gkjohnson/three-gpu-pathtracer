@@ -35,9 +35,9 @@ const params = {
 	samplesPerFrame: 1,
 	resolutionScale: 1 / window.devicePixelRatio,
 	tiles: 1,
-	autoPause: true,
+	autoPause: false,
 	pause: false,
-	continuous: false,
+	continuous: true,
 	...getScaledSettings(),
 
 };
@@ -60,6 +60,9 @@ async function init() {
 	pathTracer.multipleImportanceSampling = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.filterGlossyFactor = 0.25;
+	pathTracer.minSamples = 1;
+	pathTracer.renderDelay = 0;
+	pathTracer.fadeDuration = 0;
 
 	// scene
 	scene = new Scene();
@@ -213,6 +216,8 @@ function animate() {
 		counter = 0;
 
 	}
+
+	pathTracer.dynamicLowRes = params.continuous;
 
 	if ( ! params.pause && ! params.continuous ) {
 
