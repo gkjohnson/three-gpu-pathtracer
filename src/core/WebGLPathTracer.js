@@ -350,7 +350,7 @@ export class WebGLPathTracer {
 		// render the path tracing sample after enough time has passed
 		const delta = clock.getDelta() * 1e3;
 		const elapsedTime = clock.getElapsedTime() * 1e3;
-		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay < elapsedTime ) {
+		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay <= elapsedTime ) {
 
 			pathTracer.update();
 
@@ -363,9 +363,18 @@ export class WebGLPathTracer {
 
 			const renderer = this._renderer;
 			const minSamples = this.minSamples;
-			if ( elapsedTime > this.renderDelay && this.samples >= this.minSamples ) {
 
-				quad.material.opacity = Math.min( quad.material.opacity + delta / this.fadeDuration, 1 );
+			if ( elapsedTime >= this.renderDelay && this.samples >= this.minSamples ) {
+
+				if ( this.fadeDuration !== 0 ) {
+
+					quad.material.opacity = Math.min( quad.material.opacity + delta / this.fadeDuration, 1 );
+
+				} else {
+
+					quad.material.opacity = 1;
+
+				}
 
 			}
 
