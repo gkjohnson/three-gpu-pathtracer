@@ -76,7 +76,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	resolutionScale: 1 / window.devicePixelRatio,
+	: 1 / window.devicePixelRatio,
 	tiles: 2,
 
 	model: '',
@@ -233,7 +233,7 @@ function onParamsChange() {
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.renderScale = params.;
 
 	floorPlane.material.color.set( params.floorColor );
 	floorPlane.material.roughness = params.floorRoughness;
@@ -348,7 +348,7 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
+	pathTracingFolder.add( params, '', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onResize();
 

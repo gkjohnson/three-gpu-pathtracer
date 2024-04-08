@@ -76,7 +76,7 @@ const params = {
 
 	enable: true,
 	model: modelName in MODELS ? modelName : 'Voltron - Voltron',
-	resolutionScale: 1,
+	: 1,
 	tiles: 1,
 
 	samplesPerFrame: 1,
@@ -449,7 +449,7 @@ function getLkgParams( numViews ) {
 // callback when a parameter impacting the LKG rendering changes
 function onLkgParamsChange() {
 
-	const { resolutionScale, viewCone, viewerDistance } = params;
+	const { , viewCone, viewerDistance } = params;
 
 	lkgParams = getLkgParams( params.numViews );
 
@@ -457,7 +457,7 @@ function onLkgParamsChange() {
 	ptRenderer.viewCount = lkgParams.numViews;
 	ptRenderer.viewCone = viewCone * MathUtils.DEG2RAD;
 	ptRenderer.setFromDisplayView( viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
-	ptRenderer.setSize( resolutionScale * lkgParams.quiltWidth, resolutionScale * lkgParams.quiltHeight );
+	ptRenderer.setSize(  * lkgParams.quiltWidth,  * lkgParams.quiltHeight );
 	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
 }
@@ -505,7 +505,7 @@ function buildGui() {
 
 	} );
 	gui.add( params, 'enable' );
-	gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
+	gui.add( params, '', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onLkgParamsChange();
 		ptRenderer.reset();
