@@ -23,7 +23,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	tiles: 2,
-	resolutionScale: 1 / window.devicePixelRatio,
+	renderScale: 1 / window.devicePixelRatio,
 
 	color: '#eeeeee',
 	fog: true,
@@ -122,7 +122,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const fogFolder = gui.addFolder( 'Fog' );
 	fogFolder.addColor( params, 'color' ).onChange( onParamsChange );
@@ -146,7 +146,7 @@ function onParamsChange() {
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
-	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.updateLights();
 	pathTracer.updateMaterials();

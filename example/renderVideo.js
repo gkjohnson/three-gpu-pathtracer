@@ -85,7 +85,7 @@ const params = {
 
 	bounces: 5,
 	samplesPerFrame: 1,
-	resolutionScale: 1,
+	renderScale: 1,
 	...getScaledSettings(),
 
 };
@@ -205,7 +205,7 @@ function rebuildGUI() {
 	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
-	animationFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
+	animationFolder.add( params, 'renderScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
 	animationFolder.add( params, recording ? 'stop' : 'record' );
 
 	// dynamic parameters
@@ -242,7 +242,7 @@ function initializeSize() {
 
 function regenerateScene() {
 
-	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.renderScale = params.renderScale;
 	pathTracer.bounces = params.bounces;
 	pathTracer.setScene( scene, camera );
 

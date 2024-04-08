@@ -60,7 +60,7 @@ const params = {
 	denoiseThreshold: 0.1,
 	denoiseKSigma: 1.0,
 	bounces: 5,
-	resolutionScale: 1 / window.devicePixelRatio,
+	renderScale: 1 / window.devicePixelRatio,
 	transmissiveBounces: 20,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
@@ -103,7 +103,7 @@ const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
 	params.bounces = Math.max( params.bounces, 6 );
-	params.resolutionScale *= 0.5;
+	params.renderScale *= 0.5;
 	params.tiles = 2;
 	params.multipleImportanceSampling = false;
 
@@ -234,7 +234,7 @@ async function init() {
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'transmissiveBounces', 0, 40, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const denoiseFolder = gui.addFolder( 'Denoising' );
 	denoiseFolder.add( params, 'denoiseEnabled' );
@@ -311,7 +311,7 @@ function onParamsChange() {
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-	pathTracer.renderScale = params.resolutionScale;
+	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
 	shellMaterial.matte = materialProperties.matte;

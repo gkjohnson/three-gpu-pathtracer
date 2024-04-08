@@ -43,7 +43,7 @@ let loader;
 const params = {
 	multipleImportanceSampling: true,
 	bounces: 3,
-	resolutionScale: 1 / window.devicePixelRatio,
+	renderScale: 1 / window.devicePixelRatio,
 	tiles: 2,
 	iesProfile: - 1,
 	...getScaledSettings(),
@@ -190,7 +190,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
 	lightFolder.addColor( spotLight, 'color' ).onChange( onParamsChange );
@@ -216,7 +216,7 @@ function onResize() {
 	// TODO: we need to handle the interpolation of the float texture more intelligently to avoid
 	// extra bright hot spots - then this can be moved to "onParamsChange"
 	renderer.setSize( window.innerWidth, window.innerHeight );
-	renderer.setPixelRatio( window.devicePixelRatio * params.resolutionScale );
+	renderer.setPixelRatio( window.devicePixelRatio * params.renderScale );
 	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 	pathTracer.updateCamera();
@@ -225,7 +225,7 @@ function onResize() {
 
 function onParamsChange() {
 
-	// pathTracer.renderScale = params.resolutionScale;
+	// pathTracer.renderScale = params.renderScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
 	pathTracer.updateLights();
