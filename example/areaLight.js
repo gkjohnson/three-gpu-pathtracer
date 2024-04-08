@@ -39,7 +39,7 @@ const params = {
 
 	// path tracer settings
 	bounces: 5,
-	: 1 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	multipleImportanceSampling: true,
@@ -152,7 +152,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, '', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
 
@@ -183,7 +183,7 @@ function onParamsChange() {
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-	pathTracer.renderScale = params.;
+	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	pathTracer.updateLights();

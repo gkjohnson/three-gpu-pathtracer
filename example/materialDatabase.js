@@ -33,7 +33,7 @@ const params = {
 	tiles: 2,
 	bounces: 5,
 	multipleImportanceSampling: true,
-	: 1 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	...getScaledSettings(),
 };
 
@@ -154,7 +154,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, '', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
 	animate();
 
@@ -209,7 +209,7 @@ function onParamsChange() {
 	applyMaterialInfo( database[ params.material ], shellMaterial );
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.renderScale = params.;
+	pathTracer.renderScale = params.resolutionScale;
 	pathTracer.bounces = params.bounces;
 	pathTracer.updateMaterials();
 

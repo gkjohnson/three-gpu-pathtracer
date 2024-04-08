@@ -16,7 +16,7 @@ let fsQuad, target1, target2, materials;
 let samplesEl, samples, totalSamples;
 const params = {
 
-	: 1 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	radius: 2.0,
 	samplesPerFrame: 2.0,
 	accumulate: true,
@@ -166,7 +166,7 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, '', 0.1, 1 ).onChange( onResize );
+	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
 	gui.add( params, 'accumulate' ).onChange( reset );
@@ -184,7 +184,7 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio * params.;
+	const dpr = window.devicePixelRatio * params.resolutionScale;
 
 	target1.setSize( w * dpr, h * dpr );
 	target2.setSize( w * dpr, h * dpr );

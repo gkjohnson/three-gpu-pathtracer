@@ -31,7 +31,7 @@ const focusPoint = new Vector3();
 const params = {
 
 	bounces: 3,
-	: 1 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	autoFocus: true,
@@ -156,7 +156,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, '', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( onParamsChange ).listen();
@@ -232,7 +232,7 @@ function onParamsChange() {
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
-	pathTracer.renderScale = params.;
+	pathTracer.renderScale = params.resolutionScale;
 
 	pathTracer.reset();
 

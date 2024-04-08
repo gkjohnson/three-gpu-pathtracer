@@ -33,7 +33,7 @@ const params = {
 
 	bounces: 5,
 	samplesPerFrame: 1,
-	: 1 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	tiles: 1,
 	autoPause: true,
 	pause: false,
@@ -138,7 +138,7 @@ async function init() {
 
 	} );
 	gui.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
-	gui.add( params, '', 0.1, 1 ).onChange( v => {
+	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
 		pathTracer.reset();

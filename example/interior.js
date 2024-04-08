@@ -29,7 +29,7 @@ const params = {
 	environmentIntensity: 1,
 	emissiveIntensity: 5,
 	bounces: 20,
-	: 1 / window.devicePixelRatio,
+	resolutionScale: 1 / window.devicePixelRatio,
 	tiles: 2,
 	projection: 'Perspective',
 	...getScaledSettings(),
@@ -133,7 +133,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, '', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'resolutionScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const sceneFolder = gui.addFolder( 'Scene' );
 	sceneFolder.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
@@ -191,7 +191,7 @@ function onParamsChange() {
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.backgroundIntensity = params.environmentIntensity;
 	pathTracer.bounces = params.bounces;
-	pathTracer.renderScale = params.;
+	pathTracer.renderScale = params.resolutionScale;
 
 	pathTracer.setScene( scene, activeCamera );
 

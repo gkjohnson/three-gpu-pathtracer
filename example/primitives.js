@@ -1,6 +1,5 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGLRenderer } from 'three';
 import { WebGLPathTracer, GradientEquirectTexture } from '..';
-import { getScaledSettings } from './utils/getScaledSettings.js';
 
 // init scene, renderer, camera, controls, etc
 const scene = new Scene();
@@ -55,10 +54,7 @@ const renderer = new WebGLRenderer( { antialias: true } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 
-const settings = getScaledSettings();
 const pathTracer = new WebGLPathTracer( renderer );
-pathTracer.tiles.setScalar( settings.tiles );
-pathTracer.renderScale = settings.renderScale;
 pathTracer.setScene( scene, camera );
 
 onResize();
