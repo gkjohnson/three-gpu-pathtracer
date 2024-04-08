@@ -1,10 +1,16 @@
-import { PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending, FloatType, HalfFloatType } from 'three';
+import { PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending } from 'three';
 import { PathTracingSceneGenerator } from './PathTracingSceneGenerator.js';
 import { PathTracingRenderer } from './PathTracingRenderer.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
 import { getIesTextures, getLights, getTextures } from './utils/sceneUpdateUtils.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
+
+function supportsFloatBlending( renderer ) {
+
+	return renderer.extensions.get( 'EXT_float_blend' );
+
+}
 
 const _resolution = new Vector2();
 export class WebGLPathTracer {
@@ -270,6 +276,9 @@ export class WebGLPathTracer {
 
 			if ( scene.environment ) {
 
+				// TODO: Consider setting this to the highest supported bit depth by checking for
+				// OES_texture_float_linear or OES_texture_half_float_linear. Requires changes to
+				// the equirect uniform
 				material.envMapInfo.updateFrom( scene.environment );
 
 			} else {
@@ -331,6 +340,7 @@ export class WebGLPathTracer {
 
 		const lowResPathTracer = this._lowResPathTracer;
 		const pathTracer = this._pathTracer;
+		const renderer = this._renderer;
 		const clock = this._clock;
 		const quad = this._quad;
 
@@ -356,7 +366,9 @@ export class WebGLPathTracer {
 
 		}
 
-		pathTracer.alpha = this._renderer.getContextAttributes().alpha && pathTracer.material.background !== 1;
+		// when alpha is enabled we use a manual blending system rather than
+		// rendering with a blend function
+		pathTracer.alpha = pathTracer.material.backgroundAlpha !== 1 || ! supportsFloatBlending( renderer );
 		lowResPathTracer.alpha = pathTracer.alpha;
 
 		if ( this.renderToCanvas ) {
