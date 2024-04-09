@@ -38,7 +38,12 @@ export const stratified_functions = /* glsl */`
 
 		// tile the small noise texture across the entire screen
 		ivec2 noiseSize = ivec2( textureSize( stratifiedOffsetTexture, 0 ) );
-		pixelSeed = texelFetch( stratifiedOffsetTexture, ivec2( screenCoord.xy ) % noiseSize, 0 );
+		ivec2 pixel = ivec2( screenCoord.xy ) % noiseSize;
+		vec2 pixelWidth = 1.0 / vec2( noiseSize );
+		vec2 uv = vec2( pixel ) * pixelWidth + pixelWidth * 0.5;
+
+		// note that using "texelFetch" here seems to break Android for some reason
+		pixelSeed = texture( stratifiedOffsetTexture, uv );
 
 	}
 
