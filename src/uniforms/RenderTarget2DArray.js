@@ -17,11 +17,25 @@ function getTextureHash( texture ) {
 
 }
 
+function assignOptions( target, options ) {
+
+	for ( const key in options ) {
+
+		if ( key in target ) {
+
+			target[ key ] = options[ key ];
+
+		}
+
+	}
+
+}
+
 export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 
 	constructor( width, height, options ) {
 
-		super( width, height, 1, {
+		const textureOptions = {
 			format: RGBAFormat,
 			type: UnsignedByteType,
 			minFilter: LinearFilter,
@@ -30,7 +44,13 @@ export class RenderTarget2DArray extends WebGLArrayRenderTarget {
 			wrapT: RepeatWrapping,
 			generateMipmaps: false,
 			...options,
-		} );
+		};
+
+		super( width, height, 1, textureOptions );
+
+		// manually assign the options because passing options into the
+		// constructor does not work
+		assignOptions( this.texture, textureOptions );
 
 		this.texture.setTextures = ( ...args ) => {
 
