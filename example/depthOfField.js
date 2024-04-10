@@ -137,7 +137,6 @@ async function init() {
 	} );
 	bvh = results.bvh;
 
-	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 	onParamsChange();

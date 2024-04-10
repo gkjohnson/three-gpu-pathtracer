@@ -139,7 +139,6 @@ async function init() {
 		}
 	} );
 
-	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
 	// gui

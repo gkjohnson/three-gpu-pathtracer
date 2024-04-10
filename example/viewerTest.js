@@ -420,7 +420,6 @@ async function updateModel() {
 		}
 	} );
 
-	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';
 	loadingModel = false;
