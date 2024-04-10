@@ -7,7 +7,6 @@ import {
 	PerspectiveCamera,
 	EquirectangularReflectionMapping,
 	MathUtils,
-	BufferAttribute,
 	Group,
 	Sphere,
 	Box3,
@@ -18,9 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { computeMikkTSpaceTangents } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { GenerateMeshBVHWorker } from '../src/core/GenerateMeshBVHWorker.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
@@ -92,8 +89,7 @@ async function init() {
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.tiles.set( params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-	pathTracer.setMikkTSpace( MikkTSpace );
+	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	// scene
@@ -358,7 +354,6 @@ async function updateModel() {
 
 			} ),
 		new Promise( resolve => manager.onLoad = resolve ),
-		MikkTSpace.ready,
 	] );
 
 	envMap = envTexture;
@@ -377,37 +372,6 @@ async function updateModel() {
 		if ( c.isLight && c.target ) {
 
 			targetsToDisconnect.push( c.target );
-
-		}
-
-		if ( c.geometry ) {
-
-			if ( ! c.geometry.hasAttribute( 'normal' ) ) {
-
-				c.geometry.computeVertexNormals();
-
-			}
-
-			if ( ! c.geometry.attributes.tangent ) {
-
-				// TODO: what is this?
-				if ( c.geometry.hasAttribute( 'uv' ) ) {
-
-					computeMikkTSpaceTangents( c.geometry, MikkTSpace );
-					c.material = c.material.clone();
-					if ( c.material.normalScale ) c.material.normalScale.y *= - 1;
-					if ( c.material.clearcoatNormalScale ) c.material.clearcoatNormalScale.y *= - 1;
-
-				} else {
-
-					c.geometry.setAttribute(
-						'tangent',
-						new BufferAttribute( new Float32Array( c.geometry.attributes.position.count * 4 ), 4, false ),
-					);
-
-				}
-
-			}
 
 		}
 

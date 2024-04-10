@@ -140,12 +140,6 @@ export class WebGLPathTracer {
 
 	}
 
-	setMikkTSpace( mikktSpace ) {
-
-		this._generator.setMikkTSpace( mikktSpace );
-
-	}
-
 	setScene( scene, camera, options = {} ) {
 
 		scene.updateMatrixWorld( true );

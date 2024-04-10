@@ -103,7 +103,6 @@ export class StaticGeometryGenerator {
 		this._geometryMergeSets = new WeakMap();
 		this._mergeOrder = [];
 		this._dummyMesh = null;
-		this._mikktSpace = null;
 
 		this.setObjects( objects || [] );
 
@@ -187,7 +186,7 @@ export class StaticGeometryGenerator {
 				// and are in the attributes array
 				if ( this.generateMissingAttributes ) {
 
-					setCommonAttributes( geom, this.attributes, { mikktSpace: this._mikktSpace } );
+					setCommonAttributes( geom, this.attributes );
 
 				}
 
@@ -200,12 +199,6 @@ export class StaticGeometryGenerator {
 			_intermediateGeometry.delete( key );
 
 		} );
-
-	}
-
-	setMikkTSpace( mikktSpace ) {
-
-		this._mikktSpace = mikktSpace;
 
 	}
 
