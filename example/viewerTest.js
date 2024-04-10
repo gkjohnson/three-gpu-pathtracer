@@ -17,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { GenerateMeshBVHWorker } from '../src/core/GenerateMeshBVHWorker.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
@@ -89,7 +89,7 @@ async function init() {
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.tiles.set( params.tiles );
-	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	// scene
