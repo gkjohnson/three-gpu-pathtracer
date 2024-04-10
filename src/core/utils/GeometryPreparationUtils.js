@@ -1,5 +1,4 @@
 import { BufferAttribute } from 'three';
-import { computeMikkTSpaceTangents } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export function updateMaterialIndexAttribute( geometry, materials, allMaterials ) {
 
@@ -63,9 +62,7 @@ export function updateMaterialIndexAttribute( geometry, materials, allMaterials 
 
 }
 
-export function setCommonAttributes( geometry, attributes, options ) {
-
-	const { mikktSpace } = options;
+export function setCommonAttributes( geometry, attributes ) {
 
 	if ( ! geometry.index ) {
 
@@ -107,15 +104,7 @@ export function setCommonAttributes( geometry, attributes, options ) {
 		// compute tangents requires a uv and normal buffer
 		if ( geometry.attributes.uv && geometry.attributes.normal ) {
 
-			if ( mikktSpace ) {
-
-				computeMikkTSpaceTangents( geometry, mikktSpace );
-
-			} else {
-
-				geometry.computeTangents();
-
-			}
+			geometry.computeTangents();
 
 		} else {
 

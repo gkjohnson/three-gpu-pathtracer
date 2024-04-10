@@ -110,12 +110,6 @@ export class PathTracingSceneGenerator {
 
 	}
 
-	setMikkTSpace( mikktSpace ) {
-
-		this.staticGeometryGenerator.setMikkTSpace( mikktSpace );
-
-	}
-
 	async generateAsync( onProgress = null ) {
 
 		if ( ! this._bvhWorker ) {
