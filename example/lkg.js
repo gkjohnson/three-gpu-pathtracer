@@ -23,7 +23,7 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
 import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -76,7 +76,7 @@ const params = {
 
 	enable: true,
 	model: modelName in MODELS ? modelName : 'Voltron - Voltron',
-	resolutionScale: 1,
+	renderScale: 1,
 	tiles: 1,
 
 	samplesPerFrame: 1,
@@ -277,7 +277,7 @@ async function init() {
 			const reducer = new MaterialReducer();
 			reducer.process( group );
 
-			generator = new PathTracingSceneWorker();
+			generator = new PathTracingSceneGenerator();
 			return generator.generate( group, { onProgress: v => {
 
 				const percent = Math.floor( 100 * v );
@@ -290,8 +290,7 @@ async function init() {
 
 			scene.add( result.scene );
 
-			const { bvh, textures, materials } = result;
-			const geometry = bvh.geometry;
+			const { bvh, textures, materials, geometry } = result;
 			const material = ptRenderer.material;
 
 			material.bvh.updateFrom( bvh );
@@ -302,7 +301,7 @@ async function init() {
 				geometry.attributes.color,
 			);
 			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
+			material.textures.setTextures( renderer, textures, 2048, 2048 );
 			material.materials.updateFrom( materials, textures );
 
 			generator.dispose();
@@ -450,7 +449,7 @@ function getLkgParams( numViews ) {
 // callback when a parameter impacting the LKG rendering changes
 function onLkgParamsChange() {
 
-	const { resolutionScale, viewCone, viewerDistance } = params;
+	const { renderScale, viewCone, viewerDistance } = params;
 
 	lkgParams = getLkgParams( params.numViews );
 
@@ -458,7 +457,7 @@ function onLkgParamsChange() {
 	ptRenderer.viewCount = lkgParams.numViews;
 	ptRenderer.viewCone = viewCone * MathUtils.DEG2RAD;
 	ptRenderer.setFromDisplayView( viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
-	ptRenderer.setSize( resolutionScale * lkgParams.quiltWidth, resolutionScale * lkgParams.quiltHeight );
+	ptRenderer.setSize( renderScale * lkgParams.quiltWidth, renderScale * lkgParams.quiltHeight );
 	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
 }
@@ -506,7 +505,7 @@ function buildGui() {
 
 	} );
 	gui.add( params, 'enable' );
-	gui.add( params, 'resolutionScale', 0.1, 1.0, 0.01 ).onChange( () => {
+	gui.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onLkgParamsChange();
 		ptRenderer.reset();

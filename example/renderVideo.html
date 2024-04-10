@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 	<head>
 		<title>Rendering a Path Traced Video</title>
@@ -25,39 +26,6 @@
 				display: none;
 			}
 
-			#info {
-				position: absolute;
-				bottom: 0;
-				left: 0;
-				font-family: 'Courier New', Courier, monospace;
-				color: white;
-				pointer-events: none;
-				z-index: 2;
-			}
-
-			#samples, #credits {
-
-				opacity: 0.5;
-				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
-				padding: 5px;
-				display: inline-block;
-				white-space: pre;
-
-			}
-
-			a {
-				color: white;
-			}
-
-			#loading {
-				position: absolute;
-				left: 50%;
-				top: 50%;
-				transform: translate(-50%, -50%);
-				color: white;
-				font-family: 'Courier New', Courier, monospace;
-			}
-
 			#instructions {
 				position: absolute;
 				top: 0;
@@ -76,15 +44,6 @@
 			Rendering and recording multiple path traced frames to an animation.
 			<br/>
 			Press "record" to begin rendering and recording a video to a webm.
-		</div>
-		<div id="loading">LOADING</div>
-		<div id="info">
-			<div>
-				<div id="samples">--</div>
-			</div>
-			<div>
-				<div id="credits">Model by DailyArt on Sketchfab</div>
-			</div>
 		</div>
 		<video loop controls></video>
 		<script src="./renderVideo.js" type="module"></script>

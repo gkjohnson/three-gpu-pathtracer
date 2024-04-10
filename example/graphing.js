@@ -1,15 +1,14 @@
 import * as THREE from 'three';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GraphMaterial } from '../src/index.js';
-import { ggxGLSL } from '../src/shader/bsdf/ggx.glsl.js';
-import { utilsGLSL } from '../src/shader/common/utils.glsl.js';
-import { mathGLSL } from '../src/shader/common/math.glsl.js';
+import * as BSDFGLSL from '../src/shader/bsdf/index.js';
+import * as CommonGLSL from '../src/shader/common/index.js';
 
 const graphFunctionSnippet = /* glsl */`
 	#include <common>
-	${ mathGLSL }
-	${ utilsGLSL }
-	${ ggxGLSL }
+	${ CommonGLSL.math_functions }
+	${ CommonGLSL.util_functions }
+	${ BSDFGLSL.ggx_functions }
 
 	vec4 graphFunction( float x ) {
 

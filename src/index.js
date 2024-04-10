@@ -2,8 +2,8 @@
 export * from './core/PathTracingRenderer.js';
 export * from './core/QuiltPathTracingRenderer.js';
 export * from './core/PathTracingSceneGenerator.js';
-export * from './core/DynamicPathTracingSceneGenerator.js';
 export * from './core/MaterialReducer.js';
+export * from './core/WebGLPathTracer.js';
 
 // objects
 export * from './objects/PhysicalCamera.js';
@@ -21,10 +21,8 @@ export * from './uniforms/RenderTarget2DArray.js';
 export * from './uniforms/EquirectHdrInfoUniform.js';
 export * from './uniforms/PhysicalCameraUniform.js';
 export * from './uniforms/LightsInfoUniformStruct.js';
-export * from './uniforms/IESProfilesTexture.js';
 
 // utils
-export * from './utils/GeometryPreparationUtils.js';
 export * from './utils/BlurredEnvMapGenerator.js';
 export * from './utils/IESLoader.js';
 

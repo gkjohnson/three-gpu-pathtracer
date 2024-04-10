@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AmbientOcclusionMaterial } from '../src/materials/surface/AmbientOcclusionMaterial.js';
@@ -16,7 +16,7 @@ let fsQuad, target1, target2, materials;
 let samplesEl, samples, totalSamples;
 const params = {
 
-	resolutionScale: 1 / window.devicePixelRatio,
+	renderScale: 1 / window.devicePixelRatio,
 	radius: 2.0,
 	samplesPerFrame: 2.0,
 	accumulate: true,
@@ -60,7 +60,6 @@ async function init() {
 
 
 	const url = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
-	const generator = new PathTracingSceneWorker();
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( url )
@@ -111,7 +110,12 @@ async function init() {
 
 			} );
 
-			return generator.generate( group );
+			group.updateMatrixWorld( true );
+
+			return {
+				...new PathTracingSceneGenerator( group ).generate(),
+				scene: group,
+			};
 
 		} )
 		.then( result => {
@@ -152,8 +156,6 @@ async function init() {
 			} );
 			scene.add( group );
 
-			generator.dispose();
-
 		} );
 
 	await gltfPromise;
@@ -164,7 +166,7 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	const gui = new GUI();
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( onResize );
+	gui.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
 	gui.add( params, 'radius', 0, 4 ).onChange( reset );
 	gui.add( params, 'accumulate' ).onChange( reset );
@@ -182,7 +184,7 @@ function onResize() {
 
 	const w = window.innerWidth;
 	const h = window.innerHeight;
-	const dpr = window.devicePixelRatio * params.resolutionScale;
+	const dpr = window.devicePixelRatio * params.renderScale;
 
 	target1.setSize( w * dpr, h * dpr );
 	target2.setSize( w * dpr, h * dpr );

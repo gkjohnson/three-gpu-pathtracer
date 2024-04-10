@@ -1,7 +1,7 @@
-import { WebGLRenderTarget, RGBAFormat, HalfFloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping } from 'three';
+import { WebGLRenderTarget, RGBAFormat, HalfFloatType, PMREMGenerator, DataTexture, EquirectangularReflectionMapping, FloatType, DataUtils } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MaterialBase } from '../materials/MaterialBase.js';
-import { utilsGLSL } from '../shader/common/utils.glsl.js';
+import * as CommonGLSL from '../shader/common/index.js';
 
 class PMREMCopyMaterial extends MaterialBase {
 
@@ -31,7 +31,7 @@ class PMREMCopyMaterial extends MaterialBase {
 				#include <common>
 				#include <cube_uv_reflection_fragment>
 
-				${ utilsGLSL }
+				${ CommonGLSL.util_functions }
 
 				uniform sampler2D envMap;
 				uniform float blur;
@@ -58,7 +58,7 @@ export class BlurredEnvMapGenerator {
 		this.renderer = renderer;
 		this.pmremGenerator = new PMREMGenerator( renderer );
 		this.copyQuad = new FullScreenQuad( new PMREMCopyMaterial() );
-		this.renderTarget = new WebGLRenderTarget( 1, 1, { type: HalfFloatType, format: RGBAFormat } );
+		this.renderTarget = new WebGLRenderTarget( 1, 1, { type: FloatType, format: RGBAFormat } );
 
 	}
 
@@ -96,7 +96,14 @@ export class BlurredEnvMapGenerator {
 
 		// read the data back
 		const buffer = new Uint16Array( width * height * 4 );
-		renderer.readRenderTargetPixels( renderTarget, 0, 0, width, height, buffer );
+		const readBuffer = new Float32Array( width * height * 4 );
+		renderer.readRenderTargetPixels( renderTarget, 0, 0, width, height, readBuffer );
+
+		for ( let i = 0, l = readBuffer.length; i < l; i ++ ) {
+
+			buffer[ i ] = DataUtils.toHalfFloat( readBuffer[ i ] );
+
+		}
 
 		const result = new DataTexture( buffer, width, height, RGBAFormat, HalfFloatType );
 		result.minFilter = texture.minFilter;

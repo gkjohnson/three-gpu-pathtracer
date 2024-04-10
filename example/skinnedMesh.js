@@ -1,136 +1,147 @@
-import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import {
+	WebGLRenderer,
+	ACESFilmicToneMapping,
+	Scene,
+	PerspectiveCamera,
+	Clock,
+	AnimationMixer,
+	Mesh,
+	PlaneGeometry,
+	MeshStandardMaterial,
+} from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DynamicPathTracingSceneGenerator, PathTracingRenderer, PhysicalPathTracingMaterial, BlurredEnvMapGenerator } from '../src/index.js';
+import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { LoaderElement } from './utils/LoaderElement.js';
 
-let renderer, controls, sceneInfo, ptRenderer, camera, fsQuad, scene, clock, model;
-let samplesEl;
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
+const MORPH_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
+const SKINNED_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf';
+const CREDITS = 'Model by DailyArt on Sketchfab';
+const DESCRIPTION = 'Rendering deformable geometry with path tracing.';
+
+let pathTracer, renderer, controls, camera, scene, clock;
+let mixer, mixerAction;
+let loader;
 let counter = 0;
 const params = {
 
-	environmentIntensity: 1,
 	bounces: 5,
 	samplesPerFrame: 1,
-	resolutionScale: 1 / window.devicePixelRatio,
+	renderScale: 1 / window.devicePixelRatio,
 	tiles: 1,
 	autoPause: true,
 	pause: false,
 	continuous: false,
+	...getScaledSettings(),
 
 };
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.resolutionScale *= 0.5;
-	params.tiles = 2;
-
-}
 
 init();
 
 async function init() {
 
-	// initialize renderer, scene, camera
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	loader = new LoaderElement();
+	loader.setDescription( DESCRIPTION );
+	loader.attach( document.body );
+
+	// renderer
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	scene = new THREE.Scene();
+	// path tracer
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.multipleImportanceSampling = false;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.filterGlossyFactor = 0.25;
+	pathTracer.minSamples = 1;
+	pathTracer.renderDelay = 0;
+	pathTracer.fadeDuration = 0;
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	// scene
+	scene = new Scene();
+
+	// camera
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.position.set( 5.5, 3.5, 7.5 );
 
-	// initialize path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = camera;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.material.filterGlossyFactor = 0.25;
-	ptRenderer.material.setDefine( 'FEATURE_MIS', 0 );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		transparent: true,
-	} ) );
-
-	// initialize controls
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	camera.lookAt( controls.target );
-	controls.addEventListener( 'change', () => {
-
-		ptRenderer.reset();
-
-	} );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
-	samplesEl = document.getElementById( 'samples' );
+	// clock
+	clock = new Clock();
 
-	clock = new THREE.Clock();
+	// load assets
+	const modelUrl = window.location.hash === '#morphtarget' ? MORPH_URL : SKINNED_URL;
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( modelUrl )
+	] );
 
-	// loading the
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr' )
-		.then( texture => {
+	// update env map
+	const generator = new BlurredEnvMapGenerator( renderer );
+	const blurredTex = generator.generate( envTexture, 0.1 );
+	scene.background = blurredTex;
+	scene.environment = blurredTex;
+	generator.dispose();
 
-			const generator = new BlurredEnvMapGenerator( renderer );
-			const blurredTex = generator.generate( texture, 0.1 );
-			ptRenderer.material.envMapInfo.updateFrom( blurredTex );
-			generator.dispose();
+	// animations
+	const animations = gltf.animations;
+	mixer = new AnimationMixer( gltf.scene );
 
-			scene.background = blurredTex;
-			scene.environment = blurredTex;
+	mixerAction = mixer.clipAction( animations[ 0 ] );
+	mixerAction.play();
+	mixerAction.paused = params.pause;
 
-		} );
+	// initialize scene
+	scene.add( gltf.scene );
 
-	let modelPromise;
-	if ( window.location.hash === '#morphtarget' ) {
+	const floorTex = generateRadialFloorTexture( 2048 );
+	const floorPlane = new Mesh(
+		new PlaneGeometry(),
+		new MeshStandardMaterial( {
+			map: floorTex,
+			transparent: true,
+			color: 0xdddddd,
+			roughness: 0.15,
+			metalness: 1.0
+		} )
+	);
+	floorPlane.scale.setScalar( 50 );
+	floorPlane.rotation.x = - Math.PI / 2;
+	floorPlane.position.y = 0.075;
+	scene.add( floorPlane );
 
-		modelPromise = loadModel( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb' );
+	// initial generation
+	pathTracer.setScene( scene, camera );
 
-	} else {
-
-		modelPromise = loadModel( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf' );
-
-	}
-
-	modelPromise = modelPromise.then( res => model = res );
-
-	await Promise.all( [ envMapPromise, modelPromise ] );
-	scene.add( model.scene );
-
-	document.getElementById( 'loading' ).remove();
+	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
-	// init gui
+	// gui
 	const gui = new GUI();
 	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
+		pathTracer.tiles.set( value, value );
 
 	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'environmentIntensity', 0, 10 ).onChange( () => {
+	gui.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
+	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'bounces', 1, 10, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
+		pathTracer.renderScale = v;
+		pathTracer.reset();
 
 	} );
 	gui.add( params, 'autoPause' ).listen();
@@ -152,7 +163,7 @@ async function init() {
 
 function setPause( v ) {
 
-	model.action.paused = v;
+	mixerAction.paused = v;
 	params.pause = v;
 	if ( v ) {
 
@@ -162,96 +173,22 @@ function setPause( v ) {
 
 }
 
-function loadModel( url ) {
-
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( url )
-		.then( gltf => {
-
-			// animations
-			const animations = gltf.animations;
-			const mixer = new THREE.AnimationMixer( gltf.scene );
-
-			const action = mixer.clipAction( animations[ 0 ] );
-			action.play();
-			action.paused = params.pause;
-
-			// add floor
-			const group = new THREE.Group();
-			group.add( gltf.scene );
-
-			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new THREE.Mesh(
-				new THREE.PlaneGeometry(),
-				new THREE.MeshStandardMaterial( {
-					map: floorTex,
-					transparent: true,
-					color: 0xdddddd,
-					roughness: 0.15,
-					metalness: 1.0
-				} )
-			);
-			floorPlane.scale.setScalar( 50 );
-			floorPlane.rotation.x = - Math.PI / 2;
-			floorPlane.position.y = 0.075;
-			group.add( floorPlane );
-
-			// create the scene generator for updating skinned meshes quickly
-			const sceneGenerator = new DynamicPathTracingSceneGenerator( group );
-
-			return {
-				scene: group,
-				sceneGenerator,
-				mixer,
-				action,
-			};
-
-		} );
-
-	return gltfPromise;
-
-}
-
-
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const scale = params.resolutionScale;
-	const dpr = window.devicePixelRatio;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
-
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
-	camera.aspect = w / h;
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
+
+	pathTracer.updateCamera();
 
 }
 
 function regenerateScene() {
 
-	const { sceneGenerator } = model;
-	sceneInfo = sceneGenerator.generate();
-
-	const { bvh, textures, materials } = sceneInfo;
-	const geometry = bvh.geometry;
-	const material = ptRenderer.material;
-
-	material.bvh.updateFrom( bvh );
-	material.attributesArray.updateFrom(
-		geometry.attributes.normal,
-		geometry.attributes.tangent,
-		geometry.attributes.uv,
-		geometry.attributes.color,
-	);
-	material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-	material.textures.setTextures( renderer, 2048, 2048, textures );
-	material.materials.updateFrom( materials, textures );
-
-	ptRenderer.reset();
+	pathTracer.bounces = params.bounces;
+	pathTracer.setScene( scene, camera );
 
 }
 
@@ -261,18 +198,7 @@ function animate() {
 
 	// step the animation forward
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
-	model.mixer.update( delta );
-	model.scene.updateMatrixWorld();
-	model.scene.traverse( c => {
-
-		// TODO: why is this needed?
-		if ( c.skeleton ) {
-
-			c.skeleton.update();
-
-		}
-
-	} );
+	mixer.update( delta );
 
 	if ( params.autoPause ) {
 
@@ -291,9 +217,12 @@ function animate() {
 
 	}
 
+	pathTracer.dynamicLowRes = params.continuous;
+
 	if ( ! params.pause && ! params.continuous ) {
 
 		renderer.render( scene, camera );
+		loader.setSamples( 0 );
 
 	} else {
 
@@ -304,30 +233,8 @@ function animate() {
 
 		}
 
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-		ptRenderer.material.bounces = params.bounces;
-
-		camera.updateMatrixWorld();
-
-		// update samples
-		for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-			ptRenderer.update();
-
-		}
-
-		if ( ptRenderer.samples < 1 ) {
-
-			renderer.render( scene, camera );
-
-		}
-
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-		samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+		pathTracer.renderSample();
+		loader.setSamples( pathTracer.samples );
 
 	}
 

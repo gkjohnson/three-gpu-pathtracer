@@ -1,217 +1,143 @@
-import * as THREE from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import {
+	ACESFilmicToneMapping,
+	PerspectiveCamera,
+	Box3,
+	Vector3,
+	EquirectangularReflectionMapping,
+	Scene,
+	WebGLRenderer,
+} from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PathTracingRenderer, PhysicalPathTracingMaterial, EquirectCamera } from '../src/index.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
+import { EquirectCamera, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { getScaledSettings } from './utils/getScaledSettings.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { LoaderElement } from './utils/LoaderElement.js';
 
-let renderer, controls, sphericalControls, sceneInfo, ptRenderer, activeCamera, fsQuad;
-let perspectiveCamera, orthoCamera, equirectCamera;
-let samplesEl;
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb';
+const CREDITS = 'Interior scene by <a href="https://twitter.com/charlesforman">Charles Forman</a>';
+
+let pathTracer, renderer, controls, sphericalControls, activeCamera, scene;
+let camera, equirectCamera, loader;
+
 const params = {
 
-	environmentIntensity: 0,
-	environmentRotation: 0,
-	emissiveIntensity: 12,
+	environmentIntensity: 1,
+	emissiveIntensity: 5,
 	bounces: 20,
-	samplesPerFrame: 1,
-	resolutionScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.25,
+	renderScale: 1 / window.devicePixelRatio,
 	tiles: 2,
-	cameraProjection: 'Perspective'
+	projection: 'Perspective',
+	...getScaledSettings(),
 
 };
-
-if ( window.location.hash.includes( 'transmission' ) ) {
-
-	params.material1.metalness = 0.0;
-	params.material1.roughness = 0.05;
-	params.material1.transmission = 1.0;
-	params.material1.color = '#ffffff';
-	params.bounces = 10;
-
-}
-
-const orthoWidth = 5;
-
-// clamp value for mobile
-const aspectRatio = window.innerWidth / window.innerHeight;
-if ( aspectRatio < 0.65 ) {
-
-	params.bounces = Math.min( params.bounces, 10 );
-	params.resolutionScale *= 0.5;
-	params.tiles = 3;
-
-}
 
 init();
 
 async function init() {
 
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = THREE.ACESFilmicToneMapping;
+	loader = new LoaderElement();
+	loader.attach( document.body );
+
+	// renderer
+	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
-	perspectiveCamera = new THREE.PerspectiveCamera( 75, aspectRatio, 0.025, 500 );
-	perspectiveCamera.position.set( 0.4, 0.6, 2.65 );
+	// path tracer
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.dynamicLowRes = true;
+	pathTracer.filterGlossyFactor = 0.25;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
-	const orthoHeight = orthoWidth / aspectRatio;
-	orthoCamera = new THREE.OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
-	orthoCamera.position.copy( perspectiveCamera.position );
+	// camera
+	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera.position.set( 0.4, 0.6, 2.65 );
 
-	equirectCamera = new EquirectCamera();
 	// Almost, but not quite on top of the control target.
 	// This allows for full rotation without moving the camera very much.
+	equirectCamera = new EquirectCamera();
 	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-
-	fsQuad = new FullScreenQuad( new THREE.MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-	} ) );
-
-	controls = new OrbitControls( perspectiveCamera, renderer.domElement );
+	// controls
+	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.set( - 0.15, 0.33, - 0.08 );
-	perspectiveCamera.lookAt( controls.target );
-	controls.addEventListener( 'change', () => {
-
-		ptRenderer.reset();
-
-	} );
+	camera.lookAt( controls.target );
 	controls.update();
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
 	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
 	equirectCamera.lookAt( sphericalControls.target );
-	sphericalControls.addEventListener( 'change', () => {
+	sphericalControls.update();
+	sphericalControls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
-		ptRenderer.reset();
+	scene = new Scene();
+
+	// load assets
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+	] );
+
+	// set environment
+	envTexture.mapping = EquirectangularReflectionMapping;
+	scene.background = envTexture;
+	scene.environment = envTexture;
+
+	// set scene
+	gltf.scene.traverse( c => {
+
+		if ( c.material ) {
+
+			// set the thickness so volume rendering is used for transmissive objects.
+			c.material.thickness = 1.0;
+
+		}
 
 	} );
-	sphericalControls.update();
 
-	samplesEl = document.getElementById( 'samples' );
+	scene.add( gltf.scene );
+	scene.updateMatrixWorld();
 
-	const envMapPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr' )
-		.then( texture => {
+	const box = new Box3();
+	box.setFromObject( gltf.scene );
 
-			ptRenderer.material.envMapInfo.updateFrom( texture );
+	const center = new Vector3();
+	box.getCenter( center );
 
-		} );
+	gltf.scene.position.addScaledVector( center, - 0.5 );
 
-	const generator = new PathTracingSceneWorker();
-	const gltfPromise = new GLTFLoader()
-		.setMeshoptDecoder( MeshoptDecoder )
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb' )
-		.then( gltf => {
+	await pathTracer.setSceneAsync( scene, camera, {
+		onProgress: v => loader.setPercentage( v ),
+	} );
 
-			gltf.scene.traverse( c => {
-
-				if ( c.material ) {
-
-					// set the thickness so volume rendering is used for transmissive objects.
-					c.material.thickness = 1.0;
-
-				}
-
-			} );
-
-			const group = new THREE.Group();
-			group.add( gltf.scene );
-
-			const box = new THREE.Box3();
-			box.setFromObject( gltf.scene );
-
-			group.updateMatrixWorld();
-
-			const center = new THREE.Vector3();
-			box.getCenter( center );
-
-			gltf.scene.position.addScaledVector( center, - 0.5 );
-			group.updateMatrixWorld();
-
-			return generator.generate( group );
-
-		} )
-		.then( result => {
-
-			sceneInfo = result;
-
-			const { bvh, textures, materials } = result;
-			const geometry = bvh.geometry;
-			const material = ptRenderer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, 2048, 2048, textures );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
-
-		} );
-
-	await Promise.all( [ gltfPromise, envMapPromise ] );
-
-	document.getElementById( 'loading' ).remove();
+	loader.setCredits( CREDITS );
 
 	onResize();
+	onParamsChange();
 	window.addEventListener( 'resize', onResize );
 
-	updateCamera( params.cameraProjection );
-
+	// gui
 	const gui = new GUI();
-	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
-		ptRenderer.tiles.set( value, value );
-
-	} );
-	gui.add( params, 'samplesPerFrame', 1, 10, 1 );
-	gui.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		ptRenderer.reset();
+		pathTracer.tiles.set( value, value );
 
 	} );
-	gui.add( params, 'environmentIntensity', 0, 25 ).onChange( () => {
+	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'environmentRotation', 0, 40 ).onChange( v => {
-
-		ptRenderer.material.environmentRotation.makeRotationY( v );
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'emissiveIntensity', 0, 50 ).onChange( updateIntensity );
-	gui.add( params, 'bounces', 1, 30, 1 ).onChange( () => {
-
-		ptRenderer.reset();
-
-	} );
-	gui.add( params, 'resolutionScale', 0.1, 1 ).onChange( () => {
-
-		onResize();
-
-	} );
-	gui.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic', 'Equirectangular' ] ).onChange( v => {
-
-		updateCamera( v );
-
-	} );
-
-	updateIntensity();
+	const sceneFolder = gui.addFolder( 'Scene' );
+	sceneFolder.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
+	sceneFolder.add( params, 'environmentIntensity', 0, 25 ).onChange( onParamsChange );
+	sceneFolder.add( params, 'emissiveIntensity', 0, 50 ).onChange( onParamsChange );
 
 	animate();
 
@@ -219,89 +145,54 @@ async function init() {
 
 function onResize() {
 
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-	const scale = params.resolutionScale;
-	const dpr = window.devicePixelRatio;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
 
-	ptRenderer.setSize( w * scale * dpr, h * scale * dpr );
-	ptRenderer.reset();
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
 
-	renderer.setSize( w, h );
-	renderer.setPixelRatio( window.devicePixelRatio * scale );
-
-	const aspect = w / h;
-
-	perspectiveCamera.aspect = aspect;
-	perspectiveCamera.updateProjectionMatrix();
-
-	const orthoHeight = orthoWidth / aspect;
-	orthoCamera.top = orthoHeight / 2;
-	orthoCamera.bottom = orthoHeight / - 2;
-	orthoCamera.updateProjectionMatrix();
+	pathTracer.updateCamera();
 
 }
 
-function updateIntensity() {
+function onParamsChange() {
 
-	sceneInfo.materials.forEach( material => {
+	const projection = params.projection;
+	if ( projection === 'Perspective' ) {
 
-		material.emissiveIntensity = params.emissiveIntensity;
+		activeCamera = camera;
 
-	} );
-	ptRenderer.reset();
+		sphericalControls.enabled = false;
+		controls.enabled = true;
+		controls.update();
 
-}
-
-function updateCamera( cameraProjection ) {
-
-	if ( cameraProjection === 'Perspective' ) {
-
-		if ( activeCamera === orthoCamera ) {
-
-			perspectiveCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = perspectiveCamera;
-		controls.object = activeCamera;
-
-	} else if ( cameraProjection === 'Orthographic' ) {
-
-		if ( activeCamera === perspectiveCamera ) {
-
-			orthoCamera.position.copy( activeCamera.position );
-
-		}
-
-		activeCamera = orthoCamera;
-		controls.object = activeCamera;
-
-	}
-
-	if ( cameraProjection === 'Equirectangular' ) {
+	} else if ( projection === 'Equirectangular' ) {
 
 		activeCamera = equirectCamera;
 
 		controls.enabled = false;
 		sphericalControls.enabled = true;
-
 		sphericalControls.update();
-
-	} else {
-
-		sphericalControls.enabled = false;
-		controls.enabled = true;
-
-		controls.update();
 
 	}
 
-	ptRenderer.camera = activeCamera;
+	scene.traverse( c => {
 
-	window.CAMERA = activeCamera;
+		const material = c.material;
+		if ( material ) {
 
-	ptRenderer.reset();
+			material.emissiveIntensity = params.emissiveIntensity;
+
+		}
+
+	} );
+
+	scene.environmentIntensity = params.environmentIntensity;
+	scene.backgroundIntensity = params.environmentIntensity;
+	pathTracer.bounces = params.bounces;
+	pathTracer.renderScale = params.renderScale;
+
+	pathTracer.setScene( scene, activeCamera );
 
 }
 
@@ -309,26 +200,9 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
+	pathTracer.renderSample();
 
-	ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-	ptRenderer.material.environmentIntensity = params.environmentIntensity;
-	ptRenderer.material.environmentBlur = 0.35;
-	ptRenderer.material.bounces = params.bounces;
-
-	activeCamera.updateMatrixWorld();
-
-	for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-		ptRenderer.update();
-
-	}
-
-	renderer.autoClear = false;
-	fsQuad.render( renderer );
-	renderer.autoClear = true;
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
 

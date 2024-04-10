@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 	<head>
 		<title>Area Light Path Tracing</title>
@@ -9,67 +10,10 @@
 				padding: 0;
 				background-color: #111;
 			}
-
-			#info {
-				position: absolute;
-				bottom: 0;
-				left: 0;
-				font-family: 'Courier New', Courier, monospace;
-				color: white;
-				pointer-events: none;
-			}
-
-			#samples, #credit, #model-name {
-
-				opacity: 0.5;
-				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
-				padding: 5px;
-				display: inline-block;
-
-			}
-
-			a {
-				color: white;
-			}
-
-			#loading {
-				position: absolute;
-				left: 50%;
-				top: 50%;
-				transform: translate(-50%, -50%);
-				color: white;
-				font-family: 'Courier New', Courier, monospace;
-			}
-
-			#description {
-				position: absolute;
-				top: 0;
-				width: 100%;
-				color: white;
-				font-family: monospace;
-				text-align: center;
-				padding: 5px 0;
-				pointer-events: none;
-			}
 		</style>
 
 	</head>
 	<body>
-		<div id="loading">LOADING</div>
-		<div id="description">
-			Rendering with area lights and multiple importance sampling.
-		</div>
-		<div id="info">
-			<div>
-				<div id="samples">--</div>
-			</div>
-			<div>
-				<div id="credit">Model courtesy of "Virtual Museums of Małopolska"</div>
-			</div>
-			<div>
-				<div id="model-name">“Mercury about to kill Argos” sculpture by B. Thorvaldsen </div>
-			</div>
-		</div>
 		<script src="./areaLight.js" type="module"></script>
 	</body>
 </html>

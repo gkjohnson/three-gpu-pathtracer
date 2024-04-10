@@ -1,5 +1,6 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, BackSide, DoubleSide, NearestFilter } from 'three';
-import { reduceTexturesToUniqueSources, getTextureHash } from './utils.js';
+import { getTextureHash } from '../core/utils/sceneUpdateUtils.js';
+import { bufferToHash } from '../utils/bufferToHash.js';
 
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
@@ -60,39 +61,6 @@ export class MaterialsTexture extends DataTexture {
 
 	}
 
-	setCastShadow( materialIndex, cast ) {
-
-		// invert the shadow value so we default to "true" when initializing a material
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
-		array[ index ] = ! cast ? 1 : 0;
-
-	}
-
-	getCastShadow( materialIndex ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + SHADOW_OFFSET;
-		return ! Boolean( array[ index ] );
-
-	}
-
-	setMatte( materialIndex, matte ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + MATTE_OFFSET;
-		array[ index ] = matte ? 1 : 0;
-
-	}
-
-	getMatte( materialIndex ) {
-
-		const array = this.image.data;
-		const index = materialIndex * MATERIAL_STRIDE + MATTE_OFFSET;
-		return Boolean( array[ index ] );
-
-	}
-
 	updateFrom( materials, textures ) {
 
 		function getTexture( material, key, def = - 1 ) {
@@ -100,7 +68,7 @@ export class MaterialsTexture extends DataTexture {
 			if ( key in material && material[ key ] ) {
 
 				const hash = getTextureHash( material[ key ] );
-				return uniqueTextureLookup[ hash ];
+				return textureLookUp[ hash ];
 
 			} else {
 
@@ -150,12 +118,11 @@ export class MaterialsTexture extends DataTexture {
 		const dimension = Math.ceil( Math.sqrt( pixelCount ) ) || 1;
 		const { image, features } = this;
 
-		// get the list of textures with unique sources
-		const uniqueTextures = reduceTexturesToUniqueSources( textures );
-		const uniqueTextureLookup = {};
-		for ( let i = 0, l = uniqueTextures.length; i < l; i ++ ) {
+		// index the list of textures based on shareable source
+		const textureLookUp = {};
+		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
-			uniqueTextureLookup[ getTextureHash( uniqueTextures[ i ] ) ] = i;
+			textureLookUp[ getTextureHash( textures[ i ] ) ] = i;
 
 		}
 
@@ -407,8 +374,8 @@ export class MaterialsTexture extends DataTexture {
 			}
 
 			// sample 14
-			index ++; // matte
-			index ++; // shadow
+			floatArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
+			floatArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
 			floatArray[ index ++ ] = Number( m.vertexColors ) | ( Number( m.flatShading ) << 1 ); // vertexColors & flatShading
 			floatArray[ index ++ ] = Number( m.transparent ); // transparent
 
@@ -459,7 +426,17 @@ export class MaterialsTexture extends DataTexture {
 
 		}
 
-		this.needsUpdate = true;
+		// check if the contents have changed
+		const hash = bufferToHash( floatArray.buffer );
+		if ( this.hash !== hash ) {
+
+			this.hash = hash;
+			this.needsUpdate = true;
+			return true;
+
+		}
+
+		return false;
 
 	}
 

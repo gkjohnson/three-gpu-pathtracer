@@ -5,24 +5,20 @@ import {
 	WebGLRenderer,
 	Scene,
 	PerspectiveCamera,
-	MeshBasicMaterial,
-	CustomBlending,
 	EquirectangularReflectionMapping,
 	MathUtils,
-	BufferAttribute,
 	Group,
+	Sphere,
+	Box3,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { PathTracingSceneWorker } from '../src/workers/PathTracingSceneWorker.js';
-import { PhysicalPathTracingMaterial, PathTracingRenderer, MaterialReducer } from '../src/index.js';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { LoaderElement } from './utils/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
@@ -31,26 +27,21 @@ const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
-const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
+const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
 
 const params = {
-
-	environmentIntensity: 1.0,
-	multipleImportanceSampling: true,
-	acesToneMapping: true,
-	tilesX: tiles,
-	tilesY: tiles,
-	samplesPerFrame: 1,
-	scale: scale,
-
-	model: '',
-	checkerboardTransparency: true,
 
 	enable: true,
 	bounces: 10,
 	transmissiveBounces: 10,
 	pause: false,
+	multipleImportanceSampling: true,
+	acesToneMapping: true,
+	tiles: tiles,
+	scale: scale,
 
+	model: '',
+	checkerboardTransparency: true,
 	displayImage: false,
 	imageMode: 'overlay',
 	imageOpacity: 1.0,
@@ -58,22 +49,18 @@ const params = {
 
 };
 
-let creditEl, loadingEl, samplesEl, containerEl, imgEl;
-let gui, stats, sceneInfo;
-let renderer, camera;
-let ptRenderer, fsQuad, controls, scene;
+let containerEl, imgEl, loader;
+let gui, model, envMap;
+let pathTracer, renderer, camera, scene, controls;
 let loadingModel = false;
 let delaySamples = 0;
-let models;
+let modelDatabase;
 
 init();
 
 async function init() {
 
 	// get elements
-	creditEl = document.getElementById( 'credits' );
-	loadingEl = document.getElementById( 'loading' );
-	samplesEl = document.getElementById( 'samples' );
 	containerEl = document.getElementById( 'container' );
 	imgEl = document.querySelector( 'img' );
 
@@ -84,13 +71,28 @@ async function init() {
 
 	}
 
-	// init renderer
+	loader = new LoaderElement();
+	if ( ! hideUI ) {
+
+		loader.attach( document.body );
+
+	}
+
+	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.physicallyCorrectLights = true;
+	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.setClearAlpha( 0 );
 	containerEl.appendChild( renderer.domElement );
 
-	// init scene
+	// path tracer
+	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer.filterGlossyFactor = 0.5;
+	pathTracer.tiles.set( params.tiles );
+	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+
+	// scene
 	scene = new Scene();
 
 	// init camera
@@ -98,63 +100,17 @@ async function init() {
 	camera = new PerspectiveCamera( 60, aspect, 0.01, 500 );
 	camera.position.set( - 1, 0.25, 1 );
 
-	// init path tracer
-	ptRenderer = new PathTracingRenderer( renderer );
-	ptRenderer.camera = camera;
-	ptRenderer.alpha = true;
-	ptRenderer.material = new PhysicalPathTracingMaterial();
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.material.setDefine( 'FEATURE_MIS', Number( params.multipleImportanceSampling ) );
-	ptRenderer.tiles.set( params.tilesX, params.tilesY );
-
-
-	// init fsquad
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending
-	} ) );
-
-	// init controls
+	// controls
 	controls = new OrbitControls( camera, containerEl );
-	controls.addEventListener( 'change', resetRenderer );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
-	// init stats
-	stats = new Stats();
-	if ( ! hideUI ) {
+	// models
+	const { scenarios } = await fetch( CONFIG_URL ).then( res => res.json() );
+	modelDatabase = {};
+	scenarios.forEach( s => modelDatabase[ s.name ] = s );
 
-		containerEl.appendChild( stats.dom );
-
-	} else {
-
-		creditEl.remove();
-		samplesEl.remove();
-
-	}
-
-	// init models
-	const { scenarios } = await ( await fetch( CONFIG_URL ) ).json();
-	models = {};
-	scenarios.forEach( s => {
-
-		models[ s.name ] = s;
-
-	} );
-
-	let initialModel = scenarios[ 0 ].name;
-	if ( window.location.hash ) {
-
-		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
-		if ( modelName in models ) {
-
-			initialModel = modelName;
-
-		}
-
-	}
-
-	params.model = initialModel;
-
-	updateModel();
+	window.addEventListener( 'hashchange', onHashChange );
+	onHashChange();
 
 	animate();
 
@@ -164,13 +120,12 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
+	// if rendering has completed then don't render
+	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
 
 	}
-
-	stats.update();
 
 	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
@@ -184,69 +139,76 @@ function animate() {
 
 	}
 
-	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
+	// TODO: use a delay field from WebGLPathTracer
+	if ( params.enable && delaySamples === 0 ) {
 
+		pathTracer.enablePathTracing = params.enable;
+		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+
+		pathTracer.renderSample();
+
+	} else if ( delaySamples > 0 || ! params.enable ) {
+
+		delaySamples = Math.max( delaySamples - 1, 0 );
 		renderer.render( scene, camera );
 
 	}
 
-	if ( params.enable && delaySamples === 0 ) {
+	// rendering has completed
+	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
-		const samples = Math.floor( ptRenderer.samples );
-		samplesEl.innerText = `samples: ${ samples }`;
-
-		ptRenderer.material.materials.updateFrom( sceneInfo.materials, sceneInfo.textures );
-		ptRenderer.material.filterGlossyFactor = 0.5;
-		ptRenderer.material.bounces = params.bounces;
-		ptRenderer.material.transmissiveBounces = params.transmissiveBounces;
-		ptRenderer.material.physicalCamera.updateFrom( camera );
-		ptRenderer.material.environmentIntensity = params.environmentIntensity;
-
-		camera.updateMatrixWorld();
-
-		if ( ! params.pause || ptRenderer.samples < 1 ) {
-
-			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-				ptRenderer.update();
-
-			}
-
-		}
-
-		renderer.autoClear = false;
-		fsQuad.render( renderer );
-		renderer.autoClear = true;
-
-	} else if ( delaySamples > 0 ) {
-
-		delaySamples --;
+		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
 
 	}
 
-	if ( ptRenderer.samples >= maxSamples && maxSamples !== - 1 ) {
-
-		requestAnimationFrame( () => {
-
-			window.dispatchEvent( new Event( 'render-complete' ) );
-
-		} );
-
-	}
-
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+	loader.setSamples( pathTracer.samples );
 
 }
 
-function resetRenderer() {
+function onHashChange() {
 
-	if ( params.tilesX * params.tilesY !== 1.0 ) {
+	params.model = Object.keys( modelDatabase )[ 0 ];
+	if ( window.location.hash ) {
+
+		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
+		if ( modelName in modelDatabase ) {
+
+			params.model = modelName;
+
+		}
+
+	}
+
+	updateModel();
+
+}
+
+function onParamsChange() {
+
+	if ( pathTracer.tiles !== 1.0 ) {
 
 		delaySamples = 1;
 
 	}
 
-	ptRenderer.reset();
+	if ( params.checkerboardTransparency ) {
+
+		containerEl.classList.add( 'checkerboard' );
+
+	} else {
+
+		containerEl.classList.remove( 'checkerboard' );
+
+	}
+
+	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.bounces = params.bounces;
+	pathTracer.transmissiveBounces = params.transmissiveBounces;
+	pathTracer.renderScale = params.scale;
+
+	const model = modelDatabase[ params.model ];
+	scene.background = model && model.renderSkybox ? scene.environment : null;
+	pathTracer.updateEnvironment();
 
 }
 
@@ -265,51 +227,31 @@ function buildGui() {
 	}
 
 	gui = new GUI();
+	gui.add( params, 'model', Object.keys( modelDatabase ) ).onChange( v => {
 
-	gui.add( params, 'model', Object.keys( models ) ).onChange( updateModel );
+		window.location.hash = v;
 
-	const pathTracingFolder = gui.addFolder( 'path tracing' );
+	} );
+
+	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'scale', 0, 1 ).onChange( v => {
-
-		const dpr = window.devicePixelRatio;
-		let { dimensions = {} } = models[ params.model ];
-		dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
-
-		const { width, height } = dimensions;
-		ptRenderer.setSize( width * dpr * v, height * dpr * v );
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( v => {
-
-		ptRenderer.material.setDefine( 'FEATURE_MIS', Number( v ) );
-		ptRenderer.reset();
-
-	} );
+	pathTracingFolder.add( params, 'scale', 0.1, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
-		ptRenderer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( () => {
-
-		ptRenderer.reset();
+		pathTracer.tiles.set( v, v );
 
 	} );
-	pathTracingFolder.add( params, 'environmentIntensity', 0, 5 ).onChange( () => {
+	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
 
-		ptRenderer.reset();
-
-	} );
-
-	const comparisonFolder = gui.addFolder( 'comparison' );
+	const comparisonFolder = gui.addFolder( 'Comparison' );
 	comparisonFolder.add( params, 'displayImage' );
 	comparisonFolder.add( params, 'imageMode', [ 'overlay', 'side-by-side' ] );
 	comparisonFolder.add( params, 'imageType', [
@@ -322,33 +264,13 @@ function buildGui() {
 		'stellar'
 	] ).onChange( updateImage );
 	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
-
-	const resolutionFolder = gui.addFolder( 'resolution' );
-	resolutionFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	resolutionFolder.add( params, 'tilesX', 1, 10, 1 ).onChange( v => {
-
-		ptRenderer.tiles.x = v;
-
-	} );
-	resolutionFolder.add( params, 'tilesY', 1, 10, 1 ).onChange( v => {
-
-		ptRenderer.tiles.y = v;
-
-	} );
-	resolutionFolder.open();
-
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) containerEl.classList.add( 'checkerboard' );
-		else containerEl.classList.remove( 'checkerboard' );
-
-	} );
+	comparisonFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
 
 }
 
 async function updateModel() {
 
+	// dispose of a gui
 	if ( gui ) {
 
 		containerEl.classList.remove( 'checkerboard' );
@@ -357,104 +279,19 @@ async function updateModel() {
 
 	}
 
-	let model, envMap;
-	const manager = new LoadingManager();
-	const modelInfo = models[ params.model ];
+	// dispose of everything
+	if ( model ) {
 
-	window.location.hash = params.model;
-
-	let {
-		orbit = {},
-		target = {},
-		dimensions = {},
-	} = modelInfo;
-
-	const {
-		verticalFoV = 45,
-		renderSkybox = false,
-		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
-	} = modelInfo;
-
-	orbit = Object.assign( {}, { theta: 0, phi: 90, radius: 1 }, orbit );
-	target = Object.assign( {}, { x: 0, y: 0, z: 0 }, target );
-	dimensions = Object.assign( {}, { width: 768, height: 768 }, dimensions );
-
-	// add a minimal radius so the camera orientation is correct when radius is 0
-	orbit.radius = Math.max( orbit.radius, 1e-5 );
-
-	loadingModel = true;
-	containerEl.style.display = 'none';
-	samplesEl.innerText = '--';
-	creditEl.innerText = '--';
-	loadingEl.innerText = 'Loading';
-	loadingEl.style.visibility = 'visible';
-
-	updateImage();
-
-	scene.traverse( c => {
-
-		if ( c.material ) {
-
-			const material = c.material;
-			for ( const key in material ) {
-
-				if ( material[ key ] && material[ key ].isTexture ) {
-
-					material[ key ].dispose();
-
-				}
-
-			}
-
-		}
-
-	} );
-
-	if ( sceneInfo ) {
-
-		scene.remove( sceneInfo.scene );
-
-	}
-
-	const onFinish = async () => {
-
-		await MikkTSpace.ready;
-
-		const reducer = new MaterialReducer();
-		reducer.process( model );
-
-		const targetsToDisconnect = [];
 		model.traverse( c => {
 
-			if ( c.isLight && c.target ) {
+			if ( c.material ) {
 
-				targetsToDisconnect.push( c.target );
+				const material = c.material;
+				for ( const key in material ) {
 
-			}
+					if ( material[ key ] && material[ key ].isTexture ) {
 
-			if ( c.geometry ) {
-
-				if ( ! c.geometry.hasAttribute( 'normal' ) ) {
-
-					c.geometry.computeVertexNormals();
-
-				}
-
-				if ( ! c.geometry.attributes.tangent ) {
-
-					if ( c.geometry.hasAttribute( 'uv' ) ) {
-
-						BufferGeometryUtils.computeMikkTSpaceTangents( c.geometry, MikkTSpace );
-						c.material = c.material.clone();
-						if ( c.material.normalScale ) c.material.normalScale.y *= - 1;
-						if ( c.material.clearcoatNormalScale ) c.material.clearcoatNormalScale.y *= - 1;
-
-					} else {
-
-						c.geometry.setAttribute(
-							'tangent',
-							new BufferAttribute( new Float32Array( c.geometry.attributes.position.count * 4 ), 4, false ),
-						);
+						material[ key ].dispose();
 
 					}
 
@@ -464,140 +301,132 @@ async function updateModel() {
 
 		} );
 
-		// disconnect all light targets from parents because that's what happens after a clone which
-		// is needed to match the model viewer setup
-		targetsToDisconnect.forEach( t => {
+		scene.remove( model );
 
-			t.removeFromParent();
+	}
 
-		} );
+	// dispose of the background
+	if ( envMap ) {
 
-		// add a parent group to process the parent offset
-		const targetGroup = new Group();
-		targetGroup.position.set( - target.x, - target.y, - target.z );
-		targetGroup.add( model );
+		envMap.dispose();
 
-		model = targetGroup;
-		model.updateMatrixWorld( true );
+	}
 
-		const generator = new PathTracingSceneWorker();
-		const result = await generator.generate( model, { onProgress: v => {
+	const modelInfo = modelDatabase[ params.model ];
+	const {
+		verticalFoV = 45,
+		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
+	} = modelInfo;
 
-			const percent = Math.floor( 100 * v );
-			loadingEl.innerText = `Building BVH : ${ percent }%`;
+	let {
+		orbit = {},
+		target = {},
+		dimensions = {},
+	} = modelInfo;
 
-		} } );
+	orbit = { theta: 0, phi: 90, radius: 1, ...orbit };
+	target = { x: 0, y: 0, z: 0, ...target };
+	dimensions = { width: 768, height: 768, ...dimensions };
 
-		sceneInfo = result;
-		scene.add( sceneInfo.scene );
+	// add a minimal radius so the camera orientation is correct when radius is 0
+	orbit.radius = Math.max( orbit.radius, 1e-5 );
 
-		const { bvh, textures, materials, lights } = result;
-		const geometry = bvh.geometry;
-		const material = ptRenderer.material;
+	loadingModel = true;
+	containerEl.style.display = 'none';
 
-		material.bvh.updateFrom( bvh );
-		material.attributesArray.updateFrom(
-			geometry.attributes.normal,
-			geometry.attributes.tangent,
-			geometry.attributes.uv,
-			geometry.attributes.color,
-		);
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-		material.textures.setTextures( renderer, 2048, 2048, textures );
-		material.materials.updateFrom( materials, textures );
-		material.envMapInfo.updateFrom( envMap );
-		material.lights.updateFrom( lights );
-
-		generator.dispose();
-
-		loadingEl.style.visibility = 'hidden';
-
-		creditEl.innerHTML = modelInfo.credit || '';
-		creditEl.style.visibility = modelInfo.credit ? 'visible' : 'hidden';
-		buildGui();
-
-		geometry.computeBoundingSphere();
-
-		// mirror the model-viewer near / far planes
-		const radius = Math.max( orbit.radius, geometry.boundingSphere.radius );
-		camera.near = 2 * radius / 1000;
-		camera.far = 2 * radius;
-		camera.updateProjectionMatrix();
-		camera.position.setFromSphericalCoords( orbit.radius, MathUtils.DEG2RAD * orbit.phi, MathUtils.DEG2RAD * orbit.theta );
-
-		const dpr = window.devicePixelRatio;
-		const { width, height } = dimensions;
-		renderer.setSize( width, height );
-		renderer.setPixelRatio( dpr );
-		ptRenderer.setSize( width * dpr * params.scale, height * dpr * params.scale );
-		camera.aspect = width / height;
-		camera.fov = verticalFoV;
-		camera.updateProjectionMatrix();
-
-		controls.update();
-		scene.updateMatrixWorld();
-		camera.updateMatrixWorld();
-
-		envMap.mapping = EquirectangularReflectionMapping;
-		scene.environment = envMap;
-		if ( renderSkybox ) {
-
-			scene.background = envMap;
-			ptRenderer.material.backgroundAlpha = 1;
-
-		} else {
-
-			renderer.setClearAlpha( 0 );
-			scene.background = null;
-			ptRenderer.material.backgroundAlpha = 0;
-
-		}
-
-		ptRenderer.reset();
-
-		containerEl.style.display = 'flex';
-		loadingModel = false;
-		if ( params.checkerboardTransparency ) {
-
-			containerEl.classList.add( 'checkerboard' );
-
-		}
-
-	};
-
-	let modelUrl = new URL( modelInfo.model, BASE_URL ).toString();
-	modelUrl = modelUrl.replace( /.*?glTF-Sample-Assets/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main' );
-
-	manager.onLoad = onFinish;
-
+	// load assets
 	const envUrl = new URL( lighting, BASE_URL ).toString();
-	new RGBELoader( manager )
-		.load( envUrl, res => {
+	const modelUrl = new URL( modelInfo.model, BASE_URL )
+		.toString()
+		.replace( /.*?glTF-Sample-Assets/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main' );
 
-			envMap = res;
-
-		} );
-
-	new GLTFLoader( manager )
-		.setMeshoptDecoder( MeshoptDecoder )
-		.load(
-			modelUrl,
-			gltf => {
-
-				model = gltf.scene;
-
-			},
-			progress => {
+	const manager = new LoadingManager();
+	const [ envTexture, gltf ] = await Promise.all( [
+		new RGBELoader( manager ).loadAsync( envUrl ),
+		new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder )
+			.loadAsync( modelUrl, progress => {
 
 				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-					const percent = Math.floor( 100 * progress.loaded / progress.total );
-					loadingEl.innerText = `Loading : ${ percent }%`;
+					loader.setPercentage( 0.5 * progress.loaded / progress.total );
 
 				}
 
-			}
-		);
+			} ),
+		new Promise( resolve => manager.onLoad = resolve ),
+	] );
+
+	envMap = envTexture;
+	envMap.mapping = EquirectangularReflectionMapping;
+	scene.environment = envMap;
+
+	model = gltf.scene;
+
+	// reduce the used materials
+	const reducer = new MaterialReducer();
+	reducer.process( model );
+
+	const targetsToDisconnect = [];
+	model.traverse( c => {
+
+		if ( c.isLight && c.target ) {
+
+			targetsToDisconnect.push( c.target );
+
+		}
+
+	} );
+
+	// disconnect all light targets from parents because that's what happens after a clone which
+	// is needed to match the model viewer setup
+	targetsToDisconnect.forEach( t => t.removeFromParent() );
+
+	// add a parent group to process the parent offset
+	const targetGroup = new Group();
+	targetGroup.position.set( - target.x, - target.y, - target.z );
+	targetGroup.add( model );
+
+	// replace the target group TODO
+	model = targetGroup;
+	model.updateMatrixWorld( true );
+	scene.add( model );
+
+	const box = new Box3();
+	const sphere = new Sphere();
+	box.setFromObject( model );
+	box.getBoundingSphere( sphere );
+
+	// mirror the model-viewer near / far planes
+	const radius = Math.max( orbit.radius, sphere.radius );
+	camera.near = 2 * radius / 1000;
+	camera.far = 2 * radius;
+	camera.updateProjectionMatrix();
+	camera.position.setFromSphericalCoords( orbit.radius, MathUtils.DEG2RAD * orbit.phi, MathUtils.DEG2RAD * orbit.theta );
+
+	// initialize the canvas size
+	const { width, height } = dimensions;
+	renderer.setSize( width, height );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	camera.aspect = width / height;
+	camera.fov = verticalFoV;
+	camera.updateProjectionMatrix();
+	controls.update();
+
+	await pathTracer.setSceneAsync( scene, camera, {
+		onProgress: v => {
+
+			loader.setPercentage( 0.5 + 0.5 * v );
+
+		}
+	} );
+
+	loader.setCredits( modelInfo.credit || '' );
+	containerEl.style.display = 'flex';
+	loadingModel = false;
+
+	onParamsChange();
+	buildGui();
+	updateImage();
 
 }
 

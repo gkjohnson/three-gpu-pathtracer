@@ -1,7 +1,8 @@
-import { RGBAFormat, FloatType, HalfFloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4 } from 'three';
+import { RGBAFormat, FloatType, Color, Vector2, WebGLRenderTarget, NoBlending, NormalBlending, Vector4, NearestFilter } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
+import { PhysicalPathTracingMaterial } from '../materials/pathtracing/PhysicalPathTracingMaterial.js';
 
 function* renderTask() {
 
@@ -14,7 +15,6 @@ function* renderTask() {
 		_sobolTarget,
 		_subframe,
 		alpha,
-		camera,
 		material,
 	} = this;
 	const _ogScissor = new Vector4();
@@ -27,13 +27,13 @@ function* renderTask() {
 
 		if ( alpha ) {
 
-			blendMaterial.opacity = this._opacityFactor / ( this._samples + 1 );
+			blendMaterial.opacity = this._opacityFactor / ( this.samples + 1 );
 			material.blending = NoBlending;
 			material.opacity = 1;
 
 		} else {
 
-			material.opacity = this._opacityFactor / ( this._samples + 1 );
+			material.opacity = this._opacityFactor / ( this.samples + 1 );
 			material.blending = NormalBlending;
 
 		}
@@ -63,30 +63,6 @@ function* renderTask() {
 		for ( let y = 0; y < tilesY; y ++ ) {
 
 			for ( let x = 0; x < tilesX; x ++ ) {
-
-				material.cameraWorldMatrix.copy( camera.matrixWorld );
-				material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
-
-				// Perspective camera (default)
-				let cameraType = 0;
-
-				// An orthographic projection matrix will always have the bottom right element == 1
-				// And a perspective projection matrix will always have the bottom right element == 0
-				if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
-
-					// Orthographic
-					cameraType = 1;
-
-				}
-
-				if ( camera.isEquirectCamera ) {
-
-					// Equirectangular
-					cameraType = 2;
-
-				}
-
-				material.setDefine( 'CAMERA_TYPE', cameraType );
 
 				// store og state
 				const ogRenderTarget = _renderer.getRenderTarget();
@@ -151,12 +127,12 @@ function* renderTask() {
 
 				}
 
-				this._samples += ( 1 / totalTiles );
+				this.samples += ( 1 / totalTiles );
 
 				// round the samples value if we've finished the tiles
 				if ( x === tilesX - 1 && y === tilesY - 1 ) {
 
-					this._samples = Math.round( this._samples );
+					this.samples = Math.round( this.samples );
 
 				}
 
@@ -219,49 +195,79 @@ export class PathTracingRenderer {
 
 	}
 
-	get samples() {
-
-		return this._samples;
-
-	}
-
 	constructor( renderer ) {
 
 		this.camera = null;
-		this.tiles = new Vector2( 1, 1 );
+		this.tiles = new Vector2( 3, 3 );
 
 		this.stableNoise = false;
 		this.stableTiles = true;
 
-		this._samples = 0;
+		this.samples = 0;
 		this._subframe = new Vector4( 0, 0, 1, 1 );
 		this._opacityFactor = 1.0;
 		this._renderer = renderer;
 		this._alpha = false;
-		this._fsQuad = new FullScreenQuad( null );
+		this._fsQuad = new FullScreenQuad( new PhysicalPathTracingMaterial() );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
 		this._currentTile = 0;
 
 		this._sobolTarget = new SobolNumberMapGenerator().generate( renderer );
 
-		// will be null if extension not supported
-		const floatLinearExtensionSupported = renderer.extensions.get( 'OES_texture_float_linear' );
-
 		this._primaryTarget = new WebGLRenderTarget( 1, 1, {
 			format: RGBAFormat,
-			type: floatLinearExtensionSupported ? FloatType : HalfFloatType,
+			type: FloatType,
+			magFilter: NearestFilter,
+			minFilter: NearestFilter,
 		} );
 		this._blendTargets = [
 			new WebGLRenderTarget( 1, 1, {
 				format: RGBAFormat,
-				type: floatLinearExtensionSupported ? FloatType : HalfFloatType,
+				type: FloatType,
+				magFilter: NearestFilter,
+				minFilter: NearestFilter,
 			} ),
 			new WebGLRenderTarget( 1, 1, {
 				format: RGBAFormat,
-				type: floatLinearExtensionSupported ? FloatType : HalfFloatType,
+				type: FloatType,
+				magFilter: NearestFilter,
+				minFilter: NearestFilter,
 			} ),
 		];
+
+	}
+
+	setCamera( camera ) {
+
+		const { material } = this;
+		material.cameraWorldMatrix.copy( camera.matrixWorld );
+		material.invProjectionMatrix.copy( camera.projectionMatrixInverse );
+		material.physicalCamera.updateFrom( camera );
+
+		// Perspective camera (default)
+		let cameraType = 0;
+
+		// An orthographic projection matrix will always have the bottom right element == 1
+		// And a perspective projection matrix will always have the bottom right element == 0
+		if ( camera.projectionMatrix.elements[ 15 ] > 0 ) {
+
+			// Orthographic
+			cameraType = 1;
+
+		}
+
+		if ( camera.isEquirectCamera ) {
+
+			// Equirectangular
+			cameraType = 2;
+
+		}
+
+		material.setDefine( 'CAMERA_TYPE', cameraType );
+
+		this.camera = camera;
+		// this.reset();
 
 	}
 
@@ -280,6 +286,13 @@ export class PathTracingRenderer {
 		this._blendTargets[ 0 ].setSize( w, h );
 		this._blendTargets[ 1 ].setSize( w, h );
 		this.reset();
+
+	}
+
+	getSize( target ) {
+
+		target.x = this._primaryTarget.width;
+		target.y = this._primaryTarget.height;
 
 	}
 
@@ -318,7 +331,7 @@ export class PathTracingRenderer {
 		_renderer.setClearColor( ogClearColor, ogClearAlpha );
 		_renderer.setRenderTarget( ogRenderTarget );
 
-		this._samples = 0;
+		this.samples = 0;
 		this._task = null;
 
 		if ( this.stableNoise ) {
