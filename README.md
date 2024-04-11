@@ -86,7 +86,7 @@ renderer = new THREE.WebGLRenderer();
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
 pathTracer = new WebGLPathTracer( renderer );
-pathTracer.updateScene( scene, camera );
+pathTracer.setScene( scene, camera );
 
 animate();
 
