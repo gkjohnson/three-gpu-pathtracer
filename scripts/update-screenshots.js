@@ -146,7 +146,19 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	}
 
-	await page.screenshot( { path: `${ targetFolder }/${ name }.png`, omitBackground: true } );
+	// https://stackoverflow.com/questions/11335460/how-do-i-parse-a-data-url-in-node
+	// https://stackoverflow.com/questions/65914988/how-to-save-a-canvas-as-an-image-using-puppeteer
+	const dataUrl = await page.evaluate( () => {
+
+		const canvas = document.querySelector( 'canvas' );
+		return canvas.toDataURL();
+
+	} );
+
+	const [ info, data ] = dataUrl.split( ',' );
+	const [ , ext ] = info.match( /^data:.+\/(.+);base64/ );
+	const buffer = Buffer.from( data, 'base64' );
+	fs.writeFileSync( `${ targetFolder }/${ name }.${ ext }`, buffer );
 
 	await browser.close();
 
