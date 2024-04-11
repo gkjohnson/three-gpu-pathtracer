@@ -5,9 +5,6 @@ import { bufferToHash } from '../utils/bufferToHash.js';
 const MATERIAL_PIXELS = 45;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
-const MATTE_OFFSET = 14 * 4 + 0; // s14.r
-const SHADOW_OFFSET = 14 * 4 + 1; // s14.g
-
 class MaterialFeatures {
 
 	constructor() {
@@ -90,6 +87,12 @@ export class MaterialsTexture extends DataTexture {
 
 			// check if texture exists
 			if ( texture ) {
+
+				if ( texture.matrixAutoUpdate ) {
+
+					texture.updateMatrix();
+
+				}
 
 				const elements = texture.matrix.elements;
 

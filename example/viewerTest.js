@@ -79,7 +79,7 @@ async function init() {
 	}
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
 	renderer.physicallyCorrectLights = true;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearAlpha( 0 );

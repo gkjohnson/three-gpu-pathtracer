@@ -1,4 +1,5 @@
 import simpleGit from 'simple-git';
+import { exec } from 'child_process';
 import { runScript } from './utils.js';
 
 ( async() => {
@@ -28,6 +29,8 @@ import { runScript } from './utils.js';
 
 	console.log( 'Merging in "main"' );
 	await git.merge( [ 'main' ] );
+
+	await exec( 'rm -rf ./screenshots/golden' );
 
 	// rebuild the screenshots
 	await runScript( 'node ./scripts/update-screenshots.js ' + process.argv.slice( 2 ).join( ' ' ) );
