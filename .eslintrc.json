@@ -15,5 +15,14 @@
 		"quotes": [ "error", "single" ],
 		"indent": [ "error", "tab" ],
 		"no-var": [ "error" ]
-	}
+	},
+    	"overrides": [
+		{
+			"files": ["**/*.d.ts"],
+			"parser": "@typescript-eslint/parser",
+			"rules": {
+				"no-unused-vars": ["error", { "args": "none" }]
+			}
+		}
+	]
 }
