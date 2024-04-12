@@ -122,9 +122,9 @@ export class PathTracingSceneGenerator {
 
 	constructor( objects?: Object3D | Array<Object3D> );
 
-  readonly initialized: boolean;
+	readonly initialized: boolean;
 
-  bvhOptions: MeshBVHOptions;
+	bvhOptions: MeshBVHOptions;
 	attributes: Array<string>;
 	generateBVH: boolean;
 
@@ -147,7 +147,7 @@ export class PathTracingSceneGenerator {
 export class DynamicPathTracingSceneGenerator extends PathTracingSceneGenerator {}
 
 /**
- * @deprecated renamed to `PathTracingSceneGenerator`
+ * @deprecated use `PathTracingSceneGenerator` instead
  */
 export class PathTracingSceneWorker extends PathTracingSceneGenerator {}
 
@@ -357,7 +357,7 @@ export class LightsInfoUniformStruct {
 	count: number;
 	hash: number;
 
-	updateFrom( lights: Array<Light>, iesTextures?: Array<Texture> ): void;
+	updateFrom( lights: Array<Light>, iesTextures?: Array<DataTexture> ): void;
 
 }
 
@@ -601,7 +601,7 @@ export class CompatibilityDetector {
 
 	constructor( renderer: WebGLRenderer, material: Material );
 
-	detect(): { detail?: Record<string, unknown>; pass: boolean; message: string; };
+	detect(): { detail: Record<string, unknown> | null; pass: boolean; message: string; };
 
 }
 
