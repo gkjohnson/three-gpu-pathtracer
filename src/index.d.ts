@@ -118,6 +118,12 @@ export interface PathTracingSceneGeneratorResult {
 
 }
 
+export interface BVHWorker {
+
+	generate( geometry : BufferGeometry, options?: MeshBVHOptions ) : Promise<MeshBVH>
+
+}
+
 export class PathTracingSceneGenerator {
 
 	constructor( objects?: Object3D | Array<Object3D> );
@@ -133,8 +139,7 @@ export class PathTracingSceneGenerator {
 	staticGeometryGenerator: StaticGeometryGenerator;
 
 	setObjects( objects: Object3D | Array<Object3D> ): void;
-	// TODO: The worker and its type are not exported from `three-mesh-bvh`
-	setBVHWorker( bvhWorker: any ): void;
+	setBVHWorker( bvhWorker: BVHWorker ): void;
 
 	generateAsync( onProgress?: ( progress: number ) => void ): Promise<PathTracingSceneGeneratorResult>;
 	generate( onProgress?: ( progress: number ) => void ): PathTracingSceneGeneratorResult;
@@ -194,8 +199,7 @@ export class WebGLPathTracer {
 	rasterizeSceneCallback: ( scene: Scene, camera: Camera ) => void;
 	renderToCanvasCallback: ( target: WebGLRenderTarget, renderer: WebGLRenderer, quad: FullScreenQuad ) => void;
 
-	// TODO: The worker and its type are not exported from `three-mesh-bvh`
-	setBVHWorker( bvhWorker: any ): void;
+	setBVHWorker( bvhWorker: BVHWorker ): void;
 	setScene(
 		scene: Scene,
 		camera: Camera,
