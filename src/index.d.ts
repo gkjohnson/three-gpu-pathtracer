@@ -36,6 +36,32 @@ import {
 	UIntVertexAttributeTexture,
 } from 'three-mesh-bvh';
 
+//#region three.js type augmentation
+
+declare module 'three/src/materials/MeshStandardMaterial' {
+
+	export interface MeshStandardMaterial {
+
+		/**
+		 * Whether to render the object as completely transparent against the rest of the environment
+		 * so other objects can be composited later.
+		 *
+		 * Used by `WebGLPathTracer` from `three-gpu-pathtracer`.
+		 */
+		matte: boolean;
+		/**
+		 * Whether the object should cast a shadow.
+		 *
+		 * Used by `WebGLPathTracer` from `three-gpu-pathtracer`.
+		 */
+		castShadow: boolean;
+
+	}
+
+}
+
+//#endregion
+
 //#region core
 
 export class PathTracingRenderer<TMaterial extends ShaderMaterial> {
