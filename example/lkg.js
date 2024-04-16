@@ -24,7 +24,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
-import { MaterialReducer, PhysicalCamera } from '../src/index.js';
+import { PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
@@ -272,10 +272,6 @@ async function init() {
 			floorPlane.position.y = box.min.y;
 			group.add( model, floorPlane );
 			group.updateMatrixWorld( true );
-
-			// dedupe materials
-			const reducer = new MaterialReducer();
-			reducer.process( group );
 
 			generator = new PathTracingSceneGenerator();
 			return generator.generate( group, { onProgress: v => {
