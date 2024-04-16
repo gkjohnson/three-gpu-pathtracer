@@ -24,10 +24,11 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
-import { PhysicalPathTracingMaterial, QuiltPathTracingRenderer, MaterialReducer, PhysicalCamera } from '../src/index.js';
+import { MaterialReducer, PhysicalCamera } from '../src/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
+import { QuiltPathTracingRenderer } from '../src/core/QuiltPathTracingRenderer.js';
 
 import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
@@ -135,7 +136,6 @@ async function init() {
 
 	// initialize the quilt renderer
 	ptRenderer = new QuiltPathTracingRenderer( renderer );
-	ptRenderer.material = new PhysicalPathTracingMaterial();
 	ptRenderer.tiles.set( params.tiles, params.tiles );
 	ptRenderer.camera = camera;
 
