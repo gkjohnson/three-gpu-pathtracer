@@ -1,5 +1,5 @@
 import { Vector2, CustomBlending } from 'three';
-import { MaterialBase } from '../../src/index.js';
+import { MaterialBase } from '../../src/materials/MaterialBase.js';
 
 export class QuiltPreviewMaterial extends MaterialBase {
 

@@ -15,7 +15,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { MaterialReducer, WebGLPathTracer } from '../src/index.js';
+import { WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -361,10 +361,6 @@ async function updateModel() {
 	scene.environment = envMap;
 
 	model = gltf.scene;
-
-	// reduce the used materials
-	const reducer = new MaterialReducer();
-	reducer.process( model );
 
 	const targetsToDisconnect = [];
 	model.traverse( c => {

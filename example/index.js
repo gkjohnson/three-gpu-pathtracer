@@ -24,7 +24,7 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { MaterialReducer, GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
+import { GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -615,8 +615,6 @@ async function updateModel() {
 	box.setFromObject( model );
 	floorPlane.position.y = box.min.y;
 
-	const reducer = new MaterialReducer();
-	reducer.process( model );
 	scene.add( model );
 
 	await pathTracer.setSceneAsync( scene, activeCamera, {
