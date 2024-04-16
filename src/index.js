@@ -20,6 +20,3 @@ export * from './utils/MaterialReducer.js';
 // materials
 export * from './materials/fullscreen/DenoiseMaterial.js';
 export * from './materials/surface/FogVolumeMaterial.js';
-
-// detectors
-// export * from './detectors/CompatibilityDetector.js';
