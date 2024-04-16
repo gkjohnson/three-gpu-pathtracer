@@ -1,8 +1,5 @@
 // core
-export * from './core/PathTracingRenderer.js';
-export * from './core/QuiltPathTracingRenderer.js';
 export * from './core/PathTracingSceneGenerator.js';
-export * from './core/MaterialReducer.js';
 export * from './core/WebGLPathTracer.js';
 
 // objects
@@ -15,24 +12,14 @@ export * from './objects/ShapedAreaLight.js';
 export * from './textures/ProceduralEquirectTexture.js';
 export * from './textures/GradientEquirectTexture.js';
 
-// uniforms
-export * from './uniforms/MaterialsTexture.js';
-export * from './uniforms/RenderTarget2DArray.js';
-export * from './uniforms/EquirectHdrInfoUniform.js';
-export * from './uniforms/PhysicalCameraUniform.js';
-export * from './uniforms/LightsInfoUniformStruct.js';
-
 // utils
 export * from './utils/BlurredEnvMapGenerator.js';
 export * from './utils/IESLoader.js';
+export * from './utils/MaterialReducer.js';
 
 // materials
 export * from './materials/fullscreen/DenoiseMaterial.js';
-export * from './materials/fullscreen/GradientMapMaterial.js';
-export * from './materials/debug/GraphMaterial.js';
-export * from './materials/MaterialBase.js';
-export * from './materials/pathtracing/PhysicalPathTracingMaterial.js';
 export * from './materials/surface/FogVolumeMaterial.js';
 
 // detectors
-export * from './detectors/CompatibilityDetector.js';
+// export * from './detectors/CompatibilityDetector.js';
