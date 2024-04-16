@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { GraphMaterial } from '../src/index.js';
+import { GraphMaterial } from '../src/materials/debug/GraphMaterial.js';
 import * as BSDFGLSL from '../src/shader/bsdf/index.js';
 import * as CommonGLSL from '../src/shader/common/index.js';
 
