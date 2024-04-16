@@ -69,6 +69,10 @@ export interface BVHWorker {
 
 }
 
+/**
+ * @deprecated `PathTracingSceneGenerator` has been deprecated and will be removed in a future release.
+ * Use `WebGLPathTracer` instead, as it handles scene generation internally.
+ */
 export class PathTracingSceneGenerator {
 
 	constructor( objects?: Object3D | Array<Object3D> );
@@ -91,12 +95,14 @@ export class PathTracingSceneGenerator {
 }
 
 /**
- * @deprecated use `PathTracingSceneGenerator` instead.
+ * @deprecated `DynamicPathTracingSceneGenerator` has been deprecated and will be removed in a future release.
+ * Use `WebGLPathTracer` instead, as it handles scene generation internally.
  */
 export class DynamicPathTracingSceneGenerator extends PathTracingSceneGenerator {}
 
 /**
- * @deprecated use `PathTracingSceneGenerator` instead.
+ * @deprecated `PathTracingSceneWorker` has been deprecated and will be removed in a future release.
+ * Use `WebGLPathTracer` instead, as it handles scene generation internally.
  */
 export class PathTracingSceneWorker extends PathTracingSceneGenerator {}
 
