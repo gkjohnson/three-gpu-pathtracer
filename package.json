@@ -5,6 +5,7 @@
   "module": "src/index.js",
   "main": "build/index.umd.cjs",
   "type": "module",
+  "types": "src/index.d.ts",
   "sideEffects": false,
   "files": [
     "src/*",
@@ -31,6 +32,9 @@
   "devDependencies": {
     "@lookingglass/webxr": "^0.3.1",
     "@monogrid/gainmap-js": "^3.0.5",
+    "@types/node": "^20.12.7",
+    "@types/three": "^0.163.0",
+    "@typescript-eslint/parser": "^6.21.0",
     "canvas-capture": "^2.0.5",
     "eslint": "^7.32.0",
     "eslint-config-mdcs": "^5.0.0",
@@ -44,6 +48,7 @@
     "simple-git": "^3.10.0",
     "three": "^0.163.0",
     "three-mesh-bvh": "^0.7.4",
+    "typescript": "5.3.3",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
@@ -57,7 +62,7 @@
     "update-screenshots": "node ./scripts/push-screenshots.js",
     "screenshot-diff": "node ./scripts/regression-test.js",
     "build": "rollup -c",
-    "lint": "eslint \"./src/**/*.{js,ts}\" \"./example/*.js\"",
+    "lint": "eslint \"./src/**/*.{js,ts}\" \"./example/*.js\" && tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
   "repository": {

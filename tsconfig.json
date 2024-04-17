@@ -1,0 +1,11 @@
+{
+	"compilerOptions": {
+		"noEmit": true,
+		"strict": true,
+		"strictNullChecks":true,
+		"noImplicitAny": true
+	},
+	"files": [
+		"src/index.d.ts"
+	],
+}
