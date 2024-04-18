@@ -47,9 +47,9 @@ function getLights( objects ) {
 
 					lights.push( c );
 
-					if ( c.iesTexture ) {
+					if ( c.iesMap ) {
 
-						iesSet.add( c.iesTexture );
+						iesSet.add( c.iesMap );
 
 					}
 

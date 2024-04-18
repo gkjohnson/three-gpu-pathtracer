@@ -201,7 +201,7 @@ async function init() {
 	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( onParamsChange );
 	lightFolder.add( params, 'iesProfile', - 1, IES_PROFILE_URLS.length - 1, 1 ).onChange( v => {
 
-		spotLight.iesTexture = v === - 1 ? null : iesTextures[ v ];
+		spotLight.iesMap = v === - 1 ? null : iesTextures[ v ];
 		onParamsChange();
 
 	} );

@@ -6,7 +6,7 @@ export class PhysicalSpotLight extends SpotLight {
 
 		super( ...args );
 
-		this.iesTexture = null;
+		this.iesMap = null;
 		this.radius = 0;
 
 	}
@@ -15,7 +15,7 @@ export class PhysicalSpotLight extends SpotLight {
 
 		super.copy( source, recursive );
 
-		this.iesTexture = source.iesTexture;
+		this.iesMap = source.iesMap;
 		this.radius = source.radius;
 
 		return this;
