@@ -13,7 +13,7 @@ export const camera_util_functions = /* glsl */`
 		// Jitter the camera ray by finding a uv coordinate at a random sample
 		// around this pixel's UV coordinate for AA
 		vec2 ruv = rand2( 0 );
-		vec2 jitteredUv = vUv + vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y );
+		vec2 jitteredUv = vUv + ( (jitterEnabled > 0.5) ? vec2( tentFilter( ruv.x ) * ssd.x, tentFilter( ruv.y ) * ssd.y ) : vec2(0.0, 0.0) );
 		Ray ray;
 
 		#if CAMERA_TYPE == 2
