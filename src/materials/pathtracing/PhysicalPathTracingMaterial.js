@@ -36,6 +36,18 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 	}
 
+	set( v ) {
+
+		this.uniforms.jitterEnabled.value = v ? 1 : 0;
+		
+	}
+
+	get() {
+
+		return this.uniforms.jitterEnabled.value > 1;
+		
+	}
+
 	constructor( parameters ) {
 
 		super( {
@@ -112,6 +124,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				sobolTexture: { value: null },
 				stratifiedTexture: { value: new StratifiedSamplesTexture() },
 				stratifiedOffsetTexture: { value: new BlueNoiseTexture( 64, 1 ) },
+				jitterEnabled: { value: 1 }
 			},
 
 			vertexShader: /* glsl */`
@@ -293,6 +306,8 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ RenderGLSL.direct_light_contribution_function }
 				${ RenderGLSL.get_surface_record_function }
 
+				uniform float jitterEnabled;
+    
 				void main() {
 
 					// init
