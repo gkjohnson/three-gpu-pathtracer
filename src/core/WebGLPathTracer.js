@@ -81,6 +81,18 @@ export class WebGLPathTracer {
 
 	}
 
+	set jitterEnabled( v ) {
+
+		this._pathTracer.jitterEnabled = v;
+
+	};
+
+	get jitterEnabled() {
+
+		return this._pathTracer.jitterEnabled;
+		
+	}
+
 	constructor( renderer ) {
 
 		// members
