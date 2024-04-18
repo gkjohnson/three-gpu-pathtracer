@@ -36,13 +36,13 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 	}
 
-	set( v ) {
+	set jitterEnabled( v ) {
 
 		this.uniforms.jitterEnabled.value = v ? 1 : 0;
 		
 	}
 
-	get() {
+	get jitterEnabled() {
 
 		return this.uniforms.jitterEnabled.value > 1;
 		
