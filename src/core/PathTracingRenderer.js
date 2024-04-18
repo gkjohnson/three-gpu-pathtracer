@@ -195,6 +195,18 @@ export class PathTracingRenderer {
 
 	}
 
+	set jitterEnabled( v ) {
+
+		this._ptMaterial.jitterEnabled = v;
+
+	};
+
+	get jitterEnabled() {
+
+		return this._ptMaterial.jitterEnabled;
+
+	};
+
 	constructor( renderer ) {
 
 		this.camera = null;
@@ -208,7 +220,8 @@ export class PathTracingRenderer {
 		this._opacityFactor = 1.0;
 		this._renderer = renderer;
 		this._alpha = false;
-		this._fsQuad = new FullScreenQuad( new PhysicalPathTracingMaterial() );
+		this._ptMaterial = new PhysicalPathTracingMaterial();
+		this._fsQuad = new FullScreenQuad( this._ptMaterial );
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
 		this._currentTile = 0;
