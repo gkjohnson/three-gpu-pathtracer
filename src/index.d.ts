@@ -132,6 +132,7 @@ export class WebGLPathTracer {
 	rasterizeScene: boolean;
 	renderToCanvas: boolean;
 	textureSize: Vector2;
+	jitterEnabled: boolean
 
 	rasterizeSceneCallback: ( scene: Scene, camera: Camera ) => void;
 	renderToCanvasCallback: ( target: WebGLRenderTarget, renderer: WebGLRenderer, quad: FullScreenQuad ) => void;
