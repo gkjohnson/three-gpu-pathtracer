@@ -173,7 +173,7 @@ export class LightsInfoUniformStruct {
 				floatArray[ baseIndex + ( index ++ ) ] = Math.cos( l.angle * ( 1 - l.penumbra ) );
 
 				// iesProfile
-				floatArray[ baseIndex + ( index ++ ) ] = l.iesTexture ? iesTextures.indexOf( l.iesTexture ) : - 1;
+				floatArray[ baseIndex + ( index ++ ) ] = l.iesMap ? iesTextures.indexOf( l.iesMap ) : - 1;
 
 			} else if ( l.isPointLight ) {
 

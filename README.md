@@ -408,10 +408,10 @@ radius = 0 : Number
 
 The radius of the spotlight surface. Increase this value to add softness to shadows.
 
-### .iesTexture
+### .iesMap
 
 ```js
-iesTexture = null : Texture
+iesMap = null : Texture
 ```
 
 The loaded IES texture describing directional light intensity. These can be loaded with the `IESLoader`.

@@ -39,7 +39,7 @@ function reduceTexturesToUniqueSources( textures ) {
 
 export function getIesTextures( lights ) {
 
-	const textures = lights.map( l => l.iesTexture || null ).filter( t => t );
+	const textures = lights.map( l => l.iesMap || null ).filter( t => t );
 	const textureSet = new Set( textures );
 	return Array.from( textureSet ).sort( uuidSort );
 
