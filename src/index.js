@@ -20,6 +20,5 @@ export * from './materials/fullscreen/DenoiseMaterial.js';
 export * from './materials/surface/FogVolumeMaterial.js';
 
 // deprecated
-export * from './utils/IESLoader.js';
 export * from './materials/pathtracing/PhysicalPathTracingMaterial.js';
 export * from './core/PathTracingRenderer.js';
