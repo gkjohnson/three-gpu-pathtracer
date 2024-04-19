@@ -11,9 +11,10 @@ import {
 	BoxGeometry,
 	PerspectiveCamera,
 } from 'three';
+import { IESLoader } from 'three/examples/jsm/loaders/IESLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalSpotLight, IESLoader, WebGLPathTracer } from '../src/index.js';
+import { PhysicalSpotLight, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
