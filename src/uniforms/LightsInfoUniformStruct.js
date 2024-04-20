@@ -1,5 +1,5 @@
 import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quaternion, Matrix4, NearestFilter } from 'three';
-import { bufferToHash } from '../utils/bufferToHash';
+import { bufferToHash } from '../utils/bufferToHash.js';
 
 const LIGHT_PIXELS = 6;
 const RECT_AREA_LIGHT = 0;
