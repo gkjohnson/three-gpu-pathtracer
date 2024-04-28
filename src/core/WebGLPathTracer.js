@@ -200,7 +200,7 @@ export class WebGLPathTracer {
 		const materials = this._materials;
 		const textureSize = this.textureSize;
 
-		// TODO: reduce texture sources here - we don't want to do this in the
+		// reduce texture sources here - we don't want to do this in the
 		// textures array because we need to pass the textures array into the
 		// material target
 		const textures = getTextures( materials );
