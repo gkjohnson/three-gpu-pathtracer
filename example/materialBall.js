@@ -129,6 +129,7 @@ async function init() {
 		denoiseQuad.material.sigma = params.denoiseSigma;
 		denoiseQuad.material.threshold = params.denoiseThreshold;
 		denoiseQuad.material.kSigma = params.denoiseKSigma;
+		denoiseQuad.material.opacity = quad.material.opacity;
 
 		const autoClear = renderer.autoClear;
 		const finalQuad = params.denoiseEnabled ? denoiseQuad : quad;
@@ -243,7 +244,7 @@ async function init() {
 	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
 	denoiseFolder.close();
 
-	const matFolder1 = gui.addFolder( 'Shell Material' );
+	const matFolder1 = gui.addFolder( 'Material' );
 	matFolder1.addColor( params.materialProperties, 'color' ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'emissive' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( onParamsChange );
@@ -278,6 +279,7 @@ function onResize() {
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.setPixelRatio( window.devicePixelRatio );
 	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
 	pathTracer.updateCamera();
 
 }

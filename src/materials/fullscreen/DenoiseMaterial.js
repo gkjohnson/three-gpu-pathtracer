@@ -28,6 +28,7 @@ export class DenoiseMaterial extends MaterialBase {
 				kSigma: { value: 1.0 },
 
 				map: { value: null },
+				opacity: { value: 1 },
 
 			},
 
@@ -65,6 +66,7 @@ export class DenoiseMaterial extends MaterialBase {
 				uniform float sigma;
 				uniform float threshold;
 				uniform float kSigma;
+				uniform float opacity;
 
 				varying vec2 vUv;
 
@@ -128,6 +130,8 @@ export class DenoiseMaterial extends MaterialBase {
 					#include <tonemapping_fragment>
 					#include <colorspace_fragment>
 					#include <premultiplied_alpha_fragment>
+
+					gl_FragColor.a *= opacity;
 
 				}
 
