@@ -350,7 +350,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
-		onResize();
+		onParamsChange();
 
 	} );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
