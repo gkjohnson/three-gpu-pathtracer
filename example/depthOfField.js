@@ -162,8 +162,8 @@ async function init() {
 	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
 
 		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
-		pathTracer.updateCamera();
 		this.updateDisplay();
+		onParamsChange();
 
 
 	} );
@@ -233,6 +233,7 @@ function onParamsChange() {
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
 
+	pathTracer.updateCamera();
 	pathTracer.reset();
 
 }
