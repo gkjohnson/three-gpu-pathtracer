@@ -106,6 +106,9 @@ async function init() {
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.renderDelay = 0;
+	pathTracer.minSamples = 1;
+	pathTracer.fadeDuration = 0;
 
 	// scene
 	scene = new Scene();
