@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - WebGLPathTracer class for more easily intializing a path tracer.
 
+### Changed
+- PathTracingRenderer, DynamicPathTracingSceneGenerator, and more classes have been deprecated in favor of WebGLPathTracer. See new README for API.
+- Remove IESLoader in favor of three.js' version.
+
 ## [0.0.20] - 2024.02.21
 ### Fixed
 - Adjust peer dependency semver for three-mesh-bvh.
