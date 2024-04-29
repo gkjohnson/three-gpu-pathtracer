@@ -543,6 +543,7 @@ Denoise material based on [BrutPitt/glslSmartDeNoise](https://github.com/BrutPit
 
 }
 ```
+<!--
 
 ## CompatibilityDetector
 
@@ -566,6 +567,8 @@ detect() : {
 ```
 
 Returns `pass === true` if the path tracer can run. If it cannot run then a message is returned indicating why.
+
+-->
 
 # Gotchas
 
