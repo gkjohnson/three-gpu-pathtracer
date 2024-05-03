@@ -13,7 +13,7 @@ function flatTraverseMeshes( objects, cb ) {
 	for ( let i = 0, l = objects.length; i < l; i ++ ) {
 
 		const object = objects[ i ];
-		object.traverse( o => {
+		object.traverseVisible( o => {
 
 			if ( o.isMesh ) {
 
