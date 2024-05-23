@@ -14,6 +14,10 @@ import {
 	OrthographicCamera,
 	WebGLRenderer,
 	EquirectangularReflectionMapping,
+	BoxGeometry,
+	MeshBasicMaterial,
+	Vector4,
+	NoBlending,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -115,6 +119,7 @@ const params = {
 let floorPlane, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
+let testScene, testMesh;
 let gradientMap;
 let loader;
 
@@ -166,7 +171,9 @@ async function init() {
 	// scene
 	scene = new Scene();
 	scene.background = gradientMap;
-
+	testScene = new Scene();
+	testMesh = new Mesh( new BoxGeometry(0.5,0.5,0.5), new MeshBasicMaterial( { color: 0x00ff00 } ) );
+	testScene.add( testMesh );
 	const floorTex = generateRadialFloorTexture( 2048 );
 	floorPlane = new Mesh(
 		new PlaneGeometry(),
@@ -223,6 +230,11 @@ function animate() {
 		renderer.render( scene, activeCamera );
 
 	}
+
+
+	renderer.autoClear = false;
+	renderer.render(testMesh, activeCamera);
+	renderer.autoClear = true;
 
 	loader.setSamples( pathTracer.samples );
 
