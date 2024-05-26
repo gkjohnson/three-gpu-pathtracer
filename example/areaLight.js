@@ -11,6 +11,7 @@ import {
 	WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -25,6 +26,7 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const CREDITS = 'Model courtesy of Virtual Museums of Małopolska';
 
 let pathTracer, renderer, controls, areaLight, scene, camera;
+let overlayScene, transformControls
 let loader;
 
 const params = {
@@ -43,6 +45,9 @@ const params = {
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	multipleImportanceSampling: true,
+
+	// TransformControls settings
+	enabled : true,
 
 	...getScaledSettings(),
 
@@ -75,10 +80,18 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
+	transformControls = new TransformControls( camera, renderer.domElement );
+	transformControls.addEventListener( 'mouseDown', () => controls.enabled = false );
+	transformControls.addEventListener( 'change', () =>	onParamsChange() );
+	 transformControls.addEventListener( 'mouseUp', () => controls.enabled = true );
+
 	// init scene
 	scene = new Scene();
 	scene.environmentIntensity = 0.03;
 	scene.backgroundIntensity = 0.03;
+
+	overlayScene = new Scene();
+	overlayScene.add( transformControls );
 
 	// load the assets
 	const [ envTexture, gltf ] = await Promise.all( [
@@ -122,6 +135,7 @@ async function init() {
 	areaLight.rotateX( - Math.PI / 2 );
 	areaLight.isCircular = false;
 	scene.add( areaLight );
+	transformControls.attach( areaLight );
 
 	const redLight = new ShapedAreaLight( new Color( 0xff0000 ), 15.0, 1.25, 2.75 );
 	redLight.position.y = 1.25;
@@ -162,6 +176,15 @@ async function init() {
 	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'width', 0, 5 ).name( 'width' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( onParamsChange );
+
+	const transformControlsFolder = gui.addFolder( 'Transform Controls' );
+	transformControlsFolder.add( params, 'enabled' ).onChange( value => {
+		
+		transformControls.enabled = value;
+		value ? overlayScene.add( transformControls ) :
+		overlayScene.remove( transformControls );
+
+	});
 
 	onParamsChange();
 	onResize();
@@ -205,6 +228,12 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	pathTracer.renderSample();
+
+	const originAutoClear = renderer.autoClear;
+	renderer.autoClear = false;
+	renderer.clearDepth();
+	renderer.render( overlayScene, camera );
+	renderer.autoClear = originAutoClear;
 
 	loader.setSamples( pathTracer.samples );
 
