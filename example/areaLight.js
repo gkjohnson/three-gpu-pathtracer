@@ -47,7 +47,7 @@ const params = {
 	multipleImportanceSampling: true,
 
 	// TransformControls settings
-	enabled : true,
+	controlEnabled : true,
 
 	...getScaledSettings(),
 
@@ -178,11 +178,9 @@ async function init() {
 	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( onParamsChange );
 
 	const transformControlsFolder = gui.addFolder( 'Transform Controls' );
-	transformControlsFolder.add( params, 'enabled' ).onChange( value => {
+	transformControlsFolder.add( params, 'controlEnabled' ).onChange( value => {
 		
-		transformControls.enabled = value;
-		value ? overlayScene.add( transformControls ) :
-		overlayScene.remove( transformControls );
+		transformControls.enabled = transformControls.visible = value;
 
 	});
 
