@@ -237,7 +237,7 @@ export class StaticGeometryGenerator {
 
 		// }
 
-		console.log('meshes', meshes.map(m => m.name))
+		console.log( 'meshes', meshes.map( m => m.name ) );
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
@@ -246,19 +246,19 @@ export class StaticGeometryGenerator {
 
 			const info = previousMergeInfo[ i ];
 			if ( ! info || info.uuid !== geom.uuid ) {
-				
-				console.log('forceUpdate true')
+
+				console.log( 'forceUpdate true' );
 				skipAssigningAttributes.push( false );
 				forceUpdate = true;
 
 			} else if ( info.version !== geom.version ) {
 
-				console.log('GEOMETRY_ADJUSTED')
+				console.log( 'GEOMETRY_ADJUSTED' );
 				skipAssigningAttributes.push( false );
 
 			} else {
-				
-				console.log('NO_CHANGE')
+
+				console.log( 'NO_CHANGE' );
 				skipAssigningAttributes.push( true );
 
 			}
