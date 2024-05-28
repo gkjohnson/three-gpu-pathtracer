@@ -231,6 +231,13 @@ export class StaticGeometryGenerator {
 
 		// get the list of geometries to merge
 		let forceUpdate = false;
+		// if ( meshes.length !== previousMergeInfo.length ) {
+
+		// 	forceUpdate = true;
+
+		// }
+
+		console.log('meshes', meshes.map(m => m.name))
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
@@ -239,16 +246,19 @@ export class StaticGeometryGenerator {
 
 			const info = previousMergeInfo[ i ];
 			if ( ! info || info.uuid !== geom.uuid ) {
-
+				
+				console.log('forceUpdate true')
 				skipAssigningAttributes.push( false );
 				forceUpdate = true;
 
 			} else if ( info.version !== geom.version ) {
 
+				console.log('GEOMETRY_ADJUSTED')
 				skipAssigningAttributes.push( false );
 
 			} else {
-
+				
+				console.log('NO_CHANGE')
 				skipAssigningAttributes.push( true );
 
 			}

@@ -8,6 +8,7 @@ import {
 	Mesh,
 	MeshStandardMaterial,
 	PlaneGeometry,
+	BoxGeometry,
 	MeshPhysicalMaterial,
 	Scene,
 	PerspectiveCamera,
@@ -114,7 +115,7 @@ const params = {
 
 let floorPlane, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
-let controls, scene, model;
+let controls, scene, model, testMesh1, testMesh2, testMesh3, testMesh4;
 let gradientMap;
 let loader;
 
@@ -181,7 +182,31 @@ async function init() {
 	);
 	floorPlane.scale.setScalar( 5 );
 	floorPlane.rotation.x = - Math.PI / 2;
+	floorPlane.name = 'floor';
 	scene.add( floorPlane );
+
+	// initialize testMesh 1234 with small boxes
+	const boxGeometry = new BoxGeometry( 0.1, 0.1, 0.1 );
+	const boxMaterial = new MeshStandardMaterial( { color: 0xff0000 } );
+	testMesh1 = new Mesh( boxGeometry, boxMaterial );
+	testMesh1.position.set( - 0.5, 0.05, 0.5 );
+	testMesh1.name = 'testMesh1';
+	scene.add( testMesh1 );
+	const boxMaterial2 = new MeshStandardMaterial( { color: 0x00ff00 } );
+	testMesh2 = new Mesh( boxGeometry, boxMaterial2 );
+	testMesh2.position.set( - 0.5, 0.05, - 0.5 );
+	testMesh2.name = 'testMesh2';
+	scene.add( testMesh2 );
+	const boxMaterial3 = new MeshStandardMaterial( { color: 0x0000ff } );
+	testMesh3 = new Mesh( boxGeometry, boxMaterial3 );
+	testMesh3.position.set( 0.5, 0.05, - 0.5 );
+	testMesh3.name = 'testMesh3';
+	scene.add( testMesh3 );
+	const boxMaterial4 = new MeshStandardMaterial( { color: 0xffff00 } );
+	testMesh4 = new Mesh( boxGeometry, boxMaterial4 );
+	testMesh4.position.set( 0.5, 0.05, 0.5 );
+	testMesh4.name = 'testMesh4';
+	scene.add( testMesh4 );
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
@@ -337,6 +362,40 @@ function buildGui() {
 
 	} );
 
+	const meshParams = {
+		mesh1Visible : true,
+		mesh2Visible : true,
+		mesh3Visible : true,
+		mesh4Visible : true,
+		floorVisible : true,
+	}
+	const meshFolder = gui.addFolder( 'Test Mesh' );
+	meshFolder.add(meshParams, 'mesh1Visible').onChange( v => {
+		testMesh1.visible = v;
+		pathTracer.setScene( scene, activeCamera );
+		pathTracer.reset();
+	});
+	meshFolder.add(meshParams, 'mesh2Visible').onChange( v => {
+		testMesh2.visible = v;
+		pathTracer.setScene( scene, activeCamera );
+		pathTracer.reset();
+	});
+	meshFolder.add(meshParams, 'mesh3Visible').onChange( v => {
+		testMesh3.visible = v;
+		pathTracer.setScene( scene, activeCamera );
+		pathTracer.reset();
+	});
+	meshFolder.add(meshParams, 'mesh4Visible').onChange( v => {
+		testMesh4.visible = v;
+		pathTracer.setScene( scene, activeCamera );
+		pathTracer.reset();
+	});
+	meshFolder.add(meshParams, 'floorVisible').onChange( v => {
+		floorPlane.visible = v;
+		pathTracer.setScene( scene, activeCamera );
+		pathTracer.reset();
+	});
+	
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
@@ -615,13 +674,9 @@ async function updateModel() {
 	box.setFromObject( model );
 	floorPlane.position.y = box.min.y;
 
-	scene.add( model );
+	// scene.add( model );
 
-	await pathTracer.setSceneAsync( scene, activeCamera, {
-
-		onProgress: v => loader.setPercentage( 0.5 + 0.5 * v ),
-
-	} );
+	pathTracer.setSceneAsync( scene, activeCamera)
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
