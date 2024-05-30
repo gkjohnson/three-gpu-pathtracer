@@ -361,6 +361,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 									// NOTE: Only area lights are supported for forward sampling and can be hit
 									float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
 									gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
+									gl_FragColor.a = lightRec.visibleSurface; // This is not working as expected
 
 									#else
 

@@ -35,6 +35,7 @@ export const light_sampling_functions = /* glsl */`
 	struct LightRecord {
 
 		float dist;
+		float visibleSurface;
 		vec3 direction;
 		float pdf;
 		vec3 emission;
@@ -72,7 +73,7 @@ export const light_sampling_functions = /* glsl */`
 				lightRec.emission = light.color * light.intensity;
 				lightRec.direction = rayDirection;
 				lightRec.type = light.type;
-
+				lightRec.visibleSurface = light.visibleSurface;
 			}
 
 		}
