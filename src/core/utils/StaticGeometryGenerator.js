@@ -237,7 +237,6 @@ export class StaticGeometryGenerator {
 
 		}
 
-
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
