@@ -240,6 +240,12 @@ export class StaticGeometryGenerator {
 
 		// get the list of geometries to merge
 		let forceUpdate = false;
+		if ( meshes.length !== previousMergeInfo.length ) {
+
+			forceUpdate = true;
+
+		}
+
 		for ( let i = 0, l = meshes.length; i < l; i ++ ) {
 
 			const mesh = meshes[ i ];
