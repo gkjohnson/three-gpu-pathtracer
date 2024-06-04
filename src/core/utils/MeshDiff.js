@@ -1,29 +1,23 @@
 import { Matrix4 } from 'three';
 import { bufferToHash } from '../../utils/bufferToHash.js';
 
-function attributeSort( a, b ) {
-
-	if ( a.uuid > b.uuid ) return 1;
-	if ( a.uuid < b.uuid ) return - 1;
-	return 0;
-
-}
-
 function getGeometryHash( geometry ) {
 
-	let hash = '';
+	let hash = geometry.uuid;
 	const attributes = Object.values( geometry.attributes );
 	if ( geometry.index ) {
 
 		attributes.push( geometry.index );
+		hash += `index|${ geometry.index.version }`;
 
 	}
 
-	attributes.sort( attributeSort );
+	const keys = Object.keys( attributes ).sort();
+	for ( const i in keys ) {
 
-	for ( const attr of attributes ) {
-
-		hash += `${ attr.uuid }_${ attr.version }|`;
+		const key = keys[ i ];
+		const attr = attributes[ key ];
+		hash += `${ key }_${ attr.version }|`;
 
 	}
 

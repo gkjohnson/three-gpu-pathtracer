@@ -171,15 +171,24 @@ export class StaticGeometryGenerator {
 			unusedMeshKeys.delete( meshKey );
 
 			// initialize the intermediate geometry
-			if ( ! _intermediateGeometry.has( meshKey ) ) {
+			// if the mesh and source geometry have changed in such a way that they are no longer
+			// compatible then regenerate the baked geometry from scratch
+			let geom = _intermediateGeometry.get( meshKey );
+			if ( ! geom || ! geom.isCompatible( mesh ) ) {
 
-				_intermediateGeometry.set( meshKey, new BakedGeometry() );
+				if ( geom ) {
+
+					geom.dispose();
+
+				}
+
+				geom = new BakedGeometry();
+				_intermediateGeometry.set( meshKey, geom );
 
 			}
 
 			// transform the geometry into the intermediate buffer geometry, saving whether
 			// or not it changed.
-			const geom = _intermediateGeometry.get( meshKey );
 			if ( geom.updateFrom( mesh, convertOptions ) ) {
 
 				// TODO: provide option for only generating the set of attributes that are present
