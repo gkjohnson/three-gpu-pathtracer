@@ -13,9 +13,8 @@ function getGeometryHash( geometry ) {
 	}
 
 	const keys = Object.keys( attributes ).sort();
-	for ( const i in keys ) {
+	for ( const key of keys ) {
 
-		const key = keys[ i ];
 		const attr = attributes[ key ];
 		hash += `${ key }_${ attr.version }|`;
 

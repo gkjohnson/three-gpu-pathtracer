@@ -24,7 +24,7 @@ export class BakedGeometry extends BufferGeometry {
 
 			const attr1 = attributes[ key ];
 			const attr2 = this.attributes[ key ];
-			if ( attr2 && ! validateAttributes( attr1, attr2 ) ) {
+			if ( ! validateAttributes( attr1, attr2 ) ) {
 
 				return false;
 
