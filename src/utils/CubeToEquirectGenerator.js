@@ -1,5 +1,18 @@
-import { ColorManagement, DataTexture, DataUtils, EquirectangularReflectionMapping, FloatType, HalfFloatType, LinearFilter, LinearMipMapLinearFilter, RGBAFormat, RepeatWrapping, ShaderMaterial, WebGLRenderTarget } from 'three';
+import {
+	DataTexture,
+	DataUtils,
+	EquirectangularReflectionMapping,
+	FloatType,
+	HalfFloatType,
+	LinearFilter,
+	LinearMipMapLinearFilter,
+	RGBAFormat,
+	RepeatWrapping,
+	ShaderMaterial,
+	WebGLRenderTarget,
+} from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import * as CommonGLSL from '../shader/common/index.js';
 
 class CubeToEquirectMaterial extends ShaderMaterial {
 
@@ -31,10 +44,12 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 				#include <common>
 				#include <cube_uv_reflection_fragment>
 
+				${ CommonGLSL.util_functions }
+
 				void main() {
 
-					vec4 texel = texture2D( tDiffuse, vUv );
-					gl_FragColor = opacity * texel;
+					vec3 rayDirection = equirectUvToDirection( vUv );
+					gl_FragColor = textureCubeUV( cubeMap, rayDirection, 0.0 );
 
 				}`
 		} );
