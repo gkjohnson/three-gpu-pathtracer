@@ -7,7 +7,7 @@ import { StratifiedSampler } from './StratifiedSampler.js';
 // Stratified set of data with each tuple stratified separately and combined
 export class StratifiedSamplerCombined {
 
-	constructor( strataCount, listOfDimensions ) {
+	constructor( strataCount, listOfDimensions, random = Math.random ) {
 
 		let totalDim = 0;
 		for ( const dim of listOfDimensions ) {
@@ -21,7 +21,7 @@ export class StratifiedSamplerCombined {
 		let offset = 0;
 		for ( const dim of listOfDimensions ) {
 
-			const sampler = new StratifiedSampler( strataCount, dim );
+			const sampler = new StratifiedSampler( strataCount, dim, random );
 			sampler.samples = new Float32Array( combined.buffer, offset, sampler.samples.length );
 			offset += sampler.samples.length * 4;
 			strataObjs.push( sampler );

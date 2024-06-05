@@ -2,11 +2,11 @@
 // - https://github.com/hoverinc/ray-tracing-renderer
 // - http://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/Stratified_Sampling.html
 
-export function shuffle( arr ) {
+export function shuffle( arr, random = Math.random() ) {
 
 	for ( let i = arr.length - 1; i > 0; i -- ) {
 
-	  const j = Math.floor( Math.random() * ( i + 1 ) );
+	  const j = Math.floor( random() * ( i + 1 ) );
 	  const x = arr[ i ];
 	  arr[ i ] = arr[ j ];
 	  arr[ j ] = x;
@@ -21,7 +21,7 @@ export function shuffle( arr ) {
 // dimensions  : The number of dimensions to generate stratified values for
 export class StratifiedSampler {
 
-	constructor( strataCount, dimensions ) {
+	constructor( strataCount, dimensions, random = Math.random ) {
 
 		const l = strataCount ** dimensions;
 		const strata = new Uint16Array( l );
@@ -50,7 +50,7 @@ export class StratifiedSampler {
 
 			if ( index >= strata.length ) {
 
-				shuffle( strata );
+				shuffle( strata, random );
 				this.restart();
 
 			}
@@ -59,7 +59,7 @@ export class StratifiedSampler {
 
 			for ( let i = 0; i < dimensions; i ++ ) {
 
-				samples[ i ] = ( stratum % strataCount + Math.random() ) / strataCount;
+				samples[ i ] = ( stratum % strataCount + random() ) / strataCount;
 				stratum = Math.floor( stratum / strataCount );
 
 			}
