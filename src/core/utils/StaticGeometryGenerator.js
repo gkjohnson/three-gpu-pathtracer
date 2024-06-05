@@ -174,7 +174,7 @@ export class StaticGeometryGenerator {
 			// if the mesh and source geometry have changed in such a way that they are no longer
 			// compatible then regenerate the baked geometry from scratch
 			let geom = _intermediateGeometry.get( meshKey );
-			if ( ! geom || ! geom.isCompatible( mesh ) ) {
+			if ( ! geom || ! geom.isCompatible( mesh, this.attributes ) ) {
 
 				if ( geom ) {
 

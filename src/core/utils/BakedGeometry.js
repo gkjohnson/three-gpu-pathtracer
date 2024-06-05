@@ -16,15 +16,15 @@ export class BakedGeometry extends BufferGeometry {
 
 	// returns whether the passed mesh is compatible with this baked geometry
 	// such that it can be updated without resizing attributes
-	isCompatible( mesh ) {
+	isCompatible( mesh, attributes ) {
 
 		const geometry = mesh.geometry;
-		const attributes = geometry.attributes;
-		for ( const key in attributes ) {
+		for ( let i = 0; i < attributes.length; i ++ ) {
 
-			const attr1 = attributes[ key ];
+			const key = attributes[ i ];
+			const attr1 = geometry.attributes[ key ];
 			const attr2 = this.attributes[ key ];
-			if ( ! validateAttributes( attr1, attr2 ) ) {
+			if ( attr1 && ! validateAttributes( attr1, attr2 ) ) {
 
 				return false;
 
