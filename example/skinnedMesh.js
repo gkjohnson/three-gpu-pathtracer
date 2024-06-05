@@ -35,9 +35,10 @@ const params = {
 	samplesPerFrame: 1,
 	renderScale: 1 / window.devicePixelRatio,
 	tiles: 1,
-	autoPause: true,
+	autoPause: false,
 	pause: false,
-	continuous: false,
+	continuous: true,
+	stableNoise: false,
 	...getScaledSettings(),
 
 };
@@ -154,6 +155,11 @@ async function init() {
 	gui.add( params, 'continuous' ).onChange( () => {
 
 		params.autoPause = false;
+
+	} );
+	gui.add( params, 'stableNoise' ).onChange( v => {
+
+		pathTracer.stableNoise = v;
 
 	} );
 
