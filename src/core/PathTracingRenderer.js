@@ -334,9 +334,11 @@ export class PathTracingRenderer {
 		this.samples = 0;
 		this._task = null;
 
+		this.material.stratifiedTexture.stableNoise = this.stableNoise;
 		if ( this.stableNoise ) {
 
 			this.material.seed = 0;
+			this.material.stratifiedTexture.reset();
 
 		}
 

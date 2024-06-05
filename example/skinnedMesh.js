@@ -38,6 +38,7 @@ const params = {
 	autoPause: true,
 	pause: false,
 	continuous: false,
+	stableNoise: false,
 	...getScaledSettings(),
 
 };
@@ -154,6 +155,11 @@ async function init() {
 	gui.add( params, 'continuous' ).onChange( () => {
 
 		params.autoPause = false;
+
+	} );
+	gui.add( params, 'stableNoise' ).onChange( v => {
+
+		pathTracer.stableNoise = v;
 
 	} );
 

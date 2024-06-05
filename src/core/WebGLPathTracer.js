@@ -81,6 +81,18 @@ export class WebGLPathTracer {
 
 	}
 
+	get stableNoise() {
+
+		return this._pathTracer.stableNoise;
+
+	}
+
+	set stableNoise( v ) {
+
+		this._pathTracer.stableNoise = v;
+
+	}
+
 	constructor( renderer ) {
 
 		// members
