@@ -41,12 +41,18 @@ export function createAttributeClone( attr, countOverride = null ) {
 
 }
 
-// Confirms that the two provided attributes are compatible
+// Confirms that the two provided attributes are compatible. Returns false if they are not.
 export function validateAttributes( attr1, attr2 ) {
 
 	if ( ! attr1 && ! attr2 ) {
 
-		return;
+		return true;
+
+	}
+
+	if ( Boolean( attr1 ) !== Boolean( attr2 ) ) {
+
+		return false;
 
 	}
 
@@ -57,8 +63,10 @@ export function validateAttributes( attr1, attr2 ) {
 
 	if ( ! sameCount || ! sameNormalized || ! sameType || ! sameItemSize ) {
 
-		throw new Error();
+		return false;
 
 	}
+
+	return true;
 
 }
