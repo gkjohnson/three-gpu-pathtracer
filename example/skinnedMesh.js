@@ -35,9 +35,9 @@ const params = {
 	samplesPerFrame: 1,
 	renderScale: 1 / window.devicePixelRatio,
 	tiles: 1,
-	autoPause: false,
+	autoPause: true,
 	pause: false,
-	continuous: true,
+	continuous: false,
 	stableNoise: false,
 	...getScaledSettings(),
 
