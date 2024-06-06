@@ -4,6 +4,7 @@ import {
 	EquirectangularReflectionMapping,
 	WebGLRenderer,
 	PerspectiveCamera,
+	CubeTextureLoader,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -12,6 +13,7 @@ import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBV
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { WebGLPathTracer } from '..';
+import { CubeToEquirectGenerator } from '../src/utils/CubeToEquirectGenerator.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
@@ -57,13 +59,39 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
+	// load the appropriate env
+	let envPromise;
+	if ( window.location.hash.includes( 'cube' ) ) {
+
+		const path = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/'
+		const format = '.jpg';
+		const envUrls = [
+			path + 'px' + format, path + 'nx' + format,
+			path + 'py' + format, path + 'ny' + format,
+			path + 'pz' + format, path + 'nz' + format
+		];
+		envPromise = new CubeTextureLoader().loadAsync( envUrls );
+
+		scene.environmentIntensity = 5;
+		scene.backgroundIntensity = 5;
+
+	} else {
+
+		envPromise = new RGBELoader().loadAsync( ENV_URL ).then( tex => {
+
+			tex.mapping = EquirectangularReflectionMapping;
+			return tex;
+
+		} );
+
+	}
+
 	// load the environment map and model
 	const [ gltf, envTexture ] = await Promise.all( [
 		new GLTFLoader().loadAsync( MODEL_URL ),
-		new RGBELoader().loadAsync( ENV_URL ),
+		envPromise,
 	] );
 
-	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.background = envTexture;
 	scene.environment = envTexture;
 	scene.add( gltf.scene );

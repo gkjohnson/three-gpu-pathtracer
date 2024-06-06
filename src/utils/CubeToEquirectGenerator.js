@@ -22,7 +22,7 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 
 			uniforms: {
 
-				cubeMap: { value: null },
+				envMap: { value: null },
 
 			},
 
@@ -38,7 +38,7 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 			fragmentShader: /* glsl */`
 				#define ENVMAP_TYPE_CUBE_UV
 
-				uniform sampler2D cubeMap;
+				uniform samplerCube envMap;
 				varying vec2 vUv;
 
 				#include <common>
@@ -49,7 +49,7 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 				void main() {
 
 					vec3 rayDirection = equirectUvToDirection( vUv );
-					gl_FragColor = textureCubeUV( cubeMap, rayDirection, 0.0 );
+					gl_FragColor = textureCube( envMap, rayDirection );
 
 				}`
 		} );
@@ -70,7 +70,7 @@ export class CubeToEquirectGenerator {
 
 	}
 
-	generate( source, width, height ) {
+	generate( source, width = null, height = null ) {
 
 		if ( ! source.isCubeTexture ) {
 
@@ -78,17 +78,43 @@ export class CubeToEquirectGenerator {
 
 		}
 
-		// set up the conents
-		const target = new WebGLRenderTarget( width, height, {
-			type: FloatType,
-			colorSpace: source.image[ 0 ].colorSpace,
-		} );
+		const image = source.images[ 0 ];
 		const renderer = this._renderer;
 		const quad = this._quad;
+
+		// determine the dimensions if not provided
+		if ( width === null ) {
+
+			width = 4 * image.height;
+
+		}
+
+		if ( height === null ) {
+
+			height = 2 * image.height;
+
+		}
+
+		const target = new WebGLRenderTarget( width, height, {
+			type: FloatType,
+			colorSpace: image.colorSpace,
+		} );
+
+		// prep the cube map data
+		const imageHeight = image.height;
+		const maxMip = Math.log2( imageHeight ) - 2;
+		const texelHeight = 1.0 / imageHeight;
+		const texelWidth = 1.0 / ( 3 * Math.max( Math.pow( 2, maxMip ), 7 * 16 ) );
+
+		quad.material.defines.CUBEUV_MAX_MIP = `${ maxMip }.0`;
+		quad.material.defines.CUBEUV_TEXEL_WIDTH = texelWidth;
+		quad.material.defines.CUBEUV_TEXEL_HEIGHT = texelHeight;
+		quad.material.uniforms.envMap.value = source;
+		quad.material.needsUpdate = true;
+
+		// save state and render the contents
 		const currentTarget = renderer.getRenderTarget();
 		const currentAutoClear = renderer.autoClear;
-
-		// render the contents
 		renderer.autoClear = true;
 		renderer.setRenderTarget( target );
 		quad.render( renderer );
@@ -99,6 +125,7 @@ export class CubeToEquirectGenerator {
 		const buffer = new Uint16Array( width * height * 4 );
 		const readBuffer = new Float32Array( width * height * 4 );
 		renderer.readRenderTargetPixels( target, 0, 0, width, height, readBuffer );
+		target.dispose();
 
 		for ( let i = 0, l = readBuffer.length; i < l; i ++ ) {
 
@@ -106,6 +133,7 @@ export class CubeToEquirectGenerator {
 
 		}
 
+		// produce the data texture
 		const result = new DataTexture( buffer, width, height, RGBAFormat, HalfFloatType );
 		result.minFilter = LinearMipMapLinearFilter;
 		result.magFilter = LinearFilter;
@@ -113,8 +141,6 @@ export class CubeToEquirectGenerator {
 		result.wrapT = RepeatWrapping;
 		result.mapping = EquirectangularReflectionMapping;
 		result.needsUpdate = true;
-
-		target.dispose();
 
 		return result;
 
