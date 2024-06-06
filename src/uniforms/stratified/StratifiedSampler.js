@@ -38,7 +38,19 @@ export class StratifiedSampler {
 
 		this.strataCount = strataCount;
 
-		this.restart = function () {
+		this.reset = function () {
+
+			for ( let i = 0; i < l; i ++ ) {
+
+				strata[ i ] = i;
+
+			}
+
+			index = 0;
+
+		};
+
+		this.reshuffle = function () {
 
 			index = 0;
 
@@ -51,7 +63,7 @@ export class StratifiedSampler {
 			if ( index >= strata.length ) {
 
 				shuffle( strata, random );
-				this.restart();
+				this.reshuffle();
 
 			}
 

@@ -44,11 +44,21 @@ export class StratifiedSamplerCombined {
 
 		};
 
-		this.restart = function () {
+		this.reshuffle = function () {
 
 			for ( const strata of strataObjs ) {
 
-				strata.restart();
+				strata.reshuffle();
+
+			}
+
+		};
+
+		this.reset = function () {
+
+			for ( const strata of strataObjs ) {
+
+				strata.reset();
 
 			}
 

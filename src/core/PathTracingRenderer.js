@@ -273,7 +273,6 @@ export class PathTracingRenderer {
 		material.setDefine( 'CAMERA_TYPE', cameraType );
 
 		this.camera = camera;
-		// this.reset();
 
 	}
 
