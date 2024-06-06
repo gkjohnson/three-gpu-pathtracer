@@ -63,7 +63,7 @@ async function init() {
 	let envPromise;
 	if ( window.location.hash.includes( 'cube' ) ) {
 
-		const path = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/'
+		const path = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/';
 		const format = '.jpg';
 		const envUrls = [
 			path + 'px' + format, path + 'nx' + format,
