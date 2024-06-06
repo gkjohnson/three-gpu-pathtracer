@@ -238,6 +238,12 @@ export class PathTracingRenderer {
 
 	}
 
+	compileMaterial() {
+
+		return this._renderer.compileAsync( this._fsQuad._mesh );
+
+	}
+
 	setCamera( camera ) {
 
 		const { material } = this;
