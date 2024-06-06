@@ -23,6 +23,7 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 			uniforms: {
 
 				envMap: { value: null },
+				flipEnvMap: { value: - 1 },
 
 			},
 
@@ -39,6 +40,7 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 				#define ENVMAP_TYPE_CUBE_UV
 
 				uniform samplerCube envMap;
+				uniform float flipEnvMap;
 				varying vec2 vUv;
 
 				#include <common>
@@ -49,6 +51,7 @@ class CubeToEquirectMaterial extends ShaderMaterial {
 				void main() {
 
 					vec3 rayDirection = equirectUvToDirection( vUv );
+					rayDirection.x *= flipEnvMap;
 					gl_FragColor = textureCube( envMap, rayDirection );
 
 				}`
@@ -110,6 +113,7 @@ export class CubeToEquirectGenerator {
 		quad.material.defines.CUBEUV_TEXEL_WIDTH = texelWidth;
 		quad.material.defines.CUBEUV_TEXEL_HEIGHT = texelHeight;
 		quad.material.uniforms.envMap.value = source;
+		quad.material.uniforms.flipEnvMap.value = source.isRenderTargetTexture ? 1 : - 1;
 		quad.material.needsUpdate = true;
 
 		// save state and render the contents
