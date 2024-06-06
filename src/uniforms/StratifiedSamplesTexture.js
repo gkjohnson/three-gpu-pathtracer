@@ -93,9 +93,6 @@ export class StratifiedSamplesTexture extends DataTexture {
 
 	reset() {
 
-		// this.sampler = null;
-		// this.init();
-		// this.sampler.restart();
 		this.sampler.reset();
 		this.generator.seed = 0;
 
