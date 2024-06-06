@@ -5,6 +5,7 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
 import { getIesTextures, getLights, getTextures } from './utils/sceneUpdateUtils.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
+import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 
 function supportsFloatBlending( renderer ) {
 
@@ -112,6 +113,10 @@ export class WebGLPathTracer {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} ) );
 		this._materials = null;
+
+		this._previousEnvironment = null;
+		this._previousBackground = null;
+		this._internalBackground = null;
 
 		// options
 		this.renderDelay = 100;
@@ -241,6 +246,13 @@ export class WebGLPathTracer {
 		const scene = this.scene;
 		const material = this._pathTracer.material;
 
+		if ( this._internalBackground ) {
+
+			this._internalBackground.dispose();
+			this._internalBackground = null;
+
+		}
+
 		// update scene background
 		material.backgroundBlur = scene.backgroundBlurriness;
 		material.backgroundIntensity = scene.backgroundIntensity ?? 1;
@@ -268,6 +280,17 @@ export class WebGLPathTracer {
 			material.backgroundMap = colorBackground;
 			material.backgroundAlpha = 1;
 
+		} else if ( scene.background.isCubeTexture ) {
+
+			if ( scene.background !== this._previousBackground ) {
+
+				const background = new CubeToEquirectGenerator( this._renderer ).generate( scene.background );
+				this._internalBackground = background;
+				material.backgroundMap = background;
+				material.backgroundAlpha = 1;
+
+			}
+
 		} else {
 
 			material.backgroundMap = scene.background;
@@ -280,12 +303,21 @@ export class WebGLPathTracer {
 		material.environmentRotation.makeRotationFromEuler( scene.environmentRotation ).invert();
 		if ( this._previousEnvironment !== scene.environment ) {
 
-			if ( scene.environment ) {
+			if ( scene.environment !== null ) {
 
-				// TODO: Consider setting this to the highest supported bit depth by checking for
-				// OES_texture_float_linear or OES_texture_half_float_linear. Requires changes to
-				// the equirect uniform
-				material.envMapInfo.updateFrom( scene.environment );
+				if ( scene.environment.isCubeTexture ) {
+
+					const environment = new CubeToEquirectGenerator( this._renderer ).generate( scene.environment );
+					material.envMapInfo.updateFrom( environment );
+
+				} else {
+
+					// TODO: Consider setting this to the highest supported bit depth by checking for
+					// OES_texture_float_linear or OES_texture_half_float_linear. Requires changes to
+					// the equirect uniform
+					material.envMapInfo.updateFrom( scene.environment );
+
+				}
 
 			} else {
 
@@ -296,6 +328,7 @@ export class WebGLPathTracer {
 		}
 
 		this._previousEnvironment = scene.environment;
+		this._previousBackground = scene.background;
 		this.reset();
 
 	}
