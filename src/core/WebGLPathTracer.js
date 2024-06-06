@@ -94,6 +94,12 @@ export class WebGLPathTracer {
 
 	}
 
+	get isCompiling() {
+
+		return Boolean( this._compilePromise );
+
+	}
+
 	constructor( renderer ) {
 
 		// members
@@ -102,6 +108,7 @@ export class WebGLPathTracer {
 		this._pathTracer = new PathTracingRenderer( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
+		this._compilePromise = null;
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._lowResPathTracer.tiles.set( 1, 1 );
@@ -399,7 +406,7 @@ export class WebGLPathTracer {
 		// render the path tracing sample after enough time has passed
 		const delta = clock.getDelta() * 1e3;
 		const elapsedTime = clock.getElapsedTime() * 1e3;
-		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay <= elapsedTime ) {
+		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay <= elapsedTime && ! this.isCompiling ) {
 
 			pathTracer.update();
 
@@ -432,7 +439,7 @@ export class WebGLPathTracer {
 			// render the fallback if we haven't rendered enough samples, are paused, or are occluded
 			if ( ! this.enablePathTracing || this.samples < minSamples || quad.material.opacity < 1 ) {
 
-				if ( this.dynamicLowRes ) {
+				if ( this.dynamicLowRes && ! this.isCompiling ) {
 
 					if ( lowResPathTracer.samples < 1 ) {
 
@@ -447,7 +454,9 @@ export class WebGLPathTracer {
 					quad.render( renderer );
 					quad.material.opacity = currentOpacity;
 
-				} else if ( this.rasterizeScene ) {
+				}
+
+				if ( this.rasterizeScene || this.isCompiling ) {
 
 					this.rasterizeSceneCallback( this.scene, this.camera );
 
@@ -480,6 +489,12 @@ export class WebGLPathTracer {
 
 		this._queueReset = true;
 		this._pathTracer.samples = 0;
+
+		this._compilePromise = this._pathTracer.compileMaterial().then( () => {
+
+			this._compilePromise = null;
+
+		} );
 
 	}
 
