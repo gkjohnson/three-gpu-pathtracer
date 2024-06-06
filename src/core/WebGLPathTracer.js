@@ -456,7 +456,7 @@ export class WebGLPathTracer {
 
 				}
 
-				if ( this.rasterizeScene || this.isCompiling ) {
+				if ( ! this.dynamicLowRes && this.rasterizeScene || this.dynamicLowRes && this.isCompiling ) {
 
 					this.rasterizeSceneCallback( this.scene, this.camera );
 
