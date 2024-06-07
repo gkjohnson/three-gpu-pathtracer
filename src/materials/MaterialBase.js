@@ -2,6 +2,17 @@ import { ShaderMaterial } from 'three';
 
 export class MaterialBase extends ShaderMaterial {
 
+	set needsUpdate( v ) {
+
+		super.needsUpdate = true;
+		this.dispatchEvent( {
+
+			type: 'recompilation',
+
+		} );
+
+	}
+
 	constructor( shader ) {
 
 		super( shader );

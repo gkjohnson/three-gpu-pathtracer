@@ -159,6 +159,9 @@ export class PathTracingRenderer {
 
 	set material( v ) {
 
+		this._fsQuad.material.removeEventListener( 'recompilation', this._compileFunction );
+		v.addEventListener( 'recompilation', this._compileFunction );
+
 		this._fsQuad.material = v;
 
 	}
@@ -195,6 +198,12 @@ export class PathTracingRenderer {
 
 	}
 
+	get isCompiling() {
+
+		return Boolean( this._compilePromise );
+
+	}
+
 	constructor( renderer ) {
 
 		this.camera = null;
@@ -212,6 +221,7 @@ export class PathTracingRenderer {
 		this._blendQuad = new FullScreenQuad( new BlendMaterial() );
 		this._task = null;
 		this._currentTile = 0;
+		this._compilePromise = null;
 
 		this._sobolTarget = new SobolNumberMapGenerator().generate( renderer );
 
@@ -235,6 +245,27 @@ export class PathTracingRenderer {
 				minFilter: NearestFilter,
 			} ),
 		];
+
+		// function for listening to for triggered compilation so we can wait for compilation to finish
+		// before starting to render
+		this._compileFunction = () => {
+
+			const promise = this.compileMaterial( this._fsQuad._mesh );
+			promise.then( () => {
+
+				if ( this._compilePromise === promise ) {
+
+					this._compilePromise = null;
+
+				}
+
+			} );
+
+			this._compilePromise = promise;
+
+		};
+
+		this.material.addEventListener( 'recompilation', this._compileFunction );
 
 	}
 
@@ -350,6 +381,15 @@ export class PathTracingRenderer {
 	}
 
 	update() {
+
+		// ensure we've updated our defines before rendering so we can ensure we
+		// can wait for compilation to finish
+		this.material.onBeforeRender();
+		if ( this.isCompiling ) {
+
+			return;
+
+		}
 
 		if ( ! this._task ) {
 

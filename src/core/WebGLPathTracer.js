@@ -96,7 +96,7 @@ export class WebGLPathTracer {
 
 	get isCompiling() {
 
-		return Boolean( this._compilePromise );
+		return Boolean( this._pathTracer.isCompiling );
 
 	}
 
@@ -489,12 +489,6 @@ export class WebGLPathTracer {
 
 		this._queueReset = true;
 		this._pathTracer.samples = 0;
-
-		this._compilePromise = this._pathTracer.compileMaterial().then( () => {
-
-			this._compilePromise = null;
-
-		} );
 
 	}
 
