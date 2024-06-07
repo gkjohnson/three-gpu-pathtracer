@@ -228,7 +228,7 @@ function animate() {
 	if ( ! params.pause && ! params.continuous ) {
 
 		renderer.render( scene, camera );
-		loader.setSamples( 0 );
+		loader.setSamples( 0, pathTracer.isCompiling );
 
 	} else {
 
@@ -240,7 +240,7 @@ function animate() {
 		}
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.samples );
+		loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 	}
 

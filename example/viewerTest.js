@@ -161,7 +161,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples );
+	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 }
 

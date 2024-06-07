@@ -313,7 +313,7 @@ function animate() {
 	} else {
 
 		loader.setPercentage( 1 );
-		loader.setSamples( pathTracer.samples );
+		loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 	}
 
