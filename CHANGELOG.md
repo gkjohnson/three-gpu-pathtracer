@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Added
 - Support for CubeTexture environments and backgrounds.
+- Compilation happens asynchronously to avoid blocking the browser.
 
 ### Fixed
 - Corner case where marking a mesh as non-visible would not remove the geometry.
