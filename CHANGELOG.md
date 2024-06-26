@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - Case where the background alpha was not set correctly when changing the scene background.
 - Alpha map texture transform not being respected.
+- WebGLPathTracer.dispose throwing an error.
 
 ## [0.0.23] - 2024.06.07
 ### Added
