@@ -490,8 +490,8 @@ export class WebGLPathTracer {
 
 	dispose() {
 
-		this._renderQuad.dispose();
-		this._renderQuad.material.dispose();
+		this._quad.dispose();
+		this._quad.material.dispose();
 		this._pathTracer.dispose();
 
 	}
