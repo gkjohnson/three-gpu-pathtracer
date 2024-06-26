@@ -97,7 +97,8 @@ export const attenuate_hit_function = /* glsl */`
 				// alphaMap
 				if ( material.alphaMap != - 1 ) {
 
-					albedo.a *= texture2D( textures, vec3( uv, material.alphaMap ) ).x;
+					vec3 uvPrime = material.alphaMapTransform * vec3( uv, 1 );
+					albedo.a *= texture2D( textures, vec3( uvPrime.xy, material.alphaMap ) ).x;
 
 				}
 
