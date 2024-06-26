@@ -10,7 +10,7 @@ import { PhysicalCameraUniform } from '../../uniforms/PhysicalCameraUniform.js';
 import { EquirectHdrInfoUniform } from '../../uniforms/EquirectHdrInfoUniform.js';
 import { LightsInfoUniformStruct } from '../../uniforms/LightsInfoUniformStruct.js';
 import { AttributesTextureArray } from '../../uniforms/AttributesTextureArray.js';
-import { MaterialsTexture } from '../../uniforms/MaterialsTexture.js';
+import { MaterialsTexture, MATERIAL_PIXELS } from '../../uniforms/MaterialsTexture.js';
 import { RenderTarget2DArray } from '../../uniforms/RenderTarget2DArray.js';
 import { StratifiedSamplesTexture } from '../../uniforms/StratifiedSamplesTexture.js';
 import { BlueNoiseTexture } from '../../textures/BlueNoiseTexture.js';
@@ -66,6 +66,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				ATTR_TANGENT: 1,
 				ATTR_UV: 2,
 				ATTR_COLOR: 3,
+				MATERIAL_PIXELS: MATERIAL_PIXELS,
 			},
 
 			uniforms: {

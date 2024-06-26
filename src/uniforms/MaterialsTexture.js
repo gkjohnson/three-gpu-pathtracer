@@ -2,7 +2,7 @@ import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, FrontSide, Bac
 import { getTextureHash } from '../core/utils/sceneUpdateUtils.js';
 import { bufferToHash } from '../utils/bufferToHash.js';
 
-const MATERIAL_PIXELS = 45;
+export const MATERIAL_PIXELS = 47;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
 class MaterialFeatures {
@@ -426,6 +426,9 @@ export class MaterialsTexture extends DataTexture {
 
 			// specularIntensityMap transform 43
 			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
+
+			// alphaMap transform 45
+			index += writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
 
 		}
 
