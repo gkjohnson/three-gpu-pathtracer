@@ -66,7 +66,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				ATTR_TANGENT: 1,
 				ATTR_UV: 2,
 				ATTR_COLOR: 3,
-				MATERIAL_PIXELS : MATERIAL_PIXELS,
+				MATERIAL_PIXELS: MATERIAL_PIXELS,
 			},
 
 			uniforms: {
