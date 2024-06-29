@@ -207,8 +207,8 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 
 				if ( key === 'color' && targetAttribute.itemSize !== attr.itemSize ) {
 
-					//make sure the color attribute is aligned with itemSize 3 to 4
-					for ( let index = offset; index < attr.count; ++ index ) {
+					// make sure the color attribute is aligned with itemSize 3 to 4
+					for ( let index = offset, l = attr.count; index < l; index ++ ) {
 
 						attr.setXYZW( index, targetAttribute.getX( index ), targetAttribute.getY( index ), targetAttribute.getZ( index ), 1.0 );
 
