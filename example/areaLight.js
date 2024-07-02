@@ -32,6 +32,7 @@ const params = {
 	// area light settings
 	enabled: true,
 	isCircular: false,
+	visibleSurface: false,
 	intensity: 2,
 	color: '#ffffff',
 	width: 1,
@@ -128,7 +129,7 @@ async function init() {
 	redLight.position.z = - 1.5;
 	redLight.rotateX( Math.PI );
 	redLight.isCircular = false;
-	scene.add( redLight );
+	// scene.add( redLight );
 
 	// initialize scene
 	await pathTracer.setSceneAsync( scene, camera, {
@@ -157,6 +158,7 @@ async function init() {
 
 	const areaLightFolder = gui.addFolder( 'Area Light' );
 	areaLightFolder.add( params, 'enabled' ).name( 'enable' ).onChange( onParamsChange );
+	areaLightFolder.add( params, 'visibleSurface' ).name( 'visibleSurface' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( onParamsChange );
 	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( onParamsChange );
@@ -179,6 +181,7 @@ function onParamsChange() {
 	areaLight.height = params.height;
 	areaLight.color.set( params.color ).convertSRGBToLinear();
 	areaLight.visible = params.enabled;
+	areaLight.visible = params.visibleSurface;
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;

@@ -6,6 +6,7 @@ export class ShapedAreaLight extends RectAreaLight {
 
 		super( ...args );
 		this.isCircular = false;
+		this.visibleSurface = false;
 
 	}
 
@@ -14,6 +15,7 @@ export class ShapedAreaLight extends RectAreaLight {
 		super.copy( source, recursive );
 
 		this.isCircular = source.isCircular;
+		this.visibleSurface = source.visibleSurface;
 
 		return this;
 

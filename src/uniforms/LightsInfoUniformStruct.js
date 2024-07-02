@@ -126,6 +126,10 @@ export class LightsInfoUniformStruct {
 
 				// area
 				floatArray[ baseIndex + ( index ++ ) ] = u.cross( v ).length() * ( l.isCircular ? ( Math.PI / 4.0 ) : 1.0 );
+				index ++;
+
+				// sample 5
+				floatArray[ baseIndex + ( index ++ ) ] = l.visibleSurface ? 0.0 : 1.0;
 
 			} else if ( l.isSpotLight ) {
 

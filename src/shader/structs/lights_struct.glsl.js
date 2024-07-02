@@ -17,6 +17,7 @@ export const lights_struct = /* glsl */`
 
 		vec3 position;
 		int type;
+		float visibleSurface;
 
 		vec3 color;
 		float intensity;
@@ -44,12 +45,14 @@ export const lights_struct = /* glsl */`
 		vec4 s1 = texelFetch1D( tex, i + 1u );
 		vec4 s2 = texelFetch1D( tex, i + 2u );
 		vec4 s3 = texelFetch1D( tex, i + 3u );
+		vec4 s4 = texelFetch1D( tex, i + 4u );
 
 		Light l;
 		l.position = s0.rgb;
 		l.type = int( round( s0.a ) );
 
 		l.color = s1.rgb;
+		l.visibleSurface = s4.r;
 		l.intensity = s1.a;
 
 		l.u = s2.rgb;
@@ -58,7 +61,6 @@ export const lights_struct = /* glsl */`
 
 		if ( l.type == SPOT_LIGHT_TYPE || l.type == POINT_LIGHT_TYPE ) {
 
-			vec4 s4 = texelFetch1D( tex, i + 4u );
 			vec4 s5 = texelFetch1D( tex, i + 5u );
 			l.radius = s4.r;
 			l.decay = s4.g;
