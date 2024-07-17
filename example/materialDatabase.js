@@ -1,5 +1,5 @@
 import {
-	ACESFilmicToneMapping,
+	AgXToneMapping,
 	PerspectiveCamera,
 	Scene,
 	Box3,
@@ -48,7 +48,7 @@ async function init() {
 
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.toneMapping = AgXToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
@@ -181,12 +181,22 @@ function applyMaterialInfo( info, material ) {
 	material.roughness = 1.0;
 	material.ior = 1.5;
 	material.thickness = 1.0;
+	material.iridescence = 0.0;
+	material.iridescenceIOR = 1.0;
+	material.iridescenceThicknessRange = [ 0, 0 ];
 
 	if ( info.specularColor ) material.specularColor.setRGB( ...info.specularColor );
 	if ( 'metalness' in info ) material.metalness = info.metalness;
 	if ( 'roughness' in info ) material.roughness = info.roughness;
 	if ( 'ior' in info ) material.ior = info.ior;
 	if ( 'transmission' in info ) material.transmission = info.transmission;
+	if ( 'thinFilmThickness' in info ) {
+
+		material.iridescence = 1.0;
+		material.iridescenceIOR = info.thinFilmIor;
+		material.iridescenceThicknessRange = [ info.thinFilmThickness, info.thinFilmThickness ];
+
+	}
 
 	if ( material.transmission ) {
 
@@ -199,8 +209,7 @@ function applyMaterialInfo( info, material ) {
 
 	}
 
-	const cleanName = info.name.replace( /\s+/g, '-' ).replace( /[()]+/g, '' );
-	imgEl.src = `https://physicallybased.info/reference/render/${ cleanName }-cycles.png`;
+	imgEl.src = info.reference[ 0 ];
 
 }
 
