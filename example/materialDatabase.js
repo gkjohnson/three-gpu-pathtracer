@@ -183,7 +183,7 @@ function applyMaterialInfo( info, material ) {
 	material.thickness = 1.0;
 	material.iridescence = 0.0;
 	material.iridescenceIOR = 1.0;
-	material.iridescenceThicknessRange = [ 0, 0 ]
+	material.iridescenceThicknessRange = [ 0, 0 ];
 
 	if ( info.specularColor ) material.specularColor.setRGB( ...info.specularColor );
 	if ( 'metalness' in info ) material.metalness = info.metalness;
@@ -197,6 +197,7 @@ function applyMaterialInfo( info, material ) {
 		material.iridescenceThicknessRange = [ info.thinFilmThickness, info.thinFilmThickness ];
 
 	}
+
 	if ( material.transmission ) {
 
 		if ( info.color ) material.attenuationColor.setRGB( ...info.color );
@@ -208,7 +209,7 @@ function applyMaterialInfo( info, material ) {
 
 	}
 
-	imgEl.src = info.reference[0];
+	imgEl.src = info.reference[ 0 ];
 
 }
 
