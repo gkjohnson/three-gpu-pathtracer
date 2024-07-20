@@ -149,7 +149,14 @@ function applyMaterialInfo( info, material ) {
 
 	if ( material.transmission ) {
 
-		if ( info.color ) material.attenuationColor.setRGB( ...info.color );
+		if ( info.color ) {
+
+			material.attenuationColor.setRGB( ...info.color );
+
+		}
+
+		// Blender uses 1 / density when exporting volume transmission which doesn't look
+		// exactly right. But because the scene is 1000x in size we multiply by 1000 here.
 		material.attenuationDistance = 1000 / info.density;
 
 	} else {
