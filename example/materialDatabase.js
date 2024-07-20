@@ -1,26 +1,18 @@
 import {
 	AgXToneMapping,
-	PerspectiveCamera,
-	Scene,
 	Box3,
-	Mesh,
-	CylinderGeometry,
-	MeshPhysicalMaterial,
+	Scene,
+	Vector3,
 	WebGLRenderer,
-	EquirectangularReflectionMapping,
-	Color,
 } from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WebGLPathTracer } from '../src/index.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
+import { MaterialOrbSceneLoader } from './utils/MaterialOrbLoader.js';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb';
-const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr';
 const DB_URL = 'https://api.physicallybased.info/materials';
 const CREDITS = 'Materials courtesy of "physicallybased.info"';
 
@@ -41,6 +33,8 @@ init();
 
 async function init() {
 
+	RectAreaLightUniformsLib.init();
+
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
@@ -49,84 +43,39 @@ async function init() {
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = AgXToneMapping;
+	renderer.toneMappingExposure = 0.02;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.textureSize.set( 2048, 2048 );
 	pathTracer.filterGlossyFactor = 0.5;
-
-	// camera
-	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
-	camera.position.set( - 4, 2, 3 );
-
-	// controls
-	controls = new OrbitControls( camera, renderer.domElement );
-	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// scene
 	scene = new Scene();
 
 	// load assets
-	const [ envTexture, gltf, dbJson ] = await Promise.all( [
-		new RGBELoader().loadAsync( ENV_URL ),
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+	const [ orb, dbJson ] = await Promise.all( [
+		new MaterialOrbSceneLoader().loadAsync(),
 		fetch( DB_URL ).then( res => res.json() ),
 	] );
 
-	// background
-	envTexture.mapping = EquirectangularReflectionMapping;
-	scene.background = envTexture;
-	scene.environment = envTexture;
-
 	// scene initialization
-	gltf.scene.scale.setScalar( 0.01 );
-	gltf.scene.updateMatrixWorld();
-	scene.add( gltf.scene );
+	scene.add( orb.scene );
+	camera = orb.camera;
+	shellMaterial = orb.material;
 
-	const box = new Box3();
-	box.setFromObject( gltf.scene );
+	scene.attach( camera );
+	camera.removeFromParent();
+	camera.updateMatrixWorld();
 
-	const floor = new Mesh(
-		new CylinderGeometry( 3, 3, 0.05, 200 ),
-		new MeshPhysicalMaterial( { color: 0xffffff, roughness: 0, metalness: 0.25 } ),
-	);
-	floor.geometry = floor.geometry.toNonIndexed();
-	floor.geometry.clearGroups();
-	floor.position.y = box.min.y - 0.03;
-	scene.add( floor );
-
-	shellMaterial = new MeshPhysicalMaterial();
-	const coreMaterial = new MeshPhysicalMaterial( { color: new Color( 0.5, 0.5, 0.5 ) } );
-	gltf.scene.traverse( c => {
-
-		// the vertex normals on the material ball are off...
-		// TODO: precompute the vertex normals so they are correct on load
-		if ( c.geometry ) {
-
-			c.geometry.computeVertexNormals();
-
-		}
-
-		if ( c.name === 'Sphere_1' ) {
-
-			c.material = coreMaterial;
-
-		} else {
-
-			c.material = shellMaterial;
-
-		}
-
-		if ( c.name === 'subsphere_1' ) {
-
-			c.material = coreMaterial;
-
-		}
-
-	} );
+	const fwd = new Vector3( 0, 0, - 1 ).transformDirection( camera.matrixWorld ).normalize();
+	controls = new OrbitControls( camera, renderer.domElement );
+	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
+	controls.target.copy( camera.position ).addScaledVector( fwd, 25 );
+	controls.update();
 
 	// database set up
 	database = {};
@@ -201,7 +150,7 @@ function applyMaterialInfo( info, material ) {
 	if ( material.transmission ) {
 
 		if ( info.color ) material.attenuationColor.setRGB( ...info.color );
-		material.attenuationDistance = 200 / info.density;
+		material.attenuationDistance = 1000 / info.density;
 
 	} else {
 
@@ -228,6 +177,7 @@ function animate() {
 
 	requestAnimationFrame( animate );
 	pathTracer.renderSample();
+	// renderer.render( scene, camera );
 	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 }

@@ -1,8 +1,9 @@
-import { RectAreaLight } from 'three';
+import { MeshPhysicalMaterial, MeshStandardMaterial, RectAreaLight } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-const ORB_SCENE_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/usd-shader-ball/usd-shaderball-scene.glb';
+// TODO: this scene should technically be rendered at a 1000x smaller scale
 
+const ORB_SCENE_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/usd-shader-ball/usd-shaderball-scene.glb';
 function assignWatts( light, watts ) {
 
 	// https://github.com/will-ca/glTF-Blender-IO/blob/af9e7f06508a95425b05e485fa83681b268bbdfc/addons/io_scene_gltf2/blender/exp/gltf2_blender_gather_lights.py#L92-L97
@@ -29,7 +30,6 @@ export class MaterialOrbSceneLoader {
 
 				const {
 					scene,
-					lights,
 					cameras,
 				} = gltf;
 
@@ -40,16 +40,45 @@ export class MaterialOrbSceneLoader {
 				for ( let i = 0; i < 4; i ++ ) {
 
 					const light = new RectAreaLight( 0xffffff, 1, 24.36, 24.36 );
-					assignWatts( leftLight, 11185.5 );
+					assignWatts( light, 11185.5 );
 					scene.getObjectByName( 'light' + i ).add( light );
 
 				}
 
+				// TODO: why is this necessary?
+				const camera = cameras[ 0 ];
+				camera.fov *= 2.0;
+				camera.updateProjectionMatrix();
+
+				// TODO: if we don't set these we seem to have some kind of race condition causing
+				// emission on the object core
+				scene.traverse( c => {
+
+					if ( c.material ) {
+
+						c.material.emissive.set( 0, 0, 0 );
+						c.material.emissiveIntensity = 0;
+
+					}
+
+					if ( c.material ) {
+
+						const newMat = new MeshStandardMaterial();
+						newMat.color.copy( c.material.color );
+						newMat.map = c.material.map;
+						c.material = newMat;
+
+					}
+
+				} );
+
+				const material = new MeshPhysicalMaterial();
+				scene.getObjectByName( 'material_surface' ).material = material;
+
 				return {
 
-					material: scene.getObjectByName( 'material_surface' ).material,
-					cameras,
-					lights,
+					material,
+					camera,
 					scene,
 
 				};
