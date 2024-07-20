@@ -13,6 +13,8 @@ import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
+const CREDITS = 'Material orb model courtesy of USD Working Group';
+
 let pathTracer, renderer, controls, denoiseQuad, material;
 let camera, scene, loader;
 
@@ -167,6 +169,8 @@ async function init() {
 	controls.update();
 
 	loader.setPercentage( 1 );
+	loader.setCredits( CREDITS );
+
 	onParamsChange();
 	onResize();
 	window.addEventListener( 'resize', onResize );
