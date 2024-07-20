@@ -1,4 +1,4 @@
-import { MeshPhysicalMaterial, MeshStandardMaterial, RectAreaLight } from 'three';
+import { MeshPhysicalMaterial, RectAreaLight, SRGBColorSpace } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // TODO: this scene should technically be rendered at a 1000x smaller scale
@@ -50,23 +50,18 @@ export class MaterialOrbSceneLoader {
 				camera.fov *= 2.0;
 				camera.updateProjectionMatrix();
 
-				// TODO: if we don't set these we seem to have some kind of race condition causing
-				// emission on the object core
+				// some objects in the scene use 16 bit float vertex colors so we disable them here
 				scene.traverse( c => {
 
 					if ( c.material ) {
 
-						c.material.emissive.set( 0, 0, 0 );
-						c.material.emissiveIntensity = 0;
+						c.material.vertexColors = false;
 
 					}
 
-					if ( c.material ) {
+					if ( c.name === 'sss_bars' ) {
 
-						const newMat = new MeshStandardMaterial();
-						newMat.color.copy( c.material.color );
-						newMat.map = c.material.map;
-						c.material = newMat;
+						c.material.color.setRGB( 0.18, 0.18, 0.18, SRGBColorSpace );
 
 					}
 

@@ -1,6 +1,5 @@
 import {
 	AgXToneMapping,
-	Box3,
 	Scene,
 	Vector3,
 	WebGLRenderer,
@@ -14,9 +13,9 @@ import { MaterialOrbSceneLoader } from './utils/MaterialOrbLoader.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 const DB_URL = 'https://api.physicallybased.info/materials';
-const CREDITS = 'Materials courtesy of "physicallybased.info"';
+const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material sphere courtesy of USD Working Group';
 
-let pathTracer, renderer, controls, shellMaterial;
+let pathTracer, renderer, controls, material;
 let camera, database, scene;
 let loader, imgEl;
 
@@ -65,15 +64,18 @@ async function init() {
 	// scene initialization
 	scene.add( orb.scene );
 	camera = orb.camera;
-	shellMaterial = orb.material;
+	material = orb.material;
 
+	// move camera to the scene
 	scene.attach( camera );
 	camera.removeFromParent();
-	camera.updateMatrixWorld();
 
-	const fwd = new Vector3( 0, 0, - 1 ).transformDirection( camera.matrixWorld ).normalize();
+	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
+
+	// shift target
+	const fwd = new Vector3( 0, 0, - 1 ).transformDirection( camera.matrixWorld ).normalize();
 	controls.target.copy( camera.position ).addScaledVector( fwd, 25 );
 	controls.update();
 
@@ -121,6 +123,7 @@ function onResize() {
 
 function applyMaterialInfo( info, material ) {
 
+	// defaults
 	material.color.set( 0xffffff );
 	material.transmission = 0.0;
 	material.attenuationDistance = Infinity;
@@ -134,6 +137,7 @@ function applyMaterialInfo( info, material ) {
 	material.iridescenceIOR = 1.0;
 	material.iridescenceThicknessRange = [ 0, 0 ];
 
+	// apply database values
 	if ( info.specularColor ) material.specularColor.setRGB( ...info.specularColor );
 	if ( 'metalness' in info ) material.metalness = info.metalness;
 	if ( 'roughness' in info ) material.roughness = info.roughness;
@@ -161,7 +165,11 @@ function applyMaterialInfo( info, material ) {
 
 	} else {
 
-		if ( info.color ) material.color.setRGB( ...info.color );
+		if ( info.color ) {
+
+			material.color.setRGB( ...info.color );
+
+		}
 
 	}
 
@@ -171,7 +179,7 @@ function applyMaterialInfo( info, material ) {
 
 function onParamsChange() {
 
-	applyMaterialInfo( database[ params.material ], shellMaterial );
+	applyMaterialInfo( database[ params.material ], material );
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.renderScale = params.renderScale;
@@ -184,7 +192,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 	pathTracer.renderSample();
-	// renderer.render( scene, camera );
 	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 }
