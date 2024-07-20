@@ -9,7 +9,7 @@ import { WebGLPathTracer } from '../src/index.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
-import { MaterialOrbSceneLoader } from './utils/MaterialOrbLoader.js';
+import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 const DB_URL = 'https://api.physicallybased.info/materials';

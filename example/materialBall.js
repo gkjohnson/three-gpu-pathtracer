@@ -2,28 +2,18 @@ import {
 	ACESFilmicToneMapping,
 	CustomBlending,
 	Scene,
-	Box3,
-	Mesh,
-	CylinderGeometry,
-	MeshPhysicalMaterial,
 	WebGLRenderer,
-	EquirectangularReflectionMapping,
-	PerspectiveCamera,
-	Color,
+	Vector3,
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
+import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
-const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/autoshop_01_1k.hdr';
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/material-balls/material_ball_v2.glb';
-
-let pathTracer, renderer, controls, denoiseQuad, shellMaterial;
+let pathTracer, renderer, controls, denoiseQuad, material;
 let camera, scene, loader;
 
 const params = {
@@ -113,17 +103,21 @@ init();
 
 async function init() {
 
+	RectAreaLightUniformsLib.init();
+
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
 	// renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.toneMappingExposure = 0.02;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.textureSize.set( 2048, 2048 );
 	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {
 
 		denoiseQuad.material.sigma = params.denoiseSigma;
@@ -147,76 +141,30 @@ async function init() {
 		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 	} ) );
 
-	// camera
-	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
-	camera.position.set( - 4, 2, 3 );
+	scene = new Scene();
+
+	window.SCENE = scene;
+
+	// load assets
+	const orb = await new MaterialOrbSceneLoader().loadAsync();
+
+	// scene initialization
+	scene.add( orb.scene );
+	camera = orb.camera;
+	material = orb.material;
+
+	// move camera to the scene
+	scene.attach( camera );
+	camera.removeFromParent();
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
-	scene = new Scene();
-	scene.backgroundBlurriness = 0.05;
-
-	// load assets
-	const [ envTexture, gltf ] = await Promise.all( [
-		new RGBELoader().loadAsync( ENV_URL ),
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL )
-	] );
-
-	// set environment
-	envTexture.mapping = EquirectangularReflectionMapping;
-	scene.background = envTexture;
-	scene.environment = envTexture;
-
-	// set up scene
-	gltf.scene.scale.setScalar( 0.01 );
-	gltf.scene.updateMatrixWorld();
-	scene.add( gltf.scene );
-
-	const box = new Box3();
-	box.setFromObject( gltf.scene );
-
-	const floor = new Mesh(
-		new CylinderGeometry( 3, 3, 0.05, 200 ),
-		new MeshPhysicalMaterial( { color: 0xffffff, roughness: 0.1, metalness: 0.9 } ),
-	);
-	floor.geometry = floor.geometry.toNonIndexed();
-	floor.geometry.clearGroups();
-	floor.position.y = box.min.y - 0.03;
-	scene.add( floor );
-
-	const coreMaterial = new MeshPhysicalMaterial( { color: new Color( 0.5, 0.5, 0.5 ) } );
-	shellMaterial = new MeshPhysicalMaterial();
-
-	gltf.scene.traverse( c => {
-
-		// the vertex normals on the material ball are off...
-		// TODO: precompute the vertex normals so they are correct on load
-		if ( c.geometry ) {
-
-			c.geometry.computeVertexNormals();
-
-		}
-
-		if ( c.name === 'Sphere_1' ) {
-
-			c.material = coreMaterial;
-
-		} else {
-
-			c.material = shellMaterial;
-
-		}
-
-		if ( c.name === 'subsphere_1' ) {
-
-			c.material = coreMaterial;
-
-		}
-
-	} );
+	// shift target
+	const fwd = new Vector3( 0, 0, - 1 ).transformDirection( camera.matrixWorld ).normalize();
+	controls.target.copy( camera.position ).addScaledVector( fwd, 25 );
+	controls.update();
 
 	loader.setPercentage( 1 );
 	onParamsChange();
@@ -287,27 +235,27 @@ function onResize() {
 function onParamsChange() {
 
 	const materialProperties = params.materialProperties;
-	shellMaterial.color.set( materialProperties.color );
-	shellMaterial.emissive.set( materialProperties.emissive );
-	shellMaterial.emissiveIntensity = materialProperties.emissiveIntensity;
-	shellMaterial.metalness = materialProperties.metalness;
-	shellMaterial.roughness = materialProperties.roughness;
-	shellMaterial.transmission = materialProperties.transmission;
-	shellMaterial.attenuationDistance = materialProperties.thinFilm ? Infinity : materialProperties.attenuationDistance;
-	shellMaterial.attenuationColor.set( materialProperties.attenuationColor );
-	shellMaterial.ior = materialProperties.ior;
-	shellMaterial.opacity = materialProperties.opacity;
-	shellMaterial.clearcoat = materialProperties.clearcoat;
-	shellMaterial.clearcoatRoughness = materialProperties.clearcoatRoughness;
-	shellMaterial.sheenColor.set( materialProperties.sheenColor );
-	shellMaterial.sheenRoughness = materialProperties.sheenRoughness;
-	shellMaterial.iridescence = materialProperties.iridescence;
-	shellMaterial.iridescenceIOR = materialProperties.iridescenceIOR;
-	shellMaterial.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
-	shellMaterial.specularColor.set( materialProperties.specularColor );
-	shellMaterial.specularIntensity = materialProperties.specularIntensity;
-	shellMaterial.transparent = shellMaterial.opacity < 1;
-	shellMaterial.flatShading = materialProperties.flatShading;
+	material.color.set( materialProperties.color );
+	material.emissive.set( materialProperties.emissive );
+	material.emissiveIntensity = materialProperties.emissiveIntensity;
+	material.metalness = materialProperties.metalness;
+	material.roughness = materialProperties.roughness;
+	material.transmission = materialProperties.transmission;
+	material.attenuationDistance = materialProperties.thinFilm ? Infinity : materialProperties.attenuationDistance;
+	material.attenuationColor.set( materialProperties.attenuationColor );
+	material.ior = materialProperties.ior;
+	material.opacity = materialProperties.opacity;
+	material.clearcoat = materialProperties.clearcoat;
+	material.clearcoatRoughness = materialProperties.clearcoatRoughness;
+	material.sheenColor.set( materialProperties.sheenColor );
+	material.sheenRoughness = materialProperties.sheenRoughness;
+	material.iridescence = materialProperties.iridescence;
+	material.iridescenceIOR = materialProperties.iridescenceIOR;
+	material.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
+	material.specularColor.set( materialProperties.specularColor );
+	material.specularIntensity = materialProperties.specularIntensity;
+	material.transparent = material.opacity < 1;
+	material.flatShading = materialProperties.flatShading;
 
 	pathTracer.transmissiveBounces = params.transmissiveBounces;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
@@ -316,8 +264,8 @@ function onParamsChange() {
 	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
-	shellMaterial.matte = materialProperties.matte;
-	shellMaterial.castShadow = materialProperties.castShadow;
+	material.matte = materialProperties.matte;
+	material.castShadow = materialProperties.castShadow;
 
 	pathTracer.updateMaterials();
 	pathTracer.setScene( scene, camera );
