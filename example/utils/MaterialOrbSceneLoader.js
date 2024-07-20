@@ -1,8 +1,7 @@
-import { MeshPhysicalMaterial, RectAreaLight, SRGBColorSpace } from 'three';
+import { MeshPhysicalMaterial, RectAreaLight } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // TODO: this scene should technically be rendered at a 1000x smaller scale
-// TODO: it would be nice to round the orb 3d model a bit more
 
 const ORB_SCENE_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/usd-shader-ball/usd-shaderball-scene.glb';
 function assignWatts( light, watts ) {
@@ -57,13 +56,6 @@ export class MaterialOrbSceneLoader {
 					if ( c.material ) {
 
 						c.material.vertexColors = false;
-
-					}
-
-					// TODO: this should be colored by a texture that says "Sub-Surface Bar"
-					if ( c.name === 'sss_bars' ) {
-
-						c.material.color.setRGB( 0.01, 0.01, 0.01, SRGBColorSpace );
 
 					}
 

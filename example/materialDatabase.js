@@ -13,7 +13,7 @@ import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 const DB_URL = 'https://api.physicallybased.info/materials';
-const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb courtesy of USD Working Group';
+const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
 
 let pathTracer, renderer, controls, material;
 let camera, database, scene;
