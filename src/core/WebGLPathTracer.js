@@ -100,6 +100,7 @@ export class WebGLPathTracer {
 		return Boolean( this._pathTracer.isCompiling );
 
 	}
+	//* Denoiser ----------------------------
 
 	get isDenoising() {
 
@@ -116,6 +117,43 @@ export class WebGLPathTracer {
 	set weightsUrl( url ) {
 
 		this._denoiserManager.denoiser.weightsUrl = url;
+
+	}
+
+	get denoiserQuality() {
+
+		return this._denoiserManager.denoiser.quality;
+
+	}
+
+	set denoiserQuality( v ) {
+
+		this._denoiserManager.denoiser.quality = v;
+
+	}
+
+	get useAux() {
+
+		return this._useAux;
+
+	}
+
+	set useAux( v ) {
+
+		this._useAux = v;
+		this._denoiserManager.denoiser.resetInputs();
+
+	}
+
+	get denoiserDebugging() {
+
+		return this._denoiserManager.denoiser.debugging;
+
+	}
+
+	set denoiserDebugging( v ) {
+
+		this._denoiserManager.denoiser.debugging = v;
 
 	}
 
@@ -158,19 +196,23 @@ export class WebGLPathTracer {
 		this.synchronizeRenderSize = true;
 		this.rasterizeScene = true;
 		this.renderToCanvas = true;
+
 		// denoiser
-		this.enableDenoiser = true;
+		this.enableDenoiser = false;
 		// we will use aux
-		this.useAux = true;
+		this._useAux = true;
 		// the aux will be clean inputs
 		this.cleanAux = true;
 		// if the aux will be passed externally
 		this.externalAux = false;
 		this._auxTextures = {};
+		// for debugging, which aux to render
+		this.renderAux = null;
 		// When to denoise
 		this.denoiseAt = 6;
 		// state
 		this.isDenoised = false;
+
 		this.textureSize = new Vector2( 1024, 1024 );
 		this.rasterizeSceneCallback = ( scene, camera ) => {
 
@@ -443,7 +485,7 @@ export class WebGLPathTracer {
 			if ( this.enableDenoiser ) {
 
 				// check to run the denoiser
-				if ( this.isDenoised ) this._denoiserManager.renderOutput();
+				if ( this.isDenoised ) this._denoiserManager.renderOutput( this._auxTextures[ this.renderAux ] );
 				else if ( this.samples === this.denoiseAt ) this.denoiseSample();
 
 			}
@@ -538,14 +580,15 @@ export class WebGLPathTracer {
 	async denoiseSample( colorInput, albedoInput, normalInput ) {
 
 		if ( this.isDenoising || this.isDenoised || this.blockDenoise ) return;
-		console.log( 'Pathtracer: Denoising from root, samples:', this.samples, performance.now() );
 		const colorTexture = colorInput || this._pathTracer.target.texture;
 		// get the aux if needed
-		if ( this.useAux ) {
+		if ( this._useAux ) {
 
 			// using user provided aux or from our own generator
 			const aux = this.externalAux ? this._auxTextures : await this.generateAux();
-			console.log('Aux', aux);
+			this._auxTextures = aux;
+			// todo: remove me, debugging
+			//this.renderAux = 'normal';
 			await this._denoiserManager.denoise( colorTexture, albedoInput || aux.albedo, normalInput || aux.normal );
 
 		} else {

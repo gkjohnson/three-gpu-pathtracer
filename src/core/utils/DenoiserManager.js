@@ -17,10 +17,9 @@ export class DenoiserManager {
 		this.denoiser.inputMode = 'webgl';
 		this.denoiser.outputMode = 'webgl';
 		this.denoiser.weightsUrl = 'https://cdn.jsdelivr.net/npm/denoiser/tzas';
-		this.denoiser.debugging = true;
-		//this.denoiser.usePassThrough = true;
 
-		// Delete this after debugging
+		//this.denoiser.debugging = true;
+		//this.denoiser.usePassThrough = true;
 		//this.rawCanvas = document.getElementById( 'rawCanvas' );
 		//this.denoiser.setCanvas( this.rawCanvas );
 
@@ -37,6 +36,7 @@ export class DenoiserManager {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
 		this.ptMaterial.opacity = 1;
+
 		// Material to blend between pathtracer and denoiser
 		// TODO: Not sure if  params are required
 		this.blendMaterial = new BlendMaterial();
@@ -55,7 +55,6 @@ export class DenoiserManager {
 
 		if ( this.denoiser.height !== height || this.denoiser.width !== width ) {
 
-			console.log( 'Setting Denoiser size:', width, height );
 			this.denoiser.width = width;
 			this.denoiser.height = height;
 			this.createConversionRenderTarget( width, height );
@@ -66,8 +65,6 @@ export class DenoiserManager {
 
 			}
 
-			console.log( 'Conversion Render Target:', this.conversionRenderTarget );
-
 		}
 
 		// set so we can access later when blending
@@ -76,7 +73,7 @@ export class DenoiserManager {
 		const albedoWebGLTexture = this.getWebGLTexture( albedoTexture );
 		const normalWebGLTexture = this.getWebGLTexture( normalTexture );
 
-		// run the denoiser
+		//* run the denoiser
 		this.renderer.resetState();
 
 		/* The setting of inputs is async and running too quick before execute. this will be fixed in a future version
@@ -91,9 +88,7 @@ export class DenoiserManager {
 		// Run the denoiser
 		const denoisedWebGLTexture = await this.denoiser.execute();
 
-		console.log( 'Denoiser finished', denoisedWebGLTexture );
 		this.renderer.resetState();
-		// because we know the texture is propperly initialized and correct,
 		if ( ! this.outputTexture ) this.outputTexture = this.createOutputTexture();
 		// inject the webGLTexture into the texture
 		this.denoisedTexture = this.injectWebGLTexture( this.outputTexture, denoisedWebGLTexture );
@@ -105,7 +100,7 @@ export class DenoiserManager {
 	}
 
 	// render the blended output
-	renderOutput() {
+	renderOutput( bypassTexture ) {
 
 		if ( ! this.pathtracedTexture || ! this.denoisedTexture ) return;
 
@@ -114,11 +109,22 @@ export class DenoiserManager {
 		this.blendMaterial.target1 = this.pathtracedTexture;
 		this.blendMaterial.target2 = this.denoisedTexture;
 		this.blendMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
+
+		// Lets us see the aux textures
+		if ( bypassTexture ) {
+
+			this.blendMaterial.target2 = bypassTexture;
+			this.blendMaterial.opacity = 1;
+
+		}
+
+		// should we force to canvas or allow the user to set to their own target?
 		//this.renderer.setRenderTarget( null );
 		this.quad.render( this.renderer );
 		//this.renderer.setRenderTarget( currentTarget );
 
 	}
+
 	// because of size issues we need to create one when we change size
 	createConversionRenderTarget( width, height ) {
 
@@ -131,16 +137,15 @@ export class DenoiserManager {
 
 	}
 
+	// The plain texture is raw without toneMapping this is more like what renders to canvas
 	getCorrectPathtracerTexture( pathtracedTexture ) {
 
-		//get the current things
-		const currentTarget = this.renderer.getRenderTarget();
-		// set the ptmaterial to the quad
+		const oldRenderTarget = this.renderer.getRenderTarget();
 		this.quad.material = this.ptMaterial;
 		this.ptMaterial.map = pathtracedTexture;
 		this.renderer.setRenderTarget( this.conversionRenderTarget );
 		this.quad.render( this.renderer );
-		this.renderer.setRenderTarget( currentTarget );
+		this.renderer.setRenderTarget( oldRenderTarget );
 		return this.conversionRenderTarget.texture;
 
 	}
@@ -168,7 +173,7 @@ export class DenoiserManager {
 
 	}
 
-	//* Utils that require things in the class
+	//* Utils ----------------------------
 	// get the webGLTexture out of a renderTarget or THREE.texture
 	getWebGLTexture( input ) {
 
@@ -197,10 +202,3 @@ export class DenoiserManager {
 	}
 
 }
-
-
-
-// set the inputs based on threejs render targets or textures
-
-
-// get the webGLTexture out of a renderTarget or texture

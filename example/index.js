@@ -29,6 +29,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import path from 'path';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -107,6 +108,13 @@ const params = {
 	floorOpacity: 1.0,
 	floorRoughness: 0.2,
 	floorMetalness: 0.2,
+
+	// Denoiser
+	enableDenoiser: false,
+	useAux: true,
+	renderAux: '',
+	denoiserQuality: 'fast',
+	denoiserDebugging: false,
 
 	...getScaledSettings(),
 
@@ -269,10 +277,48 @@ function onParamsChange() {
 
 	}
 
+	// Denoiser
+	const renderScaleController = findController( 'renderScale' );
+	const maxSamplesController = findController( 'maxSamples' );
+	pathTracer.enableDenoiser = params.enableDenoiser;
+	if ( params.enableDenoiser ) {
+
+		pathTracer.denoiserQuality = params.denoiserQuality;
+		pathTracer.useAux = params.useAux;
+		pathTracer.renderAux = params.renderAux;
+		pathTracer.denoiserDebugging = params.denoiserDebugging;
+
+		// force the renderscale to be 1 when using the denoiser
+		pathTracer.renderScale = 1;
+		params.renderScale = 1;
+		// set and disable the renderScale gui
+		renderScaleController.disable();
+		renderScaleController.setValue( 1 );
+
+	} else {
+
+	}
+
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 
 }
+
+function findController( property ) {
+
+	let targetController = null;
+	// get the controller by property
+	// biome-ignore lint/complexity/noForEach: <explanation>
+	gui.controllersRecursive().forEach( controller => {
+
+		if ( controller.property === property ) targetController = controller;
+
+	} );
+	return targetController;
+
+}
+
+
 
 function onHashChange() {
 
@@ -363,6 +409,14 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.open();
+
+	const denoisingFolder = gui.addFolder( 'Denoising' );
+	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
+	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( onParamsChange ).name( 'Quality' );
+	denoisingFolder.add( params, 'useAux' ).onChange( onParamsChange ).name( 'Use Aux Inputs' );
+	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
+	denoisingFolder.add( params, 'denoiserDebugging' ).name( 'Debugging' ).onChange( onParamsChange );
+	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
