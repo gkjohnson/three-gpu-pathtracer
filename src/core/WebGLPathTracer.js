@@ -6,7 +6,8 @@ import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js'
 import { getIesTextures, getLights, getTextures } from './utils/sceneUpdateUtils.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
-
+import { DenoiserManager } from './utils/DenoiserManager.js';
+import { AlbedoNormalPass } from './utils/AlbedoNormalPass.js';
 function supportsFloatBlending( renderer ) {
 
 	return renderer.extensions.get( 'EXT_float_blend' );
@@ -100,12 +101,31 @@ export class WebGLPathTracer {
 
 	}
 
+	get isDenoising() {
+
+		return this._denoiserManager.isDenoising;
+
+	}
+
+	get weightsUrl() {
+
+		return this._denoiserManager.denoiser.tzaUrl;
+
+	}
+
+	set weightsUrl( url ) {
+
+		this._denoiserManager.denoiser.weightsUrl = url;
+
+	}
+
 	constructor( renderer ) {
 
 		// members
 		this._renderer = renderer;
 		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
+		this._denoiserManager = new DenoiserManager( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
 		this._compilePromise = null;
@@ -128,6 +148,7 @@ export class WebGLPathTracer {
 		// options
 		this.renderDelay = 100;
 		this.minSamples = 5;
+		this.maxSamples = 6;
 		this.fadeDuration = 500;
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
@@ -137,6 +158,19 @@ export class WebGLPathTracer {
 		this.synchronizeRenderSize = true;
 		this.rasterizeScene = true;
 		this.renderToCanvas = true;
+		// denoiser
+		this.enableDenoiser = true;
+		// we will use aux
+		this.useAux = true;
+		// the aux will be clean inputs
+		this.cleanAux = true;
+		// if the aux will be passed externally
+		this.externalAux = false;
+		this._auxTextures = {};
+		// When to denoise
+		this.denoiseAt = 6;
+		// state
+		this.isDenoised = false;
 		this.textureSize = new Vector2( 1024, 1024 );
 		this.rasterizeSceneCallback = ( scene, camera ) => {
 
@@ -154,7 +188,7 @@ export class WebGLPathTracer {
 		};
 
 		// initialize the scene so it doesn't fail
-		this.setScene( new Scene(), new PerspectiveCamera() );
+		this.setScene( new Scene(), new PerspectiveCamera(), { blockDenoise: true } );
 
 	}
 
@@ -176,16 +210,18 @@ export class WebGLPathTracer {
 
 			return generator.generateAsync( options.onProgress ).then( result => {
 
+				this.blockDenoise = false;
 				return this._updateFromResults( scene, camera, result );
 
 			} );
 
-		} else {
-
-			const result = generator.generate();
-			return this._updateFromResults( scene, camera, result );
-
 		}
+
+		if ( options.blockDenoise ) this.blockDenoise = true;
+		else this.blockDenoise = false;
+
+		const result = generator.generate();
+		return this._updateFromResults( scene, camera, result );
 
 	}
 
@@ -404,6 +440,17 @@ export class WebGLPathTracer {
 		const elapsedTime = clock.getElapsedTime() * 1e3;
 		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay <= elapsedTime && ! this.isCompiling ) {
 
+			if ( this.enableDenoiser ) {
+
+				// check to run the denoiser
+				if ( this.isDenoised ) this._denoiserManager.renderOutput();
+				else if ( this.samples === this.denoiseAt ) this.denoiseSample();
+
+			}
+
+			// reject if above max samples
+			if ( this.samples >= this.maxSamples ) return;
+
 			pathTracer.update();
 
 		}
@@ -480,10 +527,49 @@ export class WebGLPathTracer {
 		}
 
 	}
+	setAuxTextures( albedoTexture, normalTexture ) {
+
+		this.externalAux = true;
+		this._auxTextures.albedo = albedoTexture;
+		this._auxTextures.normal = normalTexture;
+
+	}
+	// run the denoiser on the current sample
+	async denoiseSample( colorInput, albedoInput, normalInput ) {
+
+		if ( this.isDenoising || this.isDenoised || this.blockDenoise ) return;
+		console.log( 'Pathtracer: Denoising from root, samples:', this.samples, performance.now() );
+		const colorTexture = colorInput || this._pathTracer.target.texture;
+		// get the aux if needed
+		if ( this.useAux ) {
+
+			// using user provided aux or from our own generator
+			const aux = this.externalAux ? this._auxTextures : await this.generateAux();
+			console.log('Aux', aux);
+			await this._denoiserManager.denoise( colorTexture, albedoInput || aux.albedo, normalInput || aux.normal );
+
+		} else {
+
+			await this._denoiserManager.denoise( colorTexture );
+
+		}
+
+		this.isDenoised = true;
+
+	}
+
+	//get albedo and normals from the current scene
+	async generateAux() {
+
+		if ( ! this._albedoNormalPass ) this._albedoNormalPass = new AlbedoNormalPass( this._renderer, true );
+		return this._albedoNormalPass.render( this._renderer, this.scene, this.camera );
+
+	}
 
 	reset() {
 
 		this._queueReset = true;
+		this.isDenoised = false;
 		this._pathTracer.samples = 0;
 
 	}

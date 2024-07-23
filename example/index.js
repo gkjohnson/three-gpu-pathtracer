@@ -316,7 +316,6 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
-
 	pathTracer.updateCamera();
 
 }
@@ -436,7 +435,6 @@ function updateCameraProjection( cameraProjection ) {
 
 	controls.object = activeCamera;
 	controls.update();
-
 	pathTracer.setCamera( activeCamera );
 
 }
