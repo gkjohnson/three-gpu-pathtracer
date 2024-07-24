@@ -24,11 +24,12 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
+import { GradientEquirectTexture, WebGLPathTracer, OIDNDenoiser } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -123,7 +124,7 @@ const params = {
 };
 
 let floorPlane, gui, stats;
-let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
+let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera, denoiser;
 let controls, scene, model;
 let gradientMap;
 let loader;
@@ -149,6 +150,10 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
+
+	// denoiser
+	denoiser = new OIDNDenoiser( renderer );
+	pathTracer.setDenoiser( denoiser );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;

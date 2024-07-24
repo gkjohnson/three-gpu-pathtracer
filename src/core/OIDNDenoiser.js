@@ -2,13 +2,73 @@
 
 import { Denoiser } from 'denoiser';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { ClampedInterpolationMaterial } from '../../materials/fullscreen/ClampedInterpolationMaterial';
-import { BlendMaterial } from '../../materials/fullscreen/BlendMaterial';
+import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
+import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 
-import { NoBlending } from 'three';
-import * as THREE from 'three';
+import { NoBlending, WebGLRenderTarget, SRGBColorSpace } from 'three';
 
-export class DenoiserManager {
+export class OIDNDenoiser {
+
+	get weightsUrl() {
+
+		return this.denoiser.weightsUrl;
+
+	}
+
+	set weightsUrl( url ) {
+
+		this.weightsUrl = url;
+
+	}
+
+	get quality() {
+
+		return this.denoiser.quality;
+
+	}
+
+	set quality( v ) {
+
+		this.denoiser.quality = v;
+
+	}
+
+	get useAux() {
+
+		return this._useAux;
+
+	}
+
+	set useAux( v ) {
+
+		this._useAux = v;
+		this.denoiser.resetInputs();
+
+	}
+
+	get denoiserDebugging() {
+
+		return this.denoiser.debugging;
+
+	}
+
+	set denoiserDebugging( v ) {
+
+		this.denoiser.debugging = v;
+
+	}
+
+	get cleanAux() {
+
+		return ! this.denoiser.dirtyAux;
+
+	}
+
+	set cleanAux( v ) {
+
+		this.denoiser.dirtyAux = ! v;
+
+	}
 
 	constructor( renderer ) {
 
@@ -26,6 +86,10 @@ export class DenoiserManager {
 		this.isDenoising = false;
 		this.fadeTime = 500;
 		this.denoiserFinished = 0;
+		this.cleanAux = true;
+		this._useAux = true;
+		this.externalAux = false;
+		this.auxTextures = { albedo: null, normal: null };
 
 		// Same as pathtracer so tonemapping is the same
 		this.ptMaterial = new ClampedInterpolationMaterial( {
@@ -46,10 +110,19 @@ export class DenoiserManager {
 
 	}
 
+	setAuxTextures( albedoTexture, normalTexture ) {
+
+		this.externalAux = true;
+		this.auxTextures.albedo = albedoTexture;
+		this.auxTextures.normal = normalTexture;
+
+	}
+
 	async denoise( rawPathtracedTexture, albedoTexture, normalTexture ) {
 
 		this.isDenoising = true;
 		// Adjust the height /width if changed from before
+		console.log('Raw Texture:', rawPathtracedTexture);
 		const height = this.renderer.domElement.height;
 		const width = this.renderer.domElement.width;
 
@@ -102,7 +175,9 @@ export class DenoiserManager {
 	}
 
 	// render the blended output
-	renderOutput( bypassTexture ) {
+	renderOutput( bypassTextureName ) {
+
+		const bypassTexture = this.auxTextures[ bypassTextureName ];
 
 		if ( ! this.pathtracedTexture || ! this.denoisedTexture ) return;
 
@@ -110,7 +185,7 @@ export class DenoiserManager {
 		this.quad.material = this.blendMaterial;
 		this.blendMaterial.target1 = this.pathtracedTexture;
 		this.blendMaterial.target2 = this.denoisedTexture;
-		this.blendMaterial.t2conversion = false;
+		this.blendMaterial.t2conversion = true;
 		this.blendMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
 
 		// Lets us see the aux textures
@@ -136,8 +211,8 @@ export class DenoiserManager {
 		if ( this.conversionRenderTarget ) this.conversionRenderTarget.dispose();
 
 		// todo Probably a better setting with dpr
-		this.conversionRenderTarget = new THREE.WebGLRenderTarget( width, height );
-		this.conversionRenderTarget.colorspace = THREE.SRGBColorSpace;
+		this.conversionRenderTarget = new WebGLRenderTarget( width, height );
+		this.conversionRenderTarget.colorspace = SRGBColorSpace;
 
 	}
 
@@ -163,7 +238,7 @@ export class DenoiserManager {
 		return this.initializeTexture( texture );
 		*/
 		// hardway
-		const tempRT = new THREE.WebGLRenderTarget( this.denoiser.width, this.denoiser.height );
+		const tempRT = new WebGLRenderTarget( this.denoiser.width, this.denoiser.height );
 		// render the quad to the texture
 		const oldRenderTarget = this.renderer.getRenderTarget();
 		this.renderer.setRenderTarget( tempRT );

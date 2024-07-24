@@ -6,7 +6,6 @@ import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js'
 import { getIesTextures, getLights, getTextures } from './utils/sceneUpdateUtils.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
-import { DenoiserManager } from './utils/DenoiserManager.js';
 import { AlbedoNormalPass } from './utils/AlbedoNormalPass.js';
 function supportsFloatBlending( renderer ) {
 
@@ -104,69 +103,8 @@ export class WebGLPathTracer {
 
 	get isDenoising() {
 
-		return this._denoiserManager.isDenoising;
-
-	}
-
-	get weightsUrl() {
-
-		return this._denoiserManager.denoiser.tzaUrl;
-
-	}
-
-	set weightsUrl( url ) {
-
-		this._denoiserManager.denoiser.weightsUrl = url;
-
-	}
-
-	get denoiserQuality() {
-
-		return this._denoiserManager.denoiser.quality;
-
-	}
-
-	set denoiserQuality( v ) {
-
-		this._denoiserManager.denoiser.quality = v;
-
-	}
-
-	get useAux() {
-
-		return this._useAux;
-
-	}
-
-	set useAux( v ) {
-
-		this._useAux = v;
-		this._denoiserManager.denoiser.resetInputs();
-
-	}
-
-	get denoiserDebugging() {
-
-		return this._denoiserManager.denoiser.debugging;
-
-	}
-
-	set denoiserDebugging( v ) {
-
-		this._denoiserManager.denoiser.debugging = v;
-
-	}
-
-	get cleanAux() {
-
-		return this._cleanAux;
-
-	}
-
-	set cleanAux( v ) {
-
-		this._cleanAux = v;
-		this._denoiserManager.denoiser.cleanAux = v;
+		if ( this.denoiser ) return this.denoiser.isDenoising;
+		return false;
 
 	}
 
@@ -176,7 +114,6 @@ export class WebGLPathTracer {
 		this._renderer = renderer;
 		this._generator = new PathTracingSceneGenerator();
 		this._pathTracer = new PathTracingRenderer( renderer );
-		this._denoiserManager = new DenoiserManager( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
 		this._compilePromise = null;
@@ -212,14 +149,6 @@ export class WebGLPathTracer {
 
 		// denoiser
 		this.enableDenoiser = false;
-		// we will use aux
-		this._useAux = true;
-		// the aux will be clean inputs
-		this._cleanAux = true;
-		// if the aux will be passed externally
-		this.externalAux = false;
-		this._auxTextures = {};
-		// for debugging, which aux to render
 		this.renderAux = null;
 		// state
 		this.isDenoised = false;
@@ -248,6 +177,12 @@ export class WebGLPathTracer {
 	setBVHWorker( worker ) {
 
 		this._generator.setBVHWorker( worker );
+
+	}
+
+	setDenoiser( denoiser ) {
+
+		this.denoiser = denoiser;
 
 	}
 
@@ -496,7 +431,7 @@ export class WebGLPathTracer {
 			if ( this.enableDenoiser ) {
 
 				// check to run the denoiser
-				if ( this.isDenoised ) this._denoiserManager.renderOutput( this._auxTextures[ this.renderAux ] );
+				if ( this.isDenoised ) this.denoiser.renderOutput( this.renderAux );
 				else if ( Math.floor( this.samples ) === this.maxSamples ) this.denoiseSample();
 
 			}
@@ -580,31 +515,25 @@ export class WebGLPathTracer {
 		}
 
 	}
-	setAuxTextures( albedoTexture, normalTexture ) {
 
-		this.externalAux = true;
-		this._auxTextures.albedo = albedoTexture;
-		this._auxTextures.normal = normalTexture;
-
-	}
 	// run the denoiser on the current sample
 	async denoiseSample( colorInput, albedoInput, normalInput ) {
 
 		if ( this.isDenoising || this.isDenoised || this.blockDenoise ) return;
 		const colorTexture = colorInput || this._pathTracer.target.texture;
 		// get the aux if needed
-		if ( this._useAux ) {
+		if ( this.denoiser.useAux ) {
 
 			// using user provided aux or from our own generator
-			const aux = this.externalAux ? this._auxTextures : await this.generateAux();
-			this._auxTextures = aux;
+			const aux = this.denoiser.externalAux ? this._auxTextures : await this.generateAux();
+			this.denoiser.auxTextures = aux;
 			// todo: remove me, debugging
 			//this.renderAux = 'normal';
-			await this._denoiserManager.denoise( colorTexture, albedoInput || aux.albedo, normalInput || aux.normal );
+			await this.denoiser.denoise( colorTexture, albedoInput || aux.albedo, normalInput || aux.normal );
 
 		} else {
 
-			await this._denoiserManager.denoise( colorTexture );
+			await this.denoiser.denoise( colorTexture );
 
 		}
 
