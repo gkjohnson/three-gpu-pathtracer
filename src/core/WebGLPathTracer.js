@@ -157,6 +157,19 @@ export class WebGLPathTracer {
 
 	}
 
+	get cleanAux() {
+
+		return this._cleanAux;
+
+	}
+
+	set cleanAux( v ) {
+
+		this._cleanAux = v;
+		this._denoiserManager.denoiser.cleanAux = v;
+
+	}
+
 	constructor( renderer ) {
 
 		// members
@@ -202,14 +215,12 @@ export class WebGLPathTracer {
 		// we will use aux
 		this._useAux = true;
 		// the aux will be clean inputs
-		this.cleanAux = true;
+		this._cleanAux = true;
 		// if the aux will be passed externally
 		this.externalAux = false;
 		this._auxTextures = {};
 		// for debugging, which aux to render
 		this.renderAux = null;
-		// When to denoise
-		this.denoiseAt = 6;
 		// state
 		this.isDenoised = false;
 
@@ -486,7 +497,7 @@ export class WebGLPathTracer {
 
 				// check to run the denoiser
 				if ( this.isDenoised ) this._denoiserManager.renderOutput( this._auxTextures[ this.renderAux ] );
-				else if ( this.samples === this.denoiseAt ) this.denoiseSample();
+				else if ( Math.floor( this.samples ) === this.maxSamples ) this.denoiseSample();
 
 			}
 

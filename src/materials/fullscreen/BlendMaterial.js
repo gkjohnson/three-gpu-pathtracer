@@ -14,6 +14,7 @@ export class BlendMaterial extends MaterialBase {
 				target1: { value: null },
 				target2: { value: null },
 				opacity: { value: 1.0 },
+				t2conversion: { value: false }
 
 			},
 
@@ -34,13 +35,24 @@ export class BlendMaterial extends MaterialBase {
 
 				uniform sampler2D target1;
 				uniform sampler2D target2;
+				uniform bool t2conversion;
 
 				varying vec2 vUv;
+
+				vec4 LinearToSRGB(vec4 value) {
+					return vec4(pow(value.rgb, vec3(1.0 / 2.2)), value.a);
+				}
+				vec4 SRGBToLinear(vec4 value) {
+					return vec4(pow(value.rgb, vec3(2.2)), value.a);
+				}
 
 				void main() {
 
 					vec4 color1 = texture2D( target1, vUv );
 					vec4 color2 = texture2D( target2, vUv );
+					if (t2conversion) {
+						color2 = LinearToSRGB(color2);
+					}
 
 					float invOpacity = 1.0 - opacity;
 					float totalAlpha = color1.a * invOpacity + color2.a * opacity;

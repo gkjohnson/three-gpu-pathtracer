@@ -12,9 +12,7 @@ export class AlbedoNormalPass {
 
 		// RT
 		this.renderTarget = new THREE.WebGLRenderTarget( 1, 1, {
-			samples: 4,
-			type: THREE.HalfFloatType,
-			format: THREE.RGBAFormat,
+			samples: 16,
 			count: 2
 		} );
 		this.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
@@ -30,7 +28,7 @@ export class AlbedoNormalPass {
 				debugNormalMaps: { value: this.debugNormalMaps },
 				normalScale: { value: 1 }
 			},
-			vertexShader: `
+			vertexShader: /* glsl */`
                 varying vec2 vUv;
                 varying vec3 vViewPosition;
                 varying vec3 vNormal;
@@ -52,7 +50,7 @@ export class AlbedoNormalPass {
                     #endif
                 }
             `,
-			fragmentShader: `
+			fragmentShader: /* glsl */`
                 uniform vec3 color;
                 uniform sampler2D diffuseMap;
                 uniform sampler2D normalMap;

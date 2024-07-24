@@ -58,12 +58,14 @@ export class DenoiserManager {
 			this.denoiser.width = width;
 			this.denoiser.height = height;
 			this.createConversionRenderTarget( width, height );
+
+			/* Used when debugging
 			if ( this.rawCanvas ) {
 
 				this.rawCanvas.width = width;
 				this.rawCanvas.height = height;
 
-			}
+			}*/
 
 		}
 
@@ -108,6 +110,7 @@ export class DenoiserManager {
 		this.quad.material = this.blendMaterial;
 		this.blendMaterial.target1 = this.pathtracedTexture;
 		this.blendMaterial.target2 = this.denoisedTexture;
+		this.blendMaterial.t2conversion = false;
 		this.blendMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
 
 		// Lets us see the aux textures
@@ -115,6 +118,7 @@ export class DenoiserManager {
 
 			this.blendMaterial.target2 = bypassTexture;
 			this.blendMaterial.opacity = 1;
+			this.blendMaterial.t2conversion = false;
 
 		}
 

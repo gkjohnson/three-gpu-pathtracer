@@ -30,6 +30,7 @@ import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import path from 'path';
+import { on } from 'events';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -110,8 +111,11 @@ const params = {
 	floorMetalness: 0.2,
 
 	// Denoiser
+	maxSamples: 6,
+	limitlessSamples: false,
 	enableDenoiser: false,
 	useAux: true,
+	cleanAux: true,
 	renderAux: '',
 	denoiserQuality: 'fast',
 	denoiserDebugging: false,
@@ -278,24 +282,29 @@ function onParamsChange() {
 	}
 
 	// Denoiser
+	if ( params.limitlessSamples ) pathTracer.maxSamples = Number.POSITIVE_INFINITY;
+	else pathTracer.maxSamples = params.maxSamples;
 	const renderScaleController = findController( 'renderScale' );
-	const maxSamplesController = findController( 'maxSamples' );
+	const oldEnableState = pathTracer.enableDenoiser;
 	pathTracer.enableDenoiser = params.enableDenoiser;
-	if ( params.enableDenoiser ) {
-
-		pathTracer.denoiserQuality = params.denoiserQuality;
-		pathTracer.useAux = params.useAux;
-		pathTracer.renderAux = params.renderAux;
-		pathTracer.denoiserDebugging = params.denoiserDebugging;
+	pathTracer.renderAux = params.renderAux;
+	pathTracer.denoiserDebugging = params.denoiserDebugging;
+	if ( oldEnableState !== params.enableDenoiser ) {
 
 		// force the renderscale to be 1 when using the denoiser
 		pathTracer.renderScale = 1;
 		params.renderScale = 1;
 		// set and disable the renderScale gui
-		renderScaleController.disable();
-		renderScaleController.setValue( 1 );
+		if ( renderScaleController ) {
+
+			renderScaleController.disable();
+			renderScaleController.setValue( 1 );
+
+		}
 
 	} else {
+
+		if ( renderScaleController ) renderScaleController.enable();
 
 	}
 
@@ -304,7 +313,23 @@ function onParamsChange() {
 
 }
 
+function hardDenoiserParamsChange() {
+
+	// When these params change it causes the denoiser to have to rebuild. So I split them out
+	if ( params.enableDenoiser ) {
+
+		pathTracer.useAux = params.useAux;
+		pathTracer.denoiserQuality = params.denoiserQuality;
+		pathTracer.cleanAux = params.cleanAux;
+
+
+	}
+
+}
+
 function findController( property ) {
+
+	if ( ! gui ) return null;
 
 	let targetController = null;
 	// get the controller by property
@@ -385,6 +410,8 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'maxSamples', 1, 300, 1 ).onChange( onParamsChange ).name( 'Max Samples' );
+	pathTracingFolder.add( params, 'limitlessSamples' ).onChange( onParamsChange ).name( 'Limitless Samples' );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
@@ -412,8 +439,9 @@ function buildGui() {
 
 	const denoisingFolder = gui.addFolder( 'Denoising' );
 	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
-	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( onParamsChange ).name( 'Quality' );
-	denoisingFolder.add( params, 'useAux' ).onChange( onParamsChange ).name( 'Use Aux Inputs' );
+	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
+	denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
+	denoisingFolder.add( params, 'cleanAux' ).onChange( hardDenoiserParamsChange ).name( 'Aux Inputs 100% Clean' );
 	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
 	denoisingFolder.add( params, 'denoiserDebugging' ).name( 'Debugging' ).onChange( onParamsChange );
 	denoisingFolder.open();
