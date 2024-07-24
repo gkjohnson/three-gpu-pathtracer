@@ -285,31 +285,9 @@ function onParamsChange() {
 	}
 
 	// Denoiser
-	if ( params.limitlessSamples ) pathTracer.maxSamples = Number.POSITIVE_INFINITY;
 	else pathTracer.maxSamples = params.maxSamples;
-	const renderScaleController = findController( 'renderScale' );
-	const oldEnableState = pathTracer.enableDenoiser;
 	pathTracer.enableDenoiser = params.enableDenoiser;
 	pathTracer.renderAux = params.renderAux;
-	pathTracer.denoiserDebugging = params.denoiserDebugging;
-	if ( oldEnableState !== params.enableDenoiser ) {
-
-		// force the renderscale to be 1 when using the denoiser
-		pathTracer.renderScale = 1;
-		params.renderScale = 1;
-		// set and disable the renderScale gui
-		if ( renderScaleController ) {
-
-			renderScaleController.disable();
-			renderScaleController.setValue( 1 );
-
-		}
-
-	} else {
-
-		if ( renderScaleController ) renderScaleController.enable();
-
-	}
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
@@ -321,32 +299,14 @@ function hardDenoiserParamsChange() {
 	// When these params change it causes the denoiser to have to rebuild. So I split them out
 	if ( params.enableDenoiser ) {
 
-		pathTracer.useAux = params.useAux;
-		pathTracer.denoiserQuality = params.denoiserQuality;
+		denoiser.useAux = params.useAux;
+		denoiser.quality = params.denoiserQuality;
 		pathTracer.cleanAux = params.cleanAux;
 
 
 	}
 
 }
-
-function findController( property ) {
-
-	if ( ! gui ) return null;
-
-	let targetController = null;
-	// get the controller by property
-	// biome-ignore lint/complexity/noForEach: <explanation>
-	gui.controllersRecursive().forEach( controller => {
-
-		if ( controller.property === property ) targetController = controller;
-
-	} );
-	return targetController;
-
-}
-
-
 
 function onHashChange() {
 
@@ -444,9 +404,8 @@ function buildGui() {
 	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
 	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
 	denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
-	denoisingFolder.add( params, 'cleanAux' ).onChange( hardDenoiserParamsChange ).name( 'Aux Inputs 100% Clean' );
+	//denoisingFolder.add( params, 'cleanAux' ).onChange( hardDenoiserParamsChange ).name( 'Aux Inputs 100% Clean' );
 	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
-	denoisingFolder.add( params, 'denoiserDebugging' ).name( 'Debugging' ).onChange( onParamsChange );
 	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );

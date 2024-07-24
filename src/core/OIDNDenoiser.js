@@ -122,9 +122,8 @@ export class OIDNDenoiser {
 
 		this.isDenoising = true;
 		// Adjust the height /width if changed from before
-		console.log('Raw Texture:', rawPathtracedTexture);
-		const height = this.renderer.domElement.height;
-		const width = this.renderer.domElement.width;
+		const height = rawPathtracedTexture.image.height;
+		const width = rawPathtracedTexture.image.width;
 
 		if ( this.denoiser.height !== height || this.denoiser.width !== width ) {
 
