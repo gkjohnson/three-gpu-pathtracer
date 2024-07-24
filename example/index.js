@@ -92,7 +92,7 @@ const params = {
 
 	cameraProjection: 'Perspective',
 
-	backgroundType: 'Gradient',
+	backgroundType: 'Environment',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
 	backgroundBlur: 0.0,
@@ -403,9 +403,11 @@ function buildGui() {
 	const denoisingFolder = gui.addFolder( 'Denoising' );
 	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
 	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
-	denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
+	//denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
 	//denoisingFolder.add( params, 'cleanAux' ).onChange( hardDenoiserParamsChange ).name( 'Aux Inputs 100% Clean' );
 	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
+	denoisingFolder.add( denoiser, 'doSplit' ).name( 'Split' );
+	denoisingFolder.add( denoiser, 'splitPoint', 0, 1 ).name( 'Split Point' );
 	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );

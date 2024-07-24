@@ -1,223 +1,88 @@
-import * as THREE from 'three';
+import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial } from 'three';
+import { createAlbedoShaderMaterial } from '../../materials/denoiser/createAlbedoMaterial.js';
 
 export class AlbedoNormalPass {
 
-	constructor( useWorldSpaceNormals = true ) {
+	constructor() {
 
-		this.originalMaterials = new Map();
-		this.albedoMaterials = new Map();
-		this.useWorldSpaceNormals = useWorldSpaceNormals;
-		//debugging
-		//this.debugNormalMaps = true;
-
-		// RT
-		this.renderTarget = new THREE.WebGLRenderTarget( 1, 1, {
-			samples: 16,
-			count: 2
-		} );
-		this.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
-
-		this.albedoNormalMaterial = new THREE.ShaderMaterial( {
-			uniforms: {
-				diffuseMap: { value: null },
-				normalMap: { value: null },
-				color: { value: new THREE.Color( 1, 1, 1 ) },
-				useWorldSpaceNormals: { value: this.useWorldSpaceNormals },
-				useDiffuseMap: { value: false },
-				useNormalMap: { value: false },
-				debugNormalMaps: { value: this.debugNormalMaps },
-				normalScale: { value: 1 }
-			},
-			vertexShader: /* glsl */`
-                varying vec2 vUv;
-                varying vec3 vViewPosition;
-                varying vec3 vNormal;
-                varying vec3 vWorldNormal;
-                varying vec3 vTangent;
-                varying vec3 vBitangent;
-
-                void main() {
-                    vUv = uv;
-                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                    gl_Position = projectionMatrix * mvPosition;
-                    vViewPosition = -mvPosition.xyz;
-                    vNormal = normalize(normalMatrix * normal);
-                    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-                    
-                    #ifdef USE_TANGENT
-                        vTangent = normalize(normalMatrix * tangent.xyz);
-                        vBitangent = normalize(cross(vNormal, vTangent) * tangent.w);
-                    #endif
-                }
-            `,
-			fragmentShader: /* glsl */`
-                uniform vec3 color;
-                uniform sampler2D diffuseMap;
-                uniform sampler2D normalMap;
-                uniform bool useWorldSpaceNormals;
-                uniform bool useDiffuseMap;
-                uniform bool useNormalMap;
-                uniform bool debugNormalMaps;
-				uniform float normalScale;
-
-                varying vec2 vUv;
-                varying vec3 vViewPosition;
-                varying vec3 vNormal;
-                varying vec3 vWorldNormal;
-                varying vec3 vTangent;
-                varying vec3 vBitangent;
-
-                layout(location = 0) out vec4 gAlbedo;
-                layout(location = 1) out vec4 gNormal;
-
-                void main() {
-                    // Albedo
-                    vec3 albedo;
-                    if (useDiffuseMap) {
-                        vec4 diffuseColor = texture(diffuseMap, vUv);
-                        albedo = diffuseColor.rgb * color;
-                    } else {
-                        albedo = color;
-                    }
-                    gAlbedo = vec4(albedo, 1.0);
-
-                    // Normal
-                    vec3 normal;
-                    if (useNormalMap) {
-						// This is NOT correct, but it works. I dont think the denoiser actually cares
-						// TODO: Make this actually work to convert to worldSpace
-						// Output the raw normal map data
-						vec3 rawNormalMap = texture(normalMap, vUv).xyz;
-						gNormal = vec4(rawNormalMap, 1.0);
-						return;
-					
-						vec3 mapN = texture(normalMap, vUv).xyz * 2.0 - 1.0;
-						mapN.xy *= normalScale;
-						mat3 tbn = mat3(normalize(vTangent), normalize(vBitangent), normalize(vNormal));
-						vec3 worldNormal = normalize(tbn * mapN);
-						
-						if (useWorldSpaceNormals) {
-							normal = worldNormal;
-						} else {
-							normal = normalize((viewMatrix * vec4(worldNormal, 0.0)).xyz);
-						}
-					} else {
-						normal = useWorldSpaceNormals ? vWorldNormal : vNormal;
-					}
-
-					normal = normalize(normal + vec3(1e-6));
-					normal = normal * 0.5 + 0.5;
-					gNormal = vec4(normal, 1.0);
-                }
-            `,
-			glslVersion: THREE.GLSL3
-		} );
+		this.albedoRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
+		this.normalRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
+		this.albedoRenderTarget.texture.colorSpace = SRGBColorSpace;
+		this.normalMaterial = new MeshNormalMaterial();
 
 	}
 
-	async render( renderer, scene, camera ) {
+	render( renderer, scene, camera, width, height ) {
 
-		const target = this.renderTarget;
-		target.setSize( renderer.domElement.width, renderer.domElement.height );
-
-		this.swapMaterials( scene );
+		this.albedoRenderTarget.setSize( width, height );
+		this.normalRenderTarget.setSize( width, height );
 
 		const oldRenderTarget = renderer.getRenderTarget();
-		renderer.setRenderTarget( target );
+
+		// Normal pass
+		this.swapMaterials( scene, 'normal' );
+		renderer.setRenderTarget( this.normalRenderTarget );
 		renderer.render( scene, camera );
+
+		// Albedo pass
+		this.swapMaterials( scene, 'albedo' );
+		this.albedoRenderTarget.colorSpace = SRGBColorSpace;
+		this.albedoRenderTarget.texture.colorSpace = SRGBColorSpace;
+		renderer.setRenderTarget( this.albedoRenderTarget );
+		renderer.render( scene, camera );
+
+		// Restore original materials
+		this.swapMaterials( scene );
 		renderer.setRenderTarget( oldRenderTarget );
 
-		this.restoreMaterials();
-
 		// return the two textures
-		return { albedo: target.textures[ 0 ], normal: target.textures[ 1 ] };
+		return { albedo: this.albedoRenderTarget.texture, normal: this.normalRenderTarget.texture };
 
 	}
 
-	swapMaterials( object ) {
+	generateObjectMaterials( object ) {
 
-		if ( object instanceof THREE.Mesh && object.material ) {
+		// original material
+		object.userData.originalMaterial = object.material;
 
-			if ( ! this.originalMaterials.has( object ) )
-				this.originalMaterials.set( object, object.material );
+		// normal material
+		// If the objects original material has a normal map, clone our material and apply the map
+		if ( object.material.normalMap ) {
 
-			if ( this.albedoMaterials.has( object ) ) {
+			const newNormalMaterial = this.normalMaterial.clone();
+			newNormalMaterial.normalMap = object.material.normalMap;
+			newNormalMaterial.normalScale.copy( object.material.normalScale );
+			object.userData.normalMaterial = newNormalMaterial;
 
-				object.material = this.albedoMaterials.get( object );
-				return;
+		} else object.userData.normalMaterial = this.normalMaterial;
+
+		// albedo material
+		object.userData.albedoMaterial = createAlbedoShaderMaterial( object.material );
+
+	}
+
+	swapMaterials( object, swapTo = 'original' ) {
+
+		if ( object instanceof Mesh && object.material ) {
+
+			if ( ! object.userData.originalMaterial ) this.generateObjectMaterials( object );
+			switch ( swapTo ) {
+
+			case 'albedo':
+				object.material = object.userData.albedoMaterial;
+				break;
+			case 'normal':
+				object.material = object.userData.normalMaterial;
+				break;
+			default:
+				object.material = object.userData.originalMaterial;
 
 			}
-
-			const material = object.material;
-			const newAlbedoMaterial = this.albedoNormalMaterial.clone();
-
-			if ( material.color ) newAlbedoMaterial.uniforms.color.value.copy( material.color );
-			newAlbedoMaterial.uniforms.diffuseMap.value = material.map;
-			newAlbedoMaterial.uniforms.normalMap.value = material.normalMap;
-			newAlbedoMaterial.uniforms.useDiffuseMap.value = !! material.map;
-			newAlbedoMaterial.uniforms.useNormalMap.value = !! material.normalMap;
-			newAlbedoMaterial.uniforms.debugNormalMaps.value = this.debugNormalMaps;
-
-			if ( material.normalMap ) {
-
-				newAlbedoMaterial.defines.USE_TANGENT = '';
-
-			}
-
-			this.albedoMaterials.set( object, newAlbedoMaterial );
-			object.material = newAlbedoMaterial;
 
 		}
 
 		// biome-ignore lint/complexity/noForEach: <explanation>
-		object.children.forEach( child => this.swapMaterials( child ) );
-
-	}
-
-	restoreMaterials() {
-
-		this.originalMaterials.forEach( ( material, object ) => {
-
-			if ( object instanceof THREE.Mesh ) {
-
-				object.material = material;
-
-			}
-
-		} );
-		this.originalMaterials.clear();
-
-	}
-
-	setUseWorldSpaceNormals( value ) {
-
-		this.useWorldSpaceNormals = value;
-		// biome-ignore lint/complexity/noForEach: <explanation>
-		this.albedoMaterials.forEach( ( material ) => {
-
-			if ( material instanceof THREE.ShaderMaterial ) {
-
-				material.uniforms.useWorldSpaceNormals.value = value;
-
-			}
-
-		} );
-
-	}
-	// this lets you debug the normal maps at runtime. Remove in the future
-	setDebugNormalMaps( value ) {
-
-		this.debugNormalMaps = value;
-		// biome-ignore lint/complexity/noForEach: <explanation>
-		this.albedoMaterials.forEach( ( material ) => {
-
-			if ( material instanceof THREE.ShaderMaterial ) {
-
-				material.uniforms.debugNormalMaps.value = value;
-
-			}
-
-		} );
+		object.children.forEach( child => this.swapMaterials( child, swapTo ) );
 
 	}
 

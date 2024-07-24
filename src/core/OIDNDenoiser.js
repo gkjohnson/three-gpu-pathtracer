@@ -91,6 +91,11 @@ export class OIDNDenoiser {
 		this.externalAux = false;
 		this.auxTextures = { albedo: null, normal: null };
 
+		// split props
+		this.doSplit = false;
+		this.splitPoint = 0.5;
+		this.t2conversion = false;
+
 		// Same as pathtracer so tonemapping is the same
 		this.ptMaterial = new ClampedInterpolationMaterial( {
 			map: null,
@@ -100,9 +105,10 @@ export class OIDNDenoiser {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
 		this.ptMaterial.opacity = 1;
+		// get the pathtracer to output in SRGB
+		this.ptMaterial.uniforms.convertToSRGB.value = true;
 
 		// Material to blend between pathtracer and denoiser
-		// TODO: Not sure if  params are required
 		this.blendMaterial = new BlendMaterial();
 
 		this.quad = new FullScreenQuad( this.ptMaterial );
@@ -157,8 +163,8 @@ export class OIDNDenoiser {
 
 		// Set input Textures with await
 		await this.denoiser.setInputTexture( 'color', colorWebGLTexture );
-		if ( albedoTexture ) await this.denoiser.setInputTexture( 'albedo', albedoWebGLTexture );
-		if ( normalTexture ) await this.denoiser.setInputTexture( 'normal', normalWebGLTexture );
+		if ( albedoTexture ) await this.denoiser.setInputTexture( 'albedo', albedoWebGLTexture, { colorspace: 'linear' } );
+		if ( normalTexture ) await this.denoiser.setInputTexture( 'normal', normalWebGLTexture, { colorspace: 'linear' } );
 		// Run the denoiser
 		const denoisedWebGLTexture = await this.denoiser.execute();
 
@@ -184,8 +190,12 @@ export class OIDNDenoiser {
 		this.quad.material = this.blendMaterial;
 		this.blendMaterial.target1 = this.pathtracedTexture;
 		this.blendMaterial.target2 = this.denoisedTexture;
-		this.blendMaterial.t2conversion = true;
+		this.blendMaterial.t2conversion = this.t2conversion;
 		this.blendMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
+
+		// until I get the params in
+		this.blendMaterial.doSplit = this.doSplit;
+		this.blendMaterial.splitPoint = this.splitPoint;
 
 		// Lets us see the aux textures
 		if ( bypassTexture ) {
@@ -212,6 +222,7 @@ export class OIDNDenoiser {
 		// todo Probably a better setting with dpr
 		this.conversionRenderTarget = new WebGLRenderTarget( width, height );
 		this.conversionRenderTarget.colorspace = SRGBColorSpace;
+		this.conversionRenderTarget.texture.colorspace = SRGBColorSpace;
 
 	}
 

@@ -520,15 +520,14 @@ export class WebGLPathTracer {
 	async denoiseSample( colorInput, albedoInput, normalInput ) {
 
 		if ( this.isDenoising || this.isDenoised || this.blockDenoise ) return;
+
 		const colorTexture = colorInput || this._pathTracer.target.texture;
 		// get the aux if needed
 		if ( this.denoiser.useAux ) {
 
 			// using user provided aux or from our own generator
-			const aux = this.denoiser.externalAux ? this._auxTextures : await this.generateAux();
+			const aux = this.denoiser.externalAux ? this.denoiser.auxTextures : this.generateAux();
 			this.denoiser.auxTextures = aux;
-			// todo: remove me, debugging
-			//this.renderAux = 'normal';
 			await this.denoiser.denoise( colorTexture, albedoInput || aux.albedo, normalInput || aux.normal );
 
 		} else {
@@ -542,10 +541,12 @@ export class WebGLPathTracer {
 	}
 
 	//get albedo and normals from the current scene
-	async generateAux() {
+	generateAux() {
 
+		// get the height and width of the current render target
+		const target = this._pathTracer.target;
 		if ( ! this._albedoNormalPass ) this._albedoNormalPass = new AlbedoNormalPass();
-		return this._albedoNormalPass.render( this._renderer, this.scene, this.camera );
+		return this._albedoNormalPass.render( this._renderer, this.scene, this.camera, target.width, target.height );
 
 	}
 
