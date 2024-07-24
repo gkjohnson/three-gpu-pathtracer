@@ -615,7 +615,7 @@ export class WebGLPathTracer {
 	//get albedo and normals from the current scene
 	async generateAux() {
 
-		if ( ! this._albedoNormalPass ) this._albedoNormalPass = new AlbedoNormalPass( this._renderer, true );
+		if ( ! this._albedoNormalPass ) this._albedoNormalPass = new AlbedoNormalPass();
 		return this._albedoNormalPass.render( this._renderer, this.scene, this.camera );
 
 	}
