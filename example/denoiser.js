@@ -29,7 +29,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
-import path from 'path';
 
 
 const envMaps = {
@@ -112,7 +111,13 @@ const params = {
 
 	// Denoiser
 	maxSamples: 6,
-	denoiserQuality: '',
+	limitlessSamples: false,
+	enableDenoiser: false,
+	useAux: true,
+	cleanAux: true,
+	renderAux: '',
+	denoiserQuality: 'fast',
+	denoiserDebugging: false,
 
 	...getScaledSettings(),
 
@@ -281,16 +286,26 @@ function onParamsChange() {
 
 	// Denoiser
 	else pathTracer.maxSamples = params.maxSamples;
+	pathTracer.enableDenoiser = params.enableDenoiser;
+	pathTracer.renderAux = params.renderAux;
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 
 }
 
-function onDenoiserChange(quality) {
-	if ( ! quality ) return pathTracer.enableDenoiser = false;
-	pathTracer.enableDenoiser = true;
-	pathTracer.denoiser.quality = quality;
+function hardDenoiserParamsChange() {
+
+	// When these params change it causes the denoiser to have to rebuild. So I split them out
+	if ( params.enableDenoiser ) {
+
+		denoiser.useAux = params.useAux;
+		denoiser.quality = params.denoiserQuality;
+		pathTracer.cleanAux = params.cleanAux;
+
+
+	}
+
 }
 
 function onHashChange() {
@@ -357,53 +372,32 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
-	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'maxSamples', 1, 300, 1 ).onChange( onParamsChange ).name( 'Max Samples' );
-	pathTracingFolder.add( params, 'denoiserQuality', {'disabled': '', 'fast': 'fast', 'balaced':'balanced'} ).name('OIDN Denoiser').onChange( onDenoiserChange );
-
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onParamsChange();
-
-	} );
-	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
-
-		pathTracer.tiles.set( v, v );
-
-	} );
-	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
-
-		updateCameraProjection( v );
-
-	} );
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange);
 	pathTracingFolder.open();
+
+	const denoisingFolder = gui.addFolder( 'Denoising' );
+	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
+	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
+	//denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
+	//denoisingFolder.add( params, 'cleanAux' ).onChange( hardDenoiserParamsChange ).name( 'Aux Inputs 100% Clean' );
+	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
+	denoisingFolder.add( denoiser, 'doSplit' ).name( 'Split' );
+	denoisingFolder.add( denoiser, 'splitPoint', 0, 1 ).name( 'Split Point' );
+	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
+	environmentFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
 	environmentFolder.open();
 
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
-
-	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.addColor( params, 'floorColor' ).onChange( onParamsChange );
