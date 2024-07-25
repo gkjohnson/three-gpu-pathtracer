@@ -17,7 +17,7 @@ export class OIDNDenoiser {
 
 	set weightsUrl( url ) {
 
-		this.weightsUrl = url;
+		this.denoiser.weightsUrl = url;
 
 	}
 
