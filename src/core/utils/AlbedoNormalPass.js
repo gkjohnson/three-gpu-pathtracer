@@ -136,6 +136,7 @@ export class AlbedoNormalPass {
 
 		// return the renderer to the original render target
 		renderer.setRenderTarget( oldRenderTarget );
+		this.materialPool.reset();
 
 		// return the two textures
 		return { albedo: this.albedoConvertRenderTarget.texture, normal: this.normalRenderTarget.texture };
