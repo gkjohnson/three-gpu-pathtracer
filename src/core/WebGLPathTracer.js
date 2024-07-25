@@ -563,6 +563,7 @@ export class WebGLPathTracer {
 		this._quad.dispose();
 		this._quad.material.dispose();
 		this._pathTracer.dispose();
+		this._albedoNormalPass.dispose();
 
 	}
 
