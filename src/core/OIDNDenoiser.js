@@ -108,21 +108,20 @@ export class OIDNDenoiser {
 		this.t2conversion = false;
 
 		// Same as pathtracer so tonemapping is the same
-		this.ptMaterial = new MeshBasicMaterial( {
+		this.linearToSRGBMaterial = new MeshBasicMaterial( {
 			map: null,
 			transparent: true,
 			blending: NoBlending,
-			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
 
 		// Material to blend between pathtracer and denoiser
-		this.blendMaterial = new ClampedInterpolationMaterial( {
+		this.blendToCanvasMaterial = new ClampedInterpolationMaterial( {
 			map: null,
 			transparent: true,
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
 
-		this.quad = new FullScreenQuad( this.ptMaterial );
+		this.quad = new FullScreenQuad( this.linearToSRGBMaterial );
 		this.createConversionRenderTarget( renderer.domElement.width, renderer.domElement.height );
 
 	}
@@ -191,15 +190,15 @@ export class OIDNDenoiser {
 		if ( ! this.denoisedTexture ) return;
 
 		//const currentTarget = this.renderer.getRenderTarget();
-		this.quad.material = this.blendMaterial;
-		this.blendMaterial.map = this.denoisedTexture;
-		this.blendMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
+		this.quad.material = this.blendToCanvasMaterial;
+		this.blendToCanvasMaterial.map = this.denoisedTexture;
+		this.blendToCanvasMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
 
 		// Lets us see the aux textures
 		if ( bypassTexture ) {
 
-			this.blendMaterial.map = bypassTexture;
-			this.blendMaterial.opacity = 1;
+			this.blendToCanvasMaterial.map = bypassTexture;
+			this.blendToCanvasMaterial.opacity = 1;
 
 		}
 
@@ -228,8 +227,8 @@ export class OIDNDenoiser {
 	getLinearToSRGBTexture( pathtracedTexture, target ) {
 
 		const oldRenderTarget = this.renderer.getRenderTarget();
-		this.quad.material = this.ptMaterial;
-		this.ptMaterial.map = pathtracedTexture;
+		this.quad.material = this.linearToSRGBMaterial;
+		this.linearToSRGBMaterial.map = pathtracedTexture;
 		this.renderer.setRenderTarget( target );
 		this.quad.render( this.renderer );
 		this.renderer.setRenderTarget( oldRenderTarget );
