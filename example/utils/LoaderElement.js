@@ -42,7 +42,7 @@ function initializeStyles() {
 		}
 
 		.loader-container .credits,
-		.loader-container .samples,
+		.loader-container .dataEl,
 		.loader-container .percentage {
 			padding: 5px;
 			margin: 0 0 1px 1px;
@@ -61,7 +61,7 @@ function initializeStyles() {
 
 		.loader-container .credits a,
 		.loader-container .credits,
-		.loader-container .samples {
+		.loader-container .dataEl {
 			color: rgba( 255, 255, 255, 0.75 );
 		}
 	`;
@@ -82,9 +82,20 @@ export class LoaderElement {
 		percentageEl.classList.add( 'percentage' );
 		container.appendChild( percentageEl );
 
+		const dataEl = document.createElement( 'div' );
+		dataEl.classList.add( 'dataEl' );
+		dataEl.style.display = 'flex';
+		dataEl.style.flexDirection = 'row';
+		dataEl.style.gap = '6px';
+		container.appendChild( dataEl );
+
 		const samplesEl = document.createElement( 'div' );
 		samplesEl.classList.add( 'samples' );
-		container.appendChild( samplesEl );
+		dataEl.appendChild( samplesEl );
+
+		const denoisingPercentageEl = document.createElement( 'div' );
+		denoisingPercentageEl.classList.add( 'denoising-percentage' );
+		dataEl.appendChild( denoisingPercentageEl );
 
 		const creditsEl = document.createElement( 'div' );
 		creditsEl.classList.add( 'credits' );
@@ -102,7 +113,9 @@ export class LoaderElement {
 		this._loaderBar = loaderBarEl;
 		this._percentage = percentageEl;
 		this._credits = creditsEl;
+		this._data = dataEl;
 		this._samples = samplesEl;
+		this._denoisingPercentage = denoisingPercentageEl;
 		this._container = container;
 
 		this.setPercentage( 0 );
@@ -151,6 +164,24 @@ export class LoaderElement {
 		} else {
 
 			this._samples.innerText = `${ Math.floor( count ) } samples`;
+
+		}
+
+	}
+
+	setDenoising( count ) {
+
+		if ( count === 0 ) {
+
+			this._denoisingPercentage.innerText = '';
+
+		} else if ( count === 100 ) {
+
+			this._denoisingPercentage.innerText = 'Denoised';
+
+		} else {
+
+			this._denoisingPercentage.innerText = ` ${ Math.floor( count ) }% Denoising...`;
 
 		}
 

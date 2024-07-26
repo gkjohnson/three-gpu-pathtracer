@@ -154,13 +154,24 @@ async function init() {
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
 
-	// denoiser
+	//* Create and setup the OIDN denoiser
 	denoiser = new OIDNDenoiser( renderer );
+	pathTracer.setDenoiser( denoiser );
+	pathTracer.enableDenoiser = params.enableDenoiser;
+
+	//* Access the denoiser outside the pathtracer
+	denoiser.onProgress( progress => {
+
+		loader.setDenoising( progress );
+		console.log( 'Denoiser Progress:', progress );
+
+	} );
+
+	//* Interfacing with the internal denoiser
 	// Set the raw canvas by accessing core Denoiser object
 	denoiser.denoiser.setCanvas( rawCanvas );
 	//denoiser.denoiser.usePassThrough = true;
-	pathTracer.setDenoiser( denoiser );
-	pathTracer.enableDenoiser = params.enableDenoiser;
+
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -243,6 +254,12 @@ function animate() {
 	} else {
 
 		renderer.render( scene, activeCamera );
+
+	}
+
+	if ( ! pathTracer.isDenoised && ! denoiser.isDenoising ) {
+
+		loader.setDenoising( 0 );
 
 	}
 
