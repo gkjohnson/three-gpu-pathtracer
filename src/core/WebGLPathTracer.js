@@ -428,18 +428,24 @@ export class WebGLPathTracer {
 		const elapsedTime = clock.getElapsedTime() * 1e3;
 		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay <= elapsedTime && ! this.isCompiling ) {
 
-			if ( this.enableDenoiser ) {
+			if ( this.samples < this.maxSamples ) {
 
-				// check to run the denoiser
-				if ( this.isDenoised ) this.denoiser.renderOutput( this.renderAux );
-				else if ( Math.floor( this.samples ) === this.maxSamples ) this.denoiseSample();
+				pathTracer.update();
 
 			}
 
-			// reject if above max samples
-			if ( this.samples >= this.maxSamples ) return;
+			if ( this.enableDenoiser && this.samples === this.maxSamples && this._quad.material.opacity === 1 ) {
 
-			pathTracer.update();
+				if ( ! this.isDenoised && ! this.blockDenoise ) {
+
+					// TODO: if we call this and then perform other draw operations then the result is mangled
+					// so we return here until denoising is complete
+					this.denoiseSample();
+					return;
+
+				}
+
+			}
 
 		}
 
@@ -509,6 +515,12 @@ export class WebGLPathTracer {
 				quad.material.map = pathTracer.target.texture;
 				this.renderToCanvasCallback( pathTracer.target, renderer, quad );
 				quad.material.blending = NoBlending;
+
+			}
+
+			if ( this.enableDenoiser && this.isDenoised ) {
+
+				this.denoiser.renderOutput( this.renderAux );
 
 			}
 

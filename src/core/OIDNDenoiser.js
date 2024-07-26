@@ -3,9 +3,8 @@
 import { Denoiser } from 'denoiser';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
-import { DenoiserBlendMaterial } from '../materials/fullscreen/DenoiserBlendMaterial.js';
 
-import { NoBlending, WebGLRenderTarget, SRGBColorSpace } from 'three';
+import { NoBlending, WebGLRenderTarget, SRGBColorSpace, MeshBasicMaterial } from 'three';
 
 export class OIDNDenoiser {
 
@@ -109,19 +108,19 @@ export class OIDNDenoiser {
 		this.t2conversion = false;
 
 		// Same as pathtracer so tonemapping is the same
-		this.ptMaterial = new ClampedInterpolationMaterial( {
+		this.ptMaterial = new MeshBasicMaterial( {
 			map: null,
 			transparent: true,
 			blending: NoBlending,
-
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
-		this.ptMaterial.opacity = 1;
-		// get the pathtracer to output in SRGB
-		this.ptMaterial.uniforms.convertToSRGB.value = false;
 
 		// Material to blend between pathtracer and denoiser
-		this.blendMaterial = new DenoiserBlendMaterial();
+		this.blendMaterial = new ClampedInterpolationMaterial( {
+			map: null,
+			transparent: true,
+			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
+		} );
 
 		this.quad = new FullScreenQuad( this.ptMaterial );
 		this.createConversionRenderTarget( renderer.domElement.width, renderer.domElement.height );
@@ -139,10 +138,9 @@ export class OIDNDenoiser {
 	async denoise( rawPathtracedTexture, albedoTexture, normalTexture ) {
 
 		this.isDenoising = true;
-		// Adjust the height /width if changed from before
-		const height = rawPathtracedTexture.image.height;
-		const width = rawPathtracedTexture.image.width;
 
+		// Adjust the height /width if changed from before
+		const { width, height } = rawPathtracedTexture.image;
 		if ( this.denoiser.height !== height || this.denoiser.width !== width ) {
 
 			this.denoiser.width = width;
@@ -152,7 +150,8 @@ export class OIDNDenoiser {
 		}
 
 		// set so we can access later when blending
-		this.pathtracedTexture = this.getCorrectPathtracerTexture( rawPathtracedTexture );
+		this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget );
+		this.pathtracedTexture = this.conversionRenderTarget.texture;
 		const colorWebGLTexture = this.getWebGLTexture( this.pathtracedTexture );
 		const albedoWebGLTexture = this.getWebGLTexture( albedoTexture );
 		const normalWebGLTexture = this.getWebGLTexture( normalTexture );
@@ -169,6 +168,7 @@ export class OIDNDenoiser {
 		await this.denoiser.setInputTexture( 'color', colorWebGLTexture );
 		if ( albedoTexture ) await this.denoiser.setInputTexture( 'albedo', albedoWebGLTexture, { colorspace: 'linear' } );
 		if ( normalTexture ) await this.denoiser.setInputTexture( 'normal', normalWebGLTexture, { colorspace: 'linear' } );
+
 		// Run the denoiser
 		const denoisedWebGLTexture = await this.denoiser.execute();
 
@@ -188,32 +188,26 @@ export class OIDNDenoiser {
 
 		const bypassTexture = this.auxTextures[ bypassTextureName ];
 
-		if ( ! this.pathtracedTexture || ! this.denoisedTexture ) return;
+		if ( ! this.denoisedTexture ) return;
 
 		//const currentTarget = this.renderer.getRenderTarget();
 		this.quad.material = this.blendMaterial;
-		this.blendMaterial.target1 = this.pathtracedTexture;
-		this.blendMaterial.target2 = this.denoisedTexture;
-		this.blendMaterial.t2conversion = this.t2conversion;
+		this.blendMaterial.map = this.denoisedTexture;
 		this.blendMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
-
-		// until I get the params in
-		this.blendMaterial.doSplit = this.doSplit;
-		this.blendMaterial.splitPoint = this.splitPoint;
 
 		// Lets us see the aux textures
 		if ( bypassTexture ) {
 
-			this.blendMaterial.target2 = bypassTexture;
+			this.blendMaterial.map = bypassTexture;
 			this.blendMaterial.opacity = 1;
-			this.blendMaterial.t2conversion = false;
 
 		}
 
 		// should we force to canvas or allow the user to set to their own target?
-		//this.renderer.setRenderTarget( null );
+		const currentAutoClear = this.renderer.autoClear;
+		this.renderer.autoClear = false;
 		this.quad.render( this.renderer );
-		//this.renderer.setRenderTarget( currentTarget );
+		this.renderer.autoClear = currentAutoClear;
 
 	}
 
@@ -231,15 +225,14 @@ export class OIDNDenoiser {
 	}
 
 	// The plain texture is raw without toneMapping this is more like what renders to canvas
-	getCorrectPathtracerTexture( pathtracedTexture ) {
+	getLinearToSRGBTexture( pathtracedTexture, target ) {
 
 		const oldRenderTarget = this.renderer.getRenderTarget();
 		this.quad.material = this.ptMaterial;
 		this.ptMaterial.map = pathtracedTexture;
-		this.renderer.setRenderTarget( this.conversionRenderTarget );
+		this.renderer.setRenderTarget( target );
 		this.quad.render( this.renderer );
 		this.renderer.setRenderTarget( oldRenderTarget );
-		return this.conversionRenderTarget.texture;
 
 	}
 
