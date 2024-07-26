@@ -99,7 +99,6 @@ export class AlbedoNormalPass {
 	constructor() {
 
 		this.albedoRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
-		this.albedoConvertRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
 		this.normalRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
 		this.albedoRenderTarget.texture.colorSpace = SRGBColorSpace;
 		this.materialPool = new MaterialPool();
@@ -110,7 +109,6 @@ export class AlbedoNormalPass {
 
 		this.albedoRenderTarget.setSize( width, height );
 		this.normalRenderTarget.setSize( width, height );
-		this.albedoConvertRenderTarget.setSize( width, height );
 
 		if ( ! this.quad ) this.setupQuad( renderer );
 
@@ -129,17 +127,12 @@ export class AlbedoNormalPass {
 		// Restore original materials
 		this.swapMaterials( scene );
 
-		// convert the albedo to srgb
-		this.quad.material.map = this.albedoRenderTarget.texture;
-		renderer.setRenderTarget( this.albedoConvertRenderTarget );
-		this.quad.render( renderer );
-
 		// return the renderer to the original render target
 		renderer.setRenderTarget( oldRenderTarget );
 		this.materialPool.reset();
 
 		// return the two textures
-		return { albedo: this.albedoConvertRenderTarget.texture, normal: this.normalRenderTarget.texture };
+		return { albedo: this.albedoRenderTarget.texture, normal: this.normalRenderTarget.texture };
 
 	}
 

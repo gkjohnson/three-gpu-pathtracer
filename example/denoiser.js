@@ -77,7 +77,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	tiles: 2,
 
 	model: '',
@@ -112,12 +112,13 @@ const params = {
 	// Denoiser
 	maxSamples: 6,
 	limitlessSamples: false,
-	enableDenoiser: false,
+	enableDenoiser: true,
 	useAux: true,
 	cleanAux: true,
 	renderAux: '',
 	denoiserQuality: 'fast',
 	denoiserDebugging: false,
+	showDebugCanvas: false,
 
 	...getScaledSettings(),
 
@@ -128,6 +129,8 @@ let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera, denoiser
 let controls, scene, model;
 let gradientMap;
 let loader;
+
+const rawCanvas = document.getElementById( 'rawCanvas' );
 
 const orthoWidth = 2;
 
@@ -153,7 +156,11 @@ async function init() {
 
 	// denoiser
 	denoiser = new OIDNDenoiser( renderer );
+	// Set the raw canvas by accessing core Denoiser object
+	denoiser.denoiser.setCanvas( rawCanvas );
+	//denoiser.denoiser.usePassThrough = true;
 	pathTracer.setDenoiser( denoiser );
+	pathTracer.enableDenoiser = params.enableDenoiser;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -292,6 +299,11 @@ function onParamsChange() {
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 
+	// access deep params
+	denoiser.denoiser.outputToCanvas = params.showDebugCanvas;
+	rawCanvas.style.display = params.showDebugCanvas ? 'block' : 'none';
+
+
 }
 
 function hardDenoiserParamsChange() {
@@ -378,17 +390,21 @@ function buildGui() {
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange);
-	pathTracingFolder.open();
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
+	pathTracingFolder.close();
 
 	const denoisingFolder = gui.addFolder( 'Denoising' );
 	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
 	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
-	//denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
-	//denoisingFolder.add( params, 'cleanAux' ).onChange( hardDenoiserParamsChange ).name( 'Aux Inputs 100% Clean' );
+	denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
 	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
-	denoisingFolder.add( denoiser, 'doSplit' ).name( 'Split' );
-	denoisingFolder.add( denoiser, 'splitPoint', 0, 1 ).name( 'Split Point' );
+	denoisingFolder.add( denoiser, 'doSplit' ).name( 'Split' ).onChange( v=> {
+
+		if ( v ) splitPointControl.show(); else splitPointControl.hide();
+
+	} );
+	const splitPointControl = denoisingFolder.add( denoiser, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
+	denoisingFolder.add( params, 'showDebugCanvas' ).name( 'Show Debug Canvas' ).onChange( onParamsChange );
 	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
@@ -396,7 +412,7 @@ function buildGui() {
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
 	environmentFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
-	environmentFolder.open();
+	environmentFolder.close();
 
 
 	const floorFolder = gui.addFolder( 'floor' );

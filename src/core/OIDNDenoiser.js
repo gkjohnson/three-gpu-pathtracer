@@ -3,7 +3,7 @@
 import { Denoiser } from 'denoiser';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
-import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
+import { DenoiserBlendMaterial } from '../materials/fullscreen/DenoiserBlendMaterial.js';
 
 import { NoBlending, WebGLRenderTarget, SRGBColorSpace } from 'three';
 
@@ -30,6 +30,8 @@ export class OIDNDenoiser {
 	set quality( v ) {
 
 		this.denoiser.quality = v;
+		if ( v === 'fast' && this.hdr ) this.hdr = false;
+		//if ( v === 'balanced' && ! this.hdr ) this.hdr = true;
 
 	}
 
@@ -46,18 +48,6 @@ export class OIDNDenoiser {
 
 	}
 
-	get denoiserDebugging() {
-
-		return this.denoiser.debugging;
-
-	}
-
-	set denoiserDebugging( v ) {
-
-		this.denoiser.debugging = v;
-
-	}
-
 	get cleanAux() {
 
 		return ! this.denoiser.dirtyAux;
@@ -70,6 +60,32 @@ export class OIDNDenoiser {
 
 	}
 
+	get hdr() {
+
+		return this.denoiser.hdr;
+
+	}
+
+	set hdr( v ) {
+
+		this.denoiser.hdr = v;
+		if ( v && this.quality === 'fast' ) this.quality = 'balanced';
+
+	}
+
+	//* Debugging
+	get denoiserDebugging() {
+
+		return this.denoiser.debugging;
+
+	}
+
+	set denoiserDebugging( v ) {
+
+		this.denoiser.debugging = v;
+
+	}
+
 	constructor( renderer ) {
 
 		this.renderer = renderer;
@@ -77,11 +93,7 @@ export class OIDNDenoiser {
 		this.denoiser.inputMode = 'webgl';
 		this.denoiser.outputMode = 'webgl';
 		this.denoiser.weightsUrl = 'https://cdn.jsdelivr.net/npm/denoiser/tzas';
-
-		//this.denoiser.debugging = true;
-		//this.denoiser.usePassThrough = true;
-		//this.rawCanvas = document.getElementById( 'rawCanvas' );
-		//this.denoiser.setCanvas( this.rawCanvas );
+		//this.denoiser.hdr = true;
 
 		this.isDenoising = false;
 		this.fadeTime = 500;
@@ -106,10 +118,10 @@ export class OIDNDenoiser {
 		} );
 		this.ptMaterial.opacity = 1;
 		// get the pathtracer to output in SRGB
-		this.ptMaterial.uniforms.convertToSRGB.value = true;
+		this.ptMaterial.uniforms.convertToSRGB.value = false;
 
 		// Material to blend between pathtracer and denoiser
-		this.blendMaterial = new BlendMaterial();
+		this.blendMaterial = new DenoiserBlendMaterial();
 
 		this.quad = new FullScreenQuad( this.ptMaterial );
 		this.createConversionRenderTarget( renderer.domElement.width, renderer.domElement.height );
@@ -136,14 +148,6 @@ export class OIDNDenoiser {
 			this.denoiser.width = width;
 			this.denoiser.height = height;
 			this.createConversionRenderTarget( width, height );
-
-			/* Used when debugging
-			if ( this.rawCanvas ) {
-
-				this.rawCanvas.width = width;
-				this.rawCanvas.height = height;
-
-			}*/
 
 		}
 
