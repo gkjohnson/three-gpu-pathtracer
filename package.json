@@ -46,15 +46,9 @@
     "puppeteer": "^15.4.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "stream-browserify": "^3.0.0",
-    "stream-http": "^3.2.0",
-    "string_decoder": "^1.3.0",
     "three": "^0.163.0",
     "three-mesh-bvh": "^0.7.4",
     "typescript": "5.3.3",
-    "url": "^0.11.3",
-    "util": "^0.12.5",
-    "vm-browserify": "^1.1.2",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
