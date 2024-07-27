@@ -30,7 +30,6 @@ import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 
-
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
 	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/moonless_golf_1k.hdr',
@@ -92,7 +91,7 @@ const params = {
 
 	cameraProjection: 'Perspective',
 
-	backgroundType: 'Environment',
+	backgroundType: 'Gradient',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
 	backgroundBlur: 0.0,
@@ -118,10 +117,11 @@ const params = {
 };
 
 let floorPlane, gui, stats;
-let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera, denoiser;
+let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
 let loader;
+let denoiser;
 
 const orthoWidth = 2;
 
@@ -148,6 +148,13 @@ async function init() {
 	// denoiser
 	denoiser = new OIDNDenoiser( renderer );
 	pathTracer.setDenoiser( denoiser );
+
+	//* Access the denoiser outside the pathtracer
+	denoiser.onProgress( progress => {
+
+		loader.setDenoising( progress );
+
+	} );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -233,6 +240,12 @@ function animate() {
 
 	}
 
+	if ( ! pathTracer.isDenoised && ! denoiser.isDenoising ) {
+
+		loader.setDenoising( 0 );
+
+	}
+
 	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 }
@@ -278,15 +291,15 @@ function onParamsChange() {
 
 	}
 
-	// Denoiser
-	else pathTracer.maxSamples = params.maxSamples;
+	pathTracer.maxSamples = params.maxSamples;
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 
 }
 
-function onDenoiserChange(quality) {
+function onDenoiserChange( quality ) {
+
 	if ( ! quality ) return pathTracer.enableDenoiser = false;
 	pathTracer.enableDenoiser = true;
 	pathTracer.denoiser.quality = quality;
@@ -334,6 +347,7 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
+
 	pathTracer.updateCamera();
 
 }
@@ -358,8 +372,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'maxSamples', 1, 300, 1 ).onChange( onParamsChange ).name( 'Max Samples' );
-	pathTracingFolder.add( params, 'denoiserQuality', {'disabled': '', 'fast': 'fast', 'balaced':'balanced'} ).name('OIDN Denoiser').onChange( onDenoiserChange );
-
+	pathTracingFolder.add( params, 'denoiserQuality', { 'disabled': '', 'fast': 'fast', 'balaced': 'balanced' } ).name( 'OIDN Denoiser' ).onChange( onDenoiserChange );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
@@ -456,6 +469,7 @@ function updateCameraProjection( cameraProjection ) {
 
 	controls.object = activeCamera;
 	controls.update();
+
 	pathTracer.setCamera( activeCamera );
 
 }

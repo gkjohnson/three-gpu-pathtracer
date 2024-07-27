@@ -76,6 +76,6 @@
   },
   "homepage": "https://github.com/gkjohnson/three-gpu-pathtracer#readme",
   "dependencies": {
-    "denoiser": "^0.0.7"
+    "denoiser": "^0.0.8"
   }
 }

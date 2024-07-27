@@ -8,18 +8,6 @@ import { NoBlending, WebGLRenderTarget, SRGBColorSpace, MeshBasicMaterial } from
 
 export class OIDNDenoiser {
 
-	get weightsUrl() {
-
-		return this.denoiser.weightsUrl;
-
-	}
-
-	set weightsUrl( url ) {
-
-		this.denoiser.weightsUrl = url;
-
-	}
-
 	get quality() {
 
 		return this.denoiser.quality;
@@ -72,6 +60,18 @@ export class OIDNDenoiser {
 
 	}
 
+	get weightsUrl() {
+
+		return this.denoiser.weightsUrl;
+
+	}
+
+	set weightsUrl( url ) {
+
+		this.denoiser.weightsUrl = url;
+
+	}
+
 	//* Debugging
 	get denoiserDebugging() {
 
@@ -92,6 +92,7 @@ export class OIDNDenoiser {
 		this.denoiser.inputMode = 'webgl';
 		this.denoiser.outputMode = 'webgl';
 		this.denoiser.weightsUrl = 'https://cdn.jsdelivr.net/npm/denoiser/tzas';
+		this.denoiser.onProgress( progress => this.handleProgress( progress ) );
 		//this.denoiser.hdr = true;
 
 		this.isDenoising = false;
@@ -101,6 +102,7 @@ export class OIDNDenoiser {
 		this._useAux = true;
 		this.externalAux = false;
 		this.auxTextures = { albedo: null, normal: null };
+		this.progressListeners = new Set();
 
 		// split props
 		this.doSplit = false;
@@ -165,8 +167,8 @@ export class OIDNDenoiser {
 
 		// Set input Textures with await
 		await this.denoiser.setInputTexture( 'color', colorWebGLTexture );
-		if ( albedoTexture ) await this.denoiser.setInputTexture( 'albedo', albedoWebGLTexture, { colorspace: 'linear' } );
-		if ( normalTexture ) await this.denoiser.setInputTexture( 'normal', normalWebGLTexture, { colorspace: 'linear' } );
+		if ( albedoTexture ) await this.denoiser.setInputTexture( 'albedo', albedoWebGLTexture );
+		if ( normalTexture ) await this.denoiser.setInputTexture( 'normal', normalWebGLTexture );
 
 		// Run the denoiser
 		const denoisedWebGLTexture = await this.denoiser.execute();
@@ -177,7 +179,9 @@ export class OIDNDenoiser {
 		this.denoisedTexture = this.injectWebGLTexture( this.outputTexture, denoisedWebGLTexture );
 		// mark as complete and setup the renderer
 		this.isDenoising = false;
+		// we use this for the fade in
 		this.denoiserFinished = performance.now();
+		this.handleProgress( 1 );
 		return this.denoisedTexture;
 
 	}
@@ -202,11 +206,15 @@ export class OIDNDenoiser {
 
 		}
 
+<<<<<<< HEAD
 		// should we force to canvas or allow the user to set to their own target?
 		const currentAutoClear = this.renderer.autoClear;
 		this.renderer.autoClear = false;
 		this.quad.render( this.renderer );
 		this.renderer.autoClear = currentAutoClear;
+=======
+		this.quad.render( this.renderer );
+>>>>>>> 9e43cd4f85e17edec505ad522c1588cf6f59851f
 
 	}
 
@@ -236,14 +244,8 @@ export class OIDNDenoiser {
 	}
 
 	// create an output texture we can inject to
-	createOutputTexture( input ) {
+	createOutputTexture() {
 
-		/* thought this would work
-		const texture = input.clone();
-		// initialize the texture
-		return this.initializeTexture( texture );
-		*/
-		// hardway
 		const tempRT = new WebGLRenderTarget( this.denoiser.width, this.denoiser.height );
 		// render the quad to the texture
 		const oldRenderTarget = this.renderer.getRenderTarget();
@@ -257,6 +259,25 @@ export class OIDNDenoiser {
 		return texture;
 
 	}
+
+	//* Listeners
+
+	handleProgress( progress ) {
+
+		let outProgress = progress * 100;
+		// we only return 100 when isDenoised is true but the denoiser progress is for tiling
+		if ( this.isDenoising && outProgress >= 1 ) outProgress --;
+		this.progressListeners.forEach(listener => listener(outProgress));
+
+	}
+
+	onProgress( listener ) {
+
+		this.progressListeners.add( listener );
+		return () => this.progressListeners.delete( listener );
+
+	}
+
 
 	//* Utils ----------------------------
 	// get the webGLTexture out of a renderTarget or THREE.texture
