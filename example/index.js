@@ -704,7 +704,7 @@ async function loadModel( url, onProgress ) {
 
 		manager.onProgress = ( url, loaded, total ) => {
 
-			loader.setPercentage( loaded / total );
+			onProgress( loaded / total );
 
 		};
 
