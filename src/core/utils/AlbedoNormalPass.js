@@ -95,12 +95,12 @@ class MaterialPool {
 		const material = this._getNextMaterial( type );
 
 		material.map = originalMaterial.map;
-		material.color = originalMaterial.color;
 		material.opacity = originalMaterial.opacity;
 		material.transparent = originalMaterial.transparent;
 		material.depthWrite = originalMaterial.depthWrite;
 		material.alphaTest = originalMaterial.alphaTest;
 		material.alphaMap = originalMaterial.alphaMap;
+		if ( material.color ) material.color.copy( originalMaterial.color );
 		if ( type === 'normal' ) material.normalMap = originalMaterial.normalMap;
 		else material.normalMap = null;
 
@@ -137,9 +137,10 @@ class MaterialPool {
 		if ( mesh.material.map ) mesh.material.map = null;
 		if ( mesh.material.alphaMap ) mesh.material.alphaMap = null;
 		if ( mesh.material.normalMap ) mesh.material.normalMap = null;
-		if ( mesh.material.color ) mesh.material.color = 0xffffff;
+
 		// restore the original material
 		mesh.material = this.originalMaterials.get( mesh );
+
 		// remove our reference to the original material
 		this.originalMaterials.delete( mesh );
 
