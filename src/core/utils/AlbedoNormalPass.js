@@ -1,6 +1,4 @@
 import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial, MeshBasicMaterial, NoBlending } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/Addons.js';
-import { ClampedInterpolationMaterial } from '../../materials/fullscreen/ClampedInterpolationMaterial.js';
 
 // Material pool
 class MaterialPool {
@@ -110,8 +108,6 @@ export class AlbedoNormalPass {
 		this.albedoRenderTarget.setSize( width, height );
 		this.normalRenderTarget.setSize( width, height );
 
-		if ( ! this.quad ) this.setupQuad( renderer );
-
 		const oldRenderTarget = renderer.getRenderTarget();
 
 		// Normal pass
@@ -133,24 +129,6 @@ export class AlbedoNormalPass {
 
 		// return the two textures
 		return { albedo: this.albedoRenderTarget.texture, normal: this.normalRenderTarget.texture };
-
-	}
-
-	setupQuad( renderer ) {
-
-		// for converting to srgb
-		// Same as pathtracer so tonemapping is the same
-		this.ptMaterial = new ClampedInterpolationMaterial( {
-			map: null,
-			transparent: true,
-			blending: NoBlending,
-
-			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-		} );
-		this.ptMaterial.opacity = 1;
-		// get the pathtracer to output in SRGB
-		this.ptMaterial.uniforms.convertToSRGB.value = true;
-		this.quad = new FullScreenQuad( this.ptMaterial );
 
 	}
 

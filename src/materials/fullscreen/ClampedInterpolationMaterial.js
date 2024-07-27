@@ -40,7 +40,6 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 
 				map: { value: null },
 				opacity: { value: 1 },
-				convertToSRGB: { value: false }
 
 			},
 
@@ -115,7 +114,6 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 
 					vec4 finalColor = mix( p1, p2, alpha.y );
 					finalColor.a *= opacity;
-					if ( convertToSRGB ) finalColor = LinearToSRGB( finalColor );
 					gl_FragColor = finalColor;
 
 					#include <premultiplied_alpha_fragment>
