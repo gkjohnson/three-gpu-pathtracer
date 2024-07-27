@@ -206,15 +206,11 @@ export class OIDNDenoiser {
 
 		}
 
-<<<<<<< HEAD
 		// should we force to canvas or allow the user to set to their own target?
 		const currentAutoClear = this.renderer.autoClear;
 		this.renderer.autoClear = false;
 		this.quad.render( this.renderer );
 		this.renderer.autoClear = currentAutoClear;
-=======
-		this.quad.render( this.renderer );
->>>>>>> 9e43cd4f85e17edec505ad522c1588cf6f59851f
 
 	}
 
