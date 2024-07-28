@@ -567,6 +567,7 @@ export class WebGLPathTracer {
 		this._queueReset = true;
 		this.isDenoised = false;
 		this._pathTracer.samples = 0;
+		if ( this.denoiser ) this.denoiser.abort();
 
 	}
 

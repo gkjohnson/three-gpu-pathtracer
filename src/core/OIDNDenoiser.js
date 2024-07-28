@@ -150,27 +150,16 @@ export class OIDNDenoiser {
 
 		}
 
-		// set so we can access later when blending
-		this.pathtracedTexture = this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget );
-		const colorWebGLTexture = this.getWebGLTexture( this.pathtracedTexture );
+		// Extract the raw webGLTextures
+		const colorWebGLTexture = this.getWebGLTexture( this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget ) );
 		const albedoWebGLTexture = this.getWebGLTexture( albedoTexture );
 		const normalWebGLTexture = this.getWebGLTexture( normalTexture );
 
-		//* run the denoiser
+		//* run the denoiser ----------------------------
 		this.renderer.resetState();
 
-		/* The setting of inputs is async and running too quick before execute. this will be fixed in a future version
-		see https://github.com/DennisSmolek/Denoiser/issues/21
-		const denoisedWebGLTexture = await this.denoiser.execute( colorWebGLTexture, albedoWebGLTexture, normalWebGLTexture );
-		*/
-
-		// Set input Textures with await
-		await this.denoiser.setInputTexture( 'color', colorWebGLTexture );
-		if ( albedoTexture ) await this.denoiser.setInputTexture( 'albedo', albedoWebGLTexture );
-		if ( normalTexture ) await this.denoiser.setInputTexture( 'normal', normalWebGLTexture );
-
 		// Run the denoiser
-		const denoisedWebGLTexture = await this.denoiser.execute();
+		const denoisedWebGLTexture = await this.denoiser.execute( colorWebGLTexture, albedoWebGLTexture, normalWebGLTexture );
 
 		this.renderer.resetState();
 		if ( ! this.outputTexture ) this.outputTexture = this.createOutputTexture();
@@ -257,6 +246,7 @@ export class OIDNDenoiser {
 	abort() {
 
 		this.denoiser.abort();
+		this.handleProgress( 0 );
 
 	}
 
