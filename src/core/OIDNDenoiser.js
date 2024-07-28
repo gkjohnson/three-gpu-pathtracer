@@ -151,8 +151,7 @@ export class OIDNDenoiser {
 		}
 
 		// set so we can access later when blending
-		this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget );
-		this.pathtracedTexture = this.conversionRenderTarget.texture;
+		this.pathtracedTexture = this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget );
 		const colorWebGLTexture = this.getWebGLTexture( this.pathtracedTexture );
 		const albedoWebGLTexture = this.getWebGLTexture( albedoTexture );
 		const normalWebGLTexture = this.getWebGLTexture( normalTexture );
@@ -193,7 +192,6 @@ export class OIDNDenoiser {
 
 		if ( ! this.denoisedTexture ) return;
 
-		//const currentTarget = this.renderer.getRenderTarget();
 		this.quad.material = this.blendToCanvasMaterial;
 		this.blendToCanvasMaterial.map = this.denoisedTexture;
 		this.blendToCanvasMaterial.opacity = Math.min( ( performance.now() - this.denoiserFinished ) / this.fadeTime, 1 );
@@ -206,7 +204,6 @@ export class OIDNDenoiser {
 
 		}
 
-		// should we force to canvas or allow the user to set to their own target?
 		const currentAutoClear = this.renderer.autoClear;
 		this.renderer.autoClear = false;
 		this.quad.render( this.renderer );
@@ -236,6 +233,7 @@ export class OIDNDenoiser {
 		this.renderer.setRenderTarget( target );
 		this.quad.render( this.renderer );
 		this.renderer.setRenderTarget( oldRenderTarget );
+		return target.texture;
 
 	}
 
@@ -253,6 +251,12 @@ export class OIDNDenoiser {
 		const texture = tempRT.texture;
 		// dispose?
 		return texture;
+
+	}
+
+	abort() {
+
+		this.denoiser.abort();
 
 	}
 
