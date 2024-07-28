@@ -1,11 +1,81 @@
-import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial, MeshBasicMaterial, NoBlending } from 'three';
+import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial, MeshBasicMaterial, Color, } from 'three';
+
+const _blackColor = /* @__PURE__ */ new Color( 0, 0, 0 );
+
+// A normal material that supports texture partial transparency
+class AlphaMapNormalMaterial extends MeshNormalMaterial {
+
+	get map() {
+
+		return this._uniforms.map.value;
+
+	}
+
+	set map( v ) {
+
+		this._uniforms.map.value = v;
+
+	}
+
+	get alphaMap() {
+
+		return this._uniforms.alphaMap.value;
+
+	}
+
+	set alphaMap( v ) {
+
+		this._uniforms.alphaMap.value = v;
+
+	}
+
+	constructor( ...args ) {
+
+		super( ...args );
+		this._uniforms = {
+			map: { value: null },
+			alphaMap: { value: null },
+		};
+
+	}
+
+	onBeforeCompile( shader ) {
+
+		shader.uniforms = {
+			...shader.uniforms,
+			...this._uniforms,
+		};
+
+		shader.fragmentShader = shader.fragmentShader
+			.replace( /#include <uv_pars_fragment>/, /* glsl */`
+
+				#include <uv_pars_fragment>
+				#include <map_pars_fragment>
+				#include <alphamap_pars_fragment>
+				#include <alphatest_pars_fragment>
+
+			` )
+			.replace( /#include <clipping_planes_fragment>/, /* glsl */`
+
+				#include <map_fragment>
+				#include <color_fragment>
+				#include <alphamap_fragment>
+				#include <alphatest_fragment>
+
+				#include <clipping_planes_fragment>
+
+			` );
+
+	}
+
+}
 
 // Material pool
 class MaterialPool {
 
 	constructor() {
 
-		this.normalMaterial = new MeshNormalMaterial();
+		this.normalMaterial = new AlphaMapNormalMaterial();
 		this.albedoMaterial = new MeshBasicMaterial();
 		this.originalMaterials = new Map();
 
@@ -25,8 +95,16 @@ class MaterialPool {
 		const material = this._getNextMaterial( type );
 
 		material.map = originalMaterial.map;
-		material.color = originalMaterial.color;
+		material.opacity = originalMaterial.opacity;
+		material.transparent = originalMaterial.transparent;
+		material.depthWrite = originalMaterial.depthWrite;
+		material.alphaTest = originalMaterial.alphaTest;
+		material.alphaMap = originalMaterial.alphaMap;
+		if ( material.color ) material.color.copy( originalMaterial.color );
 		if ( type === 'normal' ) material.normalMap = originalMaterial.normalMap;
+		else material.normalMap = null;
+
+		material.needsUpdate = true;
 
 		return material;
 
@@ -57,10 +135,12 @@ class MaterialPool {
 
 		// reset the state of the applied material
 		if ( mesh.material.map ) mesh.material.map = null;
+		if ( mesh.material.alphaMap ) mesh.material.alphaMap = null;
 		if ( mesh.material.normalMap ) mesh.material.normalMap = null;
-		if ( mesh.material.color ) mesh.material.color = 0xffffff;
+
 		// restore the original material
 		mesh.material = this.originalMaterials.get( mesh );
+
 		// remove our reference to the original material
 		this.originalMaterials.delete( mesh );
 
@@ -111,9 +191,14 @@ export class AlbedoNormalPass {
 		const oldRenderTarget = renderer.getRenderTarget();
 
 		// Normal pass
+		const prevBackground = scene.background;
+		scene.background = _blackColor;
+
 		this.swapMaterials( scene, 'normal' );
 		renderer.setRenderTarget( this.normalRenderTarget );
 		renderer.render( scene, camera );
+
+		scene.background = prevBackground;
 
 		// Albedo pass
 		this.swapMaterials( scene, 'albedo' );
@@ -134,14 +219,16 @@ export class AlbedoNormalPass {
 
 	swapMaterials( object, swapTo = '' ) {
 
-		if ( object instanceof Mesh && object.material ) {
+		object.traverse( child => {
 
-			if ( swapTo ) object.material = this.materialPool.getMaterial( object, swapTo );
-			else this.materialPool.restoreOriginal( object );
+			if ( child instanceof Mesh && child.material ) {
 
-		}
+				if ( swapTo ) child.material = this.materialPool.getMaterial( child, swapTo );
+				else this.materialPool.restoreOriginal( child );
 
-		object.children.forEach( child => this.swapMaterials( child, swapTo ) );
+			}
+
+		} );
 
 	}
 
