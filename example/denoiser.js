@@ -14,6 +14,7 @@ import {
 	OrthographicCamera,
 	WebGLRenderer,
 	EquirectangularReflectionMapping,
+	MeshBasicMaterial,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -29,9 +30,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
-import { DenoiserSplitMaterial } from '../src/materials/fullscreen/DenoiserSplitMaterial.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -122,6 +121,7 @@ const params = {
 	denoiserDebugging: false,
 	showDebugCanvas: false,
 	doSplit: false,
+	splitPoint: 0,
 
 	...getScaledSettings(),
 
@@ -132,8 +132,7 @@ let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera, denoiser
 let controls, scene, model;
 let gradientMap;
 let loader;
-const splitMaterial = new DenoiserSplitMaterial();
-const quad = new FullScreenQuad( splitMaterial );
+const quad = new FullScreenQuad( new MeshBasicMaterial() );
 
 const rawCanvas = document.getElementById( 'rawCanvas' );
 
@@ -246,9 +245,16 @@ function animate() {
 			pathTracer.renderSample();
 			if ( pathTracer.isDenoised ) {
 
-				// set the textures on our material
-				splitMaterial.map1 = denoiser.srgbPathTracedTarget.texture;
-				splitMaterial.map2 = denoiser.denoisedTexture;
+				// render the denoised texture
+				renderer.setScissorTest( false );
+				quad.material.map = denoiser.denoisedTexture;
+				quad.render( renderer );
+
+				// render the og path traced texture over a portion of the canvas based
+				// on the set split point using scissor
+				renderer.setScissorTest( true );
+				renderer.setScissor( 0, 0, Math.round( window.innerWidth * params.splitPoint ), window.innerHeight );
+				quad.material.map = denoiser.srgbPathTracedTarget.texture;
 				quad.render( renderer );
 
 			}
@@ -437,7 +443,7 @@ function buildGui() {
 		}
 
 	} );
-	const splitPointControl = denoisingFolder.add( splitMaterial, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
+	const splitPointControl = denoisingFolder.add( params, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
 	denoisingFolder.add( params, 'showDebugCanvas' ).name( 'Show Debug Canvas' ).onChange( onParamsChange );
 	denoisingFolder.open();
 
