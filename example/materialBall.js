@@ -55,7 +55,7 @@ const params = {
 	renderScale: 1 / window.devicePixelRatio,
 	transmissiveBounces: 20,
 	filterGlossyFactor: 0.5,
-	tiles: 1,
+	tiles: 3,
 };
 
 if ( window.location.hash.includes( 'transmission' ) ) {
