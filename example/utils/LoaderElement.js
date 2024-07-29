@@ -64,6 +64,11 @@ function initializeStyles() {
 		.loader-container .dataEl {
 			color: rgba( 255, 255, 255, 0.75 );
 		}
+
+		.loader-container .dataEl {
+			display: flex;
+			flex-direction: row;
+		}
 	`;
 	document.head.appendChild( _styleElement );
 
@@ -84,9 +89,6 @@ export class LoaderElement {
 
 		const dataEl = document.createElement( 'div' );
 		dataEl.classList.add( 'dataEl' );
-		dataEl.style.display = 'flex';
-		dataEl.style.flexDirection = 'row';
-		dataEl.style.gap = '6px';
 		container.appendChild( dataEl );
 
 		const samplesEl = document.createElement( 'div' );
@@ -169,19 +171,19 @@ export class LoaderElement {
 
 	}
 
-	setDenoising( count ) {
+	setDenoising( perc ) {
 
-		if ( count === 0 ) {
+		if ( perc === 0 ) {
 
 			this._denoisingPercentage.innerText = '';
 
-		} else if ( count === 100 ) {
+		} else if ( perc === 1 ) {
 
-			this._denoisingPercentage.innerText = 'Denoised';
+			this._denoisingPercentage.innerText = ', denoised';
 
 		} else {
 
-			this._denoisingPercentage.innerText = ` ${ Math.floor( count ) }% Denoising...`;
+			this._denoisingPercentage.innerText = `, ${ Math.floor( perc * 100 ) }% denoised...`;
 
 		}
 

@@ -92,6 +92,7 @@ export class OIDNDenoiser {
 		this.denoiser.onProgress( progress => this.handleProgress( progress ) );
 		//this.denoiser.hdr = true;
 
+		this.percentage = 0;
 		this.isDenoising = false;
 		this.fadeTime = 500;
 		this.denoiserFinished = 0;
@@ -242,17 +243,11 @@ export class OIDNDenoiser {
 	// Listeners
 	handleProgress( progress ) {
 
-		let outProgress = progress * 100;
+		let outProgress = progress;
 		// we only return 100 when isDenoised is true but the denoiser progress is for tiling
-		if ( this.isDenoising && outProgress >= 1 ) outProgress --;
-		this.progressListeners.forEach( listener => listener( outProgress ) );
+		if ( this.isDenoising && outProgress >= 1 ) outProgress -= 0.01;
 
-	}
-
-	onProgress( listener ) {
-
-		this.progressListeners.add( listener );
-		return () => this.progressListeners.delete( listener );
+		this.progress = outProgress;
 
 	}
 

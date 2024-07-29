@@ -149,13 +149,6 @@ async function init() {
 	denoiser = new OIDNDenoiser( renderer );
 	pathTracer.setDenoiser( denoiser );
 
-	//* Access the denoiser outside the pathtracer
-	denoiser.onProgress( progress => {
-
-		loader.setDenoising( progress );
-
-	} );
-
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
@@ -243,6 +236,10 @@ function animate() {
 	if ( ! pathTracer.isDenoised && ! denoiser.isDenoising ) {
 
 		loader.setDenoising( 0 );
+
+	} else {
+
+		loader.setDenoising( denoiser.progress );
 
 	}
 
