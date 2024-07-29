@@ -316,8 +316,7 @@ function onParamsChange() {
 
 	}
 
-	// Denoiser
-	else pathTracer.maxSamples = params.maxSamples;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.enableDenoiser = params.enableDenoiser;
 	pathTracer.renderAux = params.renderAux;
 

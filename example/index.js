@@ -300,6 +300,7 @@ function onDenoiserChange( quality ) {
 	if ( ! quality ) return pathTracer.enableDenoiser = false;
 	pathTracer.enableDenoiser = true;
 	pathTracer.denoiser.quality = quality;
+
 }
 
 function onHashChange() {
