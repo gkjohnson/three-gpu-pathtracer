@@ -104,12 +104,6 @@ export class OIDNDenoiser {
 		this.auxTextures = { albedo: null, normal: null };
 		this.progressListeners = new Set();
 
-		// split props
-		this.doSplit = false;
-		this.splitPoint = 0.5;
-		this.t2conversion = false;
-
-		// Same as pathtracer so tonemapping is the same
 		this.linearToSRGBMaterial = new MeshBasicMaterial( {
 			map: null,
 			transparent: true,
@@ -122,6 +116,7 @@ export class OIDNDenoiser {
 			transparent: true,
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
+
 
 		this.quad = new FullScreenQuad( this.linearToSRGBMaterial );
 		this.createConversionRenderTarget( renderer.domElement.width, renderer.domElement.height );
@@ -150,8 +145,11 @@ export class OIDNDenoiser {
 
 		}
 
+		// set this on the object so we can get it later to split it
+		this.pathtracedTexture = this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget );
+
 		// Extract the raw webGLTextures
-		const colorWebGLTexture = this.getWebGLTexture( this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget ) );
+		const colorWebGLTexture = this.getWebGLTexture( this.pathtracedTexture );
 		const albedoWebGLTexture = this.getWebGLTexture( albedoTexture );
 		const normalWebGLTexture = this.getWebGLTexture( normalTexture );
 

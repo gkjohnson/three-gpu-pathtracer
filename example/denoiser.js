@@ -29,6 +29,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { DenoiserSplitMaterial } from '../src/materials/fullscreen/DenoiserSplitMaterial.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 
 const envMaps = {
@@ -119,6 +121,7 @@ const params = {
 	denoiserQuality: 'fast',
 	denoiserDebugging: false,
 	showDebugCanvas: false,
+	doSplit: false,
 
 	...getScaledSettings(),
 
@@ -129,6 +132,8 @@ let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera, denoiser
 let controls, scene, model;
 let gradientMap;
 let loader;
+const splitMaterial = new DenoiserSplitMaterial();
+const quad = new FullScreenQuad( splitMaterial );
 
 const rawCanvas = document.getElementById( 'rawCanvas' );
 
@@ -163,7 +168,7 @@ async function init() {
 	denoiser.onProgress( progress => {
 
 		loader.setDenoising( progress );
-		console.log( 'Denoiser Progress:', progress );
+		if ( progress > 0 ) console.log( 'Denoiser Progress:', progress );
 
 	} );
 
@@ -248,6 +253,14 @@ function animate() {
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
 			pathTracer.renderSample();
+			if ( pathTracer.isDenoised ) {
+
+				// set the textures on our material
+				splitMaterial.map1 = denoiser.pathtracedTexture;
+				splitMaterial.map2 = denoiser.denoisedTexture;
+				quad.render( renderer );
+
+			}
 
 		}
 
@@ -415,12 +428,22 @@ function buildGui() {
 	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
 	denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
 	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
-	denoisingFolder.add( denoiser, 'doSplit' ).name( 'Split' ).onChange( v=> {
+	denoisingFolder.add( params, 'doSplit' ).name( 'Split' ).onChange( v=> {
 
-		if ( v ) splitPointControl.show(); else splitPointControl.hide();
+		if ( v ) {
+
+			splitPointControl.setValue( 0.5 );
+			splitPointControl.show();
+
+		} else {
+
+			splitPointControl.setValue( 0 );
+			splitPointControl.hide();
+
+		}
 
 	} );
-	const splitPointControl = denoisingFolder.add( denoiser, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
+	const splitPointControl = denoisingFolder.add( splitMaterial, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
 	denoisingFolder.add( params, 'showDebugCanvas' ).name( 'Show Debug Canvas' ).onChange( onParamsChange );
 	denoisingFolder.open();
 
