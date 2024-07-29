@@ -178,12 +178,7 @@ export class PathTracingSceneGenerator {
 		const materials = result.materials;
 		const textures = getTextures( materials );
 		const { lights, iesTextures } = getLights( objects );
-
-		if ( result.changeType !== NO_CHANGE ) {
-
-			updateMaterialIndexAttribute( geometry, materials, materials );
-
-		}
+		updateMaterialIndexAttribute( geometry, materials, materials );
 
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {

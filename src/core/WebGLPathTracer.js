@@ -360,9 +360,9 @@ export class WebGLPathTracer {
 				geometry.attributes.color,
 			);
 
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-
 		}
+
+		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
 
 		// save previously used items
 		this._previousScene = scene;
