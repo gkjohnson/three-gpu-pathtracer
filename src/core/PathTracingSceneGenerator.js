@@ -73,6 +73,8 @@ function getLights( objects ) {
 
 }
 
+let materialUuids = null;
+
 export class PathTracingSceneGenerator {
 
 	get initialized() {
@@ -176,9 +178,29 @@ export class PathTracingSceneGenerator {
 		// generate the geometry
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
+		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || materialUuids === null || materialUuids.length !== length;
+		for ( let index = 0, length = materials.length; ( index < length ) && ! needsMaterialIndexUpdate; index ++ ) {
+
+			if ( materialUuids === null || materialUuids.length !== length ) {
+
+				needsMaterialIndexUpdate = true;
+				break;
+
+			}
+
+			const material = materials[ index ];
+			if ( material.uuid !== materialUuids[ index ] ) needsMaterialIndexUpdate = true;
+
+		}
+
+		materialUuids = materials.map( material => material.uuid );
 		const textures = getTextures( materials );
 		const { lights, iesTextures } = getLights( objects );
-		updateMaterialIndexAttribute( geometry, materials, materials );
+		if ( needsMaterialIndexUpdate ) {
+
+			updateMaterialIndexAttribute( geometry, materials, materials );
+
+		}
 
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {
@@ -220,6 +242,7 @@ export class PathTracingSceneGenerator {
 		return {
 			bvhChanged: result.changeType !== NO_CHANGE,
 			bvh: this.bvh,
+			needsMaterialIndexUpdate,
 			lights,
 			iesTextures,
 			geometry,
