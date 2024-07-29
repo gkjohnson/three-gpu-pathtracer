@@ -17,8 +17,6 @@ export class OIDNDenoiser {
 	set quality( v ) {
 
 		this.denoiser.quality = v;
-		if ( v === 'fast' && this.hdr ) this.hdr = false;
-		//if ( v === 'balanced' && ! this.hdr ) this.hdr = true;
 
 	}
 
@@ -56,7 +54,6 @@ export class OIDNDenoiser {
 	set hdr( v ) {
 
 		this.denoiser.hdr = v;
-		if ( v && this.quality === 'fast' ) this.quality = 'balanced';
 
 	}
 
@@ -72,7 +69,7 @@ export class OIDNDenoiser {
 
 	}
 
-	//* Debugging
+	// Debugging
 	get denoiserDebugging() {
 
 		return this.denoiser.debugging;
@@ -117,9 +114,19 @@ export class OIDNDenoiser {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
 
-
 		this.quad = new FullScreenQuad( this.linearToSRGBMaterial );
-		this.createConversionRenderTarget( renderer.domElement.width, renderer.domElement.height );
+		this.srgbPathTracedTarget = new WebGLRenderTarget( 1, 1, { colorSpace: SRGBColorSpace } );
+		this.outputTexture = null;
+
+	}
+
+	dispose() {
+
+		this.linearToSRGBMaterial.dispose();
+		this.blendToCanvasMaterial.dispose();
+		this.srgbPathTracedTarget.dispose();
+		if ( this.outputTexture ) this.outputTexture.dispose();
+		this.quad.dispose();
 
 	}
 
@@ -131,35 +138,30 @@ export class OIDNDenoiser {
 
 	}
 
-	async denoise( rawPathtracedTexture, albedoTexture, normalTexture ) {
+	async denoise( rawPathTracedTexture, albedoTexture, normalTexture ) {
 
 		this.isDenoising = true;
 
 		// Adjust the height /width if changed from before
-		const { width, height } = rawPathtracedTexture.image;
-		if ( this.denoiser.height !== height || this.denoiser.width !== width ) {
+		const { width, height } = rawPathTracedTexture.image;
 
-			this.denoiser.width = width;
-			this.denoiser.height = height;
-			this.createConversionRenderTarget( width, height );
-
-		}
+		this.denoiser.width = width;
+		this.denoiser.height = height;
+		this.srgbPathTracedTarget.setSize( width, height );
 
 		// set this on the object so we can get it later to split it
-		this.pathtracedTexture = this.getLinearToSRGBTexture( rawPathtracedTexture, this.conversionRenderTarget );
+		this.getLinearToSRGBTexture( rawPathTracedTexture, this.srgbPathTracedTarget );
 
 		// Extract the raw webGLTextures
-		const colorWebGLTexture = this.getWebGLTexture( this.pathtracedTexture );
+		const colorWebGLTexture = this.getWebGLTexture( this.srgbPathTracedTarget.texture );
 		const albedoWebGLTexture = this.getWebGLTexture( albedoTexture );
 		const normalWebGLTexture = this.getWebGLTexture( normalTexture );
 
-		//* run the denoiser ----------------------------
-		this.renderer.resetState();
-
 		// Run the denoiser
-		const denoisedWebGLTexture = await this.denoiser.execute( colorWebGLTexture, albedoWebGLTexture, normalWebGLTexture );
-
 		this.renderer.resetState();
+		const denoisedWebGLTexture = await this.denoiser.execute( colorWebGLTexture, albedoWebGLTexture, normalWebGLTexture );
+		this.renderer.resetState();
+
 		if ( ! this.outputTexture ) this.outputTexture = this.createOutputTexture();
 		// inject the webGLTexture into the texture
 		this.denoisedTexture = this.injectWebGLTexture( this.outputTexture, denoisedWebGLTexture );
@@ -198,28 +200,16 @@ export class OIDNDenoiser {
 
 	}
 
-	// because of size issues we need to create one when we change size
-	createConversionRenderTarget( width, height ) {
-
-		// if one exists destroy it
-		if ( this.conversionRenderTarget ) this.conversionRenderTarget.dispose();
-
-		// todo Probably a better setting with dpr
-		this.conversionRenderTarget = new WebGLRenderTarget( width, height );
-		this.conversionRenderTarget.colorspace = SRGBColorSpace;
-		this.conversionRenderTarget.texture.colorspace = SRGBColorSpace;
-
-	}
-
 	// The plain texture is raw without toneMapping this is more like what renders to canvas
 	getLinearToSRGBTexture( pathtracedTexture, target ) {
 
-		const oldRenderTarget = this.renderer.getRenderTarget();
-		this.quad.material = this.linearToSRGBMaterial;
-		this.linearToSRGBMaterial.map = pathtracedTexture;
-		this.renderer.setRenderTarget( target );
-		this.quad.render( this.renderer );
-		this.renderer.setRenderTarget( oldRenderTarget );
+		const { quad, linearToSRGBMaterial, renderer } = this;
+		const oldRenderTarget = renderer.getRenderTarget();
+		quad.material = linearToSRGBMaterial;
+		linearToSRGBMaterial.map = pathtracedTexture;
+		renderer.setRenderTarget( target );
+		quad.render( renderer );
+		renderer.setRenderTarget( oldRenderTarget );
 		return target.texture;
 
 	}
@@ -228,6 +218,7 @@ export class OIDNDenoiser {
 	createOutputTexture() {
 
 		const tempRT = new WebGLRenderTarget( this.denoiser.width, this.denoiser.height );
+
 		// render the quad to the texture
 		const oldRenderTarget = this.renderer.getRenderTarget();
 		this.renderer.setRenderTarget( tempRT );
@@ -248,14 +239,13 @@ export class OIDNDenoiser {
 
 	}
 
-	//* Listeners
-
+	// Listeners
 	handleProgress( progress ) {
 
 		let outProgress = progress * 100;
 		// we only return 100 when isDenoised is true but the denoiser progress is for tiling
 		if ( this.isDenoising && outProgress >= 1 ) outProgress --;
-		this.progressListeners.forEach(listener => listener(outProgress));
+		this.progressListeners.forEach( listener => listener( outProgress ) );
 
 	}
 
@@ -266,8 +256,7 @@ export class OIDNDenoiser {
 
 	}
 
-
-	//* Utils ----------------------------
+	// Utils
 	// get the webGLTexture out of a renderTarget or THREE.texture
 	getWebGLTexture( input ) {
 
