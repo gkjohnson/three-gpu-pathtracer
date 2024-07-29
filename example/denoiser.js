@@ -247,7 +247,7 @@ function animate() {
 			if ( pathTracer.isDenoised ) {
 
 				// set the textures on our material
-				splitMaterial.map1 = denoiser.pathtracedTexture;
+				splitMaterial.map1 = denoiser.srgbPathTracedTarget.texture;
 				splitMaterial.map2 = denoiser.denoisedTexture;
 				quad.render( renderer );
 
