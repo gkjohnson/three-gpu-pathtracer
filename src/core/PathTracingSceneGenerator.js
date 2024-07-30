@@ -73,8 +73,6 @@ function getLights( objects ) {
 
 }
 
-let materialUuids = null;
-
 export class PathTracingSceneGenerator {
 
 	get initialized() {
@@ -97,6 +95,7 @@ export class PathTracingSceneGenerator {
 		this._bvhWorker = null;
 		this._pendingGenerate = null;
 		this._buildAsync = false;
+		this._materialUuids = null;
 
 	}
 
@@ -178,27 +177,29 @@ export class PathTracingSceneGenerator {
 		// generate the geometry
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
-		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || materialUuids === null || materialUuids.length !== length;
-		for ( let index = 0, length = materials.length; ( index < length ) && ! needsMaterialIndexUpdate; index ++ ) {
+		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || this._materialUuids === null || this._materialUuids.length !== length;
+		if ( ! needsMaterialIndexUpdate ) {
 
-			if ( materialUuids === null || materialUuids.length !== length ) {
+			for ( let i = 0, length = materials.length; ( i < length ); i ++ ) {
 
-				needsMaterialIndexUpdate = true;
-				break;
+				const material = materials[ i ];
+				if ( material.uuid !== this._materialUuids[ i ] ) {
+
+					needsMaterialIndexUpdate = true;
+					break;
+
+				}
 
 			}
 
-			const material = materials[ index ];
-			if ( material.uuid !== materialUuids[ index ] ) needsMaterialIndexUpdate = true;
-
 		}
 
-		materialUuids = materials.map( material => material.uuid );
 		const textures = getTextures( materials );
 		const { lights, iesTextures } = getLights( objects );
 		if ( needsMaterialIndexUpdate ) {
 
 			updateMaterialIndexAttribute( geometry, materials, materials );
+			this._materialUuids = materials.map( material => material.uuid );
 
 		}
 
