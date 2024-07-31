@@ -4,7 +4,7 @@ import { Denoiser } from 'denoiser';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
 
-import { NoBlending, WebGLRenderTarget, SRGBColorSpace, MeshBasicMaterial, LinearSRGBColorSpace } from 'three';
+import { NoBlending, WebGLRenderTarget, MeshBasicMaterial, LinearSRGBColorSpace } from 'three';
 
 export class OIDNDenoiser {
 

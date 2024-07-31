@@ -1,4 +1,4 @@
-import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial, MeshBasicMaterial, Color, LinearSRGBColorSpace, } from 'three';
+import { WebGLRenderTarget, Mesh, MeshNormalMaterial, MeshBasicMaterial, Color, LinearSRGBColorSpace, } from 'three';
 
 const _blackColor = /* @__PURE__ */ new Color( 0, 0, 0 );
 
