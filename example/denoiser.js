@@ -257,6 +257,8 @@ function animate() {
 				quad.material.map = denoiser.srgbPathTracedTarget.texture;
 				quad.render( renderer );
 
+				renderer.setScissorTest( false );
+
 			}
 
 		}

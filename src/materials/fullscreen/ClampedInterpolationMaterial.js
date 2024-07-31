@@ -56,7 +56,6 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 			fragmentShader: /* glsl */`
 				uniform sampler2D map;
 				uniform float opacity;
-				uniform bool convertToSRGB;
 				varying vec2 vUv;
 
 				vec4 clampedTexelFatch( sampler2D map, ivec2 px, int lod ) {
@@ -70,21 +69,6 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 
 			  		return linearToOutputTexel( res );
 
-				}
-
-				vec4 LinearToSRGB(vec4 value) {
-					vec3 linearRGB = value.rgb;
-					vec3 sRGB = vec3(0.0); // Initialize sRGB to zero
-				
-					for (int i = 0; i < 3; ++i) {
-						if (linearRGB[i] <= 0.0031308) {
-							sRGB[i] = 12.92 * linearRGB[i];
-						} else {
-							sRGB[i] = 1.055 * pow(linearRGB[i], 1.0 / 2.4) - 0.055;
-						}
-					}
-				
-					return vec4(sRGB, value.a);
 				}
 
 				void main() {

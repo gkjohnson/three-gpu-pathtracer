@@ -145,9 +145,16 @@ export class OIDNDenoiser {
 
 		// Adjust the height /width if changed from before
 		const { width, height } = rawPathTracedTexture.image;
+		//todo remove conditional when fixed upstream
+		if ( this.denoiser.width !== width || this.denoiser.height !== height ) {
 
-		this.denoiser.width = width;
-		this.denoiser.height = height;
+			this.denoiser.width = width;
+			this.denoiser.height = height;
+
+		}
+
+		//this.denoiser.width = width;
+		//this.denoiser.height = height;
 		this.srgbPathTracedTarget.setSize( width, height );
 
 		// set this on the object so we can get it later to split it
