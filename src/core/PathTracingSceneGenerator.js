@@ -180,7 +180,7 @@ export class PathTracingSceneGenerator {
 		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || this._materialUuids === null || this._materialUuids.length !== length;
 		if ( ! needsMaterialIndexUpdate ) {
 
-			for ( let i = 0, length = materials.length; ( i < length ); i ++ ) {
+			for ( let i = 0, length = materials.length; i < length; i ++ ) {
 
 				const material = materials[ i ];
 				if ( material.uuid !== this._materialUuids[ i ] ) {
