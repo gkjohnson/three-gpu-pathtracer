@@ -14,6 +14,7 @@ import {
 	OrthographicCamera,
 	WebGLRenderer,
 	EquirectangularReflectionMapping,
+	MeshBasicMaterial,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
@@ -29,6 +30,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -76,7 +78,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	tiles: 2,
 
 	model: '',
@@ -91,7 +93,7 @@ const params = {
 
 	cameraProjection: 'Perspective',
 
-	backgroundType: 'Gradient',
+	backgroundType: 'Environment',
 	bgGradientTop: '#111111',
 	bgGradientBottom: '#000000',
 	backgroundBlur: 0.0,
@@ -110,18 +112,29 @@ const params = {
 
 	// Denoiser
 	maxSamples: 6,
-	denoiserQuality: '',
+	limitlessSamples: false,
+	enableDenoiser: true,
+	useAux: true,
+	cleanAux: true,
+	renderAux: '',
+	denoiserQuality: 'fast',
+	denoiserDebugging: false,
+	showDebugCanvas: false,
+	doSplit: false,
+	splitPoint: 0,
 
 	...getScaledSettings(),
 
 };
 
 let floorPlane, gui, stats;
-let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
+let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera, denoiser;
 let controls, scene, model;
 let gradientMap;
 let loader;
-let denoiser;
+const quad = new FullScreenQuad( new MeshBasicMaterial() );
+
+const rawCanvas = document.getElementById( 'rawCanvas' );
 
 const orthoWidth = 2;
 
@@ -144,10 +157,22 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
+	pathTracer.minSamples = 2;
 
-	// denoiser
+	// create and setup the OIDN denoiser
 	denoiser = new OIDNDenoiser( renderer );
 	pathTracer.setDenoiser( denoiser );
+	pathTracer.enableDenoiser = params.enableDenoiser;
+
+	//* Interfacing with the internal denoiser
+	// Set the raw canvas by accessing core Denoiser object
+	denoiser.denoiser.setCanvas( rawCanvas );
+	//denoiser.denoiser.usePassThrough = true;
+	denoiser.denoiser.debugging = true;
+
+	denoiser.denoiser.onProgress( progress => {
+		console.log( 'Denoiser progress:', progress );
+	});
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -224,6 +249,17 @@ function animate() {
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
 			pathTracer.renderSample();
+			if ( pathTracer.isDenoised ) {
+
+				// render the og path traced texture over a portion of the canvas based
+				// on the set split point using scissor
+				renderer.setScissorTest( true );
+				renderer.setScissor( 0, 0, Math.round( window.innerWidth * params.splitPoint ), window.innerHeight );
+				quad.material.map = denoiser.srgbPathTracedTarget.texture;
+				quad.render( renderer );
+				renderer.setScissorTest( false );
+
+			}
 
 		}
 
@@ -289,17 +325,30 @@ function onParamsChange() {
 	}
 
 	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.enableDenoiser = params.enableDenoiser;
+	pathTracer.renderAux = params.renderAux;
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 
+	// access deep params
+	denoiser.denoiser.outputToCanvas = params.showDebugCanvas;
+	rawCanvas.style.display = params.showDebugCanvas ? 'block' : 'none';
+
+
 }
 
-function onDenoiserChange( quality ) {
+function hardDenoiserParamsChange() {
 
-	if ( ! quality ) return pathTracer.enableDenoiser = false;
-	pathTracer.enableDenoiser = true;
-	pathTracer.denoiser.quality = quality;
+	// When these params change it causes the denoiser to have to rebuild. So I split them out
+	if ( params.enableDenoiser ) {
+
+		denoiser.useAux = params.useAux;
+		denoiser.quality = params.denoiserQuality;
+		pathTracer.cleanAux = params.cleanAux;
+
+
+	}
 
 }
 
@@ -345,7 +394,6 @@ function onResize() {
 	orthoCamera.top = orthoHeight / 2;
 	orthoCamera.bottom = orthoHeight / - 2;
 	orthoCamera.updateProjectionMatrix();
-
 	pathTracer.updateCamera();
 
 }
@@ -368,52 +416,47 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
-	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'maxSamples', 1, 300, 1 ).onChange( onParamsChange ).name( 'Max Samples' );
-	pathTracingFolder.add( params, 'denoiserQuality', { 'disabled': '', 'fast': 'fast', 'balaced': 'balanced' } ).name( 'OIDN Denoiser' ).onChange( onDenoiserChange );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
+	pathTracingFolder.close();
 
-		onParamsChange();
+	const denoisingFolder = gui.addFolder( 'Denoising' );
+	denoisingFolder.add( params, 'enableDenoiser' ).name( 'OIDN' ).onChange( onParamsChange );
+	denoisingFolder.add( params, 'denoiserQuality', [ 'fast', 'balanced' ] ).onChange( hardDenoiserParamsChange ).name( 'Quality' );
+	denoisingFolder.add( params, 'useAux' ).onChange( hardDenoiserParamsChange ).name( 'Use Aux Inputs' );
+	denoisingFolder.add( params, 'renderAux', { 'Denoised': '', 'Albedo': 'albedo', 'Normal': 'normal' } ).name( 'Render Output' ).onChange( onParamsChange );
+	denoisingFolder.add( params, 'doSplit' ).name( 'Split' ).onChange( v=> {
+
+		if ( v ) {
+
+			splitPointControl.setValue( 0.5 );
+			splitPointControl.show();
+
+		} else {
+
+			splitPointControl.setValue( 0 );
+			splitPointControl.hide();
+
+		}
 
 	} );
-	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
-
-		pathTracer.tiles.set( v, v );
-
-	} );
-	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
-
-		updateCameraProjection( v );
-
-	} );
-	pathTracingFolder.open();
+	const splitPointControl = denoisingFolder.add( params, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
+	denoisingFolder.add( params, 'showDebugCanvas' ).name( 'Show Debug Canvas' ).onChange( onParamsChange );
+	denoisingFolder.add( denoiser.denoiser, 'debugging' ).name( 'Debug Raw Denoiser' );
+	denoisingFolder.add( denoiser.denoiser, 'usePassThrough' ).name( 'Use Pass Through' );
+	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
-	environmentFolder.open();
+	environmentFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
+	environmentFolder.close();
 
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
-
-	} );
 
 	const floorFolder = gui.addFolder( 'floor' );
 	floorFolder.addColor( params, 'floorColor' ).onChange( onParamsChange );
@@ -467,7 +510,6 @@ function updateCameraProjection( cameraProjection ) {
 
 	controls.object = activeCamera;
 	controls.update();
-
 	pathTracer.setCamera( activeCamera );
 
 }
@@ -735,7 +777,7 @@ async function loadModel( url, onProgress ) {
 
 		manager.onProgress = ( url, loaded, total ) => {
 
-			onProgress( loaded / total );
+			loader.setPercentage( loaded / total );
 
 		};
 
