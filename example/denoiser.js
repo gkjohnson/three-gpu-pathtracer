@@ -253,8 +253,6 @@ function animate() {
 				quad.render( renderer );
 				renderer.setScissorTest( false );
 
-				renderer.setScissorTest( false );
-
 			}
 
 		}
