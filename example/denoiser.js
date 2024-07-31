@@ -256,6 +256,7 @@ function animate() {
 				renderer.setScissor( 0, 0, Math.round( window.innerWidth * params.splitPoint ), window.innerHeight );
 				quad.material.map = denoiser.srgbPathTracedTarget.texture;
 				quad.render( renderer );
+				renderer.setScissorTest( false );
 
 			}
 
