@@ -157,6 +157,7 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
+	pathTracer.minSamples = 2;
 
 	// create and setup the OIDN denoiser
 	denoiser = new OIDNDenoiser( renderer );
@@ -167,6 +168,11 @@ async function init() {
 	// Set the raw canvas by accessing core Denoiser object
 	denoiser.denoiser.setCanvas( rawCanvas );
 	//denoiser.denoiser.usePassThrough = true;
+	denoiser.denoiser.debugging = true;
+
+	denoiser.denoiser.onProgress( progress => {
+		console.log( 'Denoiser progress:', progress );
+	});
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -416,7 +422,6 @@ function buildGui() {
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
 	pathTracingFolder.close();
 
 	const denoisingFolder = gui.addFolder( 'Denoising' );
@@ -441,6 +446,8 @@ function buildGui() {
 	} );
 	const splitPointControl = denoisingFolder.add( params, 'splitPoint', 0, 1 ).name( 'Split Point' ).hide();
 	denoisingFolder.add( params, 'showDebugCanvas' ).name( 'Show Debug Canvas' ).onChange( onParamsChange );
+	denoisingFolder.add( denoiser.denoiser, 'debugging' ).name( 'Debug Raw Denoiser' );
+	denoisingFolder.add( denoiser.denoiser, 'usePassThrough' ).name( 'Use Pass Through' );
 	denoisingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );

@@ -1,4 +1,4 @@
-import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial, MeshBasicMaterial, Color, } from 'three';
+import { WebGLRenderTarget, SRGBColorSpace, Mesh, MeshNormalMaterial, MeshBasicMaterial, Color, LinearSRGBColorSpace, } from 'three';
 
 const _blackColor = /* @__PURE__ */ new Color( 0, 0, 0 );
 
@@ -176,9 +176,9 @@ export class AlbedoNormalPass {
 
 	constructor() {
 
-		this.albedoRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
-		this.normalRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: SRGBColorSpace } );
-		this.albedoRenderTarget.texture.colorSpace = SRGBColorSpace;
+		this.albedoRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: LinearSRGBColorSpace } );
+		this.normalRenderTarget = new WebGLRenderTarget( 1, 1, { samples: 4, colorSpace: LinearSRGBColorSpace } );
+		this.albedoRenderTarget.texture.colorSpace = LinearSRGBColorSpace;
 		this.materialPool = new MaterialPool();
 
 	}

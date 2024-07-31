@@ -4,7 +4,7 @@ import { Denoiser } from 'denoiser';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
 
-import { NoBlending, WebGLRenderTarget, SRGBColorSpace, MeshBasicMaterial } from 'three';
+import { NoBlending, WebGLRenderTarget, SRGBColorSpace, MeshBasicMaterial, LinearSRGBColorSpace } from 'three';
 
 export class OIDNDenoiser {
 
@@ -91,6 +91,7 @@ export class OIDNDenoiser {
 		this.denoiser.weightsUrl = 'https://cdn.jsdelivr.net/npm/denoiser/tzas';
 		this.denoiser.onProgress( progress => this.handleProgress( progress ) );
 		//this.denoiser.hdr = true;
+		this.denoiser.webglStateManager.ingoreRestore = true;
 
 		this.percentage = 0;
 		this.isDenoising = false;
@@ -100,9 +101,8 @@ export class OIDNDenoiser {
 		this._useAux = true;
 		this.externalAux = false;
 		this.auxTextures = { albedo: null, normal: null };
-		this.progressListeners = new Set();
 
-		this.linearToSRGBMaterial = new MeshBasicMaterial( {
+		this.pathTracerMaterial = new MeshBasicMaterial( {
 			map: null,
 			transparent: true,
 			blending: NoBlending,
@@ -115,15 +115,15 @@ export class OIDNDenoiser {
 			premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
 		} );
 
-		this.quad = new FullScreenQuad( this.linearToSRGBMaterial );
-		this.srgbPathTracedTarget = new WebGLRenderTarget( 1, 1, { colorSpace: SRGBColorSpace } );
+		this.quad = new FullScreenQuad( this.pathTracerMaterial );
+		this.srgbPathTracedTarget = new WebGLRenderTarget( 1, 1, { colorSpace: LinearSRGBColorSpace } );
 		this.outputTexture = null;
 
 	}
 
 	dispose() {
 
-		this.linearToSRGBMaterial.dispose();
+		this.pathTracerMaterial.dispose();
 		this.blendToCanvasMaterial.dispose();
 		this.srgbPathTracedTarget.dispose();
 		if ( this.outputTexture ) this.outputTexture.dispose();
@@ -145,20 +145,13 @@ export class OIDNDenoiser {
 
 		// Adjust the height /width if changed from before
 		const { width, height } = rawPathTracedTexture.image;
-		//todo remove conditional when fixed upstream
-		if ( this.denoiser.width !== width || this.denoiser.height !== height ) {
 
-			this.denoiser.width = width;
-			this.denoiser.height = height;
 
-		}
-
-		//this.denoiser.width = width;
-		//this.denoiser.height = height;
+		this.denoiser.width = width;
+		this.denoiser.height = height;
 		this.srgbPathTracedTarget.setSize( width, height );
 
-		// set this on the object so we can get it later to split it
-		this.getLinearToSRGBTexture( rawPathTracedTexture, this.srgbPathTracedTarget );
+		this.getCorrectedTexture( rawPathTracedTexture, this.srgbPathTracedTarget );
 
 		// Extract the raw webGLTextures
 		const colorWebGLTexture = this.getWebGLTexture( this.srgbPathTracedTarget.texture );
@@ -174,6 +167,7 @@ export class OIDNDenoiser {
 		// inject the webGLTexture into the texture
 		this.denoisedTexture = this.injectWebGLTexture( this.outputTexture, denoisedWebGLTexture );
 		// mark as complete and setup the renderer
+
 		this.isDenoising = false;
 		// we use this for the fade in
 		this.denoiserFinished = performance.now();
@@ -208,13 +202,13 @@ export class OIDNDenoiser {
 
 	}
 
-	// The plain texture is raw without toneMapping this is more like what renders to canvas
-	getLinearToSRGBTexture( pathtracedTexture, target ) {
+	// Until we resolve colorspace/hdr this is req
+	getCorrectedTexture( pathtracedTexture, target ) {
 
-		const { quad, linearToSRGBMaterial, renderer } = this;
+		const { quad, pathTracerMaterial, renderer } = this;
 		const oldRenderTarget = renderer.getRenderTarget();
-		quad.material = linearToSRGBMaterial;
-		linearToSRGBMaterial.map = pathtracedTexture;
+		quad.material = pathTracerMaterial;
+		pathTracerMaterial.map = pathtracedTexture;
 		renderer.setRenderTarget( target );
 		quad.render( renderer );
 		renderer.setRenderTarget( oldRenderTarget );
@@ -242,7 +236,7 @@ export class OIDNDenoiser {
 
 	abort() {
 
-		this.denoiser.abort();
+		if ( this.isDenoising ) this.denoiser.abort();
 		this.handleProgress( 0 );
 
 	}
