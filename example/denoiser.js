@@ -245,17 +245,13 @@ function animate() {
 			pathTracer.renderSample();
 			if ( pathTracer.isDenoised ) {
 
-				// render the denoised texture
-				renderer.setScissorTest( false );
-				quad.material.map = denoiser.denoisedTexture;
-				quad.render( renderer );
-
 				// render the og path traced texture over a portion of the canvas based
 				// on the set split point using scissor
 				renderer.setScissorTest( true );
 				renderer.setScissor( 0, 0, Math.round( window.innerWidth * params.splitPoint ), window.innerHeight );
 				quad.material.map = denoiser.srgbPathTracedTarget.texture;
 				quad.render( renderer );
+				renderer.setScissorTest( false );
 
 				renderer.setScissorTest( false );
 

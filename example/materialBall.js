@@ -66,7 +66,7 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.materialProperties.color = '#ffffff';
 
 	params.bounces = 10;
-	params.tiles = 2;
+	params.tiles = 4;
 
 } else if ( window.location.hash.includes( 'iridescent' ) ) {
 
@@ -86,7 +86,6 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.materialProperties.attenuationColor = '#2a6dc6';
 
 	params.bounces = 20;
-	params.tiles = 3;
 
 }
 
