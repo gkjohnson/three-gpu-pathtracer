@@ -343,6 +343,7 @@ export class WebGLPathTracer {
 			geometry,
 			bvh,
 			bvhChanged,
+			needsMaterialIndexUpdate,
 		} = results;
 
 		this._materials = materials;
@@ -362,7 +363,11 @@ export class WebGLPathTracer {
 
 		}
 
-		material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+		if ( needsMaterialIndexUpdate ) {
+
+			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
+
+		}
 
 		// save previously used items
 		this._previousScene = scene;

@@ -95,6 +95,7 @@ export class PathTracingSceneGenerator {
 		this._bvhWorker = null;
 		this._pendingGenerate = null;
 		this._buildAsync = false;
+		this._materialUuids = null;
 
 	}
 
@@ -176,9 +177,31 @@ export class PathTracingSceneGenerator {
 		// generate the geometry
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
+		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || this._materialUuids === null || this._materialUuids.length !== length;
+		if ( ! needsMaterialIndexUpdate ) {
+
+			for ( let i = 0, length = materials.length; i < length; i ++ ) {
+
+				const material = materials[ i ];
+				if ( material.uuid !== this._materialUuids[ i ] ) {
+
+					needsMaterialIndexUpdate = true;
+					break;
+
+				}
+
+			}
+
+		}
+
 		const textures = getTextures( materials );
 		const { lights, iesTextures } = getLights( objects );
-		updateMaterialIndexAttribute( geometry, materials, materials );
+		if ( needsMaterialIndexUpdate ) {
+
+			updateMaterialIndexAttribute( geometry, materials, materials );
+			this._materialUuids = materials.map( material => material.uuid );
+
+		}
 
 		// only generate a new bvh if the objects used have changed
 		if ( this.generateBVH ) {
@@ -220,6 +243,7 @@ export class PathTracingSceneGenerator {
 		return {
 			bvhChanged: result.changeType !== NO_CHANGE,
 			bvh: this.bvh,
+			needsMaterialIndexUpdate,
 			lights,
 			iesTextures,
 			geometry,

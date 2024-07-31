@@ -57,6 +57,7 @@ export interface PathTracingSceneGeneratorResult {
 	lights: Array<Light>;
 	iesTextures: Array<DataTexture>;
 	geometry: BufferGeometry;
+	needsMaterialIndexUpdate: boolean;
 	materials: Array<Material>;
 	textures: Array<Texture>;
 	objects: Array<Object3D>;
