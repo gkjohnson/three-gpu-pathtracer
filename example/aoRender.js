@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { AmbientOcclusionMaterial } from '../src/materials/surface/AmbientOcclusionMaterial.js';
+import { AOThicknessMaterial, AOThicknessMode } from '../src/materials/surface/AOThicknessMaterial.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { MeshBVHUniformStruct } from 'three-mesh-bvh';
 import * as MikkTSpace from 'three/examples/jsm/libs/mikktspace.module.js';
@@ -136,8 +136,8 @@ async function init() {
 					const normalMap = c.material.normalMap;
 					if ( ! materialMap.has( normalMap ) ) {
 
-						const material = new AmbientOcclusionMaterial( {
-
+						const material = new AOThicknessMaterial( {
+							mode: AOThicknessMode.AO_ONLY,
 							bvh: bvhUniform,
 							normalScale: c.material.normalScale,
 							normalMap,
