@@ -184,6 +184,7 @@ export class AOThicknessMapGenerator {
 		uvTriangleRenderTarget.dispose();
 		material.dispose();
 		aoQuad.dispose();
+		aoRenderTarget.dispose();
 
 		if ( flood ) {
 
