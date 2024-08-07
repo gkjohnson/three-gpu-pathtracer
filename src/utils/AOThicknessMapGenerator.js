@@ -132,7 +132,16 @@ export class AOThicknessMapGenerator {
 
 		const uvTriangleDataTextureGenerator = new UVTriangleDataTextureGenerator( renderer );
 		uvTriangleDataTextureGenerator.channel = channel;
-		const uvToTriangleMap = uvTriangleDataTextureGenerator.generateTexture( geometries, renderTarget.width );
+
+		const uvTriangleRenderTarget = new THREE.WebGLRenderTarget( renderTarget.width, renderTarget.height * 2, {
+			minFilter: THREE.NearestFilter,
+			magFilter: THREE.NearestFilter,
+			format: THREE.RGBAFormat,
+			type: THREE.FloatType
+		} );
+
+		uvTriangleDataTextureGenerator.generateTexture( geometries, uvTriangleRenderTarget );
+		const uvToTriangleMap = uvTriangleRenderTarget.texture;
 
 		const bvhUniform = new MeshBVHUniformStruct();
 		bvhUniform.updateFrom( bvh );
@@ -172,7 +181,7 @@ export class AOThicknessMapGenerator {
 
 		}
 
-		uvToTriangleMap.dispose();
+		uvTriangleRenderTarget.dispose();
 		material.dispose();
 		aoQuad.dispose();
 

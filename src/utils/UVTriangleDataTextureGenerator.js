@@ -46,7 +46,9 @@ export class UVTriangleDataTextureGenerator {
 
 	}
 
-	generateTexture( geometries, resolution ) {
+	generateTexture( geometries, renderTarget ) {
+
+		const resolution = renderTarget.width;
 
 		const { _vertexShader: vertexShader, _positionFragmentShader: positionFragmentShader, _normalFragmentShader: normalFragmentShader, _renderer: renderer } = this;
 
@@ -121,7 +123,7 @@ export class UVTriangleDataTextureGenerator {
 
 		}
 
-		const combinedTexture = this._combineTextures( positionTarget.texture, normalTarget.texture, resolution );
+		this._combineTextures( positionTarget.texture, normalTarget.texture, renderTarget );
 
 		// Reset renderer state
 		renderer.autoClear = originalAutoClear;
@@ -135,8 +137,6 @@ export class UVTriangleDataTextureGenerator {
 		normalTarget.dispose();
 		positionMaterial.dispose();
 		normalMaterial.dispose();
-
-		return combinedTexture;
 
 	}
 
@@ -187,14 +187,7 @@ export class UVTriangleDataTextureGenerator {
 
 	}
 
-	_combineTextures( positionTexture, normalTexture, resolution ) {
-
-		const combinedRenderTarget = new THREE.WebGLRenderTarget( resolution, resolution * 2, {
-			minFilter: THREE.NearestFilter,
-			magFilter: THREE.NearestFilter,
-			format: THREE.RGBAFormat,
-			type: THREE.FloatType
-		} );
+	_combineTextures( positionTexture, normalTexture, renderTarget ) {
 
 		const combineShader = new THREE.ShaderMaterial( {
 			uniforms: {
@@ -224,11 +217,9 @@ export class UVTriangleDataTextureGenerator {
 		} );
 
 		const fsQuad = new FullScreenQuad( combineShader );
-		this._renderer.setRenderTarget( combinedRenderTarget );
+		this._renderer.setRenderTarget( renderTarget );
 		fsQuad.render( this._renderer );
 		fsQuad.dispose();
-
-		return combinedRenderTarget.texture;
 
 	}
 
