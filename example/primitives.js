@@ -1,6 +1,7 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGLRenderer } from 'three';
 import { WebGLPathTracer, GradientEquirectTexture } from '..';
 import { getScaledSettings } from './utils/getScaledSettings.js';
+import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 // init scene, renderer, camera, controls, etc
 const scene = new Scene();
@@ -14,7 +15,7 @@ const ball1 = new Mesh(
 	} )
 );
 const ball2 = new Mesh(
-	sphereGeom,
+	sphereGeom.clone(),
 	new MeshStandardMaterial( {
 		color: '#ff9800',
 		roughness: 0.1,
@@ -22,22 +23,18 @@ const ball2 = new Mesh(
 	} )
 );
 const ball3 = new Mesh(
-	sphereGeom,
+	sphereGeom.clone(),
 	new MeshStandardMaterial( {
 		color: '#2196f3',
 		roughness: 0.2,
 		metalness: 1,
 	} )
 );
-const ground = new Mesh(
-	new BoxGeometry( 3.5, 0.1, 1.5 ),
-	new MeshStandardMaterial(),
-);
 
 ball1.position.x = - 1;
 ball3.position.x = 1;
-ground.position.y = - 0.54;
-scene.add( ball1, ball2, ball3, ground );
+
+scene.add( ball1 );
 
 // set the environment map
 const texture = new GradientEquirectTexture();
@@ -61,6 +58,23 @@ pathTracer.renderScale = settings.renderScale;
 pathTracer.tiles.setScalar( settings.tiles );
 pathTracer.setScene( scene, camera );
 
+let gui = new GUI();
+const params = {
+	'enable' : false,
+	'addedModel' : false
+}
+gui.add(params, 'enable').name('Enable');
+
+gui.add(params, 'addedModel').name('Add model').onChange(() => {
+	if( params.addedModel ) {
+		scene.add( ball2, ball3 );
+		pathTracer.setScene( scene, camera );
+	} else {
+		scene.remove( ball2, ball3 );
+		pathTracer.setScene( scene, camera );
+	}
+});
+
 onResize();
 
 animate();
@@ -73,7 +87,15 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// update the camera and render one sample
-	pathTracer.renderSample();
+	if( params.enable ) {
+
+		pathTracer.renderSample();
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }
 
