@@ -1,4 +1,4 @@
-import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGLRenderer } from 'three';
+import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, PerspectiveCamera, ACESFilmicToneMapping, WebGLRenderer } from 'three';
 import { WebGLPathTracer, GradientEquirectTexture } from '..';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -58,22 +58,29 @@ pathTracer.renderScale = settings.renderScale;
 pathTracer.tiles.setScalar( settings.tiles );
 pathTracer.setScene( scene, camera );
 
-let gui = new GUI();
+const gui = new GUI();
 const params = {
-	'enable' : false,
-	'addedModel' : false
-}
-gui.add(params, 'enable').name('Enable');
+	'enable': false,
+	'addedModel': false
+};
 
-gui.add(params, 'addedModel').name('Add model').onChange(() => {
-	if( params.addedModel ) {
+gui.add( params, 'enable' ).name( 'Enable' );
+
+gui.add( params, 'addedModel' ).name( 'Add model' ).onChange( () => {
+
+	if ( params.addedModel ) {
+
 		scene.add( ball2, ball3 );
 		pathTracer.setScene( scene, camera );
+
 	} else {
+
 		scene.remove( ball2, ball3 );
 		pathTracer.setScene( scene, camera );
+
 	}
-});
+
+} );
 
 onResize();
 
@@ -87,7 +94,7 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// update the camera and render one sample
-	if( params.enable ) {
+	if ( params.enable ) {
 
 		pathTracer.renderSample();
 
