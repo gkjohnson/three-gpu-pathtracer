@@ -11,9 +11,11 @@ const AddMeshStatus = {
 
 export class UVGenerator {
 
-	constructor() {
+	constructor( wasmPath = '../../node_modules/@gfodor/xatlas-web/dist/xatlas-web.wasm' ) {
 
 		this._module = null;
+		this._wasmPath = wasmPath;
+
 		this.channel = 1;
 
 	}
@@ -22,7 +24,7 @@ export class UVGenerator {
 
 		if ( this._module ) return;
 
-		const wasmurl = new URL( '../../node_modules/@gfodor/xatlas-web/dist/xatlas-web.wasm', import.meta.url );
+		const wasmurl = new URL( this._wasmPath, import.meta.url );
 		this._module = XAtlas( {
 
 			locateFile( path ) {
@@ -82,7 +84,7 @@ export class UVGenerator {
 			const statusCode = xatlas.addMesh();
 			if ( statusCode !== AddMeshStatus.Success ) {
 
-				throw new Error( `UVUnwrapper: Error adding mesh. Status code ${ statusCode }` );
+				throw new Error( `UVGenerator: Error adding mesh. Status code ${ statusCode }` );
 
 			}
 
