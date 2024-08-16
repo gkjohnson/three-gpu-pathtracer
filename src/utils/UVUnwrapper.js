@@ -4,15 +4,16 @@ import { BufferGeometry, Float32BufferAttribute, Uint32BufferAttribute } from 't
 
 export class UVUnwrapper {
 
-	constructor() {
+	constructor( wasmPath = '../../node_modules/xatlas-web/dist/xatlas-web.wasm' ) {
 
 		this._module = null;
+		this._wasmPath = wasmPath;
 
 	}
 
 	async load() {
 
-		const wasmurl = new URL( '../../node_modules/xatlas-web/dist/xatlas-web.wasm', import.meta.url );
+		const wasmurl = new URL( this._wasmPath, import.meta.url );
 		this._module = XAtlas( {
 
 			locateFile( path ) {
