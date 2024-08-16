@@ -108,9 +108,11 @@ export class UVGenerator {
 			const oldPositionArray = geometry.attributes.position.array;
 			const oldNormalArray = geometry.attributes.normal.array;
 			const oldUvArray = geometry.attributes.uv.array;
+			const oldColorArray = geometry.attributes.color ? geometry.attributes.color.array : null;
 
 			const newPositionArray = new Float32Array( meshData.newVertexCount * 3 );
 			const newNormalArray = new Float32Array( meshData.newVertexCount * 3 );
+			const newColorArray = oldColorArray ? new Float32Array( meshData.newVertexCount * 3 ) : null;
 
 			let newUvArray = null, newUv2Array = null;
 			const useSecondChannel = this.channel === 2;
@@ -143,6 +145,14 @@ export class UVGenerator {
 				newNormalArray[ i * 3 + 1 ] = oldNormalArray[ originalIndex * 3 + 1 ];
 				newNormalArray[ i * 3 + 2 ] = oldNormalArray[ originalIndex * 3 + 2 ];
 
+				if ( oldColorArray ) {
+
+					newColorArray[ i * 3 ] = oldColorArray[ originalIndex * 3 ];
+					newColorArray[ i * 3 + 1 ] = oldColorArray[ originalIndex * 3 + 1 ];
+					newColorArray[ i * 3 + 2 ] = oldColorArray[ originalIndex * 3 + 2 ];
+
+				}
+
 				if ( useSecondChannel ) {
 
 					newUvArray[ i * 2 ] = oldUvArray[ originalIndex * 2 ];
@@ -155,6 +165,12 @@ export class UVGenerator {
 			geometry.setAttribute( 'position', new Float32BufferAttribute( newPositionArray, 3 ) );
 			geometry.setAttribute( 'normal', new Float32BufferAttribute( newNormalArray, 3 ) );
 			geometry.setAttribute( 'uv', new Float32BufferAttribute( newUvArray, 2 ) );
+
+			if ( newColorArray ) {
+
+				geometry.setAttribute( 'color', new Float32BufferAttribute( newColorArray, 3 ) );
+
+			}
 
 			if ( newUv2Array ) {
 
