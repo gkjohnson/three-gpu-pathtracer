@@ -11,18 +11,29 @@ import {
 	Group,
 	Box3,
 	Sphere,
-	MeshPhysicalMaterial
+	MeshPhysicalMaterial,
+	EquirectangularReflectionMapping,
+	MeshBasicMaterial
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { UVGenerator } from '../src/utils/UVGenerator.js';
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AO_THICKNESS_SAMPLES_PER_UPDATE, AOThicknessMapGenerator } from '../src/utils/AOThicknessMapGenerator.js';
 
 let renderer, camera, scene, stats;
 let statusEl, totalSamples = 0;
-let aoGenerator, aoTexture;
+let aoGenerator, aoTexture, gui, aoMaterial;
+let quad;
+
+const params = {
+	transmission: false,
+	displayMap: false,
+};
 
 const AO_THICKNESS_TEXTURE_SIZE = 1024;
 const MAX_SAMPLES = 1000;
@@ -40,7 +51,7 @@ async function init() {
 
 	scene = new Scene();
 
-	const light1 = new PointLight( 0xaaaaa, 20, 100 );
+	const light1 = new PointLight( 0xaaaaaa, 20, 100 );
 	light1.position.set( 3, 3, 3 );
 
 	const light2 = new PointLight( 0xaaaaaa, 20, 100 );
@@ -55,6 +66,7 @@ async function init() {
 	new OrbitControls( camera, renderer.domElement );
 	statusEl = document.getElementById( 'status' );
 
+	// const url = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/stanford-bunny/bunny.glb';
 	const url = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
 
 	const uvGenerator = new UVGenerator();
@@ -77,12 +89,30 @@ async function init() {
 	aoTexture = aoTarget.texture;
 	aoTexture.channel = 2;
 
-	const aoMaterial = new MeshPhysicalMaterial( {
-
+	aoMaterial = new MeshPhysicalMaterial( {
 		aoMap: aoTexture,
 		thicknessMap: aoTexture,
-
+		thickness: 1,
+		attenuationColor: 0xfaeef2,
+		attenuationDistance: 0.5,
+		roughness: 0.25,
 	} );
+
+	quad = new FullScreenQuad( new MeshBasicMaterial( {
+		map: aoTexture,
+		transparent: true,
+	} ) );
+
+	const envPromise = new RGBELoader()
+		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr' )
+		.then( tex => {
+
+			tex.mapping = EquirectangularReflectionMapping;
+			scene.background = tex;
+			scene.backgroundRotation.set( 0, 0.75, 0 );
+			scene.backgroundBlurriness = 0.1;
+
+		} );
 
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
@@ -121,6 +151,7 @@ async function init() {
 		} );
 
 	await gltfPromise;
+	await envPromise;
 
 	document.getElementById( 'loading' ).remove();
 
@@ -140,6 +171,10 @@ async function init() {
 
 	onResize();
 	window.addEventListener( 'resize', onResize );
+
+	gui = new GUI();
+	gui.add( params, 'transmission' );
+	gui.add( params, 'displayMap' );
 
 	stats = new Stats();
 	document.body.appendChild( stats.domElement );
@@ -180,9 +215,34 @@ function animate() {
 
 	}
 
+	if ( params.transmission ) {
+
+		aoMaterial.transmission = 1;
+		aoMaterial.color.copy( aoMaterial.attenuationColor );
+		aoMaterial.color.r *= 0.75;
+		aoMaterial.color.g *= 0.5;
+		aoMaterial.color.b *= 0.5;
+
+	} else {
+
+		aoMaterial.transmission = 0;
+		aoMaterial.color.set( 0xffffff );
+
+	}
+
 	renderer.setRenderTarget( null );
-	aoTexture.needsUpdate = true;
-	renderer.render( scene, camera );
+
+	if ( params.displayMap ) {
+
+		aoTexture.channel = 0;
+		quad.render( renderer );
+
+	} else {
+
+		aoTexture.channel = 2;
+		renderer.render( scene, camera );
+
+	}
 
 	if ( aoGenerator ) {
 
