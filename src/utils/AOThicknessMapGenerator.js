@@ -7,7 +7,7 @@ import { MipFlooder } from './MipFlooder.js';
 import { UVEdgeExpander } from './UVEdgeExpander.js';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 
-export const AO_THICKNESS_SAMPLES_PER_UPDATE = 10;
+export const AO_THICKNESS_SAMPLES_PER_UPDATE = 1;
 
 export class AOThicknessMapGenerator {
 

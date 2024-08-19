@@ -7,13 +7,10 @@ import {
 	WebGLRenderTarget,
 	FloatType,
 	LinearSRGBColorSpace,
-	NearestMipMapNearestFilter,
-	NearestFilter,
 	RGBAFormat,
 	Group,
 	Box3,
 	Sphere,
-	MeshStandardMaterial,
 	MeshPhysicalMaterial
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -69,8 +66,6 @@ async function init() {
 		type: FloatType,
 		colorSpace: LinearSRGBColorSpace,
 		generateMipmaps: true,
-		// minFilter: NearestMipMapNearestFilter,
-		// magFilter: NearestFilter,
 		format: RGBAFormat,
 	} );
 
