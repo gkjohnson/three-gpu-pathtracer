@@ -95,7 +95,6 @@ async function init() {
 		thickness: 1,
 		attenuationColor: 0xfaeef2,
 		attenuationDistance: 0.5,
-		roughness: 0.25,
 	} );
 
 	quad = new FullScreenQuad( new MeshBasicMaterial( {
@@ -222,11 +221,13 @@ function animate() {
 		aoMaterial.color.r *= 0.75;
 		aoMaterial.color.g *= 0.5;
 		aoMaterial.color.b *= 0.5;
+		aoMaterial.roughness = 0.25;
 
 	} else {
 
 		aoMaterial.transmission = 0;
 		aoMaterial.color.set( 0xffffff );
+		aoMaterial.roughness = 1;
 
 	}
 
