@@ -248,7 +248,6 @@ function animate() {
 
 		statusEl.innerText = `Samples: ${ totalSamples } of ${ MAX_SAMPLES }`;
 
-
 	}
 
 }
