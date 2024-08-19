@@ -47,7 +47,7 @@ export class AOThicknessMaterial extends MaterialBase {
 
 		super( {
 			defines: {
-				SAMPLES: 10,
+				SAMPLES: 1,
 				MATERIAL_PIXELS: MATERIAL_PIXELS
 			},
 
