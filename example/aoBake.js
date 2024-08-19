@@ -25,9 +25,12 @@ import { UVGenerator } from '../src/utils/UVGenerator.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { AO_THICKNESS_SAMPLES_PER_UPDATE, AOThicknessMapGenerator } from '../src/utils/AOThicknessMapGenerator.js';
 
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
+
 let renderer, camera, scene, stats;
 let statusEl, totalSamples = 0;
 let aoGenerator, aoTexture, gui, aoMaterial;
+let background;
 let quad;
 
 const params = {
@@ -44,12 +47,15 @@ async function init() {
 
 	// initialize renderer
 	renderer = new WebGLRenderer( { antialias: true } );
+	renderer.setClearColor( 0x111111 );
 	document.body.appendChild( renderer.domElement );
 
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 200 );
 	camera.position.set( - 4, 2, 3 );
 
 	scene = new Scene();
+	scene.backgroundRotation.set( 0, 0.75, 0 );
+	scene.backgroundBlurriness = 0.1;
 
 	const light1 = new PointLight( 0xaaaaaa, 20, 100 );
 	light1.position.set( 3, 3, 3 );
@@ -60,8 +66,8 @@ async function init() {
 	const ambientLight = new AmbientLight( 0xffffff, 2.75 );
 	scene.add( ambientLight );
 
-	scene.add( light1 );
-	scene.add( light2 );
+	// scene.add( light1 );
+	// scene.add( light2 );
 
 	new OrbitControls( camera, renderer.domElement );
 	statusEl = document.getElementById( 'status' );
@@ -69,26 +75,24 @@ async function init() {
 	// const url = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/stanford-bunny/bunny.glb';
 	const url = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/FlightHelmet/glTF/FlightHelmet.gltf';
 
-	const uvGenerator = new UVGenerator();
-	await uvGenerator.init();
-
-	const geometriesToBake = [];
-
+	// init ao texture
 	const aoTarget = new WebGLRenderTarget( AO_THICKNESS_TEXTURE_SIZE, AO_THICKNESS_TEXTURE_SIZE, {
 		type: FloatType,
 		colorSpace: LinearSRGBColorSpace,
 		generateMipmaps: true,
 		format: RGBAFormat,
 	} );
+	aoTexture = aoTarget.texture;
+	aoTexture.channel = 2;
 
+	// init ao generator
 	aoGenerator = new AOThicknessMapGenerator( renderer );
 	aoGenerator.samples = MAX_SAMPLES;
 	aoGenerator.channel = 2;
 	aoGenerator.aoRadius = 2;
 	aoGenerator.thicknessRadius = 0.5;
-	aoTexture = aoTarget.texture;
-	aoTexture.channel = 2;
 
+	// gltf material
 	aoMaterial = new MeshPhysicalMaterial( {
 		aoMap: aoTexture,
 		thicknessMap: aoTexture,
@@ -97,22 +101,25 @@ async function init() {
 		attenuationDistance: 0.5,
 	} );
 
+	// quad for rendering texture result
 	quad = new FullScreenQuad( new MeshBasicMaterial( {
 		map: aoTexture,
-		transparent: true,
 	} ) );
 
+	// uv generator
+	const uvGenerator = new UVGenerator();
+	uvGenerator.channel = 2;
+
 	const envPromise = new RGBELoader()
-		.loadAsync( 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr' )
+		.loadAsync( ENV_URL )
 		.then( tex => {
 
 			tex.mapping = EquirectangularReflectionMapping;
-			scene.background = tex;
-			scene.backgroundRotation.set( 0, 0.75, 0 );
-			scene.backgroundBlurriness = 0.1;
+			background = tex;
 
 		} );
 
+	const geometriesToBake = [];
 	const gltfPromise = new GLTFLoader()
 		.setMeshoptDecoder( MeshoptDecoder )
 		.loadAsync( url )
@@ -128,7 +135,7 @@ async function init() {
 			box.getBoundingSphere( sphere );
 
 			gltf.scene.scale.setScalar( 2.5 / sphere.radius );
-			gltf.scene.position.y = - 0.25 * ( box.max.y - box.min.y ) * 2.5 / sphere.radius;
+			gltf.scene.position.y = - 0.5 * ( box.max.y - box.min.y ) * 2.5 / sphere.radius;
 			gltf.scene.updateMatrixWorld();
 			group.add( gltf.scene );
 
@@ -144,17 +151,14 @@ async function init() {
 
 			} );
 
-			group.updateMatrixWorld( true );
 			scene.add( group );
 
 		} );
 
-	await gltfPromise;
-	await envPromise;
+	// wait for promises
+	await Promise.all( [ gltfPromise, envPromise, uvGenerator.init() ] );
 
 	document.getElementById( 'loading' ).remove();
-
-	uvGenerator.channel = 2;
 
 	uvGenerator.generate( geometriesToBake, ( item, percentage ) => {
 
@@ -223,11 +227,15 @@ function animate() {
 		aoMaterial.color.b *= 0.5;
 		aoMaterial.roughness = 0.25;
 
+		scene.background = background;
+
 	} else {
 
 		aoMaterial.transmission = 0;
 		aoMaterial.color.set( 0xffffff );
 		aoMaterial.roughness = 1;
+
+		scene.background = null;
 
 	}
 
