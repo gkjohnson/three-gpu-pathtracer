@@ -273,3 +273,25 @@ export class FogVolumeMaterial extends MeshStandardMaterial {
 	density: number;
 
 }
+
+// utils
+
+export class AOThicknessMapGenerator {
+
+	constructor( renderer: WebGLRenderer );
+
+	startGeneration( geometries: Array<BufferGeometry>, renderTarget: WebGLRenderTarget ): void;
+
+	generateSample(): boolean;
+
+}
+
+export class UVGenerator {
+
+	constructor();
+
+	init(): Promise<void>;
+
+	generate( geometries: Array<BufferGeometry>, onProgress?: ( progress: number ) => void ): Promise<void>;
+
+}
