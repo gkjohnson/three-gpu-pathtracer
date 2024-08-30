@@ -11,7 +11,7 @@ const AddMeshStatus = {
 
 export class UVGenerator {
 
-	constructor( wasmPath = '../../node_modules/@gfodor/xatlas-web/dist/xatlas-web.wasm' ) {
+	constructor( wasmPath = new URL( '../../node_modules/@gfodor/xatlas-web/dist/xatlas-web.wasm', import.meta.url ) ) {
 
 		this._module = null;
 		this._wasmPath = wasmPath;
