@@ -43,6 +43,18 @@ export class AOThicknessMaterial extends MaterialBase {
 
 	}
 
+	set samples( v ) {
+
+		this.setDefine( 'SAMPLES', Number( v ) || 1 );
+
+	}
+
+	get samples() {
+
+		return this.defines.SAMPLES;
+
+	}
+
 	constructor( parameters ) {
 
 		super( {

@@ -7,8 +7,6 @@ import { MipFlooder } from './MipFlooder.js';
 import { UVEdgeExpander } from './UVEdgeExpander.js';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 
-export const AO_THICKNESS_SAMPLES_PER_UPDATE = 1;
-
 export class AOThicknessMapGenerator {
 
 	constructor( renderer ) {
@@ -20,6 +18,7 @@ export class AOThicknessMapGenerator {
 		this.mode = AOThicknessMode.AO_AND_THICKNESS;
 		this.aoRadius = 1.0;
 		this.thicknessRadius = 1.0;
+		this.samplesPerUpdate = 1;
 
 		this._generator = null;
 		this._isGenerating = false;
@@ -153,7 +152,8 @@ export class AOThicknessMapGenerator {
 			uvToTriangleMap: uvToTriangleMap,
 			resolution: new THREE.Vector2( renderTarget.width, renderTarget.height ),
 			thicknessRadius,
-			aoRadius
+			aoRadius,
+			samples: this.samplesPerUpdate,
 		} );
 
 		const aoQuad = new FullScreenQuad( material );
@@ -161,7 +161,7 @@ export class AOThicknessMapGenerator {
 
 		let steps = 1;
 
-		for ( let i = 0; i < samples; i += AO_THICKNESS_SAMPLES_PER_UPDATE ) {
+		for ( let i = 0; i < samples; i += this.samplesPerUpdate ) {
 
 			renderer.setPixelRatio( 1 );
 			renderer.setRenderTarget( aoRenderTarget );

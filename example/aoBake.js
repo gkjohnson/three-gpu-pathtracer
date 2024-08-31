@@ -23,7 +23,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { UVGenerator } from '../src/utils/UVGenerator.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { AO_THICKNESS_SAMPLES_PER_UPDATE, AOThicknessMapGenerator } from '../src/utils/AOThicknessMapGenerator.js';
+import { AOThicknessMapGenerator } from '../src/utils/AOThicknessMapGenerator.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
 
@@ -65,9 +65,6 @@ async function init() {
 
 	const ambientLight = new AmbientLight( 0xffffff, 2.75 );
 	scene.add( ambientLight );
-
-	// scene.add( light1 );
-	// scene.add( light2 );
 
 	new OrbitControls( camera, renderer.domElement );
 	statusEl = document.getElementById( 'status' );
@@ -208,7 +205,7 @@ function animate() {
 
 		if ( aoGenerator.generateSample() ) {
 
-			totalSamples += AO_THICKNESS_SAMPLES_PER_UPDATE;
+			totalSamples += aoGenerator.samplesPerUpdate;
 
 		} else {
 
