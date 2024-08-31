@@ -14,6 +14,8 @@ export * from './textures/GradientEquirectTexture.js';
 
 // utils
 export * from './utils/BlurredEnvMapGenerator.js';
+export * from './utils/AOThicknessMapGenerator.js';
+export * from './utils/UVGenerator.js';
 
 // materials
 export * from './materials/fullscreen/DenoiseMaterial.js';
