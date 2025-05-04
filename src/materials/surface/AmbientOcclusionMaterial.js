@@ -1,6 +1,7 @@
 import { TangentSpaceNormalMap, Vector2 } from 'three';
 import { MaterialBase } from '../MaterialBase.js';
 import { MeshBVHUniformStruct, BVHShaderGLSL } from 'three-mesh-bvh';
+import { MATERIAL_PIXELS } from '../../uniforms/MaterialsTexture.js';
 
 import * as StructsGLSL from '../../shader/structs/index.js';
 import * as SamplingGLSL from '../../shader/sampling/index.js';
@@ -43,6 +44,7 @@ export class AmbientOcclusionMaterial extends MaterialBase {
 
 			defines: {
 				SAMPLES: 10,
+				MATERIAL_PIXELS: MATERIAL_PIXELS,
 			},
 
 			uniforms: {
