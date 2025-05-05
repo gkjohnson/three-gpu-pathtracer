@@ -2,6 +2,9 @@
 export * from './core/PathTracingSceneGenerator.js';
 export * from './core/WebGLPathTracer.js';
 
+// denoiser
+export * from './core/OIDNDenoiser.js';
+
 // objects
 export * from './objects/PhysicalCamera.js';
 export * from './objects/EquirectCamera.js';
