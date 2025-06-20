@@ -60,7 +60,7 @@ export const camera_util_functions = /* glsl */`
 			vec3 shapeUVW= rand3( 1 );
 			int blades = physicalCamera.apertureBlades;
 			float anamorphicRatio = physicalCamera.anamorphicRatio;
-			vec2 apertureSample = blades == 0 ? sampleCircle( shapeUVW.xy ) : sampleRegularPolygon( blades, shapeUVW );
+			vec2 apertureSample = sampleAperture( blades, shapeUVW );
 			apertureSample *= physicalCamera.bokehSize * 0.5 * 1e-3;
 
 			// rotate the aperture shape
