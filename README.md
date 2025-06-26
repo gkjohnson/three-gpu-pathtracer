@@ -133,10 +133,10 @@ bounces = 10 : Number
 
 Max number of lights bounces to trace.
 
-### .filteredGlossyFactor
+### .filterGlossyFactor
 
 ```js
-filteredGlossyFactor = 0 : Number
+filterGlossyFactor = 0 : Number
 ```
 
 Factor for alleviating bright pixels from rays that hit diffuse surfaces then specular surfaces. Setting this higher alleviates fireflies but will remove some specular caustics.
