@@ -126,7 +126,7 @@ function applyMaterialInfo( info, material ) {
 	// defaults
 	material.color.set( 0xffffff );
 	material.transmission = 0.0;
-	material.attenuationDistance = Infinity;
+	material.attenuationDistance = 1;
 	material.attenuationColor.set( 0xffffff );
 	material.specularColor.set( 0xffffff );
 	material.metalness = 0.0;
@@ -159,9 +159,15 @@ function applyMaterialInfo( info, material ) {
 
 		}
 
-		// Blender uses 1 / density when exporting volume transmission which doesn't look
-		// exactly right. But because the scene is 1000x in size we multiply by 1000 here.
-		material.attenuationDistance = 1000 / info.density;
+		if ( info.transmissionDepth ) {
+
+			material.attenuationDistance = info.transmissionDepth;
+
+		} else {
+
+			material.attenuationDistance = 1;
+
+		}
 
 	} else {
 
