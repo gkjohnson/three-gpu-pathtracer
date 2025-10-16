@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending, NodeMaterial } from 'three/webgpu';
+import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending, NodeMaterial } from 'three/webgpu';
 import { storage, texture, sampler, wgslFn, uv, varying, positionGeometry } from 'three/tsl';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -299,11 +299,33 @@ export class WebGPUPathTracer {
 			const newNormals = new StorageBufferAttribute( geometry.attributes.normal.array, 3 );
 			pathTracer.megakernelParams.geom_normals.value = newNormals;
 
-
 			const newBvhRoots = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
 			pathTracer.megakernelParams.bvh.value = newBvhRoots;
 
 		}
+
+		if ( needsMaterialIndexUpdate ) {
+
+			const newMaterialIndex = new StorageBufferAttribute( geometry.attributes.materialIndex.array, 1 );
+			pathTracer.megakernelParams.geom_material_index.value = newMaterialIndex;
+
+		}
+
+		const newMaterialsData = new Float32Array( materials.length * 3 );
+		const defaultColor = new Color();
+		for ( let i = 0; i < materials.length; i ++ ) {
+
+			const material = materials[ i ];
+			const color = material.color ?? defaultColor;
+			// Make sure those are in linear-sRGB space
+			newMaterialsData[ 3 * i + 0 ] = color.r;
+			newMaterialsData[ 3 * i + 1 ] = color.g;
+			newMaterialsData[ 3 * i + 2 ] = color.b;
+
+		}
+
+		const newMaterialsBuffer = new StorageBufferAttribute( newMaterialsData, 3 );
+		pathTracer.megakernelParams.materials.value = newMaterialsBuffer;
 
 		this.setCamera( camera );
 

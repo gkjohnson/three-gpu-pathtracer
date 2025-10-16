@@ -149,11 +149,11 @@ export class PathTracerCore {
 
 		// this.material.addEventListener( 'recompilation', this._compileFunction );
 
-		// const materialStruct = wgsl( /* wgsl */`
-		// 	struct Material {
-		// 		color: vec3f;
-		// 	};
-		// ` );
+		const materialStruct = wgsl( /* wgsl */`
+			struct Material {
+				color: vec3f,
+			};
+		` );
 
 		this.resultTexture = new StorageTexture();
 
@@ -166,10 +166,14 @@ export class PathTracerCore {
 			cameraToModelMatrix: uniform( new Matrix4() ),
 
 			// bvh and geometry definition
+			// TODO: Think of a better to get size of wgsl structs?
 			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
 			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
 			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
+			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
 			bvh: storage( new StorageBufferAttribute( 0, 8 ), 'BVHNode' ).toReadOnly(),
+
+			materials: storage( new StorageBufferAttribute( 0, 3 ), 'Material' ).toReadOnly(),
 
 			// compute variables
 			workgroupSize: uniform( new Vector3() ),
@@ -185,10 +189,15 @@ export class PathTracerCore {
 				smoothNormals: u32,
 				inverseProjectionMatrix: mat4x4f,
 				cameraToModelMatrix: mat4x4f,
+
 				geom_position: ptr<storage, array<vec3f>, read>,
 				geom_index: ptr<storage, array<vec3u>, read>,
 				geom_normals: ptr<storage, array<vec3f>, read>,
+				geom_material_index: ptr<storage, array<u32>, read>,
 				bvh: ptr<storage, array<BVHNode>, read>,
+
+				materials: ptr<storage, array<Material>, read>,
+
 				workgroupSize: vec3u,
 				workgroupId: vec3u,
 				localId: vec3u,
@@ -211,12 +220,9 @@ export class PathTracerCore {
 				// write result
 				if ( hitResult.didHit && hitResult.dist < 1.0 ) {
 
-					let normal = select(
-						hitResult.normal,
-						normalize( getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals ) ),
-						smoothNormals > 0u,
-					);
-					textureStore( outputTex, indexUV, vec4f( normal, 1.0 ) );
+					let material = materials[ geom_material_index[ hitResult.indices.x ] ];
+
+					textureStore( outputTex, indexUV, vec4f( material.color, 1.0 ) );
 
 				} else {
 
@@ -226,7 +232,7 @@ export class PathTracerCore {
 				}
 
 			}
-		`, [ ndcToCameraRay, bvhIntersectFirstHit ] );
+		`, [ ndcToCameraRay, bvhIntersectFirstHit, materialStruct ] );
 
 		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
 
