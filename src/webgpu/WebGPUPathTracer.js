@@ -291,25 +291,17 @@ export class WebGPUPathTracer {
 			}
 
 			const newIndex = new StorageBufferAttribute( dereferencedIndexAttr.array, 3 );
-			// pathTracer.megakernelParams.geom_index = storage( newIndex, 'uvec3', newIndex.count );
 			pathTracer.megakernelParams.geom_index.value = newIndex;
-			pathTracer.megakernelParams.geom_index.bufferCount = newIndex.count;
 
 			const newPosition = new StorageBufferAttribute( geometry.attributes.position.array, 3 );
-			// pathTracer.megakernelParams.geom_position = storage( newPosition, 'vec3', newPosition.count );
 			pathTracer.megakernelParams.geom_position.value = newPosition;
-			pathTracer.megakernelParams.geom_position.bufferCount = newPosition.count;
 
 			const newNormals = new StorageBufferAttribute( geometry.attributes.normal.array, 3 );
-			// pathTracer.megakernelParams.geom_normals = storage( newNormals, 'vec3', newNormals.count );
 			pathTracer.megakernelParams.geom_normals.value = newNormals;
-			pathTracer.megakernelParams.geom_normals.bufferCount = newNormals.count;
 
 
 			const newBvhRoots = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
-			// pathTracer.megakernelParams.geom_normals = storage( newBvhRoots, 'BVHNode', newBvhRoots.count );
 			pathTracer.megakernelParams.bvh.value = newBvhRoots;
-			pathTracer.megakernelParams.bvh.bufferCount = newBvhRoots.count;
 
 		}
 

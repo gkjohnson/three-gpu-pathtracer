@@ -157,14 +157,6 @@ export class PathTracerCore {
 
 		this.resultTexture = new StorageTexture();
 
-		const sphereGeometry = new SphereGeometry( 0.49, 64, 32 );
-		const bvh = new MeshBVH( sphereGeometry, { maxLeafTris: 1, strategy: SAH } );
-
-		const geom_index = new StorageBufferAttribute( sphereGeometry.index.array, 3 );
-		const geom_position = new StorageBufferAttribute( sphereGeometry.attributes.position.array, 3 );
-		const geom_normals = new StorageBufferAttribute( sphereGeometry.attributes.normal.array, 3 );
-		const bvhNodes = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
-
 		const megakernelShaderParams = {
 			outputTex: textureStore( this.resultTexture ),
 			smoothNormals: uniform( 1 ),
@@ -174,10 +166,10 @@ export class PathTracerCore {
 			cameraToModelMatrix: uniform( new Matrix4() ),
 
 			// bvh and geometry definition
-			geom_index: storage( geom_index, 'uvec3', geom_index.count ).toReadOnly(),
-			geom_position: storage( geom_position, 'vec3', geom_position.count ).toReadOnly(),
-			geom_normals: storage( geom_normals, 'vec3', geom_normals.count ).toReadOnly(),
-			bvh: storage( bvhNodes, 'BVHNode', bvhNodes.count ).toReadOnly(),
+			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
+			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
+			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
+			bvh: storage( new StorageBufferAttribute( 0, 8 ), 'BVHNode' ).toReadOnly(),
 
 			// compute variables
 			workgroupSize: uniform( new Vector3() ),
