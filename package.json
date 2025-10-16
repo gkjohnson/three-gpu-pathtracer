@@ -33,7 +33,7 @@
     "@lookingglass/webxr": "^0.3.1",
     "@monogrid/gainmap-js": "^3.0.5",
     "@types/node": "^20.12.7",
-    "@types/three": "^0.163.0",
+    "@types/three": "^0.179.0",
     "@typescript-eslint/parser": "^6.21.0",
     "canvas-capture": "^2.0.5",
     "eslint": "^7.32.0",
@@ -46,8 +46,8 @@
     "puppeteer": "^15.4.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "three": "^0.163.0",
-    "three-mesh-bvh": "^0.7.4",
+    "three": "^0.179.0",
+    "three-mesh-bvh": "file:../three-mesh-bvh/three-mesh-bvh",
     "typescript": "5.3.3",
     "yargs": "^17.5.1"
   },
@@ -56,6 +56,9 @@
     "three-mesh-bvh": ">=0.7.4",
     "xatlas-web": "^0.1.0"
   },
+	"@parcel/resolver-default": {
+			"packageExports": true
+	},
   "scripts": {
     "start": "cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr",
     "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash",
