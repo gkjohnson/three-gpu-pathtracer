@@ -151,15 +151,132 @@ export class PathTracerCore {
 
 		const materialStruct = wgsl( /* wgsl */`
 			struct Material {
-				color: vec3f,
+				albedo: vec3f,
+				// roughness: f32,
+				// metalness: f32,
 			};
 		` );
+
+		const surfaceRecordStruct = wgsl( /* wgsl */`
+			struct SurfaceRecord {
+				normal: vec3f,
+				albedo: vec3f,
+
+				roughness: f32,
+				metalness: f32,
+			};
+		` );
+
+		const pcgStateStruct = wgsl( /* wgsl */`
+			struct PcgState {
+				s0: vec4u,
+				s1: vec4u,
+				pixel: vec2i,
+			};
+		` );
+
+		const equirectDirectionToUvFn = wgslFn( /* wgsl */`
+			fn equirectDirectionToUv(direction: vec3f) -> vec2f {
+
+				// from Spherical.setFromCartesianCoords
+				vec2 uv = vec2f( atan2( direction.z, direction.x ), acos( direction.y ) );
+				uv /= vec2f( 2.0 * PI, PI );
+
+				// apply adjustments to get values in range [0, 1] and y right side up
+				uv.x += 0.5;
+				uv.y = 1.0 - uv.y;
+				return uv;
+
+			}
+		` );
+
+		// const sampleEquirectColorFn = wgslFn( /* wgsl */ `
+		// 	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec3f {
+
+		// 		return texture2D( envMap, equirectDirectionToUv( direction ) ).rgb;
+
+		// 	}
+		// `, [ equirectDirectionToUvFn ] );
+
+		const pcgInit = wgslFn( /* wgsl */`
+			fn pcg_initialize(state: ptr<function, PcgState>, p: vec2u, frame: u32) -> void {
+				state.pixel = vec2i( p );
+
+				//white noise seed
+				state.s0 = vec4u(p, frame, u32(p.x) + u32(p.y));
+
+				//blue noise seed
+				state.s1 = vec4u(frame, frame*15843, frame*31 + 4566, frame*2345 + 58585);
+			}
+		`, [ pcgStateStruct ] );
+
+		const pcg4d = wgslFn( /* wgsl */ `
+			fn pcg4d(v: ptr<function, vec4u>) -> void {
+				*v = *v * 1664525u + 1013904223u;
+				v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
+				*v = *v ^ (*v >> vec4u(16u));
+				v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
+			}
+		` );
+
+		const pcgRand3 = wgslFn( /*wgsl*/`
+			fn pcgRand3(state: ptr<function, PcgState>) -> vec3f {
+				pcg4d(&state.s0);
+				return vec3f(state.s0.xyz) / f32(0xffffffffu);
+			}
+		`, [ pcg4d, pcgStateStruct ] );
+
+		const pcgRand2 = wgslFn( /*wgsl*/`
+			fn pcgRand2(state: ptr<function, PcgState>) -> vec2f {
+				pcg4d(&state.s0);
+				return vec2f(state.s0.xy) / f32(0xffffffffu);
+			}
+		`, [ pcg4d, pcgStateStruct ] );
+
+		// TODO: Move to a local (s, t, n) coordinate system
+		// From RayTracingGems v1.6 chapter 16.6.2
+		// https://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.6.pdf
+		// result.xyz = cosine-wighted vector on the hemisphere oriented to a vector
+		// result.w = pdf
+		const sampleSphereCosineFn = wgslFn( /* wgsl */ `
+			fn sampleSphereCosine(rng: vec2f, n: vec3f) -> vec4f {
+
+				const PI: f32 = 3.141592653589793;
+				let a = 1 - 2 * rng.x;
+				let b = sqrt( 1 - a * a );
+				let phi = 2 * PI * rng.y;
+
+				return vec4f(n.x + b * cos( phi ), n.y + b * sin( phi ), n.z + a, a / PI);
+			}
+		` );
+
+		const scatterRecordStruct = wgsl( /* wgsl */ `
+			struct ScatterRecord {
+				direction: vec3f,
+				pdf: f32, // Actually just a probability
+			};
+		` );
+
+		const bsdfFunc = wgslFn( /* wgsl */`
+			fn bsdfEval(rngState: ptr<function, PcgState>, normal: vec3f, view: vec3f) -> ScatterRecord {
+
+				var record: ScatterRecord;
+
+				let res = sampleSphereCosine( pcgRand2( rngState ), normal );
+				record.direction = res.xyz;
+				record.pdf = res.w;
+
+				return record;
+
+			}
+		`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2 ] );
 
 		this.resultTexture = new StorageTexture();
 
 		const megakernelShaderParams = {
 			outputTex: textureStore( this.resultTexture ),
 			smoothNormals: uniform( 1 ),
+			seed: uniform( 0 ),
 
 			// transforms
 			inverseProjectionMatrix: uniform( new Matrix4() ),
@@ -189,6 +306,7 @@ export class PathTracerCore {
 				smoothNormals: u32,
 				inverseProjectionMatrix: mat4x4f,
 				cameraToModelMatrix: mat4x4f,
+				seed: u32,
 
 				geom_position: ptr<storage, array<vec3f>, read>,
 				geom_index: ptr<storage, array<vec3u>, read>,
@@ -209,30 +327,52 @@ export class PathTracerCore {
 				let uv = vec2f( indexUV ) / vec2f( dimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
+				var rngState: PcgState;
+				pcg_initialize(&rngState, indexUV, seed);
+
 				// scene ray
+				// TODO: sample a random ray
 				var ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
-				// get hit result
-				// let triCount = arrayLength(geom_index);
-				// let hitResult = intersectTriangles( geom_position, geom_index, 0, triCount, ray );
-				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
+				const bounces: u32 = 7;
+				var resultColor = vec3f( 0.0 );
+				var throughputColor = vec3f( 1.0 );
+				// TODO: fix shadow acne? RTIOW says we could just ignore ray hits that are too close
+				for (var bounce = 0u; bounce < bounces; bounce++) {
+					let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 
-				// write result
-				if ( hitResult.didHit && hitResult.dist < 1.0 ) {
+					// write result
+					if ( hitResult.didHit) {
 
-					let material = materials[ geom_material_index[ hitResult.indices.x ] ];
+						let material = materials[ geom_material_index[ hitResult.indices.x ] ];
+						// var surfaceRecord: SurfaceRecord;
+						// surfaceRecord.normal = hitResult.normal;
+						// surfaceRecord.albedo = material.albedo;
+						// surfaceRecord.roughness = material.roughness;
+						// surfaceRecord.metalness = material.metalness;
 
-					textureStore( outputTex, indexUV, vec4f( material.color, 1.0 ) );
+						let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
 
-				} else {
+						let scatterRec = bsdfEval(&rngState, hitResult.normal, - ray.direction);
 
-					let background = vec4f( 0.0366, 0.0813, 0.1057, 1.0 );
-					textureStore( outputTex, indexUV, background );
+						throughputColor *= material.albedo; //  * throughputColor;
+
+						ray.origin = hitPosition;
+						ray.direction = scatterRec.direction;
+
+					} else {
+
+						let background = vec3f( 0.0366, 0.0813, 0.1057 );
+						resultColor += background * throughputColor;
+						break;
+					}
 
 				}
 
+				textureStore( outputTex, indexUV, vec4f( resultColor, 1.0 ) );
+
 			}
-		`, [ ndcToCameraRay, bvhIntersectFirstHit, materialStruct ] );
+		`, [ ndcToCameraRay, bvhIntersectFirstHit, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, bsdfFunc ] );
 
 		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
 
@@ -342,6 +482,7 @@ export class PathTracerCore {
 
 		}
 
+		this.megakernelParams.seed.value += 1;
 		this.megakernelParams.workgroupSize.value.fromArray( this.WORKGROUP_SIZE );
 		this.megakernelParams.outputTex.value = this.resultTexture;
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );

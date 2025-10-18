@@ -31,7 +31,7 @@ const ball3 = new Mesh(
 );
 const ground = new Mesh(
 	new BoxGeometry( 3.5, 0.1, 1.5 ),
-	new MeshStandardMaterial(),
+	new MeshStandardMaterial( { color: '#f0f0f0' } ),
 );
 
 ball1.position.x = - 1;
