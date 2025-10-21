@@ -246,10 +246,10 @@ export class PathTracerCore {
 				let a = (1 - 2 * rng.x) * 0.99999;
 				let b = sqrt( 1 - a * a ) * 0.99999;
 				let phi = 2 * PI * rng.y;
-				let direction = vec3f(n.x + b * cos( phi ), n.y + b * sin( phi ), n.z + a);
-				let pdf = abs( a ) / PI;
+				let direction = normalize( vec3f(n.x + b * cos( phi ), n.y + b * sin( phi ), n.z + a) );
+				let pdf = dot( direction, n ) / PI;
 
-				return vec4f( normalize( direction ), pdf );
+				return vec4f( direction, pdf );
 			}
 		` );
 
@@ -364,6 +364,12 @@ export class PathTracerCore {
 
 						let scatterRec = bsdfEval(&rngState, hitNormal, - ray.direction);
 						// let scatterRec = bsdfEval(&rngState, hitResult.normal, - ray.direction);
+						// TODO: fix shadow acne
+						// if (bounce == 1) {
+						// 	resultColor = vec3f( 0.0, 1.0, 0.0 ); //  dot( scatterRec.direction, hitNormal ) ); // ( vec3f( 1.0 ) + scatterRec.direction ) * 0.5;
+						// 	sampleCount = 1;
+						// 	break;
+						// }
 
 						throughputColor *= material.albedo * scatterRec.value / scatterRec.pdf;
 
@@ -372,7 +378,7 @@ export class PathTracerCore {
 
 					} else {
 
-						let background = vec3f( 0.0366, 0.0813, 0.1057 );
+						let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 						resultColor += background * throughputColor;
 						sampleCount += 1;
 						break;
@@ -384,14 +390,20 @@ export class PathTracerCore {
 					return;
 				}
 
+				const accumulate: bool = true;
+
 				let offset = globalId.x + globalId.y * dimensions.x;
 				let prevSampleCount = sample_count_buffer[offset];
 				let newSampleCount = prevSampleCount + sampleCount;
 				sample_count_buffer[offset] = newSampleCount;
 
 				let prevColor = textureLoad( prevTex, indexUV );
-				let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-				textureStore( outputTex, indexUV, vec4f( newColor, 1.0 ) );
+				if ( accumulate ) {
+					let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
+					textureStore( outputTex, indexUV, vec4f( newColor, 1.0 ) );
+				} else {
+					textureStore( outputTex, indexUV, vec4f( resultColor.xyz / f32( sampleCount ), 1.0 ) );
+				}
 
 			}
 		`, [ ndcToCameraRay, bvhIntersectFirstHit, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
