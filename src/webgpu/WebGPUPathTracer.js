@@ -345,7 +345,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.update();
 
 		// TODO: pass shader that reads from pathtracer's texture
-		this.renderToCanvasCallback( this._pathTracer.resultTexture, this._renderer );
+		this.renderToCanvasCallback( this._pathTracer.getResultTexture(), this._renderer );
 
 	}
 
