@@ -3,7 +3,7 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
 import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
 import { PhysicalPathTracingMaterial } from '../materials/pathtracing/PhysicalPathTracingMaterial.js';
-import { bvhIntersectFirstHit, ndcToCameraRay } from 'three-mesh-bvh/webgpu';
+import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { storageTexture, wgsl, wgslFn, textureStore, uniform, storage, workgroupId, localId, globalId } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 
@@ -19,7 +19,20 @@ function* renderTask() {
 			1
 		];
 
+		const startTime = window.performance.now();
 		_renderer.compute( megakernel, dispatchSize );
+
+		if ( _renderer.backend.device ) {
+
+			_renderer.backend.device.queue.onSubmittedWorkDone().then(() => {
+
+				const endTime = window.performance.now();
+				const delta = endTime - startTime;
+				console.log(`Computing a sample took ${delta.toFixed(2)}ms`);
+
+			});
+
+		}
 
 		yield;
 
@@ -406,7 +419,7 @@ export class PathTracerCore {
 				}
 
 			}
-		`, [ ndcToCameraRay, bvhIntersectFirstHit, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
+		`, [ ndcToCameraRay, bvhIntersectFirstHit, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
 
 		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
 
