@@ -322,15 +322,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					// path tracing state
 					RenderState state = initRenderState();
 					state.transmissiveTraversals = transmissiveBounces;
-					#if FEATURE_FOG
-
-					state.fogMaterial.fogVolume = bvhIntersectFogVolumeHit(
-						ray.origin, - ray.direction,
-						materialIndexAttribute, materials,
-						state.fogMaterial
-					);
-
-					#endif
 
 					for ( int i = 0; i < bounces; i ++ ) {
 
@@ -345,35 +336,24 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// check if we intersect any lights and accumulate the light contribution
 						// TODO: we can add support for light surface rendering in the else condition if we
 						// add the ability to toggle visibility of the the light
-						if ( ! state.firstRay && ! state.transmissiveRay ) {
+						// if ( ! state.firstRay && ! state.transmissiveRay ) {
 
-							LightRecord lightRec;
-							float lightDist = hitType == NO_HIT ? INFINITY : surfaceHit.dist;
-							for ( uint i = 0u; i < lights.count; i ++ ) {
+						// 	LightRecord lightRec;
+						// 	float lightDist = hitType == NO_HIT ? INFINITY : surfaceHit.dist;
+						// 	for ( uint i = 0u; i < lights.count; i ++ ) {
 
-								if (
-									intersectLightAtIndex( lights.tex, ray.origin, ray.direction, i, lightRec ) &&
-									lightRec.dist < lightDist
-								) {
+						// 		if (
+						// 			intersectLightAtIndex( lights.tex, ray.origin, ray.direction, i, lightRec ) &&
+						// 			lightRec.dist < lightDist
+						// 		) {
 
-									#if FEATURE_MIS
+						// 			gl_FragColor.rgb += lightRec.emission * state.throughputColor;
 
-									// weight the contribution
-									// NOTE: Only area lights are supported for forward sampling and can be hit
-									float misWeight = misHeuristic( scatterRec.pdf, lightRec.pdf / lightsDenom );
-									gl_FragColor.rgb += lightRec.emission * state.throughputColor * misWeight;
+						// 		}
 
-									#else
+						// 	}
 
-									gl_FragColor.rgb += lightRec.emission * state.throughputColor;
-
-									#endif
-
-								}
-
-							}
-
-						}
+						// }
 
 						if ( hitType == NO_HIT ) {
 
@@ -384,25 +364,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 							} else {
 
-								#if FEATURE_MIS
-
-								// get the PDF of the hit envmap point
-								vec3 envColor;
-								float envPdf = sampleEquirect( envRotation3x3 * ray.direction, envColor );
-								envPdf /= lightsDenom;
-
-								// and weight the contribution
-								float misWeight = misHeuristic( scatterRec.pdf, envPdf );
-								gl_FragColor.rgb += environmentIntensity * envColor * state.throughputColor * misWeight;
-
-								#else
-
 								gl_FragColor.rgb +=
 									environmentIntensity *
 									sampleEquirectColor( envMapInfo.map, envRotation3x3 * ray.direction ) *
 									state.throughputColor;
-
-								#endif
 
 							}
 							break;
@@ -411,28 +376,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						uint materialIndex = uTexelFetch1D( materialIndexAttribute, surfaceHit.faceIndices.x ).r;
 						Material material = readMaterialInfo( materials, materialIndex );
-
-						#if FEATURE_FOG
-
-						if ( hitType == FOG_HIT ) {
-
-							material = state.fogMaterial;
-							state.accumulatedRoughness += 0.2;
-
-						} else if ( material.fogVolume ) {
-
-							state.fogMaterial = material;
-							state.fogMaterial.fogVolume = surfaceHit.side == 1.0;
-
-							ray.origin = stepRayOrigin( ray.origin, ray.direction, - surfaceHit.faceNormal, surfaceHit.dist );
-
-							i -= sign( state.transmissiveTraversals );
-							state.transmissiveTraversals -= sign( state.transmissiveTraversals );
-							continue;
-
-						}
-
-						#endif
 
 						// early out if this is a matte material
 						if ( material.matte && state.firstRay ) {
@@ -474,13 +417,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						bool isBelowSurface = ! surf.volumeParticle && dot( scatterRec.direction, surf.faceNormal ) < 0.0;
 						vec3 hitPoint = stepRayOrigin( ray.origin, ray.direction, isBelowSurface ? - surf.faceNormal : surf.faceNormal, surfaceHit.dist );
-
-						// next event estimation
-						#if FEATURE_MIS
-
-						gl_FragColor.rgb += directLightContribution( - ray.direction, surf, state, hitPoint );
-
-						#endif
 
 						// accumulate a roughness value to offset diffuse, specular, diffuse rays that have high contribution
 						// to a single pixel resulting in fireflies
@@ -528,29 +464,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 
 						}
 
-						#if FEATURE_RUSSIAN_ROULETTE
-
-						// russian roulette path termination
-						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
-						uint minBounces = 3u;
-						float depthProb = float( state.depth < minBounces );
-
-						float rrProb = luminance( state.throughputColor * scatterRec.color / scatterRec.pdf );
-						rrProb /= luminance( state.throughputColor );
-						rrProb = sqrt( rrProb );
-						rrProb = max( rrProb, depthProb );
-						rrProb = min( rrProb, 1.0 );
-						if ( rand( 8 ) > rrProb ) {
-
-							break;
-
-						}
-
-						// perform sample clamping here to avoid bright pixels
-						state.throughputColor *= min( 1.0 / rrProb, 20.0 );
-
-						#endif
-
 						// adjust the throughput and discard and exit if we find discard the sample if there are any NaNs
 						state.throughputColor *= scatterRec.color / scatterRec.pdf;
 						if ( any( isnan( state.throughputColor ) ) || any( isinf( state.throughputColor ) ) ) {
@@ -568,19 +481,6 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 					}
 
 					gl_FragColor.a *= opacity;
-
-					#if DEBUG_MODE == 1
-
-					// output the number of rays checked in the path and number of
-					// transmissive rays encountered.
-					gl_FragColor.rgb = vec3(
-						float( state.depth ),
-						transmissiveBounces - state.transmissiveTraversals,
-						0.0
-					);
-					gl_FragColor.a = 1.0;
-
-					#endif
 
 				}
 

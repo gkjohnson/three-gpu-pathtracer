@@ -1,6 +1,11 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
+import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+
+const options = {
+	useMegakernel: true,
+};
 
 // init scene, renderer, camera, controls, etc
 const scene = new Scene();
@@ -60,6 +65,15 @@ const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.renderScale = settings.renderScale;
 pathTracer.tiles.setScalar( settings.tiles );
 pathTracer.setScene( scene, camera );
+
+const gui = new GUI();
+
+gui.add( options, 'useMegakernel' ).onChange( () => {
+
+	pathTracer.useMegakernel( options.useMegakernel );
+
+} );
+
 
 onResize();
 

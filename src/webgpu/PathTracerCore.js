@@ -1,11 +1,8 @@
-import { SphereGeometry, StorageBufferAttribute, Matrix4, Vector3, NearestFilter, DataTexture, StorageTexture, NodeMaterial } from 'three/webgpu';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { BlendMaterial } from '../materials/fullscreen/BlendMaterial.js';
-import { SobolNumberMapGenerator } from '../utils/SobolNumberMapGenerator.js';
-import { PhysicalPathTracingMaterial } from '../materials/pathtracing/PhysicalPathTracingMaterial.js';
+import { StorageBufferAttribute, Matrix4, StorageTexture } from 'three/webgpu';
 import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute } from 'three-mesh-bvh/webgpu';
-import { storageTexture, wgsl, wgslFn, textureStore, uniform, storage, workgroupId, localId, globalId } from 'three/tsl';
-import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { storageTexture, wgsl, wgslFn, textureStore, uniform, storage, globalId } from 'three/tsl';
+
+const samplesEl = document.getElementById( 'samples' );
 
 function* renderTask() {
 
@@ -24,13 +21,13 @@ function* renderTask() {
 
 		if ( _renderer.backend.device ) {
 
-			_renderer.backend.device.queue.onSubmittedWorkDone().then(() => {
+			_renderer.backend.device.queue.onSubmittedWorkDone().then( () => {
 
 				const endTime = window.performance.now();
 				const delta = endTime - startTime;
-				console.log(`Computing a sample took ${delta.toFixed(2)}ms`);
+				samplesEl.innerText = `Computing a sample took ${delta.toFixed( 2 )}ms`;
 
-			});
+			} );
 
 		}
 
@@ -248,7 +245,7 @@ export class PathTracerCore {
 		`, [ pcg4d, pcgStateStruct ] );
 
 		// TODO: Move to a local (s, t, n) coordinate system
-		// From RayTracingGems v1.9 chapter 16.6.2
+		// From RayTracingGems v1.9 chapter 16.6.2 -- Its shit!
 		// https://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.9.pdf
 		// result.xyz = cosine-wighted vector on the hemisphere oriented to a vector
 		// result.w = pdf
@@ -306,7 +303,6 @@ export class PathTracerCore {
 			cameraToModelMatrix: uniform( new Matrix4() ),
 
 			// bvh and geometry definition
-			// TODO: Think of a better to get size of wgsl structs?
 			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
 			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
 			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
@@ -319,6 +315,7 @@ export class PathTracerCore {
 			globalId: globalId,
 		};
 
+		// TODO: Move to buffer for storing total current/prev color
 		const megakernelComputeShader = wgslFn( /* wgsl */`
 
 			fn compute(
@@ -363,7 +360,7 @@ export class PathTracerCore {
 					let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 
 					// write result
-					if ( hitResult.didHit) {
+					if ( hitResult.didHit ) {
 
 						let material = materials[ geom_material_index[ hitResult.indices.x ] ];
 						// var surfaceRecord: SurfaceRecord;
@@ -453,6 +450,180 @@ export class PathTracerCore {
 
 		this.resetKernel = resetComputeShader( resetParams ).computeKernel( this.WORKGROUP_SIZE );
 
+		const maxRayCount = 2560 * 1440;
+		const queueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
+		const rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+
+		const queueElementStruct = wgsl( /* wgsl */ `
+
+			struct QueueElement {
+				ray: Ray,
+				pixel: vec2u,
+				throughputColor: vec3f,
+			};
+
+		`, [ /* TODO: find ray struct */] );
+
+		const rayQueueStruct = wgsl( /* wgsl */ `
+
+			struct RayQueue {
+				currentSize: atomic<u32>,
+				queue: array<QueueElement>,
+			};
+
+		`, [ queueElementStruct ] );
+
+		const generateRaysParams = {
+
+			cameraToModelMatrix: uniform( new Matrix4() ),
+			inverseProjectionMatrix: uniform( new Matrix4() ),
+
+			rayQueue: storage( rayQueue, 'RayQueue' ),
+
+			globalId: globalId,
+
+		};
+
+		const generateRays = wgslFn( /* wgsl */ `
+
+			fn generateRays(
+				cameraToModelMatrix: mat4x4f,
+				inverseProjectionMatrix: mat4x4f,
+
+				rayQueue: ptr<storage, RayQueue, write>,
+
+				globalId: vec3u
+			) {
+				let dimensions = textureDimensions( outputTex );
+				let indexUV = globalId.xy;
+				let uv = vec2f( indexUV ) / vec2f( dimensions );
+				let ndc = uv * 2.0 - vec2f( 1.0 );
+
+				let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
+
+				// TODO: Firtly write to workgroup-local memory, then put a bunch inside storage mem
+				let index = atomicAdd(&rayQueue.currentSize, 1);
+
+				rayQueue.queue[index].ray = ray;
+				rayQueue.pixels[index].pixel = indexUV;
+				rayQueue.pixels[index].thoughtputColor = vec3f(1.0);
+			}
+
+		`, [ rayQueueStruct, ndcToCameraRay ] );
+
+		this.generateRaysKernel = generateRays( generateRaysParams ).computeKernel( this.WORKGROUP_SIZE );
+
+		const hitResultQueueElementStruct = wgslFn( /* wgsl */`
+			struct HitResultQueueElement {
+				normal: vec3f,
+				position: vec3f,
+				materialIndex: u32,
+				view: vec3f,
+				pixel: vec2u,
+			};
+		` );
+
+		const hitResultQueueStruct = wgslFn( /* wgsl */ `
+			struct HitResultQueue {
+				queue: array<HitResultQueueElement>,
+				currentSize: atomic<u32>,
+		`, [ hitResultQueueElementStruct ] );
+
+		const escapedQueueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
+		const escapedQueue = new StorageBufferAttribute( new Uint32Array( escapedQueueSize ) );
+
+		const hitResultQueueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
+		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( hitResultQueueSize ) );
+
+		const traceRayParams = {
+			inputQueue: storage( rayQueue ).toReadOnly(),
+			escapedQueue: storage( escapedQueue ),
+			outputQueue: storage( hitResultQueue ),
+
+			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
+			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
+			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
+			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
+			bvh: storage( new StorageBufferAttribute( 0, 8 ), 'BVHNode' ).toReadOnly(),
+
+			globalId: globalId,
+		};
+
+		// TODO: Write material shader that will: run bsdf, determine new direction for the ray and new throughput
+		const traceRay = wgslFn( /* wgsl */`
+
+			fn traceRay(
+				inputQueue: ptr<storage, RayQueue, read>,
+				escapedQueue: ptr<storage, RayQueue, read_write>,
+				outputQueue: ptr<storage, HitResultQueue, read_write>,
+
+				geom_position: ptr<storage, array<vec3f>, read>,
+				geom_index: ptr<storage, array<vec3u>, read>,
+				geom_normals: ptr<storage, array<vec3f>, read>,
+				geom_material_index: ptr<storage, array<u32>, read>,
+				bvh: ptr<storage, array<BVHNode>, read>,
+
+				globalId: vec3u,
+			) {
+				let input = inputQueue[globalId.x];
+
+				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, input.ray );
+
+				if ( hitResult.didHit ) {
+
+					let index = atomicAdd(&outputQueue.currentSize, 1);
+					outputQueue.queue[index].view = - input.ray;
+					outputQueue.queue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normal );
+					outputQueue.queue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
+					outputQueue.queue[index].pixel = input.pixel;
+					outputQueue.queue[index].materialIndex = geom_material_index[hitResult.indices.x;
+
+				} else {
+
+					let index = atomicAdd(&escapedQueue.currentSize, 1);
+					escapedQueue.queue[index] = input;
+
+				}
+
+			}
+
+		`, [ hitResultQueueStruct, rayQueueStruct, getVertexAttribute ] );
+
+		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.WORKGROUP_SIZE );
+
+		const escapedRayParams = {
+			inputQueue: storage( escapedQueue ).toReadOnly(),
+
+			globalId: globalId,
+		};
+
+		// TODO: write new sample info into an appropriate buffer
+		const escapedRay = wgslFn( /* wgsl */`
+
+			fn escapedRay(
+				inputQueue: ptr<storage, RayQueue, read>,
+
+				globalId: vec3u,
+			) {
+				let current = inputQueue.queue[globalId.x];
+
+				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
+				let resultColor = background * current.throughputColor;
+
+				// TODO
+
+			}
+
+		`, [ rayQueueStruct ] );
+
+		this.escapedQueueKernel = escapedRay( escapedRayParams ).computeKernel( this.WORKGROUP_SIZE );
+
+	}
+
+	useMegakernel( useMegakernel ) {
+
+		this.useMegakernel = useMegakernel;
+
 	}
 
 	// compileMaterial() {
@@ -502,8 +673,8 @@ export class PathTracerCore {
 		// this._blendTargets[ 1 ].dispose();
 		// this._sobolTarget.dispose();
 
-		// this._fsQuad.dispose();
-		// this._blendQuad.dispose();
+			// this._fsQuad.dispose();
+			// this._blendQuad.dispose();
 			this._task = null;
 
 	}

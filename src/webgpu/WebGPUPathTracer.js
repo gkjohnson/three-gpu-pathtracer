@@ -101,6 +101,12 @@ export class WebGPUPathTracer {
 
 	}
 
+	useMegakernel( useMegakernel ) {
+
+		this._renderer.useMegakernel( useMegakernel );
+
+	}
+
 	constructor( renderer ) {
 
 		// members
