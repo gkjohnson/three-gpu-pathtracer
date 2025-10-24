@@ -114,7 +114,6 @@ async function init() {
 			dropZone.classList.remove( 'hidden' );
 
 			const fileMap = new Map();
-			let rootFile = null;
 			let rootUrl = null;
 
 			for ( const file of files ) {
@@ -124,7 +123,6 @@ async function init() {
 
 				if ( file.name.match( /\.gltf$/i ) ) {
 
-					rootFile = file;
 					rootUrl = url;
 
 				}
