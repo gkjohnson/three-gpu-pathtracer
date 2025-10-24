@@ -18,6 +18,7 @@ function* renderTask() {
 
 		const startTime = window.performance.now();
 		_renderer.compute( megakernel, dispatchSize );
+		this.samples += 1;
 
 		if ( _renderer.backend.device ) {
 
@@ -25,7 +26,7 @@ function* renderTask() {
 
 				const endTime = window.performance.now();
 				const delta = endTime - startTime;
-				samplesEl.innerText = `Computing a sample took ${delta.toFixed( 2 )}ms`;
+				samplesEl.innerText = `Computing a sample took ${delta.toFixed( 2 )}ms, total ${this.samples} samples`;
 
 			} );
 
