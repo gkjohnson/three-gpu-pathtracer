@@ -1,4 +1,3 @@
-
 import {
 	ACESFilmicToneMapping,
 	Scene,
@@ -8,6 +7,7 @@ import {
 	Box3,
 	Vector3,
 	Group,
+	LoadingManager,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -78,81 +78,117 @@ async function init() {
 	pathTracer.setScene( scene, camera );
 	loader.setPercentage( 1 );
 
-		// listeners
-		window.addEventListener( 'resize', onResize );
-	
-			window.addEventListener( 'dragover', e => {
-		
-				e.preventDefault();
-				if ( ! isModelLoaded ) {
-		
-					dropZone.classList.add( 'drag-over' );
-		
-				}
-		
-			} );	
-		window.addEventListener( 'dragleave', e => {
-	
-			if ( e.relatedTarget === null || e.relatedTarget === document.documentElement ) {
-	
-				dropZone.classList.remove( 'drag-over' );
-	
-			}
-	
-		} );
-	
-		window.addEventListener( 'drop', e => {
-	
-			e.preventDefault();
+	// listeners
+	window.addEventListener( 'resize', onResize );
+
+	window.addEventListener( 'dragover', e => {
+
+		e.preventDefault();
+		if ( ! isModelLoaded ) {
+
+			dropZone.classList.add( 'drag-over' );
+
+		}
+
+	} );
+
+	window.addEventListener( 'dragleave', e => {
+
+		if ( e.relatedTarget === null || e.relatedTarget === document.documentElement ) {
+
 			dropZone.classList.remove( 'drag-over' );
-	
-			const file = e.dataTransfer.files[ 0 ];
-			if ( file ) {
-	
-				dropZone.innerText = 'Loading...';
-				dropZone.classList.remove( 'hidden' );
-	
+
+		}
+
+	} );
+
+	window.addEventListener( 'drop', e => {
+
+		e.preventDefault();
+		dropZone.classList.remove( 'drag-over' );
+
+		const files = e.dataTransfer.files;
+		if ( files.length > 0 ) {
+
+			dropZone.innerText = 'Loading...';
+			dropZone.classList.remove( 'hidden' );
+
+			const fileMap = new Map();
+			let rootFile = null;
+			let rootUrl = null;
+
+			for ( const file of files ) {
+
+				const url = URL.createObjectURL( file );
+				fileMap.set( file.name, url );
+
+				if ( file.name.match( /\.gltf$/i ) ) {
+
+					rootFile = file;
+					rootUrl = url;
+
+				}
+
+			}
+
+			const loadingManager = new LoadingManager();
+			loadingManager.setURLModifier( url => fileMap.get( url.split( '/' ).pop() ) || url );
+
+			const loader = new GLTFLoader( loadingManager );
+			const onLoad = gltf => {
+
+				modelContainer.clear();
+				modelContainer.add( gltf.scene );
+
+				const box = new Box3().setFromObject( gltf.scene );
+				const center = box.getCenter( new Vector3() );
+				const size = box.getSize( new Vector3() );
+
+				gltf.scene.position.sub( center );
+
+				const maxDim = Math.max( size.x, size.y, size.z );
+				const fov = camera.fov * ( Math.PI / 180 );
+				camera.position.z = maxDim / ( 2 * Math.tan( fov / 2 ) );
+				camera.position.z *= 1.5;
+				
+				camera.near = maxDim / 100;
+				camera.far = maxDim * 10;
+				camera.updateProjectionMatrix();
+
+				controls.target.set( 0, 0, 0 );
+				controls.update();
+
+				pathTracer.setScene( scene, camera );
+
+				dropZone.innerText = 'Drop GLTF/GLB file here';
+				dropZone.classList.add( 'hidden' );
+				isModelLoaded = true;
+
+				fileMap.forEach( url => URL.revokeObjectURL( url ) );
+
+			};
+
+			if ( rootUrl ) {
+
+				loader.load( rootUrl, onLoad );
+
+			} else {
+
+				const file = files[ 0 ];
 				const reader = new FileReader();
 				reader.onload = e => {
-	
-					new GLTFLoader().parse( e.target.result, '', gltf => {
-	
-						modelContainer.clear();
-						modelContainer.add( gltf.scene );
-	
-						const box = new Box3().setFromObject( gltf.scene );
-						const center = box.getCenter( new Vector3() );
-						const size = box.getSize( new Vector3() );
-	
-						gltf.scene.position.sub( center );
-	
-						const maxDim = Math.max( size.x, size.y, size.z );
-						const fov = camera.fov * ( Math.PI / 180 );
-						camera.position.z = maxDim / ( 2 * Math.tan( fov / 2 ) );
-						camera.position.z *= 1.5;
-						
-						camera.near = maxDim / 100;
-						camera.far = maxDim * 10;
-						camera.updateProjectionMatrix();
-	
-						controls.target.set( 0, 0, 0 );
-						controls.update();
-	
-						pathTracer.setScene( scene, camera );
-	
-						dropZone.innerText = 'Drop GLTF/GLB file here';
-						dropZone.classList.add( 'hidden' );
-						isModelLoaded = true;
-	
-					} );
-	
+
+					loader.parse( e.target.result, '', onLoad );
+
 				};
-	
 				reader.readAsArrayBuffer( file );
-	
+
 			}
-	
-		} );
+
+		}
+
+	} );
+
 	onResize();
 	animate();
 
