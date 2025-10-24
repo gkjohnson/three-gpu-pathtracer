@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, Matrix4, StorageTexture } from 'three/webgpu';
+import { StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { storageTexture, wgsl, wgslFn, textureStore, uniform, storage, globalId } from 'three/tsl';
 
@@ -8,11 +8,11 @@ function* renderTask() {
 
 	while ( true ) {
 
-		const { megakernel, _renderer, resultTextures, WORKGROUP_SIZE } = this;
+		const { megakernel, _renderer, dimensions, WORKGROUP_SIZE } = this;
 
 		const dispatchSize = [
-			Math.ceil( resultTextures[ 0 ].width / WORKGROUP_SIZE[ 0 ] ),
-			Math.ceil( resultTextures[ 0 ].height / WORKGROUP_SIZE[ 1 ] ),
+			Math.ceil( dimensions.x / WORKGROUP_SIZE[ 0 ] ),
+			Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
 			1
 		];
 
@@ -288,12 +288,15 @@ export class PathTracerCore {
 			}
 		`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2 ] );
 
-		this.resultTextures = [ new StorageTexture(), new StorageTexture() ];
+		// this.resultTextures = [ new StorageTexture(), new StorageTexture() ];
+		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
+		this.dimensions = new Vector2();
 
 		const megakernelShaderParams = {
-			prevTex: storageTexture( this.resultTextures[ 0 ] ).toReadOnly(),
-			outputTex: storageTexture( this.resultTextures[ 1 ] ).toWriteOnly(),
+			resultBuffer: storage( this.resultBuffer, 'vec4' ), // storageTexture( this.resultTextures[ 0 ] ).toReadOnly(),
+			// outputTex: storageTexture( this.resultTextures[ 1 ] ).toWriteOnly(),
+			dimensions: uniform( this.dimensions ),
 			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
 			smoothNormals: uniform( 1 ),
 			seed: uniform( 0 ),
@@ -319,8 +322,8 @@ export class PathTracerCore {
 		const megakernelComputeShader = wgslFn( /* wgsl */`
 
 			fn compute(
-				prevTex: texture_storage_2d<rgba8unorm, read>,
-				outputTex: texture_storage_2d<rgba8unorm, write>,
+				resultBuffer: ptr<storage, array<vec4f>, read_write>,
+				dimensions: vec2u,
 				smoothNormals: u32,
 				inverseProjectionMatrix: mat4x4f,
 				cameraToModelMatrix: mat4x4f,
@@ -339,7 +342,6 @@ export class PathTracerCore {
 			) -> void {
 
 				// to screen coordinates
-				let dimensions = textureDimensions( outputTex );
 				let indexUV = globalId.xy;
 				let uv = vec2f( indexUV ) / vec2f( dimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
@@ -407,12 +409,12 @@ export class PathTracerCore {
 				let newSampleCount = prevSampleCount + sampleCount;
 				sample_count_buffer[offset] = newSampleCount;
 
-				let prevColor = textureLoad( prevTex, indexUV );
+				let prevColor = resultBuffer[offset];
 				if ( accumulate ) {
 					let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-					textureStore( outputTex, indexUV, vec4f( newColor, 1.0 ) );
+					resultBuffer[offset] = vec4f( newColor, 1.0 );
 				} else {
-					textureStore( outputTex, indexUV, vec4f( resultColor.xyz / f32( sampleCount ), 1.0 ) );
+					resultBuffer[offset] = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
 				}
 
 			}
@@ -421,8 +423,8 @@ export class PathTracerCore {
 		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
 
 		const resetParams = {
-			outputTex: textureStore( this.resultTextures[ 0 ] ).toWriteOnly(),
-			prevTex: textureStore( this.resultTextures[ 1 ] ).toWriteOnly(),
+			resultBuffer: storage( this.resultBuffer, 'vec4f' ),
+			dimensions: uniform( new Vector2() ),
 			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
 
 			globalId: globalId,
@@ -431,18 +433,16 @@ export class PathTracerCore {
 		const resetComputeShader = wgslFn( /* wgsl */ `
 
 			fn reset(
-				prevTex: texture_storage_2d<rgba8unorm, write>,
-				outputTex: texture_storage_2d<rgba8unorm, write>,
+				resultBuffer: ptr<storage, array<vec4f>, read_write>,
 				sample_count_buffer: ptr<storage, array<u32>, read_write>,
+				dimensions: vec2u,
 
 				globalId: vec2u,
 			) -> void {
 
-				textureStore( outputTex, globalId, vec4f( 0.0, 0.0, 0.0, 1.0 ) );
-				textureStore( prevTex, globalId, vec4f( 0.0, 0.0, 0.0, 1.0 ) );
-				let dimensions = textureDimensions( outputTex );
 				let offset = globalId.x + globalId.y * dimensions.x;
 				sample_count_buffer[offset] = 0;
+				resultBuffer[offset] = vec4f(0.0);
 
 			}
 
@@ -643,13 +643,15 @@ export class PathTracerCore {
 		w = Math.ceil( w );
 		h = Math.ceil( h );
 
-		if ( this.resultTextures[ 0 ].width === w && this.resultTextures[ 0 ].height === h ) {
+		if ( this.dimensions.x === w && this.dimensions.y === h ) {
 
 			return;
 
 		}
 
-		this.resultTextures.forEach( tex => tex.setSize( w, h, 1 ) );
+		this.dimensions.set( w, h );
+		// this.resultTextures.forEach( tex => tex.setSize( w, h, 1 ) );
+		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 * w * h ) );
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );
 
 		// this._blendTargets[ 0 ].setSize( w, h );
@@ -660,37 +662,35 @@ export class PathTracerCore {
 
 	getSize( target ) {
 
-		target.x = this.resultTextures[ 0 ].width;
-		target.y = this.resultTextures[ 0 ].height;
+		target.copy( this.dimensions );
 
 	}
 
 	dispose() {
 
-		this.resultTexture.dispose();
-		this.
+		// this.resultTexture.dispose();
 		// this._blendTargets[ 0 ].dispose();
 		// this._blendTargets[ 1 ].dispose();
 		// this._sobolTarget.dispose();
 
-			// this._fsQuad.dispose();
-			// this._blendQuad.dispose();
-			this._task = null;
+		// this._fsQuad.dispose();
+		// this._blendQuad.dispose();
+		this._task = null;
 
 	}
 
 	reset() {
 
-		const { _renderer, resultTextures } = this;
+		const { _renderer } = this;
 
 		const dispatchSize = [
-			Math.ceil( resultTextures[ 0 ].width / this.WORKGROUP_SIZE[ 0 ] ),
-			Math.ceil( resultTextures[ 0 ].height / this.WORKGROUP_SIZE[ 1 ] ),
+			Math.ceil( this.dimensions.x / this.WORKGROUP_SIZE[ 0 ] ),
+			Math.ceil( this.dimensions.y / this.WORKGROUP_SIZE[ 1 ] ),
 			1
 		];
 
-		this.resetKernel.computeNode.parameters.outputTex.value = resultTextures[ 0 ];
-		this.resetKernel.computeNode.parameters.prevTex.value = resultTextures[ 1 ];
+		this.resetKernel.computeNode.parameters.dimensions.value.copy( this.dimensions );
+		this.resetKernel.computeNode.parameters.resultBuffer.value = this.resultBuffer;
 		_renderer.compute( this.resetKernel, dispatchSize );
 
 		this.megakernelParams.seed.value = 0;
@@ -716,14 +716,16 @@ export class PathTracerCore {
 
 		}
 
-		const tmp = this.resultTextures[ 0 ];
-		this.resultTextures[ 0 ] = this.resultTextures[ 1 ];
-		this.resultTextures[ 1 ] = tmp;
+		// const tmp = this.resultTextures[ 0 ];
+		// this.resultTextures[ 0 ] = this.resultTextures[ 1 ];
+		// this.resultTextures[ 1 ] = tmp;
 
 		this.megakernelParams.seed.value += 1;
-		this.megakernelParams.outputTex.value = this.resultTextures[ 0 ];
-		this.megakernelParams.prevTex.value = this.resultTextures[ 1 ];
+		// this.megakernelParams.outputTex.value = this.resultTextures[ 0 ];
+		// this.megakernelParams.prevTex.value = this.resultTextures[ 1 ];
+		this.megakernelParams.resultBuffer.value = this.resultBuffer;
 		this.megakernelParams.sample_count_buffer.value = this.sampleCountBuffer;
+		this.megakernelParams.dimensions.value.copy( this.dimensions );
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
 
@@ -737,9 +739,9 @@ export class PathTracerCore {
 
 	}
 
-	getResultTexture() {
+	getResultBuffer() {
 
-		return this.resultTextures[ 0 ];
+		return this.resultBuffer;
 
 	}
 

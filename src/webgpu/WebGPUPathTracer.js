@@ -1,5 +1,5 @@
 import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending, NodeMaterial } from 'three/webgpu';
-import { storage, texture, sampler, wgslFn, uv, varying, positionGeometry } from 'three/tsl';
+import { storage, uniform, wgslFn, uv, varying, positionGeometry } from 'three/tsl';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
@@ -155,18 +155,22 @@ export class WebGPUPathTracer {
 
 		const blitMaterial = new NodeMaterial();
 		const fragmentShaderParams = {
-			texture_sampler: sampler( texture() ),
-			texture: texture(),
+			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
+			dimensions: uniform( new Vector2() ),
 			uv: varying( uv() ),
 		};
 
+		// TODO: Apply gamma correction?
 		const blitFragmentShader = wgslFn( /* wgsl */ `
 			fn blit(
-				texture_sampler: sampler,
-				texture: texture_2d<f32>,
+				resultBuffer: ptr<storage, array<vec4f>, read>,
+				dimensions: vec2u,
 				uv: vec2f,
 			) -> vec4f {
-				return vec4f(textureSample(texture, texture_sampler, uv).xyz, 1.0);
+				let x = min(u32( uv.x * f32(dimensions.x) ), dimensions.x - 1);
+				let y = min(u32( uv.y * f32(dimensions.y) ), dimensions.y - 1);
+				let offset = x + y * dimensions.x;
+				return resultBuffer[offset];
 			}
 		` );
 
@@ -184,10 +188,11 @@ export class WebGPUPathTracer {
 
 		const blitQuad = new FullScreenQuad( blitMaterial );
 
-		this.renderToCanvasCallback = ( finalTexture, renderer, quad ) => {
+		this.renderToCanvasCallback = ( finalBuffer, renderer, quad ) => {
 
-			blitQuad.material.fragmentNode.parameters.texture.value = finalTexture;
-			blitQuad.material.fragmentNode.parameters.texture_sampler.node.value = finalTexture;
+			blitQuad.material.fragmentNode.parameters.resultBuffer.value = finalBuffer;
+			const dimensions = blitQuad.material.fragmentNode.parameters.dimensions.value;
+			this._renderer.getSize( dimensions );
 			blitQuad.render( renderer );
 
 			// const currentAutoClear = renderer.autoClear;
@@ -350,8 +355,7 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.update();
 
-		// TODO: pass shader that reads from pathtracer's texture
-		this.renderToCanvasCallback( this._pathTracer.getResultTexture(), this._renderer );
+		this.renderToCanvasCallback( this._pathTracer.getResultBuffer(), this._renderer );
 
 	}
 
