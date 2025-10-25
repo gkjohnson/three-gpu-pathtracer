@@ -72,11 +72,12 @@ export const bsdf_functions = /* glsl */`
 		// Single-scatter term (standard Cook-Torrance microfacet BRDF)
 		vec3 singleScatter = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
 
-		// Multi-scatter energy compensation (Kulla-Conty 2017)
-		// This accounts for energy lost due to multiple bounces within the microfacet structure
-		// The multiscatter term is already divided by PI and accounts for cosine weighting
+		// Multiscatter energy compensation
+		// Adds back energy lost to multiple bounces within the microfacet structure
+		// Returns a diffuse-like lobe scaled by the missing energy and average Fresnel
 		vec3 multiScatter = ggxMultiScatterCompensation( wo, wi, roughness, f0Color ) * wi.z;
 
+		// Total specular reflection = single-scatter + multiscatter
 		color = singleScatter + multiScatter;
 		return ggxPdf / ( 4.0 * dot( wo, wh ) );
 
@@ -207,10 +208,12 @@ export const bsdf_functions = /* glsl */`
 		// Single-scatter clearcoat term
 		float fClearcoatSingle = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
 
-		// Multi-scatter compensation for clearcoat layer
+		// Multiscatter energy compensation for clearcoat layer
+		// Clearcoat is a dielectric layer (IOR 1.5), so we use its F0 for compensation
 		vec3 f0ColorClearcoat = vec3( f0 );
 		vec3 clearcoatMultiScatter = ggxMultiScatterCompensation( wo, wi, roughness, f0ColorClearcoat );
 
+		// Total clearcoat reflection = single-scatter + multiscatter
 		float fClearcoat = fClearcoatSingle + clearcoatMultiScatter.r;
 		color = color * ( 1.0 - surf.clearcoat * F ) + fClearcoat * surf.clearcoat * wi.z;
 
