@@ -82,38 +82,17 @@ export const bsdf_functions = /* glsl */`
 
 	}
 
-	// Global variable to store microsurface scatter throughput
-	// This is set by specularDirection and used by bsdfSample
-	vec3 g_microsurfaceThroughput = vec3( 1.0 );
-
 	vec3 specularDirection( vec3 wo, SurfaceRecord surf ) {
 
-		// sample ggx vndf distribution which gives a new normal
+		// Sample GGX VNDF distribution to get a microfacet normal
 		float roughness = surf.filteredRoughness;
-
-		// Reset microsurface throughput
-		g_microsurfaceThroughput = vec3( 1.0 );
-
-		// For rough surfaces, optionally use microsurface multiscatter
-		// This simulates multiple bounces within the microfacet structure
-		vec3 f0Color = mix( surf.f0 * surf.specularColor * surf.specularIntensity, surf.color, surf.metalness );
-
-		MicrosurfaceScatterResult microResult = ggxMicrosurfaceScatter( wo, roughness, f0Color );
-
-		if ( microResult.valid ) {
-			// Use the microsurface scattered direction
-			g_microsurfaceThroughput = microResult.throughput;
-			return microResult.direction;
-		}
-
-		// Fall back to standard single-scatter sampling
 		vec3 halfVector = ggxDirection(
 			wo,
 			vec2( roughness ),
 			rand2( 12 )
 		);
 
-		// apply to new ray by reflecting off the new normal
+		// Reflect view direction off the sampled microfacet normal
 		return - reflect( wo, halfVector );
 
 	}
@@ -478,12 +457,6 @@ export const bsdf_functions = /* glsl */`
 		ScatterRecord result;
 		result.pdf = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, diffuseWeight, specularWeight, transmissionWeight, clearcoatWeight, result.specularPdf, result.color );
 		result.direction = normalize( surf.normalBasis * wi );
-
-		// Apply microsurface scattering throughput if we sampled the specular lobe
-		if ( r > cdf[0] && r <= cdf[1] ) {
-			// Specular lobe was sampled - apply microsurface throughput
-			result.color *= g_microsurfaceThroughput;
-		}
 
 		return result;
 
