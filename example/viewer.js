@@ -148,7 +148,7 @@ async function init() {
 				const fov = camera.fov * ( Math.PI / 180 );
 				camera.position.z = maxDim / ( 2 * Math.tan( fov / 2 ) );
 				camera.position.z *= 1.5;
-				
+
 				camera.near = maxDim / 100;
 				camera.far = maxDim * 10;
 				camera.updateProjectionMatrix();
@@ -179,6 +179,7 @@ async function init() {
 					loader.parse( e.target.result, '', onLoad );
 
 				};
+
 				reader.readAsArrayBuffer( file );
 
 			}
