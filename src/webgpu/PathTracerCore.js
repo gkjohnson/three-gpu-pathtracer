@@ -8,16 +8,31 @@ function* renderTask() {
 
 	while ( true ) {
 
-		const { megakernel, _renderer, dimensions, WORKGROUP_SIZE } = this;
-
-		const dispatchSize = [
-			Math.ceil( dimensions.x / WORKGROUP_SIZE[ 0 ] ),
-			Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
-			1
-		];
+		const { megakernel, _renderer, dimensions, WORKGROUP_SIZE, useMegakernel } = this;
 
 		const startTime = window.performance.now();
-		_renderer.compute( megakernel, dispatchSize );
+
+		if ( useMegakernel ) {
+
+			const dispatchSize = [
+				Math.ceil( dimensions.x / WORKGROUP_SIZE[ 0 ] ),
+				Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
+				1
+			];
+
+			_renderer.compute( megakernel, dispatchSize );
+
+		} else {
+			// TODO: write wavefront path
+			// 1. generate rays
+			// in a loop (bounces = n):
+			// 1. Write dispatchSize to a gpu buffer
+			// 2. trace rays (dispatch indirect)
+			// 3. Write dispatchSize for escaped and bsdf
+			// 4. process escaped and bsdf (dispatch indirect)
+		}
+
+
 		this.samples += 1;
 
 		if ( _renderer.backend.device ) {
@@ -297,7 +312,7 @@ export class PathTracerCore {
 		const megakernelShaderParams = {
 			resultBuffer: storage( this.resultBuffer, 'vec4' ), // storageTexture( this.resultTextures[ 0 ] ).toReadOnly(),
 			// outputTex: storageTexture( this.resultTextures[ 1 ] ).toWriteOnly(),
-			dimensions: uniform( this.dimensions ),
+			dimensions: uniform( new Vector2() ),
 			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
 			smoothNormals: uniform( 1 ),
 			seed: uniform( 0 ),
@@ -319,7 +334,6 @@ export class PathTracerCore {
 			globalId: globalId,
 		};
 
-		// TODO: Move to buffer for storing total current/prev color
 		const megakernelComputeShader = wgslFn( /* wgsl */`
 
 			fn compute(
@@ -478,6 +492,7 @@ export class PathTracerCore {
 
 			cameraToModelMatrix: uniform( new Matrix4() ),
 			inverseProjectionMatrix: uniform( new Matrix4() ),
+			dimensions: uniform( new Vector2() ),
 
 			rayQueue: storage( rayQueue, 'RayQueue' ),
 
@@ -490,12 +505,12 @@ export class PathTracerCore {
 			fn generateRays(
 				cameraToModelMatrix: mat4x4f,
 				inverseProjectionMatrix: mat4x4f,
+				dimensions: vec2u,
 
 				rayQueue: ptr<storage, RayQueue, write>,
 
 				globalId: vec3u
 			) {
-				let dimensions = textureDimensions( outputTex );
 				let indexUV = globalId.xy;
 				let uv = vec2f( indexUV ) / vec2f( dimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
@@ -520,6 +535,7 @@ export class PathTracerCore {
 				position: vec3f,
 				materialIndex: u32,
 				view: vec3f,
+				throughputColor: vec3f,
 				pixel: vec2u,
 			};
 		` );
@@ -533,7 +549,7 @@ export class PathTracerCore {
 		const escapedQueueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
 		const escapedQueue = new StorageBufferAttribute( new Uint32Array( escapedQueueSize ) );
 
-		const hitResultQueueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
+		const hitResultQueueSize = /* sizeField */ 4 + /* element storage */ 18 * maxRayCount;
 		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( hitResultQueueSize ) );
 
 		const traceRayParams = {
@@ -550,7 +566,6 @@ export class PathTracerCore {
 			globalId: globalId,
 		};
 
-		// TODO: Write material shader that will: run bsdf, determine new direction for the ray and new throughput
 		const traceRay = wgslFn( /* wgsl */`
 
 			fn traceRay(
@@ -590,20 +605,25 @@ export class PathTracerCore {
 
 		`, [ hitResultQueueStruct, rayQueueStruct, getVertexAttribute ] );
 
-		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.traceRayWorkgroupSize = [ 16, 1, 1 ];
+		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
 
 		const escapedRayParams = {
+			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
 			inputQueue: storage( escapedQueue ).toReadOnly(),
 
+			dimensions: uniform( new Vector2() ),
 			globalId: globalId,
 		};
 
-		// TODO: write new sample info into an appropriate buffer
+		// WARN: this kernel assumes only one ray per pixel at one time is possible
 		const escapedRay = wgslFn( /* wgsl */`
 
 			fn escapedRay(
+				resultBuffer: ptr<storage, array<vec4f>, read_write>,
 				inputQueue: ptr<storage, RayQueue, read>,
 
+				dimensions: vec2u,
 				globalId: vec3u,
 			) {
 				let current = inputQueue.queue[globalId.x];
@@ -611,13 +631,64 @@ export class PathTracerCore {
 				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 				let resultColor = background * current.throughputColor;
 
-				// TODO
+				let offset = current.pixel.x + current.pixel.y * dimensions.y;
 
+				const accumulate: bool = true;
+
+				let prevSampleCount = sample_count_buffer[offset];
+				let newSampleCount = prevSampleCount + 1;
+				sample_count_buffer[offset] = newSampleCount;
+
+				let prevColor = resultBuffer[offset];
+				if ( accumulate ) {
+					let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
+					resultBuffer[offset] = vec4f( newColor, 1.0 );
+				} else {
+					resultBuffer[offset] = vec4f( resultColor, 1.0 );
+				}
 			}
 
 		`, [ rayQueueStruct ] );
 
-		this.escapedQueueKernel = escapedRay( escapedRayParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.escapedRayWorkgroupSize = [ 16, 1, 1 ];
+		this.escapedQueueKernel = escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
+
+		const bsdfEvalParams = {
+			inputQueue: storage( hitResultQueue ).toReadOnly(),
+			outputQueue: storage( rayQueue ),
+
+			globalId: globalId,
+		};
+
+		// TODO:: collect results in workgroup-local mem first, then move to storage
+		const bsdfEval = wgslFn( /* wgsl */ `
+			fn bsdf(
+				inputQueue: ptr<storage, HitResultQueue, read>,
+				outputQueue: ptr<storage, RayQueue, read_write>,
+
+				globalId: vec3u,
+			) {
+				const input = inputQueue.queue[globalId.x];
+
+				const PI: f32 = 3.141592653589793;
+				var record: ScatterRecord;
+
+				let material = materials[ input.materialIndex ];
+
+				let scatterRec = bsdfEval(&rngState, hitNormal, input.view);
+
+				let throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
+
+				let rayIndex = atomicAdd(&outputQueue.currentSize, 1);
+				outputQueue.queue[rayIndex].ray.origin = input.position;
+				outputQueue.queue[rayIndex].ray.direction = scatterRec.direction;
+				outputQueue.queue[rayIndex].ray.pixel = input.pixel;
+
+			}
+		`, [ lambertBsdfFunc, hitResultQueueStruct, rayQueueStruct ] );
+
+		this.bsdfEvalWorkgroupSize = [ 16, 1, 1 ];
+		this.bsdfKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
 
 	}
 
