@@ -1,8 +1,106 @@
 import { StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
-import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute } from 'three-mesh-bvh/webgpu';
+import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute, constants, rayStruct } from 'three-mesh-bvh/webgpu';
 import { storageTexture, wgsl, wgslFn, textureStore, uniform, storage, globalId } from 'three/tsl';
 
 const samplesEl = document.getElementById( 'samples' );
+
+// TODO: replace with _renderer.compute when indirect dispatch is merged and available
+function computeIndirect( renderer, computeNodes, buffer ) {
+
+	if ( renderer._isDeviceLost === true ) return;
+
+	if ( renderer._initialized === false ) {
+
+		console.warn( 'THREE.Renderer: .compute() called before the backend is initialized. Try using .computeAsync() instead.' );
+		return renderer.computeAsync( computeNodes );
+
+	}
+
+	//
+	const nodeFrame = renderer._nodes.nodeFrame;
+	const previousRenderId = nodeFrame.renderId;
+	//
+	renderer.info.calls ++;
+	renderer.info.compute.calls ++;
+	renderer.info.compute.frameCalls ++;
+	nodeFrame.renderId = renderer.info.calls;
+	//
+	const backend = renderer.backend;
+	const pipelines = renderer._pipelines;
+	const bindings = renderer._bindings;
+	const nodes = renderer._nodes;
+	const computeList = Array.isArray( computeNodes ) ? computeNodes : [ computeNodes ];
+	if ( computeList[ 0 ] === undefined || computeList[ 0 ].isComputeNode !== true ) {
+
+		throw new Error( 'THREE.Renderer: .compute() expects a ComputeNode.' );
+
+	}
+
+	backend.beginCompute( computeNodes );
+	for ( const computeNode of computeList ) {
+
+		// onInit
+		if ( pipelines.has( computeNode ) === false ) {
+
+			const dispose = () => {
+
+				computeNode.removeEventListener( 'dispose', dispose );
+				pipelines.delete( computeNode );
+				bindings.delete( computeNode );
+				nodes.delete( computeNode );
+
+			};
+
+			computeNode.addEventListener( 'dispose', dispose );
+			//
+			const onInitFn = computeNode.onInitFunction;
+			if ( onInitFn !== null ) {
+
+				onInitFn.call( computeNode, { renderer: renderer } );
+
+			}
+
+		}
+
+		nodes.updateForCompute( computeNode );
+		bindings.updateForCompute( computeNode );
+		const computeBindings = bindings.getForCompute( computeNode );
+		const computePipeline = pipelines.getForCompute( computeNode, computeBindings );
+
+		computeBackendIndirect( backend, computeNodes, computeNode, computeBindings, computePipeline, buffer );
+
+	}
+
+	backend.finishCompute( computeNodes );
+	//
+	nodeFrame.renderId = previousRenderId;
+
+}
+
+function computeBackendIndirect( backend, computeGroup, computeNode, bindings, pipeline, buffer ) {
+
+	const { passEncoderGPU } = backend.get( computeGroup );
+
+	// pipeline
+
+	const pipelineGPU = this.get( pipeline ).pipeline;
+
+	this.pipelineUtils.setPipeline( passEncoderGPU, pipelineGPU );
+
+	// bind groups
+
+	for ( let i = 0, l = bindings.length; i < l; i ++ ) {
+
+		const bindGroup = bindings[ i ];
+		const bindingsData = this.get( bindGroup );
+
+		passEncoderGPU.setBindGroup( i, bindingsData.group );
+
+	}
+
+	passEncoderGPU.dispatchWorkgroupsIndirect( buffer, 0 );
+
+}
 
 function* renderTask() {
 
@@ -23,13 +121,28 @@ function* renderTask() {
 			_renderer.compute( megakernel, dispatchSize );
 
 		} else {
-			// TODO: write wavefront path
-			// 1. generate rays
-			// in a loop (bounces = n):
-			// 1. Write dispatchSize to a gpu buffer
-			// 2. trace rays (dispatch indirect)
-			// 3. Write dispatchSize for escaped and bsdf
-			// 4. process escaped and bsdf (dispatch indirect)
+
+			const dispatchSize = [
+				Math.ceil( dimensions.x / WORKGROUP_SIZE[ 0 ] ),
+				Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
+				1,
+			];
+			_renderer.compute( this.generateRaysKernel, dispatchSize );
+
+			for ( let i = 0; i < this.bounces; i ++ ) {
+
+				// 1. Trace rays
+				_renderer.compute( this.writeTraceRayDispatchSizeKernel, 1 );
+				computeIndirect( _renderer, this.traceRayKernel, this.traceRayDispatchBuffer );
+
+				// 2. Handle escaped and scattered rays
+				_renderer.compute( this.writeEscapedRayDispatchSizeKernel, 1 );
+				_renderer.compute( this.writeBsdfDispatchSizeKernel, 1 );
+				computeIndirect( _renderer, this.escapedRayKernel, this.escapedRayDispatchBuffer );
+				computeIndirect( _renderer, this.bsdfEvalKernel, this.bsdfDispatchBuffer );
+
+			}
+
 		}
 
 
@@ -37,6 +150,7 @@ function* renderTask() {
 
 		if ( _renderer.backend.device ) {
 
+			// TODO: Get measuresments by three.js native things
 			_renderer.backend.device.queue.onSubmittedWorkDone().then( () => {
 
 				const endTime = window.performance.now();
@@ -174,6 +288,7 @@ export class PathTracerCore {
 		// };
 
 		// this.material.addEventListener( 'recompilation', this._compileFunction );
+		this.bounces = 7;
 
 		const materialStruct = wgsl( /* wgsl */`
 			struct Material {
@@ -368,7 +483,7 @@ export class PathTracerCore {
 				// TODO: sample a random ray
 				var ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
-				const bounces: u32 = 7;
+				const bounces: u32 = ${this.bounces};
 				var resultColor = vec3f( 0.0 );
 				var throughputColor = vec3f( 1.0 );
 				var sampleCount = 0u;
@@ -433,7 +548,7 @@ export class PathTracerCore {
 				}
 
 			}
-		`, [ ndcToCameraRay, bvhIntersectFirstHit, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
+		`, [ ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
 
 		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
 
@@ -465,7 +580,7 @@ export class PathTracerCore {
 
 		this.resetKernel = resetComputeShader( resetParams ).computeKernel( this.WORKGROUP_SIZE );
 
-		const maxRayCount = 2560 * 1440;
+		const maxRayCount = 1920 * 1080;
 		const queueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
 		const rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
 
@@ -477,7 +592,7 @@ export class PathTracerCore {
 				throughputColor: vec3f,
 			};
 
-		`, [ /* TODO: find ray struct */] );
+		`, [ rayStruct ] );
 
 		const rayQueueStruct = wgsl( /* wgsl */ `
 
@@ -510,7 +625,7 @@ export class PathTracerCore {
 				rayQueue: ptr<storage, RayQueue, write>,
 
 				globalId: vec3u
-			) {
+			) -> void {
 				let indexUV = globalId.xy;
 				let uv = vec2f( indexUV ) / vec2f( dimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
@@ -529,7 +644,7 @@ export class PathTracerCore {
 
 		this.generateRaysKernel = generateRays( generateRaysParams ).computeKernel( this.WORKGROUP_SIZE );
 
-		const hitResultQueueElementStruct = wgslFn( /* wgsl */`
+		const hitResultQueueElementStruct = wgsl( /* wgsl */`
 			struct HitResultQueueElement {
 				normal: vec3f,
 				position: vec3f,
@@ -540,10 +655,13 @@ export class PathTracerCore {
 			};
 		` );
 
-		const hitResultQueueStruct = wgslFn( /* wgsl */ `
+		// TODO: find a way to bind an atomic-u32
+		// Maybe create a TSL struct and try to use that? will it place it in storrrrrrrrrrrage
+		const hitResultQueueStruct = wgsl( /* wgsl */ `
 			struct HitResultQueue {
 				queue: array<HitResultQueueElement>,
 				currentSize: atomic<u32>,
+			};
 		`, [ hitResultQueueElementStruct ] );
 
 		const escapedQueueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
@@ -580,7 +698,7 @@ export class PathTracerCore {
 				bvh: ptr<storage, array<BVHNode>, read>,
 
 				globalId: vec3u,
-			) {
+			) -> void {
 				let input = inputQueue[globalId.x];
 
 				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, input.ray );
@@ -625,7 +743,7 @@ export class PathTracerCore {
 
 				dimensions: vec2u,
 				globalId: vec3u,
-			) {
+			) -> void {
 				let current = inputQueue.queue[globalId.x];
 
 				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
@@ -651,7 +769,7 @@ export class PathTracerCore {
 		`, [ rayQueueStruct ] );
 
 		this.escapedRayWorkgroupSize = [ 16, 1, 1 ];
-		this.escapedQueueKernel = escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
+		this.escapedRayKernel = escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
 
 		const bsdfEvalParams = {
 			inputQueue: storage( hitResultQueue ).toReadOnly(),
@@ -667,7 +785,7 @@ export class PathTracerCore {
 				outputQueue: ptr<storage, RayQueue, read_write>,
 
 				globalId: vec3u,
-			) {
+			) -> void {
 				const input = inputQueue.queue[globalId.x];
 
 				const PI: f32 = 3.141592653589793;
@@ -688,13 +806,100 @@ export class PathTracerCore {
 		`, [ lambertBsdfFunc, hitResultQueueStruct, rayQueueStruct ] );
 
 		this.bsdfEvalWorkgroupSize = [ 16, 1, 1 ];
-		this.bsdfKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
+		this.bsdfEvalKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
+
+		this.traceRayDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		const writeTraceRayDispatchSizeParams = {
+			outputBuffer: storage( this.traceRayDispatchBuffer, 'uint' ),
+
+			escapedQueue: storage( escapedQueue, 'RayQueue' ),
+			hitResultQueue: storage( hitResultQueue, 'HitResult' ),
+
+			rayQueue: storage( rayQueue, 'RayQueue' ),
+			workgroupSize: uniform( this.traceRayWorkgroupSize[ 0 ] ),
+		};
+
+		const writeTraceRayDispatchSize = wgslFn( /* wgsl */ `
+			fn writeTraceRayDispatchSize(
+				outputBuffer: ptr<storage, array<u32>, read_write>,
+
+				escapedQueue: ptr<storage, RayQueue, read_write>,
+				hitResultQueue: ptr<storage, HitResultQueue, read_write>,
+
+				rayQueue: ptr<storage, RayQueue, read_write>,
+				workgroupSize: u32,
+			) -> void {
+				atomicStore(&escapedQueue.currentSize, 1);
+				atomicStore(&hitResultQueue.currentSize, 1);
+
+				let size = atomicLoad(&rayQueue.currentSize);
+				outputBuffer[0] = u32( ceil( f32(size) / f32( workgroupSize ) ) );
+				outputBuffer[1] = 1;
+				outputBuffer[2] = 1;
+			}
+
+		`, [ rayQueueStruct ] );
+
+		this.writeTraceRayDispatchSizeKernel = writeTraceRayDispatchSize( writeTraceRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
+
+		this.escapedRayDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
+
+		const writeEscapedRayDispatchSizeParams = {
+			outputBuffer: storage( this.escapedRayDispatchBuffer, 'uint' ),
+
+			rayQueue: storage( escapedQueue, 'RayQueue' ),
+			workgroupSize: uniform( this.escapedRayWorkgroupSize[ 0 ] ),
+		};
+
+		const writeEscapedRayDispatchSize = wgslFn( /* wgsl */ `
+			fn writeTraceRayDispatchSize(
+				outputBuffer: ptr<storage, array<u32>, read_write>,
+
+				rayQueue: ptr<storage, RayQueue, read_write>,
+				workgroupSize: u32,
+			) -> void {
+				let size = atomicLoad(&rayQueue.currentSize);
+				outputBuffer[0] = u32( ceil( f32(size) / f32( workgroupSize ) ) );
+				outputBuffer[1] = 1;
+				outputBuffer[2] = 1;
+			}
+
+		` );
+
+		this.writeEscapedRayDispatchSizeKernel = writeEscapedRayDispatchSize( writeEscapedRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
+
+		this.bsdfDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		const writeBsdfDispatchSizeParams = {
+			inputQueue: storage( hitResultQueue, 'HitResultQueue' ),
+			outputQueue: storage( rayQueue, 'RayQueue' ),
+
+			outputBuffer: storage( this.bsdfDispatchBuffer, 'uint' ),
+		};
+
+		const writeBsdfDispatchSize = wgslFn( /* wgsl */ `
+			fn writeBsdfDispatchSize(
+				inputQueue: ptr<storage, HitResultQueue, read_write>,
+				outputQueue: ptr<storage, RayQueue, read_write>,
+				outputBuffer: ptr<storage, array<u32>, read_write>,
+			) -> void {
+
+				atomicStore(&outputQueue.currentSize, 0);
+
+				let count = atoimicLoad(&outputQueue.currentSize);
+				outputBuffer[0] = count / workgroupSize;
+				outputBuffer[1] = 1;
+				outputBuffer[2] = 1;
+			}
+		`, [ hitResultQueueStruct, rayQueueStruct ] );
+
+		this.writeBsdfDispatchSizeKernel = writeBsdfDispatchSize( writeBsdfDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
 	}
 
 	useMegakernel( useMegakernel ) {
 
 		this.useMegakernel = useMegakernel;
+		this.reset();
 
 	}
 
@@ -722,9 +927,9 @@ export class PathTracerCore {
 		}
 
 		this.dimensions.set( w, h );
-		// this.resultTextures.forEach( tex => tex.setSize( w, h, 1 ) );
 		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 * w * h ) );
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );
+		// TODO: update wavefront queues
 
 		// this._blendTargets[ 0 ].setSize( w, h );
 		// this._blendTargets[ 1 ].setSize( w, h );

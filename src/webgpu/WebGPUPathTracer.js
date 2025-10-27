@@ -103,7 +103,7 @@ export class WebGPUPathTracer {
 
 	useMegakernel( useMegakernel ) {
 
-		this._renderer.useMegakernel( useMegakernel );
+		this._pathTracer.useMegakernel( useMegakernel );
 
 	}
 
