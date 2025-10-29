@@ -1,6 +1,6 @@
 import { StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute, constants, rayStruct } from 'three-mesh-bvh/webgpu';
-import { storageTexture, wgsl, wgslFn, textureStore, uniform, storage, globalId } from 'three/tsl';
+import { storageTexture, wgsl, wgslFn, struct, textureStore, uniform, storage, globalId } from 'three/tsl';
 
 const samplesEl = document.getElementById( 'samples' );
 
@@ -83,22 +83,24 @@ function computeBackendIndirect( backend, computeGroup, computeNode, bindings, p
 
 	// pipeline
 
-	const pipelineGPU = this.get( pipeline ).pipeline;
+	const pipelineGPU = backend.get( pipeline ).pipeline;
 
-	this.pipelineUtils.setPipeline( passEncoderGPU, pipelineGPU );
+	backend.pipelineUtils.setPipeline( passEncoderGPU, pipelineGPU );
 
 	// bind groups
 
 	for ( let i = 0, l = bindings.length; i < l; i ++ ) {
 
 		const bindGroup = bindings[ i ];
-		const bindingsData = this.get( bindGroup );
+		const bindingsData = backend.get( bindGroup );
 
 		passEncoderGPU.setBindGroup( i, bindingsData.group );
 
 	}
 
-	passEncoderGPU.dispatchWorkgroupsIndirect( buffer, 0 );
+	const dispatchBuffer = backend.get( buffer ).buffer;
+
+	passEncoderGPU.dispatchWorkgroupsIndirect( dispatchBuffer, 0 );
 
 }
 
@@ -580,13 +582,17 @@ export class PathTracerCore {
 
 		this.resetKernel = resetComputeShader( resetParams ).computeKernel( this.WORKGROUP_SIZE );
 
+		// const QueueSize = struct( { currentSize: { type: 'uint', atomic: true } }, 'QueueSize' );
+
 		const maxRayCount = 1920 * 1080;
-		const queueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
+		const queueSize = /* element storage */ 14 * maxRayCount;
 		const rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		// [rayQueueSize, escapedQueueSize, hitResultQueueSize]
+		const queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
 
-		const queueElementStruct = wgsl( /* wgsl */ `
+		const rayQueueElementStruct = wgsl( /* wgsl */ `
 
-			struct QueueElement {
+			struct RayQueueElement {
 				ray: Ray,
 				pixel: vec2u,
 				throughputColor: vec3f,
@@ -598,10 +604,10 @@ export class PathTracerCore {
 
 			struct RayQueue {
 				currentSize: atomic<u32>,
-				queue: array<QueueElement>,
+				queue: array<RayQueueElement>,
 			};
 
-		`, [ queueElementStruct ] );
+		`, [ rayQueueElementStruct ] );
 
 		const generateRaysParams = {
 
@@ -609,7 +615,8 @@ export class PathTracerCore {
 			inverseProjectionMatrix: uniform( new Matrix4() ),
 			dimensions: uniform( new Vector2() ),
 
-			rayQueue: storage( rayQueue, 'RayQueue' ),
+			rayQueue: storage( rayQueue, 'RayQueueElement' ),
+			rayQueueSize: storage( queueSizes, 'uint' ).toAtomic(),
 
 			globalId: globalId,
 
@@ -622,7 +629,8 @@ export class PathTracerCore {
 				inverseProjectionMatrix: mat4x4f,
 				dimensions: vec2u,
 
-				rayQueue: ptr<storage, RayQueue, write>,
+				rayQueue: ptr<storage, array<RayQueueElement>, read_write>,
+				rayQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
 
 				globalId: vec3u
 			) -> void {
@@ -633,14 +641,14 @@ export class PathTracerCore {
 				let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
 				// TODO: Firtly write to workgroup-local memory, then put a bunch inside storage mem
-				let index = atomicAdd(&rayQueue.currentSize, 1);
+				let index = atomicAdd(&rayQueueSize[0], 1);
 
-				rayQueue.queue[index].ray = ray;
-				rayQueue.pixels[index].pixel = indexUV;
-				rayQueue.pixels[index].thoughtputColor = vec3f(1.0);
+				rayQueue[index].ray = ray;
+				rayQueue[index].pixel = indexUV;
+				rayQueue[index].throughputColor = vec3f(1.0);
 			}
 
-		`, [ rayQueueStruct, ndcToCameraRay ] );
+		`, [ rayQueueElementStruct, ndcToCameraRay ] );
 
 		this.generateRaysKernel = generateRays( generateRaysParams ).computeKernel( this.WORKGROUP_SIZE );
 
@@ -648,7 +656,7 @@ export class PathTracerCore {
 			struct HitResultQueueElement {
 				normal: vec3f,
 				position: vec3f,
-				materialIndex: u32,
+				vertexIndex: u32,
 				view: vec3f,
 				throughputColor: vec3f,
 				pixel: vec2u,
@@ -656,29 +664,29 @@ export class PathTracerCore {
 		` );
 
 		// TODO: find a way to bind an atomic-u32
-		// Maybe create a TSL struct and try to use that? will it place it in storrrrrrrrrrrage
-		const hitResultQueueStruct = wgsl( /* wgsl */ `
-			struct HitResultQueue {
-				queue: array<HitResultQueueElement>,
-				currentSize: atomic<u32>,
-			};
-		`, [ hitResultQueueElementStruct ] );
+		// Maybe create a TSL struct and try to use that? will it place it in storage?
+		//
+		// const hitResultQueueStruct = wgsl( /* wgsl */ `
+		// 	struct HitResultQueue {
+		// 		queue: array<HitResultQueueElement>,
+		// 		currentSize: atomic<u32>,
+		// 	};
+		// `, [ hitResultQueueElementStruct ] );
 
-		const escapedQueueSize = /* sizeField */ 4 + /* element storage */ 14 * maxRayCount;
-		const escapedQueue = new StorageBufferAttribute( new Uint32Array( escapedQueueSize ) );
+		const escapedQueue = new StorageBufferAttribute( new Uint32Array( 14 * maxRayCount ) );
 
-		const hitResultQueueSize = /* sizeField */ 4 + /* element storage */ 18 * maxRayCount;
-		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( hitResultQueueSize ) );
+		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( 18 * maxRayCount ) );
 
 		const traceRayParams = {
-			inputQueue: storage( rayQueue ).toReadOnly(),
-			escapedQueue: storage( escapedQueue ),
-			outputQueue: storage( hitResultQueue ),
+			inputQueue: storage( rayQueue, 'RayQueueElement' ).toReadOnly(),
+			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			escapedQueue: storage( escapedQueue, 'RayQueueElement' ),
+			outputQueue: storage( hitResultQueue, 'HitResultQueueElement' ),
 
 			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
 			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
 			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
-			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
+			// geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
 			bvh: storage( new StorageBufferAttribute( 0, 8 ), 'BVHNode' ).toReadOnly(),
 
 			globalId: globalId,
@@ -687,48 +695,56 @@ export class PathTracerCore {
 		const traceRay = wgslFn( /* wgsl */`
 
 			fn traceRay(
-				inputQueue: ptr<storage, RayQueue, read>,
-				escapedQueue: ptr<storage, RayQueue, read_write>,
-				outputQueue: ptr<storage, HitResultQueue, read_write>,
+				inputQueue: ptr<storage, array<RayQueueElement>, read>,
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
+				escapedQueue: ptr<storage, array<RayQueueElement>, read_write>,
+				outputQueue: ptr<storage, array<HitResultQueueElement>, read_write>,
 
 				geom_position: ptr<storage, array<vec3f>, read>,
 				geom_index: ptr<storage, array<vec3u>, read>,
 				geom_normals: ptr<storage, array<vec3f>, read>,
-				geom_material_index: ptr<storage, array<u32>, read>,
 				bvh: ptr<storage, array<BVHNode>, read>,
 
 				globalId: vec3u,
 			) -> void {
+				let inputSize = atomicLoad(&queueSizes[0]);
+				if (globalId.x >= inputSize) {
+					return;
+				}
+
 				let input = inputQueue[globalId.x];
 
 				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, input.ray );
 
 				if ( hitResult.didHit ) {
 
-					let index = atomicAdd(&outputQueue.currentSize, 1);
-					outputQueue.queue[index].view = - input.ray;
-					outputQueue.queue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normal );
-					outputQueue.queue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-					outputQueue.queue[index].pixel = input.pixel;
-					outputQueue.queue[index].materialIndex = geom_material_index[hitResult.indices.x;
+					let index = atomicAdd(&queueSizes[1], 1);
+					outputQueue[index].view = - input.ray.direction;
+					outputQueue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
+					outputQueue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
+					outputQueue[index].pixel = input.pixel;
+					outputQueue[index].vertexIndex = hitResult.indices.x;
+					// outputQueue[index].materialIndex = geom_material_index[hitResult.indices.x];
 
 				} else {
 
-					let index = atomicAdd(&escapedQueue.currentSize, 1);
-					escapedQueue.queue[index] = input;
+					let index = atomicAdd(&queueSizes[2], 1);
+					escapedQueue[index] = input;
 
 				}
 
 			}
 
-		`, [ hitResultQueueStruct, rayQueueStruct, getVertexAttribute ] );
+		`, [ hitResultQueueElementStruct, rayQueueStruct, getVertexAttribute, bvhIntersectFirstHit ] );
 
 		this.traceRayWorkgroupSize = [ 16, 1, 1 ];
 		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
 
 		const escapedRayParams = {
 			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
-			inputQueue: storage( escapedQueue ).toReadOnly(),
+			inputQueue: storage( escapedQueue, 'RayQueueElement' ).toReadOnly(),
+			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
 
 			dimensions: uniform( new Vector2() ),
 			globalId: globalId,
@@ -739,12 +755,19 @@ export class PathTracerCore {
 
 			fn escapedRay(
 				resultBuffer: ptr<storage, array<vec4f>, read_write>,
-				inputQueue: ptr<storage, RayQueue, read>,
+				inputQueue: ptr<storage, array<RayQueueElement>, read>,
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
+				sampleCountBuffer: ptr<storage, array<u32>, read_write>,
 
 				dimensions: vec2u,
 				globalId: vec3u,
 			) -> void {
-				let current = inputQueue.queue[globalId.x];
+				let inputSize = atomicLoad(&queueSizes[1]);
+				if (globalId.x >= inputSize) {
+					return;
+				}
+
+				let current = inputQueue[globalId.x];
 
 				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 				let resultColor = background * current.throughputColor;
@@ -753,9 +776,9 @@ export class PathTracerCore {
 
 				const accumulate: bool = true;
 
-				let prevSampleCount = sample_count_buffer[offset];
+				let prevSampleCount = sampleCountBuffer[offset];
 				let newSampleCount = prevSampleCount + 1;
-				sample_count_buffer[offset] = newSampleCount;
+				sampleCountBuffer[offset] = newSampleCount;
 
 				let prevColor = resultBuffer[offset];
 				if ( accumulate ) {
@@ -766,44 +789,63 @@ export class PathTracerCore {
 				}
 			}
 
-		`, [ rayQueueStruct ] );
+		`, [ rayQueueElementStruct ] );
 
 		this.escapedRayWorkgroupSize = [ 16, 1, 1 ];
 		this.escapedRayKernel = escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
 
 		const bsdfEvalParams = {
-			inputQueue: storage( hitResultQueue ).toReadOnly(),
-			outputQueue: storage( rayQueue ),
+			inputQueue: storage( hitResultQueue, 'HitResultQueueElement' ).toReadOnly(),
+			outputQueue: storage( rayQueue, 'RayQueueElement' ),
+			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+
+			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
+			materials: storage( new StorageBufferAttribute( 0, 3 ), 'Material' ).toReadOnly(),
+			seed: uniform( 0 ),
 
 			globalId: globalId,
 		};
 
-		// TODO:: collect results in workgroup-local mem first, then move to storage
+		// TODO: Make seed unique per-pixel, not per-frame for proper randomisation
+		// TODO: collect results in workgroup-local mem first, then move to storage
 		const bsdfEval = wgslFn( /* wgsl */ `
 			fn bsdf(
-				inputQueue: ptr<storage, HitResultQueue, read>,
-				outputQueue: ptr<storage, RayQueue, read_write>,
+				inputQueue: ptr<storage, array<HitResultQueueElement>, read>,
+				outputQueue: ptr<storage, array<RayQueueElement>, read_write>,
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
+
+				geom_material_index: ptr<storage, array<u32>, read>,
+				materials: ptr<storage, array<Material>, read>,
+				seed: u32,
 
 				globalId: vec3u,
 			) -> void {
-				const input = inputQueue.queue[globalId.x];
+				let inputSize = atomicLoad(&queueSizes[2]);
+				if (globalId.x >= inputSize) {
+					return;
+				}
+
+				let input = inputQueue[globalId.x];
+
+				var rngState: PcgState;
+				pcg_initialize(&rngState, input.pixel, seed);
 
 				const PI: f32 = 3.141592653589793;
 				var record: ScatterRecord;
 
-				let material = materials[ input.materialIndex ];
+				let material = materials[ geom_material_index[ input.vertexIndex ] ];
 
-				let scatterRec = bsdfEval(&rngState, hitNormal, input.view);
+				let scatterRec = bsdfEval(&rngState, input.normal, input.view);
 
 				let throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
 
-				let rayIndex = atomicAdd(&outputQueue.currentSize, 1);
-				outputQueue.queue[rayIndex].ray.origin = input.position;
-				outputQueue.queue[rayIndex].ray.direction = scatterRec.direction;
-				outputQueue.queue[rayIndex].ray.pixel = input.pixel;
+				let rayIndex = atomicAdd(&queueSizes[0], 1);
+				outputQueue[rayIndex].ray.origin = input.position;
+				outputQueue[rayIndex].ray.direction = scatterRec.direction;
+				outputQueue[rayIndex].pixel = input.pixel;
 
 			}
-		`, [ lambertBsdfFunc, hitResultQueueStruct, rayQueueStruct ] );
+		`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit ] );
 
 		this.bsdfEvalWorkgroupSize = [ 16, 1, 1 ];
 		this.bsdfEvalKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
@@ -812,10 +854,8 @@ export class PathTracerCore {
 		const writeTraceRayDispatchSizeParams = {
 			outputBuffer: storage( this.traceRayDispatchBuffer, 'uint' ),
 
-			escapedQueue: storage( escapedQueue, 'RayQueue' ),
-			hitResultQueue: storage( hitResultQueue, 'HitResult' ),
+			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
 
-			rayQueue: storage( rayQueue, 'RayQueue' ),
 			workgroupSize: uniform( this.traceRayWorkgroupSize[ 0 ] ),
 		};
 
@@ -823,22 +863,20 @@ export class PathTracerCore {
 			fn writeTraceRayDispatchSize(
 				outputBuffer: ptr<storage, array<u32>, read_write>,
 
-				escapedQueue: ptr<storage, RayQueue, read_write>,
-				hitResultQueue: ptr<storage, HitResultQueue, read_write>,
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 
-				rayQueue: ptr<storage, RayQueue, read_write>,
 				workgroupSize: u32,
 			) -> void {
-				atomicStore(&escapedQueue.currentSize, 1);
-				atomicStore(&hitResultQueue.currentSize, 1);
+				atomicStore(&queueSizes[1], 0);
+				atomicStore(&queueSizes[2], 0);
 
-				let size = atomicLoad(&rayQueue.currentSize);
+				let size = atomicLoad(&queueSizes[0]);
 				outputBuffer[0] = u32( ceil( f32(size) / f32( workgroupSize ) ) );
 				outputBuffer[1] = 1;
 				outputBuffer[2] = 1;
 			}
 
-		`, [ rayQueueStruct ] );
+		` );
 
 		this.writeTraceRayDispatchSizeKernel = writeTraceRayDispatchSize( writeTraceRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
@@ -847,7 +885,8 @@ export class PathTracerCore {
 		const writeEscapedRayDispatchSizeParams = {
 			outputBuffer: storage( this.escapedRayDispatchBuffer, 'uint' ),
 
-			rayQueue: storage( escapedQueue, 'RayQueue' ),
+			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+
 			workgroupSize: uniform( this.escapedRayWorkgroupSize[ 0 ] ),
 		};
 
@@ -855,10 +894,10 @@ export class PathTracerCore {
 			fn writeTraceRayDispatchSize(
 				outputBuffer: ptr<storage, array<u32>, read_write>,
 
-				rayQueue: ptr<storage, RayQueue, read_write>,
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 				workgroupSize: u32,
 			) -> void {
-				let size = atomicLoad(&rayQueue.currentSize);
+				let size = atomicLoad(&queueSizes[1]);
 				outputBuffer[0] = u32( ceil( f32(size) / f32( workgroupSize ) ) );
 				outputBuffer[1] = 1;
 				outputBuffer[2] = 1;
@@ -870,27 +909,28 @@ export class PathTracerCore {
 
 		this.bsdfDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
 		const writeBsdfDispatchSizeParams = {
-			inputQueue: storage( hitResultQueue, 'HitResultQueue' ),
-			outputQueue: storage( rayQueue, 'RayQueue' ),
+			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
 
 			outputBuffer: storage( this.bsdfDispatchBuffer, 'uint' ),
+
+			workgroupSize: uniform( this.bsdfEvalWorkgroupSize[ 0 ] ),
 		};
 
 		const writeBsdfDispatchSize = wgslFn( /* wgsl */ `
 			fn writeBsdfDispatchSize(
-				inputQueue: ptr<storage, HitResultQueue, read_write>,
-				outputQueue: ptr<storage, RayQueue, read_write>,
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 				outputBuffer: ptr<storage, array<u32>, read_write>,
+				workgroupSize: u32
 			) -> void {
 
-				atomicStore(&outputQueue.currentSize, 0);
+				atomicStore(&queueSizes[0], 0);
 
-				let count = atoimicLoad(&outputQueue.currentSize);
+				let count = atomicLoad(&queueSizes[2]);
 				outputBuffer[0] = count / workgroupSize;
 				outputBuffer[1] = 1;
 				outputBuffer[2] = 1;
 			}
-		`, [ hitResultQueueStruct, rayQueueStruct ] );
+		`, );
 
 		this.writeBsdfDispatchSizeKernel = writeBsdfDispatchSize( writeBsdfDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
