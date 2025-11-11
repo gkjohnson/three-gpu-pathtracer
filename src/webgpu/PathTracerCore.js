@@ -655,11 +655,12 @@ export class PathTracerCore {
 		const hitResultQueueElementStruct = wgsl( /* wgsl */`
 			struct HitResultQueueElement {
 				normal: vec3f,
+				pixel_x: u32,
 				position: vec3f,
-				vertexIndex: u32,
+				pixel_y: u32,
 				view: vec3f,
 				throughputColor: vec3f,
-				pixel: vec2u,
+				vertexIndex: u32,
 			};
 		` );
 
@@ -675,7 +676,7 @@ export class PathTracerCore {
 
 		const escapedQueue = new StorageBufferAttribute( new Uint32Array( 14 * maxRayCount ) );
 
-		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( 18 * maxRayCount ) );
+		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
 
 		const traceRayParams = {
 			inputQueue: storage( rayQueue, 'RayQueueElement' ).toReadOnly(),
@@ -722,7 +723,8 @@ export class PathTracerCore {
 					outputQueue[index].view = - input.ray.direction;
 					outputQueue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
 					outputQueue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-					outputQueue[index].pixel = input.pixel;
+					outputQueue[index].pixel_x = input.pixel.x;
+					outputQueue[index].pixel_y = input.pixel.y;
 					outputQueue[index].vertexIndex = hitResult.indices.x;
 					// outputQueue[index].materialIndex = geom_material_index[hitResult.indices.x];
 
@@ -826,9 +828,10 @@ export class PathTracerCore {
 				}
 
 				let input = inputQueue[globalId.x];
+				let pixel = vec2u(input.pixel_x, input.pixel_y);
 
 				var rngState: PcgState;
-				pcg_initialize(&rngState, input.pixel, seed);
+				pcg_initialize(&rngState, pixel, seed);
 
 				const PI: f32 = 3.141592653589793;
 				var record: ScatterRecord;
@@ -842,7 +845,7 @@ export class PathTracerCore {
 				let rayIndex = atomicAdd(&queueSizes[0], 1);
 				outputQueue[rayIndex].ray.origin = input.position;
 				outputQueue[rayIndex].ray.direction = scatterRec.direction;
-				outputQueue[rayIndex].pixel = input.pixel;
+				outputQueue[rayIndex].pixel = pixel;
 
 			}
 		`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit ] );
