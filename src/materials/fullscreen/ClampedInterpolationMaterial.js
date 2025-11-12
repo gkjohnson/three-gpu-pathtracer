@@ -63,8 +63,7 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 					vec4 res = texelFetch( map, ivec2( px.x, px.y ), 0 );
 
 					#if defined( TONE_MAPPING )
-
-					res.xyz = toneMapping( res.xyz );
+					 res.xyz = toneMapping( res.xyz );
 
 					#endif
 
@@ -97,8 +96,10 @@ export class ClampedInterpolationMaterial extends ShaderMaterial {
 						alpha.x
 					);
 
-					gl_FragColor = mix( p1, p2, alpha.y );
-					gl_FragColor.a *= opacity;
+					vec4 finalColor = mix( p1, p2, alpha.y );
+					finalColor.a *= opacity;
+					gl_FragColor = finalColor;
+
 					#include <premultiplied_alpha_fragment>
 
 				}

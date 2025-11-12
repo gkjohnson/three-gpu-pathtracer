@@ -74,5 +74,8 @@
   "bugs": {
     "url": "https://github.com/gkjohnson/three-gpu-pathtracer/issues"
   },
-  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracer#readme"
+  "homepage": "https://github.com/gkjohnson/three-gpu-pathtracer#readme",
+  "dependencies": {
+    "denoiser": "^0.0.11"
+  }
 }
