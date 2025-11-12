@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Drag and Drop GLTF Example</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+		<style>
+			html, body {
+				margin: 0;
+				padding: 0;
+				background-color: #111;
+			}
+
+			#drop-zone {
+				position: absolute;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				text-align: center;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				font-size: 24px;
+				box-sizing: border-box;
+				border: 12px solid transparent;
+				transition: border-color 0.2s, opacity 0.2s;
+				opacity: 0.2;
+			}
+
+			#drop-zone.hidden {
+				display: none;
+			}
+
+			#drop-zone.drag-over {
+				border-color: white;
+				opacity: 1;
+			}
+		</style>
+
+	</head>
+	<body>
+		<div id="drop-zone">Drop GLTF/GLB file here</div>
+		<script src="./viewer.js" type="module"></script>
+	</body>
+</html>
