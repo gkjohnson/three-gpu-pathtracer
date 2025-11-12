@@ -39,7 +39,6 @@
     "eslint": "^7.32.0",
     "eslint-config-mdcs": "^5.0.0",
     "node-fetch": "^3.2.9",
-    "parcel": "^2.12.0",
     "pixelmatch": "^5.3.0",
     "pngjs": "^6.0.0",
     "process": "^0.11.10",
@@ -49,6 +48,7 @@
     "three": "^0.163.0",
     "three-mesh-bvh": "^0.7.4",
     "typescript": "5.3.3",
+    "vite": "^6.2.2",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
@@ -57,8 +57,8 @@
     "xatlas-web": "^0.1.0"
   },
   "scripts": {
-    "start": "cd example && parcel serve ./*.html --dist-dir ./dev-bundle/ --no-cache --no-hmr",
-    "build-examples": "cd example && parcel build ./*.html --dist-dir ./bundle/ --public-url . --no-cache --no-content-hash",
+    "start": "vite --config ./vite.config.js",
+    "build-examples": "vite build --config ./vite.config.js",
     "update-screenshots": "node ./scripts/push-screenshots.js",
     "screenshot-diff": "node ./scripts/regression-test.js",
     "build": "rollup -c",
