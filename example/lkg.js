@@ -30,7 +30,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
 import { QuiltPathTracingRenderer } from '../src/core/QuiltPathTracingRenderer.js';
 
-import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr/dist/@lookingglass/webxr.js';
+import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 
 // lkg display constants

@@ -30,7 +30,7 @@
     "tracer"
   ],
   "devDependencies": {
-    "@lookingglass/webxr": "^0.3.1",
+    "@lookingglass/webxr": "^0.6.0",
     "@monogrid/gainmap-js": "^3.0.5",
     "@types/node": "^20.12.7",
     "@types/three": "^0.163.0",
