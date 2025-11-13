@@ -21,7 +21,7 @@ import {
 	Scene,
 	PMREMGenerator
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MeshBVH, MeshBVHOptions } from 'three-mesh-bvh';
 
 // three.js type augmentation
