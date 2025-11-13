@@ -4,7 +4,8 @@
 		"strict": true,
 		"strictNullChecks":true,
 		"noImplicitAny": true,
-		"skipLibCheck": true
+		"lib": [ "dom", "es2017" ],
+		"module": "node20"
 	},
 	"files": [
 		"src/index.d.ts"
