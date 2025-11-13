@@ -3,7 +3,8 @@
 		"noEmit": true,
 		"strict": true,
 		"strictNullChecks":true,
-		"noImplicitAny": true
+		"noImplicitAny": true,
+		"skipLibCheck": true
 	},
 	"files": [
 		"src/index.d.ts"
