@@ -17,7 +17,7 @@ import {
 	MathUtils,
 	Vector4
 } from 'three';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -163,7 +163,7 @@ async function init() {
 	} );
 
 	// load the environment map
-	new RGBELoader()
+	new HDRLoader()
 		.load( ENVMAP_URL, texture => {
 
 			texture.mapping = EquirectangularReflectionMapping;

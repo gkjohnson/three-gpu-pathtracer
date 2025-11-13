@@ -109,7 +109,7 @@ import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
 
 // ...
 
-const envMap = await new RGBELoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
+const envMap = await new HDRLoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
 const generator = new BlurredEnvMapGenerator( renderer );
 const blurredEnvMap = generator.generate( envMap, 0.35 );
 

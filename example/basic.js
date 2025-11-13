@@ -8,7 +8,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -76,7 +76,7 @@ async function init() {
 
 	} else {
 
-		envPromise = new RGBELoader().loadAsync( ENV_URL ).then( tex => {
+		envPromise = new HDRLoader().loadAsync( ENV_URL ).then( tex => {
 
 			tex.mapping = EquirectangularReflectionMapping;
 			return tex;
