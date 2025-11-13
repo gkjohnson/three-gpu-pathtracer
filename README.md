@@ -14,6 +14,8 @@ _More features and capabilities in progress!_
 
 # Examples
 
+[GLB Drag and Drop Viewer](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewer.html)
+
 **Setup**
 
 [Basic glTF Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
