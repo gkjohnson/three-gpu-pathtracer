@@ -52,7 +52,7 @@
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
-    "three": ">=0.151.0",
+    "three": ">=0.180.0",
     "three-mesh-bvh": ">=0.7.4",
     "xatlas-web": "^0.1.0"
   },

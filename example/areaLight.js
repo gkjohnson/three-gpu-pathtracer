@@ -12,7 +12,7 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ShapedAreaLight, WebGLPathTracer } from '../src/index.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -82,7 +82,7 @@ async function init() {
 
 	// load the assets
 	const [ envTexture, gltf ] = await Promise.all( [
-		new RGBELoader().loadAsync( ENV_URL ),
+		new HDRLoader().loadAsync( ENV_URL ),
 		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
 	] );
 

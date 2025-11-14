@@ -12,7 +12,7 @@ import {
 	Box3,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGLPathTracer } from '../src/index.js';
@@ -342,7 +342,7 @@ async function updateModel() {
 
 	const manager = new LoadingManager();
 	const [ envTexture, gltf ] = await Promise.all( [
-		new RGBELoader( manager ).loadAsync( envUrl ),
+		new HDRLoader( manager ).loadAsync( envUrl ),
 		new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder )
 			.loadAsync( modelUrl, progress => {
 

@@ -16,7 +16,7 @@ import {
 	EquirectangularReflectionMapping,
 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
@@ -395,7 +395,7 @@ function buildGui() {
 
 function updateEnvMap() {
 
-	new RGBELoader()
+	new HDRLoader()
 		.load( params.envMap, texture => {
 
 			if ( scene.environment ) {

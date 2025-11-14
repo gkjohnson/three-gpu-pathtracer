@@ -15,7 +15,7 @@ import { IESLoader } from 'three/examples/jsm/loaders/IESLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalSpotLight, WebGLPathTracer } from '../src/index.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -92,7 +92,7 @@ async function init() {
 	// load assets
 	const iesLoader = new IESLoader();
 	const [ envTexture, gltf, textures ] = await Promise.all( [
-		new RGBELoader().loadAsync( ENV_URL ),
+		new HDRLoader().loadAsync( ENV_URL ),
 		new GLTFLoader().loadAsync( MODEL_URL ),
 		Promise.all( IES_PROFILE_URLS.map( url => iesLoader.loadAsync( url ) ) )
 	] );

@@ -12,7 +12,7 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { BlurredEnvMapGenerator, WebGLPathTracer } from '../src/index.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
@@ -84,7 +84,7 @@ async function init() {
 	// load assets
 	const modelUrl = window.location.hash === '#morphtarget' ? MORPH_URL : SKINNED_URL;
 	const [ envTexture, gltf ] = await Promise.all( [
-		new RGBELoader().loadAsync( ENV_URL ),
+		new HDRLoader().loadAsync( ENV_URL ),
 		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( modelUrl )
 	] );
 

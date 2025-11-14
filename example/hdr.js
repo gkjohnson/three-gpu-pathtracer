@@ -13,7 +13,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { WebGLPathTracer } from '..';
@@ -93,7 +93,7 @@ async function init() {
 	// load the environment map and model
 	const [ gltf, envTexture ] = await Promise.all( [
 		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
-		new RGBELoader().loadAsync( ENV_URL ),
+		new HDRLoader().loadAsync( ENV_URL ),
 	] );
 
 	envTexture.mapping = EquirectangularReflectionMapping;

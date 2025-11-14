@@ -13,7 +13,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { WebGLPathTracer } from '..';
@@ -66,7 +66,7 @@ async function init() {
 	controls.update();
 
 	// environment
-	const envTexture = await new RGBELoader().loadAsync( ENV_URL ).then( tex => {
+	const envTexture = await new HDRLoader().loadAsync( ENV_URL ).then( tex => {
 
 		tex.mapping = EquirectangularReflectionMapping;
 		return tex;
