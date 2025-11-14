@@ -254,6 +254,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 				${ BSDFGLSL.ggx_functions }
 				${ BSDFGLSL.sheen_functions }
 				${ BSDFGLSL.iridescence_functions }
+				${ BSDFGLSL.multiscatter_functions }
 				${ BSDFGLSL.fog_functions }
 				${ BSDFGLSL.bsdf_functions }
 

@@ -69,14 +69,23 @@ export const bsdf_functions = /* glsl */`
 		float G1 = ggxShadowMaskG1( incidentTheta, roughness );
 		float ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
 
-		color = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
+		// Single-scatter term (standard Cook-Torrance microfacet BRDF)
+		vec3 singleScatter = wi.z * F * G * D / ( 4.0 * abs( wi.z * wo.z ) );
+
+		// Multiscatter energy compensation
+		// Adds back energy lost to multiple bounces within the microfacet structure
+		// Returns a diffuse-like lobe scaled by the missing energy and average Fresnel
+		vec3 multiScatter = ggxMultiScatterCompensation( wo, wi, roughness, f0Color ) * wi.z;
+
+		// Total specular reflection = single-scatter + multiscatter
+		color = singleScatter + multiScatter;
 		return ggxPdf / ( 4.0 * dot( wo, wh ) );
 
 	}
 
 	vec3 specularDirection( vec3 wo, SurfaceRecord surf ) {
 
-		// sample ggx vndf distribution which gives a new normal
+		// Sample GGX VNDF distribution to get a microfacet normal
 		float roughness = surf.filteredRoughness;
 		vec3 halfVector = ggxDirection(
 			wo,
@@ -84,7 +93,7 @@ export const bsdf_functions = /* glsl */`
 			rand2( 12 )
 		);
 
-		// apply to new ray by reflecting off the new normal
+		// Reflect view direction off the sampled microfacet normal
 		return - reflect( wo, halfVector );
 
 	}
@@ -196,7 +205,16 @@ export const bsdf_functions = /* glsl */`
 		float D = ggxDistribution( wh, roughness );
 		float F = schlickFresnel( dot( wi, wh ), f0 );
 
-		float fClearcoat = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
+		// Single-scatter clearcoat term
+		float fClearcoatSingle = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
+
+		// Multiscatter energy compensation for clearcoat layer
+		// Clearcoat is a dielectric layer (IOR 1.5), so we use its F0 for compensation
+		vec3 f0ColorClearcoat = vec3( f0 );
+		vec3 clearcoatMultiScatter = ggxMultiScatterCompensation( wo, wi, roughness, f0ColorClearcoat );
+
+		// Total clearcoat reflection = single-scatter + multiscatter
+		float fClearcoat = fClearcoatSingle + clearcoatMultiScatter.r;
 		color = color * ( 1.0 - surf.clearcoat * F ) + fClearcoat * surf.clearcoat * wi.z;
 
 		// PDF
