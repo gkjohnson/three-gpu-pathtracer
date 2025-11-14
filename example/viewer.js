@@ -10,6 +10,8 @@ import {
 	LoadingManager,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
@@ -132,7 +134,16 @@ async function init() {
 			const loadingManager = new LoadingManager();
 			loadingManager.setURLModifier( url => fileMap.get( url.split( '/' ).pop() ) || url );
 
+			const dracoLoader = new DRACOLoader();
+			dracoLoader.setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
+
+			const ktx2Loader = new KTX2Loader();
+			ktx2Loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/' );
+			ktx2Loader.detectSupport( renderer );
+
 			const loader = new GLTFLoader( loadingManager );
+			loader.setDRACOLoader( dracoLoader );
+			loader.setKTX2Loader( ktx2Loader );
 			const onLoad = gltf => {
 
 				modelContainer.clear();
