@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { bvhIntersectFirstHit, ndcToCameraRay, getVertexAttribute, constants, rayStruct } from 'three-mesh-bvh/webgpu';
 import { storageTexture, wgsl, wgslFn, struct, textureStore, uniform, storage, globalId } from 'three/tsl';
 
@@ -129,6 +129,7 @@ function* renderTask() {
 				Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
 				1,
 			];
+			_renderer.compute( this.cleanQueuesKernel, 1 );
 			_renderer.compute( this.generateRaysKernel, dispatchSize );
 
 			for ( let i = 0; i < this.bounces; i ++ ) {
@@ -230,6 +231,30 @@ export class PathTracerCore {
 
 	}
 
+	get traceRayParams() {
+
+		return this.traceRayKernel.computeNode.parameters;
+
+	}
+
+	get bsdfEvalParams() {
+
+		return this.bsdfEvalKernel.computeNode.parameters;
+
+	}
+
+	get escapedRayParams() {
+
+		return this.escapedRayKernel.computeNode.parameters;
+
+	}
+
+	get generateRaysParams() {
+
+		return this.generateRaysKernel.computeNode.parameters;
+
+	}
+
 	constructor( renderer ) {
 
 		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
@@ -291,6 +316,7 @@ export class PathTracerCore {
 
 		// this.material.addEventListener( 'recompilation', this._compileFunction );
 		this.bounces = 7;
+		this.useMegakernel = true;
 
 		const materialStruct = wgsl( /* wgsl */`
 			struct Material {
@@ -423,7 +449,9 @@ export class PathTracerCore {
 
 		// this.resultTextures = [ new StorageTexture(), new StorageTexture() ];
 		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
+		this.resultBuffer.name = 'Result Image #0';
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
+		this.sampleCountBuffer.name = 'Sample Count';
 		this.dimensions = new Vector2();
 
 		const megakernelShaderParams = {
@@ -554,15 +582,7 @@ export class PathTracerCore {
 
 		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
 
-		const resetParams = {
-			resultBuffer: storage( this.resultBuffer, 'vec4f' ),
-			dimensions: uniform( new Vector2() ),
-			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
-
-			globalId: globalId,
-		};
-
-		const resetComputeShader = wgslFn( /* wgsl */ `
+		this.resetComputeShader = wgslFn( /* wgsl */ `
 
 			fn reset(
 				resultBuffer: ptr<storage, array<vec4f>, read_write>,
@@ -580,22 +600,24 @@ export class PathTracerCore {
 
 		` );
 
-		this.resetKernel = resetComputeShader( resetParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.createResetKernel();
 
 		// const QueueSize = struct( { currentSize: { type: 'uint', atomic: true } }, 'QueueSize' );
 
 		const maxRayCount = 1920 * 1080;
-		const queueSize = /* element storage */ 14 * maxRayCount;
+		const queueSize = /* element storage */ 16 * maxRayCount;
 		const rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		rayQueue.name = 'Ray Queue';
 		// [rayQueueSize, escapedQueueSize, hitResultQueueSize]
-		const queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		this.queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		this.queueSizes.name = 'Queue Sizes';
 
 		const rayQueueElementStruct = wgsl( /* wgsl */ `
 
 			struct RayQueueElement {
 				ray: Ray,
-				pixel: vec2u,
 				throughputColor: vec3f,
+				pixel: vec2u,
 			};
 
 		`, [ rayStruct ] );
@@ -613,10 +635,10 @@ export class PathTracerCore {
 
 			cameraToModelMatrix: uniform( new Matrix4() ),
 			inverseProjectionMatrix: uniform( new Matrix4() ),
-			dimensions: uniform( new Vector2() ),
+			dimensions: uniform( this.dimensions ),
 
 			rayQueue: storage( rayQueue, 'RayQueueElement' ),
-			rayQueueSize: storage( queueSizes, 'uint' ).toAtomic(),
+			rayQueueSize: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			globalId: globalId,
 
@@ -634,13 +656,16 @@ export class PathTracerCore {
 
 				globalId: vec3u
 			) -> void {
+				if (globalId.x >= dimensions.x || globalId.y >= dimensions.y) {
+					return;
+				}
 				let indexUV = globalId.xy;
 				let uv = vec2f( indexUV ) / vec2f( dimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
 				let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
-				// TODO: Firtly write to workgroup-local memory, then put a bunch inside storage mem
+				// TODO: Firstly write to workgroup-local memory, then put a bunch inside storage mem
 				let index = atomicAdd(&rayQueueSize[0], 1);
 
 				rayQueue[index].ray = ray;
@@ -674,14 +699,16 @@ export class PathTracerCore {
 		// 	};
 		// `, [ hitResultQueueElementStruct ] );
 
-		const escapedQueue = new StorageBufferAttribute( new Uint32Array( 14 * maxRayCount ) );
+		this.escapedQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
+		this.escapedQueue.name = 'Escaped Rays Queue';
 
 		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
+		hitResultQueue.name = 'Hit Result Queue';
 
 		const traceRayParams = {
 			inputQueue: storage( rayQueue, 'RayQueueElement' ).toReadOnly(),
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
-			escapedQueue: storage( escapedQueue, 'RayQueueElement' ),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+			escapedQueue: storage( this.escapedQueue, 'RayQueueElement' ),
 			outputQueue: storage( hitResultQueue, 'HitResultQueueElement' ),
 
 			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
@@ -726,6 +753,7 @@ export class PathTracerCore {
 					outputQueue[index].pixel_x = input.pixel.x;
 					outputQueue[index].pixel_y = input.pixel.y;
 					outputQueue[index].vertexIndex = hitResult.indices.x;
+					outputQueue[index].throughputColor = input.throughputColor;
 					// outputQueue[index].materialIndex = geom_material_index[hitResult.indices.x];
 
 				} else {
@@ -739,21 +767,11 @@ export class PathTracerCore {
 
 		`, [ hitResultQueueElementStruct, rayQueueStruct, getVertexAttribute, bvhIntersectFirstHit ] );
 
-		this.traceRayWorkgroupSize = [ 16, 1, 1 ];
+		this.traceRayWorkgroupSize = [ 128, 1, 1 ];
 		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
 
-		const escapedRayParams = {
-			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
-			inputQueue: storage( escapedQueue, 'RayQueueElement' ).toReadOnly(),
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
-			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
-
-			dimensions: uniform( new Vector2() ),
-			globalId: globalId,
-		};
-
 		// WARN: this kernel assumes only one ray per pixel at one time is possible
-		const escapedRay = wgslFn( /* wgsl */`
+		this.escapedRay = wgslFn( /* wgsl */`
 
 			fn escapedRay(
 				resultBuffer: ptr<storage, array<vec4f>, read_write>,
@@ -764,7 +782,7 @@ export class PathTracerCore {
 				dimensions: vec2u,
 				globalId: vec3u,
 			) -> void {
-				let inputSize = atomicLoad(&queueSizes[1]);
+				let inputSize = atomicLoad(&queueSizes[2]);
 				if (globalId.x >= inputSize) {
 					return;
 				}
@@ -774,7 +792,7 @@ export class PathTracerCore {
 				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 				let resultColor = background * current.throughputColor;
 
-				let offset = current.pixel.x + current.pixel.y * dimensions.y;
+				let offset = current.pixel.x + current.pixel.y * dimensions.x;
 
 				const accumulate: bool = true;
 
@@ -793,13 +811,13 @@ export class PathTracerCore {
 
 		`, [ rayQueueElementStruct ] );
 
-		this.escapedRayWorkgroupSize = [ 16, 1, 1 ];
-		this.escapedRayKernel = escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
+		this.escapedRayWorkgroupSize = [ 128, 1, 1 ];
+		this.createEscapedRayKernel();
 
 		const bsdfEvalParams = {
 			inputQueue: storage( hitResultQueue, 'HitResultQueueElement' ).toReadOnly(),
 			outputQueue: storage( rayQueue, 'RayQueueElement' ),
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
 			materials: storage( new StorageBufferAttribute( 0, 3 ), 'Material' ).toReadOnly(),
@@ -822,7 +840,7 @@ export class PathTracerCore {
 
 				globalId: vec3u,
 			) -> void {
-				let inputSize = atomicLoad(&queueSizes[2]);
+				let inputSize = atomicLoad(&queueSizes[1]);
 				if (globalId.x >= inputSize) {
 					return;
 				}
@@ -846,18 +864,20 @@ export class PathTracerCore {
 				outputQueue[rayIndex].ray.origin = input.position;
 				outputQueue[rayIndex].ray.direction = scatterRec.direction;
 				outputQueue[rayIndex].pixel = pixel;
+				outputQueue[rayIndex].throughputColor = throughputColor;
 
 			}
 		`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit ] );
 
-		this.bsdfEvalWorkgroupSize = [ 16, 1, 1 ];
+		this.bsdfEvalWorkgroupSize = [ 128, 1, 1 ];
 		this.bsdfEvalKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
 
-		this.traceRayDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		this.traceRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.traceRayDispatchBuffer.name = 'Dispatch Buffer for Trace Ray';
 		const writeTraceRayDispatchSizeParams = {
 			outputBuffer: storage( this.traceRayDispatchBuffer, 'uint' ),
 
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			workgroupSize: uniform( this.traceRayWorkgroupSize[ 0 ] ),
 		};
@@ -883,12 +903,13 @@ export class PathTracerCore {
 
 		this.writeTraceRayDispatchSizeKernel = writeTraceRayDispatchSize( writeTraceRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
-		this.escapedRayDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		this.escapedRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.escapedRayDispatchBuffer.name = 'Dispatch Buffer for Escaped Rays';
 
 		const writeEscapedRayDispatchSizeParams = {
 			outputBuffer: storage( this.escapedRayDispatchBuffer, 'uint' ),
 
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			workgroupSize: uniform( this.escapedRayWorkgroupSize[ 0 ] ),
 		};
@@ -900,7 +921,7 @@ export class PathTracerCore {
 				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 				workgroupSize: u32,
 			) -> void {
-				let size = atomicLoad(&queueSizes[1]);
+				let size = atomicLoad(&queueSizes[2]);
 				outputBuffer[0] = u32( ceil( f32(size) / f32( workgroupSize ) ) );
 				outputBuffer[1] = 1;
 				outputBuffer[2] = 1;
@@ -910,9 +931,10 @@ export class PathTracerCore {
 
 		this.writeEscapedRayDispatchSizeKernel = writeEscapedRayDispatchSize( writeEscapedRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
-		this.bsdfDispatchBuffer = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		this.bsdfDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.bsdfDispatchBuffer.name = 'Dispatch Buffer for bsdf eval';
 		const writeBsdfDispatchSizeParams = {
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			outputBuffer: storage( this.bsdfDispatchBuffer, 'uint' ),
 
@@ -928,8 +950,8 @@ export class PathTracerCore {
 
 				atomicStore(&queueSizes[0], 0);
 
-				let count = atomicLoad(&queueSizes[2]);
-				outputBuffer[0] = count / workgroupSize;
+				let count = atomicLoad(&queueSizes[1]);
+				outputBuffer[0] = u32( ceil( f32(count) / f32( workgroupSize ) ) );
 				outputBuffer[1] = 1;
 				outputBuffer[2] = 1;
 			}
@@ -937,11 +959,58 @@ export class PathTracerCore {
 
 		this.writeBsdfDispatchSizeKernel = writeBsdfDispatchSize( writeBsdfDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
+		const cleanQueuesParams = {
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+		};
+
+		const cleanQueues = wgslFn( /* wgsl */`
+			fn clean(
+				queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
+			) -> void {
+				atomicStore(&queueSizes[0], 0);
+				atomicStore(&queueSizes[1], 0);
+				atomicStore(&queueSizes[2], 0);
+			}
+		` );
+
+		this.cleanQueuesKernel = cleanQueues( cleanQueuesParams ).computeKernel( [ 1, 1, 1 ] );
+
 	}
 
-	useMegakernel( useMegakernel ) {
+	createResetKernel() {
 
-		this.useMegakernel = useMegakernel;
+		const resetParams = {
+			resultBuffer: storage( this.resultBuffer, 'vec4f' ),
+			dimensions: uniform( this.dimensions ),
+			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
+
+			globalId: globalId,
+		};
+
+
+		this.resetKernel = this.resetComputeShader( resetParams ).computeKernel( this.WORKGROUP_SIZE );
+
+	}
+
+	createEscapedRayKernel() {
+
+		const escapedRayParams = {
+			resultBuffer: storage( this.resultBuffer, 'vec4' ),
+			inputQueue: storage( this.escapedQueue, 'RayQueueElement' ).toReadOnly(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
+
+			dimensions: uniform( this.dimensions ),
+			globalId: globalId,
+		};
+
+		this.escapedRayKernel = this.escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
+
+	}
+
+	setUseMegakernel( value ) {
+
+		this.useMegakernel = value;
 		this.reset();
 
 	}
@@ -960,6 +1029,9 @@ export class PathTracerCore {
 
 	setSize( w, h ) {
 
+		w = 1920;
+		h = 1080;
+
 		w = Math.ceil( w );
 		h = Math.ceil( h );
 
@@ -969,9 +1041,30 @@ export class PathTracerCore {
 
 		}
 
+		this.bufferCount = ( this.bufferCount ?? 0 ) + 1;
 		this.dimensions.set( w, h );
+
+		try {
+
+			this._renderer.destroyAttribute( this.resultBuffer );
+			this._renderer.destroyAttribute( this.sampleCountBuffer );
+
+		} catch ( e ) {
+
+			console.log( 'Failed to destroy result buffer. Pbbly there was no gpu buffer for it' );
+
+		}
+
 		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 * w * h ) );
+		this.resultBuffer.name = `Result Image #${this.bufferCount}`;
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );
+		this.sampleCountBuffer.name = 'Sample Counts';
+
+		this.createResetKernel();
+		this.createEscapedRayKernel();
+		// TODO: create megakernel
+
+
 		// TODO: update wavefront queues
 
 		// this._blendTargets[ 0 ].setSize( w, h );
@@ -1003,17 +1096,24 @@ export class PathTracerCore {
 
 		const { _renderer } = this;
 
+		const resetBuffer = this.resetKernel.computeNode.parameters.resultBuffer;
+		if ( resetBuffer.value !== this.resultBuffer ) {
+
+			/// Recreate
+			this.resetKernel;
+
+		}
+
 		const dispatchSize = [
 			Math.ceil( this.dimensions.x / this.WORKGROUP_SIZE[ 0 ] ),
 			Math.ceil( this.dimensions.y / this.WORKGROUP_SIZE[ 1 ] ),
 			1
 		];
 
-		this.resetKernel.computeNode.parameters.dimensions.value.copy( this.dimensions );
-		this.resetKernel.computeNode.parameters.resultBuffer.value = this.resultBuffer;
 		_renderer.compute( this.resetKernel, dispatchSize );
 
 		this.megakernelParams.seed.value = 0;
+		this.bsdfEvalParams.seed.value = 0;
 
 		this.samples = 0;
 		this._task = null;
@@ -1048,6 +1148,13 @@ export class PathTracerCore {
 		this.megakernelParams.dimensions.value.copy( this.dimensions );
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
+
+		this.bsdfEvalParams.seed.value += 1;
+		this.escapedRayParams.resultBuffer.value = this.resultBuffer;
+		this.escapedRayParams.dimensions.value.copy( this.dimensions );
+		this.generateRaysParams.dimensions.value.copy( this.dimensions );
+		this.generateRaysParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
+		this.generateRaysParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
 
 		if ( ! this._task ) {
 

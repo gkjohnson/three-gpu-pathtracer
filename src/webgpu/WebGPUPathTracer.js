@@ -101,9 +101,9 @@ export class WebGPUPathTracer {
 
 	}
 
-	useMegakernel( useMegakernel ) {
+	useMegakernel( value ) {
 
-		this._pathTracer.useMegakernel( useMegakernel );
+		this._pathTracer.setUseMegakernel( value );
 
 	}
 
@@ -161,7 +161,7 @@ export class WebGPUPathTracer {
 		};
 
 		// TODO: Apply gamma correction?
-		const blitFragmentShader = wgslFn( /* wgsl */ `
+		this.blitFragmentShader = wgslFn( /* wgsl */ `
 			fn blit(
 				resultBuffer: ptr<storage, array<vec4f>, read>,
 				dimensions: vec2u,
@@ -174,7 +174,7 @@ export class WebGPUPathTracer {
 			}
 		` );
 
-		blitMaterial.fragmentNode = blitFragmentShader( fragmentShaderParams );
+		blitMaterial.fragmentNode = this.blitFragmentShader( fragmentShaderParams );
 
 		const vertexShaderParams = {
 			position: positionGeometry,
@@ -190,7 +190,19 @@ export class WebGPUPathTracer {
 
 		this.renderToCanvasCallback = ( finalBuffer, renderer, quad ) => {
 
-			blitQuad.material.fragmentNode.parameters.resultBuffer.value = finalBuffer;
+			const blitBuffer = blitQuad.material.fragmentNode.parameters.resultBuffer.value;
+			if ( blitBuffer !== finalBuffer ) {
+
+				const fragmentShaderParams = {
+					resultBuffer: storage( finalBuffer, 'vec4' ),
+					dimensions: uniform( new Vector2() ),
+					uv: varying( uv() ),
+				};
+
+				blitMaterial.fragmentNode = this.blitFragmentShader( fragmentShaderParams );
+
+			}
+
 			const dimensions = blitQuad.material.fragmentNode.parameters.dimensions.value;
 			this._renderer.getSize( dimensions );
 			blitQuad.render( renderer );
@@ -302,23 +314,33 @@ export class WebGPUPathTracer {
 			}
 
 			const newIndex = new StorageBufferAttribute( dereferencedIndexAttr.array, 3 );
+			newIndex.name = 'Geometry Index';
 			pathTracer.megakernelParams.geom_index.value = newIndex;
+			pathTracer.traceRayParams.geom_index.value = newIndex;
 
 			const newPosition = new StorageBufferAttribute( geometry.attributes.position.array, 3 );
+			newPosition.name = 'Geometry Positions';
 			pathTracer.megakernelParams.geom_position.value = newPosition;
+			pathTracer.traceRayParams.geom_position.value = newPosition;
 
 			const newNormals = new StorageBufferAttribute( geometry.attributes.normal.array, 3 );
+			newNormals.name = 'Geometry Normals';
 			pathTracer.megakernelParams.geom_normals.value = newNormals;
+			pathTracer.traceRayParams.geom_normals.value = newNormals;
 
 			const newBvhRoots = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
+			newBvhRoots.name = 'BVH Roots';
 			pathTracer.megakernelParams.bvh.value = newBvhRoots;
+			pathTracer.traceRayParams.bvh.value = newBvhRoots;
 
 		}
 
 		if ( needsMaterialIndexUpdate ) {
 
 			const newMaterialIndex = new StorageBufferAttribute( geometry.attributes.materialIndex.array, 1 );
+			newMaterialIndex.name = 'Material Index';
 			pathTracer.megakernelParams.geom_material_index.value = newMaterialIndex;
+			pathTracer.bsdfEvalParams.geom_material_index.value = newMaterialIndex;
 
 		}
 
@@ -336,7 +358,9 @@ export class WebGPUPathTracer {
 		}
 
 		const newMaterialsBuffer = new StorageBufferAttribute( newMaterialsData, 3 );
+		newMaterialsBuffer.name = 'Material Data';
 		pathTracer.megakernelParams.materials.value = newMaterialsBuffer;
+		pathTracer.bsdfEvalParams.materials.value = newMaterialsBuffer;
 
 		this.setCamera( camera );
 
