@@ -1,0 +1,63 @@
+<html>
+	<head>
+		<title>Path Traced Ambient Occlusion</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+		<style>
+			html, body {
+				margin: 0;
+				padding: 0;
+				background-color: #111;
+			}
+
+			#info {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				pointer-events: none;
+			}
+
+			#samples, #credits {
+
+				opacity: 0.5;
+				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
+				padding: 5px;
+				display: inline-block;
+
+			}
+
+			#loading {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				color: white;
+				font-family: 'Courier New', Courier, monospace;
+			}
+		</style>
+
+		<script type="module" crossorigin src="./assets/aoRender-CUJE6NHt.js"></script>
+		<link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-B5Qt9EMX.js">
+		<link rel="modulepreload" crossorigin href="./assets/MaterialBase-byhyp4gt.js">
+		<link rel="modulepreload" crossorigin href="./assets/pcg.glsl-Dh-2-BlJ.js">
+		<link rel="modulepreload" crossorigin href="./assets/BufferGeometryUtils-DMgFFDwZ.js">
+		<link rel="modulepreload" crossorigin href="./assets/GLTFLoader-BYq4k_JA.js">
+		<link rel="modulepreload" crossorigin href="./assets/OrbitControls-BDTesZS8.js">
+		<link rel="modulepreload" crossorigin href="./assets/meshopt_decoder.module-j6OW_3Rk.js">
+		<link rel="modulepreload" crossorigin href="./assets/lil-gui.module.min-BH_YJbPT.js">
+		<link rel="modulepreload" crossorigin href="./assets/stats.module--VATS4Kh.js">
+	</head>
+	<body>
+		<div id="loading">LOADING</div>
+		<div id="info">
+			<div>
+				<div id="samples">--</div>
+			</div>
+			<!-- <div>
+				<div id="credits">--</div>
+			</div> -->
+		</div>
+	</body>
+</html>
