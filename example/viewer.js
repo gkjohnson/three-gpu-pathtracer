@@ -157,8 +157,8 @@ async function init() {
 
 				const maxDim = Math.max( size.x, size.y, size.z );
 				const fov = camera.fov * ( Math.PI / 180 );
-				camera.position.z = maxDim / ( 2 * Math.tan( fov / 2 ) );
-				camera.position.z *= 1.5;
+				const distance = maxDim / ( 2 * Math.tan( fov / 2 ) ) * 1.5;
+				camera.position.set( 0, 0, distance );
 
 				camera.near = maxDim / 100;
 				camera.far = maxDim * 10;
