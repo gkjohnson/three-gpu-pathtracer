@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Alpha map texture transform not being respected.
 - WebGLPathTracer.dispose throwing an error.
 
+### Changed
+- Minimum three.js version is now r180.
+- Changed use of RGBELoader to HDRLoader.
+
 ## [0.0.23] - 2024.06.07
 ### Added
 - Support for CubeTexture environments and backgrounds.
