@@ -257,8 +257,6 @@ export class PathTracerCore {
 
 	constructor( renderer ) {
 
-		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
-
 		this.camera = null;
 
 		this.samples = 0;
@@ -315,8 +313,11 @@ export class PathTracerCore {
 		// };
 
 		// this.material.addEventListener( 'recompilation', this._compileFunction );
+
 		this.bounces = 7;
+
 		this.useMegakernel = true;
+
 		this.geometry = {
 			bvh: new StorageBufferAttribute(),
 			index: new StorageBufferAttribute(),
@@ -326,6 +327,47 @@ export class PathTracerCore {
 			materialIndex: new StorageBufferAttribute(),
 			materials: new StorageBufferAttribute(),
 		};
+
+		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
+		this.resultBuffer.name = 'Result Image #0';
+
+		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
+		this.sampleCountBuffer.name = 'Sample Count';
+
+		this.dimensions = new Vector2();
+
+		// More resolution does not fit into webgpu-defualt 128mb buffer
+		const maxRayCount = 1920 * 1080;
+		const queueSize = /* element storage */ 16 * maxRayCount;
+		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		this.rayQueue.name = 'Ray Queue';
+
+		// [rayQueueSize, hitResultQueueSize, escapedRayQueueSize]
+		this.queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
+		this.queueSizes.name = 'Queue Sizes';
+
+		this.escapedQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
+		this.escapedQueue.name = 'Escaped Rays Queue';
+
+		this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
+		this.hitResultQueue.name = 'Hit Result Queue';
+
+		// TODO: find a way to bind an atomic-u32
+		// Maybe create a TSL struct and try to use that? will it place it in storage?
+		//
+		// TODO: write a proposal for three.js
+		//
+		// const hitResultQueueStruct = wgsl( /* wgsl */ `
+		// 	struct HitResultQueue {
+		// 		queue: array<HitResultQueueElement>,
+		// 		currentSize: atomic<u32>,
+		// 	};
+		// `, [ hitResultQueueElementStruct ] );
+
+		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
+		this.bsdfEvalWorkgroupSize = [ 128, 1, 1 ];
+		this.traceRayWorkgroupSize = [ 128, 1, 1 ];
+		this.escapedRayWorkgroupSize = [ 128, 1, 1 ];
 
 		const materialStruct = wgsl( /* wgsl */`
 			struct Material {
@@ -353,20 +395,20 @@ export class PathTracerCore {
 			};
 		` );
 
-		const equirectDirectionToUvFn = wgslFn( /* wgsl */`
-			fn equirectDirectionToUv(direction: vec3f) -> vec2f {
-
-				// from Spherical.setFromCartesianCoords
-				vec2 uv = vec2f( atan2( direction.z, direction.x ), acos( direction.y ) );
-				uv /= vec2f( 2.0 * PI, PI );
-
-				// apply adjustments to get values in range [0, 1] and y right side up
-				uv.x += 0.5;
-				uv.y = 1.0 - uv.y;
-				return uv;
-
-			}
-		` );
+		// const equirectDirectionToUvFn = wgslFn( /* wgsl */`
+		// 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
+		//
+		// 		// from Spherical.setFromCartesianCoords
+		// 		vec2 uv = vec2f( atan2( direction.z, direction.x ), acos( direction.y ) );
+		// 		uv /= vec2f( 2.0 * PI, PI );
+		//
+		// 		// apply adjustments to get values in range [0, 1] and y right side up
+		// 		uv.x += 0.5;
+		// 		uv.y = 1.0 - uv.y;
+		// 		return uv;
+		//
+		// 	}
+		// ` );
 
 		// const sampleEquirectColorFn = wgslFn( /* wgsl */ `
 		// 	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec3f {
@@ -455,12 +497,6 @@ export class PathTracerCore {
 
 			}
 		`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2 ] );
-
-		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
-		this.resultBuffer.name = 'Result Image #0';
-		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
-		this.sampleCountBuffer.name = 'Sample Count';
-		this.dimensions = new Vector2();
 
 		this.megakernelComputeShader = wgslFn( /* wgsl */`
 
@@ -584,14 +620,6 @@ export class PathTracerCore {
 
 		this.createResetKernel();
 
-		const maxRayCount = 1920 * 1080;
-		const queueSize = /* element storage */ 16 * maxRayCount;
-		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
-		this.rayQueue.name = 'Ray Queue';
-		// [rayQueueSize, hitResultQueueSize, escapedRayQueueSize]
-		this.queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
-		this.queueSizes.name = 'Queue Sizes';
-
 		const rayQueueElementStruct = wgsl( /* wgsl */ `
 
 			struct RayQueueElement {
@@ -669,22 +697,6 @@ export class PathTracerCore {
 			};
 		` );
 
-		// TODO: find a way to bind an atomic-u32
-		// Maybe create a TSL struct and try to use that? will it place it in storage?
-		//
-		// const hitResultQueueStruct = wgsl( /* wgsl */ `
-		// 	struct HitResultQueue {
-		// 		queue: array<HitResultQueueElement>,
-		// 		currentSize: atomic<u32>,
-		// 	};
-		// `, [ hitResultQueueElementStruct ] );
-
-		this.escapedQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
-		this.escapedQueue.name = 'Escaped Rays Queue';
-
-		this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
-		this.hitResultQueue.name = 'Hit Result Queue';
-
 		this.traceRay = wgslFn( /* wgsl */`
 
 			fn traceRay(
@@ -731,7 +743,6 @@ export class PathTracerCore {
 			}
 
 		`, [ hitResultQueueElementStruct, rayQueueStruct, getVertexAttribute, bvhIntersectFirstHit ] );
-		this.traceRayWorkgroupSize = [ 128, 1, 1 ];
 		this.createTraceRayKernel();
 
 		// WARN: this kernel assumes only one ray per pixel at one time is possible
@@ -775,7 +786,6 @@ export class PathTracerCore {
 
 		`, [ rayQueueElementStruct ] );
 
-		this.escapedRayWorkgroupSize = [ 128, 1, 1 ];
 		this.createEscapedRayKernel();
 
 		// TODO: Make seed unique per-pixel, not per-frame for proper randomisation
@@ -820,7 +830,6 @@ export class PathTracerCore {
 
 			}
 		`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit ] );
-		this.bsdfEvalWorkgroupSize = [ 128, 1, 1 ];
 		this.createBsdfEvalKernel();
 
 		this.traceRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
@@ -1130,10 +1139,7 @@ export class PathTracerCore {
 
 	dispose() {
 
-		// this.resultTexture.dispose();
-		// this._blendTargets[ 0 ].dispose();
-		// this._blendTargets[ 1 ].dispose();
-		// this._sobolTarget.dispose();
+		// TODO: dispose of all buffers
 
 		// this._fsQuad.dispose();
 		// this._blendQuad.dispose();
@@ -1144,14 +1150,6 @@ export class PathTracerCore {
 	reset() {
 
 		const { _renderer } = this;
-
-		const resetBuffer = this.resetKernel.computeNode.parameters.resultBuffer;
-		if ( resetBuffer.value !== this.resultBuffer ) {
-
-			/// Recreate
-			this.resetKernel;
-
-		}
 
 		const dispatchSize = [
 			Math.ceil( this.dimensions.x / this.WORKGROUP_SIZE[ 0 ] ),
@@ -1174,6 +1172,7 @@ export class PathTracerCore {
 		// ensure we've updated our defines before rendering so we can ensure we
 		// can wait for compilation to finish
 		// this.material.onBeforeRender();
+
 		// if ( this.isCompiling ) {
 
 		// 	return;
@@ -1185,21 +1184,12 @@ export class PathTracerCore {
 
 		}
 
-		// const tmp = this.resultTextures[ 0 ];
-		// this.resultTextures[ 0 ] = this.resultTextures[ 1 ];
-		// this.resultTextures[ 1 ] = tmp;
-
 		this.megakernelParams.seed.value += 1;
-		// this.megakernelParams.outputTex.value = this.resultTextures[ 0 ];
-		// this.megakernelParams.prevTex.value = this.resultTextures[ 1 ];
-		this.megakernelParams.resultBuffer.value = this.resultBuffer;
-		this.megakernelParams.sample_count_buffer.value = this.sampleCountBuffer;
 		this.megakernelParams.dimensions.value.copy( this.dimensions );
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
 
 		this.bsdfEvalParams.seed.value += 1;
-		this.escapedRayParams.resultBuffer.value = this.resultBuffer;
 		this.escapedRayParams.dimensions.value.copy( this.dimensions );
 		this.generateRaysParams.dimensions.value.copy( this.dimensions );
 		this.generateRaysParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
