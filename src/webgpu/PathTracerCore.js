@@ -317,6 +317,15 @@ export class PathTracerCore {
 		// this.material.addEventListener( 'recompilation', this._compileFunction );
 		this.bounces = 7;
 		this.useMegakernel = true;
+		this.geometry = {
+			bvh: new StorageBufferAttribute(),
+			index: new StorageBufferAttribute(),
+			position: new StorageBufferAttribute(),
+			normal: new StorageBufferAttribute(),
+
+			materialIndex: new StorageBufferAttribute(),
+			materials: new StorageBufferAttribute(),
+		};
 
 		const materialStruct = wgsl( /* wgsl */`
 			struct Material {
@@ -447,39 +456,13 @@ export class PathTracerCore {
 			}
 		`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2 ] );
 
-		// this.resultTextures = [ new StorageTexture(), new StorageTexture() ];
 		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
 		this.resultBuffer.name = 'Result Image #0';
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
 		this.sampleCountBuffer.name = 'Sample Count';
 		this.dimensions = new Vector2();
 
-		const megakernelShaderParams = {
-			resultBuffer: storage( this.resultBuffer, 'vec4' ), // storageTexture( this.resultTextures[ 0 ] ).toReadOnly(),
-			// outputTex: storageTexture( this.resultTextures[ 1 ] ).toWriteOnly(),
-			dimensions: uniform( new Vector2() ),
-			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
-			smoothNormals: uniform( 1 ),
-			seed: uniform( 0 ),
-
-			// transforms
-			inverseProjectionMatrix: uniform( new Matrix4() ),
-			cameraToModelMatrix: uniform( new Matrix4() ),
-
-			// bvh and geometry definition
-			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
-			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
-			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
-			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
-			bvh: storage( new StorageBufferAttribute( 0, 8 ), 'BVHNode' ).toReadOnly(),
-
-			materials: storage( new StorageBufferAttribute( 0, 3 ), 'Material' ).toReadOnly(),
-
-			// compute variables
-			globalId: globalId,
-		};
-
-		const megakernelComputeShader = wgslFn( /* wgsl */`
+		this.megakernelComputeShader = wgslFn( /* wgsl */`
 
 			fn compute(
 				resultBuffer: ptr<storage, array<vec4f>, read_write>,
@@ -579,8 +562,7 @@ export class PathTracerCore {
 
 			}
 		`, [ ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
-
-		this.megakernel = megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.createMegakernel();
 
 		this.resetComputeShader = wgslFn( /* wgsl */ `
 
@@ -602,13 +584,11 @@ export class PathTracerCore {
 
 		this.createResetKernel();
 
-		// const QueueSize = struct( { currentSize: { type: 'uint', atomic: true } }, 'QueueSize' );
-
 		const maxRayCount = 1920 * 1080;
 		const queueSize = /* element storage */ 16 * maxRayCount;
-		const rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
-		rayQueue.name = 'Ray Queue';
-		// [rayQueueSize, escapedQueueSize, hitResultQueueSize]
+		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		this.rayQueue.name = 'Ray Queue';
+		// [rayQueueSize, hitResultQueueSize, escapedRayQueueSize]
 		this.queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
 		this.queueSizes.name = 'Queue Sizes';
 
@@ -637,7 +617,7 @@ export class PathTracerCore {
 			inverseProjectionMatrix: uniform( new Matrix4() ),
 			dimensions: uniform( this.dimensions ),
 
-			rayQueue: storage( rayQueue, 'RayQueueElement' ),
+			rayQueue: storage( this.rayQueue, 'RayQueueElement' ),
 			rayQueueSize: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			globalId: globalId,
@@ -702,25 +682,10 @@ export class PathTracerCore {
 		this.escapedQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
 		this.escapedQueue.name = 'Escaped Rays Queue';
 
-		const hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
-		hitResultQueue.name = 'Hit Result Queue';
+		this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
+		this.hitResultQueue.name = 'Hit Result Queue';
 
-		const traceRayParams = {
-			inputQueue: storage( rayQueue, 'RayQueueElement' ).toReadOnly(),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			escapedQueue: storage( this.escapedQueue, 'RayQueueElement' ),
-			outputQueue: storage( hitResultQueue, 'HitResultQueueElement' ),
-
-			geom_index: storage( new StorageBufferAttribute( 0, 3 ), 'uvec3' ).toReadOnly(),
-			geom_position: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
-			geom_normals: storage( new StorageBufferAttribute( 0, 3 ), 'vec3' ).toReadOnly(),
-			// geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
-			bvh: storage( new StorageBufferAttribute( 0, 8 ), 'BVHNode' ).toReadOnly(),
-
-			globalId: globalId,
-		};
-
-		const traceRay = wgslFn( /* wgsl */`
+		this.traceRay = wgslFn( /* wgsl */`
 
 			fn traceRay(
 				inputQueue: ptr<storage, array<RayQueueElement>, read>,
@@ -766,9 +731,8 @@ export class PathTracerCore {
 			}
 
 		`, [ hitResultQueueElementStruct, rayQueueStruct, getVertexAttribute, bvhIntersectFirstHit ] );
-
 		this.traceRayWorkgroupSize = [ 128, 1, 1 ];
-		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
+		this.createTraceRayKernel();
 
 		// WARN: this kernel assumes only one ray per pixel at one time is possible
 		this.escapedRay = wgslFn( /* wgsl */`
@@ -814,21 +778,9 @@ export class PathTracerCore {
 		this.escapedRayWorkgroupSize = [ 128, 1, 1 ];
 		this.createEscapedRayKernel();
 
-		const bsdfEvalParams = {
-			inputQueue: storage( hitResultQueue, 'HitResultQueueElement' ).toReadOnly(),
-			outputQueue: storage( rayQueue, 'RayQueueElement' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-
-			geom_material_index: storage( new StorageBufferAttribute( 0, 1 ), 'u32' ).toReadOnly(),
-			materials: storage( new StorageBufferAttribute( 0, 3 ), 'Material' ).toReadOnly(),
-			seed: uniform( 0 ),
-
-			globalId: globalId,
-		};
-
 		// TODO: Make seed unique per-pixel, not per-frame for proper randomisation
 		// TODO: collect results in workgroup-local mem first, then move to storage
-		const bsdfEval = wgslFn( /* wgsl */ `
+		this.bsdfEval = wgslFn( /* wgsl */ `
 			fn bsdf(
 				inputQueue: ptr<storage, array<HitResultQueueElement>, read>,
 				outputQueue: ptr<storage, array<RayQueueElement>, read_write>,
@@ -868,9 +820,8 @@ export class PathTracerCore {
 
 			}
 		`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit ] );
-
 		this.bsdfEvalWorkgroupSize = [ 128, 1, 1 ];
-		this.bsdfEvalKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
+		this.createBsdfEvalKernel();
 
 		this.traceRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.traceRayDispatchBuffer.name = 'Dispatch Buffer for Trace Ray';
@@ -977,6 +928,36 @@ export class PathTracerCore {
 
 	}
 
+	createMegakernel() {
+
+		const megakernelShaderParams = {
+			resultBuffer: storage( this.resultBuffer, 'vec4' ),
+			dimensions: uniform( new Vector2() ),
+			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
+			smoothNormals: uniform( 1 ),
+			seed: uniform( 0 ),
+
+			// transforms
+			inverseProjectionMatrix: uniform( new Matrix4() ),
+			cameraToModelMatrix: uniform( new Matrix4() ),
+
+			// bvh and geometry definition
+			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
+			geom_position: storage( this.geometry.position, 'vec3' ).toReadOnly(),
+			geom_normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
+			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
+			bvh: storage( this.geometry.bvh, 'BVHNode' ).toReadOnly(),
+
+			materials: storage( this.geometry.materials, 'Material' ).toReadOnly(),
+
+			// compute variables
+			globalId: globalId,
+		};
+
+		this.megakernel = this.megakernelComputeShader( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
+
+	}
+
 	createResetKernel() {
 
 		const resetParams = {
@@ -1008,10 +989,81 @@ export class PathTracerCore {
 
 	}
 
+	createTraceRayKernel() {
+
+		const traceRayParams = {
+			inputQueue: storage( this.rayQueue, 'RayQueueElement' ).toReadOnly(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+			escapedQueue: storage( this.escapedQueue, 'RayQueueElement' ),
+			outputQueue: storage( this.hitResultQueue, 'HitResultQueueElement' ),
+
+			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
+			geom_position: storage( this.geometry.position, 'vec3' ).toReadOnly(),
+			geom_normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
+			// geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
+			bvh: storage( this.geometry.bvh, 'BVHNode' ).toReadOnly(),
+
+			globalId: globalId,
+		};
+
+		this.traceRayKernel = this.traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
+
+	}
+
+	createBsdfEvalKernel() {
+
+		const bsdfEvalParams = {
+			inputQueue: storage( this.hitResultQueue, 'HitResultQueueElement' ).toReadOnly(),
+			outputQueue: storage( this.rayQueue, 'RayQueueElement' ),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+
+			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
+			materials: storage( this.geometry.materials, 'Material' ).toReadOnly(),
+			seed: uniform( 0 ),
+
+			globalId: globalId,
+		};
+
+		this.bsdfEvalKernel = this.bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
+
+	}
+
 	setUseMegakernel( value ) {
 
 		this.useMegakernel = value;
 		this.reset();
+
+	}
+
+	setGeometryData( geometry ) {
+
+		for ( const propName in geometry ) {
+
+			const prop = this.geometry[ propName ];
+			if ( prop === undefined ) {
+
+				console.error( `Invalid property name in geometry data: ${propName}` );
+				continue;
+
+			}
+
+			try {
+
+				this._renderer.destroyAttribute( prop );
+
+			} catch ( e ) {
+
+				console.error( 'Failed to destroy geometry attribute. Pbbly because it did not have a gpu buffer' );
+
+			}
+
+			this.geometry[ propName ] = geometry[ propName ];
+
+		}
+
+		this.createMegakernel();
+		this.createBsdfEvalKernel();
+		this.createTraceRayKernel();
 
 	}
 
@@ -1062,10 +1114,7 @@ export class PathTracerCore {
 
 		this.createResetKernel();
 		this.createEscapedRayKernel();
-		// TODO: create megakernel
-
-
-		// TODO: update wavefront queues
+		this.createMegakernel();
 
 		// this._blendTargets[ 0 ].setSize( w, h );
 		// this._blendTargets[ 1 ].setSize( w, h );
