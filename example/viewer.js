@@ -158,12 +158,14 @@ async function init() {
 				const maxDim = Math.max( size.x, size.y, size.z );
 				const fov = camera.fov * ( Math.PI / 180 );
 				const distance = maxDim / ( 2 * Math.tan( fov / 2 ) ) * 1.5;
-				camera.position.set( 0, 0, distance );
 
 				camera.near = maxDim / 100;
 				camera.far = maxDim * 10;
 				camera.updateProjectionMatrix();
 
+				// Reset camera and controls
+				camera.position.set( 0, 0, distance );
+				camera.lookAt( 0, 0, 0 );
 				controls.target.set( 0, 0, 0 );
 				controls.update();
 
