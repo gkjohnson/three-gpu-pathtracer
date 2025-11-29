@@ -41,6 +41,7 @@ export const rayQueueElementStruct = wgsl( /* wgsl */ `
 	struct RayQueueElement {
 		ray: Ray,
 		throughputColor: vec3f,
+		currentBounce: u32,
 		pixel: vec2u,
 	};
 
@@ -53,6 +54,7 @@ export const hitResultQueueElementStruct = wgsl( /* wgsl */`
 		position: vec3f,
 		pixel_y: u32,
 		view: vec3f,
+		currentBounce: u32,
 		throughputColor: vec3f,
 		vertexIndex: u32,
 	};

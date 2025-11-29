@@ -2,7 +2,7 @@ import { wgslFn } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct } from './structs.wgsl';
 import { lambertBsdfFunc } from './sampling.wgsl';
-import { pcgInit } from './random.wgsl';
+import { pcgInit, pcgCycleState } from './random.wgsl';
 
 export const generateRays = wgslFn( /* wgsl */ `
 
@@ -31,6 +31,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 		rayQueue[index].ray = ray;
 		rayQueue[index].pixel = indexUV;
 		rayQueue[index].throughputColor = vec3f(1.0);
+		rayQueue[index].currentBounce = 0;
 	}
 
 `, [ rayQueueElementStruct, ndcToCameraRay ] );
@@ -55,7 +56,8 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		let input = inputQueue[globalId.x];
 		let pixel = vec2u(input.pixel_x, input.pixel_y);
 
-		pcg_initialize(pixel, seed);
+		pcgInitialize(pixel, seed);
+		pcgCycleState(input.currentBounce);
 
 		const PI: f32 = 3.141592653589793;
 		var record: ScatterRecord;
@@ -71,9 +73,10 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		outputQueue[rayIndex].ray.direction = scatterRec.direction;
 		outputQueue[rayIndex].pixel = pixel;
 		outputQueue[rayIndex].throughputColor = throughputColor;
+		outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
 
 	}
-`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit ] );
+`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit, pcgCycleState ] );
 
 export const traceRay = wgslFn( /* wgsl */`
 
@@ -109,6 +112,7 @@ export const traceRay = wgslFn( /* wgsl */`
 			outputQueue[index].pixel_y = input.pixel.y;
 			outputQueue[index].vertexIndex = hitResult.indices.x;
 			outputQueue[index].throughputColor = input.throughputColor;
+			outputQueue[index].currentBounce = input.currentBounce;
 			// outputQueue[index].materialIndex = geom_material_index[hitResult.indices.x];
 
 		} else {
@@ -148,12 +152,12 @@ export const escapedRay = wgslFn( /* wgsl */`
 
 		const accumulate: bool = true;
 
-		let prevSampleCount = sampleCountBuffer[offset];
-		let newSampleCount = prevSampleCount + 1;
-		sampleCountBuffer[offset] = newSampleCount;
-
 		let prevColor = resultBuffer[offset];
 		if ( accumulate ) {
+			let prevSampleCount = sampleCountBuffer[offset];
+			let newSampleCount = prevSampleCount + 1;
+			sampleCountBuffer[offset] = newSampleCount;
+
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
 			resultBuffer[offset] = vec4f( newColor, 1.0 );
 		} else {

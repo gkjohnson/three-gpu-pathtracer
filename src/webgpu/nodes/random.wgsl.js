@@ -11,7 +11,7 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 ` );
 
 export const pcgInit = wgslFn( /* wgsl */`
-	fn pcg_initialize(p: vec2u, frame: u32) -> void {
+	fn pcgInitialize(p: vec2u, frame: u32) -> void {
 		g_state.pixel = vec2i( p );
 
 		//white noise seed
@@ -28,6 +28,14 @@ export const pcg4d = wgslFn( /* wgsl */ `
 		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
 		*v = *v ^ (*v >> vec4u(16u));
 		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
+	}
+` );
+
+export const pcgCycleState = wgslFn( /* wgsl */ `
+	fn pcgCycleState(n: u32) -> void {
+		for (var i = 0u; i < n; i++) {
+			pcg4d(&g_state.s0);
+		}
 	}
 ` );
 

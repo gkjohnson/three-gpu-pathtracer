@@ -31,7 +31,7 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		let uv = vec2f( indexUV ) / vec2f( dimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 
-		pcg_initialize(indexUV, seed);
+		pcgInitialize(indexUV, seed);
 
 		// scene ray
 		// TODO: sample a random ray
@@ -89,12 +89,13 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		const accumulate: bool = true;
 
 		let offset = globalId.x + globalId.y * dimensions.x;
-		let prevSampleCount = sample_count_buffer[offset];
-		let newSampleCount = prevSampleCount + sampleCount;
-		sample_count_buffer[offset] = newSampleCount;
 
 		let prevColor = resultBuffer[offset];
 		if ( accumulate ) {
+			let prevSampleCount = sample_count_buffer[offset];
+			let newSampleCount = prevSampleCount + sampleCount;
+			sample_count_buffer[offset] = newSampleCount;
+
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
 			resultBuffer[offset] = vec4f( newColor, 1.0 );
 		} else {
