@@ -1,6 +1,10 @@
 import { wgsl } from 'three/tsl';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
 
+export const constants = wgsl( /* wgsl */ `
+		const PI: f32 = 3.141592653589793;
+` );
+
 export const scatterRecordStruct = wgsl( /* wgsl */ `
 	struct ScatterRecord {
 		direction: vec3f,

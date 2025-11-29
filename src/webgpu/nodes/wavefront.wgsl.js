@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
-import { ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
-import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct } from './structs.wgsl';
+import { ndcToCameraRay, bvhIntersectFirstHit, constants as bvhConstants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
+import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, constants } from './structs.wgsl';
 import { lambertBsdfFunc } from './sampling.wgsl';
 import { pcgInit, pcgCycleState } from './random.wgsl';
 
@@ -59,7 +59,6 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		pcgInitialize(pixel, seed);
 		pcgCycleState(input.currentBounce);
 
-		const PI: f32 = 3.141592653589793;
 		var record: ScatterRecord;
 
 		let material = materials[ geom_material_index[ input.vertexIndex ] ];
@@ -76,7 +75,7 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
 
 	}
-`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit, pcgCycleState ] );
+`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit, pcgCycleState, constants ] );
 
 export const traceRay = wgslFn( /* wgsl */`
 
@@ -124,7 +123,7 @@ export const traceRay = wgslFn( /* wgsl */`
 
 	}
 
-`, [ hitResultQueueElementStruct, rayQueueElementStruct, getVertexAttribute, bvhIntersectFirstHit, constants ] );
+`, [ hitResultQueueElementStruct, rayQueueElementStruct, getVertexAttribute, bvhIntersectFirstHit, bvhConstants ] );
 
 // WARN: this kernel assumes only one ray per pixel at one time is possible
 export const escapedRay = wgslFn( /* wgsl */`

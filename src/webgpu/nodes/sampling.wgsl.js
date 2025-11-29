@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { pcgRand2 } from './random.wgsl.js';
-import { scatterRecordStruct } from './structs.wgsl.js';
+import { scatterRecordStruct, constants } from './structs.wgsl.js';
 
 // TODO: Move to a local (s, t, n) coordinate system
 // From RayTracingGems v1.9 chapter 16.6.2 -- Its shit!
@@ -10,7 +10,6 @@ import { scatterRecordStruct } from './structs.wgsl.js';
 export const sampleSphereCosineFn = wgslFn( /* wgsl */ `
 	fn sampleSphereCosine(rng: vec2f, n: vec3f) -> vec4f {
 
-		const PI: f32 = 3.141592653589793;
 		let a = (1 - 2 * rng.x) * 0.99999;
 		let b = sqrt( 1 - a * a ) * 0.99999;
 		let phi = 2 * PI * rng.y;
@@ -19,13 +18,12 @@ export const sampleSphereCosineFn = wgslFn( /* wgsl */ `
 
 		return vec4f( direction, pdf );
 	}
-` );
+`, [ constants ] );
 
 
 export const lambertBsdfFunc = wgslFn( /* wgsl */`
 	fn bsdfEval(normal: vec3f, view: vec3f) -> ScatterRecord {
 
-		const PI: f32 = 3.141592653589793;
 		var record: ScatterRecord;
 
 		// Return bsdfValue / pdf, not bsdfValue and pdf separatly?
@@ -37,7 +35,7 @@ export const lambertBsdfFunc = wgslFn( /* wgsl */`
 		return record;
 
 	}
-`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2 ] );
+`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2, constants ] );
 
 // const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 // 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
