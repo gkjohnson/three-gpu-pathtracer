@@ -23,13 +23,13 @@ export const sampleSphereCosineFn = wgslFn( /* wgsl */ `
 
 
 export const lambertBsdfFunc = wgslFn( /* wgsl */`
-	fn bsdfEval(rngState: ptr<function, PcgState>, normal: vec3f, view: vec3f) -> ScatterRecord {
+	fn bsdfEval(normal: vec3f, view: vec3f) -> ScatterRecord {
 
 		const PI: f32 = 3.141592653589793;
 		var record: ScatterRecord;
 
 		// Return bsdfValue / pdf, not bsdfValue and pdf separatly?
-		let res = sampleSphereCosine( pcgRand2( rngState ), normal );
+		let res = sampleSphereCosine( pcgRand2(), normal );
 		record.direction = res.xyz;
 		record.pdf = res.w;
 		record.value = dot( record.direction, normal ) / PI;

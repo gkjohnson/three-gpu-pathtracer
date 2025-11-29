@@ -31,8 +31,7 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		let uv = vec2f( indexUV ) / vec2f( dimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 
-		var rngState: PcgState;
-		pcg_initialize(&rngState, indexUV, seed);
+		pcg_initialize(indexUV, seed);
 
 		// scene ray
 		// TODO: sample a random ray
@@ -59,8 +58,8 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 				let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
 				let hitNormal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
 
-				let scatterRec = bsdfEval(&rngState, hitNormal, - ray.direction);
-				// let scatterRec = bsdfEval(&rngState, hitResult.normal, - ray.direction);
+				let scatterRec = bsdfEval(hitNormal, - ray.direction);
+				// let scatterRec = bsdfEval(hitResult.normal, - ray.direction);
 				// TODO: fix shadow acne
 				// if (bounce == 1) {
 				// 	resultColor = vec3f( 0.0, 1.0, 0.0 ); //  dot( scatterRec.direction, hitNormal ) ); // ( vec3f( 1.0 ) + scatterRec.direction ) * 0.5;

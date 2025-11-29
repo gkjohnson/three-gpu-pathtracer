@@ -55,15 +55,14 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		let input = inputQueue[globalId.x];
 		let pixel = vec2u(input.pixel_x, input.pixel_y);
 
-		var rngState: PcgState;
-		pcg_initialize(&rngState, pixel, seed);
+		pcg_initialize(pixel, seed);
 
 		const PI: f32 = 3.141592653589793;
 		var record: ScatterRecord;
 
 		let material = materials[ geom_material_index[ input.vertexIndex ] ];
 
-		let scatterRec = bsdfEval(&rngState, input.normal, input.view);
+		let scatterRec = bsdfEval(input.normal, input.view);
 
 		let throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
 
