@@ -1,7 +1,7 @@
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, Matrix4, Vector2 } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import megakernelShader from './nodes/megakernel.wgsl.js';
-import resetFn from './nodes/reset.wgsl.js';
+import resetResultFn from './nodes/reset.wgsl.js';
 import {
 	generateRays, traceRay, bsdfEval, escapedRay, cleanQueues,
 	writeTraceRayDispatchSize, writeBsdfDispatchSize, writeEscapedRayDispatchSize,
@@ -268,7 +268,7 @@ export class PathTracerCore {
 		};
 
 
-		this.resetKernel = resetFn( resetParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.resetKernel = resetResultFn( resetParams ).computeKernel( this.WORKGROUP_SIZE );
 
 	}
 

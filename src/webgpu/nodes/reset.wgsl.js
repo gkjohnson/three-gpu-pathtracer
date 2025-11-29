@@ -1,8 +1,8 @@
 import { wgslFn } from 'three/tsl';
 
-export const resetFn = wgslFn( /* wgsl */ `
+export const resetResultFn = wgslFn( /* wgsl */ `
 
-	fn reset(
+	fn resetBuffers(
 		resultBuffer: ptr<storage, array<vec4f>, read_write>,
 		sample_count_buffer: ptr<storage, array<u32>, read_write>,
 		dimensions: vec2u,
@@ -18,4 +18,4 @@ export const resetFn = wgslFn( /* wgsl */ `
 
 ` );
 
-export default resetFn;
+export default resetResultFn;
