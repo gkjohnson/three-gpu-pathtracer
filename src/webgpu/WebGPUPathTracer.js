@@ -412,6 +412,18 @@ export class WebGPUPathTracer {
 
 	}
 
+	getSampleCount() {
+
+		return this._pathTracer.samples;
+
+	}
+
+	async getLatestSampleTimestamp() {
+
+		return await this._pathTracer.getLatestSampleTimestamp();
+
+	}
+
 }
 
 // TODO: Expose in three-mesh-bvh?

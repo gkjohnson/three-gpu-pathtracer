@@ -7,8 +7,6 @@ import {
 	writeTraceRayDispatchSize, writeBsdfDispatchSize, writeEscapedRayDispatchSize,
 } from './nodes/wavefront.wgsl.js';
 
-const samplesEl = document.getElementById( 'samples' );
-
 function* renderTask() {
 
 	const tileSize = new Vector2();
@@ -22,7 +20,6 @@ function* renderTask() {
 			useMegakernel,
 		} = this;
 
-		const startTime = window.performance.now();
 		this.getTileSize( tileSize );
 
 		_renderer.info.reset();
@@ -75,14 +72,14 @@ function* renderTask() {
 
 		const updateTimestamps = async () => {
 
-			const samples = this.samples;
 			await _renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
 			const delta = _renderer.info.compute.timestamp;
-			samplesEl.innerText = `Computing a sample took ${delta.toFixed( 2 )}ms, total ${samples} samples`;
+
+			return delta;
 
 		};
 
-		updateTimestamps();
+		this.getLatestSampleTimestamp = updateTimestamps;
 
 
 		yield;
@@ -139,6 +136,12 @@ export class PathTracerCore {
 		this.dimensions = new Vector2();
 
 		this.useMegakernel = true;
+
+		this.getLatestSampleTimestamp = async () => {
+
+			return 0;
+
+		};
 
 		this.geometry = {
 			bvh: new StorageBufferAttribute(),

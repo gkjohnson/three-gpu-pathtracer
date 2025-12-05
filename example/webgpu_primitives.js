@@ -82,6 +82,29 @@ animate();
 
 window.addEventListener( 'resize', onResize );
 
+const samplesEl = document.getElementById( 'samples' );
+const timestamps = [];
+
+async function handleTimestamp() {
+
+	const samples = pathTracer.getSampleCount();
+	const timestamp = await pathTracer.getLatestSampleTimestamp();
+	timestamps.length = samples;
+	timestamps[ samples - 1 ] = timestamp;
+
+	let totalTime = 0;
+	for ( const t of timestamps ) {
+
+		totalTime += t;
+
+	}
+
+	const avgTime = totalTime / timestamps.length;
+
+	samplesEl.innerText = `Rendering ${samples} samples took ${totalTime.toFixed( 6 )}ms (${avgTime.toFixed( 6 )}ms on average)`;
+
+}
+
 function animate() {
 
 	// if the camera position changes call "ptRenderer.reset()"
@@ -89,6 +112,8 @@ function animate() {
 
 	// update the camera and render one sample
 	pathTracer.renderSample();
+
+	handleTimestamp();
 
 }
 
