@@ -9,6 +9,8 @@ export const generateRays = wgslFn( /* wgsl */ `
 	fn generateRays(
 		cameraToModelMatrix: mat4x4f,
 		inverseProjectionMatrix: mat4x4f,
+		offset: vec2u,
+		tileSize: vec2u,
 		dimensions: vec2u,
 
 		rayQueue: ptr<storage, array<RayQueueElement>, read_write>,
@@ -16,10 +18,10 @@ export const generateRays = wgslFn( /* wgsl */ `
 
 		globalId: vec3u
 	) -> void {
-		if (globalId.x >= dimensions.x || globalId.y >= dimensions.y) {
+		if (globalId.x >= tileSize.x || globalId.y >= tileSize.y) {
 			return;
 		}
-		let indexUV = globalId.xy;
+		let indexUV = offset + globalId.xy;
 		let uv = vec2f( indexUV ) / vec2f( dimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 

@@ -11,17 +11,25 @@ const samplesEl = document.getElementById( 'samples' );
 
 function* renderTask() {
 
+	const tileSize = new Vector2();
+
 	while ( true ) {
 
-		const { megakernel, _renderer, dimensions, WORKGROUP_SIZE, useMegakernel } = this;
+		const {
+			megakernel,
+			_renderer,
+			WORKGROUP_SIZE,
+			useMegakernel,
+		} = this;
 
 		const startTime = window.performance.now();
+		this.getTileSize( tileSize );
 
 		if ( useMegakernel ) {
 
 			const dispatchSize = [
-				Math.ceil( dimensions.x / WORKGROUP_SIZE[ 0 ] ),
-				Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
+				Math.ceil( tileSize.x / WORKGROUP_SIZE[ 0 ] ),
+				Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
 				1
 			];
 
@@ -30,8 +38,8 @@ function* renderTask() {
 		} else {
 
 			const dispatchSize = [
-				Math.ceil( dimensions.x / WORKGROUP_SIZE[ 0 ] ),
-				Math.ceil( dimensions.y / WORKGROUP_SIZE[ 1 ] ),
+				Math.ceil( tileSize.x / WORKGROUP_SIZE[ 0 ] ),
+				Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
 				1,
 			];
 			// 0. Clean queues
@@ -60,7 +68,6 @@ function* renderTask() {
 			}
 
 		}
-
 
 		this.samples += 1;
 
@@ -118,12 +125,17 @@ export class PathTracerCore {
 	constructor( renderer ) {
 
 		this.camera = null;
-
-		this.samples = 0;
 		this._renderer = renderer;
 		this._task = null;
 
+		this.samples = 0;
 		this.bounces = 7;
+
+		this.tiles = new Vector2( 2, 2 );
+		this.tileSize = new Vector2();
+		this.currentTile = 0;
+
+		this.dimensions = new Vector2();
 
 		this.useMegakernel = true;
 
@@ -142,8 +154,6 @@ export class PathTracerCore {
 
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
 		this.sampleCountBuffer.name = 'Sample Count';
-
-		this.dimensions = new Vector2();
 
 		// More resolution does not fit into webgpu-defualt 128mb buffer
 		const maxRayCount = 1920 * 1080;
@@ -173,6 +183,8 @@ export class PathTracerCore {
 
 			cameraToModelMatrix: uniform( new Matrix4() ),
 			inverseProjectionMatrix: uniform( new Matrix4() ),
+			offset: uniform( new Vector2() ),
+			tileSize: uniform( new Vector2() ),
 			dimensions: uniform( this.dimensions ),
 
 			rayQueue: storage( this.rayQueue, 'RayQueueElement' ),
@@ -231,7 +243,9 @@ export class PathTracerCore {
 
 		const megakernelShaderParams = {
 			resultBuffer: storage( this.resultBuffer, 'vec4' ),
-			dimensions: uniform( new Vector2() ),
+			offset: uniform( new Vector2() ),
+			tileSize: uniform( new Vector2() ),
+			dimensions: uniform( this.dimensions ),
 			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
 			smoothNormals: uniform( 1 ),
 			seed: uniform( 0 ),
@@ -419,6 +433,20 @@ export class PathTracerCore {
 
 	}
 
+	setTiles( tiles ) {
+
+		this.tiles.copy( tiles );
+
+	}
+
+	getTileSize( target ) {
+
+		target.copy( this.dimensions ).divide( this.tiles ).ceil();
+
+		return target;
+
+	}
+
 	dispose() {
 
 		// TODO: dispose of all buffers
@@ -442,6 +470,7 @@ export class PathTracerCore {
 		this.bsdfEvalParams.seed.value = 0;
 
 		this.samples = 0;
+		this.currentTile = 0;
 		this._task = null;
 
 	}
@@ -454,13 +483,24 @@ export class PathTracerCore {
 
 		}
 
+		const tileSize = this.getTileSize( new Vector2() );
+		const currentTileVec = new Vector2(
+			this.currentTile % this.tiles.x,
+			Math.floor( this.currentTile / this.tiles.x )
+		);
+		const offset = currentTileVec.multiply( tileSize );
+
 		this.megakernelParams.seed.value += 1;
+		this.megakernelParams.offset.value.copy( offset );
+		this.megakernelParams.tileSize.value.copy( tileSize );
 		this.megakernelParams.dimensions.value.copy( this.dimensions );
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
 
 		this.bsdfEvalParams.seed.value += 1;
 		this.escapedRayParams.dimensions.value.copy( this.dimensions );
+		this.generateRaysParams.offset.value.copy( offset );
+		this.generateRaysParams.tileSize.value.copy( tileSize );
 		this.generateRaysParams.dimensions.value.copy( this.dimensions );
 		this.generateRaysParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.generateRaysParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
@@ -472,6 +512,8 @@ export class PathTracerCore {
 		}
 
 		this._task.next();
+
+		this.currentTile = ( this.currentTile + 1 ) % ( this.tiles.x * this.tiles.y );
 
 	}
 

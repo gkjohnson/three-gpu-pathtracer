@@ -8,6 +8,8 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 
 	fn compute(
 		resultBuffer: ptr<storage, array<vec4f>, read_write>,
+		offset: vec2u,
+		tileSize: vec2u,
 		dimensions: vec2u,
 		smoothNormals: u32,
 		inverseProjectionMatrix: mat4x4f,
@@ -25,9 +27,12 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 
 		globalId: vec3u,
 	) -> void {
+		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
+			return;
+		}
 
 		// to screen coordinates
-		let indexUV = globalId.xy;
+		let indexUV = offset + globalId.xy;
 		let uv = vec2f( indexUV ) / vec2f( dimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 
@@ -88,18 +93,18 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 
 		const accumulate: bool = true;
 
-		let offset = globalId.x + globalId.y * dimensions.x;
+		let index = indexUV.x + indexUV.y * dimensions.x;
 
-		let prevColor = resultBuffer[offset];
+		let prevColor = resultBuffer[index];
 		if ( accumulate ) {
-			let prevSampleCount = sample_count_buffer[offset];
+			let prevSampleCount = sample_count_buffer[index];
 			let newSampleCount = prevSampleCount + sampleCount;
-			sample_count_buffer[offset] = newSampleCount;
+			sample_count_buffer[index] = newSampleCount;
 
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-			resultBuffer[offset] = vec4f( newColor, 1.0 );
+			resultBuffer[index] = vec4f( newColor, 1.0 );
 		} else {
-			resultBuffer[offset] = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
+			resultBuffer[index] = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
 		}
 
 	}
