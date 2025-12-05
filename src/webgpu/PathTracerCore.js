@@ -1,4 +1,4 @@
-import { IndirectStorageBufferAttribute, StorageBufferAttribute, Matrix4, Vector2 } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageBufferAttribute, Matrix4, Vector2, TimestampQuery } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import megakernelShader from './nodes/megakernel.wgsl.js';
 import resetResultFn from './nodes/reset.wgsl.js';
@@ -24,6 +24,8 @@ function* renderTask() {
 
 		const startTime = window.performance.now();
 		this.getTileSize( tileSize );
+
+		_renderer.info.reset();
 
 		if ( useMegakernel ) {
 
@@ -71,18 +73,17 @@ function* renderTask() {
 
 		this.samples += 1;
 
-		if ( _renderer.backend.device ) {
+		const updateTimestamps = async () => {
 
-			// TODO: Get measuresments by three.js native things
-			_renderer.backend.device.queue.onSubmittedWorkDone().then( () => {
+			const samples = this.samples;
+			await _renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
+			const delta = _renderer.info.compute.timestamp;
+			samplesEl.innerText = `Computing a sample took ${delta.toFixed( 2 )}ms, total ${samples} samples`;
 
-				const endTime = window.performance.now();
-				const delta = endTime - startTime;
-				samplesEl.innerText = `Computing a sample took ${delta.toFixed( 2 )}ms, total ${this.samples} samples`;
+		};
 
-			} );
+		updateTimestamps();
 
-		}
 
 		yield;
 

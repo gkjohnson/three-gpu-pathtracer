@@ -56,7 +56,7 @@ const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGPURenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 renderer.setDrawingBufferSize( 1920, 1080, 1 );
