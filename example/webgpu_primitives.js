@@ -2,6 +2,7 @@ import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, Perspec
 import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import Chart from 'chart.js/auto';
 
 const options = {
 	useMegakernel: true,
@@ -82,8 +83,12 @@ animate();
 
 window.addEventListener( 'resize', onResize );
 
-const samplesEl = document.getElementById( 'samples' );
+// const samplesEl = document.getElementById( 'samples' );
+const canvasEl = document.getElementById( 'corner-canvas' );
 const timestamps = [];
+const labels = [];
+
+const chart = new Chart( canvasEl, { type: 'line', data: { labels, datasets: [ { animation: false, label: 'Sample time', data: timestamps } ] } } );
 
 async function handleTimestamp() {
 
@@ -91,17 +96,20 @@ async function handleTimestamp() {
 	const timestamp = await pathTracer.getLatestSampleTimestamp();
 	timestamps.length = samples;
 	timestamps[ samples - 1 ] = timestamp;
+	labels.length = samples;
+	labels[ samples - 1 ] = samples;
+	chart.update();
 
-	let totalTime = 0;
-	for ( const t of timestamps ) {
-
-		totalTime += t;
-
-	}
-
-	const avgTime = totalTime / timestamps.length;
-
-	samplesEl.innerText = `Rendering ${samples} samples took ${totalTime.toFixed( 6 )}ms (${avgTime.toFixed( 6 )}ms on average)`;
+	// let totalTime = 0;
+	// for ( const t of timestamps ) {
+	//
+	// 	totalTime += t;
+	//
+	// }
+	//
+	// const avgTime = totalTime / timestamps.length;
+	//
+	// samplesEl.innerText = `Rendering ${samples} samples took ${totalTime.toFixed( 6 )}ms (${avgTime.toFixed( 6 )}ms on average)`;
 
 }
 

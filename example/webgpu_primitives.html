@@ -27,15 +27,20 @@
 				display: inline-block;
 
 			}
+
+			#corner-canvas {
+				position: fixed;
+				bottom: 0;
+				left: 0;
+				max-width: 500px;
+				max-height: 200px;
+				z-index: 1000;
+			}
 		</style>
 
 	</head>
 	<body>
-		<div id="info">
-			<div>
-				<div id="samples">--</div>
-			</div>
-		</div>
+		<canvas id="corner-canvas" width="200" height="300"></canvas>
 		<script src="./webgpu_primitives.js" type="module"></script>
 	</body>
 </html>
