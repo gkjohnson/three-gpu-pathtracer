@@ -5,7 +5,7 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Chart from 'chart.js/auto';
 
 const options = {
-	useMegakernel: true,
+	useMegakernel: false,
 };
 
 // init scene, renderer, camera, controls, etc
@@ -67,6 +67,7 @@ const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.renderScale = settings.renderScale;
 pathTracer.tiles.setScalar( settings.tiles );
 pathTracer.setScene( scene, camera );
+pathTracer.useMegakernel( options.useMegakernel );
 
 const gui = new GUI();
 
