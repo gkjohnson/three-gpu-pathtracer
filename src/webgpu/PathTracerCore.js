@@ -237,6 +237,7 @@ export class PathTracerCore {
 
 		const cleanQueuesParams = {
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+			tileSize: uniform( new Vector2() ),
 		};
 
 		this.cleanQueuesKernel = cleanQueues( cleanQueuesParams ).computeKernel( [ 1, 1, 1 ] );
@@ -508,6 +509,7 @@ export class PathTracerCore {
 		this.generateRaysParams.dimensions.value.copy( this.dimensions );
 		this.generateRaysParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.generateRaysParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
+		this.cleanQueuesKernel.computeNode.parameters.tileSize.value.copy( tileSize );
 
 		if ( ! this._task ) {
 

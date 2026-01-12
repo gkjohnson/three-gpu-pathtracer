@@ -28,7 +28,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 		let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
 		// TODO: Firstly write to workgroup-local memory, then put a bunch inside storage mem
-		let index = atomicAdd(&rayQueueSize[0], 1);
+		let index = globalId.y * tileSize.x + globalId.x; // atomicAdd(&rayQueueSize[0], 1);
 
 		rayQueue[index].ray = ray;
 		rayQueue[index].pixel = indexUV;
@@ -221,8 +221,9 @@ export const writeBsdfDispatchSize = wgslFn( /* wgsl */ `
 export const cleanQueues = wgslFn( /* wgsl */`
 	fn clean(
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
+		tileSize: vec2u,
 	) -> void {
-		atomicStore(&queueSizes[0], 0);
+		atomicStore(&queueSizes[0], tileSize.x * tileSize.y);
 		atomicStore(&queueSizes[1], 0);
 		atomicStore(&queueSizes[2], 0);
 	}
