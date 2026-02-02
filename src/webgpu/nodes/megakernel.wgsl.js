@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from './random.wgsl.js';
-import { lambertBsdfFunc } from './sampling.wgsl.js';
+import { lambertBsdfFunc, getSurfaceRecordFunc, pbrtBsdfFunc } from './sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 
 export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
@@ -54,27 +54,23 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 			if ( hitResult.didHit ) {
 
 				let material = materials[ geom_material_index[ hitResult.indices.x ] ];
-				// var surfaceRecord: SurfaceRecord;
-				// surfaceRecord.normal = hitResult.normal;
-				// surfaceRecord.albedo = material.albedo;
-				// surfaceRecord.roughness = material.roughness;
-				// surfaceRecord.metalness = material.metalness;
 
-				let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-				let hitNormal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
+				// TODO: Replace geom_normals with geom_uvs
+				let surf = getSurfaceRecord( material, hitResult, geom_normals, geom_normals );
 
-				let scatterRec = bsdfEval(hitNormal, - ray.direction);
+				let scatterRec = bsdfSample( - ray.direction, surf );
+
+				// TODO: fix shadow acne?
 				// let scatterRec = bsdfEval(hitResult.normal, - ray.direction);
-				// TODO: fix shadow acne
 				// if (bounce == 1) {
 				// 	resultColor = vec3f( 0.0, 1.0, 0.0 ); //  dot( scatterRec.direction, hitNormal ) ); // ( vec3f( 1.0 ) + scatterRec.direction ) * 0.5;
 				// 	sampleCount = 1;
 				// 	break;
 				// }
 
-				throughputColor *= material.albedo * scatterRec.value / scatterRec.pdf;
+				throughputColor *= scatterRec.color / scatterRec.pdf;
 
-				ray.origin = hitPosition;
+				ray.origin = ray.origin + ray.direction * hitResult.dist;
 				ray.direction = scatterRec.direction;
 
 			} else {
@@ -108,6 +104,6 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		}
 
 	}
-`, [ ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
+`, [ getSurfaceRecordFunc, ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, pbrtBsdfFunc ] );
 
 export default megakernelShader;

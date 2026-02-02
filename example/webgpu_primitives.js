@@ -5,7 +5,7 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Chart from 'chart.js/auto';
 
 const options = {
-	useMegakernel: false,
+	useMegakernel: true,
 };
 
 // init scene, renderer, camera, controls, etc

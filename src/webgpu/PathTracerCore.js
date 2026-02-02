@@ -41,6 +41,7 @@ function* renderTask() {
 				Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
 				1,
 			];
+
 			// 0. Clean queues
 			_renderer.compute( this.cleanQueuesKernel, 1 );
 			// 0.1 Generate one ray per pixel and write it into ray queue
@@ -191,7 +192,7 @@ export class PathTracerCore {
 			tileSize: uniform( new Vector2() ),
 			dimensions: uniform( this.dimensions ),
 
-			rayQueue: storage( this.rayQueue, 'RayQueueElement' ),
+			rayQueue: storage( this.rayQueue, 'uint' ),
 			rayQueueSize: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			globalId: globalId,
@@ -295,7 +296,7 @@ export class PathTracerCore {
 
 		const escapedRayParams = {
 			resultBuffer: storage( this.resultBuffer, 'vec4' ),
-			inputQueue: storage( this.escapedQueue, 'RayQueueElement' ).toReadOnly(),
+			inputQueue: storage( this.escapedQueue, 'uint' ).toReadOnly(),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
 
@@ -310,9 +311,9 @@ export class PathTracerCore {
 	createTraceRayKernel() {
 
 		const traceRayParams = {
-			inputQueue: storage( this.rayQueue, 'RayQueueElement' ).toReadOnly(),
+			inputQueue: storage( this.rayQueue, 'uint' ).toReadOnly(),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			escapedQueue: storage( this.escapedQueue, 'RayQueueElement' ),
+			escapedQueue: storage( this.escapedQueue, 'uint' ),
 			outputQueue: storage( this.hitResultQueue, 'HitResultQueueElement' ),
 
 			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
@@ -332,7 +333,7 @@ export class PathTracerCore {
 
 		const bsdfEvalParams = {
 			inputQueue: storage( this.hitResultQueue, 'HitResultQueueElement' ).toReadOnly(),
-			outputQueue: storage( this.rayQueue, 'RayQueueElement' ),
+			outputQueue: storage( this.rayQueue, 'u32' ),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),

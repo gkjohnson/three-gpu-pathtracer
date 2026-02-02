@@ -13,7 +13,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 		tileSize: vec2u,
 		dimensions: vec2u,
 
-		rayQueue: ptr<storage, array<RayQueueElement>, read_write>,
+		rayQueue: ptr<storage, array<u32>, read_write>,
 		rayQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
 
 		globalId: vec3u
@@ -28,12 +28,15 @@ export const generateRays = wgslFn( /* wgsl */ `
 		let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
 		// TODO: Firstly write to workgroup-local memory, then put a bunch inside storage mem
-		let index = globalId.y * tileSize.x + globalId.x; // atomicAdd(&rayQueueSize[0], 1);
+		let index = atomicAdd(&rayQueueSize[0], 1);
 
-		rayQueue[index].ray = ray;
-		rayQueue[index].pixel = indexUV;
-		rayQueue[index].throughputColor = vec3f(1.0);
-		rayQueue[index].currentBounce = 0;
+		let elementCount = arrayLength(rayQueue) / RAY_ELEMENT_STRUCT_SIZE;
+
+		rayQueueWriteOriginSoA(rayQueue, elementCount, index, ray.origin);
+		rayQueueWriteDirectionSoA(rayQueue, elementCount, index, ray.direction);
+		rayQueueWriteThroughputSoA(rayQueue, elementCount, index, vec3f(1.0));
+		rayQueueWritePixelSoA(rayQueue, elementCount, index, indexUV);
+		rayQueueWriteCurrentBounceSoA(rayQueue, elementCount, index, 0);
 	}
 
 `, [ rayQueueElementStruct, ndcToCameraRay ] );
@@ -41,7 +44,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 export const bsdfEval = wgslFn( /* wgsl */ `
 	fn bsdf(
 		inputQueue: ptr<storage, array<HitResultQueueElement>, read>,
-		outputQueue: ptr<storage, array<RayQueueElement>, read_write>,
+		outputQueue: ptr<storage, array<u32>, read_write>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 
 		geom_material_index: ptr<storage, array<u32>, read>,
@@ -65,16 +68,25 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 
 		let material = materials[ geom_material_index[ input.vertexIndex ] ];
 
-		let scatterRec = bsdfEval(input.normal, input.view);
+		let scatterRec = bsdfSample(input.normal, input.view);
 
 		let throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
 
 		let rayIndex = atomicAdd(&queueSizes[0], 1);
-		outputQueue[rayIndex].ray.origin = input.position;
-		outputQueue[rayIndex].ray.direction = scatterRec.direction;
-		outputQueue[rayIndex].pixel = pixel;
-		outputQueue[rayIndex].throughputColor = throughputColor;
-		outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
+
+		let elementCount = arrayLength(outputQueue) / RAY_ELEMENT_STRUCT_SIZE;
+
+		rayQueueWriteOriginSoA(outputQueue, elementCount, rayIndex, input.position);
+		rayQueueWriteDirectionSoA(outputQueue, elementCount, rayIndex, scatterRec.direction);
+		rayQueueWritePixelSoA(outputQueue, elementCount, rayIndex, pixel);
+		rayQueueWriteThroughputSoA(outputQueue, elementCount, rayIndex, throughputColor);
+		rayQueueWriteCurrentBounceSoA(outputQueue, elementCount, rayIndex, input.currentBounce + 1);
+
+		// outputQueue[rayIndex].ray.origin = input.position;
+		// outputQueue[rayIndex].ray.direction = scatterRec.direction;
+		// outputQueue[rayIndex].pixel = pixel;
+		// outputQueue[rayIndex].throughputColor = throughputColor;
+		// outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
 
 	}
 `, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit, pcgCycleState, constants ] );
@@ -82,9 +94,9 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 export const traceRay = wgslFn( /* wgsl */`
 
 	fn traceRay(
-		inputQueue: ptr<storage, array<RayQueueElement>, read>,
+		inputQueue: ptr<storage, array<u32>, read>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
-		escapedQueue: ptr<storage, array<RayQueueElement>, read_write>,
+		escapedQueue: ptr<storage, array<u32>, read_write>,
 		outputQueue: ptr<storage, array<HitResultQueueElement>, read_write>,
 
 		geom_position: ptr<storage, array<vec3f>, read>,
@@ -99,27 +111,44 @@ export const traceRay = wgslFn( /* wgsl */`
 			return;
 		}
 
-		let input = inputQueue[globalId.x];
+		// let input = inputQueue[globalId.x];
 
-		let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, input.ray );
+		let elementCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
+
+		let origin = rayQueueExtractOriginSoA(inputQueue, elementCount, globalId.x);
+		let direction = rayQueueExtractDirectionSoA(inputQueue, elementCount, globalId.x);
+		let ray = Ray(origin, direction);
+		let pixel = rayQueueExtractPixelSoA(inputQueue, elementCount, globalId.x);
+		let throughputColor = rayQueueExtractThroughputSoA(inputQueue, elementCount, globalId.x);
+		let currentBounce = rayQueueExtractCurrentBounceSoA(inputQueue, elementCount, globalId.x);
+
+		let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 
 		if ( hitResult.didHit ) {
 
 			let index = atomicAdd(&queueSizes[1], 1);
-			outputQueue[index].view = - input.ray.direction;
+			outputQueue[index].view = - ray.direction;
 			outputQueue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
 			outputQueue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-			outputQueue[index].pixel_x = input.pixel.x;
-			outputQueue[index].pixel_y = input.pixel.y;
 			outputQueue[index].vertexIndex = hitResult.indices.x;
-			outputQueue[index].throughputColor = input.throughputColor;
-			outputQueue[index].currentBounce = input.currentBounce;
+
+			outputQueue[index].pixel_x = pixel.x;
+			outputQueue[index].pixel_y = pixel.y;
+
+			outputQueue[index].throughputColor = throughputColor;
+
+			outputQueue[index].currentBounce = currentBounce;
 			// outputQueue[index].materialIndex = geom_material_index[hitResult.indices.x];
 
 		} else {
 
 			let index = atomicAdd(&queueSizes[2], 1);
-			escapedQueue[index] = input;
+			let escapedCount = arrayLength(escapedQueue) / RAY_ELEMENT_STRUCT_SIZE;
+			// rayQueueWriteOriginSoA(escapedQueue, escapedCount, index, origin);
+			// rayQueueWriteDirectionSoA(escapedQueue, escapedCount, index, direction);
+			rayQueueWriteThroughputSoA(escapedQueue, escapedCount, index, throughputColor);
+			rayQueueWritePixelSoA(escapedQueue, escapedCount, index, pixel);
+			// rayQueueWriteCurrentBounceSoA(escapedQueue, escapedCount, index, currentBounce);
 
 		}
 
@@ -132,7 +161,7 @@ export const escapedRay = wgslFn( /* wgsl */`
 
 	fn escapedRay(
 		resultBuffer: ptr<storage, array<vec4f>, read_write>,
-		inputQueue: ptr<storage, array<RayQueueElement>, read>,
+		inputQueue: ptr<storage, array<u32>, read>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 		sampleCountBuffer: ptr<storage, array<u32>, read_write>,
 
@@ -144,12 +173,16 @@ export const escapedRay = wgslFn( /* wgsl */`
 			return;
 		}
 
-		let current = inputQueue[globalId.x];
+		// let current = inputQueue[globalId.x];
+
+		let escapedCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
+		let throughputColor = rayQueueExtractThroughputSoA(inputQueue, escapedCount, globalId.x);
+		let pixel = rayQueueExtractPixelSoA(inputQueue, escapedCount, globalId.x);
 
 		let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
-		let resultColor = background * current.throughputColor;
+		let resultColor = background * throughputColor;
 
-		let offset = current.pixel.x + current.pixel.y * dimensions.x;
+		let offset = pixel.x + pixel.y * dimensions.x;
 
 		const accumulate: bool = true;
 
@@ -221,9 +254,8 @@ export const writeBsdfDispatchSize = wgslFn( /* wgsl */ `
 export const cleanQueues = wgslFn( /* wgsl */`
 	fn clean(
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
-		tileSize: vec2u,
 	) -> void {
-		atomicStore(&queueSizes[0], tileSize.x * tileSize.y);
+		atomicStore(&queueSizes[0], 0);
 		atomicStore(&queueSizes[1], 0);
 		atomicStore(&queueSizes[2], 0);
 	}
