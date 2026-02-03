@@ -1,7 +1,7 @@
 import { wgslFn, wgsl } from 'three/tsl';
 import { pcgRand, pcgRand2 } from './random.wgsl.js';
 import { scatterRecordStruct, surfaceRecordStruct, constants } from './structs.wgsl.js';
-import { intersectionResultStruct } from 'three-mesh-bvh/webgpu';
+import { getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
 
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
@@ -308,7 +308,15 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		return surf;
 	}
 
-`, [ inverseMat3x3Func, iorRatioToF0Func, applyFilteredGlossyFunc, getBasisFromNormalFunc, surfaceRecordStruct, intersectionResultStruct ] );
+`, [
+	inverseMat3x3Func,
+	iorRatioToF0Func,
+	applyFilteredGlossyFunc,
+	getBasisFromNormalFunc,
+	getVertexAttribute,
+	surfaceRecordStruct,
+	intersectionResultStruct
+] );
 
 // The GGX functions provide sampling and distribution information for normals as output so
 // in order to get probability of scatter direction the half vector must be computed and provided.

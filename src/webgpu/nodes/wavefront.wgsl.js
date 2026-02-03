@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
-import { ndcToCameraRay, bvhIntersectFirstHit, constants as bvhConstants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
+import { ndcToCameraRay, bvhIntersectFirstHit, constants as bvhConstants, getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
 import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, constants } from './structs.wgsl';
-import { lambertBsdfFunc } from './sampling.wgsl';
+import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from './sampling.wgsl';
 import { pcgInit, pcgCycleState } from './random.wgsl';
 
 export const generateRays = wgslFn( /* wgsl */ `
@@ -48,6 +48,7 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 
 		geom_material_index: ptr<storage, array<u32>, read>,
+		normals: ptr<storage, array<vec3f>, read>,
 		materials: ptr<storage, array<Material>, read>,
 		seed: u32,
 
@@ -66,11 +67,27 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 
 		var record: ScatterRecord;
 
-		let material = materials[ geom_material_index[ input.vertexIndex ] ];
+		let material = materials[ geom_material_index[ input.indices.x ] ];
 
-		let scatterRec = bsdfSample(input.normal, input.view);
+		let hit = IntersectionResult(
+			true,
+			vec4u( input.indices, 0 ),
+			input.normal,
+			input.barycoord,
+			input.side,
+			input.dist
+		);
+		let surf = getSurfaceRecord( material, hit, normals, normals );
 
-		let throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
+		let scatterRec = bsdfSample( input.view, surf );
+
+		if ( scatterRec.pdf <= 0 ) {
+
+			return;
+
+		}
+
+		let throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 
 		let rayIndex = atomicAdd(&queueSizes[0], 1);
 
@@ -89,7 +106,17 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		// outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
 
 	}
-`, [ lambertBsdfFunc, hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, pcgInit, pcgCycleState, constants ] );
+`, [
+	pbrtBsdfFunc,
+	hitResultQueueElementStruct,
+	rayQueueElementStruct,
+	materialStruct,
+	intersectionResultStruct,
+	pcgInit,
+	pcgCycleState,
+	getSurfaceRecordFunc,
+	constants
+] );
 
 export const traceRay = wgslFn( /* wgsl */`
 
@@ -128,9 +155,12 @@ export const traceRay = wgslFn( /* wgsl */`
 
 			let index = atomicAdd(&queueSizes[1], 1);
 			outputQueue[index].view = - ray.direction;
-			outputQueue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
-			outputQueue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-			outputQueue[index].vertexIndex = hitResult.indices.x;
+			outputQueue[index].normal = hitResult.normal; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
+			outputQueue[index].position = origin + direction * hitResult.dist; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
+			outputQueue[index].indices = hitResult.indices.xyz;
+			outputQueue[index].side = hitResult.side;
+			outputQueue[index].barycoord = hitResult.barycoord;
+			outputQueue[index].dist = hitResult.dist;
 
 			outputQueue[index].pixel_x = pixel.x;
 			outputQueue[index].pixel_y = pixel.y;
@@ -154,7 +184,13 @@ export const traceRay = wgslFn( /* wgsl */`
 
 	}
 
-`, [ hitResultQueueElementStruct, rayQueueElementStruct, getVertexAttribute, bvhIntersectFirstHit, bvhConstants ] );
+`, [
+	hitResultQueueElementStruct,
+	rayQueueElementStruct,
+	getVertexAttribute,
+	bvhIntersectFirstHit,
+	bvhConstants
+] );
 
 // WARN: this kernel assumes only one ray per pixel at one time is possible
 export const escapedRay = wgslFn( /* wgsl */`

@@ -337,6 +337,7 @@ export class PathTracerCore {
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
+			normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
 			materials: storage( this.geometry.materials, 'Material' ).toReadOnly(),
 			seed: uniform( 0 ),
 

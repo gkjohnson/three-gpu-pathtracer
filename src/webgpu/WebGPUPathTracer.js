@@ -85,11 +85,11 @@ export class WebGPUPathTracer {
 
 	// }
 
-	// get tiles() {
+	get tiles() {
 
-	// 	return this._pathTracer.tiles;
+		return this._pathTracer.tiles;
 
-	// }
+	}
 
 	// get stableNoise() {
 
@@ -124,8 +124,6 @@ export class WebGPUPathTracer {
 		this._queueReset = false;
 		this._clock = new Clock();
 		this._compilePromise = null;
-
-		this.tiles = new Vector2();
 
 		// this._lowResPathTracer = new PathTracingRenderer( renderer );
 		// this._lowResPathTracer.tiles.set( 1, 1 );

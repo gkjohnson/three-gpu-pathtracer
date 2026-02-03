@@ -350,14 +350,17 @@ export const rayQueueElementStruct = wgsl( /* wgsl */ `
 
 export const hitResultQueueElementStruct = wgsl( /* wgsl */`
 	struct HitResultQueueElement {
-		normal: vec3f,
-		pixel_x: u32,
-		position: vec3f,
+		indices: vec3u,
 		pixel_y: u32,
 		view: vec3f,
 		currentBounce: u32,
 		throughputColor: vec3f,
-		vertexIndex: u32,
+		pixel_x: u32,
+		normal: vec3f,
+		side: f32,
+		barycoord: vec3f,
+		dist: f32,
+		position: vec3f,
 	};
 ` );
 
