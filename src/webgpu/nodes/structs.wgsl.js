@@ -13,6 +13,8 @@ export const constants = wgsl( /* wgsl */ `
 		// TODO: expose modification of this value
 		const filterGlossyFactor: f32 = 0.5;
 
+		const EPSILON: f32 = 1e-5;
+
 ` );
 
 export const scatterRecordStruct = wgsl( /* wgsl */ `

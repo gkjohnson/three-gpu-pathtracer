@@ -1,5 +1,5 @@
 import { wgslFn, wgsl } from 'three/tsl';
-import { pcgRand2 } from './random.wgsl.js';
+import { pcgRand, pcgRand2 } from './random.wgsl.js';
 import { scatterRecordStruct, surfaceRecordStruct, constants } from './structs.wgsl.js';
 import { intersectionResultStruct } from 'three-mesh-bvh/webgpu';
 
@@ -138,7 +138,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		let uv = getVertexAttribute( surfaceHit.barycoord, surfaceHit.indices.xyz, uvs ).xy;
 
 		var normal = surfaceHit.normal * surfaceHit.side;
-		if ( material.flatShading == 1 ) {
+		if ( material.flatShading == 0 ) {
 
 			normal = getVertexAttribute( surfaceHit.barycoord, surfaceHit.indices.xyz, normals );
 
@@ -310,6 +310,12 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 `, [ inverseMat3x3Func, iorRatioToF0Func, applyFilteredGlossyFunc, getBasisFromNormalFunc, surfaceRecordStruct, intersectionResultStruct ] );
 
+// The GGX functions provide sampling and distribution information for normals as output so
+// in order to get probability of scatter direction the half vector must be computed and provided.
+// [0] https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
+// [1] https://hal.archives-ouvertes.fr/hal-01509746/document
+// [2] http://jcgt.org/published/0007/04/01/
+// [4] http://jcgt.org/published/0003/02/03/
 export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
 	fn ggxDirection( incidentDir: vec3f, roughness: vec2f, uv: vec2f ) -> vec3f {
@@ -368,6 +374,86 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
+// Below are PDF and related functions for use in a Monte Carlo path tracer
+// as specified in Appendix B of the following paper
+// See equation (34) from reference [0]
+export const ggxLamdaFunc = wgslFn( /* wgsl */ `
+
+	fn ggxLamda( theta: f32, roughness: f32 ) -> f32 {
+
+		let tanTheta = tan( theta );
+		let tanTheta2 = tanTheta * tanTheta;
+		let alpha2 = roughness * roughness;
+
+		let numerator = - 1.0 + sqrt( 1.0 + alpha2 * tanTheta2 );
+		return numerator / 2.0;
+
+	}
+
+` );
+
+// See equation (34) from reference [0]
+export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
+
+	fn ggxShadowMaskG1( theta: f32, roughness: f32 ) -> f32 {
+
+		return 1.0 / ( 1.0 + ggxLamda( theta, roughness ) );
+
+	}
+
+`, [ ggxLamdaFunc ] );
+
+// See equation (125) from reference [4]
+export const ggxShadowMaskG2Func = wgslFn( /* wgsl */ `
+
+	fn ggxShadowMaskG2( wi: vec3f, wo: vec3f, roughness: f32 ) -> f32 {
+
+		let incidentTheta = acos( wi.z );
+		let scatterTheta = acos( wo.z );
+		return 1.0 / ( 1.0 + ggxLamda( incidentTheta, roughness ) + ggxLamda( scatterTheta, roughness ) );
+
+	}
+
+`, [ ggxLamdaFunc ] );
+
+
+// See equation (33) from reference [0]
+export const ggxDistributionFunc = wgslFn( /* wgsl */ `
+	fn ggxDistribution( halfVector: vec3f, roughness: f32 ) -> f32 {
+
+		var a2 = roughness * roughness;
+		a2 = max( EPSILON, a2 );
+		let cosTheta = halfVector.z;
+		let cosTheta4 = pow( cosTheta, 4.0 );
+
+		if ( cosTheta == 0.0 ) {
+			return 0.0;
+		}
+
+		let theta = acos( clamp( halfVector.z, -1.0, 1.0 ) );
+		let tanTheta = tan( theta );
+		let tanTheta2 = pow( tanTheta, 2.0 );
+
+		let denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
+		return ( a2 / denom );
+
+	}
+`, );
+
+
+// See equation (3) from reference [2]
+export const ggxPDFFunc = wgslFn( /* wgsl */ `
+	fn ggxPDF( wi: vec3f, halfVector: vec3f, roughness: f32 ) -> f32 {
+
+		let incidentTheta = acos( wi.z );
+		let D = ggxDistribution( halfVector, roughness );
+		let G1 = ggxShadowMaskG1( incidentTheta, roughness );
+
+		return D * G1 * max( 0.0, dot( wi, halfVector ) ) / wi.z;
+
+	}
+`, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );
+
 export const squareFunc = wgslFn( /* wgsl */ `
 
 	fn square( value: f32 ) -> f32 {
@@ -376,9 +462,17 @@ export const squareFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+export const squareVecFunc = wgslFn( /* wgsl */ `
+
+	fn squareVec( value: vec3f ) -> vec3f {
+		return value * value;
+	}
+
+` );
+
 // ior is a value between 1.0 and 3.0. 1.0 is air interface
 export const iorToFresnel0Func = wgslFn( /* wgsl */ `
-	fn iorToFresnel0( transmittedIor: f32, incidentIor: f32 ) {
+	fn iorToFresnel0( transmittedIor: f32, incidentIor: f32 ) -> f32 {
 
 		return square( ( transmittedIor - incidentIor ) / ( transmittedIor + incidentIor ) );
 
@@ -386,17 +480,38 @@ export const iorToFresnel0Func = wgslFn( /* wgsl */ `
 
 `, [ squareFunc ] );
 
+export const iorToFresnel0VecFunc = wgslFn( /* wgsl */ `
+
+	fn iorToFresnel0Vec( transmittedIor: vec3f, incidentIor: f32 ) -> vec3f {
+
+		return squareVec( ( transmittedIor - vec3f( incidentIor ) ) / ( transmittedIor + vec3f( incidentIor ) ) );
+
+	}
+
+`, [ squareVecFunc ] );
+
+export const fresnel0ToIorFunc = wgslFn( /* wgsl */ `
+
+	fn fresnel0ToIor( fresnel0: vec3f ) -> vec3f {
+
+		let sqrtF0 = sqrt( fresnel0 );
+		return ( vec3( 1.0 ) + sqrtF0 ) / ( vec3( 1.0 ) - sqrtF0 );
+
+	}
+
+` );
+
 // Fresnel equations for dielectric/dielectric interfaces. See https://belcour.github.io/blog/research/2017/05/01/brdf-thin-film.html
-export const evalSencitivityFunc = wgslFn( /* wgsl */ `
+export const evalSensitivityFunc = wgslFn( /* wgsl */ `
 	fn evalSensitivity( OPD: f32, shift: vec3f ) -> vec3f {
 
 		let phase = 2.0 * PI * OPD * 1.0e-9;
 
 		let val = vec3f( 5.4856e-13, 4.4201e-13, 5.2481e-13 );
 		let pos = vec3f( 1.6810e+06, 1.7953e+06, 2.2084e+06 );
-		let var = vec3f( 4.3278e+09, 9.3046e+09, 6.6121e+09 );
+		let _var = vec3f( 4.3278e+09, 9.3046e+09, 6.6121e+09 );
 
-		let xyz = val * sqrt( 2.0 * PI * var ) * cos( pos * phase + shift ) * exp( - square( phase ) * var );
+		var xyz = val * sqrt( 2.0 * PI * _var ) * cos( pos * phase + shift ) * exp( - square( phase ) * _var );
 		xyz.x += 9.7470e-14 * sqrt( 2.0 * PI * 4.5282e+09 ) * cos( 2.2399e+06 * phase + shift[ 0 ] ) * exp( - 4.5282e+09 * square( phase ) );
 		xyz /= 1.0685e-7;
 
@@ -409,7 +524,17 @@ export const evalSencitivityFunc = wgslFn( /* wgsl */ `
 
 export const schlickFresnelFunc = wgslFn( /* wgsl */ `
 
-	fn schlickFresnel( cosine: f32, f0: f32, f90: f32 ) -> f32 {
+	fn schlickFresnel( cosine: f32, f0: f32 ) -> f32 {
+
+		return f0 + ( 1.0 - f0 ) * pow( 1.0 - cosine, 5.0 );
+
+	}
+
+` );
+
+export const schlickFresnelVecFunc = wgslFn( /* wgsl */ `
+
+	fn schlickFresnelVec( cosine: f32, f0: vec3f, f90: vec3f ) -> vec3f {
 
 		return f0 + ( f90 - f0 ) * pow( 1.0 - cosine, 5.0 );
 
@@ -444,7 +569,7 @@ export const evaluateIridescenceFunc = wgslFn( /* wgsl */ `
 
 		// First interface
 		let R0 = iorToFresnel0( iridescenceIor, outsideIOR );
-		let R12 = schlickFresnel( cosTheta1, R0, 1.0 );
+		let R12 = schlickFresnel( cosTheta1, R0 );
 		let R21 = R12;
 		let T121 = 1.0 - R12;
 		var phi12 = 0.0;
@@ -457,9 +582,9 @@ export const evaluateIridescenceFunc = wgslFn( /* wgsl */ `
 		let phi21 = PI - phi12;
 
 		// Second interface
-		let baseIOR = fresnel0ToIor( clamp( baseF0, 0.0, 0.9999 ) ); // guard against 1.0
-		let R1 = iorToFresnel0( baseIOR, iridescenceIor );
-		let R23 = schlickFresnel( cosTheta2, R1, 1.0 );
+		let baseIOR = fresnel0ToIor( clamp( baseF0, vec3f( 0.0 ), vec3f( 0.9999 ) ) ); // guard against 1.0
+		let R1 = iorToFresnel0Vec( baseIOR, iridescenceIor );
+		let R23 = schlickFresnelVec( cosTheta2, R1, vec3f( 1.0 ) );
 		var phi23 = vec3f( 0.0 );
 		if ( baseIOR[0] < iridescenceIor ) {
 
@@ -484,7 +609,7 @@ export const evaluateIridescenceFunc = wgslFn( /* wgsl */ `
 		let phi = vec3( phi21 ) + phi23;
 
 		// Compound terms
-		let R123 = clamp( R12 * R23, 1e-5, 0.9999 );
+		let R123 = clamp( R12 * R23, vec3f( 1e-5 ), vec3f( 0.9999 ) );
 		let r123 = sqrt( R123 );
 		let Rs = square( T121 ) * R23 / ( vec3( 1.0 ) - R123 );
 
@@ -494,7 +619,7 @@ export const evaluateIridescenceFunc = wgslFn( /* wgsl */ `
 
 		// Reflectance term for m > 0 (pairs of diracs)
 		var Cm = Rs - T121;
-		for ( var m = 1; m <= 2; ++ m ) {
+		for ( var m = 1; m <= 2; m += 1 ) {
 
 			Cm *= r123;
 			let Sm = 2.0 * evalSensitivity( f32( m ) * OPD, f32( m ) * phi );
@@ -507,7 +632,7 @@ export const evaluateIridescenceFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ squareFunc, schlickFresnelFunc, constants ] );
+`, [ squareFunc, schlickFresnelFunc, schlickFresnelVecFunc, constants, iorToFresnel0Func, iorToFresnel0VecFunc, fresnel0ToIorFunc, evalSensitivityFunc ] );
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -577,7 +702,7 @@ export const disneyFresnelFunc = wgslFn( /* wgsl */ `
 
 		let dotHL = dot( wi, wh );
 		let dielectricFresnel = dielectricFresnel( abs( dotHV ), eta );
-		let metallicFresnel = schlickFresnel( dotHL, f0, 1.0 );
+		let metallicFresnel = schlickFresnel( dotHL, f0 );
 
 		return mix( dielectricFresnel, metallicFresnel, metalness );
 
@@ -594,8 +719,8 @@ export const diffuseEvalFunc = wgslFn( /* wgsl */ `
 	) -> f32 {
 
 		// https://schuttejoe.github.io/post/disneybsdf/
-		let fl = schlickFresnel( wi.z, 0.0, 1.0 );
-		let fv = schlickFresnel( wo.z, 0.0, 1.0 );
+		let fl = schlickFresnel( wi.z, 0.0);
+		let fv = schlickFresnel( wo.z, 0.0);
 
 		let metalFactor = ( 1.0 - surf.metalness );
 		let transFactor = ( 1.0 - surf.transmission );
@@ -635,7 +760,7 @@ export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 		if ( totalInternalReflection( cosTheta, eta ) ) {
 
-			return f90
+			return f90;
 
 		}
 
@@ -678,7 +803,7 @@ export const specularEvalFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ evaluateFresnelFunc ] );
+`, [ evaluateFresnelFunc, evaluateIridescenceFunc, ggxShadowMaskG1Func, ggxShadowMaskG2Func, ggxDistributionFunc ] );
 
 export const specularDirectionFunc = wgslFn( /* wgsl */ `
 
@@ -726,7 +851,7 @@ export const transmissionEvalFunc = wgslFn( /* wgsl */ `
 		let f0 = surf.f0;
 		let cosTheta = min( wo.z, 1.0 );
 		let sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
-		let reflectance = schlickFresnel( cosTheta, f0, 1.0 );
+		let reflectance = schlickFresnel( cosTheta, f0);
 		let cannotRefract = eta * sinTheta > 1.0;
 		if ( cannotRefract ) {
 
@@ -777,20 +902,47 @@ export const clearcoatDirectionFunc = wgslFn( /* wgsl */ `
 
 `, [ ggxDirectionFunc, surfaceRecordStruct ] );
 
+export const clearcoatEvalFunc = wgslFn( /* wgsl */ `
+	fn clearcoatEval( wo: vec3f, wi: vec3f, wh: vec3f, surf: SurfaceRecord, color: ptr<function, vec3f> ) -> f32 {
+
+		let ior = 1.5;
+		let f0 = iorRatioToF0( ior );
+		let frontFace = surf.frontFace;
+		let roughness = surf.filteredClearcoatRoughness;
+
+		var eta = ior;
+		if ( frontFace ) {
+			eta = 1.0 / ior;
+		}
+		let G = ggxShadowMaskG2( wi, wo, roughness );
+		let D = ggxDistribution( wh, roughness );
+		let F = schlickFresnel( dot( wi, wh ), f0 );
+
+		let fClearcoat = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
+		*color = *color * ( 1.0 - surf.clearcoat * F ) + fClearcoat * surf.clearcoat * wi.z;
+
+		// PDF
+		// See equation (27) in http://jcgt.org/published/0003/02/03/
+		return ggxPDF( wo, wh, roughness ) / ( 4.0 * dot( wi, wh ) );
+
+	}
+
+`, [ ggxShadowMaskG2Func, ggxShadowMaskG1Func, schlickFresnelFunc, ggxPDFFunc, iorRatioToF0Func ] );
+
 export const lobeWeightsStruct = wgsl( /* wgsl */ `
 
 	struct LobeWeights {
-		diffuse: f32;
-		specular: f32;
-		transmission: f32;
-		clearcoat: f32;
+		diffuse: f32,
+		specular: f32,
+		transmission: f32,
+		clearcoat: f32,
 	};
 
 ` );
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	LobeWeights getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, clearcoatWo: vec3f, surf: SurfaceRecord) {
+	fn getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, clearcoatWo: vec3f, surf: SurfaceRecord) -> LobeWeights {
 
 		let metalness = surf.metalness;
 		let transmission = surf.transmission;
@@ -804,7 +956,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
 		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
 		weights.transmission = transmission * ( 1.0 - transSpecularProb );
-		weights.clearcoat = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04, 1.0 );
+		weights.clearcoat = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
 
 		let totalWeight = weights.diffuse + weights.specular + weights.transmission + weights.clearcoat;
 		weights.diffuse /= totalWeight;
@@ -812,7 +964,8 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.transmission /= totalWeight;
 		weights.clearcoat /= totalWeight;
 
-		return weights
+		return weights;
+
 	}
 
 `, [ disneyFresnelFunc, schlickFresnelFunc ] );
@@ -857,9 +1010,7 @@ export const directionalAlbedoSheenFunc = wgslFn( /* wgsl */ `
 
 	fn directionalAlbedoSheen( cosTheta: f32, alpha: f32 ) -> f32 {
 
-		cosTheta = saturate( cosTheta );
-
-		let c = 1.0 - cosTheta;
+		let c = 1.0 - saturate( cosTheta );
 		let c3 = c * c * c;
 
 		return 0.65584461 * c3 + 1.0 / ( 4.16526551 + exp( -7.97291361 * sqrt( alpha ) + 6.33516894 ) );
@@ -915,8 +1066,8 @@ export const velvetParamsInterpolateFunc = wgslFn( /* wgsl */ `
 
 	fn velvetParamsInterpolate( i: i32, oneMinusAlphaSquared: f32 ) -> f32 {
 
-		const p0[5] = f32[5]( 25.3245, 3.32435, 0.16801, -1.27393, -4.85967 );
-		const p1[5] = f32[5]( 21.5473, 3.82987, 0.19823, -1.97760, -4.32054 );
+		const p0 = array<f32, 5>( 25.3245, 3.32435, 0.16801, -1.27393, -4.85967 );
+		const p1 = array<f32, 5>( 21.5473, 3.82987, 0.19823, -1.97760, -4.32054 );
 
 		return mix( p1[i], p0[i], oneMinusAlphaSquared );
 
@@ -986,7 +1137,7 @@ export const sheenColorFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ saturateCosFunc ] );
+`, [ saturateCosFunc, velvetDFunc, velvetGFunc ] );
 
 export const bsdfEvalFunc = wgslFn( /* wgsl */ `
 
@@ -1009,27 +1160,27 @@ export const bsdfEvalFunc = wgslFn( /* wgsl */ `
 		let halfVector = getRefractionHalfVector( wi, wo, surf.eta );
 
 		// diffuse
-		if ( diffuseWeight > 0.0 && wi.z > 0.0 ) {
+		if ( weights.diffuse > 0.0 && wi.z > 0.0 ) {
 
-			dpdf = diffuseEval( wo, wi, halfVector, surf, color );
+			dpdf = diffuseEval( wo, wi, halfVector, surf, &result.color );
 			result.color *= 1.0 - surf.transmission;
 
 		}
 
 		// ggx specular
-		if ( specularWeight > 0.0 && wi.z > 0.0 ) {
+		if ( weights.specular > 0.0 && wi.z > 0.0 ) {
 
 			let reflectanceHalfVector = getHalfVector( wi, wo );
-			var outColor;
+			var outColor: vec3f;
 			spdf = specularEval( wo, wi, reflectanceHalfVector, surf, &outColor );
-			color += outColor;
+			result.color += outColor;
 
 		}
 
 		// transmission
-		if ( transmissionWeight > 0.0 && wi.z < 0.0 ) {
+		if ( weights.transmission > 0.0 && wi.z < 0.0 ) {
 
-			tpdf = transmissionEval( wo, wi, halfVector, surf, &color );
+			tpdf = transmissionEval( wo, wi, halfVector, surf, &result.color );
 
 		}
 
@@ -1038,27 +1189,38 @@ export const bsdfEvalFunc = wgslFn( /* wgsl */ `
 		result.color += sheenColor( wo, wi, halfVector, surf ) * surf.sheen;
 
 		// clearcoat
-		if ( clearcoatWi.z >= 0.0 && clearcoatWeight > 0.0 ) {
+		if ( clearcoatWi.z >= 0.0 && weights.clearcoat > 0.0 ) {
 
 			let clearcoatHalfVector = getHalfVector( clearcoatWo, clearcoatWi );
-			cpdf = clearcoatEval( clearcoatWo, clearcoatWi, clearcoatHalfVector, surf, color );
+			cpdf = clearcoatEval( clearcoatWo, clearcoatWi, clearcoatHalfVector, surf, &result.color );
 
 		}
 
 		result.pdf =
-			dpdf * diffuseWeight
-			+ spdf * specularWeight
-			+ tpdf * transmissionWeight
-			+ cpdf * clearcoatWeight;
+			dpdf * weights.diffuse
+			+ spdf * weights.specular
+			+ tpdf * weights.transmission
+			+ cpdf * weights.clearcoat;
 
 		// retrieve specular rays for the shadows flag
-		result.specularPdf = spdf * specularWeight + cpdf * clearcoatWeight;
+		result.specularPdf = spdf * weights.specular + cpdf * weights.clearcoat;
 
-		return pdf;
+		return result;
 
 	}
 
-`, [ getRefractionHalfVectorFunc, getHalfVectorFunc, diffuseEvalFunc, transmissionEvalFunc, specularEvalFunc, sheenAlbedoScalingFunc ] );
+`, [
+	getRefractionHalfVectorFunc,
+	getHalfVectorFunc,
+	diffuseEvalFunc,
+	transmissionEvalFunc,
+	specularEvalFunc,
+	clearcoatEvalFunc,
+	sheenAlbedoScalingFunc,
+	sheenColorFunc,
+	lobeWeightsStruct,
+	scatterRecordStruct
+] );
 
 export const pbrtBsdfFunc = wgslFn( /* wgsl */`
 
@@ -1136,7 +1298,17 @@ export const pbrtBsdfFunc = wgslFn( /* wgsl */`
 
 	}
 
-`, [ constants, diffuseDirectionFunc, specularDirectionFunc, transmissionDirectionFunc, clearcoatDirectionFunc, bsdfEvalFunc ] );
+`, [
+	constants,
+	diffuseDirectionFunc,
+	specularDirectionFunc,
+	transmissionDirectionFunc,
+	clearcoatDirectionFunc,
+	bsdfEvalFunc,
+	getLobeWeightsFunc,
+	pcgRand,
+	lobeWeightsStruct
+] );
 
 // const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 // 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {

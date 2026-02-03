@@ -12,7 +12,7 @@ export const resetResultFn = wgslFn( /* wgsl */ `
 
 		let offset = globalId.x + globalId.y * dimensions.x;
 		sample_count_buffer[offset] = 0;
-		resultBuffer[offset] = vec4f(0.0);
+		resultBuffer[offset] = vec4f(0.0, 0.0, 0.0, 1.0);
 
 	}
 

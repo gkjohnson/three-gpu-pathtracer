@@ -53,3 +53,10 @@ export const pcgRand2 = wgslFn( /*wgsl*/`
 		return abs( vec2f(g_state.s0.xy) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
+
+export const pcgRand = wgslFn( /*wgsl*/`
+	fn pcgRand() -> f32 {
+		pcg4d(&g_state.s0);
+		return abs( f32( g_state.s0.x ) / f32(0xffffffffu) );
+	}
+`, [ pcg4d, pcgStateStruct ] );

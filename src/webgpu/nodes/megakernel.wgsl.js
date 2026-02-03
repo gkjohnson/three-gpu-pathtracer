@@ -68,6 +68,12 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 				// 	break;
 				// }
 
+				if ( scatterRec.pdf <= 0.0 ) { // || ! isDirectionValid( scatterRec.direction, surf.normal, surf.faceNormal ) ) {
+
+					break;
+
+				}
+
 				throughputColor *= scatterRec.color / scatterRec.pdf;
 
 				ray.origin = ray.origin + ray.direction * hitResult.dist;
