@@ -13,9 +13,9 @@
 			#info {
 				position: absolute;
 				bottom: 0;
-				left: 0;
+				left: 1020px;
 				font-family: 'Courier New', Courier, monospace;
-				color: white;
+				color: black;
 				pointer-events: none;
 			}
 
@@ -36,11 +36,22 @@
 				max-height: 200px;
 				z-index: 1000;
 			}
+
+			#histogram {
+				position: fixed;
+				bottom: 0;
+				left: 510;
+				max-width: 500px;
+				max-height: 200px;
+				z-index: 1000;
+			}
 		</style>
 
 	</head>
 	<body>
 		<canvas id="corner-canvas" width="200" height="300"></canvas>
+		<canvas id="histogram" width="200" height="300"></canvas>
+		<p id="info">Sample text</p>
 		<script src="./webgpu_primitives.js" type="module"></script>
 	</body>
 </html>

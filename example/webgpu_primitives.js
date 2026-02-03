@@ -86,10 +86,103 @@ window.addEventListener( 'resize', onResize );
 
 // const samplesEl = document.getElementById( 'samples' );
 const canvasEl = document.getElementById( 'corner-canvas' );
+const samplesEl = document.getElementById( 'info' );
 const timestamps = [];
 const labels = [];
 
 const chart = new Chart( canvasEl, { type: 'line', data: { labels, datasets: [ { animation: false, label: 'Sample time', data: timestamps } ] } } );
+
+const sortedTimestamps = [];
+const histogramLabels = [];
+const histogramBins = [];
+const histogram = new Chart( document.getElementById( 'histogram' ), {
+	type: 'bar',
+	data: {
+		labels: histogramLabels,
+		datasets: [ {
+			label: 'Frequency',
+			data: histogramBins,
+			backgroundColor: 'rgba(54, 162, 235, 0.7)',
+			borderColor: 'rgba(54, 162, 235, 1)',
+			borderWidth: 1,
+			barPercentage: 1.0,
+			categoryPercentage: 1.0
+		} ]
+	},
+	options: {
+		responsive: true,
+		plugins: { legend: { display: false } },
+		scales: {
+			x: { title: { display: true, text: 'Value Ranges' }, grid: { display: false } },
+			y: { title: { display: true, text: 'Frequency' }, beginAtZero: true }
+		}
+	}
+} );
+
+function sortedInsert( array, number ) {
+
+	let l = 0;
+	let r = array.length;
+	while ( r - l > 0 ) {
+
+		const m = Math.floor( ( r + l ) / 2 );
+		if ( array[ m ] > number ) {
+
+			r = m;
+
+		} else {
+
+			l = m + 1;
+
+		}
+
+	}
+
+	const pos = l;
+
+	array.length += 1;
+
+	for ( let i = array.length - 2; i >= pos; i -= 1 ) {
+
+		array[ i + 1 ] = array[ i ];
+
+	}
+
+	array[ pos ] = number;
+
+}
+
+function updateHistogram( sortedData, binCount ) {
+
+	const min = sortedData[ 0 ];
+	const max = sortedData[ sortedData.length - 1 ];
+	const binSize = ( max - min ) / binCount;
+
+	histogramLabels.length = 0;
+
+	for ( let i = 0; i < binCount; i ++ ) {
+
+		const binStart = min + ( i * binSize );
+		const binEnd = binStart + binSize;
+		histogramLabels.push( `${binStart.toFixed( 4 )}-${binEnd.toFixed( 4 )}` );
+
+	}
+
+	histogramBins.length = binCount;
+	for ( let i = 0; i < binCount; i += 1 ) {
+
+		histogramBins[ i ] = 0;
+
+	}
+
+	for ( const value of sortedData ) {
+
+		const binIndex = Math.min( Math.floor( ( value - min ) / binSize ), binCount - 1 );
+		histogramBins[ binIndex ] ++;
+
+	}
+
+}
 
 async function handleTimestamp() {
 
@@ -99,18 +192,35 @@ async function handleTimestamp() {
 	timestamps[ samples - 1 ] = timestamp;
 	labels.length = samples;
 	labels[ samples - 1 ] = samples;
+
 	chart.update();
 
-	// let totalTime = 0;
-	// for ( const t of timestamps ) {
-	//
-	// 	totalTime += t;
-	//
-	// }
-	//
-	// const avgTime = totalTime / timestamps.length;
-	//
-	// samplesEl.innerText = `Rendering ${samples} samples took ${totalTime.toFixed( 6 )}ms (${avgTime.toFixed( 6 )}ms on average)`;
+	sortedTimestamps.length = Math.max( samples - 1, 0 );
+	if ( samples > 0 ) {
+
+		sortedInsert( sortedTimestamps, timestamp );
+
+	}
+
+	updateHistogram( sortedTimestamps, 32 );
+	histogram.update();
+
+	let totalTime = 0;
+	for ( const t of timestamps ) {
+
+		totalTime += t;
+
+	}
+
+	const avgTime = totalTime / timestamps.length;
+	const medianTime = sortedTimestamps[ Math.floor( sortedTimestamps.length / 2 ) ];
+
+	 samplesEl.innerText = `
+			Rendered ${samples} samples
+			Total: ${totalTime.toFixed( 6 )}ms
+			Average: ${avgTime.toFixed( 6 )}ms
+			Median: ${medianTime?.toFixed( 6 )}ms
+	`;
 
 }
 
