@@ -57,7 +57,7 @@ function* renderTask() {
 
 }
 
-export class MegaKernelCore {
+export class MegaKernelPathTracer {
 
 	constructor( renderer ) {
 
@@ -126,6 +126,7 @@ export class MegaKernelCore {
 	setCamera( camera ) {
 
 		this.camera = camera;
+		this.reset();
 
 	}
 
@@ -158,6 +159,7 @@ export class MegaKernelCore {
 
 		target.x = this.outputTarget.width;
 		target.y = this.outputTarget.height;
+
 		return target;
 
 	}

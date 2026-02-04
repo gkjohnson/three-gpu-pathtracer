@@ -3,7 +3,7 @@ import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { PathTracerCore } from './PathTracerCore.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
-import { MegaKernelCore } from './MegaKernelCore.js';
+import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
@@ -31,7 +31,7 @@ export class WebGPUPathTracer {
 		// members
 		this._renderer = renderer;
 		this._generator = new PathTracingSceneGenerator();
-		this._pathTracer = new MegaKernelCore( renderer );// new PathTracerCore( renderer );
+		this._pathTracer = new MegaKernelPathTracer( renderer );// new PathTracerCore( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
 
