@@ -36,6 +36,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		super( megakernelShader( megakernelShaderParams ) );
 
+		this.defineUniformAccessors( megakernelShaderParams );
+
 	}
 
 }

@@ -4,18 +4,6 @@ import { textureStore, wgslFn, globalId } from 'three/tsl';
 
 export class ZeroOutKernel extends ComputeKernel {
 
-	get target() {
-
-		return this._target.value;
-
-	}
-
-	set target( v ) {
-
-		this._target.value = v;
-
-	}
-
 	constructor( { textureType = 'rgba32float' } ) {
 
 		const params = {
@@ -37,7 +25,9 @@ export class ZeroOutKernel extends ComputeKernel {
 
 		super( fn );
 
-		this._target = params.outputTarget;
+		this.defineUniformAccessors( {
+			target: params.outputTarget,
+		} );
 
 	}
 

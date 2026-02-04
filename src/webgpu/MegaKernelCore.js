@@ -7,7 +7,7 @@ function* renderTask() {
 	const {
 		renderer,
 		camera,
-		megakernel,
+		kernel,
 		geometry,
 		bounces,
 
@@ -19,33 +19,32 @@ function* renderTask() {
 	camera.updateMatrixWorld();
 
 	// init parameters
-	const { parameters } = megakernel.computeNode;
-	parameters.outputTarget.value = outputTarget;
-	parameters.sampleCountTarget.value = sampleCountTarget;
+	kernel.outputTarget = outputTarget;
+	kernel.sampleCountTarget = sampleCountTarget;
 
-	parameters.geom_index.value = geometry.index;
-	parameters.geom_position.value = geometry.position;
-	parameters.geom_normals.value = geometry.normal;
-	parameters.geom_material_index.value = geometry.materialIndex;
-	parameters.bvh.value = geometry.bvh;
-	parameters.materials.value = geometry.materials;
+	kernel.geom_index = geometry.index;
+	kernel.geom_position = geometry.position;
+	kernel.geom_normals = geometry.normal;
+	kernel.geom_material_index = geometry.materialIndex;
+	kernel.bvh = geometry.bvh;
+	kernel.materials = geometry.materials;
 
-	parameters.bounces.value = bounces;
-	parameters.inverseProjectionMatrix.value.copy( camera.projectionMatrixInverse );
-	parameters.cameraToModelMatrix.value.copy( camera.matrixWorld );
+	kernel.bounces = bounces;
+	kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
+	kernel.cameraToModelMatrix.copy( camera.matrixWorld );
 
 	while ( true ) {
 
-		const tileSize = this.getTileSize( parameters.tileSize.value );
-		const dispatchSize = megakernel.getDispatchSize( tileSize.x, tileSize.y );
-		parameters.seed.value += 1;
+		const tileSize = this.getTileSize( kernel.tileSize );
+		const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
+		kernel.seed += 1;
 
 		for ( let x = 0; x < tiles.x; x ++ ) {
 
 			for ( let y = 0; y < tiles.y; y ++ ) {
 
-				parameters.offset.value.set( x, y ).multiply( tileSize );
-				renderer.compute( megakernel.kernel, dispatchSize );
+				kernel.offset.set( x, y ).multiply( tileSize );
+				renderer.compute( kernel.kernel, dispatchSize );
 				yield;
 
 			}
@@ -60,23 +59,18 @@ function* renderTask() {
 
 export class MegaKernelCore {
 
-	get megakernelParams() {
-
-		return this.megakernel.computeNode.parameters;
-
-	}
-
 	constructor( renderer ) {
 
 		this.camera = null;
 		this.renderer = renderer;
 		this._task = null;
 
+		// options
 		this.samples = 0;
 		this.bounces = 7;
-
 		this.tiles = new Vector2( 2, 2 );
 
+		// geometry fields
 		this.geometry = {
 			bvh: new StorageBufferAttribute(),
 			index: new StorageBufferAttribute(),
@@ -87,6 +81,7 @@ export class MegaKernelCore {
 			materials: new StorageBufferAttribute(),
 		};
 
+		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
 		this.outputTarget.type = FloatType;
@@ -101,10 +96,10 @@ export class MegaKernelCore {
 		this.sampleCountTarget.name = 'Sample Count';
 		this.sampleCountTarget.generateMipmaps = false;
 
+		// kernels
+		this.kernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
-
-		this.megakernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
 
 	}
 
@@ -190,9 +185,6 @@ export class MegaKernelCore {
 
 	reset() {
 
-		this.samples = 0;
-		this._task = null;
-
 		const {
 			renderer,
 			sampleCountClearKernel,
@@ -200,6 +192,16 @@ export class MegaKernelCore {
 			sampleCountTarget,
 			outputTarget,
 		} = this;
+
+		if ( ! renderer.initialized ) {
+
+			return;
+
+		}
+
+		this.samples = 0;
+		this._task = null;
+
 
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );

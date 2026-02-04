@@ -20,6 +20,38 @@ export class ComputeKernel {
 
 	}
 
+	defineUniformAccessors( parameters ) {
+
+		for ( const key in parameters ) {
+
+			if ( key in this ) {
+
+				throw new Error( `ComputeNode: Uniform name ${ key } is already defined.` );
+
+			}
+
+			const node = parameters[ key ];
+			if ( 'value' in node ) {
+
+				Object.defineProperty( this, key, {
+					get() {
+
+						return parameters[ key ].value;
+
+					},
+					set( v ) {
+
+						parameters[ key ].value = v;
+
+					},
+				} );
+
+			}
+
+		}
+
+	}
+
 	setFn( fn ) {
 
 		this._fn = fn;
