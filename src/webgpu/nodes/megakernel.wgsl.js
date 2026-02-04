@@ -4,7 +4,7 @@ import { pcgRand3, pcgInit } from './random.wgsl.js';
 import { lambertBsdfFunc } from './sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 
-export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
+export const megakernelShader = wgslFn( /* wgsl */`
 
 	fn compute(
 		resultBuffer: ptr<storage, array<vec4f>, read_write>,
@@ -24,6 +24,7 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		bvh: ptr<storage, array<BVHNode>, read>,
 
 		materials: ptr<storage, array<Material>, read>,
+		bounces: u32,
 
 		globalId: vec3u,
 	) -> void {
@@ -42,7 +43,6 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		// TODO: sample a random ray
 		var ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
-		const bounces: u32 = ${bounces};
 		var resultColor = vec3f( 0.0 );
 		var throughputColor = vec3f( 1.0 );
 		var sampleCount = 0u;

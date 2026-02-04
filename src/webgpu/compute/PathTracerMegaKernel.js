@@ -1,51 +1,40 @@
 import { ComputeKernel } from './ComputeKernel.js';
-import { IndirectStorageBufferAttribute, StorageBufferAttribute, Matrix4, Vector2, TimestampQuery } from 'three/webgpu';
+import { StorageBufferAttribute, Matrix4, Vector2 } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import megakernelShader from '../nodes/megakernel.wgsl.js';
-import resetResultFn from '../nodes/reset.wgsl.js';
-import {
-	generateRays, traceRay, bsdfEval, escapedRay, cleanQueues,
-	writeTraceRayDispatchSize, writeBsdfDispatchSize, writeEscapedRayDispatchSize,
-} from '../nodes/wavefront.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( bounces, options ) {
-
-		const {
-			geometry = null,
-			dimensions = null,
-			sampleCountBuffer = null,
-			resultBuffer = null,
-		} = options;
+	constructor() {
 
 		const megakernelShaderParams = {
-			resultBuffer: storage( resultBuffer, 'vec4' ),
+			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
 			offset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
-			dimensions: uniform( dimensions ),
-			sample_count_buffer: storage( sampleCountBuffer, 'u32' ),
+			dimensions: uniform( new Vector2() ),
+			sample_count_buffer: storage( new StorageBufferAttribute(), 'u32' ),
 			smoothNormals: uniform( 1 ),
 			seed: uniform( 0 ),
+			bounces: uniform( 5 ),
 
 			// transforms
 			inverseProjectionMatrix: uniform( new Matrix4() ),
 			cameraToModelMatrix: uniform( new Matrix4() ),
 
 			// bvh and geometry definition
-			geom_index: storage( geometry.index, 'uvec3' ).toReadOnly(),
-			geom_position: storage( geometry.position, 'vec3' ).toReadOnly(),
-			geom_normals: storage( geometry.normal, 'vec3' ).toReadOnly(),
-			geom_material_index: storage( geometry.materialIndex, 'u32' ).toReadOnly(),
-			bvh: storage( geometry.bvh, 'BVHNode' ).toReadOnly(),
+			geom_index: storage( new StorageBufferAttribute(), 'uvec3' ).toReadOnly(),
+			geom_position: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
+			geom_normals: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
+			geom_material_index: storage( new StorageBufferAttribute(), 'u32' ).toReadOnly(),
+			bvh: storage( new StorageBufferAttribute(), 'BVHNode' ).toReadOnly(),
 
-			materials: storage( geometry.materials, 'Material' ).toReadOnly(),
+			materials: storage( new StorageBufferAttribute(), 'Material' ).toReadOnly(),
 
 			// compute variables
 			globalId: globalId,
 		};
 
-		super( megakernelShader( bounces )( megakernelShaderParams ) );
+		super( megakernelShader( megakernelShaderParams ) );
 
 	}
 
