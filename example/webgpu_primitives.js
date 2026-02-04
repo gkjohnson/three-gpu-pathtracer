@@ -60,12 +60,12 @@ camera.lookAt( 0, 0, 0 );
 const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
-renderer.setDrawingBufferSize( 1920, 1080, 1 );
+renderer.setSize( 1920, 1080 );
+renderer.setPixelRatio( window.devicePixelRatio );
 
 const settings = getScaledSettings();
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.renderScale = settings.renderScale;
-pathTracer.tiles.setScalar( settings.tiles );
 pathTracer.setScene( scene, camera );
 pathTracer.useMegakernel( options.useMegakernel );
 

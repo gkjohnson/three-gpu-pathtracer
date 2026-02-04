@@ -1,45 +1,11 @@
-import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock, NormalBlending, NoBlending, AdditiveBlending, NodeMaterial } from 'three/webgpu';
-import { storage, uniform, wgslFn, uv, varying, positionGeometry } from 'three/tsl';
+import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock } from 'three/webgpu';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { GradientEquirectTexture } from '../textures/GradientEquirectTexture.js';
-import { getIesTextures, getLights, getTextures } from '../core/utils/sceneUpdateUtils.js';
-import { ClampedInterpolationMaterial } from '../materials/fullscreen/ClampedInterpolationMaterial.js';
-import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathTracerCore } from './PathTracerCore.js';
-
-// function supportsFloatBlending( renderer ) {
-
-// 	return renderer.extensions.get( 'EXT_float_blend' );
-
-// }
+import { RenderToScreenNodeMaterial } from './RenderToScreenMaterial.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
-
-	// get multipleImportanceSampling() {
-
-	// 	return Boolean( this._pathTracer.material.defines.FEATURE_MIS );
-
-	// }
-
-	// set multipleImportanceSampling( v ) {
-
-	// 	this._pathTracer.material.setDefine( 'FEATURE_MIS', v ? 1 : 0 );
-
-	// }
-
-	// get transmissiveBounces() {
-
-	// 	return this._pathTracer.material.transmissiveBounces;
-
-	// }
-
-	// set transmissiveBounces( v ) {
-
-	// 	this._pathTracer.material.transmissiveBounces = v;
-
-	// }
 
 	get bounces() {
 
@@ -50,54 +16,6 @@ export class WebGPUPathTracer {
 	set bounces( v ) {
 
 		this._pathTracer.material.bounces = v;
-
-	}
-
-	// get filterGlossyFactor() {
-
-	// 	return this._pathTracer.material.filterGlossyFactor;
-
-	// }
-
-	// set filterGlossyFactor( v ) {
-
-	// 	this._pathTracer.material.filterGlossyFactor = v;
-
-	// }
-
-	// get samples() {
-
-	// 	return this._pathTracer.samples;
-
-	// }
-
-	// get target() {
-
-	// 	return this._pathTracer.target;
-
-	// }
-
-	// get tiles() {
-
-	// 	return this._pathTracer.tiles;
-
-	// }
-
-	// get stableNoise() {
-
-	// 	return this._pathTracer.stableNoise;
-
-	// }
-
-	// set stableNoise( v ) {
-
-	// 	this._pathTracer.stableNoise = v;
-
-	// }
-
-	get isCompiling() {
-
-		return Boolean( this._pathTracer.isCompiling );
 
 	}
 
@@ -115,117 +33,19 @@ export class WebGPUPathTracer {
 		this._pathTracer = new PathTracerCore( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
-		this._compilePromise = null;
-
-		this.tiles = new Vector2();
-
-		// this._lowResPathTracer = new PathTracingRenderer( renderer );
-		// this._lowResPathTracer.tiles.set( 1, 1 );
-		// this._quad = new FullScreenQuad( new ClampedInterpolationMaterial( {
-		// 	map: null,
-		// 	transparent: true,
-		// 	blending: NoBlending,
-
-		// 	premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-		// } ) );
-		this._materials = null;
-
-		this._previousEnvironment = null;
-		this._previousBackground = null;
-		this._internalBackground = null;
 
 		// options
-		this.renderDelay = 100;
-		this.minSamples = 5;
-		this.fadeDuration = 500;
-		this.enablePathTracing = true;
-		this.pausePathTracing = false;
-		this.dynamicLowRes = false;
-		this.lowResScale = 0.25;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
-		this.rasterizeScene = true;
 		this.renderToCanvas = true;
-		this.textureSize = new Vector2( 1024, 1024 );
-		this.rasterizeSceneCallback = ( scene, camera ) => {
-
-			this._renderer.render( scene, camera );
-
-		};
-
-		const blitMaterial = new NodeMaterial();
-		const fragmentShaderParams = {
-			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
-			dimensions: uniform( new Vector2() ),
-			uv: varying( uv() ),
-		};
-
-		// TODO: Apply gamma correction?
-		this.blitFragmentShader = wgslFn( /* wgsl */ `
-			fn blit(
-				resultBuffer: ptr<storage, array<vec4f>, read>,
-				dimensions: vec2u,
-				uv: vec2f,
-			) -> vec4f {
-				let x = min(u32( uv.x * f32(dimensions.x) ), dimensions.x - 1);
-				let y = min(u32( uv.y * f32(dimensions.y) ), dimensions.y - 1);
-				let offset = x + y * dimensions.x;
-				return resultBuffer[offset];
-			}
-		` );
-
-		blitMaterial.fragmentNode = this.blitFragmentShader( fragmentShaderParams );
-
-		const vertexShaderParams = {
-			position: positionGeometry,
-		};
-		const fullScreenQuadVertex = wgslFn( /* wgsl */ `
-			fn noop(position: vec4f) -> vec4f {
-				return position;
-			}
-		` );
-		blitMaterial.vertexNode = fullScreenQuadVertex( vertexShaderParams );
-
-		const blitQuad = new FullScreenQuad( blitMaterial );
-
-		this.renderToCanvasCallback = ( finalBuffer, renderer, quad ) => {
-
-			const blitBuffer = blitQuad.material.fragmentNode.parameters.resultBuffer.value;
-			if ( blitBuffer !== finalBuffer ) {
-
-				const fragmentShaderParams = {
-					resultBuffer: storage( finalBuffer, 'vec4' ),
-					dimensions: uniform( new Vector2() ),
-					uv: varying( uv() ),
-				};
-
-				blitMaterial.fragmentNode = this.blitFragmentShader( fragmentShaderParams );
-
-			}
-
-			const dimensions = blitQuad.material.fragmentNode.parameters.dimensions.value;
-			this._renderer.getSize( dimensions );
-			blitQuad.render( renderer );
-
-			// const currentAutoClear = renderer.autoClear;
-			// renderer.autoClear = false;
-			// quad.render( renderer );
-			// renderer.autoClear = currentAutoClear;
-
-		};
+		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
 
-	setBVHWorker( worker ) {
-
-		this._generator.setBVHWorker( worker );
-
-	}
-
-	setScene( scene, camera, options = {} ) {
+	setScene( scene, camera ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
@@ -233,30 +53,8 @@ export class WebGPUPathTracer {
 		const generator = this._generator;
 		generator.setObjects( scene );
 
-		if ( this._buildAsync ) {
-
-			return generator.generateAsync( options.onProgress ).then( result => {
-
-				return this._updateFromResults( scene, camera, result );
-
-			} );
-
-		} else {
-
-			const result = generator.generate();
-			return this._updateFromResults( scene, camera, result );
-
-		}
-
-	}
-
-	setSceneAsync( ...args ) {
-
-		this._buildAsync = true;
-		const result = this.setScene( ...args );
-		this._buildAsync = false;
-
-		return result;
+		const result = generator.generate();
+		return this._updateFromResults( scene, camera, result );
 
 	}
 
@@ -273,20 +71,7 @@ export class WebGPUPathTracer {
 		camera.updateMatrixWorld();
 
 		this._pathTracer.setCamera( camera );
-		// this._lowResPathTracer.setCamera( camera );
 		this.reset();
-
-	}
-
-	updateMaterials() {
-
-	}
-
-	updateLights() {
-
-	}
-
-	updateEnvironment() {
 
 	}
 
@@ -374,14 +159,12 @@ export class WebGPUPathTracer {
 		}
 
 		this._updateScale();
-
 		this._pathTracer.update();
 
-		this.renderToCanvasCallback( this._pathTracer.getResultBuffer(), this._renderer );
-
-	}
-
-	reset() {
+		const blitQuad = this._blitQuad;
+		blitQuad.material.resultBuffer = this._pathTracer.getResultBuffer();
+		this._renderer.getSize( blitQuad.material.dimensions );
+		blitQuad.render( this._renderer );
 
 	}
 
