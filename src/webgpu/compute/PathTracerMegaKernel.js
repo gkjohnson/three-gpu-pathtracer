@@ -1,6 +1,6 @@
+import { StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { StorageBufferAttribute, Matrix4, Vector2 } from 'three/webgpu';
-import { uniform, storage, globalId } from 'three/tsl';
+import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import megakernelShader from '../nodes/megakernel.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -9,10 +9,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const megakernelShaderParams = {
 			resultBuffer: storage( new StorageBufferAttribute(), 'vec4' ),
+			sampleCountBuffer: storage( new StorageBufferAttribute(), 'u32' ),
+
+			resultBuffer2: textureStore( new StorageTexture( 1, 1 ), 'vec4' ).toReadWrite(),
+			sampleCountBuffer2: textureStore( new StorageTexture( 1, 1 ), 'u32' ).toReadWrite(),
+
 			offset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
 			dimensions: uniform( new Vector2() ),
-			sample_count_buffer: storage( new StorageBufferAttribute(), 'u32' ),
 			smoothNormals: uniform( 1 ),
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),

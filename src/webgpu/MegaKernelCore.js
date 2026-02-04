@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 
 function* renderTask() {
@@ -14,11 +14,17 @@ function* renderTask() {
 		geometry,
 		dimensions,
 		bounces,
+
+		resultBuffer2,
+		sampleCountBuffer2,
 	} = this;
 
 	const { parameters } = megakernel.computeNode;
 	parameters.resultBuffer.value = resultBuffer;
-	parameters.sample_count_buffer.value = sampleCountBuffer;
+	parameters.sampleCountBuffer.value = sampleCountBuffer;
+
+	parameters.resultBuffer2.value = resultBuffer2;
+	parameters.sampleCountBuffer2.value = sampleCountBuffer2;
 
 	parameters.geom_index.value = geometry.index;
 	parameters.geom_position.value = geometry.position;
@@ -94,6 +100,15 @@ export class MegaKernelCore {
 
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
 		this.sampleCountBuffer.name = 'Sample Count';
+
+		this.resultBuffer2 = new StorageTexture( 1, 1, );
+		this.resultBuffer2.format = RGBAFormat;
+		this.resultBuffer2.type = FloatType;
+		this.resultBuffer2.magFilter = LinearFilter;
+
+		this.sampleCountBuffer2 = new StorageTexture( 1, 1, );
+		this.sampleCountBuffer2.format = RedIntegerFormat;
+		this.sampleCountBuffer2.type = UnsignedIntType;
 
 		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
 		this.createMegakernel();

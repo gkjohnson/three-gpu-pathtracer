@@ -27,6 +27,11 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		bounces: u32,
 
 		globalId: vec3u,
+
+
+		resultBuffer2: texture_storage_2d<rgba32float, read_write>,
+		sampleCountBuffer2: texture_storage_2d<r32uint, read_write>,
+
 	) -> void {
 		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
 			return;
@@ -46,6 +51,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		var resultColor = vec3f( 0.0 );
 		var throughputColor = vec3f( 1.0 );
 		var sampleCount = 0u;
+
 		// TODO: fix shadow acne? RTIOW says we could just ignore ray hits that are too close
 		for (var bounce = 0u; bounce < bounces; bounce++) {
 			let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
@@ -97,14 +103,20 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 		let prevColor = resultBuffer[index];
 		if ( accumulate ) {
-			let prevSampleCount = sampleCountBuffer[index];
+			let prevSampleCount = textureLoad( sampleCountBuffer2, indexUV ).r;// sampleCountBuffer[index];
 			let newSampleCount = prevSampleCount + sampleCount;
 			sampleCountBuffer[index] = newSampleCount;
+			textureStore( sampleCountBuffer2, indexUV, vec4( newSampleCount ) );
 
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
 			resultBuffer[index] = vec4f( newColor, 1.0 );
+			textureStore( resultBuffer2, indexUV, vec4f( newColor, 1.0 ) );
 		} else {
-			resultBuffer[index] = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
+
+			let color = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
+			resultBuffer[index] = color;
+			textureStore( resultBuffer2, indexUV, color );
+
 		}
 
 	}
