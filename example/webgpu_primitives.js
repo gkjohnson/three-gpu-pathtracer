@@ -100,6 +100,12 @@ function animate() {
 
 function onResize() {
 
+	if ( ! renderer.initialized ) {
+
+		return;
+
+	}
+
 	// update rendering resolution
 	const w = window.innerWidth;
 	const h = window.innerHeight;

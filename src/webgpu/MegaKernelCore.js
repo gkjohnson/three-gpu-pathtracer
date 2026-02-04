@@ -190,10 +190,7 @@ export class MegaKernelCore {
 
 	reset() {
 
-		this.megakernelParams.seed.value = 0;
-
 		this.samples = 0;
-		this.currentTile = 0;
 		this._task = null;
 
 		const {
