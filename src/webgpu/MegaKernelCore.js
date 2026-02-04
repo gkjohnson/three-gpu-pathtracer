@@ -118,16 +118,8 @@ export class MegaKernelCore {
 
 			}
 
-			try {
-
-				this.renderer.destroyAttribute( prop );
-
-			} catch ( e ) {
-
-				console.error( 'Failed to destroy geometry attribute. Pbbly because it did not have a gpu buffer' );
-
-			}
-
+			// TODO: cannot dispose at the moment
+			// prop.dispose();
 			this.geometry[ propName ] = geometry[ propName ];
 
 		}
@@ -157,17 +149,9 @@ export class MegaKernelCore {
 		this.bufferCount = ( this.bufferCount ?? 0 ) + 1;
 		this.dimensions.set( w, h );
 
-		try {
-
-			this.renderer.destroyAttribute( this.resultBuffer );
-			this.renderer.destroyAttribute( this.sampleCountBuffer );
-
-		} catch ( e ) {
-
-			console.log( 'Failed to destroy result buffer. Pbbly there was no gpu buffer for it' );
-
-		}
-
+		// TODO: cannot dispose StorageBufferAttribute at the moment
+		// this.sampleCountBuffer.dispose();
+		// this.resultBuffer.dispose();
 		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 * w * h ) );
 		this.resultBuffer.name = `Result Image #${this.bufferCount}`;
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );

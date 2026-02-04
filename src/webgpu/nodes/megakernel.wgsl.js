@@ -15,7 +15,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		inverseProjectionMatrix: mat4x4f,
 		cameraToModelMatrix: mat4x4f,
 		seed: u32,
-		sample_count_buffer: ptr<storage, array<u32>, read_write>,
+		sampleCountBuffer: ptr<storage, array<u32>, read_write>,
 
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
@@ -97,9 +97,9 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 		let prevColor = resultBuffer[index];
 		if ( accumulate ) {
-			let prevSampleCount = sample_count_buffer[index];
+			let prevSampleCount = sampleCountBuffer[index];
 			let newSampleCount = prevSampleCount + sampleCount;
-			sample_count_buffer[index] = newSampleCount;
+			sampleCountBuffer[index] = newSampleCount;
 
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
 			resultBuffer[index] = vec4f( newColor, 1.0 );
