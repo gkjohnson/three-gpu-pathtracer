@@ -35,29 +35,31 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 	) -> void {
 
-		// TODO: this needs to early out only if it's beyond the extends of the buffer
-		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
-			return;
-		}
-
 		// to screen coordinates
 		let indexUV = offset + globalId.xy;
 		let targetDimensions = textureDimensions( outputTarget );
+		if ( indexUV.x >= targetDimensions.x || indexUV.y >= targetDimensions.y ) {
+
+			return;
+
+		}
+
 		let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 
-		pcgInitialize(indexUV, seed);
+		pcgInitialize( indexUV, seed );
 
 		// scene ray
-		// TODO: sample a random ray
-		var ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
+		// TODO: jittering the ray by [-1, 1] seems to look better but is larger than a pixel?
+		var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
+		var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 
 		var resultColor = vec3f( 0.0 );
 		var throughputColor = vec3f( 1.0 );
-		var sampleCount = 0u;
 
 		// TODO: fix shadow acne? RTIOW says we could just ignore ray hits that are too close
-		for (var bounce = 0u; bounce < bounces; bounce++) {
+		for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
+
 			let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 
 			// write result
@@ -73,7 +75,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 				let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
 				let hitNormal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
 
-				let scatterRec = bsdfEval(hitNormal, - ray.direction);
+				let scatterRec = bsdfEval( hitNormal, - ray.direction );
 				// let scatterRec = bsdfEval(hitResult.normal, - ray.direction);
 				// TODO: fix shadow acne
 				// if (bounce == 1) {
@@ -89,36 +91,20 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 			} else {
 
-				let background = ( vec3f( 0.5 ) );
+				let background = vec3f( 0.5 );
 				resultColor += background * throughputColor;
-				sampleCount += 1;
 				break;
+
 			}
 
 		}
 
-		if ( sampleCount == 0 ) {
-			return;
-		}
+		let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
+		var color = textureLoad( outputTarget, indexUV ).xyz;
+		color += ( resultColor - color.xyz ) / f32( sampleCount );
 
-		const accumulate: bool = true;
-
-		let index = indexUV.x + indexUV.y * targetDimensions.x;
-
-		let prevColor = textureLoad( outputTarget, indexUV );
-		if ( accumulate ) {
-			let prevSampleCount = textureLoad( sampleCountTarget, indexUV ).r;
-			let newSampleCount = prevSampleCount + sampleCount;
-			textureStore( sampleCountTarget, indexUV, vec4( newSampleCount ) );
-
-			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-			textureStore( outputTarget, indexUV, vec4( newColor, 1.0 ) );
-		} else {
-
-			let color = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
-			textureStore( outputTarget, indexUV, color );
-
-		}
+		textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
+		textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
 
 	}
 `, [ ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );

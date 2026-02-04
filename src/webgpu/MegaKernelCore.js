@@ -4,8 +4,6 @@ import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 function* renderTask() {
 
-	const tileSize = this.getTileSize( new Vector2() );
-
 	const {
 		renderer,
 		camera,
@@ -20,6 +18,7 @@ function* renderTask() {
 
 	camera.updateMatrixWorld();
 
+	// init parameters
 	const { parameters } = megakernel.computeNode;
 	parameters.outputTarget.value = outputTarget;
 	parameters.sampleCountTarget.value = sampleCountTarget;
@@ -32,27 +31,28 @@ function* renderTask() {
 	parameters.materials.value = geometry.materials;
 
 	parameters.bounces.value = bounces;
-	parameters.seed.value += 1;
 	parameters.inverseProjectionMatrix.value.copy( camera.projectionMatrixInverse );
 	parameters.cameraToModelMatrix.value.copy( camera.matrixWorld );
-	parameters.tileSize.value.copy( tileSize );
 
-	const dispatchSize = megakernel.getDispatchSize( tileSize.x, tileSize.y );
-	let iterations = 0;
 	while ( true ) {
 
-		// TODO: iterate over all tiles here in addition to reading and updating settings
+		const tileSize = this.getTileSize( parameters.tileSize.value );
+		const dispatchSize = megakernel.getDispatchSize( tileSize.x, tileSize.y );
+		parameters.seed.value += 1;
 
-		const currentTile = iterations % ( tiles.x * tiles.y );
-		parameters.offset.value.set(
-			( currentTile % tiles.x ),
-			Math.floor( currentTile / tiles.x ),
-		).multiply( tileSize );
+		for ( let x = 0; x < tiles.x; x ++ ) {
 
-		renderer.compute( megakernel.kernel, dispatchSize );
+			for ( let y = 0; y < tiles.y; y ++ ) {
+
+				parameters.offset.value.set( x, y ).multiply( tileSize );
+				renderer.compute( megakernel.kernel, dispatchSize );
+				yield;
+
+			}
+
+		}
+
 		this.samples ++;
-		iterations ++;
-		yield;
 
 	}
 
@@ -76,8 +76,6 @@ export class MegaKernelCore {
 		this.bounces = 7;
 
 		this.tiles = new Vector2( 2, 2 );
-		this.tileSize = new Vector2();
-		this.currentTile = 0;
 
 		this.geometry = {
 			bvh: new StorageBufferAttribute(),
@@ -225,19 +223,6 @@ export class MegaKernelCore {
 
 		}
 
-		const tileSize = this.getTileSize( new Vector2() );
-		const currentTileVec = new Vector2(
-			this.currentTile % this.tiles.x,
-			Math.floor( this.currentTile / this.tiles.x )
-		);
-		const offset = currentTileVec.multiply( tileSize );
-
-		this.megakernelParams.seed.value += 1;
-		this.megakernelParams.offset.value.copy( offset );
-		this.megakernelParams.tileSize.value.copy( tileSize );
-		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
-		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
-
 		if ( ! this._task ) {
 
 			this._task = renderTask.call( this );
@@ -245,8 +230,6 @@ export class MegaKernelCore {
 		}
 
 		this._task.next();
-
-		this.currentTile = ( this.currentTile + 1 ) % ( this.tiles.x * this.tiles.y );
 
 	}
 
