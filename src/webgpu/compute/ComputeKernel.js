@@ -24,6 +24,7 @@ export class ComputeKernel {
 
 		this._fn = fn;
 		this.setWorkgroupSize( ...this._workGroupSize );
+		return this;
 
 	}
 
@@ -31,6 +32,7 @@ export class ComputeKernel {
 
 		this._workGroupSize = [ x, y, z ];
 		this.kernel = this._fn.computeKernel( [ x, y, z ] );
+		return this;
 
 	}
 

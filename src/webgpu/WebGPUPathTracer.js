@@ -2,7 +2,7 @@ import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { PathTracerCore } from './PathTracerCore.js';
-import { RenderToScreenNodeMaterial } from './RenderToScreenMaterial.js';
+import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
@@ -74,6 +74,8 @@ export class WebGPUPathTracer {
 		this.reset();
 
 	}
+
+	reset() {}
 
 	_updateFromResults( scene, camera, results ) {
 
