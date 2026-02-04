@@ -13,7 +13,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			offset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
-			dimensions: uniform( new Vector2() ),
 			smoothNormals: uniform( 1 ),
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),

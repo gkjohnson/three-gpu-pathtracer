@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 
 function* renderTask() {
@@ -10,7 +10,6 @@ function* renderTask() {
 		renderer,
 		WORKGROUP_SIZE,
 		geometry,
-		dimensions,
 		bounces,
 
 		outputTarget,
@@ -28,11 +27,11 @@ function* renderTask() {
 	parameters.bvh.value = geometry.bvh;
 	parameters.materials.value = geometry.materials;
 
-	parameters.dimensions.value.copy( dimensions );
 	parameters.bounces.value = bounces;
 
 	while ( true ) {
 
+		// TODO: iterate over all tiles here in addition to reading and updating settings
 		this.getTileSize( tileSize );
 
 		renderer.info.reset();
@@ -78,8 +77,6 @@ export class MegaKernelCore {
 		this.tileSize = new Vector2();
 		this.currentTile = 0;
 
-		this.dimensions = new Vector2();
-
 		this.geometry = {
 			bvh: new StorageBufferAttribute(),
 			index: new StorageBufferAttribute(),
@@ -94,12 +91,15 @@ export class MegaKernelCore {
 		this.outputTarget.format = RGBAFormat;
 		this.outputTarget.type = FloatType;
 		this.outputTarget.magFilter = LinearFilter;
+		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
 		this.outputTarget.name = 'Output';
+		this.outputTarget.generateMipmaps = false;
 
 		this.sampleCountTarget = new StorageTexture( 1, 1, );
 		this.sampleCountTarget.format = RedIntegerFormat;
 		this.sampleCountTarget.type = UnsignedIntType;
 		this.sampleCountTarget.name = 'Sample Count';
+		this.sampleCountTarget.generateMipmaps = false;
 
 		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
 		this.createMegakernel();
@@ -140,20 +140,21 @@ export class MegaKernelCore {
 
 	setSize( w, h ) {
 
-		w = 1920;
-		h = 1080;
-
 		w = Math.ceil( w );
 		h = Math.ceil( h );
 
-		if ( this.dimensions.x === w && this.dimensions.y === h ) {
+		const { width, height } = this.outputTarget;
+		if ( width === w && height === h ) {
 
 			return;
 
 		}
 
-		this.bufferCount = ( this.bufferCount ?? 0 ) + 1;
-		this.dimensions.set( w, h );
+		this.outputTarget.dispose();
+		this.sampleCountTarget.dispose();
+
+		this.outputTarget = this.outputTarget.clone();
+		this.sampleCountTarget = this.sampleCountTarget.clone();
 
 		this.outputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
@@ -164,7 +165,9 @@ export class MegaKernelCore {
 
 	getSize( target ) {
 
-		target.copy( this.dimensions );
+		target.x = this.outputTarget.width;
+		target.y = this.outputTarget.height;
+		return target;
 
 	}
 
@@ -176,7 +179,7 @@ export class MegaKernelCore {
 
 	getTileSize( target ) {
 
-		target.copy( this.dimensions ).divide( this.tiles ).ceil();
+		this.getSize( target ).divide( this.tiles ).ceil();
 
 		return target;
 
@@ -217,7 +220,6 @@ export class MegaKernelCore {
 		this.megakernelParams.seed.value += 1;
 		this.megakernelParams.offset.value.copy( offset );
 		this.megakernelParams.tileSize.value.copy( tileSize );
-		this.megakernelParams.dimensions.value.copy( this.dimensions );
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
 

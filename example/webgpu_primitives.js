@@ -1,11 +1,10 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Chart from 'chart.js/auto';
 
 const options = {
-	useMegakernel: false,
+	useMegakernel: true,
 };
 
 // init scene, renderer, camera, controls, etc
@@ -57,15 +56,13 @@ const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
-renderer.setSize( 1920, 1080 );
-renderer.setPixelRatio( window.devicePixelRatio );
+renderer.setSize( innerWidth, innerHeight );
+renderer.setPixelRatio( devicePixelRatio );
 
-const settings = getScaledSettings();
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.renderScale = settings.renderScale;
 pathTracer.setScene( scene, camera );
 pathTracer.useMegakernel( options.useMegakernel );
 
@@ -93,13 +90,13 @@ const chart = new Chart( canvasEl, { type: 'line', data: { labels, datasets: [ {
 
 async function handleTimestamp() {
 
-	const samples = pathTracer.getSampleCount();
-	const timestamp = await pathTracer.getLatestSampleTimestamp();
-	timestamps.length = samples;
-	timestamps[ samples - 1 ] = timestamp;
-	labels.length = samples;
-	labels[ samples - 1 ] = samples;
-	chart.update();
+	// const samples = pathTracer.getSampleCount();
+	// const timestamp = await pathTracer.getLatestSampleTimestamp();
+	// timestamps.length = samples;
+	// timestamps[ samples - 1 ] = timestamp;
+	// labels.length = samples;
+	// labels[ samples - 1 ] = samples;
+	// chart.update();
 
 	// let totalTime = 0;
 	// for ( const t of timestamps ) {
@@ -128,7 +125,6 @@ function animate() {
 
 function onResize() {
 
-	return;
 	// update rendering resolution
 	const w = window.innerWidth;
 	const h = window.innerHeight;
@@ -139,7 +135,5 @@ function onResize() {
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
-
-	pathTracer.setScene( scene, camera );
 
 }

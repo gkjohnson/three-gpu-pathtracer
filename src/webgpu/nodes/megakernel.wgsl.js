@@ -7,14 +7,24 @@ import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 export const megakernelShader = wgslFn( /* wgsl */`
 
 	fn compute(
+
+		// indices and target
+		globalId: vec3u,
+		outputTarget: texture_storage_2d<rgba32float, read_write>,
+		sampleCountTarget: texture_storage_2d<r32uint, read_write>,
+
+		// tiles
 		offset: vec2u,
 		tileSize: vec2u,
-		dimensions: vec2u,
+
+		// settings
 		smoothNormals: u32,
 		inverseProjectionMatrix: mat4x4f,
 		cameraToModelMatrix: mat4x4f,
 		seed: u32,
+		bounces: u32,
 
+		// scene
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
 		geom_normals: ptr<storage, array<vec3f>, read>,
@@ -22,22 +32,18 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		bvh: ptr<storage, array<BVHNode>, read>,
 
 		materials: ptr<storage, array<Material>, read>,
-		bounces: u32,
-
-		globalId: vec3u,
-
-
-		outputTarget: texture_storage_2d<rgba32float, read_write>,
-		sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 	) -> void {
+
+		// TODO: this needs to early out only if it's beyond the extends of the buffer
 		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
 			return;
 		}
 
 		// to screen coordinates
 		let indexUV = offset + globalId.xy;
-		let uv = vec2f( indexUV ) / vec2f( dimensions );
+		let targetDimensions = textureDimensions( outputTarget );
+		let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 
 		pcgInitialize(indexUV, seed);
@@ -83,7 +89,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 			} else {
 
-				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
+				let background = ( vec3f( 0.5 ) );
 				resultColor += background * throughputColor;
 				sampleCount += 1;
 				break;
@@ -97,7 +103,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 		const accumulate: bool = true;
 
-		let index = indexUV.x + indexUV.y * dimensions.x;
+		let index = indexUV.x + indexUV.y * targetDimensions.x;
 
 		let prevColor = textureLoad( outputTarget, indexUV );
 		if ( accumulate ) {
