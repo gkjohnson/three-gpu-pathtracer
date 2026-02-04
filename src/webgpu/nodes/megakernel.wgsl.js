@@ -7,7 +7,6 @@ import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 export const megakernelShader = wgslFn( /* wgsl */`
 
 	fn compute(
-		resultBuffer: ptr<storage, array<vec4f>, read_write>,
 		offset: vec2u,
 		tileSize: vec2u,
 		dimensions: vec2u,
@@ -15,7 +14,6 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		inverseProjectionMatrix: mat4x4f,
 		cameraToModelMatrix: mat4x4f,
 		seed: u32,
-		sampleCountBuffer: ptr<storage, array<u32>, read_write>,
 
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
@@ -29,8 +27,8 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		globalId: vec3u,
 
 
-		resultBuffer2: texture_storage_2d<rgba32float, read_write>,
-		sampleCountBuffer2: texture_storage_2d<r32uint, read_write>,
+		outputTarget: texture_storage_2d<rgba32float, read_write>,
+		sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 	) -> void {
 		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -101,21 +99,18 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 		let index = indexUV.x + indexUV.y * dimensions.x;
 
-		let prevColor = resultBuffer[index];
+		let prevColor = textureLoad( outputTarget, indexUV );
 		if ( accumulate ) {
-			let prevSampleCount = textureLoad( sampleCountBuffer2, indexUV ).r;// sampleCountBuffer[index];
+			let prevSampleCount = textureLoad( sampleCountTarget, indexUV ).r;
 			let newSampleCount = prevSampleCount + sampleCount;
-			sampleCountBuffer[index] = newSampleCount;
-			textureStore( sampleCountBuffer2, indexUV, vec4( newSampleCount ) );
+			textureStore( sampleCountTarget, indexUV, vec4( newSampleCount ) );
 
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-			resultBuffer[index] = vec4f( newColor, 1.0 );
-			textureStore( resultBuffer2, indexUV, vec4f( newColor, 1.0 ) );
+			textureStore( outputTarget, indexUV, vec4f( newColor, 1.0 ) );
 		} else {
 
 			let color = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
-			resultBuffer[index] = color;
-			textureStore( resultBuffer2, indexUV, color );
+			textureStore( outputTarget, indexUV, color );
 
 		}
 

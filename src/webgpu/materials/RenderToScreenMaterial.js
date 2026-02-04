@@ -1,7 +1,7 @@
-import { StorageBufferAttribute, Vector2, NodeMaterial } from 'three/webgpu';
-import { storage, uniform, wgslFn, uv, varying, positionGeometry } from 'three/tsl';
+import { StorageBufferAttribute, Vector2, MeshBasicNodeMaterial, SRGBColorSpace, StorageTexture } from 'three/webgpu';
+import { storage, uniform, uv, varying, colorSpaceToWorking, texture } from 'three/tsl';
 
-export class RenderToScreenNodeMaterial extends NodeMaterial {
+export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	get dimensions() {
 
@@ -21,12 +21,21 @@ export class RenderToScreenNodeMaterial extends NodeMaterial {
 
 	}
 
+	get texture() {
+
+		return this._texture.value;
+
+	}
+
+	set texture( v ) {
+
+		this._texture.value = v;
+
+	}
+
 	constructor( params ) {
 
 		super();
-
-		this._resultBufferUniform = storage( new StorageBufferAttribute(), 'vec4' );
-		this._dimensionsUniform = uniform( new Vector2() );
 
 		const fragmentShaderParams = {
 			resultBuffer: this._resultBufferUniform,
@@ -34,25 +43,13 @@ export class RenderToScreenNodeMaterial extends NodeMaterial {
 			uv: varying( uv() ),
 		};
 
-		this.vertexNode = wgslFn( /* wgsl */ `
-			fn noop(position: vec4f) -> vec4f {
-				return position;
-			}
-		` )( { position: positionGeometry } );
+		this._resultBufferUniform = storage( new StorageBufferAttribute(), 'vec4' );
+		this._dimensionsUniform = uniform( new Vector2() );
+		this._texture = texture( new StorageTexture(), fragmentShaderParams.uv );
 
-		// TODO: Apply gamma correction?
-		this.fragmentNode = wgslFn( /* wgsl */ `
-			fn blit(
-				resultBuffer: ptr<storage, array<vec4f>, read>,
-				dimensions: vec2u,
-				uv: vec2f,
-			) -> vec4f {
-				let x = min(u32( uv.x * f32(dimensions.x) ), dimensions.x - 1);
-				let y = min(u32( uv.y * f32(dimensions.y) ), dimensions.y - 1);
-				let offset = x + y * dimensions.x;
-				return resultBuffer[offset];
-			}
-		` )( fragmentShaderParams );
+		// TODO: Apply gamma correction
+		// this.colorNode = colorSpaceToWorking( this._texture, SRGBColorSpace );
+		this.colorNode = this._texture;
 
 		this.setValues( params );
 

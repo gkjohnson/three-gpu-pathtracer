@@ -9,22 +9,17 @@ function* renderTask() {
 		megakernel,
 		renderer,
 		WORKGROUP_SIZE,
-		resultBuffer,
-		sampleCountBuffer,
 		geometry,
 		dimensions,
 		bounces,
 
-		resultBuffer2,
-		sampleCountBuffer2,
+		outputTarget,
+		sampleCountTarget,
 	} = this;
 
 	const { parameters } = megakernel.computeNode;
-	parameters.resultBuffer.value = resultBuffer;
-	parameters.sampleCountBuffer.value = sampleCountBuffer;
-
-	parameters.resultBuffer2.value = resultBuffer2;
-	parameters.sampleCountBuffer2.value = sampleCountBuffer2;
+	parameters.outputTarget.value = outputTarget;
+	parameters.sampleCountTarget.value = sampleCountTarget;
 
 	parameters.geom_index.value = geometry.index;
 	parameters.geom_position.value = geometry.position;
@@ -95,20 +90,16 @@ export class MegaKernelCore {
 			materials: new StorageBufferAttribute(),
 		};
 
-		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
-		this.resultBuffer.name = 'Result Image #0';
+		this.outputTarget = new StorageTexture( 1, 1, );
+		this.outputTarget.format = RGBAFormat;
+		this.outputTarget.type = FloatType;
+		this.outputTarget.magFilter = LinearFilter;
+		this.outputTarget.name = 'Output';
 
-		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
-		this.sampleCountBuffer.name = 'Sample Count';
-
-		this.resultBuffer2 = new StorageTexture( 1, 1, );
-		this.resultBuffer2.format = RGBAFormat;
-		this.resultBuffer2.type = FloatType;
-		this.resultBuffer2.magFilter = LinearFilter;
-
-		this.sampleCountBuffer2 = new StorageTexture( 1, 1, );
-		this.sampleCountBuffer2.format = RedIntegerFormat;
-		this.sampleCountBuffer2.type = UnsignedIntType;
+		this.sampleCountTarget = new StorageTexture( 1, 1, );
+		this.sampleCountTarget.format = RedIntegerFormat;
+		this.sampleCountTarget.type = UnsignedIntType;
+		this.sampleCountTarget.name = 'Sample Count';
 
 		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
 		this.createMegakernel();
@@ -164,13 +155,8 @@ export class MegaKernelCore {
 		this.bufferCount = ( this.bufferCount ?? 0 ) + 1;
 		this.dimensions.set( w, h );
 
-		// TODO: cannot dispose StorageBufferAttribute at the moment
-		// this.sampleCountBuffer.dispose();
-		// this.resultBuffer.dispose();
-		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 * w * h ) );
-		this.resultBuffer.name = `Result Image #${this.bufferCount}`;
-		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );
-		this.sampleCountBuffer.name = 'Sample Counts';
+		this.outputTarget.setSize( w, h );
+		this.sampleCountTarget.setSize( w, h );
 
 		this.reset();
 
@@ -244,12 +230,6 @@ export class MegaKernelCore {
 		this._task.next();
 
 		this.currentTile = ( this.currentTile + 1 ) % ( this.tiles.x * this.tiles.y );
-
-	}
-
-	getResultBuffer() {
-
-		return this.resultBuffer;
 
 	}
 

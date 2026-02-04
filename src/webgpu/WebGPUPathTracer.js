@@ -165,7 +165,8 @@ export class WebGPUPathTracer {
 		this._pathTracer.update();
 
 		const blitQuad = this._blitQuad;
-		blitQuad.material.resultBuffer = this._pathTracer.getResultBuffer();
+		blitQuad.material.texture = this._pathTracer.outputTarget;
+
 		this._renderer.getSize( blitQuad.material.dimensions );
 		blitQuad.render( this._renderer );
 
