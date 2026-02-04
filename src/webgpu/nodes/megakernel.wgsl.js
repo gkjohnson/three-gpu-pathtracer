@@ -112,7 +112,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 			textureStore( sampleCountTarget, indexUV, vec4( newSampleCount ) );
 
 			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-			textureStore( outputTarget, indexUV, vec4f( newColor, 1.0 ) );
+			textureStore( outputTarget, indexUV, vec4( newColor, 1.0 ) );
 		} else {
 
 			let color = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );

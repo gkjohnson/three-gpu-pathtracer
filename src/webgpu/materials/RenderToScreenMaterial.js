@@ -1,5 +1,5 @@
-import { StorageBufferAttribute, Vector2, MeshBasicNodeMaterial, SRGBColorSpace, StorageTexture } from 'three/webgpu';
-import { storage, uniform, uv, varying, colorSpaceToWorking, texture } from 'three/tsl';
+import { StorageBufferAttribute, Vector2, MeshBasicNodeMaterial, StorageTexture } from 'three/webgpu';
+import { storage, uniform, uv, varying, texture } from 'three/tsl';
 
 export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 

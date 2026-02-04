@@ -1,5 +1,6 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Chart from 'chart.js/auto';
 
@@ -65,6 +66,13 @@ renderer.setPixelRatio( devicePixelRatio );
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.setScene( scene, camera );
 pathTracer.useMegakernel( options.useMegakernel );
+
+const controls = new OrbitControls( camera, renderer.domElement );
+controls.addEventListener( 'change', () => {
+
+	pathTracer.reset();
+
+} );
 
 const gui = new GUI();
 

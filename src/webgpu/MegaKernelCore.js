@@ -1,20 +1,24 @@
 import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
+import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 function* renderTask() {
 
-	const tileSize = new Vector2();
+	const tileSize = this.getTileSize( new Vector2() );
 
 	const {
-		megakernel,
 		renderer,
-		WORKGROUP_SIZE,
+		camera,
+		megakernel,
 		geometry,
 		bounces,
 
+		tiles,
 		outputTarget,
 		sampleCountTarget,
 	} = this;
+
+	camera.updateMatrixWorld();
 
 	const { parameters } = megakernel.computeNode;
 	parameters.outputTarget.value = outputTarget;
@@ -28,22 +32,26 @@ function* renderTask() {
 	parameters.materials.value = geometry.materials;
 
 	parameters.bounces.value = bounces;
+	parameters.seed.value += 1;
+	parameters.inverseProjectionMatrix.value.copy( camera.projectionMatrixInverse );
+	parameters.cameraToModelMatrix.value.copy( camera.matrixWorld );
+	parameters.tileSize.value.copy( tileSize );
 
+	const dispatchSize = megakernel.getDispatchSize( tileSize.x, tileSize.y );
+	let iterations = 0;
 	while ( true ) {
 
 		// TODO: iterate over all tiles here in addition to reading and updating settings
-		this.getTileSize( tileSize );
 
-		renderer.info.reset();
-
-		const dispatchSize = [
-			Math.ceil( tileSize.x / WORKGROUP_SIZE[ 0 ] ),
-			Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
-			1
-		];
+		const currentTile = iterations % ( tiles.x * tiles.y );
+		parameters.offset.value.set(
+			( currentTile % tiles.x ),
+			Math.floor( currentTile / tiles.x ),
+		).multiply( tileSize );
 
 		renderer.compute( megakernel.kernel, dispatchSize );
 		this.samples ++;
+		iterations ++;
 		yield;
 
 	}
@@ -55,12 +63,6 @@ export class MegaKernelCore {
 	get megakernelParams() {
 
 		return this.megakernel.computeNode.parameters;
-
-	}
-
-	get traceRayParams() {
-
-		return this.traceRayKernel.computeNode.parameters;
 
 	}
 
@@ -101,14 +103,10 @@ export class MegaKernelCore {
 		this.sampleCountTarget.name = 'Sample Count';
 		this.sampleCountTarget.generateMipmaps = false;
 
-		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
-		this.createMegakernel();
+		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
+		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
 
-	}
-
-	createMegakernel() {
-
-		this.megakernel = new PathTracerMegaKernel().setWorkgroupSize( ...this.WORKGROUP_SIZE );
+		this.megakernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
 
 	}
 
@@ -199,6 +197,23 @@ export class MegaKernelCore {
 		this.samples = 0;
 		this.currentTile = 0;
 		this._task = null;
+
+		const {
+			renderer,
+			sampleCountClearKernel,
+			outputTargetClearKernel,
+			sampleCountTarget,
+			outputTarget,
+		} = this;
+
+		const { width, height } = sampleCountTarget;
+		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
+
+		sampleCountClearKernel.target = sampleCountTarget;
+		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
+
+		outputTargetClearKernel.target = outputTarget;
+		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 	}
 

@@ -76,7 +76,11 @@ export class WebGPUPathTracer {
 
 	}
 
-	reset() {}
+	reset() {
+
+		this._pathTracer.reset();
+
+	}
 
 	_updateFromResults( scene, camera, results ) {
 
