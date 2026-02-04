@@ -7,6 +7,7 @@ export default {
 	base: '',
 	build: {
 		outDir: './bundle/',
+		sourcemap: true,
 		rollupOptions: {
 			input: fs
 				.readdirSync( './example/' )
@@ -21,6 +22,8 @@ export default {
 				searchForWorkspaceRoot( process.cwd() ),
 			],
 		},
-	}
-
+	},
+	optimizeDeps: {
+    	exclude: [ 'three-mesh-bvh' ],
+  	},
 };

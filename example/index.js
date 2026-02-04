@@ -28,13 +28,14 @@ import { GradientEquirectTexture, WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { ParallelMeshBVHWorker, GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
 const envMaps = {
-	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr',
-	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/moonless_golf_1k.hdr',
-	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
-	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr',
+	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/moonless_golf_1k.hdr',
+	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
+	'Venice Sunset': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/venice_sunset_1k.hdr',
 	'Small Studio': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr',
 	'Pfalzer Forest': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr',
 	'Leadenhall Market': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr',
@@ -69,8 +70,6 @@ const envMaps = {
 	'Aerodynamics Workshop': 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aerodynamics_workshop_1k.hdr',
 
 };
-
-const models = window.MODEL_LIST || {};
 
 const params = {
 
@@ -117,12 +116,30 @@ let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
 let loader;
+let models;
 
 const orthoWidth = 2;
 
 init();
 
+async function waitFrame() {
+
+	return new Promise( resolve => requestAnimationFrame( resolve ) );
+
+}
+
 async function init() {
+
+	// Wait for the models list to be available since vite doesn't guarantee execution order
+	// of module tags and we rely on the other script to define the set of models for display
+	// in this example. TODO: handle this more gracefully.
+	while ( ! window.MODEL_LIST ) {
+
+		await waitFrame();
+
+	}
+
+	models = window.MODEL_LIST || {};
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
@@ -134,7 +151,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
 	pathTracer.physicallyCorrectLights = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
@@ -710,6 +727,7 @@ async function loadModel( url, onProgress ) {
 
 		const complete = new Promise( resolve => manager.onLoad = resolve );
 		const ldrawLoader = new LDrawLoader( manager );
+		ldrawLoader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
 		await ldrawLoader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
 		const result = await ldrawLoader
 			.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' )

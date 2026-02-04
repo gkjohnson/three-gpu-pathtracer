@@ -17,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGLPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
