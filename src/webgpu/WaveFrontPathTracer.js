@@ -1,7 +1,7 @@
 import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement, IndirectStorageBufferAttribute } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { PrimeRayGenerationDispatchKernel } from './compute/PrimeRayGenerationDispatchKernel.js';
-import { EnqueueScreenRayKernel } from './compute/EnqueueScreenRayKernel.js';
+import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
+import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
 
 function* renderTask() {
 
@@ -150,7 +150,7 @@ export class WaveFrontPathTracer {
 
 		// kernels
 		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.enqueueRaysKernel = new EnqueueScreenRayKernel();
+		this.enqueueRaysKernel = new RayGenerationKernel();
 		this.writeIntersectionsKernel = null;
 		this.shadingKernel = null;
 

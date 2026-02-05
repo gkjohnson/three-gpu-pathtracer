@@ -1,11 +1,11 @@
 import { Vector2, Matrix4 } from 'three';
 import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { wgslFn, uniform, storage, globalId, textureStore } from 'three/tsl';
-import { ComputeKernel } from './ComputeKernel.js';
+import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
 import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
 
-export class EnqueueScreenRayKernel extends ComputeKernel {
+export class RayGenerationKernel extends ComputeKernel {
 
 	constructor() {
 

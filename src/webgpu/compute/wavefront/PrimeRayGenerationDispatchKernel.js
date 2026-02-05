@@ -1,7 +1,7 @@
 import { Vector2, Vector3 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { wgslFn, wgsl, uniform, storage, uint } from 'three/tsl';
-import { ComputeKernel } from './ComputeKernel.js';
+import { ComputeKernel } from '../ComputeKernel.js';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
 
 export const queuedRayStruct = wgsl( /* wgsl */ `
