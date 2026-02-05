@@ -35,6 +35,13 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 	) -> void {
 
+		// make sure we don't bleed over the edge of our tile
+		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
+
+			return;
+
+		}
+
 		// to screen coordinates
 		let indexUV = offset + globalId.xy;
 		let targetDimensions = textureDimensions( outputTarget );

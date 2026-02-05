@@ -93,19 +93,12 @@ function animate() {
 	// if the camera position changes call "ptRenderer.reset()"
 	requestAnimationFrame( animate );
 
-	if ( ! renderer.initialized ) {
-
-		return;
-
-	}
-
 	// update the camera and render one sample
 	pathTracer.renderSample();
 
 }
 
 function onResize() {
-
 
 	// update rendering resolution
 	const w = window.innerWidth;
