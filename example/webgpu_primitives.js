@@ -65,7 +65,7 @@ renderer.setDrawingBufferSize( 1920, 1080, 1 );
 const settings = getScaledSettings();
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.renderScale = settings.renderScale;
-pathTracer.tiles.setScalar( 2 ); // settings.tiles );
+pathTracer.tiles.setScalar( 1 ); // settings.tiles );
 pathTracer.setScene( scene, camera );
 pathTracer.useMegakernel( options.useMegakernel );
 

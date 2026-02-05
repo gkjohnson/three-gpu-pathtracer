@@ -13,7 +13,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 		tileSize: vec2u,
 		dimensions: vec2u,
 
-		rayQueue: ptr<storage, array<u32>, read_write>,
+		rayQueue: ptr<storage, array<RayQueueElement>, read_write>,
 		rayQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
 
 		globalId: vec3u
@@ -32,11 +32,16 @@ export const generateRays = wgslFn( /* wgsl */ `
 
 		let elementCount = arrayLength(rayQueue) / RAY_ELEMENT_STRUCT_SIZE;
 
-		rayQueueWriteOriginSoA(rayQueue, elementCount, index, ray.origin);
-		rayQueueWriteDirectionSoA(rayQueue, elementCount, index, ray.direction);
-		rayQueueWriteThroughputSoA(rayQueue, elementCount, index, vec3f(1.0));
-		rayQueueWritePixelSoA(rayQueue, elementCount, index, indexUV);
-		rayQueueWriteCurrentBounceSoA(rayQueue, elementCount, index, 0);
+		// rayQueueWriteOriginSoA(rayQueue, elementCount, index, ray.origin);
+		// rayQueueWriteDirectionSoA(rayQueue, elementCount, index, ray.direction);
+		// rayQueueWriteThroughputSoA(rayQueue, elementCount, index, vec3f(1.0));
+		// rayQueueWritePixelSoA(rayQueue, elementCount, index, indexUV);
+		// rayQueueWriteCurrentBounceSoA(rayQueue, elementCount, index, 0);
+
+		rayQueue[index].ray = ray;
+		rayQueue[index].pixel = indexUV;
+		rayQueue[index].throughputColor = vec3f( 1.0 );
+		rayQueue[index].currentBounce = 0;
 	}
 
 `, [ rayQueueElementStruct, ndcToCameraRay ] );
@@ -44,7 +49,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 export const bsdfEval = wgslFn( /* wgsl */ `
 	fn bsdf(
 		inputQueue: ptr<storage, array<HitResultQueueElement>, read>,
-		outputQueue: ptr<storage, array<u32>, read_write>,
+		outputQueue: ptr<storage, array<RayQueueElement>, read_write>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 
 		geom_material_index: ptr<storage, array<u32>, read>,
@@ -93,17 +98,17 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 
 		let elementCount = arrayLength(outputQueue) / RAY_ELEMENT_STRUCT_SIZE;
 
-		rayQueueWriteOriginSoA(outputQueue, elementCount, rayIndex, input.position);
-		rayQueueWriteDirectionSoA(outputQueue, elementCount, rayIndex, scatterRec.direction);
-		rayQueueWritePixelSoA(outputQueue, elementCount, rayIndex, pixel);
-		rayQueueWriteThroughputSoA(outputQueue, elementCount, rayIndex, throughputColor);
-		rayQueueWriteCurrentBounceSoA(outputQueue, elementCount, rayIndex, input.currentBounce + 1);
+		// rayQueueWriteOriginSoA(outputQueue, elementCount, rayIndex, input.position);
+		// rayQueueWriteDirectionSoA(outputQueue, elementCount, rayIndex, scatterRec.direction);
+		// rayQueueWritePixelSoA(outputQueue, elementCount, rayIndex, pixel);
+		// rayQueueWriteThroughputSoA(outputQueue, elementCount, rayIndex, throughputColor);
+		// rayQueueWriteCurrentBounceSoA(outputQueue, elementCount, rayIndex, input.currentBounce + 1);
 
-		// outputQueue[rayIndex].ray.origin = input.position;
-		// outputQueue[rayIndex].ray.direction = scatterRec.direction;
-		// outputQueue[rayIndex].pixel = pixel;
-		// outputQueue[rayIndex].throughputColor = throughputColor;
-		// outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
+		outputQueue[rayIndex].ray.origin = input.position;
+		outputQueue[rayIndex].ray.direction = scatterRec.direction;
+		outputQueue[rayIndex].pixel = pixel;
+		outputQueue[rayIndex].throughputColor = throughputColor;
+		outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
 
 	}
 `, [
@@ -121,9 +126,9 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 export const traceRay = wgslFn( /* wgsl */`
 
 	fn traceRay(
-		inputQueue: ptr<storage, array<u32>, read>,
+		inputQueue: ptr<storage, array<RayQueueElement>, read>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
-		escapedQueue: ptr<storage, array<u32>, read_write>,
+		escapedQueue: ptr<storage, array<RayQueueElement>, read_write>,
 		outputQueue: ptr<storage, array<HitResultQueueElement>, read_write>,
 
 		geom_position: ptr<storage, array<vec3f>, read>,
@@ -138,16 +143,21 @@ export const traceRay = wgslFn( /* wgsl */`
 			return;
 		}
 
-		// let input = inputQueue[globalId.x];
+		// let elementCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
 
-		let elementCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
+		// let origin = rayQueueExtractOriginSoA(inputQueue, elementCount, globalId.x);
+		// let direction = rayQueueExtractDirectionSoA(inputQueue, elementCount, globalId.x);
+		// let ray = Ray(origin, direction);
+		// let pixel = rayQueueExtractPixelSoA(inputQueue, elementCount, globalId.x);
+		// let throughputColor = rayQueueExtractThroughputSoA(inputQueue, elementCount, globalId.x);
+		// let currentBounce = rayQueueExtractCurrentBounceSoA(inputQueue, elementCount, globalId.x);
 
-		let origin = rayQueueExtractOriginSoA(inputQueue, elementCount, globalId.x);
-		let direction = rayQueueExtractDirectionSoA(inputQueue, elementCount, globalId.x);
-		let ray = Ray(origin, direction);
-		let pixel = rayQueueExtractPixelSoA(inputQueue, elementCount, globalId.x);
-		let throughputColor = rayQueueExtractThroughputSoA(inputQueue, elementCount, globalId.x);
-		let currentBounce = rayQueueExtractCurrentBounceSoA(inputQueue, elementCount, globalId.x);
+		let input = inputQueue[globalId.x];
+
+		let ray = input.ray;
+		let pixel = input.pixel;
+		let throughputColor = input.throughputColor;
+		let currentBounce = input.currentBounce;
 
 		let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 
@@ -156,7 +166,7 @@ export const traceRay = wgslFn( /* wgsl */`
 			let index = atomicAdd(&queueSizes[1], 1);
 			outputQueue[index].view = - ray.direction;
 			outputQueue[index].normal = hitResult.normal; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
-			outputQueue[index].position = origin + direction * hitResult.dist; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
+			outputQueue[index].position = ray.origin + ray.direction * hitResult.dist; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
 			outputQueue[index].indices = hitResult.indices.xyz;
 			outputQueue[index].side = hitResult.side;
 			outputQueue[index].barycoord = hitResult.barycoord;
@@ -176,9 +186,12 @@ export const traceRay = wgslFn( /* wgsl */`
 			let escapedCount = arrayLength(escapedQueue) / RAY_ELEMENT_STRUCT_SIZE;
 			// rayQueueWriteOriginSoA(escapedQueue, escapedCount, index, origin);
 			// rayQueueWriteDirectionSoA(escapedQueue, escapedCount, index, direction);
-			rayQueueWriteThroughputSoA(escapedQueue, escapedCount, index, throughputColor);
-			rayQueueWritePixelSoA(escapedQueue, escapedCount, index, pixel);
+			// rayQueueWriteThroughputSoA(escapedQueue, escapedCount, index, throughputColor);
+			// rayQueueWritePixelSoA(escapedQueue, escapedCount, index, pixel);
 			// rayQueueWriteCurrentBounceSoA(escapedQueue, escapedCount, index, currentBounce);
+
+			escapedQueue[index].throughputColor = throughputColor;
+			escapedQueue[index].pixel = pixel;
 
 		}
 
@@ -197,7 +210,7 @@ export const escapedRay = wgslFn( /* wgsl */`
 
 	fn escapedRay(
 		resultBuffer: ptr<storage, array<vec4f>, read_write>,
-		inputQueue: ptr<storage, array<u32>, read>,
+		inputQueue: ptr<storage, array<RayQueueElement>, read>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 		sampleCountBuffer: ptr<storage, array<u32>, read_write>,
 
@@ -209,11 +222,13 @@ export const escapedRay = wgslFn( /* wgsl */`
 			return;
 		}
 
-		// let current = inputQueue[globalId.x];
+		let current = inputQueue[globalId.x];
+		let throughputColor = current.throughputColor;
+		let pixel = current.pixel;
 
-		let escapedCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
-		let throughputColor = rayQueueExtractThroughputSoA(inputQueue, escapedCount, globalId.x);
-		let pixel = rayQueueExtractPixelSoA(inputQueue, escapedCount, globalId.x);
+		// let escapedCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
+		// let throughputColor = rayQueueExtractThroughputSoA(inputQueue, escapedCount, globalId.x);
+		// let pixel = rayQueueExtractPixelSoA(inputQueue, escapedCount, globalId.x);
 
 		let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 		let resultColor = background * throughputColor;
