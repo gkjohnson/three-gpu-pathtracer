@@ -1,8 +1,8 @@
 import { wgslFn, wgsl } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants as bvhConstants, getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
-import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, constants, pathStateStruct, materialEvalRequestStruct } from './structs.wgsl';
+import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, constants, pathStateStruct } from './structs.wgsl';
 import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from './sampling.wgsl';
-import { pcgInit, pcgCycleState, pcgRand3 } from './random.wgsl';
+import { pcgInit, pcgCycleState, pcgRand3, pcgRand2 } from './random.wgsl';
 
 export const initializeRandom = wgslFn( /* wgsl */ `
 
@@ -62,12 +62,13 @@ export const generateRays = wgslFn( /* wgsl */ `
 		}
 
 		let pathIndex = inputQueue[ globalId.x ];
-
 		let indexUV = vec2u( pathIndex % tileSize.x, pathIndex / tileSize.x ) + tileOffset;
 
 		let uv = vec2f( indexUV ) / vec2f( dimensions );
 
 		let ndc = uv * 2.0 - vec2f( 1.0 );
+
+		let jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( dimensions.xy );
 
 		if ( all( pathState[ pathIndex ].pcgState.s0 == vec4u( 0 ) ) ) {
 			pcgInitialize(indexUV, seed);
@@ -75,7 +76,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 			g_state = pathState[ pathIndex ].pcgState;
 		}
 
-		let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
+		let ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 
 		pathState[ pathIndex ].ray = ray;
 		pathState[ pathIndex ].throughputColor = vec3f( 1.0 );
@@ -91,12 +92,12 @@ export const generateRays = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ rayQueueElementStruct, ndcToCameraRay, pathStateStruct, pcgInit, inputQueueSizeWGMem ] );
+`, [ rayQueueElementStruct, ndcToCameraRay, pathStateStruct, pcgInit, inputQueueSizeWGMem, pcgRand2 ] );
 
 export const bsdfEval = wgslFn( /* wgsl */ `
 	fn bsdf(
 		pathState: ptr<storage, array<PathState>, read_write>,
-		inputQueue: ptr<storage, array<MaterialEvalRequest>, read>,
+		inputQueue: ptr<storage, array<u32>, read>,
 		extensionRayQueue: ptr<storage, array<u32>, read_write>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 
@@ -120,14 +121,13 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 			return;
 		}
 
-		let input = inputQueue[globalId.x];
-		let pathIndex = input.pathIndex;
+		let pathIndex = inputQueue[globalId.x];
 
 		g_state = pathState[ pathIndex ].pcgState;
 
 		var record: ScatterRecord;
 
-		let material = materials[ input.materialIndex ];
+		let material = materials[ pathState[ pathIndex ].materialIndex ];
 
 		let dist = pathState[ pathIndex ].dist;
 		let hit = IntersectionResult(
@@ -168,7 +168,6 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 	rayQueueElementStruct,
 	materialStruct,
 	intersectionResultStruct,
-	materialEvalRequestStruct,
 	pathStateStruct,
 	inputQueueSizeWGMem,
 	pcgInit,
@@ -238,7 +237,7 @@ export const logic = wgslFn( /* wgsl */`
 
 		pathState: ptr<storage, array<PathState>, read_write>,
 		regeneratePathQueue: ptr<storage, array<u32>, read_write>,
-		materialEvalQueue: ptr<storage, array<MaterialEvalRequest>, read_write>,
+		materialEvalQueue: ptr<storage, array<u32>, read_write>,
 		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
 
 		geom_material_index: ptr<storage, array<u32>, read>,
@@ -275,9 +274,10 @@ export const logic = wgslFn( /* wgsl */`
 			pathState[ pathIndex ].currentBounce += 1;
 
 			let materialIndex = geom_material_index[ pathState[ pathIndex ].indices.x ];
+			pathState[ pathIndex ].materialIndex = materialIndex;
 
 			let index = atomicAdd( &queueSizes[1], 1 );
-			materialEvalQueue[ index ] = MaterialEvalRequest( pathIndex, materialIndex );
+			materialEvalQueue[ index ] = pathIndex;
 
 		} else if ( !isThroughputEmpty && !isLastBounce && hasMissedScene ) {
 
@@ -313,7 +313,7 @@ export const logic = wgslFn( /* wgsl */`
 		}
 	}
 
-`, [ rayQueueElementStruct, pathStateStruct, materialEvalRequestStruct ] );
+`, [ rayQueueElementStruct, pathStateStruct ] );
 
 export const writeTraceRayDispatchSize = wgslFn( /* wgsl */ `
 	fn writeTraceRayDispatchSize(

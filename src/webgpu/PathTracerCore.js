@@ -332,7 +332,7 @@ export class PathTracerCore {
 
 			pathState: storage( this.pathState, 'PathState' ),
 			regeneratePathQueue: storage( this.regeneratePathQueue, 'uint' ),
-			materialEvalQueue: storage( this.materialEvalQueue, 'MaterialEvalRequest' ),
+			materialEvalQueue: storage( this.materialEvalQueue, 'uint' ),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
 			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
@@ -372,7 +372,7 @@ export class PathTracerCore {
 
 		const bsdfEvalParams = {
 			pathState: storage( this.pathState, 'PathState' ),
-			inputQueue: storage( this.materialEvalQueue, 'MaterialEvalRequest' ).toReadOnly(),
+			inputQueue: storage( this.materialEvalQueue, 'uint' ).toReadOnly(),
 			extensionRayQueue: storage( this.extensionRayQueue, 'uint' ),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 

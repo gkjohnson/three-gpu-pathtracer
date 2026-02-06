@@ -373,6 +373,7 @@ export const pathStateStruct = wgsl( /* wgsl */ `
 		currentBounce: u32,
 		pcgState: PcgState,
 		tileOffset: vec2u,
+		materialIndex: u32,
 
 		// Material evaluation result
 		color: vec3f,
@@ -388,12 +389,3 @@ export const pathStateStruct = wgsl( /* wgsl */ `
 	}
 
 `, [ rayStruct, pcgStateStruct ] );
-
-export const materialEvalRequestStruct = wgsl( /* wgsl */ `
-
-	struct MaterialEvalRequest {
-		pathIndex: u32,
-		materialIndex: u32,
-	}
-
-` );

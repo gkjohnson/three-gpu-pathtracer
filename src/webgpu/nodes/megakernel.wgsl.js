@@ -39,8 +39,9 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 		pcgInitialize(indexUV, seed);
 
 		// scene ray
-		// TODO: sample a random ray
-		var ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
+		let jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( dimensions.xy );
+
+		var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 
 		const bounces: u32 = ${bounces};
 		var resultColor = vec3f( 0.0 );
@@ -81,10 +82,13 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 
 			} else {
 
+				// TODO: make path regeneration work
+
 				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 				resultColor += background * throughputColor;
 				sampleCount += 1;
 				break;
+
 			}
 
 		}
