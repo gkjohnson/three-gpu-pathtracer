@@ -4,6 +4,7 @@ import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGe
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
 import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
+import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 
 function* renderTask() {
 
@@ -152,20 +153,20 @@ export class WaveFrontPathTracer {
 		// queue
 		const maxRayCount = 1000 * 1000;
 		const queueSize = 16 * maxRayCount;
-		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ), 16 );
 		this.rayQueue.name = 'Ray Queue';
-		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ) );
+		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		this.hitQueue = new StorageBufferAttribute( new Uint32Array( queueSize ), 1 );
 		this.hitQueue.name = 'Hit Queue';
-		this.hitQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ) );
+		this.hitQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
 		this.hitQueueSize.name = 'Hit Queue Size';
 
 		// dispatches
-		this.tileIndexBuffer = new StorageBufferAttribute( new Uint32Array( 2 ) );
-		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
-		this.hitProcessDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.tileIndexBuffer = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
+		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ), 1 );
+		this.hitProcessDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ), 1 );
 
 		// kernels
 		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );
@@ -177,6 +178,7 @@ export class WaveFrontPathTracer {
 		// clear kernels
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
+		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
 
 		// later
 		this.volumeKernel = null;
@@ -270,10 +272,19 @@ export class WaveFrontPathTracer {
 
 		const {
 			renderer,
+
 			sampleCountClearKernel,
 			outputTargetClearKernel,
+			zeroDispatchKernel,
+
 			sampleCountTarget,
 			outputTarget,
+
+			hitProcessDispatch,
+			rayGenerationDispatch,
+			rayQueueSize,
+			hitQueueSize,
+			tileIndexBuffer,
 		} = this;
 
 		if ( ! renderer.initialized ) {
@@ -287,11 +298,29 @@ export class WaveFrontPathTracer {
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
+		// clear buffers
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
 		outputTargetClearKernel.target = outputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
+
+		// clear queues
+		zeroDispatchKernel.target = rayQueueSize;
+		renderer.compute( zeroDispatchKernel.kernel, [ rayQueueSize.count ] );
+
+		zeroDispatchKernel.target = hitQueueSize;
+		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count ] );
+
+		// clear dispatch sizes
+		zeroDispatchKernel.target = hitProcessDispatch;
+		renderer.compute( zeroDispatchKernel.kernel, [ hitProcessDispatch.count ] );
+
+		zeroDispatchKernel.target = rayGenerationDispatch;
+		renderer.compute( zeroDispatchKernel.kernel, [ rayGenerationDispatch.count ] );
+
+		zeroDispatchKernel.target = tileIndexBuffer;
+		renderer.compute( zeroDispatchKernel.kernel, [ tileIndexBuffer.count ] );
 
 	}
 
