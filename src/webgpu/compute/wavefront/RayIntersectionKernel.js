@@ -2,7 +2,7 @@ import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, wgslFn, textureStore, globalId, wgsl } from 'three/tsl';
 import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
-import { bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
+import { bvhIntersectFirstHit, constants } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 
 export const queuedHitStruct = wgsl( /* wgsl */`

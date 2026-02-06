@@ -7,6 +7,8 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 
+const RAYS_TO_PROCESS = 250000;
+
 function* renderTask() {
 
 	const {
@@ -77,7 +79,7 @@ function* renderTask() {
 		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
 		// TODO: setting dispatch size to 10000 is causing failures / missed rays
 		rayIntersectionKernel.setWorkgroupSize( 64, 1, 1 );
-		const intersectDispatch = rayIntersectionKernel.getDispatchSize( 50000, 1, 1 );
+		const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
 		rayIntersectionKernel.outputTarget = outputTarget;
 		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 		rayIntersectionKernel.rayQueue = rayQueue;
@@ -91,11 +93,14 @@ function* renderTask() {
 		renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
 
 		// mark the rays as consumed
+		const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
 		updateRayQueueParamsKernel.setWorkgroupSize( 1, 1, 1 );
-		updateRayQueueParamsKernel.processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
+		updateRayQueueParamsKernel.processed = processed;
 		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
 		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
+		// TODO: we should use an indirect dispatch here to only kick off the number of threads
+		// as needed to iterate over all the fields
 		// Step 3: attenuate ray color, scatter, run russian roulette
 		hitProcessKernel.setWorkgroupSize( 64, 1, 1 );
 		hitProcessKernel.outputTarget = outputTarget;
@@ -108,14 +113,13 @@ function* renderTask() {
 		hitProcessKernel.geom_position = geometry.position;
 		hitProcessKernel.geom_normals = geometry.normal;
 		hitProcessKernel.materials = geometry.materials;
-		renderer.compute( hitProcessKernel.kernel, [ 1000, 1, 1 ] );
+		renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
 
 		// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
 		// is cached per parameters and resets?
 		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
-
 
 		// Step 4: connect to lights
 		// TODO
@@ -180,7 +184,7 @@ export class WaveFrontPathTracer {
 		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitQueue = new StorageBufferAttribute( new Uint32Array( queueSize ), 1 );
+		this.hitQueue = new StorageBufferAttribute( new Uint32Array( queueSize ), 16 );
 		this.hitQueue.name = 'Hit Queue';
 		this.hitQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
 		this.hitQueueSize.name = 'Hit Queue Size';
@@ -369,7 +373,7 @@ export class WaveFrontPathTracer {
 		}
 
 		// TODO: run this multiple times / adjust loop to process more rays at once
-		for ( let i = 0; i < 20; i ++ ) {
+		for ( let i = 0; i < 5; i ++ ) {
 
 			this._task.next();
 
