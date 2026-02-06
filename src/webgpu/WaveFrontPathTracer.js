@@ -7,7 +7,12 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 
+// set the buffers to the max possible size supported by default (128MB)
+// TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
+const MAX_BUFFER_SIZE = 134217728;
+const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( 16 * 4 ) );
+const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( 16 * 4 ) );
 
 function* renderTask() {
 
@@ -148,7 +153,7 @@ export class WaveFrontPathTracer {
 		// options
 		this.samples = 0;
 		this.bounces = 7;
-		this.tiles = new Vector2( 2, 2 );
+		this.tiles = new Vector2( 3, 3 );
 
 		// geometry fields
 		this.geometry = {
@@ -176,15 +181,13 @@ export class WaveFrontPathTracer {
 		this.sampleCountTarget.name = 'Sample Count';
 		this.sampleCountTarget.generateMipmaps = false;
 
-		// queue
-		const maxRayCount = 1000 * 1000;
-		const queueSize = 16 * maxRayCount;
-		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ), 16 );
+		// queues
+		this.rayQueue = new StorageBufferAttribute( new Uint32Array( MAX_RAY_COUNT * 16 ), 16 );
 		this.rayQueue.name = 'Ray Queue';
 		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitQueue = new StorageBufferAttribute( new Uint32Array( queueSize ), 16 );
+		this.hitQueue = new StorageBufferAttribute( new Uint32Array( MAX_HIT_COUNT * 16 ), 16 );
 		this.hitQueue.name = 'Hit Queue';
 		this.hitQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
 		this.hitQueueSize.name = 'Hit Queue Size';
