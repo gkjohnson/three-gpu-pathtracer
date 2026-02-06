@@ -5,7 +5,7 @@ import {
 	Vector2,
 	TimestampQuery
 } from 'three/webgpu';
-import { uniform, storage, globalId } from 'three/tsl';
+import { uniform, storage, globalId, localId } from 'three/tsl';
 import megakernelShader from './nodes/megakernel.wgsl.js';
 import resetResultFn from './nodes/reset.wgsl.js';
 import {
@@ -232,6 +232,7 @@ export class PathTracerCore {
 
 			seed: uniform( 0 ),
 			globalId: globalId,
+			localId: localId,
 
 		};
 
@@ -360,6 +361,7 @@ export class PathTracerCore {
 			bvh: storage( this.geometry.bvh, 'BVHNode' ).toReadOnly(),
 
 			globalId: globalId,
+			localId: localId,
 		};
 
 		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
@@ -379,6 +381,7 @@ export class PathTracerCore {
 			seed: uniform( 0 ),
 
 			globalId: globalId,
+			localId: localId,
 		};
 
 		this.bsdfEvalKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );

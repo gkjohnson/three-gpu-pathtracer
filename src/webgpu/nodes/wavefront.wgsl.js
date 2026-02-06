@@ -1,4 +1,4 @@
-import { wgslFn } from 'three/tsl';
+import { wgslFn, wgsl } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants as bvhConstants, getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
 import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, constants, pathStateStruct, materialEvalRequestStruct } from './structs.wgsl';
 import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from './sampling.wgsl';
@@ -23,6 +23,12 @@ export const initializeRandom = wgslFn( /* wgsl */ `
 
 `, [ pathStateStruct ] );
 
+export const inputQueueSizeWGMem = wgsl( /* wgsl */`
+
+	var<workgroup> inputQueueSize: u32;
+
+` );
+
 export const generateRays = wgslFn( /* wgsl */ `
 
 	fn generateRays(
@@ -39,10 +45,19 @@ export const generateRays = wgslFn( /* wgsl */ `
 
 		seed: u32,
 
-		globalId: vec3u
+		globalId: vec3u,
+		localId: vec3u,
 	) -> void {
-		let queueSize = atomicLoad( &queueSizes[0] );
-		if ( globalId.x >= queueSize ) {
+
+		if ( localId.x == 0 ) {
+			let queueSize = atomicLoad( &queueSizes[0] );
+
+			inputQueueSize = queueSize;
+		}
+
+		workgroupBarrier();
+
+		if ( globalId.x >= inputQueueSize ) {
 			return;
 		}
 
@@ -91,7 +106,7 @@ export const generateRays = wgslFn( /* wgsl */ `
 		// rayQueue[index].currentBounce = 0;
 	}
 
-`, [ rayQueueElementStruct, ndcToCameraRay, pathStateStruct, pcgInit ] );
+`, [ rayQueueElementStruct, ndcToCameraRay, pathStateStruct, pcgInit, inputQueueSizeWGMem ] );
 
 export const bsdfEval = wgslFn( /* wgsl */ `
 	fn bsdf(
@@ -105,9 +120,18 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		seed: u32,
 
 		globalId: vec3u,
+		localId: vec3u,
 	) -> void {
-		let inputSize = atomicLoad(&queueSizes[1]);
-		if (globalId.x >= inputSize) {
+
+		if ( localId.x == 0 ) {
+			let queueSize = atomicLoad( &queueSizes[1] );
+
+			inputQueueSize = queueSize;
+		}
+
+		workgroupBarrier();
+
+		if (globalId.x >= inputQueueSize) {
 			return;
 		}
 
@@ -179,6 +203,7 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 	intersectionResultStruct,
 	materialEvalRequestStruct,
 	pathStateStruct,
+	inputQueueSizeWGMem,
 	pcgInit,
 	pcgCycleState,
 	pcgRand3,
@@ -199,10 +224,17 @@ export const traceRay = wgslFn( /* wgsl */`
 		bvh: ptr<storage, array<BVHNode>, read>,
 
 		globalId: vec3u,
+		localId: vec3u,
 	) -> void {
-		let inputSize = atomicLoad( &queueSizes[2] );
+		if ( localId.x == 0 ) {
+			let queueSize = atomicLoad( &queueSizes[2] );
 
-		if (globalId.x >= inputSize) {
+			inputQueueSize = queueSize;
+		}
+
+		workgroupBarrier();
+
+		if (globalId.x >= inputQueueSize) {
 			return;
 		}
 
@@ -276,6 +308,7 @@ export const traceRay = wgslFn( /* wgsl */`
 	pathStateStruct,
 	getVertexAttribute,
 	bvhIntersectFirstHit,
+	inputQueueSizeWGMem,
 	bvhConstants
 ] );
 
