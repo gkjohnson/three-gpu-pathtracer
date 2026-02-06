@@ -1,5 +1,6 @@
 import { wgsl } from 'three/tsl';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
+import { pcgStateStruct } from './random.wgsl';
 
 export const constants = wgsl( /* wgsl */ `
 		const PI: f32 = 3.141592653589793;
@@ -364,3 +365,35 @@ export const hitResultQueueElementStruct = wgsl( /* wgsl */`
 	};
 ` );
 
+export const pathStateStruct = wgsl( /* wgsl */ `
+
+	struct PathState {
+		ray: Ray,
+		throughputColor: vec3f,
+		currentBounce: u32,
+		pcgState: PcgState,
+		tileOffset: vec2u,
+
+		// Material evaluation result
+		color: vec3f,
+		pdf: f32,
+
+		// Intersection result
+		indices: vec3u,
+		didHit: u32,
+		normal: vec3f,
+		side: f32,
+		barycoord: vec3f,
+		dist: f32,
+	}
+
+`, [ rayStruct, pcgStateStruct ] );
+
+export const materialEvalRequestStruct = wgsl( /* wgsl */ `
+
+	struct MaterialEvalRequest {
+		pathIndex: u32,
+		materialIndex: u32,
+	}
+
+` );

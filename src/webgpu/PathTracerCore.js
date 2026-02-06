@@ -1,10 +1,16 @@
-import { IndirectStorageBufferAttribute, StorageBufferAttribute, Matrix4, Vector2, TimestampQuery } from 'three/webgpu';
+import {
+	IndirectStorageBufferAttribute,
+	StorageBufferAttribute,
+	Matrix4,
+	Vector2,
+	TimestampQuery
+} from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import megakernelShader from './nodes/megakernel.wgsl.js';
 import resetResultFn from './nodes/reset.wgsl.js';
 import {
-	generateRays, traceRay, bsdfEval, escapedRay, cleanQueues,
-	writeTraceRayDispatchSize, writeBsdfDispatchSize, writeEscapedRayDispatchSize,
+	generateRays, traceRay, bsdfEval, logic, cleanQueues,
+	writeTraceRayDispatchSize, writeMaterialStageDispatchSize,
 } from './nodes/wavefront.wgsl.js';
 
 function* renderTask() {
@@ -42,28 +48,41 @@ function* renderTask() {
 				1,
 			];
 
-			// 0. Clean queues
-			_renderer.compute( this.cleanQueuesKernel, 1 );
+			// 0. Clean queues on camera change?
+			// _renderer.compute( this.cleanQueuesKernel, 1 );
 			// 0.1 Generate one ray per pixel and write it into ray queue
-			_renderer.compute( this.generateRaysKernel, dispatchSize );
+			// _renderer.compute( this.generateRaysKernel, dispatchSize );
+
+			const logicDispatchSize = [ Math.ceil( tileSize.x * tileSize.y / 128 ), 1, 1 ];
 
 			for ( let i = 0; i < this.bounces; i ++ ) {
+
+				_renderer.compute( this.logicKernel, logicDispatchSize );
+
+				_renderer.compute( this.writeMaterialStageDispatchSizeKernel, 1 );
+
+				_renderer.compute( this.generateRaysKernel, this.regenerateDispatchBuffer );
+				_renderer.compute( this.bsdfEvalKernel, this.materialDispatchBuffer );
+
+				_renderer.compute( this.writeTraceRayDispatchSizeKernel, 1 );
+
+				_renderer.compute( this.traceRayKernel, this.traceRayDispatchBuffer );
 
 				// 1. Trace rays from the ray queue
 				// Traced ray can either hit something - then it goes into the hitResultQueue
 				// If it doesn't hit anything it goes into the escapedRayQueue
-				_renderer.compute( this.writeTraceRayDispatchSizeKernel, 1 );
-				_renderer.compute( this.traceRayKernel, this.traceRayDispatchBuffer );
+				// _renderer.compute( this.writeTraceRayDispatchSizeKernel, 1 );
+				// _renderer.compute( this.traceRayKernel, [ ] );
 
 				// 2. Handle escaped and scattered rays
 				// 2.1 Calcuate dispatch sizes and write it to gpu buffer
-				_renderer.compute( this.writeEscapedRayDispatchSizeKernel, 1 );
-				_renderer.compute( this.writeBsdfDispatchSizeKernel, 1 );
+				// _renderer.compute( this.writeEscapedRayDispatchSizeKernel, 1 );
+				// _renderer.compute( this.writeBsdfDispatchSizeKernel, 1 );
 				// 2.1 Dispatch shaders
 				// When processing escaped rays, calculate new contribution and add that to the result image
-				_renderer.compute( this.escapedRayKernel, this.escapedRayDispatchBuffer );
+				// _renderer.compute( this.escapedRayKernel, this.escapedRayDispatchBuffer );
 				// When processing hit results, sample a new ray according to material's properties
-				_renderer.compute( this.bsdfEvalKernel, this.bsdfDispatchBuffer );
+				// _renderer.compute( this.bsdfEvalKernel, this.bsdfDispatchBuffer );
 
 			}
 
@@ -109,9 +128,9 @@ export class PathTracerCore {
 
 	}
 
-	get escapedRayParams() {
+	get logicParams() {
 
-		return this.escapedRayKernel.computeNode.parameters;
+		return this.logicKernel.computeNode.parameters;
 
 	}
 
@@ -161,25 +180,39 @@ export class PathTracerCore {
 		this.sampleCountBuffer.name = 'Sample Count';
 
 		// More resolution does not fit into webgpu-defualt 128mb buffer
-		const maxRayCount = 1920 * 1080;
-		const queueSize = /* element storage */ 16 * maxRayCount;
-		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
-		this.rayQueue.name = 'Ray Queue';
-
-		// [rayQueueSize, hitResultQueueSize, escapedRayQueueSize]
+		const pathStateStructSize = 176;
+		this.maxRayCount = 128 * 1024 * 1024 / pathStateStructSize;
+		this.maxRayCount -= this.maxRayCount % 128; // Make maxRayCount a multiple of 128
+		const queueSize = /* element storage */ 16 * this.maxRayCount;
+		const pathStateSize = ( pathStateStructSize / 4 ) * this.maxRayCount;
+		this.pathState = new StorageBufferAttribute( new Uint32Array( pathStateSize ) );
+		this.pathState.name = 'Path State';
+		//
+		// [regeneratePathQueue size; materialEvalQueue size; extensionRayQueue size]
 		this.queueSizes = new StorageBufferAttribute( new Uint32Array( 3 ) );
 		this.queueSizes.name = 'Queue Sizes';
 
-		this.escapedQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
-		this.escapedQueue.name = 'Escaped Rays Queue';
+		this.regeneratePathQueue = new StorageBufferAttribute( new Uint32Array( this.maxRayCount ) );
+		this.regeneratePathQueue.name = 'Regenerate Path Queue';
 
-		this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
-		this.hitResultQueue.name = 'Hit Result Queue';
+		this.materialEvalQueue = new StorageBufferAttribute( new Uint32Array( this.maxRayCount ) );
+		this.materialEvalQueue.name = 'Material Eval Queue';
+
+		this.extensionRayQueue = new StorageBufferAttribute( new Uint32Array( this.maxRayCount ) );
+		this.extensionRayQueue.name = 'Extension Ray Queue';
+
+
+		// this.rayQueue = new StorageBufferAttribute( new Uint32Array( 8 * maxRayCount ) );
+		// this.rayQueue.name = 'Extension Ray Queue';
+
+		// this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
+		// this.hitResultQueue.name = 'Hit Result Queue';
 
 		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
 		this.bsdfEvalWorkgroupSize = [ 128, 1, 1 ];
 		this.traceRayWorkgroupSize = [ 128, 1, 1 ];
 		this.escapedRayWorkgroupSize = [ 128, 1, 1 ];
+		this.regenerateRayWorkgroupSize = [ 128, 1, 1 ];
 
 		this.createMegakernel();
 		this.createResetKernel();
@@ -188,21 +221,24 @@ export class PathTracerCore {
 
 			cameraToModelMatrix: uniform( new Matrix4() ),
 			inverseProjectionMatrix: uniform( new Matrix4() ),
-			offset: uniform( new Vector2() ),
+			tileOffset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
 			dimensions: uniform( this.dimensions ),
 
-			rayQueue: storage( this.rayQueue, 'RayQueueElement' ),
-			rayQueueSize: storage( this.queueSizes, 'uint' ).toAtomic(),
+			pathState: storage( this.pathState, 'PathState' ),
+			inputQueue: storage( this.regeneratePathQueue, 'uint' ).toReadOnly(),
+			extensionRayQueue: storage( this.extensionRayQueue, 'uint' ),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
+			seed: uniform( 0 ),
 			globalId: globalId,
 
 		};
 
-		this.generateRaysKernel = generateRays( generateRaysParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.generateRaysKernel = generateRays( generateRaysParams ).computeKernel( this.regenerateRayWorkgroupSize );
 
 		this.createTraceRayKernel();
-		this.createEscapedRayKernel();
+		this.createLogicKernel();
 		this.createBsdfEvalKernel();
 
 		this.traceRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
@@ -215,26 +251,21 @@ export class PathTracerCore {
 		};
 
 		this.writeTraceRayDispatchSizeKernel = writeTraceRayDispatchSize( writeTraceRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
-		this.escapedRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
-		this.escapedRayDispatchBuffer.name = 'Dispatch Buffer for Escaped Rays';
 
-		const writeEscapedRayDispatchSizeParams = {
-			outputBuffer: storage( this.escapedRayDispatchBuffer, 'uint' ),
+		this.regenerateDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.regenerateDispatchBuffer.name = 'Dispatch Buffer for Regenerate Rays Kernel';
+
+		this.materialDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.materialDispatchBuffer.name = 'Dispatch Buffer for Material Eval Kernel';
+
+		const writeMaterialStageDispatchSizeParams = {
+			regenerateKernelBuffer: storage( this.regenerateDispatchBuffer, 'uint' ),
+			materialKernelBuffer: storage( this.materialDispatchBuffer, 'uint' ),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 			workgroupSize: uniform( this.escapedRayWorkgroupSize[ 0 ] ),
 		};
 
-		this.writeEscapedRayDispatchSizeKernel = writeEscapedRayDispatchSize( writeEscapedRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
-
-		this.bsdfDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
-		this.bsdfDispatchBuffer.name = 'Dispatch Buffer for bsdf eval';
-		const writeBsdfDispatchSizeParams = {
-			outputBuffer: storage( this.bsdfDispatchBuffer, 'uint' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			workgroupSize: uniform( this.bsdfEvalWorkgroupSize[ 0 ] ),
-		};
-
-		this.writeBsdfDispatchSizeKernel = writeBsdfDispatchSize( writeBsdfDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
+		this.writeMaterialStageDispatchSizeKernel = writeMaterialStageDispatchSize( writeMaterialStageDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
 
 		const cleanQueuesParams = {
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
@@ -282,7 +313,7 @@ export class PathTracerCore {
 		const resetParams = {
 			resultBuffer: storage( this.resultBuffer, 'vec4f' ),
 			dimensions: uniform( this.dimensions ),
-			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
+			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
 
 			globalId: globalId,
 		};
@@ -292,34 +323,40 @@ export class PathTracerCore {
 
 	}
 
-	createEscapedRayKernel() {
+	createLogicKernel() {
 
-		const escapedRayParams = {
+		const logicParams = {
 			resultBuffer: storage( this.resultBuffer, 'vec4' ),
-			inputQueue: storage( this.escapedQueue, 'RayQueueElement' ).toReadOnly(),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
 
+			pathState: storage( this.pathState, 'PathState' ),
+			regeneratePathQueue: storage( this.regeneratePathQueue, 'uint' ),
+			materialEvalQueue: storage( this.materialEvalQueue, 'MaterialEvalRequest' ),
+			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+
+			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
+
+			maxBounces: uniform( this.bounces ),
+			tileOffset: uniform( new Vector2() ),
+			tileSize: uniform( new Vector2() ),
 			dimensions: uniform( this.dimensions ),
 			globalId: globalId,
 		};
 
-		this.escapedRayKernel = escapedRay( escapedRayParams ).computeKernel( this.escapedRayWorkgroupSize );
+		this.logicKernel = logic( logicParams ).computeKernel( this.escapedRayWorkgroupSize );
 
 	}
 
 	createTraceRayKernel() {
 
 		const traceRayParams = {
-			inputQueue: storage( this.rayQueue, 'RayQueueElement' ).toReadOnly(),
+			pathState: storage( this.pathState, 'PathState' ),
+			inputQueue: storage( this.extensionRayQueue, 'uint' ).toReadOnly(),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			escapedQueue: storage( this.escapedQueue, 'RayQueueElement' ),
-			outputQueue: storage( this.hitResultQueue, 'HitResultQueueElement' ),
 
 			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
 			geom_position: storage( this.geometry.position, 'vec3' ).toReadOnly(),
 			geom_normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
-			// geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
 			bvh: storage( this.geometry.bvh, 'BVHNode' ).toReadOnly(),
 
 			globalId: globalId,
@@ -332,11 +369,11 @@ export class PathTracerCore {
 	createBsdfEvalKernel() {
 
 		const bsdfEvalParams = {
-			inputQueue: storage( this.hitResultQueue, 'HitResultQueueElement' ).toReadOnly(),
-			outputQueue: storage( this.rayQueue, 'RayQueueElement' ),
+			pathState: storage( this.pathState, 'PathState' ),
+			inputQueue: storage( this.materialEvalQueue, 'MaterialEvalRequest' ).toReadOnly(),
+			extensionRayQueue: storage( this.extensionRayQueue, 'uint' ),
 			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
 
-			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
 			normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
 			materials: storage( this.geometry.materials, 'Material' ).toReadOnly(),
 			seed: uniform( 0 ),
@@ -427,7 +464,7 @@ export class PathTracerCore {
 		this.sampleCountBuffer.name = 'Sample Counts';
 
 		this.createResetKernel();
-		this.createEscapedRayKernel();
+		this.createLogicKernel();
 		this.createMegakernel();
 
 		this.reset();
@@ -474,7 +511,7 @@ export class PathTracerCore {
 		_renderer.compute( this.resetKernel, dispatchSize );
 
 		this.megakernelParams.seed.value = 0;
-		this.bsdfEvalParams.seed.value = 0;
+		this.generateRaysParams.seed.value = 0;
 
 		this.samples = 0;
 		this.currentTile = 0;
@@ -504,9 +541,12 @@ export class PathTracerCore {
 		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
 		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
 
-		this.bsdfEvalParams.seed.value += 1;
-		this.escapedRayParams.dimensions.value.copy( this.dimensions );
-		this.generateRaysParams.offset.value.copy( offset );
+		this.logicParams.maxBounces.value = this.bounces;
+		this.logicParams.tileOffset.value.copy( offset );
+		this.logicParams.tileSize.value.copy( tileSize );
+		this.logicParams.dimensions.value.copy( this.dimensions );
+		this.generateRaysParams.seed.value += 1;
+		this.generateRaysParams.tileOffset.value.copy( offset );
 		this.generateRaysParams.tileSize.value.copy( tileSize );
 		this.generateRaysParams.dimensions.value.copy( this.dimensions );
 		this.generateRaysParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
