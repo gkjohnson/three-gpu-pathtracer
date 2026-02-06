@@ -77,9 +77,6 @@ export const generateRays = wgslFn( /* wgsl */ `
 
 		let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
 
-		// TODO: Firstly write to workgroup-local memory, then put a bunch inside storage mem
-		// let index = atomicAdd( &rayQueueSize[0], 1 );
-
 		pathState[ pathIndex ].ray = ray;
 		pathState[ pathIndex ].throughputColor = vec3f( 1.0 );
 		pathState[ pathIndex ].currentBounce = 0;
@@ -88,22 +85,10 @@ export const generateRays = wgslFn( /* wgsl */ `
 		pathState[ pathIndex ].pcgState = g_state;
 		pathState[ pathIndex ].tileOffset = tileOffset;
 
+		// TODO: Firstly write to workgroup-local memory, then put a bunch inside storage mem
 		let index = atomicAdd( &queueSizes[2], 1 );
-
 		extensionRayQueue[ index ] = pathIndex;
 
-		// let elementCount = arrayLength(rayQueue) / RAY_ELEMENT_STRUCT_SIZE;
-
-		// rayQueueWriteOriginSoA(rayQueue, elementCount, index, ray.origin);
-		// rayQueueWriteDirectionSoA(rayQueue, elementCount, index, ray.direction);
-		// rayQueueWriteThroughputSoA(rayQueue, elementCount, index, vec3f(1.0));
-		// rayQueueWritePixelSoA(rayQueue, elementCount, index, indexUV);
-		// rayQueueWriteCurrentBounceSoA(rayQueue, elementCount, index, 0);
-
-		// rayQueue[index].ray = ray;
-		// rayQueue[index].pixel = indexUV;
-		// rayQueue[index].throughputColor = vec3f( 1.0 );
-		// rayQueue[index].currentBounce = 0;
 	}
 
 `, [ rayQueueElementStruct, ndcToCameraRay, pathStateStruct, pcgInit, inputQueueSizeWGMem ] );
@@ -176,24 +161,6 @@ export const bsdfEval = wgslFn( /* wgsl */ `
 		let index = atomicAdd( &queueSizes[2], 1 );
 		extensionRayQueue[ index ] = pathIndex;
 
-		// let throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
-		//
-		// let rayIndex = atomicAdd(&queueSizes[0], 1);
-		//
-		// let elementCount = arrayLength(outputQueue) / RAY_ELEMENT_STRUCT_SIZE;
-
-		// rayQueueWriteOriginSoA(outputQueue, elementCount, rayIndex, input.position);
-		// rayQueueWriteDirectionSoA(outputQueue, elementCount, rayIndex, scatterRec.direction);
-		// rayQueueWritePixelSoA(outputQueue, elementCount, rayIndex, pixel);
-		// rayQueueWriteThroughputSoA(outputQueue, elementCount, rayIndex, throughputColor);
-		// rayQueueWriteCurrentBounceSoA(outputQueue, elementCount, rayIndex, input.currentBounce + 1);
-
-		// outputQueue[rayIndex].ray.origin = input.position;
-		// outputQueue[rayIndex].ray.direction = scatterRec.direction;
-		// outputQueue[rayIndex].pixel = pixel;
-		// outputQueue[rayIndex].throughputColor = throughputColor;
-		// outputQueue[rayIndex].currentBounce = input.currentBounce + 1;
-
 	}
 `, [
 	pbrtBsdfFunc,
@@ -226,6 +193,7 @@ export const traceRay = wgslFn( /* wgsl */`
 		globalId: vec3u,
 		localId: vec3u,
 	) -> void {
+
 		if ( localId.x == 0 ) {
 			let queueSize = atomicLoad( &queueSizes[2] );
 
@@ -237,15 +205,6 @@ export const traceRay = wgslFn( /* wgsl */`
 		if (globalId.x >= inputQueueSize) {
 			return;
 		}
-
-		// let elementCount = arrayLength(inputQueue) / RAY_ELEMENT_STRUCT_SIZE;
-
-		// let origin = rayQueueExtractOriginSoA(inputQueue, elementCount, globalId.x);
-		// let direction = rayQueueExtractDirectionSoA(inputQueue, elementCount, globalId.x);
-		// let ray = Ray(origin, direction);
-		// let pixel = rayQueueExtractPixelSoA(inputQueue, elementCount, globalId.x);
-		// let throughputColor = rayQueueExtractThroughputSoA(inputQueue, elementCount, globalId.x);
-		// let currentBounce = rayQueueExtractCurrentBounceSoA(inputQueue, elementCount, globalId.x);
 
 		let pathIndex = inputQueue[ globalId.x ];
 
@@ -265,40 +224,6 @@ export const traceRay = wgslFn( /* wgsl */`
 		pathState[ pathIndex ].side = hitResult.side;
 		pathState[ pathIndex ].barycoord = hitResult.barycoord;
 		pathState[ pathIndex ].dist = hitResult.dist;
-
-		// if ( hitResult.didHit ) {
-		//
-		// 	let index = atomicAdd(&queueSizes[1], 1);
-		// 	outputQueue[index].view = - ray.direction;
-		// 	outputQueue[index].normal = hitResult.normal; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
-		// 	outputQueue[index].position = ray.origin + ray.direction * hitResult.dist; // getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-		// 	outputQueue[index].indices = hitResult.indices.xyz;
-		// 	outputQueue[index].side = hitResult.side;
-		// 	outputQueue[index].barycoord = hitResult.barycoord;
-		// 	outputQueue[index].dist = hitResult.dist;
-		//
-		// 	outputQueue[index].pixel_x = pixel.x;
-		// 	outputQueue[index].pixel_y = pixel.y;
-		//
-		// 	outputQueue[index].throughputColor = throughputColor;
-		//
-		// 	outputQueue[index].currentBounce = currentBounce;
-		// 	// outputQueue[index].materialIndex = geom_material_index[hitResult.indices.x];
-		//
-		// } else {
-		//
-		// 	let index = atomicAdd(&queueSizes[2], 1);
-		// 	let escapedCount = arrayLength(escapedQueue) / RAY_ELEMENT_STRUCT_SIZE;
-		// 	// rayQueueWriteOriginSoA(escapedQueue, escapedCount, index, origin);
-		// 	// rayQueueWriteDirectionSoA(escapedQueue, escapedCount, index, direction);
-		// 	// rayQueueWriteThroughputSoA(escapedQueue, escapedCount, index, throughputColor);
-		// 	// rayQueueWritePixelSoA(escapedQueue, escapedCount, index, pixel);
-		// 	// rayQueueWriteCurrentBounceSoA(escapedQueue, escapedCount, index, currentBounce);
-		//
-		// 	escapedQueue[index].throughputColor = throughputColor;
-		// 	escapedQueue[index].pixel = pixel;
-		//
-		// }
 
 	}
 
@@ -344,10 +269,14 @@ export const logic = wgslFn( /* wgsl */`
 
 		let isThroughputEmpty = length( throughputColor ) < 1e-4; // all( newThroughput == vec3f( 0.0 ) );
 
+		// TODO: Russian Roulette
+		// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
+
 		let isTerminated = isLastBounce || hasMissedScene || isThroughputEmpty;
 
 		if ( !isTerminated ) {
 
+			// Enqueue material evaluation
 			let newThroughput = throughputColor * pathState[ pathIndex ].color / pathState[ pathIndex ].pdf;
 			pathState[ pathIndex ].throughputColor = newThroughput;
 			pathState[ pathIndex ].currentBounce += 1;
@@ -383,9 +312,11 @@ export const logic = wgslFn( /* wgsl */`
 		}
 
 		if ( isTerminated ) {
+
 			// Place in a queue for regeneration
 			let index = atomicAdd( &queueSizes[0], 1 );
 			regeneratePathQueue[ index ] = pathIndex;
+
 		}
 	}
 

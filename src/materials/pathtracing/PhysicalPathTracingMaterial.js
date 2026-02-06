@@ -531,8 +531,7 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						#if FEATURE_RUSSIAN_ROULETTE
 
 						// russian roulette path termination
-						// https://www.arnoldrenderer.com/research/physically_based_shader_design_in_arnold.pdf
-						uint minBounces = 3u;
+						// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
 						float depthProb = float( state.depth < minBounces );
 
 						float rrProb = luminance( state.throughputColor * scatterRec.color / scatterRec.pdf );
