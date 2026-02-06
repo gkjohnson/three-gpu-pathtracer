@@ -47,8 +47,8 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				}
 
-				// pixel
-				let offset = tileIndexBuffer[ 0 ] * tileSize.x + tileIndexBuffer[ 1 ] * tileSize.y;
+				// calculate the pixel index and ensure we are not generating rays outside the texture bounds
+				let offset = vec2( tileIndexBuffer[ 0 ] * tileSize.x, tileIndexBuffer[ 1 ] * tileSize.y );
 				let indexUV = offset + globalId.xy;
 				let targetDimensions = textureDimensions( sampleCountTarget );
 				if ( indexUV.x >= targetDimensions.x || indexUV.y >= targetDimensions.y ) {
@@ -57,11 +57,11 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				}
 
-				// screen uv
+				// calculate the screen uv
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
-				// check whether ray is active
+				// check whether ray is already active (added on the queue) and skip it if it is
 				let ACTIVE_FLAG = 0xF0000000u;
 				let combinedField = textureLoad( sampleCountTarget, indexUV ).r;
 				let isActive = ( ACTIVE_FLAG & combinedField ) != 0;
@@ -73,12 +73,14 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				}
 
-				// write the ray
-				let ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );
-				let index = atomicAdd( &rayQueueSize[ 1 ], 1 );
-				rayQueue[ index ].ray = ray;
+				// get the ray index
+				let queueCapacity = arrayLength( rayQueue );
+				let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % queueCapacity;
+
+				// write the ray data
+				rayQueue[ index ].ray = ndcToCameraRay( ndc, cameraToModelMatrix * inverseProjectionMatrix );;
 				rayQueue[ index ].pixel = indexUV;
-				rayQueue[ index ].throughputColor = vec3f(1.0);
+				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
 
 				// write the active params

@@ -57,10 +57,12 @@ camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
 const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
 renderer.setPixelRatio( devicePixelRatio );
+renderer.setAnimationLoop( animate );
 
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.setScene( scene, camera );
@@ -84,14 +86,9 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 
 onResize();
 
-animate();
-
 window.addEventListener( 'resize', onResize );
 
 function animate() {
-
-	// if the camera position changes call "ptRenderer.reset()"
-	requestAnimationFrame( animate );
 
 	// update the camera and render one sample
 	pathTracer.renderSample();

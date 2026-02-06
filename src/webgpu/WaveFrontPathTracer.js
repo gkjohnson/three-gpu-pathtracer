@@ -2,6 +2,8 @@ import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat,
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
+import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
+import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 
 function* renderTask() {
 
@@ -18,36 +20,32 @@ function* renderTask() {
 		rayQueue,
 		rayQueueSize,
 		rayGenerationDispatch,
+
+		hitQueue,
+		hitQueueSize,
+		hitProcessDispatch,
 		tileIndexBuffer,
 
 		primeRayGenerationDispatchKernel,
 		enqueueRaysKernel,
+		rayIntersectionKernel,
+		updateRayQueueParamsKernel,
 	} = this;
 
 	camera.updateMatrixWorld();
 
-	// init parameters
-	// kernel.outputTarget = outputTarget;
-	// kernel.sampleCountTarget = sampleCountTarget;
-
-	// kernel.geom_index = geometry.index;
-	// kernel.geom_position = geometry.position;
-	// kernel.geom_normals = geometry.normal;
-	// kernel.geom_material_index = geometry.materialIndex;
-	// kernel.bvh = geometry.bvh;
-	// kernel.materials = geometry.materials;
-
-	// kernel.bounces = bounces;
-	// kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
-	// kernel.cameraToModelMatrix.copy( camera.matrixWorld );
+	const tileSize = new Vector2();
 
 	while ( true ) {
 
+		this.getTileSize( tileSize );
+
 		// Step 1: Top up the ray queue
 		// set up the ray prime kernel
+		primeRayGenerationDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
 		primeRayGenerationDispatchKernel.tileCount.copy( tiles );
-		this.getTileSize( primeRayGenerationDispatchKernel.tileSize );
+		primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
 		primeRayGenerationDispatchKernel.rayQueue = rayQueue;
 		primeRayGenerationDispatchKernel.rayQueueSize = rayQueueSize;
 		primeRayGenerationDispatchKernel.outputTileIndex = tileIndexBuffer;
@@ -57,21 +55,41 @@ function* renderTask() {
 		enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
 		enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 		enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
-		this.getTileSize( enqueueRaysKernel.tileSize );
+		enqueueRaysKernel.tileSize.copy( tileSize );
 		enqueueRaysKernel.rayQueue = rayQueue;
 		enqueueRaysKernel.rayQueueSize = rayQueueSize;
 		enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
+		enqueueRaysKernel.outputTarget = outputTarget;
 
 		for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
 
 			// TODO: skip rays that have converged, have reach max samples
-			renderer.compute( primeRayGenerationDispatchKernel.kernel, 1 );
+			renderer.compute( primeRayGenerationDispatchKernel.kernel, [ 1, 1, 1 ] );
 			renderer.compute( enqueueRaysKernel.kernel, rayGenerationDispatch );
 
 		}
 
-		// Step 2: run intersections, add color for terminated rays
-		// TODO
+		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
+		const intersectDispatch = rayIntersectionKernel.getDispatchSize( 50000, 1, 1 );
+		rayIntersectionKernel.outputTarget = outputTarget;
+		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
+
+		rayIntersectionKernel.rayQueue = rayQueue;
+		rayIntersectionKernel.rayQueueSize = rayQueueSize;
+		rayIntersectionKernel.hitQueue = hitQueue;
+		rayIntersectionKernel.hitQueueSize = hitQueueSize;
+		rayIntersectionKernel.geom_index = geometry.index;
+		rayIntersectionKernel.geom_position = geometry.position;
+		rayIntersectionKernel.geom_normals = geometry.normal;
+		rayIntersectionKernel.geom_material_index = geometry.materialIndex;
+		rayIntersectionKernel.bvh = geometry.bvh;
+		rayIntersectionKernel.materials = geometry.materials;
+		renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
+
+		// mark the rays as consumed
+		updateRayQueueParamsKernel.processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workGroupSize[ 0 ];
+		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
+		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
 		// Step 3: attenuate ray color, scatter, run russian roulette
 		// TODO
@@ -132,27 +150,29 @@ export class WaveFrontPathTracer {
 		this.sampleCountTarget.generateMipmaps = false;
 
 		// queue
-		const maxRayCount = 1920 * 1080;
+		const maxRayCount = 1000 * 1000;
 		const queueSize = 16 * maxRayCount;
 		this.rayQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
 		this.rayQueue.name = 'Ray Queue';
 		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ) );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
-		this.hitResultQueue.name = 'Hit Result Queue';
-		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ) );
-		this.rayQueueSize.name = 'Hit Result Queue Size';
+		this.hitQueue = new StorageBufferAttribute( new Uint32Array( queueSize ) );
+		this.hitQueue.name = 'Hit Queue';
+		this.hitQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ) );
+		this.hitQueueSize.name = 'Hit Queue Size';
 
 		// dispatches
 		this.tileIndexBuffer = new StorageBufferAttribute( new Uint32Array( 2 ) );
 		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
+		this.hitProcessDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 
 		// kernels
 		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.enqueueRaysKernel = new RayGenerationKernel();
-		this.writeIntersectionsKernel = null;
-		this.shadingKernel = null;
+		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
+		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
+		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
+		this.hitProcessKernel = null;
 
 		// clear kernels
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );

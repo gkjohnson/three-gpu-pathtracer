@@ -1,6 +1,6 @@
 import { Vector2, Vector3 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
-import { wgslFn, wgsl, uniform, storage, uint } from 'three/tsl';
+import { wgslFn, wgsl, uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
 
@@ -22,7 +22,7 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 			tileCount: uniform( new Vector2() ),
 			rayQueue: storage( new StorageBufferAttribute(), 'QueuedRay' ).toReadOnly(),
-			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
+			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ),
 
 			outputTileIndex: storage( new StorageBufferAttribute(), 'uint' ),
 			outputDispatch: storage( new StorageBufferAttribute(), 'uint' ),
@@ -34,22 +34,36 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 				tileSize: vec2u,
 				tileCount: vec2u,
 				rayQueue: ptr<storage, array<QueuedRay>, read>,
-				rayQueueSize: ptr<storage, array<u32>, read>,
+				rayQueueSize: ptr<storage, array<u32>, read_write>,
 
 				outputTileIndex: ptr<storage, array<u32>, read_write>,
 				outputDispatch: ptr<storage, array<u32>, read_write>,
 			) -> void {
 
+				// keep the queue index small
 			    let queueCapacity = arrayLength( rayQueue );
-				let queueSize = rayQueueSize[ 1 ];
+				if ( rayQueueSize[ 0 ] >= queueCapacity ) {
+
+					rayQueueSize[ 0 ] = rayQueueSize[ 0 ] % queueCapacity;
+					rayQueueSize[ 1 ] = rayQueueSize[ 1 ] % queueCapacity;
+
+				}
+
+				// calculate the amount of elements in the queue
+			    var queueSize = rayQueueSize[ 1 ] - rayQueueSize[ 0 ];
+
+				// calculate the overhead of space in the queue and how much space we need to run a new tile
 				let overhead = queueCapacity - queueSize;
 				let requiredSpace = tileSize.x * tileSize.y;
-				if ( overhead >= requiredSpace ) {
 
+				if ( overhead > requiredSpace ) {
+
+					// calculate the necessary dispatch size to cover the tile
 					outputDispatch[ 0 ] = u32( ceil( f32( tileSize.x ) / f32( rayWorkGroupSize.x ) ) );
 					outputDispatch[ 1 ] = u32( ceil( f32( tileSize.y ) / f32( rayWorkGroupSize.y ) ) );
 					outputDispatch[ 2 ] = 1;
 
+					// calculate the tile index to generate rays for
 					let totalTiles = tileCount.x * tileCount.y;
 					let currentIndex = outputTileIndex[ 1 ] * tileCount.x + outputTileIndex[ 0 ];
 					let nextIndex = ( currentIndex + 1 ) % totalTiles;

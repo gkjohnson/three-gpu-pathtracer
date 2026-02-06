@@ -162,7 +162,6 @@ export class WebGPUPathTracer {
 
 		if ( ! this._renderer._initialized ) {
 
-			this._renderer.init();
 			return;
 
 		}
