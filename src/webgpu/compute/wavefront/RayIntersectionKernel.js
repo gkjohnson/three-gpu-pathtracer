@@ -1,20 +1,20 @@
 import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, storage, wgslFn, textureStore, globalId, wgsl } from 'three/tsl';
+import { storage, wgslFn, textureStore, globalId, wgsl } from 'three/tsl';
 import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
 import { bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 
 export const queuedHitStruct = wgsl( /* wgsl */`
 	struct QueuedHit {
-		normal: vec3f,
+		indices: vec3u,
 		pixel_x: u32,
-		position: vec3f,
+		barycoord: vec3f,
 		pixel_y: u32,
 		view: vec3f,
 		currentBounce: u32,
 		throughputColor: vec3f,
-		vertexIndex: u32,
+		materialIndex: u32,
 	};
 ` );
 
@@ -26,10 +26,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 			outputTarget: textureStore( new StorageTexture( 1, 1 ), 'vec4' ).toReadWrite(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ), 'u32' ).toReadWrite(),
 
-			// settings
-			smoothNormals: uniform( 1 ),
-			bounces: uniform( 1 ),
-
 			// rays
 			rayQueue: storage( new StorageBufferAttribute(), 'QueuedRay' ).toReadOnly(),
 			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
@@ -40,17 +36,11 @@ export class RayIntersectionKernel extends ComputeKernel {
 			// bvh and geometry definition
 			geom_index: storage( new StorageBufferAttribute(), 'uvec3' ).toReadOnly(),
 			geom_position: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
-			geom_normals: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
 			geom_material_index: storage( new StorageBufferAttribute(), 'u32' ).toReadOnly(),
 			bvh: storage( new StorageBufferAttribute(), 'BVHNode' ).toReadOnly(),
-			materials: storage( new StorageBufferAttribute(), 'Material' ).toReadOnly(),
 
 			globalId: globalId,
 		};
-
-		// geom_normals: ptr<storage, array<vec3f>, read>,
-		// geom_material_index: ptr<storage, array<u32>, read>,
-		// materials: ptr<storage, array<Material>, read>,
 
 		const fn = wgslFn( /* wgsl */`
 
@@ -58,10 +48,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 				// indices and target
 				outputTarget: texture_storage_2d<rgba32float, read_write>,
 				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
-
-				// settings
-				smoothNormals: u32,
-				bounces: u32,
 
 				// rays
 				rayQueue: ptr<storage, array<QueuedRay>, read>,
@@ -74,12 +60,12 @@ export class RayIntersectionKernel extends ComputeKernel {
 				// scene
 				geom_position: ptr<storage, array<vec3f>, read>,
 				geom_index: ptr<storage, array<vec3u>, read>,
+				geom_material_index: ptr<storage, array<u32>, read>,
 				bvh: ptr<storage, array<BVHNode>, read>,
 
 				globalId: vec3u
 			) -> void {
 
-				// TODO: is this needed?
 				// skip any rays invocations beyond the ray count
 				let queueCapacity = arrayLength( rayQueue );
 				let rayIndex = ( globalId.x + rayQueueSize[ 0 ] );
@@ -91,40 +77,32 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				// get the ray info
 				let ACTIVE_FLAG = 0xF0000000u;
-				let info = rayQueue[ rayIndex % queueCapacity ];
-				let indexUV = info.pixel;
-				let seed = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + info.currentBounce;
+				let input = rayQueue[ rayIndex % queueCapacity ];
+				let indexUV = input.pixel;
+				let seed = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
 
 				pcgInitialize( indexUV, seed );
 
 				// run intersection
-				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, info.ray );
+				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, input.ray );
 				if ( hitResult.didHit ) {
 
-					// // TODO: we process all of these materials immediately to push to the ray queue
-					// let materialIndex = geom_material_index[ hitResult.indices.x ];
-					// let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-					// let hitNormal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
-
-					// let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
-					// outputQueue[index].view = - input.ray.direction;
-					// outputQueue[index].normal = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_normals );
-					// outputQueue[index].position = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
-					// outputQueue[index].pixel_x = input.pixel.x;
-					// outputQueue[index].pixel_y = input.pixel.y;
-					// outputQueue[index].vertexIndex = hitResult.indices.x;
-					// outputQueue[index].throughputColor = input.throughputColor;
-					// outputQueue[index].currentBounce = input.currentBounce;
-
-
-					let c = textureLoad( outputTarget, indexUV ) + vec4( 0.1, 0, 0, 1 );
-					textureStore( outputTarget, indexUV, c );
-					textureStore( sampleCountTarget, indexUV, vec4( 0 ) );
+					// TODO: we process all of these materials immediately to push to the ray queue
+					let materialIndex = geom_material_index[ hitResult.indices.x ];
+					let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
+					hitQueue[ index ].view = - input.ray.direction;
+					hitQueue[ index ].indices = hitResult.indices.xyz;
+					hitQueue[ index ].barycoord = hitResult.barycoord;
+					hitQueue[ index ].pixel_x = input.pixel.x;
+					hitQueue[ index ].pixel_y = input.pixel.y;
+					hitQueue[ index ].materialIndex = materialIndex;
+					hitQueue[ index ].throughputColor = input.throughputColor;
+					hitQueue[ index ].currentBounce = input.currentBounce;;
 
 				} else {
 
 					let background = vec3f( 0.5 );
-					let newColor = background * info.throughputColor;
+					let newColor = background * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					var color = textureLoad( outputTarget, indexUV ).xyz;
@@ -136,7 +114,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ queuedRayStruct, bvhIntersectFirstHit, constants, getVertexAttribute, pcgRand3, pcgInit, queuedHitStruct ] );
+		`, [ queuedRayStruct, bvhIntersectFirstHit, constants, pcgRand3, pcgInit, queuedHitStruct ] );
 
 		super( fn( parameters ) );
 

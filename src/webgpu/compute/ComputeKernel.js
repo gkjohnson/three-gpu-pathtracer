@@ -6,17 +6,23 @@ export class ComputeKernel {
 
 	}
 
+	get workgroupSize() {
+
+		return this.kernel.workgroupSize;
+
+	}
+
 	constructor( fn, options = {} ) {
 
 		const {
 			workgroupSize = [ 64 ],
 		} = options;
 
-		this.workGroupSize = [ ...workgroupSize ];
-		this._fn = null;
+		// this.workgroupSize = [ ...workgroupSize ];
+		this._fn = fn;
 		this.kernel = null;
 
-		this.setFn( fn );
+		this.setWorkgroupSize( ...workgroupSize );
 
 	}
 
@@ -52,17 +58,9 @@ export class ComputeKernel {
 
 	}
 
-	setFn( fn ) {
-
-		this._fn = fn;
-		this.setWorkgroupSize( ...this.workGroupSize );
-		return this;
-
-	}
-
 	setWorkgroupSize( x = 64, y = 1, z = 1 ) {
 
-		this.workGroupSize = [ x, y, z ];
+		// this.workgroupSize = [ x, y, z ];
 		this.kernel = this._fn.computeKernel( [ x, y, z ] );
 		return this;
 
@@ -70,7 +68,7 @@ export class ComputeKernel {
 
 	getDispatchSize( tx = 1, ty = 1, tz = 1, target = [] ) {
 
-		const [ wgx, wgy, wgz ] = this.workGroupSize;
+		const [ wgx, wgy, wgz ] = this.workgroupSize;
 		target.length = 3;
 		target[ 0 ] = Math.ceil( tx / wgx );
 		target[ 1 ] = Math.ceil( ty / wgy );

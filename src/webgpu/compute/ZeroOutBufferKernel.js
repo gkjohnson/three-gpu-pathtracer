@@ -7,7 +7,7 @@ export class ZeroOutBufferKernel extends ComputeKernel {
 	constructor( options = {} ) {
 
 		const {
-			type = 'uint',
+			type = 'u32',
 		} = options;
 
 		const params = {

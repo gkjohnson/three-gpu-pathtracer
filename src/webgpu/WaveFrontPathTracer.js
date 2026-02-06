@@ -5,6 +5,7 @@ import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js'
 import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
+import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 
 function* renderTask() {
 
@@ -31,19 +32,19 @@ function* renderTask() {
 		enqueueRaysKernel,
 		rayIntersectionKernel,
 		updateRayQueueParamsKernel,
+		hitProcessKernel,
+		zeroDispatchKernel,
 	} = this;
 
 	camera.updateMatrixWorld();
 
 	const tileSize = new Vector2();
-
 	while ( true ) {
 
 		this.getTileSize( tileSize );
 
 		// Step 1: Top up the ray queue
 		// set up the ray prime kernel
-		primeRayGenerationDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
 		primeRayGenerationDispatchKernel.tileCount.copy( tiles );
 		primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
@@ -71,29 +72,42 @@ function* renderTask() {
 		}
 
 		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
-		const intersectDispatch = rayIntersectionKernel.getDispatchSize( 50000, 1, 1 );
+		const intersectDispatch = rayIntersectionKernel.getDispatchSize( 100000, 1, 1 );
 		rayIntersectionKernel.outputTarget = outputTarget;
 		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
-
 		rayIntersectionKernel.rayQueue = rayQueue;
 		rayIntersectionKernel.rayQueueSize = rayQueueSize;
 		rayIntersectionKernel.hitQueue = hitQueue;
 		rayIntersectionKernel.hitQueueSize = hitQueueSize;
 		rayIntersectionKernel.geom_index = geometry.index;
 		rayIntersectionKernel.geom_position = geometry.position;
-		rayIntersectionKernel.geom_normals = geometry.normal;
 		rayIntersectionKernel.geom_material_index = geometry.materialIndex;
 		rayIntersectionKernel.bvh = geometry.bvh;
-		rayIntersectionKernel.materials = geometry.materials;
 		renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
 
 		// mark the rays as consumed
-		updateRayQueueParamsKernel.processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workGroupSize[ 0 ];
+		updateRayQueueParamsKernel.processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
 		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
 		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
 		// Step 3: attenuate ray color, scatter, run russian roulette
-		// TODO
+		hitProcessKernel.outputTarget = outputTarget;
+		hitProcessKernel.sampleCountTarget = sampleCountTarget;
+		hitProcessKernel.bounces = bounces;
+		hitProcessKernel.rayQueue = rayQueue;
+		hitProcessKernel.rayQueueSize = rayQueueSize;
+		hitProcessKernel.hitQueue = hitQueue;
+		hitProcessKernel.hitQueueSize = hitQueueSize;
+		hitProcessKernel.geom_position = geometry.position;
+		hitProcessKernel.geom_normals = geometry.normal;
+		hitProcessKernel.materials = geometry.materials;
+		renderer.compute( hitProcessKernel.kernel, [ 1000, 1, 1 ] );
+
+		// TODO: for some reason we need to call "setWorkgroupSize" here?
+		zeroDispatchKernel.target = hitQueueSize;
+		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
+		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
+
 
 		// Step 4: connect to lights
 		// TODO
@@ -173,7 +187,7 @@ export class WaveFrontPathTracer {
 		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
 		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = null;
+		this.hitProcessKernel = new ProcessHitsKernel().setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
@@ -306,6 +320,8 @@ export class WaveFrontPathTracer {
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 		// clear queues
+		// TODO: why do we need to se the work group size here?
+		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = rayQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayQueueSize.count ] );
 
