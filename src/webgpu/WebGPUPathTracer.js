@@ -1,7 +1,6 @@
 import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock } from 'three/webgpu';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { PathTracerCore } from './PathTracerCore.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
@@ -23,7 +22,9 @@ export class WebGPUPathTracer {
 
 	useMegakernel( value ) {
 
-		// this._pathTracer.setUseMegakernel( value );
+		this._pathTracer.dispose();
+		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._generator = new PathTracingSceneGenerator();
 
 	}
 
@@ -32,8 +33,8 @@ export class WebGPUPathTracer {
 		// members
 		this._renderer = renderer;
 		this._generator = new PathTracingSceneGenerator();
-		this._pathTracer = new MegaKernelPathTracer( renderer );
-		// this._pathTracer = new WaveFrontPathTracer( renderer );
+		// this._pathTracer = new MegaKernelPathTracer( renderer );
+		this._pathTracer = new WaveFrontPathTracer( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
 

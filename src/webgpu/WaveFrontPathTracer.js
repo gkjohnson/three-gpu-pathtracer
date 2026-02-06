@@ -45,6 +45,7 @@ function* renderTask() {
 
 		// Step 1: Top up the ray queue
 		// set up the ray prime kernel
+		primeRayGenerationDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
 		primeRayGenerationDispatchKernel.tileCount.copy( tiles );
 		primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
@@ -54,6 +55,8 @@ function* renderTask() {
 		primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
 
 		// set up the ray generation kernel
+		enqueueRaysKernel.setWorkgroupSize( 8, 8, 1 );
+		enqueueRaysKernel.seed ++;
 		enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
 		enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 		enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
@@ -72,7 +75,9 @@ function* renderTask() {
 		}
 
 		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
-		const intersectDispatch = rayIntersectionKernel.getDispatchSize( 100000, 1, 1 );
+		// TODO: setting dispatch size to 10000 is causing failures / missed rays
+		rayIntersectionKernel.setWorkgroupSize( 64, 1, 1 );
+		const intersectDispatch = rayIntersectionKernel.getDispatchSize( 50000, 1, 1 );
 		rayIntersectionKernel.outputTarget = outputTarget;
 		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 		rayIntersectionKernel.rayQueue = rayQueue;
@@ -86,11 +91,13 @@ function* renderTask() {
 		renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
 
 		// mark the rays as consumed
+		updateRayQueueParamsKernel.setWorkgroupSize( 1, 1, 1 );
 		updateRayQueueParamsKernel.processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
 		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
 		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
 		// Step 3: attenuate ray color, scatter, run russian roulette
+		hitProcessKernel.setWorkgroupSize( 64, 1, 1 );
 		hitProcessKernel.outputTarget = outputTarget;
 		hitProcessKernel.sampleCountTarget = sampleCountTarget;
 		hitProcessKernel.bounces = bounces;
@@ -103,9 +110,10 @@ function* renderTask() {
 		hitProcessKernel.materials = geometry.materials;
 		renderer.compute( hitProcessKernel.kernel, [ 1000, 1, 1 ] );
 
-		// TODO: for some reason we need to call "setWorkgroupSize" here?
-		zeroDispatchKernel.target = hitQueueSize;
+		// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
+		// is cached per parameters and resets?
 		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
+		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
 
 
@@ -313,9 +321,11 @@ export class WaveFrontPathTracer {
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
 		// clear buffers
+		sampleCountClearKernel.setWorkgroupSize( 8, 8, 1 );
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
+		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
 		outputTargetClearKernel.target = outputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
@@ -325,16 +335,20 @@ export class WaveFrontPathTracer {
 		zeroDispatchKernel.target = rayQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayQueueSize.count ] );
 
+		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count ] );
 
 		// clear dispatch sizes
+		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitProcessDispatch;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitProcessDispatch.count ] );
 
+		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = rayGenerationDispatch;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayGenerationDispatch.count ] );
 
+		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = tileIndexBuffer;
 		renderer.compute( zeroDispatchKernel.kernel, [ tileIndexBuffer.count ] );
 
@@ -354,7 +368,12 @@ export class WaveFrontPathTracer {
 
 		}
 
-		this._task.next();
+		// TODO: run this multiple times / adjust loop to process more rays at once
+		for ( let i = 0; i < 20; i ++ ) {
+
+			this._task.next();
+
+		}
 
 	}
 

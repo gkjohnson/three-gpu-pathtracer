@@ -65,8 +65,8 @@ renderer.setPixelRatio( devicePixelRatio );
 renderer.setAnimationLoop( animate );
 
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.setScene( scene, camera );
 pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.setScene( scene, camera );
 
 const controls = new OrbitControls( camera, renderer.domElement );
 controls.addEventListener( 'change', () => {
@@ -80,6 +80,8 @@ const gui = new GUI();
 gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
+	pathTracer.setScene( scene, camera );
+	pathTracer.reset();
 
 } );
 
