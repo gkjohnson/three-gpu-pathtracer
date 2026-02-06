@@ -123,17 +123,15 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					textureStore( outputTarget, indexUV, vec4( 0, 0, 1, 1 ) );
+					let background = vec3f( 0.5 );
+					let newColor = background * info.throughputColor;
 
-					// let background = vec3f( 0.5 );
-					// let newColor = background * info.throughputColor;
+					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
+					var color = textureLoad( outputTarget, indexUV ).xyz;
+					color += ( newColor - color.xyz ) / f32( sampleCount );
 
-					// let sampleCount = textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) + 1;
-					// var color = textureLoad( outputTarget, indexUV ).xyz;
-					// color += ( newColor - color.xyz ) / f32( sampleCount );
-
-					// textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					// textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
+					textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
 
 				}
 
