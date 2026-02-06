@@ -353,7 +353,7 @@ export class PathTracerCore {
 		const traceRayParams = {
 			pathState: storage( this.pathState, 'PathState' ),
 			inputQueue: storage( this.extensionRayQueue, 'uint' ).toReadOnly(),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+			queueSizes: storage( this.queueSizes, 'uint' ).toReadOnly(),
 
 			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
 			geom_position: storage( this.geometry.position, 'vec3' ).toReadOnly(),

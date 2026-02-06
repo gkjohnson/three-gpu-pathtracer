@@ -183,7 +183,7 @@ export const traceRay = wgslFn( /* wgsl */`
 	fn traceRay(
 		pathState: ptr<storage, array<PathState>, read_write>,
 		inputQueue: ptr<storage, array<u32>, read>,
-		queueSizes: ptr<storage, array<atomic<u32>>, read_write>,
+		queueSizes: ptr<storage, array<u32>, read>,
 
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
@@ -194,13 +194,7 @@ export const traceRay = wgslFn( /* wgsl */`
 		localId: vec3u,
 	) -> void {
 
-		if ( localId.x == 0 ) {
-			let queueSize = atomicLoad( &queueSizes[2] );
-
-			inputQueueSize = queueSize;
-		}
-
-		workgroupBarrier();
+		let inputQueueSize = queueSizes[2];
 
 		if (globalId.x >= inputQueueSize) {
 			return;
@@ -233,7 +227,6 @@ export const traceRay = wgslFn( /* wgsl */`
 	pathStateStruct,
 	getVertexAttribute,
 	bvhIntersectFirstHit,
-	inputQueueSizeWGMem,
 	bvhConstants
 ] );
 
