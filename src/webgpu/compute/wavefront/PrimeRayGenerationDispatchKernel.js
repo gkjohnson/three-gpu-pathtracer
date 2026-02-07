@@ -44,8 +44,10 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			    let queueCapacity = arrayLength( rayQueue );
 				if ( rayQueueSize[ 0 ] >= queueCapacity ) {
 
-					rayQueueSize[ 0 ] = rayQueueSize[ 0 ] % queueCapacity;
-					rayQueueSize[ 1 ] = rayQueueSize[ 1 ] % queueCapacity;
+					// uint division results in a floored value
+					let offset = rayQueueSize[ 0 ] / queueCapacity;
+					rayQueueSize[ 0 ] = rayQueueSize[ 0 ] - queueCapacity * offset;
+					rayQueueSize[ 1 ] = rayQueueSize[ 1 ] - queueCapacity * offset;
 
 				}
 

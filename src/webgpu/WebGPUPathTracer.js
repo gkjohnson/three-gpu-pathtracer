@@ -10,13 +10,13 @@ export class WebGPUPathTracer {
 
 	get bounces() {
 
-		return this._pathTracer.material.bounces;
+		return this._pathTracer.bounces;
 
 	}
 
 	set bounces( v ) {
 
-		this._pathTracer.material.bounces = v;
+		this._pathTracer.bounces = v;
 
 	}
 

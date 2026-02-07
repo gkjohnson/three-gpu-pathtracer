@@ -63,7 +63,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			) -> void {
 
 				// skip any rays invocations beyond the ray count
-				let queueCapacity = arrayLength( hitQueue );
+				let hitQueueCapacity = arrayLength( hitQueue );
 				let hitIndex = ( globalId.x + hitQueueSize[ 0 ] );
 				if ( hitIndex >= hitQueueSize[ 1 ] ) {
 
@@ -73,7 +73,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// get the ray info
 				let ACTIVE_FLAG = 0xF0000000u;
-				let input = hitQueue[ hitIndex % queueCapacity ];
+				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				let seed = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
 
@@ -84,7 +84,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let hitNormal = getVertexAttribute( input.barycoord, input.indices.xyz, geom_normals );
 				let scatterRec = bsdfEval( hitNormal, input.view );
 
-				if ( input.currentBounce > bounces ) {
+				if ( input.currentBounce >= bounces ) {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
@@ -96,8 +96,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				} else {
 
-					let queueCapacity = arrayLength( rayQueue );
-					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % queueCapacity;
+					let rayQueueCapacity = arrayLength( rayQueue );
+					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
 					rayQueue[ index ].ray.origin = hitPosition;
 					rayQueue[ index ].ray.direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
