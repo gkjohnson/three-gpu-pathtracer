@@ -58,7 +58,7 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 				let overhead = queueCapacity - queueSize;
 				let requiredSpace = tileSize.x * tileSize.y;
 
-				if ( overhead > requiredSpace ) {
+				if ( overhead >= requiredSpace ) {
 
 					// calculate the necessary dispatch size to cover the tile
 					outputDispatch[ 0 ] = u32( ceil( f32( tileSize.x ) / f32( rayWorkGroupSize.x ) ) );
