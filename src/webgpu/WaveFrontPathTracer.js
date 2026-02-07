@@ -45,6 +45,8 @@ function* renderTask() {
 
 	camera.updateMatrixWorld();
 
+	primeRayGenerationDispatchKernel.tileOffset = 0;
+
 	const tileSize = new Vector2();
 	while ( true ) {
 
@@ -78,6 +80,7 @@ function* renderTask() {
 			// TODO: skip rays that have converged, have reach max samples
 			renderer.compute( primeRayGenerationDispatchKernel.kernel, [ 1, 1, 1 ] );
 			renderer.compute( enqueueRaysKernel.kernel, rayGenerationDispatch );
+			primeRayGenerationDispatchKernel.tileOffset = 1;
 
 		}
 

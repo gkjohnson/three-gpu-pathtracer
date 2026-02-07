@@ -10,8 +10,11 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 
 		const params = {
 			rayWorkGroupSize: uniform( new Vector3() ),
+
 			tileSize: uniform( new Vector2() ),
 			tileCount: uniform( new Vector2() ),
+			tileOffset: uniform( 1 ),
+
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
 
@@ -22,8 +25,11 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 		const kernel = wgslFn( /* wgsl */`
 			fn compute(
 				rayWorkGroupSize: vec3u,
+
 				tileSize: vec2u,
 				tileCount: vec2u,
+				tileOffset: u32,
+
 				rayQueue: ptr<storage, array<QueuedRay>, read>,
 				rayQueueSize: ptr<storage, array<u32>, read_write>,
 
@@ -59,7 +65,7 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 					// calculate the tile index to generate rays for
 					let totalTiles = tileCount.x * tileCount.y;
 					let currentIndex = outputTileIndex[ 1 ] * tileCount.x + outputTileIndex[ 0 ];
-					let nextIndex = ( currentIndex + 1 ) % totalTiles;
+					let nextIndex = ( currentIndex + tileOffset ) % totalTiles;
 
 					outputTileIndex[ 0 ] = nextIndex % tileCount.x;
 					outputTileIndex[ 1 ] = nextIndex / tileCount.x;
