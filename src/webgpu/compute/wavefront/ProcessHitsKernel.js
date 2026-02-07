@@ -1,12 +1,11 @@
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
 import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { queuedHitStruct } from './RayIntersectionKernel.js';
 import { materialStruct } from '../../nodes/structs.wgsl.js';
 import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
+import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -21,16 +20,16 @@ export class ProcessHitsKernel extends ComputeKernel {
 			bounces: uniform( 1 ),
 
 			// rays
-			rayQueue: storage( new StorageBufferAttribute(), 'QueuedRay' ),
-			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toAtomic(),
 
-			hitQueue: storage( new StorageBufferAttribute(), 'QueuedHit' ),
-			hitQueueSize: storage( new StorageBufferAttribute(), 'uint' ),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
+			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
 
 			// bvh and geometry definition
-			geom_position: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
-			geom_normals: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
-			materials: storage( new StorageBufferAttribute(), 'Material' ).toReadOnly(),
+			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill in initial values
 
 			globalId: globalId,
 		};

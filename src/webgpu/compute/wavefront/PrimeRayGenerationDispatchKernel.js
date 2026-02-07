@@ -1,17 +1,8 @@
 import { Vector2, Vector3 } from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
-import { wgslFn, wgsl, uniform, storage } from 'three/tsl';
+import { IndirectStorageBufferAttribute } from 'three/webgpu';
+import { wgslFn, uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
-
-export const queuedRayStruct = wgsl( /* wgsl */ `
-	struct QueuedRay {
-		ray: Ray,
-		throughputColor: vec3f,
-		currentBounce: u32,
-		pixel: vec2u,
-	};
-`, [ rayStruct ] );
+import { QUEUED_RAY_SIZE, queuedRayStruct } from './structs.js';
 
 export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 
@@ -21,11 +12,11 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			rayWorkGroupSize: uniform( new Vector3() ),
 			tileSize: uniform( new Vector2() ),
 			tileCount: uniform( new Vector2() ),
-			rayQueue: storage( new StorageBufferAttribute(), 'QueuedRay' ).toReadOnly(),
-			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
 
-			outputTileIndex: storage( new StorageBufferAttribute(), 'uint' ),
-			outputDispatch: storage( new StorageBufferAttribute(), 'uint' ),
+			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
+			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'uint' ),
 		};
 
 		const kernel = wgslFn( /* wgsl */`

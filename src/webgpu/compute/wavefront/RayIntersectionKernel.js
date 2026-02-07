@@ -1,22 +1,9 @@
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, wgslFn, textureStore, globalId, wgsl } from 'three/tsl';
-import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
 import { bvhIntersectFirstHit, constants } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-
-export const queuedHitStruct = wgsl( /* wgsl */`
-	struct QueuedHit {
-		indices: vec3u,
-		pixel_x: u32,
-		barycoord: vec3f,
-		pixel_y: u32,
-		view: vec3f,
-		currentBounce: u32,
-		throughputColor: vec3f,
-		materialIndex: u32,
-	};
-` );
+import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -27,17 +14,17 @@ export class RayIntersectionKernel extends ComputeKernel {
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ), 'u32' ).toReadWrite(),
 
 			// rays
-			rayQueue: storage( new StorageBufferAttribute(), 'QueuedRay' ).toReadOnly(),
-			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toReadOnly(),
 
-			hitQueue: storage( new StorageBufferAttribute(), 'QueuedHit' ),
-			hitQueueSize: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
+			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toAtomic(),
 
 			// bvh and geometry definition
-			geom_index: storage( new StorageBufferAttribute(), 'uvec3' ).toReadOnly(),
-			geom_position: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
-			geom_material_index: storage( new StorageBufferAttribute(), 'u32' ).toReadOnly(),
-			bvh: storage( new StorageBufferAttribute(), 'BVHNode' ).toReadOnly(),
+			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'uvec3' ).toReadOnly(),
+			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			geom_material_index: storage( new IndirectStorageBufferAttribute( 1, 1 ), 'u32' ).toReadOnly(),
+			bvh: storage( new IndirectStorageBufferAttribute(), 'BVHNode' ).toReadOnly(), // TODO: fill in sizes
 
 			globalId: globalId,
 		};

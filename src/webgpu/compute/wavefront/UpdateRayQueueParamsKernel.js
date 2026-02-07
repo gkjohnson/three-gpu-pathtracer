@@ -1,7 +1,7 @@
-import { StorageBufferAttribute } from 'three/webgpu';
+import { IndirectStorageBufferAttribute } from 'three/webgpu';
 import { wgslFn, uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
+import { queuedRayStruct } from './structs.js';
 
 export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
@@ -9,7 +9,7 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
 		const params = {
 			processed: uniform( 0 ),
-			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
 		};
 
 		const kernel = wgslFn( /* wgsl */`

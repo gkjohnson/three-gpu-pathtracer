@@ -1,10 +1,10 @@
 import { Vector2, Matrix4 } from 'three';
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { wgslFn, uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
-import { queuedRayStruct } from './PrimeRayGenerationDispatchKernel.js';
 import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
+import { QUEUED_RAY_SIZE, queuedRayStruct } from './structs.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
@@ -16,11 +16,11 @@ export class RayGenerationKernel extends ComputeKernel {
 
 			seed: uniform( 0 ),
 
-			tileIndexBuffer: storage( new StorageBufferAttribute(), 'uint' ),
+			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
 			tileSize: uniform( new Vector2() ),
 
-			rayQueue: storage( new StorageBufferAttribute(), 'QueuedRay' ),
-			rayQueueSize: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toAtomic(),
 
 			sampleCountTarget: textureStore( new StorageTexture(), 'uint' ).toReadWrite(),
 
