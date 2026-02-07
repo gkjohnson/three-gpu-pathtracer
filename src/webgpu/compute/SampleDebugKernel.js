@@ -2,6 +2,7 @@ import { StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { textureStore, wgslFn, globalId, uniform } from 'three/tsl';
 
+// Kernel for copying count + active flag to an output target for debug visualizations
 export class SampleDebugKernel extends ComputeKernel {
 
 	constructor() {
