@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement, IndirectStorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute, IndirectStorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
@@ -157,13 +157,13 @@ export class WaveFrontPathTracer {
 
 		// geometry fields
 		this.geometry = {
-			bvh: new StorageBufferAttribute(),
-			index: new StorageBufferAttribute(),
-			position: new StorageBufferAttribute(),
-			normal: new StorageBufferAttribute(),
+			bvh: null,
+			index: null,
+			position: null,
+			normal: null,
 
-			materialIndex: new StorageBufferAttribute(),
-			materials: new StorageBufferAttribute(),
+			materialIndex: null,
+			materials: null,
 		};
 
 		// targets
@@ -182,20 +182,20 @@ export class WaveFrontPathTracer {
 		this.sampleCountTarget.generateMipmaps = false;
 
 		// queues
-		this.rayQueue = new StorageBufferAttribute( new Uint32Array( MAX_RAY_COUNT * 16 ), 16 );
+		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, 16 );
 		this.rayQueue.name = 'Ray Queue';
-		this.rayQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
+		this.rayQueueSize = new IndirectStorageBufferAttribute( 2, 1 );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitQueue = new StorageBufferAttribute( new Uint32Array( MAX_HIT_COUNT * 16 ), 16 );
+		this.hitQueue = new IndirectStorageBufferAttribute( MAX_HIT_COUNT, 16 );
 		this.hitQueue.name = 'Hit Queue';
-		this.hitQueueSize = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
+		this.hitQueueSize = new IndirectStorageBufferAttribute( 2, 1 );
 		this.hitQueueSize.name = 'Hit Queue Size';
 
 		// dispatches
-		this.tileIndexBuffer = new StorageBufferAttribute( new Uint32Array( 2 ), 1 );
-		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ), 1 );
-		this.hitProcessDispatch = new IndirectStorageBufferAttribute( new Uint32Array( 3 ), 1 );
+		this.tileIndexBuffer = new IndirectStorageBufferAttribute( 2, 1 );
+		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( 3, 1 );
+		this.hitProcessDispatch = new IndirectStorageBufferAttribute( 3, 1 );
 
 		// kernels
 		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );

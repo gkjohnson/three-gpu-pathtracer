@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import megakernelShader from '../nodes/megakernel.wgsl.js';
@@ -22,13 +22,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			cameraToModelMatrix: uniform( new Matrix4() ),
 
 			// bvh and geometry definition
-			geom_index: storage( new StorageBufferAttribute(), 'uvec3' ).toReadOnly(),
-			geom_position: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
-			geom_normals: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
-			geom_material_index: storage( new StorageBufferAttribute(), 'u32' ).toReadOnly(),
-			bvh: storage( new StorageBufferAttribute(), 'BVHNode' ).toReadOnly(),
+			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'uvec3' ).toReadOnly(),
+			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			geom_material_index: storage( new IndirectStorageBufferAttribute( 1, 1 ), 'u32' ).toReadOnly(),
+			bvh: storage( new IndirectStorageBufferAttribute(), 'BVHNode' ).toReadOnly(), // TODO: fill this in
 
-			materials: storage( new StorageBufferAttribute(), 'Material' ).toReadOnly(),
+			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill this in
 
 			// compute variables
 			globalId: globalId,
