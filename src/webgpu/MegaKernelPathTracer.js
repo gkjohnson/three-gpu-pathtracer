@@ -1,4 +1,4 @@
-import { StorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
+import { StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
@@ -72,13 +72,13 @@ export class MegaKernelPathTracer {
 
 		// geometry fields
 		this.geometry = {
-			bvh: new StorageBufferAttribute(),
-			index: new StorageBufferAttribute(),
-			position: new StorageBufferAttribute(),
-			normal: new StorageBufferAttribute(),
+			bvh: null,
+			index: null,
+			position: null,
+			normal: null,
 
-			materialIndex: new StorageBufferAttribute(),
-			materials: new StorageBufferAttribute(),
+			materialIndex: null,
+			materials: null,
 		};
 
 		// targets
