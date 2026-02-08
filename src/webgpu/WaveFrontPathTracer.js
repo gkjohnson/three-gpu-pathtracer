@@ -257,12 +257,6 @@ export class WaveFrontPathTracer {
 
 		}
 
-		this.outputTarget.dispose();
-		this.sampleCountTarget.dispose();
-
-		this.outputTarget = this.outputTarget.clone();
-		this.sampleCountTarget = this.sampleCountTarget.clone();
-
 		this.outputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
 
