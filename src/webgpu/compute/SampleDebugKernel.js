@@ -10,8 +10,8 @@ export class SampleDebugKernel extends ComputeKernel {
 		const params = {
 			globalId: globalId,
 			displaySamples: uniform( true ),
-			inputTarget: textureStore( new StorageTexture( 1, 1 ), 'u32' ).toReadOnly(),
-			outputTarget: textureStore( new StorageTexture( 1, 1 ), 'vec4f' ).toReadWrite(),
+			inputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 		};
 
 		const fn = wgslFn( /* wgsl */`

@@ -12,8 +12,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 	constructor() {
 
 		const parameters = {
-			outputTarget: textureStore( new StorageTexture( 1, 1 ), 'vec4' ).toReadWrite(),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ), 'u32' ).toReadWrite(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// settings
 			smoothNormals: uniform( 1 ),
@@ -21,14 +21,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toAtomic(),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
-			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
+			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
 			// bvh and geometry definition
-			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
-			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
+			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
 			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill in initial values
 
 			globalId: globalId,

@@ -16,10 +16,10 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileOffset: uniform( 1 ),
 
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
-			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
-			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'uint' ),
+			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
+			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'u32' ),
 		};
 
 		const kernel = wgslFn( /* wgsl */`

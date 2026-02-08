@@ -16,13 +16,13 @@ export class RayGenerationKernel extends ComputeKernel {
 
 			seed: uniform( 0 ),
 
-			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
+			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 			tileSize: uniform( new Vector2() ),
 
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toAtomic(),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
-			sampleCountTarget: textureStore( new StorageTexture(), 'uint' ).toReadWrite(),
+			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
 			globalId: globalId,
 		};

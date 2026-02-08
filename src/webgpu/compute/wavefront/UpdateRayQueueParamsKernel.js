@@ -9,7 +9,7 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
 		const params = {
 			processed: uniform( 0 ),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 		};
 
 		const kernel = wgslFn( /* wgsl */`

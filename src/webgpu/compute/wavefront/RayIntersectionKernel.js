@@ -10,19 +10,19 @@ export class RayIntersectionKernel extends ComputeKernel {
 	constructor() {
 
 		const parameters = {
-			outputTarget: textureStore( new StorageTexture( 1, 1 ), 'vec4' ).toReadWrite(),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ), 'u32' ).toReadWrite(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toReadOnly(),
+			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toReadOnly(),
 
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
-			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'uint' ).toAtomic(),
+			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
 			// bvh and geometry definition
-			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'uvec3' ).toReadOnly(),
-			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3' ).toReadOnly(),
+			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3u' ).toReadOnly(),
+			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
 			geom_material_index: storage( new IndirectStorageBufferAttribute( 1, 1 ), 'u32' ).toReadOnly(),
 			bvh: storage( new IndirectStorageBufferAttribute(), 'BVHNode' ).toReadOnly(), // TODO: fill in sizes
 
