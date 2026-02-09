@@ -8,9 +8,12 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 	fn compute(
 
-		// indices and target
+		// indices
 		globalId: vec3u,
-		outputTarget: texture_storage_2d<rgba32float, read_write>,
+
+		// Previous target to read from and new target to write to
+		prevOutputTarget: texture_storage_2d<rgba32float, read>,
+		outputTarget: texture_storage_2d<rgba32float, write>,
 		sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 		// tiles
@@ -108,7 +111,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		}
 
 		let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
-		var color = textureLoad( outputTarget, indexUV ).xyz;
+		var color = textureLoad( prevOutputTarget, indexUV ).xyz;
 		color += ( resultColor - color.xyz ) / f32( sampleCount );
 
 		textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );

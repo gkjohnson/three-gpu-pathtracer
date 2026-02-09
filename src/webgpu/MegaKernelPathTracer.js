@@ -12,14 +12,12 @@ function* renderTask() {
 		bounces,
 
 		tiles,
-		outputTarget,
 		sampleCountTarget,
 	} = this;
 
 	camera.updateMatrixWorld();
 
 	// init parameters
-	kernel.outputTarget = outputTarget;
 	kernel.sampleCountTarget = sampleCountTarget;
 
 	kernel.geom_index = geometry.index;
@@ -38,6 +36,13 @@ function* renderTask() {
 		const tileSize = this.getTileSize( kernel.tileSize );
 		const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
 		kernel.seed += 1;
+
+		// Swap targets to support devices without rgba32float with read_write
+		// Copy latest data to a new outputTarget to keep the appearance
+		renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
+		[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
+		kernel.prevOutputTarget = this.prevOutputTarget;
+		kernel.outputTarget = this.outputTarget;
 
 		for ( let x = 0; x < tiles.x; x ++ ) {
 
@@ -87,8 +92,16 @@ export class MegaKernelPathTracer {
 		this.outputTarget.type = FloatType;
 		this.outputTarget.magFilter = LinearFilter;
 		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.outputTarget.name = 'Output';
+		this.outputTarget.name = 'Output 0';
 		this.outputTarget.generateMipmaps = false;
+
+		this.prevOutputTarget = new StorageTexture( 1, 1, );
+		this.prevOutputTarget.format = RGBAFormat;
+		this.prevOutputTarget.type = FloatType;
+		this.prevOutputTarget.magFilter = LinearFilter;
+		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
+		this.prevOutputTarget.name = 'Output 1';
+		this.prevOutputTarget.generateMipmaps = false;
 
 		this.sampleCountTarget = new StorageTexture( 1, 1, );
 		this.sampleCountTarget.format = RedIntegerFormat;
@@ -142,12 +155,15 @@ export class MegaKernelPathTracer {
 
 		}
 
+		this.prevOutputTarget.dispose();
 		this.outputTarget.dispose();
 		this.sampleCountTarget.dispose();
 
+		this.prevOutputTarget = this.prevOutputTarget.clone();
 		this.outputTarget = this.outputTarget.clone();
 		this.sampleCountTarget = this.sampleCountTarget.clone();
 
+		this.prevOutputTarget.setSize( w, h );
 		this.outputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
 
@@ -193,6 +209,7 @@ export class MegaKernelPathTracer {
 			outputTargetClearKernel,
 			sampleCountTarget,
 			outputTarget,
+			prevOutputTarget,
 		} = this;
 
 		if ( ! renderer.initialized ) {
@@ -212,6 +229,9 @@ export class MegaKernelPathTracer {
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
 		outputTargetClearKernel.target = outputTarget;
+		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
+
+		outputTargetClearKernel.target = prevOutputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 	}
