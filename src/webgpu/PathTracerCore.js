@@ -12,6 +12,7 @@ import {
 	generateRays, traceRay, bsdfEval, logic, cleanQueues,
 	writeTraceRayDispatchSize, writeMaterialStageDispatchSize,
 } from './nodes/wavefront.wgsl.js';
+import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 
 function* renderTask() {
 
@@ -38,7 +39,7 @@ function* renderTask() {
 				1
 			];
 
-			_renderer.compute( megakernel, dispatchSize );
+			_renderer.compute( megakernel.kernel, dispatchSize );
 
 		} else {
 
@@ -279,33 +280,12 @@ export class PathTracerCore {
 
 	createMegakernel() {
 
-		const megakernelShaderParams = {
-			resultBuffer: storage( this.resultBuffer, 'vec4' ),
-			offset: uniform( new Vector2() ),
-			tileSize: uniform( new Vector2() ),
-			dimensions: uniform( this.dimensions ),
-			sample_count_buffer: storage( this.sampleCountBuffer, 'u32' ),
-			smoothNormals: uniform( 1 ),
-			seed: uniform( 0 ),
-
-			// transforms
-			inverseProjectionMatrix: uniform( new Matrix4() ),
-			cameraToModelMatrix: uniform( new Matrix4() ),
-
-			// bvh and geometry definition
-			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
-			geom_position: storage( this.geometry.position, 'vec3' ).toReadOnly(),
-			geom_normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
-			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
-			bvh: storage( this.geometry.bvh, 'BVHNode' ).toReadOnly(),
-
-			materials: storage( this.geometry.materials, 'Material' ).toReadOnly(),
-
-			// compute variables
-			globalId: globalId,
-		};
-
-		this.megakernel = megakernelShader( this.bounces )( megakernelShaderParams ).computeKernel( this.WORKGROUP_SIZE );
+		this.megakernel = new PathTracerMegaKernel( this.bounces, {
+			geometry: this.geometry,
+			resultBuffer: this.resultBuffer,
+			dimensions: this.dimensions,
+			sampleCountBuffer: this.sampleCountBuffer,
+		} ).setWorkgroupSize( ...this.WORKGROUP_SIZE );
 
 	}
 

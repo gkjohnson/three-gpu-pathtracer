@@ -18,11 +18,11 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/src/workers/ParallelMeshBVHWorker.js';
+import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 
-const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/royal_esplanade_1k.hdr';
+const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb';
 const CREDITS = 'Model by tipatat on Sketchfab';
 
@@ -193,17 +193,20 @@ function animate() {
 	updateFloatingObjects();
 	pathTracer.renderSample();
 
-	const originAutoClear = renderer.autoClear;
+	const originalAutoClear = renderer.autoClear;
+	const originalBackground = scene.background;
 	renderer.autoClear = false;
+	scene.background = null;
 	scene.overrideMaterial = depthMaterial;
 	renderer.clearDepth();
 	// render depth of the scene
 	renderer.render( scene, camera );
 	scene.overrideMaterial = null;
+	scene.background = originalBackground;
 
 	// render real time floating objects
 	renderer.render( overlayScene, camera );
-	renderer.autoClear = originAutoClear;
+	renderer.autoClear = originalAutoClear;
 
 	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 

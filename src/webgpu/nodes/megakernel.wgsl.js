@@ -4,19 +4,27 @@ import { pcgRand3, pcgInit } from './random.wgsl.js';
 import { lambertBsdfFunc, getSurfaceRecordFunc, pbrtBsdfFunc } from './sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 
-export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
+export const megakernelShader = wgslFn( /* wgsl */`
 
 	fn compute(
-		resultBuffer: ptr<storage, array<vec4f>, read_write>,
+
+		// indices and target
+		globalId: vec3u,
+		outputTarget: texture_storage_2d<rgba32float, read_write>,
+		sampleCountTarget: texture_storage_2d<r32uint, read_write>,
+
+		// tiles
 		offset: vec2u,
 		tileSize: vec2u,
-		dimensions: vec2u,
+
+		// settings
 		smoothNormals: u32,
 		inverseProjectionMatrix: mat4x4f,
 		cameraToModelMatrix: mat4x4f,
 		seed: u32,
-		sample_count_buffer: ptr<storage, array<u32>, read_write>,
+		bounces: u32,
 
+		// scene
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
 		geom_normals: ptr<storage, array<vec3f>, read>,
@@ -25,30 +33,40 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 
 		materials: ptr<storage, array<Material>, read>,
 
-		globalId: vec3u,
 	) -> void {
+
+		// make sure we don't bleed over the edge of our tile
 		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
+
 			return;
+
 		}
 
 		// to screen coordinates
 		let indexUV = offset + globalId.xy;
-		let uv = vec2f( indexUV ) / vec2f( dimensions );
+		let targetDimensions = textureDimensions( outputTarget );
+		if ( indexUV.x >= targetDimensions.x || indexUV.y >= targetDimensions.y ) {
+
+			return;
+
+		}
+
+		let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 		let ndc = uv * 2.0 - vec2f( 1.0 );
 
-		pcgInitialize(indexUV, seed);
+		pcgInitialize( indexUV, seed );
 
 		// scene ray
-		let jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( dimensions.xy );
-
+		// TODO: jittering the ray by [-1, 1] seems to look better but is larger than a pixel?
+		let jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
 		var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 
-		const bounces: u32 = ${bounces};
 		var resultColor = vec3f( 0.0 );
 		var throughputColor = vec3f( 1.0 );
-		var sampleCount = 0u;
+
 		// TODO: fix shadow acne? RTIOW says we could just ignore ray hits that are too close
-		for (var bounce = 0u; bounce < bounces; bounce++) {
+		for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
+
 			let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 
 			// write result
@@ -60,8 +78,6 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 				let surf = getSurfaceRecord( material, hitResult, geom_normals, geom_normals );
 
 				let scatterRec = bsdfSample( - ray.direction, surf );
-
-				// TODO: fix shadow acne?
 				// let scatterRec = bsdfEval(hitResult.normal, - ray.direction);
 				// if (bounce == 1) {
 				// 	resultColor = vec3f( 0.0, 1.0, 0.0 ); //  dot( scatterRec.direction, hitNormal ) ); // ( vec3f( 1.0 ) + scatterRec.direction ) * 0.5;
@@ -82,36 +98,21 @@ export const megakernelShader = ( bounces ) => wgslFn( /* wgsl */`
 
 			} else {
 
-				// TODO: make path regeneration work
-
-				let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
+				// TODO: try path regeneration
+				let background = vec3f( 0.5 );
 				resultColor += background * throughputColor;
-				sampleCount += 1;
 				break;
 
 			}
 
 		}
 
-		if ( sampleCount == 0 ) {
-			return;
-		}
+		let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
+		var color = textureLoad( outputTarget, indexUV ).xyz;
+		color += ( resultColor - color.xyz ) / f32( sampleCount );
 
-		const accumulate: bool = true;
-
-		let index = indexUV.x + indexUV.y * dimensions.x;
-
-		let prevColor = resultBuffer[index];
-		if ( accumulate ) {
-			let prevSampleCount = sample_count_buffer[index];
-			let newSampleCount = prevSampleCount + sampleCount;
-			sample_count_buffer[index] = newSampleCount;
-
-			let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-			resultBuffer[index] = vec4f( newColor, 1.0 );
-		} else {
-			resultBuffer[index] = vec4f( resultColor.xyz / f32( sampleCount ), 1.0 );
-		}
+		textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
+		textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
 
 	}
 `, [ getSurfaceRecordFunc, ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, pbrtBsdfFunc ] );

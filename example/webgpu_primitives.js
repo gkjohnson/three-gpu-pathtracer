@@ -1,8 +1,7 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import Chart from 'chart.js/auto';
 
 const options = {
 	useMegakernel: true,
@@ -57,188 +56,49 @@ const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
-renderer.setDrawingBufferSize( 1920, 1080, 1 );
+renderer.setSize( innerWidth, innerHeight );
+renderer.setPixelRatio( devicePixelRatio );
+renderer.setAnimationLoop( animate );
 
-const settings = getScaledSettings();
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.renderScale = settings.renderScale;
-pathTracer.tiles.setScalar( 2 ); // settings.tiles );
-pathTracer.setScene( scene, camera );
 pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.setScene( scene, camera );
+
+const controls = new OrbitControls( camera, renderer.domElement );
+controls.addEventListener( 'change', () => {
+
+	pathTracer.reset();
+
+} );
 
 const gui = new GUI();
 
 gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
+	pathTracer.setScene( scene, camera );
+	pathTracer.reset();
 
 } );
 
 
 onResize();
 
-animate();
-
 window.addEventListener( 'resize', onResize );
-
-// const samplesEl = document.getElementById( 'samples' );
-const canvasEl = document.getElementById( 'corner-canvas' );
-const samplesEl = document.getElementById( 'info' );
-const timestamps = [];
-const labels = [];
-
-const chart = new Chart( canvasEl, { type: 'line', data: { labels, datasets: [ { animation: false, label: 'Sample time', data: timestamps } ] } } );
-
-const sortedTimestamps = [];
-const histogramLabels = [];
-const histogramBins = [];
-const histogram = new Chart( document.getElementById( 'histogram' ), {
-	type: 'bar',
-	data: {
-		labels: histogramLabels,
-		datasets: [ {
-			label: 'Frequency',
-			data: histogramBins,
-			backgroundColor: 'rgba(54, 162, 235, 0.7)',
-			borderColor: 'rgba(54, 162, 235, 1)',
-			borderWidth: 1,
-			barPercentage: 1.0,
-			categoryPercentage: 1.0
-		} ]
-	},
-	options: {
-		responsive: true,
-		plugins: { legend: { display: false } },
-		scales: {
-			x: { title: { display: true, text: 'Value Ranges' }, grid: { display: false } },
-			y: { title: { display: true, text: 'Frequency' }, beginAtZero: true }
-		}
-	}
-} );
-
-function sortedInsert( array, number ) {
-
-	let l = 0;
-	let r = array.length;
-	while ( r - l > 0 ) {
-
-		const m = Math.floor( ( r + l ) / 2 );
-		if ( array[ m ] > number ) {
-
-			r = m;
-
-		} else {
-
-			l = m + 1;
-
-		}
-
-	}
-
-	const pos = l;
-
-	array.length += 1;
-
-	for ( let i = array.length - 2; i >= pos; i -= 1 ) {
-
-		array[ i + 1 ] = array[ i ];
-
-	}
-
-	array[ pos ] = number;
-
-}
-
-function updateHistogram( sortedData, binCount ) {
-
-	const min = sortedData[ 0 ];
-	const max = sortedData[ sortedData.length - 1 ];
-	const binSize = ( max - min ) / binCount;
-
-	histogramLabels.length = 0;
-
-	for ( let i = 0; i < binCount; i ++ ) {
-
-		const binStart = min + ( i * binSize );
-		const binEnd = binStart + binSize;
-		histogramLabels.push( `${binStart.toFixed( 2 )}-${binEnd.toFixed( 2 )}` );
-
-	}
-
-	histogramBins.length = binCount;
-	for ( let i = 0; i < binCount; i += 1 ) {
-
-		histogramBins[ i ] = 0;
-
-	}
-
-	for ( const value of sortedData ) {
-
-		const binIndex = Math.min( Math.floor( ( value - min ) / binSize ), binCount - 1 );
-		histogramBins[ binIndex ] ++;
-
-	}
-
-}
-
-async function handleTimestamp() {
-
-	const samples = pathTracer.getSampleCount();
-	const timestamp = await pathTracer.getLatestSampleTimestamp();
-	timestamps.length = samples;
-	timestamps[ samples - 1 ] = timestamp;
-	labels.length = samples;
-	labels[ samples - 1 ] = samples;
-
-	chart.update();
-
-	sortedTimestamps.length = Math.max( samples - 1, 0 );
-	if ( samples > 0 ) {
-
-		sortedInsert( sortedTimestamps, timestamp );
-
-	}
-
-	updateHistogram( sortedTimestamps, 32 );
-	histogram.update();
-
-	let totalTime = 0;
-	for ( const t of timestamps ) {
-
-		totalTime += t;
-
-	}
-
-	const avgTime = totalTime / timestamps.length;
-	const medianTime = sortedTimestamps[ Math.floor( sortedTimestamps.length / 2 ) ];
-
-	 samplesEl.innerText = `
-			Rendered ${samples} samples
-			Total: ${totalTime.toFixed( 6 )}ms
-			Average: ${avgTime.toFixed( 6 )}ms
-			Median: ${medianTime?.toFixed( 6 )}ms
-	`;
-
-}
 
 function animate() {
 
-	// if the camera position changes call "ptRenderer.reset()"
-	requestAnimationFrame( animate );
-
 	// update the camera and render one sample
 	pathTracer.renderSample();
-
-	handleTimestamp();
 
 }
 
 function onResize() {
 
-	return;
 	// update rendering resolution
 	const w = window.innerWidth;
 	const h = window.innerHeight;
@@ -249,7 +109,5 @@ function onResize() {
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
-
-	pathTracer.setScene( scene, camera );
 
 }

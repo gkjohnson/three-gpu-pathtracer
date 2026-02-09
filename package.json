@@ -36,7 +36,6 @@
     "@types/three": "^0.181.0",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "canvas-capture": "^2.0.5",
-    "chart.js": "^4.5.1",
     "eslint": "^8.56.0",
     "eslint-config-mdcs": "^5.0.0",
     "node-fetch": "^3.2.9",
@@ -47,7 +46,7 @@
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.181.1",
-    "three-mesh-bvh": "^0.9.2",
+    "three-mesh-bvh": "^0.9.5",
     "typescript": "^5.9.2",
     "vite": "^6.2.2",
     "yargs": "^17.5.1"

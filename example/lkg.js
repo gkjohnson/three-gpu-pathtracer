@@ -45,10 +45,10 @@ const ENVMAP_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/mas
 const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr';
 const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 const MODELS = {
-	'X-Wing': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
-	'UCS AT-ST': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
+	'X-Wing': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
+	'UCS AT-ST': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
 	'Death Star': 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/10143-1 - Death Star II.mpd',
-	'Lunar Vehicle': 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
+	'Lunar Vehicle': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
 };
 
 [

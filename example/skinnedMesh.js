@@ -20,7 +20,7 @@ import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
-const MORPH_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
+const MORPH_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
 const SKINNED_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/trex/scene.gltf';
 const CREDITS = 'Model by DailyArt on Sketchfab';
 const DESCRIPTION = 'Rendering deformable geometry with path tracing.';
