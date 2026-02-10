@@ -10,24 +10,16 @@ import { constants, inputQueueSizeWGMem } from '../../nodes/structs.wgsl';
 
 export class EvaluateMaterialKernel extends ComputeKernel {
 
-	constructor(
-		pathState = new StorageBufferAttribute(),
-		extensionRayQueue = new StorageBufferAttribute(),
-		materialEvalQueue = new StorageBufferAttribute(),
-		queueSizes = new StorageBufferAttribute(),
-
-		geomNormals = new StorageBufferAttribute(),
-		materials = new StorageBufferAttribute(),
-	) {
+	constructor( ) {
 
 		const params = {
-			pathState: storage( pathState, 'PathState' ),
-			inputQueue: storage( materialEvalQueue, 'uint' ).toReadOnly(),
-			extensionRayQueue: storage( extensionRayQueue, 'uint' ),
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			pathState: storage( new StorageBufferAttribute(), 'PathState' ),
+			inputQueue: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
+			extensionRayQueue: storage( new StorageBufferAttribute(), 'uint' ),
+			queueSizes: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
 
-			geomNormals: storage( geomNormals, 'vec3' ).toReadOnly(),
-			materials: storage( materials, 'Material' ).toReadOnly(),
+			geomNormals: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
+			materials: storage( new StorageBufferAttribute(), 'Material' ).toReadOnly(),
 			seed: uniform( 0 ),
 
 			globalId: globalId,

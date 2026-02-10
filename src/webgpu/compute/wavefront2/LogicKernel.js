@@ -1,33 +1,23 @@
 import { ComputeKernel } from '../ComputeKernel';
-import { wgslFn, storage, uniform, globalId } from 'three/tsl';
+import { wgslFn, storage, textureStore, uniform, globalId } from 'three/tsl';
 import { Vector2 } from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { pathStateStruct } from '../../nodes/structs.wgsl';
 
 export class LogicKernel extends ComputeKernel {
 
-	constructor(
-		resultBuffer = new StorageBufferAttribute(),
-		sampleCountBuffer = new StorageBufferAttribute(),
-
-		pathState = new StorageBufferAttribute(),
-		regeneratePathQueue = new StorageBufferAttribute(),
-		materialEvalQueue = new StorageBufferAttribute(),
-		queueSizes = new StorageBufferAttribute(),
-
-		geomMaterialIndex = new StorageBufferAttribute(),
-	) {
+	constructor() {
 
 		const params = {
-			resultBuffer: storage( resultBuffer, 'vec4' ),
-			sampleCountBuffer: storage( sampleCountBuffer, 'u32' ),
+			outputTarget: textureStore( new StorageTexture() ).toReadWrite(),
+			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
-			pathState: storage( pathState, 'PathState' ),
-			regeneratePathQueue: storage( regeneratePathQueue, 'uint' ),
-			materialEvalQueue: storage( materialEvalQueue, 'uint' ),
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			pathState: storage( new StorageBufferAttribute(), 'PathState' ),
+			regeneratePathQueue: storage( new StorageBufferAttribute(), 'uint' ),
+			materialEvalQueue: storage( new StorageBufferAttribute(), 'uint' ),
+			queueSizes: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
 
-			geomMaterialIndex: storage( geomMaterialIndex, 'uint' ).toReadOnly(),
+			geomMaterialIndex: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
 
 			maxBounces: uniform( 1 ),
 			tileOffset: uniform( new Vector2() ),
@@ -40,8 +30,8 @@ export class LogicKernel extends ComputeKernel {
 		const kernel = wgslFn( /* wgsl */`
 
 			fn logic(
-				resultBuffer: ptr<storage, array<vec4f>, read_write>,
-				sampleCountBuffer: ptr<storage, array<u32>, read_write>,
+				outputTarget: texture_storage_2d<rgba32float, read_write>,
+				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 				pathState: ptr<storage, array<PathState>, read_write>,
 				regeneratePathQueue: ptr<storage, array<u32>, read_write>,
@@ -99,16 +89,13 @@ export class LogicKernel extends ComputeKernel {
 
 					let resultColor = background * newThroughput;
 
-					let offset = pixel.x + pixel.y * dimensions.x;
-
-					let prevColor = resultBuffer[offset];
-					let prevSampleCount = sampleCountBuffer[offset];
+					let prevColor = textureLoad( outputTarget, pixel ).xyz;
+					let prevSampleCount = textureLoad( sampleCountTarget, pixel ).r;
 					let newSampleCount = prevSampleCount + 1;
-					sampleCountBuffer[offset] = newSampleCount;
+					textureStore( sampleCountTarget, pixel, vec4( newSampleCount ) );
 
 					let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
-					resultBuffer[offset] = vec4f( newColor, 1.0 );
-					// resultBuffer[offset] = vec4f( resultColor, 1.0 );
+					textureStore( outputTarget, pixel, vec4( newColor.xyz, 1.0 ) );
 
 				}
 

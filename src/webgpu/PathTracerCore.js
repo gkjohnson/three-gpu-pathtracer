@@ -2,7 +2,14 @@ import {
 	IndirectStorageBufferAttribute,
 	StorageBufferAttribute,
 	Vector2,
-	TimestampQuery
+	TimestampQuery,
+	StorageTexture,
+	RGBAFormat,
+	RedIntegerFormat,
+	FloatType,
+	UnsignedIntType,
+	LinearFilter,
+	ColorManagement,
 } from 'three/webgpu';
 import { MaterialStageDispatchKernel, TraceRayDispatchKernel } from './compute/wavefront2/DispatchKernels.js';
 import { RegenerateRaysKernel } from './compute/wavefront2/RegenerateRaysKernel.js';
@@ -10,6 +17,7 @@ import { RayIntersectionKernel } from './compute/wavefront2/RayIntersectionKerne
 import { LogicKernel } from './compute/wavefront2/LogicKernel.js';
 import { EvaluateMaterialKernel } from './compute/wavefront2/EvaluateMaterialKernel.js';
 import { ResetKernel } from './compute/wavefront2/ResetKernel.js';
+import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 function* renderTask() {
 
@@ -53,17 +61,18 @@ function* renderTask() {
 		const offset = currentTileVec.multiply( tileSize );
 
 		// Setup all the state for kernels
-		logicKernel.resultBuffer = this.resultBuffer;
-		logicKernel.sampleCountBuffer = this.sampleCountBuffer;
+		logicKernel.tileOffset.copy( offset );
+		logicKernel.tileSize.copy( tileSize );
+		this.getSize( logicKernel.dimensions );
+		logicKernel.maxBounces = this.bounces;
+
+		logicKernel.outputTarget = this.outputTarget;
+		logicKernel.sampleCountTarget = this.sampleCountTarget;
 		logicKernel.pathState = this.pathState;
-		logicKernel.regenreatePathQueue = this.regeneratePathQueue;
+		logicKernel.regeneratePathQueue = this.regeneratePathQueue;
 		logicKernel.materialEvalQueue = this.materialEvalQueue;
 		logicKernel.queueSizes = this.queueSizes;
 		logicKernel.geomMaterialIndex = this.geometry.materialIndex;
-		logicKernel.tileOffset.copy( offset );
-		logicKernel.tileSize.copy( tileSize );
-		logicKernel.dimensions.copy( this.dimensions );
-		logicKernel.maxBounces = this.bounces;
 
 		materialStageDispatchKernel.regenerateDispatchBuffer = regenerateDispatchBuffer;
 		materialStageDispatchKernel.regenerateKernelWorkgroupSize = regenerateRaysKernel.workgroupSize[ 0 ];
@@ -76,7 +85,8 @@ function* renderTask() {
 		regenerateRaysKernel.inverseProjectionMatrix.copy( this.camera.projectionMatrixInverse );
 		regenerateRaysKernel.tileOffset.copy( offset );
 		regenerateRaysKernel.tileSize.copy( tileSize );
-		regenerateRaysKernel.dimensions.copy( this.dimensions );
+		this.getSize( regenerateRaysKernel.dimensions );
+
 		regenerateRaysKernel.pathState = this.pathState;
 		regenerateRaysKernel.inputQueue = this.regeneratePathQueue;
 		regenerateRaysKernel.extensionRayQueue = this.extensionRayQueue;
@@ -94,7 +104,7 @@ function* renderTask() {
 		traceRayDispatchKernel.queueSizes = this.queueSizes;
 
 		traceRayKernel.pathState = this.pathState;
-		traceRayKernel.extensionRayQueue = this.extensionRayQueue;
+		traceRayKernel.inputQueue = this.extensionRayQueue;
 		traceRayKernel.queueSizes = this.queueSizes;
 		traceRayKernel.geomIndex = this.geometry.index;
 		traceRayKernel.geomPosition = this.geometry.position;
@@ -103,7 +113,7 @@ function* renderTask() {
 		// Run n waves
 		const logicDispatchSize = logicKernel.getDispatchSize( tileSize.x * tileSize.y, 1, 1 );
 
-		for ( let i = 0; i < this.bounces; i ++ ) {
+		for ( let i = 0; i < 5; i ++ ) {
 
 			// 1. Logic stage
 			// Process material eval and ray intersection results
@@ -177,11 +187,25 @@ export class PathTracerCore {
 			materials: new StorageBufferAttribute(),
 		};
 
-		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
-		this.resultBuffer.name = 'Result Image #0';
+		this.outputTarget = new StorageTexture( 1, 1, );
+		this.outputTarget.format = RGBAFormat;
+		this.outputTarget.type = FloatType;
+		this.outputTarget.magFilter = LinearFilter;
+		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
+		this.outputTarget.name = 'Output';
+		this.outputTarget.generateMipmaps = false;
 
-		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
-		this.sampleCountBuffer.name = 'Sample Count';
+		this.sampleCountTarget = new StorageTexture( 1, 1, );
+		this.sampleCountTarget.format = RedIntegerFormat;
+		this.sampleCountTarget.type = UnsignedIntType;
+		this.sampleCountTarget.name = 'Sample Count';
+		this.sampleCountTarget.generateMipmaps = false;
+
+		// this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 ) );
+		// this.resultBuffer.name = 'Result Image #0';
+
+		// this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( 1 ) );
+		// this.sampleCountBuffer.name = 'Sample Count';
 
 		// More resolution does not fit into webgpu-defualt 128mb buffer
 		const pathStateStructSize = 176;
@@ -211,43 +235,19 @@ export class PathTracerCore {
 		this.regenerateRayWorkgroupSize = [ 128, 1, 1 ];
 
 		this.resetKernel = new ResetKernel().setWorkgroupSize( ...this.resetKernelWorkgroupSize );
+		this.regenerateRaysKernel = new RegenerateRaysKernel().setWorkgroupSize( ...this.regenerateRayWorkgroupSize );
+		this.traceRayKernel = new RayIntersectionKernel().setWorkgroupSize( ...this.traceRayWorkgroupSize );
+		this.logicKernel = new LogicKernel().setWorkgroupSize( ...this.logicKernelWorkgroupSize );
+		this.materialEvalKernel = new EvaluateMaterialKernel().setWorkgroupSize( ...this.materialWorkgroupSize );
 
-		this.regenerateRaysKernel = new RegenerateRaysKernel(
-			this.pathState,
-			this.regeneratePathQueue,
-			this.extensionRayQueue,
-			this.queueSizes,
-		).setWorkgroupSize( ...this.regenerateRayWorkgroupSize );
+		this.traceRayDispatchKernel = new TraceRayDispatchKernel().setWorkgroupSize( 1, 1, 1 );
+		this.materialStageDispatchKernel = new MaterialStageDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 
-		this.traceRayKernel = new RayIntersectionKernel(
-			this.queueSizes,
-			this.pathState,
-			this.extensionRayQueue,
-		).setWorkgroupSize( ...this.traceRayWorkgroupSize );
-
-		this.logicKernel = new LogicKernel(
-			this.resultBuffer,
-			this.sampleCountBuffer,
-			this.pathState,
-			this.regeneratePathQueue,
-			this.materialEvalQueue,
-			this.queueSizes,
-		).setWorkgroupSize( ...this.logicKernelWorkgroupSize );
-
-		this.materialEvalKernel = new EvaluateMaterialKernel(
-			this.pathState,
-			this.extensionRayQueue,
-			this.materialEvalQueue,
-			this.queueSizes,
-		).setWorkgroupSize( ...this.materialWorkgroupSize );
+		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
+		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
 
 		this.traceRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.traceRayDispatchBuffer.name = 'Dispatch Buffer for Trace Ray';
-
-		this.traceRayDispatchKernel = new TraceRayDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.traceRayDispatchBuffer.queueSizes = this.queueSizes;
-		this.traceRayKernelWorkgroupSize = this.traceRayWorkgroupSize[ 0 ];
-		this.traceRayDispatchBuffer = this.traceRayDispatchBuffer;
 
 		this.regenerateDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.regenerateDispatchBuffer.name = 'Dispatch Buffer for Regenerate Rays Kernel';
@@ -255,12 +255,6 @@ export class PathTracerCore {
 		this.materialDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.materialDispatchBuffer.name = 'Dispatch Buffer for Material Eval Kernel';
 
-		this.materialStageDispatchKernel = new MaterialStageDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.materialStageDispatchKernel.queueSizes = this.queueSizes;
-		this.materialStageDispatchKernel.regenerateDispatchBuffer = this.regenerateDispatchBuffer;
-		this.materialStageDispatchKernel.regenerateKernelWorkgroupSize = this.regenerateRayWorkgroupSize[ 0 ];
-		this.materialStageDispatchKernel.materialDispatchBuffer = this.materialDispatchBuffer;
-		this.materialStageDispatchKernel.materialDispatchBuffer = this.materialWorkgroupSize[ 0 ];
 
 	}
 
@@ -313,30 +307,21 @@ export class PathTracerCore {
 		w = Math.ceil( w );
 		h = Math.ceil( h );
 
-		if ( this.dimensions.x === w && this.dimensions.y === h ) {
+		const { width, height } = this.outputTarget;
+		if ( width === w && height === h ) {
 
 			return;
 
 		}
 
-		this.bufferCount = ( this.bufferCount ?? 0 ) + 1;
-		this.dimensions.set( w, h );
+		this.outputTarget.dispose();
+		this.sampleCountTarget.dispose();
 
-		try {
+		this.outputTarget = this.outputTarget.clone();
+		this.sampleCountTarget = this.sampleCountTarget.clone();
 
-			this._renderer.destroyAttribute( this.resultBuffer );
-			this._renderer.destroyAttribute( this.sampleCountBuffer );
-
-		} catch ( e ) {
-
-			console.log( 'Failed to destroy result buffer. Pbbly there was no gpu buffer for it' );
-
-		}
-
-		this.resultBuffer = new StorageBufferAttribute( new Float32Array( 4 * w * h ) );
-		this.resultBuffer.name = `Result Image #${this.bufferCount}`;
-		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );
-		this.sampleCountBuffer.name = 'Sample Counts';
+		this.outputTarget.setSize( w, h );
+		this.sampleCountTarget.setSize( w, h );
 
 		this.reset();
 
@@ -344,7 +329,7 @@ export class PathTracerCore {
 
 	getSize( target ) {
 
-		target.copy( this.dimensions );
+		return target.set( this.outputTarget.width, this.outputTarget.height );
 
 	}
 
@@ -356,7 +341,7 @@ export class PathTracerCore {
 
 	getTileSize( target ) {
 
-		target.copy( this.dimensions ).divide( this.tiles ).ceil();
+		this.getSize( target ).divide( this.tiles ).ceil();
 
 		return target;
 
@@ -371,18 +356,35 @@ export class PathTracerCore {
 
 	reset() {
 
-		const { _renderer } = this;
+		const {
+			_renderer,
 
-		const dispatchSize = this.resetKernel.getDispatchSize(
-			this.dimensions.x,
-			this.dimensions.y,
-			1
-		);
+			sampleCountClearKernel,
+			outputTargetClearKernel,
 
-		this.resetKernel.resultBuffer = this.resultBuffer;
-		this.resetKernel.sampleCountBuffer = this.sampleCountBuffer;
+			sampleCountTarget,
+			outputTarget,
+		} = this;
 
-		_renderer.compute( this.resetKernel.kernel, dispatchSize );
+		if ( ! _renderer.initialized ) {
+
+			return;
+
+		}
+
+		this._task = null;
+
+		const { width, height } = sampleCountTarget;
+		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
+
+		// clear targets
+		sampleCountClearKernel.setWorkgroupSize( 8, 8, 1 );
+		sampleCountClearKernel.target = sampleCountTarget;
+		_renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
+
+		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
+		outputTargetClearKernel.target = outputTarget;
+		_renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 		this.regenerateRaysKernel.seed = 0;
 

@@ -54,7 +54,7 @@ export class WebGPUPathTracer {
 
 		}
 
-		this._blitQuad.material = value === WebGPUBackend.PathTracerCore ? new BlitBufferNodeMaterial() : new RenderToScreenNodeMaterial();
+		this._blitQuad.material = new RenderToScreenNodeMaterial();
 		this._generator = new PathTracingSceneGenerator();
 
 	}
@@ -554,16 +554,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.update();
 
 		const blitQuad = this._blitQuad;
-		if ( blitQuad.material.texture !== undefined ) {
-
-			blitQuad.material.texture = this._pathTracer.outputTarget;
-
-		} else {
-
-			this._pathTracer.getSize( blitQuad.material.dimensions );
-			blitQuad.material.resultBuffer = this._pathTracer.getResultBuffer();
-
-		}
+		blitQuad.material.texture = this._pathTracer.outputTarget;
 
 		blitQuad.render( this._renderer );
 

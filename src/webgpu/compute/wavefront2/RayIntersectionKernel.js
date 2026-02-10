@@ -6,25 +6,16 @@ import { getVertexAttribute, bvhIntersectFirstHit, constants as bvhConstants } f
 
 export class RayIntersectionKernel extends ComputeKernel {
 
-	constructor(
-		queueSizes = new StorageBufferAttribute(),
-
-		pathState = new StorageBufferAttribute(),
-		extensionRayQueue = new StorageBufferAttribute(),
-
-		geomIndex = new StorageBufferAttribute(),
-		geomPosition = new StorageBufferAttribute(),
-		bvh = new StorageBufferAttribute(),
-	) {
+	constructor( ) {
 
 		const params = {
-			pathState: storage( pathState, 'PathState' ),
-			inputQueue: storage( extensionRayQueue, 'uint' ).toReadOnly(),
-			queueSizes: storage( queueSizes, 'uint' ).toReadOnly(),
+			pathState: storage( new StorageBufferAttribute(), 'PathState' ),
+			inputQueue: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
+			queueSizes: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
 
-			geomIndex: storage( geomIndex, 'uvec3' ).toReadOnly(),
-			geomPosition: storage( geomPosition, 'vec3' ).toReadOnly(),
-			bvh: storage( bvh, 'BVHNode' ).toReadOnly(),
+			geomIndex: storage( new StorageBufferAttribute(), 'uvec3' ).toReadOnly(),
+			geomPosition: storage( new StorageBufferAttribute(), 'vec3' ).toReadOnly(),
+			bvh: storage( new StorageBufferAttribute(), 'BVHNode' ).toReadOnly(),
 
 			globalId: globalId,
 			localId: localId,

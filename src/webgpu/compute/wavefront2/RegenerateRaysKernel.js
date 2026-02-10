@@ -8,12 +8,7 @@ import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl';
 
 export class RegenerateRaysKernel extends ComputeKernel {
 
-	constructor(
-		pathState = new StorageBufferAttribute(),
-		inputQueue = new StorageBufferAttribute(),
-		extensionRayQueue = new StorageBufferAttribute(),
-		queueSizes = new StorageBufferAttribute(),
-	) {
+	constructor( ) {
 
 		const params = {
 
@@ -23,10 +18,10 @@ export class RegenerateRaysKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 			dimensions: uniform( new Vector2() ),
 
-			pathState: storage( pathState, 'PathState' ),
-			inputQueue: storage( inputQueue, 'uint' ).toReadOnly(),
-			extensionRayQueue: storage( extensionRayQueue, 'uint' ),
-			queueSizes: storage( queueSizes, 'uint' ).toAtomic(),
+			pathState: storage( new StorageBufferAttribute(), 'PathState' ),
+			inputQueue: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
+			extensionRayQueue: storage( new StorageBufferAttribute(), 'uint' ),
+			queueSizes: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
 
 			seed: uniform( 0 ),
 			globalId: globalId,
@@ -65,6 +60,8 @@ export class RegenerateRaysKernel extends ComputeKernel {
 					return;
 				}
 
+				let index = atomicAdd( &queueSizes[2], 1 );
+
 				let pathIndex = inputQueue[ globalId.x ];
 				let indexUV = vec2u( pathIndex % tileSize.x, pathIndex / tileSize.x ) + tileOffset;
 
@@ -91,7 +88,6 @@ export class RegenerateRaysKernel extends ComputeKernel {
 				pathState[ pathIndex ].tileOffset = tileOffset;
 
 				// TODO: Firstly write to workgroup-local memory, then put a bunch inside storage mem
-				let index = atomicAdd( &queueSizes[2], 1 );
 				extensionRayQueue[ index ] = pathIndex;
 
 			}
