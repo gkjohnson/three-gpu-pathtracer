@@ -1,18 +1,9 @@
 import {
 	IndirectStorageBufferAttribute,
 	StorageBufferAttribute,
-	Matrix4,
 	Vector2,
 	TimestampQuery
 } from 'three/webgpu';
-import { uniform, storage, globalId, localId } from 'three/tsl';
-import megakernelShader from './nodes/megakernel.wgsl.js';
-import resetResultFn from './nodes/reset.wgsl.js';
-import {
-	generateRays, traceRay, logic, cleanQueues,
-	writeTraceRayDispatchSize, writeMaterialStageDispatchSize,
-} from './nodes/wavefront.wgsl.js';
-import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { MaterialStageDispatchKernel, TraceRayDispatchKernel } from './compute/wavefront2/DispatchKernels.js';
 import { RegenerateRaysKernel } from './compute/wavefront2/RegenerateRaysKernel.js';
 import { RayIntersectionKernel } from './compute/wavefront2/RayIntersectionKernel.js';

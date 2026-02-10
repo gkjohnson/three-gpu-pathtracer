@@ -3,9 +3,8 @@ import { Matrix4, Vector2 } from 'three';
 import { ComputeKernel } from '../ComputeKernel';
 import StorageBufferAttribute from 'three/src/renderers/common/StorageBufferAttribute.js';
 import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
-import { pathStateStruct } from '../../nodes/structs.wgsl';
+import { pathStateStruct, inputQueueSizeWGMem } from '../../nodes/structs.wgsl';
 import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl';
-import { inputQueueSizeWGMem } from '../../nodes/wavefront.wgsl';
 
 export class RegenerateRaysKernel extends ComputeKernel {
 

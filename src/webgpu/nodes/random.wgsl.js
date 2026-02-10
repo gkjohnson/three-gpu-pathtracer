@@ -31,14 +31,6 @@ export const pcg4d = wgslFn( /* wgsl */ `
 	}
 ` );
 
-export const pcgCycleState = wgslFn( /* wgsl */ `
-	fn pcgCycleState(n: u32) -> void {
-		for (var i = 0u; i < n; i++) {
-			pcg4d(&g_state.s0);
-		}
-	}
-` );
-
 // TODO: test if abs there is necessary
 export const pcgRand3 = wgslFn( /*wgsl*/`
 	fn pcgRand3() -> vec3f {

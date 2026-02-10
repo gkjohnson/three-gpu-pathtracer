@@ -262,3 +262,9 @@ export const pathStateStruct = wgsl( /* wgsl */ `
 	}
 
 `, [ rayStruct, pcgStateStruct ] );
+
+export const inputQueueSizeWGMem = wgsl( /* wgsl */ `
+
+	var<workgroup> inputQueueSize: u32;
+
+` );

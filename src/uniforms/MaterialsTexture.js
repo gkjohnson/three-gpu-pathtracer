@@ -98,9 +98,6 @@ export class MaterialsTexture extends DataTexture {
 
 				let i = 0;
 
-				// LOOKINTO: Why are we wriring only 6 elements of the matrix?
-				// Others do not matter? And why 8 element offset for matricies actually works???
-
 				// first row
 				array[ offset + i ++ ] = elements[ 0 ];
 				array[ offset + i ++ ] = elements[ 3 ];

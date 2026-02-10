@@ -5,9 +5,8 @@ import { pathStateStruct } from '../../nodes/structs.wgsl';
 import { pbrtBsdfFunc, getSurfaceRecordFunc } from '../../nodes/sampling.wgsl';
 import { materialStruct } from '../../nodes/structs.wgsl';
 import { intersectionResultStruct } from 'three-mesh-bvh/webgpu';
-import { inputQueueSizeWGMem } from '../../nodes/wavefront.wgsl';
 import { pcgInit, pcgRand3 } from '../../nodes/random.wgsl';
-import { constants } from '../../nodes/structs.wgsl';
+import { constants, inputQueueSizeWGMem } from '../../nodes/structs.wgsl';
 
 export class EvaluateMaterialKernel extends ComputeKernel {
 

@@ -3,7 +3,6 @@ import { pcgRand, pcgRand2 } from './random.wgsl.js';
 import { scatterRecordStruct, surfaceRecordStruct, constants } from './structs.wgsl.js';
 import { getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
 
-
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
 	fn inverse(m: mat3x3f) -> mat3x3f {
@@ -58,7 +57,6 @@ export const sampleSphereFunc = wgslFn( /* wgsl */ `
 	}
 
 `, [ constants ] );
-
 
 export const lambertBsdfFunc = wgslFn( /* wgsl */`
 
