@@ -9,10 +9,16 @@ import { uniform, storage, globalId, localId } from 'three/tsl';
 import megakernelShader from './nodes/megakernel.wgsl.js';
 import resetResultFn from './nodes/reset.wgsl.js';
 import {
-	generateRays, traceRay, bsdfEval, logic, cleanQueues,
+	generateRays, traceRay, logic, cleanQueues,
 	writeTraceRayDispatchSize, writeMaterialStageDispatchSize,
 } from './nodes/wavefront.wgsl.js';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
+import { MaterialStageDispatchKernel, TraceRayDispatchKernel } from './compute/wavefront2/DispatchKernels.js';
+import { RegenerateRaysKernel } from './compute/wavefront2/RegenerateRaysKernel.js';
+import { RayIntersectionKernel } from './compute/wavefront2/RayIntersectionKernel.js';
+import { LogicKernel } from './compute/wavefront2/LogicKernel.js';
+import { EvaluateMaterialKernel } from './compute/wavefront2/EvaluateMaterialKernel.js';
+import { ResetKernel } from './compute/wavefront2/ResetKernel.js';
 
 function* renderTask() {
 
@@ -21,73 +27,111 @@ function* renderTask() {
 	while ( true ) {
 
 		const {
-			megakernel,
 			_renderer,
-			WORKGROUP_SIZE,
-			useMegakernel,
+			logicKernel,
+			materialStageDispatchKernel,
+			regenerateRaysKernel,
+			materialEvalKernel,
+			traceRayDispatchKernel,
+			traceRayKernel,
+
+			regenerateDispatchBuffer,
+			materialDispatchBuffer,
+			traceRayDispatchBuffer,
 		} = this;
 
 		this.getTileSize( tileSize );
 
 		_renderer.info.reset();
 
-		if ( useMegakernel ) {
+		// const dispatchSize = [
+		// 	Math.ceil( tileSize.x / WORKGROUP_SIZE[ 0 ] ),
+		// 	Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
+		// 	1,
+		// ];
 
-			const dispatchSize = [
-				Math.ceil( tileSize.x / WORKGROUP_SIZE[ 0 ] ),
-				Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
-				1
-			];
+		// 0. Clean queues on camera change?
+		// 0.1 Generate one ray per pixel and write it into ray queue
+		// _renderer.compute( this.generateRaysKernel, dispatchSize );
 
-			_renderer.compute( megakernel.kernel, dispatchSize );
+		// Current tile characteristics
+		const currentTileVec = new Vector2(
+			this.currentTile % this.tiles.x,
+			Math.floor( this.currentTile / this.tiles.x )
+		);
+		const offset = currentTileVec.multiply( tileSize );
 
-		} else {
+		// Setup all the state for kernels
+		logicKernel.resultBuffer = this.resultBuffer;
+		logicKernel.sampleCountBuffer = this.sampleCountBuffer;
+		logicKernel.pathState = this.pathState;
+		logicKernel.regenreatePathQueue = this.regeneratePathQueue;
+		logicKernel.materialEvalQueue = this.materialEvalQueue;
+		logicKernel.queueSizes = this.queueSizes;
+		logicKernel.geomMaterialIndex = this.geometry.materialIndex;
+		logicKernel.tileOffset.copy( offset );
+		logicKernel.tileSize.copy( tileSize );
+		logicKernel.dimensions.copy( this.dimensions );
+		logicKernel.maxBounces = this.bounces;
 
-			const dispatchSize = [
-				Math.ceil( tileSize.x / WORKGROUP_SIZE[ 0 ] ),
-				Math.ceil( tileSize.y / WORKGROUP_SIZE[ 1 ] ),
-				1,
-			];
+		materialStageDispatchKernel.regenerateDispatchBuffer = regenerateDispatchBuffer;
+		materialStageDispatchKernel.regenerateKernelWorkgroupSize = regenerateRaysKernel.workgroupSize[ 0 ];
+		materialStageDispatchKernel.materialDispatchBuffer = materialDispatchBuffer;
+		materialStageDispatchKernel.materialKernelWorkgroupSize = materialEvalKernel.workgroupSize[ 0 ];
+		materialStageDispatchKernel.queueSizes = this.queueSizes;
 
-			// 0. Clean queues on camera change?
-			// _renderer.compute( this.cleanQueuesKernel, 1 );
-			// 0.1 Generate one ray per pixel and write it into ray queue
-			// _renderer.compute( this.generateRaysKernel, dispatchSize );
+		regenerateRaysKernel.seed += 1;
+		regenerateRaysKernel.cameraToModelMatrix.copy( this.camera.matrixWorld );
+		regenerateRaysKernel.inverseProjectionMatrix.copy( this.camera.projectionMatrixInverse );
+		regenerateRaysKernel.tileOffset.copy( offset );
+		regenerateRaysKernel.tileSize.copy( tileSize );
+		regenerateRaysKernel.dimensions.copy( this.dimensions );
+		regenerateRaysKernel.pathState = this.pathState;
+		regenerateRaysKernel.inputQueue = this.regeneratePathQueue;
+		regenerateRaysKernel.extensionRayQueue = this.extensionRayQueue;
+		regenerateRaysKernel.queueSizes = this.queueSizes;
 
-			const logicDispatchSize = [ Math.ceil( tileSize.x * tileSize.y / 128 ), 1, 1 ];
+		materialEvalKernel.pathState = this.pathState;
+		materialEvalKernel.inputQueue = this.materialEvalQueue;
+		materialEvalKernel.extensionRayQueue = this.extensionRayQueue;
+		materialEvalKernel.queueSizes = this.queueSizes;
+		materialEvalKernel.geomNormals = this.geometry.normal;
+		materialEvalKernel.materials = this.geometry.materials;
 
-			for ( let i = 0; i < this.bounces; i ++ ) {
+		traceRayDispatchKernel.traceRayDispatchBuffer = traceRayDispatchBuffer;
+		traceRayDispatchKernel.traceRayKernelWorkgroupSize = traceRayKernel.workgroupSize[ 0 ];
+		traceRayDispatchKernel.queueSizes = this.queueSizes;
 
-				_renderer.compute( this.logicKernel, logicDispatchSize );
+		traceRayKernel.pathState = this.pathState;
+		traceRayKernel.extensionRayQueue = this.extensionRayQueue;
+		traceRayKernel.queueSizes = this.queueSizes;
+		traceRayKernel.geomIndex = this.geometry.index;
+		traceRayKernel.geomPosition = this.geometry.position;
+		traceRayKernel.bvh = this.geometry.bvh;
 
-				_renderer.compute( this.writeMaterialStageDispatchSizeKernel, 1 );
+		// Run n waves
+		const logicDispatchSize = logicKernel.getDispatchSize( tileSize.x * tileSize.y, 1, 1 );
 
-				_renderer.compute( this.generateRaysKernel, this.regenerateDispatchBuffer );
-				_renderer.compute( this.bsdfEvalKernel, this.materialDispatchBuffer );
+		for ( let i = 0; i < this.bounces; i ++ ) {
 
-				_renderer.compute( this.writeTraceRayDispatchSizeKernel, 1 );
+			// 1. Logic stage
+			// Process material eval and ray intersection results
+			// Enqueue material evaluations and paths to regenerate
+			_renderer.compute( logicKernel.kernel, logicDispatchSize );
 
-				_renderer.compute( this.traceRayKernel, this.traceRayDispatchBuffer );
+			// 2. Material stage:
+			// Evaluate hits, regenerate misses
+			// Enqueue extension rays to trace
+			_renderer.compute( materialStageDispatchKernel.kernel, 1 );
+			_renderer.compute( regenerateRaysKernel.kernel, regenerateDispatchBuffer );
+			_renderer.compute( materialEvalKernel.kernel, materialDispatchBuffer );
 
-				// 1. Trace rays from the ray queue
-				// Traced ray can either hit something - then it goes into the hitResultQueue
-				// If it doesn't hit anything it goes into the escapedRayQueue
-				// _renderer.compute( this.writeTraceRayDispatchSizeKernel, 1 );
-				// _renderer.compute( this.traceRayKernel, [ ] );
-
-				// 2. Handle escaped and scattered rays
-				// 2.1 Calcuate dispatch sizes and write it to gpu buffer
-				// _renderer.compute( this.writeEscapedRayDispatchSizeKernel, 1 );
-				// _renderer.compute( this.writeBsdfDispatchSizeKernel, 1 );
-				// 2.1 Dispatch shaders
-				// When processing escaped rays, calculate new contribution and add that to the result image
-				// _renderer.compute( this.escapedRayKernel, this.escapedRayDispatchBuffer );
-				// When processing hit results, sample a new ray according to material's properties
-				// _renderer.compute( this.bsdfEvalKernel, this.bsdfDispatchBuffer );
-
-			}
+			// 3. Extension rays tracing stage
+			_renderer.compute( traceRayDispatchKernel.kernel, 1 );
+			_renderer.compute( traceRayKernel.kernel, traceRayDispatchBuffer );
 
 		}
+
 
 		this.samples += 1;
 
@@ -111,36 +155,6 @@ function* renderTask() {
 
 export class PathTracerCore {
 
-	get megakernelParams() {
-
-		return this.megakernel.computeNode.parameters;
-
-	}
-
-	get traceRayParams() {
-
-		return this.traceRayKernel.computeNode.parameters;
-
-	}
-
-	get bsdfEvalParams() {
-
-		return this.bsdfEvalKernel.computeNode.parameters;
-
-	}
-
-	get logicParams() {
-
-		return this.logicKernel.computeNode.parameters;
-
-	}
-
-	get generateRaysParams() {
-
-		return this.generateRaysKernel.computeNode.parameters;
-
-	}
-
 	constructor( renderer ) {
 
 		this.camera = null;
@@ -155,8 +169,6 @@ export class PathTracerCore {
 		this.currentTile = 0;
 
 		this.dimensions = new Vector2();
-
-		this.useMegakernel = true;
 
 		this.getLatestSampleTimestamp = async () => {
 
@@ -184,7 +196,6 @@ export class PathTracerCore {
 		const pathStateStructSize = 176;
 		this.maxRayCount = 128 * 1024 * 1024 / pathStateStructSize;
 		this.maxRayCount -= this.maxRayCount % 128; // Make maxRayCount a multiple of 128
-		const queueSize = /* element storage */ 16 * this.maxRayCount;
 		const pathStateSize = ( pathStateStructSize / 4 ) * this.maxRayCount;
 		this.pathState = new StorageBufferAttribute( new Uint32Array( pathStateSize ) );
 		this.pathState.name = 'Path State';
@@ -202,57 +213,50 @@ export class PathTracerCore {
 		this.extensionRayQueue = new StorageBufferAttribute( new Uint32Array( this.maxRayCount ) );
 		this.extensionRayQueue.name = 'Extension Ray Queue';
 
-
-		// this.rayQueue = new StorageBufferAttribute( new Uint32Array( 8 * maxRayCount ) );
-		// this.rayQueue.name = 'Extension Ray Queue';
-
-		// this.hitResultQueue = new StorageBufferAttribute( new Uint32Array( 16 * maxRayCount ) );
-		// this.hitResultQueue.name = 'Hit Result Queue';
-
-		this.WORKGROUP_SIZE = [ 8, 8, 1 ];
-		this.bsdfEvalWorkgroupSize = [ 128, 1, 1 ];
+		this.resetKernelWorkgroupSize = [ 8, 8, 1 ];
+		this.materialWorkgroupSize = [ 128, 1, 1 ];
 		this.traceRayWorkgroupSize = [ 128, 1, 1 ];
-		this.escapedRayWorkgroupSize = [ 128, 1, 1 ];
+		this.logicKernelWorkgroupSize = [ 128, 1, 1 ];
 		this.regenerateRayWorkgroupSize = [ 128, 1, 1 ];
 
-		this.createMegakernel();
-		this.createResetKernel();
+		this.resetKernel = new ResetKernel().setWorkgroupSize( ...this.resetKernelWorkgroupSize );
 
-		const generateRaysParams = {
+		this.regenerateRaysKernel = new RegenerateRaysKernel(
+			this.pathState,
+			this.regeneratePathQueue,
+			this.extensionRayQueue,
+			this.queueSizes,
+		).setWorkgroupSize( ...this.regenerateRayWorkgroupSize );
 
-			cameraToModelMatrix: uniform( new Matrix4() ),
-			inverseProjectionMatrix: uniform( new Matrix4() ),
-			tileOffset: uniform( new Vector2() ),
-			tileSize: uniform( new Vector2() ),
-			dimensions: uniform( this.dimensions ),
+		this.traceRayKernel = new RayIntersectionKernel(
+			this.queueSizes,
+			this.pathState,
+			this.extensionRayQueue,
+		).setWorkgroupSize( ...this.traceRayWorkgroupSize );
 
-			pathState: storage( this.pathState, 'PathState' ),
-			inputQueue: storage( this.regeneratePathQueue, 'uint' ).toReadOnly(),
-			extensionRayQueue: storage( this.extensionRayQueue, 'uint' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
+		this.logicKernel = new LogicKernel(
+			this.resultBuffer,
+			this.sampleCountBuffer,
+			this.pathState,
+			this.regeneratePathQueue,
+			this.materialEvalQueue,
+			this.queueSizes,
+		).setWorkgroupSize( ...this.logicKernelWorkgroupSize );
 
-			seed: uniform( 0 ),
-			globalId: globalId,
-			localId: localId,
-
-		};
-
-		this.generateRaysKernel = generateRays( generateRaysParams ).computeKernel( this.regenerateRayWorkgroupSize );
-
-		this.createTraceRayKernel();
-		this.createLogicKernel();
-		this.createBsdfEvalKernel();
+		this.materialEvalKernel = new EvaluateMaterialKernel(
+			this.pathState,
+			this.extensionRayQueue,
+			this.materialEvalQueue,
+			this.queueSizes,
+		).setWorkgroupSize( ...this.materialWorkgroupSize );
 
 		this.traceRayDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.traceRayDispatchBuffer.name = 'Dispatch Buffer for Trace Ray';
 
-		const writeTraceRayDispatchSizeParams = {
-			outputBuffer: storage( this.traceRayDispatchBuffer, 'uint' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			workgroupSize: uniform( this.traceRayWorkgroupSize[ 0 ] ),
-		};
-
-		this.writeTraceRayDispatchSizeKernel = writeTraceRayDispatchSize( writeTraceRayDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
+		this.traceRayDispatchKernel = new TraceRayDispatchKernel().setWorkgroupSize( 1, 1, 1 );
+		this.traceRayDispatchBuffer.queueSizes = this.queueSizes;
+		this.traceRayKernelWorkgroupSize = this.traceRayWorkgroupSize[ 0 ];
+		this.traceRayDispatchBuffer = this.traceRayDispatchBuffer;
 
 		this.regenerateDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.regenerateDispatchBuffer.name = 'Dispatch Buffer for Regenerate Rays Kernel';
@@ -260,118 +264,12 @@ export class PathTracerCore {
 		this.materialDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.materialDispatchBuffer.name = 'Dispatch Buffer for Material Eval Kernel';
 
-		const writeMaterialStageDispatchSizeParams = {
-			regenerateKernelBuffer: storage( this.regenerateDispatchBuffer, 'uint' ),
-			materialKernelBuffer: storage( this.materialDispatchBuffer, 'uint' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			workgroupSize: uniform( this.escapedRayWorkgroupSize[ 0 ] ),
-		};
-
-		this.writeMaterialStageDispatchSizeKernel = writeMaterialStageDispatchSize( writeMaterialStageDispatchSizeParams ).computeKernel( [ 1, 1, 1 ] );
-
-		const cleanQueuesParams = {
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-			tileSize: uniform( new Vector2() ),
-		};
-
-		this.cleanQueuesKernel = cleanQueues( cleanQueuesParams ).computeKernel( [ 1, 1, 1 ] );
-
-	}
-
-	createMegakernel() {
-
-		this.megakernel = new PathTracerMegaKernel( this.bounces, {
-			geometry: this.geometry,
-			resultBuffer: this.resultBuffer,
-			dimensions: this.dimensions,
-			sampleCountBuffer: this.sampleCountBuffer,
-		} ).setWorkgroupSize( ...this.WORKGROUP_SIZE );
-
-	}
-
-	createResetKernel() {
-
-		const resetParams = {
-			resultBuffer: storage( this.resultBuffer, 'vec4f' ),
-			dimensions: uniform( this.dimensions ),
-			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
-
-			globalId: globalId,
-		};
-
-
-		this.resetKernel = resetResultFn( resetParams ).computeKernel( this.WORKGROUP_SIZE );
-
-	}
-
-	createLogicKernel() {
-
-		const logicParams = {
-			resultBuffer: storage( this.resultBuffer, 'vec4' ),
-			sampleCountBuffer: storage( this.sampleCountBuffer, 'u32' ),
-
-			pathState: storage( this.pathState, 'PathState' ),
-			regeneratePathQueue: storage( this.regeneratePathQueue, 'uint' ),
-			materialEvalQueue: storage( this.materialEvalQueue, 'uint' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-
-			geom_material_index: storage( this.geometry.materialIndex, 'u32' ).toReadOnly(),
-
-			maxBounces: uniform( this.bounces ),
-			tileOffset: uniform( new Vector2() ),
-			tileSize: uniform( new Vector2() ),
-			dimensions: uniform( this.dimensions ),
-			globalId: globalId,
-		};
-
-		this.logicKernel = logic( logicParams ).computeKernel( this.escapedRayWorkgroupSize );
-
-	}
-
-	createTraceRayKernel() {
-
-		const traceRayParams = {
-			pathState: storage( this.pathState, 'PathState' ),
-			inputQueue: storage( this.extensionRayQueue, 'uint' ).toReadOnly(),
-			queueSizes: storage( this.queueSizes, 'uint' ).toReadOnly(),
-
-			geom_index: storage( this.geometry.index, 'uvec3' ).toReadOnly(),
-			geom_position: storage( this.geometry.position, 'vec3' ).toReadOnly(),
-			geom_normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
-			bvh: storage( this.geometry.bvh, 'BVHNode' ).toReadOnly(),
-
-			globalId: globalId,
-			localId: localId,
-		};
-
-		this.traceRayKernel = traceRay( traceRayParams ).computeKernel( this.traceRayWorkgroupSize );
-
-	}
-
-	createBsdfEvalKernel() {
-
-		const bsdfEvalParams = {
-			pathState: storage( this.pathState, 'PathState' ),
-			inputQueue: storage( this.materialEvalQueue, 'uint' ).toReadOnly(),
-			extensionRayQueue: storage( this.extensionRayQueue, 'uint' ),
-			queueSizes: storage( this.queueSizes, 'uint' ).toAtomic(),
-
-			normals: storage( this.geometry.normal, 'vec3' ).toReadOnly(),
-			materials: storage( this.geometry.materials, 'Material' ).toReadOnly(),
-			seed: uniform( 0 ),
-
-			globalId: globalId,
-			localId: localId,
-		};
-
-		this.bsdfEvalKernel = bsdfEval( bsdfEvalParams ).computeKernel( this.bsdfEvalWorkgroupSize );
-
-	}
-
-	setUseMegakernel( value ) {
-
-		this.useMegakernel = value;
-		this.reset();
+		this.materialStageDispatchKernel = new MaterialStageDispatchKernel().setWorkgroupSize( 1, 1, 1 );
+		this.materialStageDispatchKernel.queueSizes = this.queueSizes;
+		this.materialStageDispatchKernel.regenerateDispatchBuffer = this.regenerateDispatchBuffer;
+		this.materialStageDispatchKernel.regenerateKernelWorkgroupSize = this.regenerateRayWorkgroupSize[ 0 ];
+		this.materialStageDispatchKernel.materialDispatchBuffer = this.materialDispatchBuffer;
+		this.materialStageDispatchKernel.materialDispatchBuffer = this.materialWorkgroupSize[ 0 ];
 
 	}
 
@@ -401,10 +299,6 @@ export class PathTracerCore {
 
 		}
 
-		this.createMegakernel();
-		this.createBsdfEvalKernel();
-		this.createTraceRayKernel();
-
 	}
 
 	setCamera( camera ) {
@@ -415,8 +309,10 @@ export class PathTracerCore {
 
 	setSize( w, h ) {
 
-		w = 1920;
-		h = 1080;
+		// TODO: automatically adjust tileSize to fit into maxRayCount
+
+		// w = 1920;
+		// h = 1080;
 
 		w = Math.ceil( w );
 		h = Math.ceil( h );
@@ -445,10 +341,6 @@ export class PathTracerCore {
 		this.resultBuffer.name = `Result Image #${this.bufferCount}`;
 		this.sampleCountBuffer = new StorageBufferAttribute( new Uint32Array( w * h ) );
 		this.sampleCountBuffer.name = 'Sample Counts';
-
-		this.createResetKernel();
-		this.createLogicKernel();
-		this.createMegakernel();
 
 		this.reset();
 
@@ -485,16 +377,18 @@ export class PathTracerCore {
 
 		const { _renderer } = this;
 
-		const dispatchSize = [
-			Math.ceil( this.dimensions.x / this.WORKGROUP_SIZE[ 0 ] ),
-			Math.ceil( this.dimensions.y / this.WORKGROUP_SIZE[ 1 ] ),
+		const dispatchSize = this.resetKernel.getDispatchSize(
+			this.dimensions.x,
+			this.dimensions.y,
 			1
-		];
+		);
 
-		_renderer.compute( this.resetKernel, dispatchSize );
+		this.resetKernel.resultBuffer = this.resultBuffer;
+		this.resetKernel.sampleCountBuffer = this.sampleCountBuffer;
 
-		this.megakernelParams.seed.value = 0;
-		this.generateRaysParams.seed.value = 0;
+		_renderer.compute( this.resetKernel.kernel, dispatchSize );
+
+		this.regenerateRaysKernel.seed = 0;
 
 		this.samples = 0;
 		this.currentTile = 0;
@@ -509,32 +403,6 @@ export class PathTracerCore {
 			return;
 
 		}
-
-		const tileSize = this.getTileSize( new Vector2() );
-		const currentTileVec = new Vector2(
-			this.currentTile % this.tiles.x,
-			Math.floor( this.currentTile / this.tiles.x )
-		);
-		const offset = currentTileVec.multiply( tileSize );
-
-		this.megakernelParams.seed.value += 1;
-		this.megakernelParams.offset.value.copy( offset );
-		this.megakernelParams.tileSize.value.copy( tileSize );
-		this.megakernelParams.dimensions.value.copy( this.dimensions );
-		this.megakernelParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
-		this.megakernelParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
-
-		this.logicParams.maxBounces.value = this.bounces;
-		this.logicParams.tileOffset.value.copy( offset );
-		this.logicParams.tileSize.value.copy( tileSize );
-		this.logicParams.dimensions.value.copy( this.dimensions );
-		this.generateRaysParams.seed.value += 1;
-		this.generateRaysParams.tileOffset.value.copy( offset );
-		this.generateRaysParams.tileSize.value.copy( tileSize );
-		this.generateRaysParams.dimensions.value.copy( this.dimensions );
-		this.generateRaysParams.inverseProjectionMatrix.value.copy( this.camera.projectionMatrixInverse );
-		this.generateRaysParams.cameraToModelMatrix.value.copy( this.camera.matrixWorld );
-		this.cleanQueuesKernel.computeNode.parameters.tileSize.value.copy( tileSize );
 
 		if ( ! this._task ) {
 

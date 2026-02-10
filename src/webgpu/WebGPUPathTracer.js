@@ -8,6 +8,8 @@ import { getTextureHash } from '../core/utils/sceneUpdateUtils.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
+import { PathTracerCore } from './PathTracerCore.js';
+import { BlitBufferNodeMaterial } from './materials/BlitBufferNodeMaterial.js';
 
 const MATERIAL_STRIDE = 260;
 
@@ -29,7 +31,8 @@ export class WebGPUPathTracer {
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
-		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new PathTracerCore( this._renderer ); // new WaveFrontPathTracer( this._renderer );
+		this._blitQuad.material = value ? new RenderToScreenNodeMaterial() : new BlitBufferNodeMaterial();
 		this._generator = new PathTracingSceneGenerator();
 
 	}
@@ -529,7 +532,17 @@ export class WebGPUPathTracer {
 		this._pathTracer.update();
 
 		const blitQuad = this._blitQuad;
-		blitQuad.material.texture = this._pathTracer.outputTarget;
+		if ( blitQuad.material.texture !== undefined ) {
+
+			blitQuad.material.texture = this._pathTracer.outputTarget;
+
+		} else {
+
+			this._pathTracer.getSize( blitQuad.material.dimensions );
+			blitQuad.material.resultBuffer = this._pathTracer.getResultBuffer();
+
+		}
+
 		blitQuad.render( this._renderer );
 
 	}

@@ -4,25 +4,6 @@ import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, con
 import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from './sampling.wgsl';
 import { pcgInit, pcgCycleState, pcgRand3, pcgRand2 } from './random.wgsl';
 
-export const initializeRandom = wgslFn( /* wgsl */ `
-
-	fn initializeRandom(
-		tileOffset: vec2u,
-		tileSize: vec2u,
-		pathState: ptr<storage, array<PathState>, read_write>,
-
-		seed: u32,
-		globalId: vec3u,
-	) -> void {
-
-		let indexUV = vec2u( pathIndex % tileSize.x, pathIndex / tileSize.x ) + tileOffset;
-		pcgInitialize(pixel, seed);
-		pathState[ globalId.x ].pcgState = g_state;
-
-	}
-
-`, [ pathStateStruct ] );
-
 export const inputQueueSizeWGMem = wgsl( /* wgsl */`
 
 	var<workgroup> inputQueueSize: u32;
