@@ -211,133 +211,6 @@ export const surfaceRecordStruct = wgsl( /* wgsl */`
 // 	};
 // `, [ hitResultQueueElementStruct ] );
 
-export const rayQueueElementOps = wgsl( /* wgsl */ `
-	const ORIGIN_OFFSET = 0;
-	const ORIGIN_SIZE = 3;
-
-	const DIRECTION_OFFSET = 3;
-	const DIRECTION_SIZE = 3;
-
-	const THROUGHPUT_COLOR_OFFSET = 6;
-	const THROUGHPUT_COLOR_SIZE = 3;
-
-	const CURRENT_BOUNCE_OFFSET = 9;
-	const CURRENT_BOUNCE_SIZE = 1;
-
-	const PIXEL_OFFSET = 10;
-	const PIXEL_SIZE = 2;
-
-	const RAY_ELEMENT_STRUCT_SIZE = ORIGIN_SIZE + DIRECTION_SIZE + THROUGHPUT_COLOR_SIZE + CURRENT_BOUNCE_SIZE + PIXEL_SIZE;
-
-	fn rayQueueExtractOriginSoA(
-		buffer: ptr<storage, array<u32>, read>,
-		element_count: u32,
-		i: u32
-	) -> vec3f {
-		return vec3f(
-			bitcast<f32>(buffer[ORIGIN_OFFSET * element_count + ORIGIN_SIZE * i + 0]),
-			bitcast<f32>(buffer[ORIGIN_OFFSET * element_count + ORIGIN_SIZE * i + 1]),
-			bitcast<f32>(buffer[ORIGIN_OFFSET * element_count + ORIGIN_SIZE * i + 2]),
-		);
-	}
-
-	fn rayQueueWriteOriginSoA(
-		buffer: ptr<storage, array<u32>, read_write>,
-		element_count: u32,
-		i: u32,
-		value: vec3f
-	) {
-		buffer[ORIGIN_OFFSET * element_count + ORIGIN_SIZE * i + 0] = bitcast<u32>(value.x);
-		buffer[ORIGIN_OFFSET * element_count + ORIGIN_SIZE * i + 1] = bitcast<u32>(value.y);
-		buffer[ORIGIN_OFFSET * element_count + ORIGIN_SIZE * i + 2] = bitcast<u32>(value.z);
-	}
-
-	fn rayQueueExtractDirectionSoA(
-		buffer: ptr<storage, array<u32>, read>,
-		element_count: u32,
-		i: u32
-	) -> vec3f {
-		return vec3f(
-			bitcast<f32>(buffer[DIRECTION_OFFSET * element_count + DIRECTION_SIZE * i + 0]),
-			bitcast<f32>(buffer[DIRECTION_OFFSET * element_count + DIRECTION_SIZE * i + 1]),
-			bitcast<f32>(buffer[DIRECTION_OFFSET * element_count + DIRECTION_SIZE * i + 2]),
-		);
-	}
-
-	fn rayQueueWriteDirectionSoA(
-		buffer: ptr<storage, array<u32>, read_write>,
-		element_count: u32,
-		i: u32,
-		value: vec3f
-	) {
-		buffer[DIRECTION_OFFSET * element_count + DIRECTION_SIZE * i + 0] = bitcast<u32>(value.x);
-		buffer[DIRECTION_OFFSET * element_count + DIRECTION_SIZE * i + 1] = bitcast<u32>(value.y);
-		buffer[DIRECTION_OFFSET * element_count + DIRECTION_SIZE * i + 2] = bitcast<u32>(value.z);
-	}
-
-	fn rayQueueExtractThroughputSoA(
-		buffer: ptr<storage, array<u32>, read>,
-		element_count: u32,
-		i: u32
-	) -> vec3f {
-		return vec3f(
-			bitcast<f32>(buffer[THROUGHPUT_COLOR_OFFSET * element_count + THROUGHPUT_COLOR_SIZE * i + 0]),
-			bitcast<f32>(buffer[THROUGHPUT_COLOR_OFFSET * element_count + THROUGHPUT_COLOR_SIZE * i + 1]),
-			bitcast<f32>(buffer[THROUGHPUT_COLOR_OFFSET * element_count + THROUGHPUT_COLOR_SIZE * i + 2]),
-		);
-	}
-
-	fn rayQueueWriteThroughputSoA(
-		buffer: ptr<storage, array<u32>, read_write>,
-		element_count: u32,
-		i: u32,
-		value: vec3f
-	) {
-		buffer[THROUGHPUT_COLOR_OFFSET * element_count + THROUGHPUT_COLOR_SIZE * i + 0] = bitcast<u32>(value.x);
-		buffer[THROUGHPUT_COLOR_OFFSET * element_count + THROUGHPUT_COLOR_SIZE * i + 1] = bitcast<u32>(value.y);
-		buffer[THROUGHPUT_COLOR_OFFSET * element_count + THROUGHPUT_COLOR_SIZE * i + 2] = bitcast<u32>(value.z);
-	}
-
-	fn rayQueueExtractCurrentBounceSoA(
-		buffer: ptr<storage, array<u32>, read>,
-		element_count: u32,
-		i: u32
-	) -> u32 {
-		return buffer[CURRENT_BOUNCE_OFFSET * element_count + i];
-	}
-
-	fn rayQueueWriteCurrentBounceSoA(
-		buffer: ptr<storage, array<u32>, read_write>,
-		element_count: u32,
-		i: u32,
-		value: u32
-	) {
-		buffer[CURRENT_BOUNCE_OFFSET * element_count + CURRENT_BOUNCE_SIZE * i + 0] = value;
-	}
-
-	fn rayQueueExtractPixelSoA(
-		buffer: ptr<storage, array<u32>, read>,
-		element_count: u32,
-		i: u32
-	) -> vec2u {
-		return vec2u(
-			buffer[PIXEL_OFFSET * element_count + PIXEL_SIZE * i + 0],
-			buffer[PIXEL_OFFSET * element_count + PIXEL_SIZE * i + 1],
-		);
-	}
-
-	fn rayQueueWritePixelSoA(
-		buffer: ptr<storage, array<u32>, read_write>,
-		element_count: u32,
-		i: u32,
-		value: vec2u
-	) {
-		buffer[PIXEL_OFFSET * element_count + PIXEL_SIZE * i + 0] = value.x;
-		buffer[PIXEL_OFFSET * element_count + PIXEL_SIZE * i + 1] = value.y;
-	}
-
-` );
-
 export const rayQueueElementStruct = wgsl( /* wgsl */ `
 
 	struct RayQueueElement {
@@ -347,7 +220,7 @@ export const rayQueueElementStruct = wgsl( /* wgsl */ `
 		pixel: vec2u,
 	};
 
-`, [ rayStruct, rayQueueElementOps ] );
+`, [ rayStruct ] );
 
 export const hitResultQueueElementStruct = wgsl( /* wgsl */`
 	struct HitResultQueueElement {
