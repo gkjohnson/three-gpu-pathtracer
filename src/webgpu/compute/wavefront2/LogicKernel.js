@@ -90,7 +90,7 @@ export class LogicKernel extends ComputeKernel {
 				} else if ( !isThroughputEmpty && !isLastBounce && hasMissedScene ) {
 
 					// Add color contribution
-					let background = normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
+					let background = vec3f( 0.5 ); // normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
 
 					let pathTileOffset = pathState[ pathIndex ].tileOffset;
 					let pixel = vec2u( pathIndex % tileSize.x, pathIndex / tileSize.x ) + pathTileOffset;

@@ -13,6 +13,12 @@ import { BlitBufferNodeMaterial } from './materials/BlitBufferNodeMaterial.js';
 
 const MATERIAL_STRIDE = 260;
 
+export const WebGPUBackend = {
+	Megakernel: 'Megakernel',
+	WaveFrontPathTracer: 'WaveFrontPathTracer',
+	PathTracerCore: 'PathTracerCore',
+};
+
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
 
@@ -31,8 +37,24 @@ export class WebGPUPathTracer {
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
-		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new PathTracerCore( this._renderer ); // new WaveFrontPathTracer( this._renderer );
-		this._blitQuad.material = value ? new RenderToScreenNodeMaterial() : new BlitBufferNodeMaterial();
+		switch ( value ) {
+
+		case WebGPUBackend.Megakernel:
+			this._pathTracer = new MegaKernelPathTracer( this._renderer );
+			break;
+		case WebGPUBackend.WaveFrontPathTracer:
+			this._pathTracer = new WaveFrontPathTracer( this._renderer );
+			break;
+		case WebGPUBackend.PathTracerCore:
+			this._pathTracer = new PathTracerCore( this._renderer );
+			break;
+		default:
+			this._pathTracer = new MegaKernelPathTracer( this._renderer );
+			break;
+
+		}
+
+		this._blitQuad.material = value === WebGPUBackend.PathTracerCore ? new BlitBufferNodeMaterial() : new RenderToScreenNodeMaterial();
 		this._generator = new PathTracingSceneGenerator();
 
 	}

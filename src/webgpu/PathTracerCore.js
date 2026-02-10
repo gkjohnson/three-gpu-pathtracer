@@ -309,10 +309,15 @@ export class PathTracerCore {
 
 	setSize( w, h ) {
 
-		// TODO: automatically adjust tileSize to fit into maxRayCount
+		// Automatically adjust tileSize to fit into maxRayCount
+		const pixelPerTile = ( w * h ) / ( this.tiles.x * this.tiles.y );
+		if ( pixelPerTile > this.maxRayCount ) {
 
-		// w = 1920;
-		// h = 1080;
+			const minTileCount = Math.ceil( ( w * h ) / this.maxRayCount );
+			const tilesPerSide = Math.ceil( Math.sqrt( minTileCount ) );
+			this.setTiles( new Vector2( tilesPerSide, tilesPerSide ) );
+
+		}
 
 		w = Math.ceil( w );
 		h = Math.ceil( h );

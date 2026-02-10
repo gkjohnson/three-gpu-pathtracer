@@ -73,13 +73,13 @@ export class RegenerateRaysKernel extends ComputeKernel {
 
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
-				let jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( dimensions.xy );
-
 				if ( all( pathState[ pathIndex ].pcgState.s0 == vec4u( 0 ) ) ) {
 					pcgInitialize(indexUV, seed);
 				} else {
 					g_state = pathState[ pathIndex ].pcgState;
 				}
+
+				let jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( dimensions.xy );
 
 				let ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 

@@ -4,7 +4,7 @@ import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { materialStruct } from '../../nodes/structs.wgsl.js';
-import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../../nodes/sampling.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
@@ -92,14 +92,20 @@ export class ProcessHitsKernel extends ComputeKernel {
 					vec4u( input.indices, 0 ),
 					hitNormal,
 					input.barycoord,
-					side,
+					input.side,
 					/* dist */ 0,
 				);
 
 				// TODO: pass UVs
-				let surf = getSurfaceRecord( material, hit, normals, normals );
+				let surf = getSurfaceRecord( material, hit, geom_normals, geom_normals );
 
-				let scatterRec = bsdfEval( input.view, surf );
+				let scatterRec = bsdfSample( input.view, surf );
+
+				if ( scatterRec.pdf <= 0 ) {
+
+					return;
+
+				}
 
 				if ( input.currentBounce >= bounces ) {
 
@@ -118,13 +124,23 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].ray.origin = hitPosition;
 					rayQueue[ index ].ray.direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
+					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 
 				}
 
 			}
-		`, [ queuedRayStruct, lambertBsdfFunc, constants, getVertexAttribute, pcgRand3, pcgInit, queuedHitStruct, materialStruct ] );
+		`, [
+			queuedRayStruct,
+			pbrtBsdfFunc,
+			constants,
+			getVertexAttribute,
+			getSurfaceRecordFunc,
+			pcgRand3,
+			pcgInit,
+			queuedHitStruct,
+			materialStruct
+		] );
 
 		super( fn( parameters ) );
 

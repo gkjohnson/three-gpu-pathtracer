@@ -1,10 +1,10 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
-import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
+import { WebGPUPathTracer, WebGPUBackend, GradientEquirectTexture } from '../src/index.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 const options = {
-	useMegakernel: true,
+	pathtracerArch: WebGPUBackend.Megakernel,
 };
 
 // init scene, renderer, camera, controls, etc
@@ -65,7 +65,7 @@ renderer.setPixelRatio( devicePixelRatio );
 renderer.setAnimationLoop( animate );
 
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.useMegakernel( options.pathtracerArch );
 pathTracer.setScene( scene, camera );
 
 const controls = new OrbitControls( camera, renderer.domElement );
@@ -77,9 +77,14 @@ controls.addEventListener( 'change', () => {
 
 const gui = new GUI();
 
-gui.add( options, 'useMegakernel' ).onChange( () => {
+gui.add( options, 'pathtracerArch', [
+	WebGPUBackend.Megakernel,
+	WebGPUBackend.WaveFrontPathTracer,
+	WebGPUBackend.PathTracerCore,
+]
+).onChange( () => {
 
-	pathTracer.useMegakernel( options.useMegakernel );
+	pathTracer.useMegakernel( options.pathtracerArch );
 	pathTracer.setScene( scene, camera );
 	pathTracer.reset();
 

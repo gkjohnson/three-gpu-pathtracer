@@ -28,7 +28,7 @@ export class ResetKernel extends ComputeKernel {
 
 				let offset = globalId.x + globalId.y * dimensions.x;
 				sampleCountBuffer[offset] = 0;
-				resultBuffer[offset] = vec4f(1.0, 0.0, 0.0, 1.0);
+				resultBuffer[offset] = vec4f(0.0, 0.0, 0.0, 1.0);
 
 			}
 		` )( params );
