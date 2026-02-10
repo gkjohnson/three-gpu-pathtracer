@@ -9,7 +9,6 @@ import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { PathTracerCore } from './PathTracerCore.js';
-import { BlitBufferNodeMaterial } from './materials/BlitBufferNodeMaterial.js';
 
 const MATERIAL_STRIDE = 260;
 
