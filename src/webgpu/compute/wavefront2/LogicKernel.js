@@ -57,10 +57,10 @@ export class LogicKernel extends ComputeKernel {
 
 				let hasMissedScene = pathState[ pathIndex ].didHit == 0;
 
-				let isThroughputEmpty = length( throughputColor ) < 1e-4; // all( newThroughput == vec3f( 0.0 ) );
+				let isThroughputEmpty = all( throughputColor == vec3f( 0.0 ) ); // all( newThroughput == vec3f( 0.0 ) );
 
 				// TODO: Russian Roulette
-				// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
+				// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf
 
 				let isTerminated = isLastBounce || hasMissedScene || isThroughputEmpty;
 
@@ -69,7 +69,7 @@ export class LogicKernel extends ComputeKernel {
 					// Enqueue material evaluation
 					let newThroughput = throughputColor * pathState[ pathIndex ].color / pathState[ pathIndex ].pdf;
 					pathState[ pathIndex ].throughputColor = newThroughput;
-					pathState[ pathIndex ].currentBounce += 1;
+					pathState[ pathIndex ].currentBounce = currentBounce + 1;
 
 					let materialIndex = geomMaterialIndex[ pathState[ pathIndex ].indices.x ];
 					pathState[ pathIndex ].materialIndex = materialIndex;
@@ -77,10 +77,14 @@ export class LogicKernel extends ComputeKernel {
 					let index = atomicAdd( &queueSizes[1], 1 );
 					materialEvalQueue[ index ] = pathIndex;
 
-				} else if ( !isThroughputEmpty && !isLastBounce && hasMissedScene ) {
+				} else if ( !isThroughputEmpty ) {
 
 					// Add color contribution
-					let background = vec3f( 0.5 ); // normalize( vec3f( 0.0366, 0.0813, 0.1057 ) );
+
+					var background = vec3f( 0.5 );
+					if ( isLastBounce ) {
+						background = vec3f( 0.0 );
+					}
 
 					let pathTileOffset = pathState[ pathIndex ].tileOffset;
 					let pixel = vec2u( pathIndex % tileSize.x, pathIndex / tileSize.x ) + pathTileOffset;
@@ -90,11 +94,10 @@ export class LogicKernel extends ComputeKernel {
 					let resultColor = background * newThroughput;
 
 					let prevColor = textureLoad( outputTarget, pixel ).xyz;
-					let prevSampleCount = textureLoad( sampleCountTarget, pixel ).r;
-					let newSampleCount = prevSampleCount + 1;
-					textureStore( sampleCountTarget, pixel, vec4( newSampleCount ) );
+					let newSampleCount = textureLoad( sampleCountTarget, pixel ).r + 1;
+					let newColor = prevColor + ( resultColor - prevColor ) / f32( newSampleCount );
 
-					let newColor = ( ( prevColor.xyz * f32( prevSampleCount ) ) + resultColor ) / f32( newSampleCount );
+					textureStore( sampleCountTarget, pixel, vec4( newSampleCount ) );
 					textureStore( outputTarget, pixel, vec4( newColor.xyz, 1.0 ) );
 
 				}

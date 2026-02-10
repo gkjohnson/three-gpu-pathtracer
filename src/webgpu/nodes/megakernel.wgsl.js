@@ -81,16 +81,10 @@ export const megakernelShader = wgslFn( /* wgsl */`
 				let surf = getSurfaceRecord( material, hitResult, geom_normals, geom_normals );
 
 				let scatterRec = bsdfSample( - ray.direction, surf );
-				// let scatterRec = bsdfEval(hitResult.normal, - ray.direction);
-				// if (bounce == 1) {
-				// 	resultColor = vec3f( 0.0, 1.0, 0.0 ); //  dot( scatterRec.direction, hitNormal ) ); // ( vec3f( 1.0 ) + scatterRec.direction ) * 0.5;
-				// 	sampleCount = 1;
-				// 	break;
-				// }
 
 				if ( scatterRec.pdf <= 0.0 ) { // || ! isDirectionValid( scatterRec.direction, surf.normal, surf.faceNormal ) ) {
 
-					break;
+					return;
 
 				}
 
