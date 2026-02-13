@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from './random.wgsl.js';
-import { lambertBsdfFunc } from './sampling.wgsl.js';
+import { sampleBackgroundFn, lambertBsdfFunc } from './sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 
 export const megakernelShader = wgslFn( /* wgsl */`
@@ -25,6 +25,13 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		seed: u32,
 		bounces: u32,
 
+		// environment
+		envMap: texture_2d<f32>,
+		envMapSampler: sampler,
+		envMapRotation: mat3x3f,
+		envMapIntensity: f32,
+		envMapBlur: f32,
+
 		// scene
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
@@ -35,6 +42,11 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		materials: ptr<storage, array<Material>, read>,
 
 	) -> void {
+		let env = EnvironmentInfo(
+			envMapRotation,
+			envMapIntensity,
+			envMapBlur,
+		);
 
 		// make sure we don't bleed over the edge of our tile
 		if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -99,7 +111,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 			} else {
 
-				let background = vec3f( 0.5 );
+				let background = sampleBackground( envMap, envMapSampler, env, ray.direction, pcgRand2() );
 				resultColor += background * throughputColor;
 				break;
 
@@ -115,6 +127,17 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
 
 	}
-`, [ ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute, materialStruct, surfaceRecordStruct, pcgRand3, pcgInit, lambertBsdfFunc ] );
+`, [
+	sampleBackgroundFn,
+	ndcToCameraRay,
+	bvhIntersectFirstHit,
+	constants,
+	getVertexAttribute,
+	materialStruct,
+	surfaceRecordStruct,
+	pcgRand3,
+	pcgInit,
+	lambertBsdfFunc,
+] );
 
 export default megakernelShader;
