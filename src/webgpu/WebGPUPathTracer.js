@@ -127,6 +127,11 @@ export class WebGPUPathTracer {
 
 		const pathTracer = this._pathTracer;
 
+		pathTracer.setEnvironment( scene.environment,
+			scene.environmentIntensity ?? 1,
+			scene.environmentRotation,
+		);
+
 		const newGeometryData = {};
 
 		if ( bvhChanged ) {

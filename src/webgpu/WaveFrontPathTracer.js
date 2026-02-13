@@ -238,6 +238,10 @@ export class WaveFrontPathTracer {
 
 	}
 
+	setEnvironment( environemnt ) {
+
+	}
+
 	setCamera( camera ) {
 
 		this.camera = camera;

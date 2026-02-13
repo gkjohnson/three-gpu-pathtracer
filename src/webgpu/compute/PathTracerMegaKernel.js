@@ -1,6 +1,6 @@
-import { IndirectStorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
+import { Matrix3, DataTexture, IndirectStorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { uniform, storage, globalId, textureStore } from 'three/tsl';
+import { texture, sampler, uniform, storage, globalId, textureStore } from 'three/tsl';
 import megakernelShader from '../nodes/megakernel.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -21,6 +21,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// transforms
 			inverseProjectionMatrix: uniform( new Matrix4() ),
 			cameraToModelMatrix: uniform( new Matrix4() ),
+
+			// environment
+			envMap: texture( new DataTexture() ),
+			envMapSampler: sampler( new DataTexture() ),
+			envMapRotation: uniform( new Matrix3() ),
+			envMapIntensity: uniform( 1 ),
+			envMapBlur: uniform( 0 ),
 
 			// bvh and geometry definition
 			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3u' ).toReadOnly(),

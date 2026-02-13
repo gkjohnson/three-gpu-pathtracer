@@ -1,6 +1,7 @@
-import { StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
+import { Matrix4, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 function* renderTask() {
 
@@ -10,6 +11,7 @@ function* renderTask() {
 		kernel,
 		geometry,
 		bounces,
+		envInfo,
 
 		tiles,
 		sampleCountTarget,
@@ -30,6 +32,10 @@ function* renderTask() {
 	kernel.bounces = bounces;
 	kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 	kernel.cameraToModelMatrix.copy( camera.matrixWorld );
+
+	kernel.envMap = envInfo.map;
+	kernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+	kernel.envMapBlur = 0;
 
 	while ( true ) {
 
@@ -86,6 +92,8 @@ export class MegaKernelPathTracer {
 			materials: null,
 		};
 
+		this.envInfo = new EquirectHdrInfoUniform();
+
 		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
@@ -133,6 +141,15 @@ export class MegaKernelPathTracer {
 			this.geometry[ propName ] = geometry[ propName ];
 
 		}
+
+	}
+
+	setEnvironment( environment, intensity, rotation ) {
+
+		this.envInfo.updateFrom( environment );
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( rotation ).invert();
+		this.kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		this.kernel.envMapIntensity = intensity;
 
 	}
 
