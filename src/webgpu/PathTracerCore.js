@@ -6,6 +6,7 @@ import {
 	writeTraceRayDispatchSize, writeBsdfDispatchSize, writeEscapedRayDispatchSize,
 } from './nodes/wavefront.wgsl.js';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 function* renderTask() {
 
@@ -143,6 +144,7 @@ export class PathTracerCore {
 
 		};
 
+		this.envInfo = new EquirectHdrInfoUniform();
 		this.geometry = {
 			bvh: new StorageBufferAttribute(),
 			index: new StorageBufferAttribute(),
@@ -360,6 +362,23 @@ export class PathTracerCore {
 		this.createMegakernel();
 		this.createBsdfEvalKernel();
 		this.createTraceRayKernel();
+
+	}
+
+	setEnvironment( environment, intensity, rotation, blur ) {
+
+		if ( environment !== null ) {
+
+			this.envInfo.updateFrom( environment );
+			this.logicKernel.envMap = this.envInfo.map;
+			this.logicKernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( rotation ).invert();
+		this.logicKernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		this.logicKernel.envMapIntensity = intensity;
+		this.logicKernel.envMapBlur = blur;
 
 	}
 

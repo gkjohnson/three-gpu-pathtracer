@@ -35,10 +35,6 @@ function* renderTask() {
 	kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 	kernel.cameraToModelMatrix.copy( camera.matrixWorld );
 
-	kernel.envMap = envInfo.map;
-	kernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
-	kernel.envMapBlur = 0;
-
 	while ( true ) {
 
 		const tileSize = this.getTileSize( kernel.tileSize );
@@ -146,12 +142,20 @@ export class MegaKernelPathTracer {
 
 	}
 
-	setEnvironment( environment, intensity, rotation ) {
+	setEnvironment( environment, intensity, rotation, blur ) {
 
-		this.envInfo.updateFrom( environment );
+		if ( environment !== null ) {
+
+			this.envInfo.updateFrom( environment );
+			this.kernel.envMap = this.envInfo.map;
+			this.kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( rotation ).invert();
 		this.kernel.envMapRotation.setFromMatrix4( rotationMatrix );
 		this.kernel.envMapIntensity = intensity;
+		this.kernel.envMapBlur = blur;
 
 	}
 

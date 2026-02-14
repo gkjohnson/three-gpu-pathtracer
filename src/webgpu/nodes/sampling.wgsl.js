@@ -80,7 +80,7 @@ const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`, [ constants ] );
 
 export const sampleBackgroundFn = wgslFn( /* wgsl */ `
 

@@ -4,6 +4,7 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
+import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
@@ -97,9 +98,17 @@ export class WebGPUPathTracer {
 
 		const pathTracer = this._pathTracer;
 
-		pathTracer.setEnvironment( scene.environment,
-			scene.environmentIntensity ?? 1,
+		let environment = scene.environment;
+		if ( environment?.isCubeTexture ) {
+
+			environment = new CubeToEquirectGenerator( this._renderer ).generate( scene.environment );
+
+		}
+
+		pathTracer.setEnvironment( environment,
+			scene.environment !== null ? ( scene.environmentIntensity ?? 1 ) : 0,
 			scene.environmentRotation,
+			scene.backgroundBlurriness ?? 0,
 		);
 
 		const newGeometryData = {};
