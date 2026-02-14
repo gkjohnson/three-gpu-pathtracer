@@ -2,6 +2,7 @@ import {
 	IndirectStorageBufferAttribute,
 	StorageBufferAttribute,
 	Vector2,
+	Matrix4,
 	TimestampQuery,
 	StorageTexture,
 	RGBAFormat,
@@ -18,6 +19,7 @@ import { LogicKernel } from './compute/wavefront2/LogicKernel.js';
 import { EvaluateMaterialKernel } from './compute/wavefront2/EvaluateMaterialKernel.js';
 import { ResetKernel } from './compute/wavefront2/ResetKernel.js';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 function* renderTask() {
 
@@ -187,6 +189,8 @@ export class PathTracerCore {
 			materials: new StorageBufferAttribute(),
 		};
 
+		this.envInfo = new EquirectHdrInfoUniform();
+
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
 		this.outputTarget.type = FloatType;
@@ -255,7 +259,6 @@ export class PathTracerCore {
 		this.materialDispatchBuffer = new IndirectStorageBufferAttribute( new Uint32Array( 3 ) );
 		this.materialDispatchBuffer.name = 'Dispatch Buffer for Material Eval Kernel';
 
-
 	}
 
 	setGeometryData( geometry ) {
@@ -283,6 +286,23 @@ export class PathTracerCore {
 			this.geometry[ propName ] = geometry[ propName ];
 
 		}
+
+	}
+
+	setEnvironment( environment, intensity, rotation, blur ) {
+
+		if ( environment !== null ) {
+
+			this.envInfo.updateFrom( environment );
+			this.logicKernel.envMap = this.envInfo.map;
+			this.logicKernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( rotation ).invert();
+		this.logicKernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		this.logicKernel.envMapIntensity = intensity;
+		this.logicKernel.envMapBlur = blur;
 
 	}
 

@@ -1,8 +1,10 @@
 import { ComputeKernel } from '../ComputeKernel';
-import { wgslFn, storage, textureStore, uniform, globalId } from 'three/tsl';
-import { Vector2 } from 'three';
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { wgslFn, texture, sampler, storage, textureStore, uniform, globalId } from 'three/tsl';
+import { Vector2, Matrix3 } from 'three';
+import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { pathStateStruct } from '../../nodes/structs.wgsl';
+import { sampleBackgroundFn } from '../../nodes/sampling.wgsl';
+import { pcgRand2 } from '../../nodes/random.wgsl';
 
 export class LogicKernel extends ComputeKernel {
 
@@ -18,6 +20,13 @@ export class LogicKernel extends ComputeKernel {
 			queueSizes: storage( new StorageBufferAttribute(), 'uint' ).toAtomic(),
 
 			geomMaterialIndex: storage( new StorageBufferAttribute(), 'uint' ).toReadOnly(),
+
+			// environment
+			envMap: texture( new DataTexture() ),
+			envMapSampler: sampler( new DataTexture() ),
+			envMapRotation: uniform( new Matrix3() ),
+			envMapIntensity: uniform( 1 ),
+			envMapBlur: uniform( 0 ),
 
 			maxBounces: uniform( 1 ),
 			tileOffset: uniform( new Vector2() ),
@@ -40,6 +49,13 @@ export class LogicKernel extends ComputeKernel {
 
 				geomMaterialIndex: ptr<storage, array<u32>, read>,
 
+				// environment
+				envMap: texture_2d<f32>,
+				envMapSampler: sampler,
+				envMapRotation: mat3x3f,
+				envMapIntensity: f32,
+				envMapBlur: f32,
+
 				maxBounces: u32,
 				tileOffset: vec2u,
 				tileSize: vec2u,
@@ -47,6 +63,13 @@ export class LogicKernel extends ComputeKernel {
 
 				globalId: vec3u,
 			) -> void {
+
+				let env = EnvironmentInfo(
+					envMapRotation,
+					envMapIntensity,
+					envMapBlur,
+				);
+
 				let pathIndex = globalId.x;
 				let state = pathState[ pathIndex ];
 
@@ -81,9 +104,10 @@ export class LogicKernel extends ComputeKernel {
 
 					// Add color contribution
 
-					var background = vec3f( 0.5 );
-					if ( isLastBounce ) {
-						background = vec3f( 0.0 );
+					var background = vec3f( 0.0 );
+					if ( !isLastBounce ) {
+						let direction = pathState[ pathIndex ].ray.direction;
+						background = sampleBackground( envMap, envMapSampler, env, direction, pcgRand2() );
 					}
 
 					let pathTileOffset = pathState[ pathIndex ].tileOffset;
@@ -111,7 +135,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 			}
 
-		`, [ pathStateStruct ] )( params );
+		`, [ pathStateStruct, sampleBackgroundFn, pcgRand2 ] )( params );
 
 		super( kernel );
 

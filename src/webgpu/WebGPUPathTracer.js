@@ -9,6 +9,7 @@ import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { PathTracerCore } from './PathTracerCore.js';
+import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 
 const MATERIAL_STRIDE = 260;
 
@@ -127,9 +128,17 @@ export class WebGPUPathTracer {
 
 		const pathTracer = this._pathTracer;
 
-		pathTracer.setEnvironment( scene.environment,
-			scene.environmentIntensity ?? 1,
+		let environment = scene.environment;
+		if ( environment?.isCubeTexture ) {
+
+			environment = new CubeToEquirectGenerator( this._renderer ).generate( scene.environment );
+
+		}
+
+		pathTracer.setEnvironment( environment,
+			scene.environment !== null ? ( scene.environmentIntensity ?? 1 ) : 0,
 			scene.environmentRotation,
+			scene.backgroundBlurriness ?? 0,
 		);
 
 		const newGeometryData = {};
