@@ -8,14 +8,14 @@ export class ZeroOutKernel extends ComputeKernel {
 
 		const params = {
 			globalId: globalId,
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 		};
 
 		const fn = wgslFn( /* wgsl */`
 
 			fn compute(
 				globalId: vec3u,
-				outputTarget: texture_storage_2d<${ textureType }, read_write>,
+				outputTarget: texture_storage_2d<${ textureType }, write>,
 			) -> void {
 
 				textureStore( outputTarget, globalId.xy, vec4( 0, 0, 0, 1 ) );
