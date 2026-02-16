@@ -4,7 +4,7 @@ import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { materialStruct } from '../../nodes/structs.wgsl.js';
-import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
@@ -81,9 +81,33 @@ export class ProcessHitsKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				let material = materials[ input.materialIndex ];
-				let hitPosition = getVertexAttribute( input.barycoord, input.indices.xyz, geom_position );
-				let hitNormal = getVertexAttribute( input.barycoord, input.indices.xyz, geom_normals );
-				let scatterRec = bsdfEval( hitNormal, input.view );
+
+				let a = geom_position[ input.indices.x ];
+				let b = geom_position[ input.indices.y ];
+				let c = geom_position[ input.indices.z ];
+
+				let hitPosition = a * input.barycoord.x + b * input.barycoord.y + c * input.barycoord.z;
+				let hitNormal = normalize( cross( c - a, b - a ) );
+
+				let hit = IntersectionResult(
+					/* didHit */ true,
+					vec4u( input.indices, 0 ),
+					hitNormal,
+					input.barycoord,
+					1.0, // input.side,
+					/* dist */ 0,
+				);
+
+				// TODO: pass UVs
+				let surf = getSurfaceRecord( material, hit, geom_normals, geom_normals );
+
+				let scatterRec = bsdfSample( input.view, surf );
+
+				if ( scatterRec.pdf <= 0 ) {
+
+					return;
+
+				}
 
 				if ( input.currentBounce >= bounces ) {
 
@@ -102,13 +126,24 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].ray.origin = hitPosition;
 					rayQueue[ index ].ray.direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
+					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 
 				}
 
 			}
-		`, [ queuedRayStruct, lambertBsdfFunc, constants, getVertexAttribute, pcgRand3, pcgInit, queuedHitStruct, materialStruct ] );
+		`, [
+			queuedRayStruct,
+			getSurfaceRecordFunc,
+			constants,
+			getVertexAttribute,
+			pcgRand3,
+			pcgInit,
+			queuedHitStruct,
+			materialStruct,
+			// lambertBsdfFunc,
+			pbrtBsdfFunc,
+		] );
 
 		super( fn( parameters ) );
 

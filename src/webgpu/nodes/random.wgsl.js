@@ -4,7 +4,7 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 	struct PcgState {
 		s0: vec4u,
 		s1: vec4u,
-		pixel: vec2i,
+		// pixel: vec2i,
 	};
 
 	var<private> g_state: PcgState;
@@ -12,7 +12,7 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 
 export const pcgInit = wgslFn( /* wgsl */`
 	fn pcgInitialize(p: vec2u, frame: u32) -> void {
-		g_state.pixel = vec2i( p );
+		// g_state.pixel = vec2i( p );
 
 		//white noise seed
 		g_state.s0 = vec4u(p, frame, u32(p.x) + u32(p.y));
@@ -25,19 +25,18 @@ export const pcgInit = wgslFn( /* wgsl */`
 export const pcg4d = wgslFn( /* wgsl */ `
 	fn pcg4d(v: ptr<private, vec4u>) -> void {
 		*v = *v * 1664525u + 1013904223u;
-		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
+		*v = *v + v.yzxy * v.wxyz;
 		*v = *v ^ (*v >> vec4u(16u));
-		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
+		*v = *v + v.yzxy * v.wxyz;
 	}
 ` );
 
-export const pcgCycleState = wgslFn( /* wgsl */ `
-	fn pcgCycleState(n: u32) -> void {
-		for (var i = 0u; i < n; i++) {
-			pcg4d(&g_state.s0);
-		}
+export const pcgRand = wgslFn( /*wgsl*/`
+	fn pcgRand() -> f32 {
+		pcg4d(&g_state.s0);
+		return abs( f32( g_state.s0.x ) / f32(0xffffffffu) );
 	}
-` );
+`, [ pcg4d, pcgStateStruct ] );
 
 // TODO: test if abs there is necessary
 export const pcgRand3 = wgslFn( /*wgsl*/`
