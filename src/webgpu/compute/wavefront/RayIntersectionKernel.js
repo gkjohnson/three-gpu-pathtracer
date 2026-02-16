@@ -10,7 +10,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 	constructor() {
 
 		const parameters = {
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// rays
@@ -33,7 +34,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			fn compute(
 				// indices and target
-				outputTarget: texture_storage_2d<rgba32float, read_write>,
+				prevOutputTarget: texture_storage_2d<rgba32float, read>,
+				outputTarget: texture_storage_2d<rgba32float, write>,
 				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 				// rays
@@ -92,7 +94,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					let newColor = background * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( outputTarget, indexUV ).xyz;
+					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
 					color += ( newColor - color.xyz ) / f32( sampleCount );
 
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );

@@ -12,7 +12,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 	constructor() {
 
 		const parameters = {
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// settings
@@ -38,7 +39,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 			fn compute(
 				// indices and target
-				outputTarget: texture_storage_2d<rgba32float, read_write>,
+				prevOutputTarget: texture_storage_2d<rgba32float, read>,
+				outputTarget: texture_storage_2d<rgba32float, write>,
 				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 				// settings
@@ -87,7 +89,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( outputTarget, indexUV ).xyz;
+					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
 					color += ( vec3( 0 ) - color.xyz ) / f32( sampleCount );
 
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );

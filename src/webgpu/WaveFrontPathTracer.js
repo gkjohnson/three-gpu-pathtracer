@@ -23,7 +23,6 @@ function* renderTask() {
 		bounces,
 
 		tiles,
-		outputTarget,
 		sampleCountTarget,
 
 		rayQueue,
@@ -52,6 +51,15 @@ function* renderTask() {
 
 		this.getTileSize( tileSize );
 
+		// Swap targets to support devices without <rgba32float, read_write> textures
+		// Copy latest data to a new outputTarget to keep the appearance
+		renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
+		[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
+		rayIntersectionKernel.prevOutputTarget = this.prevOutputTarget;
+		rayIntersectionKernel.outputTarget = this.outputTarget;
+		hitProcessKernel.prevOutputTarget = this.prevOutputTarget;
+		hitProcessKernel.outputTarget = this.outputTarget;
+
 		// Step 1: Top up the ray queue
 		// set up the ray prime kernel
 		primeRayGenerationDispatchKernel.setWorkgroupSize( 1, 1, 1 );
@@ -73,7 +81,6 @@ function* renderTask() {
 		enqueueRaysKernel.rayQueue = rayQueue;
 		enqueueRaysKernel.rayQueueSize = rayQueueSize;
 		enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
-		enqueueRaysKernel.outputTarget = outputTarget;
 
 		for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
 
@@ -88,7 +95,6 @@ function* renderTask() {
 		// TODO: setting dispatch size to 10000 is causing failures / missed rays
 		rayIntersectionKernel.setWorkgroupSize( 64, 1, 1 );
 		const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
-		rayIntersectionKernel.outputTarget = outputTarget;
 		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 		rayIntersectionKernel.rayQueue = rayQueue;
 		rayIntersectionKernel.rayQueueSize = rayQueueSize;
@@ -111,7 +117,6 @@ function* renderTask() {
 		// as needed to iterate over all the fields
 		// Step 3: attenuate ray color, scatter, run russian roulette
 		hitProcessKernel.setWorkgroupSize( 64, 1, 1 );
-		hitProcessKernel.outputTarget = outputTarget;
 		hitProcessKernel.sampleCountTarget = sampleCountTarget;
 		hitProcessKernel.bounces = bounces;
 		hitProcessKernel.rayQueue = rayQueue;
@@ -175,8 +180,16 @@ export class WaveFrontPathTracer {
 		this.outputTarget.type = FloatType;
 		this.outputTarget.magFilter = LinearFilter;
 		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.outputTarget.name = 'Output';
+		this.outputTarget.name = 'Output #0';
 		this.outputTarget.generateMipmaps = false;
+
+		this.prevOutputTarget = new StorageTexture( 1, 1, );
+		this.prevOutputTarget.format = RGBAFormat;
+		this.prevOutputTarget.type = FloatType;
+		this.prevOutputTarget.magFilter = LinearFilter;
+		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
+		this.prevOutputTarget.name = 'Output #1';
+		this.prevOutputTarget.generateMipmaps = false;
 
 		this.sampleCountTarget = new StorageTexture( 1, 1, );
 		this.sampleCountTarget.format = RedIntegerFormat;
@@ -258,12 +271,15 @@ export class WaveFrontPathTracer {
 		}
 
 		this.outputTarget.dispose();
+		this.prevOutputTarget.dispose();
 		this.sampleCountTarget.dispose();
 
 		this.outputTarget = this.outputTarget.clone();
+		this.prevOutputTarget = this.outputTarget.clone();
 		this.sampleCountTarget = this.sampleCountTarget.clone();
 
 		this.outputTarget.setSize( w, h );
+		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
 
 		this.reset();
@@ -311,6 +327,7 @@ export class WaveFrontPathTracer {
 
 			sampleCountTarget,
 			outputTarget,
+			prevOutputTarget,
 
 			hitProcessDispatch,
 			rayGenerationDispatch,
@@ -337,6 +354,10 @@ export class WaveFrontPathTracer {
 
 		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
 		outputTargetClearKernel.target = outputTarget;
+		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
+
+		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
+		outputTargetClearKernel.target = prevOutputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 		// clear queues

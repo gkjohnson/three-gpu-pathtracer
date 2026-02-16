@@ -8,7 +8,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 	constructor() {
 
 		const megakernelShaderParams = {
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			offset: uniform( new Vector2() ),
