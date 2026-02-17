@@ -60,7 +60,7 @@ export class BVHComputeFns {
 
 		const {
 			name = 'bvh_',
-			attributes = [ 'position', 'uv0' ],
+			attributes = [ 'position', 'normal', 'uv0' ],
 		} = options;
 
 		this.name = name;
@@ -78,11 +78,114 @@ export class BVHComputeFns {
 		this.raycastFirstHitFn = null;
 		this.update();
 
+		this.getBVH = ( object, id = - 1 ) => {
+
+			if ( object.isInstancedMesh ) {
+
+				return object.geometry.boundsTree;
+
+			} else if ( object.isBatchedMesh ) {
+
+				const geometryId = object.getGeometryIdAt( id );
+				return object.boundsTrees[ geometryId ];
+
+			} else {
+
+				return object.geometry.boundsTree;
+
+			}
+
+		};
+
 	}
 
 	update() {
 
-		const { attributes, name } = this;
+		const { attributes, name, bvh } = this;
+
+		// TODO: add support for materials? Optional? Custom callback?
+		// TODO: gather the BVHs, geometries, and meshes
+		// TODO: handle the case where an "ObjectBVH" vs "MeshBVH" are passed
+		// TODO: handle batched / instanced meshes
+		// TODO: how to handle skinned meshes?
+		const bvhs = [];
+		const geometries = [];
+		const meshes = [];
+		const geometryOffsets = [];
+
+		// TODO: find the total BVH node size first, then append BVH and geometry data
+		let nodeLength = 0;
+		nodeLength += bvh._roots[ 0 ].byteLength;
+		bvh.primitiveBuffer.forEach( compositeId => {
+
+			const object = bvh.getObjectFromId( compositeId );
+			const instanceId = bvh.getInstanceFromId( compositeId );
+			const bvh = this.getBVH( object, instanceId );
+			if ( ! bvhs.includes( bvh ) ) {
+
+				bvhs.push( bvh );
+				nodeLength += bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
+
+				// write associated geometry data, save offsets for use later
+				if ( object.isBatchedMesh ) {
+
+					const geometryId = object.getGeometryIdAt( instanceId );
+					const geometryInfo = object.getGeometryRangeAt( geometryId );
+					const offset = appendGeometryData( object.geometry, geometryInfo );
+					geometryOffsets.push( offset );
+
+				} else {
+
+					const offset = appendGeometryData( object.geometry );
+					geometryOffsets.push( offset );
+
+				}
+
+
+			}
+
+		} );
+
+		// TODO: build the bvh node buffers
+		const nodeBuffer = new ArrayBuffer( nodeLength );
+		const nodeBuffer16 = new Uint16Array( nodeBuffer );
+		const nodeBuffer32 = new Uint32Array( nodeBuffer );
+		const nodeBufferFloat = new Float32Array( nodeBuffer );
+		const bvhNodeOffsets = [];
+		const nodeWriteOffset = 0;
+		bvhs.forEach( bvh => {
+
+			const BYTES_PER_NODE = 6 * 4 + 4 + 4;
+			const UINT32_PER_NODE = BYTES_PER_NODE / 4;
+			const IS_LEAFNODE_FLAG = 0xFFFF;
+			const LEAFNODE_MASK_32 = IS_LEAFNODE_FLAG << 16;
+
+			bvh._roots.forEach( root => {
+
+				const rootBuffer16 = new Uint16Array( root );
+				const rootBuffer32 = new Uint32Array( root );
+				const rootBufferFloat = new Float32Array( root );
+				for ( let i = 0, l = root.byteSize / BYTES_PER_NODE; i < l; i ++ ) {
+
+					// write bounds
+					nodeBufferFloat.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), nodeWriteOffset * UINT32_PER_NODE );
+
+					// TODO: write remaining data
+					// - leaf
+					// - primitive leaf
+					// - primitive offset
+					// - primitive count
+					// - child
+					// - split
+
+				}
+
+			} );
+
+		} );
+
+		// TODO: build the geometry and transforms
+
 
 		// construct the attribute struct
 		let attributesStructSize = 0;
@@ -100,12 +203,6 @@ export class BVHComputeFns {
 			}
 		` );
 
-		// TODO: gather the BVHs, geometries, and meshes
-		// TODO: handle the case where an "ObjectBVH" vs "MeshBVH" are passed
-		// TODO: handle batched / instanced meshes
-		const bvhs = [];
-		const geometries = [];
-		const meshes = [];
 
 		// gather the size of the geometry and BVH buffers
 		let indexLength = 0;
@@ -143,70 +240,102 @@ export class BVHComputeFns {
 			}
 		`, [ intersectTriangles, intersectsBounds, rayStruct, bvhNodeStruct, intersectionResultStruct, constants ] );
 
-		function appendGeometryData( geometry ) {
+		function appendGeometryData( geometry, offsets = {} ) {
+
+			const result = indexOffset;
 
 			// TODO: handle "indirect" case
 			if ( geometry.index ) {
 
-				// TODO: need to handle the "sub range" case? For Batched Mesh?
-				for ( let i = 0, l = geometry.index.count; i < l; i ++ ) {
+				let {
+					indexCount = - 1,
+					indexStart = - 1,
+				} = offsets;
 
-					indexBuffer[ i + indexOffset ] = geometry.index.getX() + attributesOffset;
+				if ( indexCount === - 1 ) {
+
+					indexStart = 0;
+					indexCount = geometry.index.count;
 
 				}
 
-				indexOffset += geometry.index.count;
+				for ( let i = 0; i < indexCount; i ++ ) {
+
+					indexBuffer[ i + indexOffset ] = geometry.index.getX( i - indexStart ) + attributesOffset;
+
+				}
+
+				indexOffset += indexCount;
 
 			} else {
 
-				for ( let i = 0, l = geometry.attributes.position.count; i < l; i ++ ) {
+				const indexCount = geometry.attributes.position.count;
+				for ( let i = 0; i < indexCount; i ++ ) {
 
 					indexBuffer[ i + indexOffset ] = i + attributesOffset;
 
 				}
 
-				indexOffset += geometry.attributes.position.count;
+				indexOffset += indexCount;
 
 			}
 
-			attributes.forEach( ( key, ai ) => {
+			let {
+				vertexStart = - 1,
+				vertexCount = - 1,
+			} = offsets;
+
+			if ( vertexCount === - 1 ) {
+
+				vertexStart = 0;
+				vertexCount = geometry.attributes.position.count;
+
+			}
+
+			attributes.forEach( ( key, interleavedOffset ) => {
 
 				const attr = geometry.attributes[ key ];
-				if ( ! attr ) {
+				for ( let i = 0; i < vertexCount; i ++ ) {
 
-					if ( key === 'color' ) {
+					if ( ! attr ) {
 
-						_vec.set( 1, 1, 1, 1 );
+						if ( key === 'color' ) {
+
+							_vec.set( 1, 1, 1, 1 );
+
+						} else {
+
+							_vec.set( 0, 0, 0, 1 );
+
+						}
 
 					} else {
 
-						_vec.set( 0, 0, 0, 1 );
+						_vec.fromBufferAttribute( attr, i - vertexStart );
+						switch ( attr.itemSize ) {
+
+						case 3:
+							_vec.w = 0;
+						case 2:
+							_vec.z = 0;
+						case 1:
+							_vec.y = 0;
+
+						}
 
 					}
 
-				} else {
-
-					_vec.fromBufferAttribute( attr, i );
-					switch ( attr.itemSize ) {
-
-					case 3:
-						_vec.w = 0;
-					case 2:
-						_vec.z = 0;
-					case 1:
-						_vec.y = 0;
-
-					}
+					_vec.toArray( attributesBuffer, attributesOffset * attributesStructSize + interleavedOffset * 4 );
 
 				}
-
-				_vec.toArray( attributesBuffer, attributesOffset * attributesStructSize + ai * 4 );
 
 			} );
 
 			attributesOffset += geometry.attributes.position.count;
 
 		}
+
+		return indexOffset;
 
 	}
 
