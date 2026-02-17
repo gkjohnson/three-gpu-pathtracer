@@ -115,12 +115,15 @@ export class BVHComputeFns {
 
 		// TODO: find the total BVH node size first, then append BVH and geometry data
 		let nodeLength = 0;
+		let transformCount = 0;
 		nodeLength += bvh._roots[ 0 ].byteLength;
 		bvh.primitiveBuffer.forEach( compositeId => {
 
 			const object = bvh.getObjectFromId( compositeId );
 			const instanceId = bvh.getInstanceFromId( compositeId );
 			const bvh = this.getBVH( object, instanceId );
+			transformCount += bvh._roots.length;
+
 			if ( ! bvhs.includes( bvh ) ) {
 
 				bvhs.push( bvh );
@@ -153,34 +156,10 @@ export class BVHComputeFns {
 		const nodeBufferFloat = new Float32Array( nodeBuffer );
 		const bvhNodeOffsets = [];
 		const nodeWriteOffset = 0;
-		bvhs.forEach( bvh => {
+		appendBVHData( bvh, true, 0 );
+		bvhs.forEach( ( bvh, i ) => {
 
-			const BYTES_PER_NODE = 6 * 4 + 4 + 4;
-			const UINT32_PER_NODE = BYTES_PER_NODE / 4;
-			const IS_LEAFNODE_FLAG = 0xFFFF;
-			const LEAFNODE_MASK_32 = IS_LEAFNODE_FLAG << 16;
-
-			bvh._roots.forEach( root => {
-
-				const rootBuffer16 = new Uint16Array( root );
-				const rootBuffer32 = new Uint32Array( root );
-				const rootBufferFloat = new Float32Array( root );
-				for ( let i = 0, l = root.byteSize / BYTES_PER_NODE; i < l; i ++ ) {
-
-					// write bounds
-					nodeBufferFloat.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), nodeWriteOffset * UINT32_PER_NODE );
-
-					// TODO: write remaining data
-					// - leaf
-					// - primitive leaf
-					// - primitive offset
-					// - primitive count
-					// - child
-					// - split
-
-				}
-
-			} );
+			bvhNodeOffsets.push( appendBVHData( bvh, true, geometryOffsets[ i ] ) );
 
 		} );
 
@@ -239,6 +218,41 @@ export class BVHComputeFns {
 
 			}
 		`, [ intersectTriangles, intersectsBounds, rayStruct, bvhNodeStruct, intersectionResultStruct, constants ] );
+
+		function appendBVHData( bvh, tlas = false, geometryOffset = 0 ) {
+
+			const BYTES_PER_NODE = 6 * 4 + 4 + 4;
+			const UINT32_PER_NODE = BYTES_PER_NODE / 4;
+			const IS_LEAFNODE_FLAG = 0xFFFF;
+			const LEAFNODE_MASK_32 = IS_LEAFNODE_FLAG << 16;
+			const result = [];
+
+			bvh._roots.forEach( root => {
+
+				const rootBuffer16 = new Uint16Array( root );
+				const rootBuffer32 = new Uint32Array( root );
+				const rootBufferFloat = new Float32Array( root );
+				result.push( nodeWriteOffset );
+				for ( let i = 0, l = root.byteSize / BYTES_PER_NODE; i < l; i ++ ) {
+
+					// write bounds
+					nodeBufferFloat.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), nodeWriteOffset * UINT32_PER_NODE );
+
+					// TODO: write remaining data
+					// - leaf
+					// - primitive leaf
+					// - primitive offset
+					// - primitive count
+					// - child
+					// - split
+
+				}
+
+			} );
+
+			return result;
+
+		}
 
 		function appendGeometryData( geometry, offsets = {} ) {
 
@@ -332,10 +346,9 @@ export class BVHComputeFns {
 			} );
 
 			attributesOffset += geometry.attributes.position.count;
+			return result;
 
 		}
-
-		return indexOffset;
 
 	}
 
