@@ -381,12 +381,18 @@ export class BVHComputeFns {
 						_vec.fromBufferAttribute( attr, i - vertexStart );
 						switch ( attr.itemSize ) {
 
-						case 3:
-							_vec.w = 0;
-						case 2:
-							_vec.z = 0;
 						case 1:
 							_vec.y = 0;
+							_vec.z = 0;
+							_vec.w = 0;
+							break;
+						case 2:
+							_vec.z = 0;
+							_vec.w = 0;
+							break;
+						case 3:
+							_vec.w = 0;
+							break;
 
 						}
 
