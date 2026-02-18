@@ -192,7 +192,9 @@ export class BVHComputeFns {
 
 		// write the transforms
 		let transformWriteOffset = 0;
-		const transformBuffer = new Uint32Array( 17 * objectTransformsCount );
+		const transformArrayBuffer = new ArrayBuffer( 17 * 4 * objectTransformsCount );
+		const transformBufferF32 = new Float32Array( transformArrayBuffer );
+		const transformBufferU32 = new Uint32Array( transformArrayBuffer );
 		bvh.primitiveBuffer.forEach( ( compositeId, i ) => {
 
 			const matrix = new Matrix4();
@@ -202,8 +204,8 @@ export class BVHComputeFns {
 			const bvhOffset = bvhNodeOffsets[ i ];
 			objectBvh._roots.forEach( ( root, ri ) => {
 
-				matrix.toArray( transformBuffer, transformWriteOffset * 17 );
-				transformBuffer[ transformWriteOffset * 17 + 16 ] = bvhOffset[ ri ];
+				matrix.toArray( transformBufferF32, transformWriteOffset * 17 );
+				transformBufferU32[ transformWriteOffset * 17 + 16 ] = bvhOffset[ ri ];
 				transformWriteOffset ++;
 
 			} );
@@ -227,7 +229,7 @@ export class BVHComputeFns {
 			}
 		` );
 
-		this.storageBufferAttributes.transforms = new StorageBufferAttribute( transformBuffer, 17 );
+		this.storageBufferAttributes.transforms = new StorageBufferAttribute( transformBufferF32, 17 );
 		this.storageBufferAttributes.nodes = new StorageBufferAttribute( nodeBuffer32, 8 );
 		this.storageBufferAttributes.index = new StorageBufferAttribute( indexBuffer, 1 );
 		this.storageBufferAttributes.attributes = new StorageBufferAttribute( attributesBuffer, attributesStructSize );
@@ -263,15 +265,16 @@ export class BVHComputeFns {
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r32 + 15 ];
 					if ( isLeaf ) {
 
-						nodeBuffer32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ];
-						nodeBuffer16[ n16 + 14 ] = rootBuffer16[ r16 + 14 ] + geometryOffsets[ rootIndex ];
+						nodeBuffer16[ n16 + 14 ] = rootBuffer16[ r16 + 14 ];
 						if ( tlas ) {
 
 							// 0xFFFF == mesh leaf, 0xFF00 == TLAS leaf
+							nodeBuffer32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ];
 							nodeBuffer16[ n16 + 15 ] = 0xFF00;
 
 						} else {
 
+							nodeBuffer32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ] + geometryOffsets[ rootIndex ];
 							nodeBuffer16[ n16 + 15 ] = IS_LEAFNODE_FLAG;
 
 						}
