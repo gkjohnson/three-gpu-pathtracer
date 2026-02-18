@@ -51,8 +51,31 @@ export const transformStruct = wgsl( /* wgsl */`
 	struct TransformStruct {
 		matrixWorld: mat4x4f,
 		nodeOffset: u32,
+		_alignment0: u32,
+		_alignment1: u32,
+		_alignment2: u32,
 	}
 ` );
+
+function dereferenceIndex( indexAttr, indirectBuffer ) {
+
+	const indexArray = indexAttr ? indexAttr.array : null;
+	const result = new Uint32Array( indirectBuffer.length * 3 );
+	for ( let i = 0, l = indirectBuffer.length; i < l; i ++ ) {
+
+		const i3 = 3 * i;
+		const v3 = 3 * indirectBuffer[ i ];
+		for ( let c = 0; c < 3; c ++ ) {
+
+			result[ i3 + c ] = indexArray ? indexArray[ v3 + c ] : v3 + c;
+
+		}
+
+	}
+
+	return result;
+
+}
 
 export class BVHComputeFns {
 
@@ -134,6 +157,8 @@ export class BVHComputeFns {
 				bvhNodesBufferLength += meshBvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 
 				// save the geometry info to write later and increment the buffer sizes
+				const indirectBuffer = meshBvh._indirectBuffer || null;
+
 				if ( object.isBatchedMesh ) {
 
 					const geometryId = object.getGeometryIdAt( instanceId );
@@ -141,6 +166,7 @@ export class BVHComputeFns {
 					geometries.push( {
 						geometry: object.geometry,
 						range: range,
+						indirectBuffer: indirectBuffer,
 					} );
 
 					indexBufferLength += range.indexCount === - 1 ? range.vertexCount : range.indexCount;
@@ -154,6 +180,7 @@ export class BVHComputeFns {
 					geometries.push( {
 						geometry: object.geometry,
 						range: undefined,
+						indirectBuffer: indirectBuffer,
 					} );
 
 				}
@@ -181,9 +208,9 @@ export class BVHComputeFns {
 		let indexOffset = 0;
 		const indexBuffer = new Uint32Array( indexBufferLength );
 		const attributesBuffer = new Float32Array( attributesBufferLength * attributes.length * 4 );
-		geometries.forEach( ( { geometry, range } ) => {
+		geometries.forEach( ( { geometry, range, indirectBuffer } ) => {
 
-			const offset = appendGeometryData( geometry, range );
+			const offset = appendGeometryData( geometry, range, indirectBuffer );
 			geometryOffsets.push( offset );
 
 		} );
@@ -300,10 +327,9 @@ export class BVHComputeFns {
 
 		}
 
-		function appendGeometryData( geometry, offsets = null ) {
+		function appendGeometryData( geometry, offsets = null, indirectBuffer = null ) {
 
 			const result = [];
-			const groups = geometry.groups.length === 0 ? [ { start: 0, count: Infinity } ] : geometry.groups;
 
 			let vertexStart = 0;
 			let vertexCount = geometry.attributes.position.count;
@@ -314,53 +340,60 @@ export class BVHComputeFns {
 
 			}
 
-			groups.forEach( group => {
+			// write indices — when an indirect buffer is present, dereference it to
+			// resolve the BVH's triangle order into a flat index buffer
+			result.push( indexOffset );
 
-				result.push( indexOffset );
+			if ( indirectBuffer ) {
 
-				// TODO: handle "indirect" case
-				// TODO: validate the write offsets here
-				if ( geometry.index ) {
+				const dereferencedIndex = dereferenceIndex( geometry.index, indirectBuffer );
+				for ( let i = 0; i < dereferencedIndex.length; i ++ ) {
 
-					let indexStart = Math.max( 0, group.start );
-					let indexCount = Math.min( geometry.index.count, group.start + group.count ) - indexStart;
-					if ( offsets ) {
-
-						indexStart = offsets.indexStart;
-						indexCount = offsets.indexCount;
-
-					}
-
-					for ( let i = 0; i < indexCount; i ++ ) {
-
-						indexBuffer[ i + indexOffset ] = geometry.index.getX( i + indexStart ) - vertexStart + attributesOffset;
-
-					}
-
-					indexOffset += indexCount;
-
-				} else {
-
-					let indexStart = Math.max( 0, group.start );
-					let indexCount = Math.min( geometry.attributes.position.count, group.start + group.count ) - indexStart;
-					if ( offsets ) {
-
-						indexStart = offsets.vertexStart;
-						indexCount = offsets.vertexCount;
-
-					}
-
-					for ( let i = 0; i < indexCount; i ++ ) {
-
-						indexBuffer[ i + indexOffset ] = i + indexStart + attributesOffset;
-
-					}
-
-					indexOffset += indexCount;
+					indexBuffer[ i + indexOffset ] = dereferencedIndex[ i ] - vertexStart + attributesOffset;
 
 				}
 
-			} );
+				indexOffset += dereferencedIndex.length;
+
+			} else if ( geometry.index ) {
+
+				let indexStart = 0;
+				let indexCount = geometry.index.count;
+				if ( offsets ) {
+
+					indexStart = offsets.indexStart;
+					indexCount = offsets.indexCount;
+
+				}
+
+				for ( let i = 0; i < indexCount; i ++ ) {
+
+					indexBuffer[ i + indexOffset ] = geometry.index.getX( i + indexStart ) - vertexStart + attributesOffset;
+
+				}
+
+				indexOffset += indexCount;
+
+			} else {
+
+				let indexStart = 0;
+				let indexCount = geometry.attributes.position.count;
+				if ( offsets ) {
+
+					indexStart = offsets.vertexStart;
+					indexCount = offsets.vertexCount;
+
+				}
+
+				for ( let i = 0; i < indexCount; i ++ ) {
+
+					indexBuffer[ i + indexOffset ] = i + indexStart + attributesOffset;
+
+				}
+
+				indexOffset += indexCount;
+
+			}
 
 			attributes.forEach( ( key, interleavedOffset ) => {
 
