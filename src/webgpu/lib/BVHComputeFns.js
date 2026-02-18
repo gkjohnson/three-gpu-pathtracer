@@ -186,7 +186,7 @@ export class BVHComputeFns {
 		appendBVHData( bvh, 0, true );
 		bvhs.forEach( ( bvh, i ) => {
 
-			bvhNodeOffsets.push( appendBVHData( bvh, geometryOffsets[ i ] ), false );
+			bvhNodeOffsets.push( appendBVHData( bvh, geometryOffsets[ i ], false ) );
 
 		} );
 
@@ -250,7 +250,7 @@ export class BVHComputeFns {
 				const rootBuffer16 = new Uint16Array( root );
 				const rootBuffer32 = new Uint32Array( root );
 				result.push( nodeWriteOffset );
-				for ( let i = 0, l = root.byteSize / BYTES_PER_NODE; i < l; i ++ ) {
+				for ( let i = 0, l = root.byteLength / BYTES_PER_NODE; i < l; i ++ ) {
 
 					const r32 = i * UINT32_PER_NODE;
 					const r16 = r32 * 2;
