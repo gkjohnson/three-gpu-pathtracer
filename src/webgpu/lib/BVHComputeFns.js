@@ -76,7 +76,6 @@ export class BVHComputeFns {
 
 		this.attributesStruct = null;
 		this.raycastFirstHitFn = null;
-		this.update();
 
 		this.getBVH = ( object, id = - 1 ) => {
 
@@ -96,6 +95,8 @@ export class BVHComputeFns {
 			}
 
 		};
+
+		this.update();
 
 	}
 
@@ -164,6 +165,17 @@ export class BVHComputeFns {
 
 		} );
 
+		// construct the attribute struct
+		// TODO: need to include materials here
+		let attributesStructSize = 0;
+		const attributeStructContent = attributes
+			.map( key => {
+
+				attributesStructSize += 4;
+				return `${ key }: vec4f,`;
+
+			} ).join( '\n' );
+
 		// write the geometry buffer attributes
 		let attributesOffset = 0;
 		let indexOffset = 0;
@@ -211,17 +223,6 @@ export class BVHComputeFns {
 			} );
 
 		} );
-
-		// construct the attribute struct
-		// TODO: need to include materials here
-		let attributesStructSize = 0;
-		const attributeStructContent = attributes
-			.map( key => {
-
-				attributesStructSize += 4;
-				return `${ key }: vec4f,`;
-
-			} ).join( '\n' );
 
 		const attributeStruct = wgsl( /* wgsl */`
 			struct ${ name }GeometryStruct {
@@ -324,7 +325,7 @@ export class BVHComputeFns {
 					if ( offsets ) {
 
 						indexStart = offsets.indexStart;
-						indexCount = geometry.indexCount;
+						indexCount = offsets.indexCount;
 
 					}
 
@@ -398,13 +399,13 @@ export class BVHComputeFns {
 
 					}
 
-					_vec.toArray( attributesBuffer, attributesOffset * attributesStructSize + interleavedOffset * 4 );
+					_vec.toArray( attributesBuffer, ( attributesOffset + i ) * attributesStructSize + interleavedOffset * 4 );
 
 				}
 
 			} );
 
-			attributesOffset += geometry.attributes.position.count;
+			attributesOffset += vertexCount;
 			return result;
 
 		}
