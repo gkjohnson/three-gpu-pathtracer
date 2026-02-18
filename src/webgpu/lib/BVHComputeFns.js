@@ -116,7 +116,7 @@ export class BVHComputeFns {
 		let objectTransformsCount = 0;
 		let indexBufferLength = 0;
 		let attributesBufferLength = 0;
-		bvhNodesBufferLength += bvh._roots[ 0 ].byteLength;
+		bvhNodesBufferLength += bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 		bvh.primitiveBuffer.forEach( compositeId => {
 
 			const object = bvh.getObjectFromId( compositeId );
@@ -203,8 +203,10 @@ export class BVHComputeFns {
 		} );
 
 		// write the transforms
+		// stride is 20 floats (80 bytes) to match WGSL struct alignment: mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
+		const TRANSFORM_STRIDE = 20;
 		let transformWriteOffset = 0;
-		const transformArrayBuffer = new ArrayBuffer( 17 * 4 * objectTransformsCount );
+		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRIDE * 4 * objectTransformsCount );
 		const transformBufferF32 = new Float32Array( transformArrayBuffer );
 		const transformBufferU32 = new Uint32Array( transformArrayBuffer );
 		bvh.primitiveBuffer.forEach( ( compositeId, i ) => {
@@ -216,8 +218,8 @@ export class BVHComputeFns {
 			const bvhOffset = bvhNodeOffsets[ transformBVHs[ i ] ];
 			objectBvh._roots.forEach( ( root, ri ) => {
 
-				matrix.toArray( transformBufferF32, transformWriteOffset * 17 );
-				transformBufferU32[ transformWriteOffset * 17 + 16 ] = bvhOffset[ ri ];
+				matrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRIDE );
+				transformBufferU32[ transformWriteOffset * TRANSFORM_STRIDE + 16 ] = bvhOffset[ ri ];
 				transformWriteOffset ++;
 
 			} );
@@ -230,7 +232,7 @@ export class BVHComputeFns {
 			}
 		` );
 
-		this.storageBufferAttributes.transforms = new StorageBufferAttribute( transformBufferF32, 17 );
+		this.storageBufferAttributes.transforms = new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRIDE );
 		this.storageBufferAttributes.nodes = new StorageBufferAttribute( nodeBuffer32, 8 );
 		this.storageBufferAttributes.index = new StorageBufferAttribute( indexBuffer, 1 );
 		this.storageBufferAttributes.attributes = new StorageBufferAttribute( attributesBuffer, attributesStructSize );
