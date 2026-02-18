@@ -1,7 +1,15 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute } from 'three/src/Three.WebGPU.Nodes.js';
-import { wgsl, wgslFn } from 'three/tsl';
-import { intersectTriangles, intersectsBounds } from 'three-mesh-bvh/webgpu';
+import { storage, wgsl, wgslFn } from 'three/tsl';
+import {
+	intersectsTriangle,
+	intersectsBounds,
+	rayStruct,
+	bvhNodeBoundsStruct,
+	bvhNodeStruct,
+	intersectionResultStruct,
+	constants,
+} from 'three-mesh-bvh/webgpu';
 
 // TODO: separate update functions into utilities
 // TODO: add ability to easily update a single matrix / scene rearrangement
@@ -9,52 +17,15 @@ import { intersectTriangles, intersectsBounds } from 'three-mesh-bvh/webgpu';
 // TODO: add skinned mesh bvh support
 // TODO: add overrideable functions for custom implementations (custom attributes, transform fields)
 const _vec = /* @__PURE__ */ new Vector4();
+const _matrix = /* @__PURE__ */ new Matrix4();
+const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 
-export const constants = wgsl( /* wgsl */`
-	const BVH_STACK_DEPTH = 60u;
-	const INFINITY = 1e20;
-	const TRI_INTERSECT_EPSILON = 1e-5;
-` );
-
-export const rayStruct = wgsl( /* wgsl */`
-	struct Ray {
-		origin: vec3f,
-		_alignment0: u32,
-
-		direction: vec3f,
-		_alignment1: u32,
-	};
-` );
-
-export const bvhNodeBoundsStruct = wgsl( /* wgsl */`
-	struct BVHBoundingBox {
-		min: array<f32, 3>,
-		max: array<f32, 3>,
-	}
-` );
-
-export const bvhNodeStruct = wgsl( /* wgsl */`
-	struct BVHNode {
-		bounds: BVHBoundingBox,
-		rightChildOrTriangleOffset: u32,
-		splitAxisOrTriangleCount: u32,
-	};
-`, [ bvhNodeBoundsStruct ] );
-
-export const intersectionResultStruct = wgsl( /* wgsl */`
-	struct IntersectionResult {
-		indices: vec4u,
-		normal: vec3f,
-		didHit: bool,
-		barycoord: vec3f,
-		side: f32,
-		dist: f32,
-	};
-` );
+export { rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectionResultStruct, constants };
 
 export const transformStruct = wgsl( /* wgsl */`
 	struct TransformStruct {
 		matrixWorld: mat4x4f,
+		inverseMatrixWorld: mat4x4f,
 		nodeOffset: u32,
 		_alignment0: u32,
 		_alignment1: u32,
@@ -232,23 +203,25 @@ export class BVHComputeFns {
 		} );
 
 		// write the transforms
-		// stride is 20 floats (80 bytes) to match WGSL struct alignment: mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-		const TRANSFORM_STRIDE = 20;
+		// stride is 36 floats (144 bytes) to match WGSL struct alignment:
+		// mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
+		const TRANSFORM_STRIDE = 36;
 		let transformWriteOffset = 0;
 		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRIDE * 4 * objectTransformsCount );
 		const transformBufferF32 = new Float32Array( transformArrayBuffer );
 		const transformBufferU32 = new Uint32Array( transformArrayBuffer );
 		bvh.primitiveBuffer.forEach( ( compositeId, i ) => {
 
-			const matrix = new Matrix4();
-			bvh.getObjectMatrix( compositeId, matrix );
+			bvh.getObjectMatrix( compositeId, _matrix );
+			_inverseMatrix.copy( _matrix ).invert();
 
 			const objectBvh = bvhs[ transformBVHs[ i ] ];
 			const bvhOffset = bvhNodeOffsets[ transformBVHs[ i ] ];
 			objectBvh._roots.forEach( ( root, ri ) => {
 
-				matrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRIDE );
-				transformBufferU32[ transformWriteOffset * TRANSFORM_STRIDE + 16 ] = bvhOffset[ ri ];
+				_matrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRIDE );
+				_inverseMatrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRIDE + 16 );
+				transformBufferU32[ transformWriteOffset * TRANSFORM_STRIDE + 32 ] = bvhOffset[ ri ];
 				transformWriteOffset ++;
 
 			} );
@@ -261,16 +234,169 @@ export class BVHComputeFns {
 			}
 		` );
 
-		this.storageBufferAttributes.transforms = new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRIDE );
-		this.storageBufferAttributes.nodes = new StorageBufferAttribute( nodeBuffer32, 8 );
-		this.storageBufferAttributes.index = new StorageBufferAttribute( indexBuffer, 1 );
-		this.storageBufferAttributes.attributes = new StorageBufferAttribute( attributesBuffer, attributesStructSize );
+		const nodesStorage = storage( new StorageBufferAttribute( nodeBuffer32, 8 ), `${ name }BVHNode` ).toReadOnly().setName( `${ name }nodes` );
+		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRIDE ), `${ name }TransformStruct` ).toReadOnly().setName( `${ name }transforms` );
+		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
+		const attributesStorage = storage( new StorageBufferAttribute( attributesBuffer, attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
+
+		this.storageBufferAttributes.transforms = transformsStorage;
+		this.storageBufferAttributes.nodes = nodesStorage;
+		this.storageBufferAttributes.index = indexStorage;
+		this.storageBufferAttributes.attributes = attributesStorage;
 		this.attributesStruct = attributeStruct;
 		this.raycastFirstHitFn = wgslFn( /* wgsl */`
 			fn ${ name }RaycastFirstHit( ray: Ray ) -> IntersectionResult {
 
+				var bestHit: IntersectionResult;
+				bestHit.didHit = false;
+				bestHit.dist = INFINITY;
+
+				// TLAS traversal
+				var tlasPointer: i32 = 0;
+				var tlasStack: array<u32, BVH_STACK_DEPTH>;
+				tlasStack[ 0 ] = 0u;
+
+				loop {
+
+					if ( tlasPointer < 0 || tlasPointer >= i32( BVH_STACK_DEPTH ) ) {
+
+						break;
+
+					}
+
+					let currNodeIndex = tlasStack[ tlasPointer ];
+					let node = ${ name }nodes[ currNodeIndex ];
+					tlasPointer = tlasPointer - 1;
+
+					var boundsHitDist: f32 = 0.0;
+					if ( ! intersectsBounds( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+
+						continue;
+
+					}
+
+					let boundsInfox = node.splitAxisOrTriangleCount;
+					let boundsInfoy = node.rightChildOrTriangleOffset;
+					let isLeaf = ( boundsInfox & 0xffff0000u ) != 0u;
+
+					if ( isLeaf ) {
+
+						// TLAS leaf — iterate over object transforms
+						let count = boundsInfox & 0x0000ffffu;
+						let offset = boundsInfoy;
+
+						for ( var t = offset; t < offset + count; t = t + 1u ) {
+
+							let transform = ${ name }transforms[ t ];
+
+							// Transform ray into object local space
+							var localRay: Ray;
+							localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
+							localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
+
+							// BLAS traversal
+							var blasPointer: i32 = 0;
+							var blasStack: array<u32, BVH_STACK_DEPTH>;
+							blasStack[ 0 ] = transform.nodeOffset;
+
+							loop {
+
+								if ( blasPointer < 0 || blasPointer >= i32( BVH_STACK_DEPTH ) ) {
+
+									break;
+
+								}
+
+								let blasNodeIndex = blasStack[ blasPointer ];
+								let blasNode = ${ name }nodes[ blasNodeIndex ];
+								blasPointer = blasPointer - 1;
+
+								var blasBoundsHitDist: f32 = 0.0;
+								if ( ! intersectsBounds( localRay, blasNode.bounds, &blasBoundsHitDist ) || blasBoundsHitDist > bestHit.dist ) {
+
+									continue;
+
+								}
+
+								let blasInfox = blasNode.splitAxisOrTriangleCount;
+								let blasInfoy = blasNode.rightChildOrTriangleOffset;
+								let isBlasLeaf = ( blasInfox & 0xffff0000u ) != 0u;
+
+								if ( isBlasLeaf ) {
+
+									let triCount = blasInfox & 0x0000ffffu;
+									let triOffset = blasInfoy;
+
+									for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
+
+										let i0 = ${ name }index[ ti * 3u ];
+										let i1 = ${ name }index[ ti * 3u + 1u ];
+										let i2 = ${ name }index[ ti * 3u + 2u ];
+
+										let a = ${ name }attributes[ i0 ].position.xyz;
+										let b = ${ name }attributes[ i1 ].position.xyz;
+										let c = ${ name }attributes[ i2 ].position.xyz;
+
+										var triResult = intersectsTriangle( localRay, a, b, c );
+
+										if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+
+											bestHit = triResult;
+											bestHit.indices = vec4u( i0, i1, i2, ti );
+
+											// Transform normal to world space: normal matrix = transpose( inverse )
+											bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
+
+										}
+
+									}
+
+								} else {
+
+									let leftIndex = blasNodeIndex + 1u;
+									let splitAxis = blasInfox & 0x0000ffffu;
+									let rightIndex = blasNodeIndex + blasInfoy;
+
+									let leftToRight = localRay.direction[ splitAxis ] >= 0.0;
+									let c1 = select( rightIndex, leftIndex, leftToRight );
+									let c2 = select( leftIndex, rightIndex, leftToRight );
+
+									blasPointer = blasPointer + 1;
+									blasStack[ blasPointer ] = c2;
+
+									blasPointer = blasPointer + 1;
+									blasStack[ blasPointer ] = c1;
+
+								}
+
+							}
+
+						}
+
+					} else {
+
+						let leftIndex = currNodeIndex + 1u;
+						let splitAxis = boundsInfox & 0x0000ffffu;
+						let rightIndex = currNodeIndex + boundsInfoy;
+
+						let leftToRight = ray.direction[ splitAxis ] >= 0.0;
+						let c1 = select( rightIndex, leftIndex, leftToRight );
+						let c2 = select( leftIndex, rightIndex, leftToRight );
+
+						tlasPointer = tlasPointer + 1;
+						tlasStack[ tlasPointer ] = c2;
+
+						tlasPointer = tlasPointer + 1;
+						tlasStack[ tlasPointer ] = c1;
+
+					}
+
+				}
+
+				return bestHit;
+
 			}
-		`, [ intersectTriangles, intersectsBounds, rayStruct, bvhNodeStruct, intersectionResultStruct, constants ] );
+		`, [ nodesStorage, transformsStorage, indexStorage, attributesStorage, intersectsTriangle, intersectsBounds, rayStruct, bvhNodeStruct, intersectionResultStruct, constants, transformStruct, attributeStruct ] );
 
 		function appendBVHData( bvh, geometryOffsets, tlas = false ) {
 
@@ -344,7 +470,8 @@ export class BVHComputeFns {
 
 			// write indices — when an indirect buffer is present, dereference it to
 			// resolve the BVH's triangle order into a flat index buffer
-			result.push( indexOffset );
+			// store as triangle offset (not vertex-index offset) to match BVH leaf format
+			result.push( indexOffset / 3 );
 
 			if ( indirectBuffer ) {
 
