@@ -62,6 +62,42 @@ export class ObjectBVH extends BVH {
 
 	}
 
+	getObjectMatrix( compositeId, target ) {
+
+		const { idMask, idBits, objects, matrixWorld } = this;
+		const id = getObjectId( compositeId, idMask );
+		const instanceId = getInstanceId( compositeId, idBits, idMask );
+		const object = objects[ id ];
+		if ( object.isInstancedMesh || object.isBatchedMesh ) {
+
+			object.getMatrixAt( instanceId, target ).premultiply( object.matrixWorld );
+
+		} else {
+
+			target.copy( object.matrixWorld );
+
+		}
+
+		_inverseMatrix.copy( matrixWorld ).invert();
+		target.premultiply( _inverseMatrix );
+
+	}
+
+	getObjectFromId( compositeId ) {
+
+		const { idMask, objects } = this;
+		const id = getObjectId( compositeId, idMask );
+		return objects[ id ];
+
+	}
+
+	getInstanceFromId( compositeId ) {
+
+		const { idMask, idBits } = this;
+		return getInstanceId( compositeId, idBits, idMask );
+
+	}
+
 	init( options ) {
 
 		const { objects, idBits } = this;
