@@ -218,7 +218,7 @@ export class BVHComputeFns {
 		const attributeStructContent = attributes
 			.map( key => {
 
-				attributesStructSize += 16;
+				attributesStructSize += 4;
 				return `${ key }: vec4f,`;
 
 			} ).join( '\n' );
@@ -262,7 +262,7 @@ export class BVHComputeFns {
 					// write bounds
 					nodeBufferFloat.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), n32 );
 
-					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r32 + 15 ];
+					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
 
 						nodeBuffer16[ n16 + 14 ] = rootBuffer16[ r16 + 14 ];
