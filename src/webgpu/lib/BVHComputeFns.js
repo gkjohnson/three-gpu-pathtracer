@@ -5,24 +5,32 @@ import {
 	intersectsTriangle,
 	intersectsBounds,
 	rayStruct,
-	bvhNodeBoundsStruct,
 	bvhNodeStruct,
 	intersectionResultStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
 
+// TODO: clean up "update" function, separate it into chunks
 // TODO: separate update functions into utilities
-// TODO: add ability to easily update a single matrix / scene rearrangement
+// TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
 // TODO: add skinned mesh bvh support
 // TODO: add overrideable functions for custom implementations (custom attributes, transform fields)
+// TODO: see if it's possible to replace function contents and dependencies in-place so that
+// a node fn can be updated without regenerating all other materials.
+// TODO: see if we can reference wgslFn names directly rather than constructing them inline over and over
+// and / or use local variable definitions for the pointers to clean up the code
+// TODO: see if there's a "build" step that can be leveraged fro nodes
+// NEXT: Get a basic version working with megakernel
+
 const _vec = /* @__PURE__ */ new Vector4();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 
-export { rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectionResultStruct, constants };
-
-export const transformStruct = wgsl( /* wgsl */`
+// stride is 36 floats (144 bytes) to match WGSL struct alignment:
+// mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
+const TRANSFORM_STRUCT_SIZE = 36;
+const transformStruct = wgsl( /* wgsl */`
 	struct TransformStruct {
 		matrixWorld: mat4x4f,
 		inverseMatrixWorld: mat4x4f,
@@ -55,8 +63,8 @@ function dereferenceIndex( indexAttr, indirectBuffer ) {
 
 function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct ) {
 
-	const intersectFirstHitFn = wgslFn( /* wgsl */`
-		fn ${ name }IntersectFirstHit( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
+	const geometryRaycastFirstHitFn = wgslFn( /* wgsl */`
+		fn ${ name }RaycastGeometryFirstHit( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
 
 			var bestHit: IntersectionResult;
 			bestHit.didHit = false;
@@ -193,7 +201,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 						localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
 						localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
 
-						let blasHit = ${ name }IntersectFirstHit( localRay, transform.nodeOffset, bestHit.dist );
+						let blasHit = ${ name }RaycastGeometryFirstHit( localRay, transform.nodeOffset, bestHit.dist );
 
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
@@ -230,7 +238,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 		}
 	`, [
-		intersectFirstHitFn,
+		geometryRaycastFirstHitFn,
 		nodesStorage, transformsStorage,
 		intersectsBounds,
 		rayStruct, bvhNodeStruct, intersectionResultStruct, constants,
@@ -389,11 +397,8 @@ export class BVHComputeFns {
 		} );
 
 		// write the transforms
-		// stride is 36 floats (144 bytes) to match WGSL struct alignment:
-		// mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-		const TRANSFORM_STRIDE = 36;
 		let transformWriteOffset = 0;
-		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRIDE * 4 * objectTransformsCount );
+		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRUCT_SIZE * 4 * objectTransformsCount );
 		const transformBufferF32 = new Float32Array( transformArrayBuffer );
 		const transformBufferU32 = new Uint32Array( transformArrayBuffer );
 		bvh.primitiveBuffer.forEach( ( compositeId, i ) => {
@@ -405,9 +410,9 @@ export class BVHComputeFns {
 			const bvhOffset = bvhNodeOffsets[ transformBVHs[ i ] ];
 			objectBvh._roots.forEach( ( root, ri ) => {
 
-				_matrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRIDE );
-				_inverseMatrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRIDE + 16 );
-				transformBufferU32[ transformWriteOffset * TRANSFORM_STRIDE + 32 ] = bvhOffset[ ri ];
+				_matrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRUCT_SIZE );
+				_inverseMatrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRUCT_SIZE + 16 );
+				transformBufferU32[ transformWriteOffset * TRANSFORM_STRUCT_SIZE + 32 ] = bvhOffset[ ri ];
 				transformWriteOffset ++;
 
 			} );
@@ -421,7 +426,7 @@ export class BVHComputeFns {
 		` );
 
 		const nodesStorage = storage( new StorageBufferAttribute( nodeBuffer32, 8 ), `${ name }BVHNode` ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRIDE ), `${ name }TransformStruct` ).toReadOnly().setName( `${ name }transforms` );
+		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRUCT_SIZE ), `${ name }TransformStruct` ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( attributesBuffer, attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
 
