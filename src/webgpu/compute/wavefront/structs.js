@@ -1,9 +1,9 @@
 import { wgsl } from 'three/tsl';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
 
-export const QUEUED_RAY_SIZE = 16;
+export const QUEUED_RAY_SIZE = 20;
 
-export const QUEUED_HIT_SIZE = 16;
+export const QUEUED_HIT_SIZE = 20;
 
 export const queuedRayStruct = wgsl( /* wgsl */ `
 	struct QueuedRay {
@@ -11,6 +11,7 @@ export const queuedRayStruct = wgsl( /* wgsl */ `
 		throughputColor: vec3f,
 		currentBounce: u32,
 		pixel: vec2u,
+		pcgStateS0: vec4u,
 	};
 `, [ rayStruct ] );
 
@@ -24,5 +25,6 @@ export const queuedHitStruct = wgsl( /* wgsl */`
 		currentBounce: u32,
 		throughputColor: vec3f,
 		materialIndex: u32,
+		pcgStateS0: vec4u,
 	};
 ` );

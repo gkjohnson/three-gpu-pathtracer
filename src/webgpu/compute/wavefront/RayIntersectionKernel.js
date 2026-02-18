@@ -86,7 +86,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].pixel_y = input.pixel.y;
 					hitQueue[ index ].materialIndex = materialIndex;
 					hitQueue[ index ].throughputColor = input.throughputColor;
-					hitQueue[ index ].currentBounce = input.currentBounce;;
+					hitQueue[ index ].currentBounce = input.currentBounce;
+					hitQueue[ index ].pcgStateS0 = input.pcgStateS0;
 
 				} else {
 

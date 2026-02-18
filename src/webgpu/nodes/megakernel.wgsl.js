@@ -82,7 +82,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 				let scatterRec = bsdfSample( - ray.direction, surf );
 
-				if ( scatterRec.pdf <= 0.0 ) {
+				if ( scatterRec.pdf <= 0.0 || any( scatterRec.color != scatterRec.color ) ) {
 
 					return;
 

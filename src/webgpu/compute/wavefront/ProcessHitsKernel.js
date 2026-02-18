@@ -76,9 +76,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
-				let seed = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
-
-				pcgInitialize( indexUV, seed );
+				g_state.s0 = input.pcgStateS0;
 
 				let material = materials[ input.materialIndex ];
 
@@ -103,7 +101,12 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let scatterRec = bsdfSample( input.view, surf );
 
-				if ( scatterRec.pdf <= 0 ) {
+				// terminate ray if scatter is impossible or color is nan
+				// TODO: Investigate ways to not generate such scatters
+				if ( scatterRec.pdf <= 0 || any( scatterRec.color != scatterRec.color ) ) {
+
+					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) );
+					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
 
 					return;
 
@@ -128,6 +131,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
+					rayQueue[ index ].pcgStateS0 = g_state.s0;
 
 				}
 
