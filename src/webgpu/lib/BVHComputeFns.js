@@ -3,6 +3,11 @@ import { StorageBufferAttribute } from 'three/src/Three.WebGPU.Nodes.js';
 import { wgsl, wgslFn } from 'three/tsl';
 import { intersectTriangles, intersectsBounds } from 'three-mesh-bvh/webgpu';
 
+// TODO: separate update functions into utilities
+// TODO: add ability to easily update a single matrix / scene rearrangement
+// TODO: add material support w/ function to easily update material
+// TODO: add skinned mesh bvh support
+// TODO: add overrideable functions for custom implementations (custom attributes, transform fields)
 const _vec = /* @__PURE__ */ new Vector4();
 
 export const constants = wgsl( /* wgsl */`
@@ -127,8 +132,6 @@ export class BVHComputeFns {
 
 		const { attributes, name, bvh } = this;
 
-		// TODO: add support for materials? Optional? Custom callback?
-		// TODO: how to handle skinned meshes?
 		const bvhs = [];
 		const geometries = [];
 		const geometryOffsets = [];
@@ -193,7 +196,6 @@ export class BVHComputeFns {
 		} );
 
 		// construct the attribute struct
-		// TODO: need to include materials here
 		let attributesStructSize = 0;
 		const attributeStructContent = attributes
 			.map( key => {
