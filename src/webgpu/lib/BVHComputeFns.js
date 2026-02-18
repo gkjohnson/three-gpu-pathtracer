@@ -201,7 +201,7 @@ export class BVHComputeFns {
 			bvh.getObjectMatrix( compositeId, matrix );
 
 			const objectBvh = bvhs[ transformBVHs[ i ] ];
-			const bvhOffset = bvhNodeOffsets[ i ];
+			const bvhOffset = bvhNodeOffsets[ transformBVHs[ i ] ];
 			objectBvh._roots.forEach( ( root, ri ) => {
 
 				matrix.toArray( transformBufferF32, transformWriteOffset * 17 );
@@ -219,7 +219,7 @@ export class BVHComputeFns {
 			.map( key => {
 
 				attributesStructSize += 16;
-				return `${ key }: vec4,`;
+				return `${ key }: vec4f,`;
 
 			} ).join( '\n' );
 
@@ -378,7 +378,7 @@ export class BVHComputeFns {
 
 					} else {
 
-						_vec.fromBufferAttribute( attr, i - vertexStart );
+						_vec.fromBufferAttribute( attr, i + vertexStart );
 						switch ( attr.itemSize ) {
 
 						case 1:
