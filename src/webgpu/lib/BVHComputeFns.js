@@ -53,6 +53,192 @@ function dereferenceIndex( indexAttr, indirectBuffer ) {
 
 }
 
+function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct ) {
+
+	const intersectFirstHitFn = wgslFn( /* wgsl */`
+		fn ${ name }IntersectFirstHit( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
+
+			var bestHit: IntersectionResult;
+			bestHit.didHit = false;
+			bestHit.dist = bestDist;
+
+			var pointer: i32 = 0;
+			var stack: array<u32, BVH_STACK_DEPTH>;
+			stack[ 0 ] = rootNodeIndex;
+
+			loop {
+
+				if ( pointer < 0 || pointer >= i32( BVH_STACK_DEPTH ) ) {
+
+					break;
+
+				}
+
+				let nodeIndex = stack[ pointer ];
+				let node = ${ name }nodes[ nodeIndex ];
+				pointer = pointer - 1;
+
+				var boundsHitDist: f32 = 0.0;
+				if ( ! intersectsBounds( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+
+					continue;
+
+				}
+
+				let infoX = node.splitAxisOrTriangleCount;
+				let infoY = node.rightChildOrTriangleOffset;
+				let isLeaf = ( infoX & 0xffff0000u ) != 0u;
+
+				if ( isLeaf ) {
+
+					let triCount = infoX & 0x0000ffffu;
+					let triOffset = infoY;
+
+					for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
+
+						let i0 = ${ name }index[ ti * 3u ];
+						let i1 = ${ name }index[ ti * 3u + 1u ];
+						let i2 = ${ name }index[ ti * 3u + 2u ];
+
+						let a = ${ name }attributes[ i0 ].position.xyz;
+						let b = ${ name }attributes[ i1 ].position.xyz;
+						let c = ${ name }attributes[ i2 ].position.xyz;
+
+						var triResult = intersectsTriangle( ray, a, b, c );
+
+						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+
+							bestHit = triResult;
+							bestHit.indices = vec4u( i0, i1, i2, ti );
+
+						}
+
+					}
+
+				} else {
+
+					let leftIndex = nodeIndex + 1u;
+					let splitAxis = infoX & 0x0000ffffu;
+					let rightIndex = nodeIndex + infoY;
+
+					let leftToRight = ray.direction[ splitAxis ] >= 0.0;
+					let c1 = select( rightIndex, leftIndex, leftToRight );
+					let c2 = select( leftIndex, rightIndex, leftToRight );
+
+					pointer = pointer + 1;
+					stack[ pointer ] = c2;
+
+					pointer = pointer + 1;
+					stack[ pointer ] = c1;
+
+				}
+
+			}
+
+			return bestHit;
+
+		}
+	`, [
+		nodesStorage, indexStorage, attributesStorage,
+		intersectsTriangle, intersectsBounds,
+		rayStruct, bvhNodeStruct, intersectionResultStruct, constants,
+		attributeStruct,
+	] );
+
+	return wgslFn( /* wgsl */`
+		fn ${ name }RaycastFirstHit( ray: Ray ) -> IntersectionResult {
+
+			var bestHit: IntersectionResult;
+			bestHit.didHit = false;
+			bestHit.dist = INFINITY;
+
+			var tlasPointer: i32 = 0;
+			var tlasStack: array<u32, BVH_STACK_DEPTH>;
+			tlasStack[ 0 ] = 0u;
+
+			loop {
+
+				if ( tlasPointer < 0 || tlasPointer >= i32( BVH_STACK_DEPTH ) ) {
+
+					break;
+
+				}
+
+				let currNodeIndex = tlasStack[ tlasPointer ];
+				let node = ${ name }nodes[ currNodeIndex ];
+				tlasPointer = tlasPointer - 1;
+
+				var boundsHitDist: f32 = 0.0;
+				if ( ! intersectsBounds( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+
+					continue;
+
+				}
+
+				let infoX = node.splitAxisOrTriangleCount;
+				let infoY = node.rightChildOrTriangleOffset;
+				let isLeaf = ( infoX & 0xffff0000u ) != 0u;
+
+				if ( isLeaf ) {
+
+					let count = infoX & 0x0000ffffu;
+					let offset = infoY;
+
+					for ( var t = offset; t < offset + count; t = t + 1u ) {
+
+						let transform = ${ name }transforms[ t ];
+
+						// Transform ray into object local space
+						var localRay: Ray;
+						localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
+						localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
+
+						let blasHit = ${ name }IntersectFirstHit( localRay, transform.nodeOffset, bestHit.dist );
+
+						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
+
+							bestHit = blasHit;
+
+							// Transform normal to world space: normal matrix = transpose( inverse )
+							bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
+
+						}
+
+					}
+
+				} else {
+
+					let leftIndex = currNodeIndex + 1u;
+					let splitAxis = infoX & 0x0000ffffu;
+					let rightIndex = currNodeIndex + infoY;
+
+					let leftToRight = ray.direction[ splitAxis ] >= 0.0;
+					let c1 = select( rightIndex, leftIndex, leftToRight );
+					let c2 = select( leftIndex, rightIndex, leftToRight );
+
+					tlasPointer = tlasPointer + 1;
+					tlasStack[ tlasPointer ] = c2;
+
+					tlasPointer = tlasPointer + 1;
+					tlasStack[ tlasPointer ] = c1;
+
+				}
+
+			}
+
+			return bestHit;
+
+		}
+	`, [
+		intersectFirstHitFn,
+		nodesStorage, transformsStorage,
+		intersectsBounds,
+		rayStruct, bvhNodeStruct, intersectionResultStruct, constants,
+		transformStruct,
+	] );
+
+}
+
 export class BVHComputeFns {
 
 	constructor( bvh, options = {} ) {
@@ -244,159 +430,7 @@ export class BVHComputeFns {
 		this.storageBufferAttributes.index = indexStorage;
 		this.storageBufferAttributes.attributes = attributesStorage;
 		this.attributesStruct = attributeStruct;
-		this.raycastFirstHitFn = wgslFn( /* wgsl */`
-			fn ${ name }RaycastFirstHit( ray: Ray ) -> IntersectionResult {
-
-				var bestHit: IntersectionResult;
-				bestHit.didHit = false;
-				bestHit.dist = INFINITY;
-
-				// TLAS traversal
-				var tlasPointer: i32 = 0;
-				var tlasStack: array<u32, BVH_STACK_DEPTH>;
-				tlasStack[ 0 ] = 0u;
-
-				loop {
-
-					if ( tlasPointer < 0 || tlasPointer >= i32( BVH_STACK_DEPTH ) ) {
-
-						break;
-
-					}
-
-					let currNodeIndex = tlasStack[ tlasPointer ];
-					let node = ${ name }nodes[ currNodeIndex ];
-					tlasPointer = tlasPointer - 1;
-
-					var boundsHitDist: f32 = 0.0;
-					if ( ! intersectsBounds( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
-
-						continue;
-
-					}
-
-					let boundsInfox = node.splitAxisOrTriangleCount;
-					let boundsInfoy = node.rightChildOrTriangleOffset;
-					let isLeaf = ( boundsInfox & 0xffff0000u ) != 0u;
-
-					if ( isLeaf ) {
-
-						// TLAS leaf — iterate over object transforms
-						let count = boundsInfox & 0x0000ffffu;
-						let offset = boundsInfoy;
-
-						for ( var t = offset; t < offset + count; t = t + 1u ) {
-
-							let transform = ${ name }transforms[ t ];
-
-							// Transform ray into object local space
-							var localRay: Ray;
-							localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
-							localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
-
-							// BLAS traversal
-							var blasPointer: i32 = 0;
-							var blasStack: array<u32, BVH_STACK_DEPTH>;
-							blasStack[ 0 ] = transform.nodeOffset;
-
-							loop {
-
-								if ( blasPointer < 0 || blasPointer >= i32( BVH_STACK_DEPTH ) ) {
-
-									break;
-
-								}
-
-								let blasNodeIndex = blasStack[ blasPointer ];
-								let blasNode = ${ name }nodes[ blasNodeIndex ];
-								blasPointer = blasPointer - 1;
-
-								var blasBoundsHitDist: f32 = 0.0;
-								if ( ! intersectsBounds( localRay, blasNode.bounds, &blasBoundsHitDist ) || blasBoundsHitDist > bestHit.dist ) {
-
-									continue;
-
-								}
-
-								let blasInfox = blasNode.splitAxisOrTriangleCount;
-								let blasInfoy = blasNode.rightChildOrTriangleOffset;
-								let isBlasLeaf = ( blasInfox & 0xffff0000u ) != 0u;
-
-								if ( isBlasLeaf ) {
-
-									let triCount = blasInfox & 0x0000ffffu;
-									let triOffset = blasInfoy;
-
-									for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
-
-										let i0 = ${ name }index[ ti * 3u ];
-										let i1 = ${ name }index[ ti * 3u + 1u ];
-										let i2 = ${ name }index[ ti * 3u + 2u ];
-
-										let a = ${ name }attributes[ i0 ].position.xyz;
-										let b = ${ name }attributes[ i1 ].position.xyz;
-										let c = ${ name }attributes[ i2 ].position.xyz;
-
-										var triResult = intersectsTriangle( localRay, a, b, c );
-
-										if ( triResult.didHit && triResult.dist < bestHit.dist ) {
-
-											bestHit = triResult;
-											bestHit.indices = vec4u( i0, i1, i2, ti );
-
-											// Transform normal to world space: normal matrix = transpose( inverse )
-											bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
-
-										}
-
-									}
-
-								} else {
-
-									let leftIndex = blasNodeIndex + 1u;
-									let splitAxis = blasInfox & 0x0000ffffu;
-									let rightIndex = blasNodeIndex + blasInfoy;
-
-									let leftToRight = localRay.direction[ splitAxis ] >= 0.0;
-									let c1 = select( rightIndex, leftIndex, leftToRight );
-									let c2 = select( leftIndex, rightIndex, leftToRight );
-
-									blasPointer = blasPointer + 1;
-									blasStack[ blasPointer ] = c2;
-
-									blasPointer = blasPointer + 1;
-									blasStack[ blasPointer ] = c1;
-
-								}
-
-							}
-
-						}
-
-					} else {
-
-						let leftIndex = currNodeIndex + 1u;
-						let splitAxis = boundsInfox & 0x0000ffffu;
-						let rightIndex = currNodeIndex + boundsInfoy;
-
-						let leftToRight = ray.direction[ splitAxis ] >= 0.0;
-						let c1 = select( rightIndex, leftIndex, leftToRight );
-						let c2 = select( leftIndex, rightIndex, leftToRight );
-
-						tlasPointer = tlasPointer + 1;
-						tlasStack[ tlasPointer ] = c2;
-
-						tlasPointer = tlasPointer + 1;
-						tlasStack[ tlasPointer ] = c1;
-
-					}
-
-				}
-
-				return bestHit;
-
-			}
-		`, [ nodesStorage, transformsStorage, indexStorage, attributesStorage, intersectsTriangle, intersectsBounds, rayStruct, bvhNodeStruct, intersectionResultStruct, constants, transformStruct, attributeStruct ] );
+		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct );
 
 		function appendBVHData( bvh, geometryOffsets, tlas = false ) {
 
