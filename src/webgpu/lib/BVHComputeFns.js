@@ -104,50 +104,52 @@ export class BVHComputeFns {
 		const { attributes, name, bvh } = this;
 
 		// TODO: add support for materials? Optional? Custom callback?
-		// TODO: gather the BVHs, geometries, and meshes
-		// TODO: handle the case where an "ObjectBVH" vs "MeshBVH" are passed
-		// TODO: handle batched / instanced meshes
 		// TODO: how to handle skinned meshes?
 		const bvhs = [];
 		const geometries = [];
 		const geometryOffsets = [];
 		const transformBVHs = [];
 
-		// TODO: find the total BVH node size first, then append BVH and geometry data
-		let nodeLength = 0;
-		let transformCount = 0;
-		let indexLength = 0;
-		let attributesLength = 0;
-		nodeLength += bvh._roots[ 0 ].byteLength;
+		// accumulate the sizes of the bvh nodes buffer, number of objects, and geometry buffers
+		let bvhNodesBufferLength = 0;
+		let objectTransformsCount = 0;
+		let indexBufferLength = 0;
+		let attributesBufferLength = 0;
+		bvhNodesBufferLength += bvh._roots[ 0 ].byteLength;
 		bvh.primitiveBuffer.forEach( compositeId => {
 
 			const object = bvh.getObjectFromId( compositeId );
 			const instanceId = bvh.getInstanceFromId( compositeId );
 			const bvh = this.getBVH( object, instanceId );
-			transformCount += bvh._roots.length;
 
+			// add a new transform for each bvh root
+			objectTransformsCount += bvh._roots.length;
+
+			// if we haven't added this bvh, yet
 			if ( ! bvhs.includes( bvh ) ) {
 
+				// increase the buffer size
 				bvhs.push( bvh );
-				nodeLength += bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
+				bvhNodesBufferLength += bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 
-				// write associated geometry data, save offsets for use later
+				// save the geometry info to write later and increment the buffer sizes
 				if ( object.isBatchedMesh ) {
 
 					const geometryId = object.getGeometryIdAt( instanceId );
-					const geometryInfo = object.getGeometryRangeAt( geometryId );
+					const range = object.getGeometryRangeAt( geometryId );
 					geometries.push( {
 						geometry: object.geometry,
-						range: geometryInfo,
+						range: range,
 					} );
 
-					indexLength += range.indexCount === - 1 ? range.vertexCount : range.indexCount;
-					attributesLength += range.vertexCount;
+					indexBufferLength += range.indexCount === - 1 ? range.vertexCount : range.indexCount;
+					attributesBufferLength += range.vertexCount;
 
 				} else {
 
-					indexLength += geometry.index ? geometry.index.count : geometry.attributes.position.count;
-					attributesLength += geometry.attributes.position.count;
+					const geometry = object.geometry;
+					indexBufferLength += geometry.index ? geometry.index.count : geometry.attributes.position.count;
+					attributesBufferLength += geometry.attributes.position.count;
 					geometries.push( {
 						geometry: object.geometry,
 						range: undefined,
@@ -157,15 +159,16 @@ export class BVHComputeFns {
 
 			}
 
+			// save the index of the bvh associated with this transform
 			transformBVHs.push( bvhs.indexOf( bvh ) );
 
 		} );
 
-		// initialize the geometry attributes
+		// write the geometry buffer attributes
 		const attributesOffset = 0;
 		const indexOffset = 0;
-		const indexBuffer = new Uint32Array( indexLength );
-		const attributesBuffer = new Float32Array( attributesLength );
+		const indexBuffer = new Uint32Array( indexBufferLength );
+		const attributesBuffer = new Float32Array( attributesBufferLength );
 		geometries.forEach( ( { geometry, range } ) => {
 
 			const offset = appendGeometryData( geometry, range );
@@ -173,7 +176,8 @@ export class BVHComputeFns {
 
 		} );
 
-		const nodeBuffer = new ArrayBuffer( nodeLength );
+		// write the bvh data
+		const nodeBuffer = new ArrayBuffer( bvhNodesBufferLength );
 		const nodeBuffer16 = new Uint16Array( nodeBuffer );
 		const nodeBuffer32 = new Uint32Array( nodeBuffer );
 		const nodeBufferFloat = new Float32Array( nodeBuffer );
@@ -186,8 +190,9 @@ export class BVHComputeFns {
 
 		} );
 
+		// write the transforms
 		let transformWriteOffset = 0;
-		const transformBuffer = new Uint32Array( 17 * transformCount );
+		const transformBuffer = new Uint32Array( 17 * objectTransformsCount );
 		bvh.primitiveBuffer.forEach( ( compositeId, i ) => {
 
 			const matrix = new Matrix4();
@@ -205,10 +210,8 @@ export class BVHComputeFns {
 
 		} );
 
-		// TODO: build the geometry and transforms
-
-
 		// construct the attribute struct
+		// TODO: need to include materials here
 		let attributesStructSize = 0;
 		const attributeStructContent = attributes
 			.map( key => {
@@ -224,6 +227,8 @@ export class BVHComputeFns {
 			}
 		` );
 
+		this.storageBufferAttributes.transforms = new StorageBufferAttribute( transformBuffer, 17 );
+		this.storageBufferAttributes.nodes = new StorageBufferAttribute( nodeBuffer32, 8 );
 		this.storageBufferAttributes.index = new StorageBufferAttribute( indexBuffer, 1 );
 		this.storageBufferAttributes.attributes = new StorageBufferAttribute( attributesBuffer, attributesStructSize );
 		this.attributesStruct = attributeStruct;
