@@ -168,7 +168,7 @@ export class BVHComputeFns {
 		let attributesOffset = 0;
 		let indexOffset = 0;
 		const indexBuffer = new Uint32Array( indexBufferLength );
-		const attributesBuffer = new Float32Array( attributesBufferLength );
+		const attributesBuffer = new Float32Array( attributesBufferLength * attributes.length * 4 );
 		geometries.forEach( ( { geometry, range } ) => {
 
 			const offset = appendGeometryData( geometry, range );
@@ -297,7 +297,7 @@ export class BVHComputeFns {
 
 		}
 
-		function appendGeometryData( geometry, offsets = {} ) {
+		function appendGeometryData( geometry, offsets = null ) {
 
 			const result = [];
 			const groups = geometry.groups.length === 0 ? [ { start: 0, count: Infinity } ] : geometry.groups;
