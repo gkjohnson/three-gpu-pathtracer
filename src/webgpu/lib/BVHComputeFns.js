@@ -120,17 +120,17 @@ export class BVHComputeFns {
 
 			const object = bvh.getObjectFromId( compositeId );
 			const instanceId = bvh.getInstanceFromId( compositeId );
-			const bvh = this.getBVH( object, instanceId );
+			const meshBvh = this.getBVH( object, instanceId );
 
 			// add a new transform for each bvh root
-			objectTransformsCount += bvh._roots.length;
+			objectTransformsCount += meshBvh._roots.length;
 
 			// if we haven't added this bvh, yet
-			if ( ! bvhs.includes( bvh ) ) {
+			if ( ! bvhs.includes( meshBvh ) ) {
 
 				// increase the buffer size
-				bvhs.push( bvh );
-				bvhNodesBufferLength += bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
+				bvhs.push( meshBvh );
+				bvhNodesBufferLength += meshBvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 
 				// save the geometry info to write later and increment the buffer sizes
 				if ( object.isBatchedMesh ) {
@@ -160,13 +160,13 @@ export class BVHComputeFns {
 			}
 
 			// save the index of the bvh associated with this transform
-			transformBVHs.push( bvhs.indexOf( bvh ) );
+			transformBVHs.push( bvhs.indexOf( meshBvh ) );
 
 		} );
 
 		// write the geometry buffer attributes
-		const attributesOffset = 0;
-		const indexOffset = 0;
+		let attributesOffset = 0;
+		let indexOffset = 0;
 		const indexBuffer = new Uint32Array( indexBufferLength );
 		const attributesBuffer = new Float32Array( attributesBufferLength );
 		geometries.forEach( ( { geometry, range } ) => {
@@ -182,7 +182,7 @@ export class BVHComputeFns {
 		const nodeBuffer32 = new Uint32Array( nodeBuffer );
 		const nodeBufferFloat = new Float32Array( nodeBuffer );
 		const bvhNodeOffsets = [];
-		const nodeWriteOffset = 0;
+		let nodeWriteOffset = 0;
 		appendBVHData( bvh, 0, true );
 		bvhs.forEach( ( bvh, i ) => {
 
@@ -284,6 +284,8 @@ export class BVHComputeFns {
 
 					}
 
+					nodeWriteOffset ++;
+
 				}
 
 			} );
@@ -297,6 +299,15 @@ export class BVHComputeFns {
 			const result = [];
 			const groups = geometry.groups.length === 0 ? [ { start: 0, count: Infinity } ] : geometry.groups;
 
+			let vertexStart = 0;
+			let vertexCount = geometry.attributes.position.count;
+			if ( offsets ) {
+
+				vertexStart = offsets.vertexStart;
+				vertexCount = offsets.vertexCount;
+
+			}
+
 			groups.forEach( group => {
 
 				result.push( indexOffset );
@@ -305,26 +316,18 @@ export class BVHComputeFns {
 				// TODO: validate the write offsets here
 				if ( geometry.index ) {
 
-					let {
-						indexCount = - 1,
-						indexStart = - 1,
-					} = offsets;
+					let indexStart = Math.max( 0, group.start );
+					let indexCount = Math.min( geometry.index.count, group.start + group.count ) - indexStart;
+					if ( offsets ) {
 
-					if ( indexCount === - 1 ) {
-
-						indexStart = 0;
-						indexCount = geometry.index.count;
+						indexStart = offsets.indexStart;
+						indexCount = geometry.indexCount;
 
 					}
 
-					const indexEnd = Math.min( indexStart + indexCount, group.start + group.count );
-
-					indexStart = Math.max( indexStart, group.start );
-					indexCount = indexEnd - indexStart;
-
 					for ( let i = 0; i < indexCount; i ++ ) {
 
-						indexBuffer[ i + indexOffset ] = geometry.index.getX( i - indexStart ) + attributesOffset;
+						indexBuffer[ i + indexOffset ] = geometry.index.getX( i + indexStart ) - vertexStart + attributesOffset;
 
 					}
 
@@ -332,24 +335,18 @@ export class BVHComputeFns {
 
 				} else {
 
-					let {
-						vertexStart = - 1,
-						vertexCount = - 1,
-					} = offsets;
+					let indexStart = Math.max( 0, group.start );
+					let indexCount = Math.min( geometry.attributes.position.count, group.start + group.count ) - indexStart;
+					if ( offsets ) {
 
-					if ( vertexCount === - 1 ) {
-
-						vertexStart = 0;
-						vertexCount = geometry.attributes.position.count;
+						indexStart = offsets.vertexStart;
+						indexCount = offsets.vertexCount;
 
 					}
 
-					const indexStart = Math.max( vertexStart, group.start );
-					const indexEnd = Math.min( group.start + group.end, vertexStart, vertexCount );
-					const indexCount = indexEnd - indexStart;
 					for ( let i = 0; i < indexCount; i ++ ) {
 
-						indexBuffer[ i + indexOffset ] = i - indexStart + attributesOffset;
+						indexBuffer[ i + indexOffset ] = i + indexStart + attributesOffset;
 
 					}
 
@@ -358,18 +355,6 @@ export class BVHComputeFns {
 				}
 
 			} );
-
-			let {
-				vertexStart = - 1,
-				vertexCount = - 1,
-			} = offsets;
-
-			if ( vertexCount === - 1 ) {
-
-				vertexStart = 0;
-				vertexCount = geometry.attributes.position.count;
-
-			}
 
 			attributes.forEach( ( key, interleavedOffset ) => {
 
