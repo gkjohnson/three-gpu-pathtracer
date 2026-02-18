@@ -14,6 +14,7 @@ import {
 // TODO: separate update functions into utilities
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
+// 		- add a callback for writing a property for a geometry to a range
 // TODO: add skinned mesh bvh support
 // TODO: add overrideable functions for custom implementations (custom attributes, transform fields)
 // TODO: see if it's possible to replace function contents and dependencies in-place so that
@@ -21,6 +22,7 @@ import {
 // TODO: see if we can reference wgslFn names directly rather than constructing them inline over and over
 // and / or use local variable definitions for the pointers to clean up the code
 // TODO: see if there's a "build" step that can be leveraged fro nodes
+// TODO: allow for "slotting" a new type of callback (eg distance, etc) so multiple types of queries can be made
 // NEXT: Get a basic version working with megakernel
 
 const _vec = /* @__PURE__ */ new Vector4();
