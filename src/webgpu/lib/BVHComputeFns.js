@@ -617,4 +617,6 @@ export class BVHComputeFns {
 
 	}
 
+	dispose() {}
+
 }
