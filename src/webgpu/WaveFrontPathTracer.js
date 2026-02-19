@@ -125,7 +125,7 @@ function* renderTask() {
 		hitProcessKernel.hitQueue = hitQueue;
 		hitProcessKernel.hitQueueSize = hitQueueSize;
 		hitProcessKernel.geom_position = geometry.position;
-		hitProcessKernel.geom_normals = geometry.normal;
+		hitProcessKernel.geom_attributes = geometry.attributes;
 		hitProcessKernel.materials = geometry.materials;
 		renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
 
@@ -169,7 +169,7 @@ export class WaveFrontPathTracer {
 			bvh: null,
 			index: null,
 			position: null,
-			normal: null,
+			attributes: null,
 
 			materialIndex: null,
 			materials: null,
@@ -256,6 +256,13 @@ export class WaveFrontPathTracer {
 
 		this.camera = camera;
 		this.reset();
+
+	}
+
+	setTextures( textureArray ) {
+
+		this.hitProcessKernel.textures = textureArray;
+		this.hitProcessKernel.computeNode.parameters.textureSampler.node.value = textureArray;
 
 	}
 

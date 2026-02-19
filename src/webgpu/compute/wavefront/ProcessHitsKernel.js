@@ -1,9 +1,9 @@
-import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture, DataArrayTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
+import { uniform, storage, wgslFn, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { materialStruct } from '../../nodes/structs.wgsl.js';
+import { materialStruct, vertexAttributesStruct } from '../../nodes/structs.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 
@@ -29,8 +29,12 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 			// bvh and geometry definition
 			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
-			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
+			geom_attributes: storage( new IndirectStorageBufferAttribute( 1, 12 ), 'VertexAttributes' ).toReadOnly(),
 			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill in initial values
+
+			// texture array for material textures
+			textures: texture( new DataArrayTexture( null, 1, 1, 1 ) ),
+			textureSampler: sampler( new DataArrayTexture( null, 1, 1, 1 ) ),
 
 			globalId: globalId,
 		};
@@ -57,8 +61,12 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// scene
 				geom_position: ptr<storage, array<vec3f>, read>,
-				geom_normals: ptr<storage, array<vec3f>, read>,
+				geom_attributes: ptr<storage, array<VertexAttributes>, read>,
 				materials: ptr<storage, array<Material>, read>,
+
+				// texture array for material textures
+				textures: texture_2d_array<f32>,
+				textureSampler: sampler,
 
 				globalId: vec3u
 			) -> void {
@@ -97,7 +105,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				);
 
 				// TODO: pass UVs
-				let surf = getSurfaceRecord( material, hit, geom_normals, geom_normals );
+				let surf = getSurfaceRecord( material, hit, geom_attributes, textures, textureSampler );
 
 				let scatterRec = bsdfSample( input.view, surf );
 
