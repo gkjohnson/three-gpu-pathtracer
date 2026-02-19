@@ -1,5 +1,5 @@
 import { Matrix4, Vector4 } from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { CodeNode, StorageBufferAttribute } from 'three/webgpu';
 import { storage, wgsl, wgslFn } from 'three/tsl';
 import {
 	intersectsBounds,
@@ -23,27 +23,61 @@ const IS_LEAFNODE_FLAG = 0xFFFF;
 // a node fn can be updated without regenerating all other materials.
 // TODO: see if we can reference wgslFn names directly rather than constructing them inline over and over
 // and / or use local variable definitions for the pointers to clean up the code
-// TODO: see if there's a "build" step that can be leveraged fro nodes
+// TODO: see if there's a "build" step that can be leveraged for nodes to make integration more simple
 // TODO: allow for "slotting" a new type of callback (eg distance, etc) so multiple types of queries can be made
+// 		- add a "shapecast" style function with functions and return types that can be slotted in
+// NEXT: add support for custom transform fields
 
 const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 
+// a more structured "struct" node that bookkeeps the struct name, byte size
+class WGSLStructNode extends CodeNode {
+
+	get uintSize() {
+
+		return this.byteSize / 4;
+
+	}
+
+	constructor( name, byteSize, fields, includes = [] ) {
+
+		const content = Object
+			.entries( fields )
+			.map( ( [ name, type ] ) => {
+
+				return `${ name }: ${ type },`;
+
+			} ).join( '\n' );
+
+		const code = /* wgsl */`
+			struct ${ name } {
+				${ content }
+			}
+		`;
+
+		super( code, includes, 'wgsl' );
+		this.name = name;
+		this.byteSize = byteSize;
+
+	}
+
+}
+
+const wgslStruct = ( ...args ) => new WGSLStructNode( ...args );
+
 // stride is 36 floats (144 bytes) to match WGSL struct alignment:
 // mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-const TRANSFORM_STRUCT_SIZE = 36;
-const transformStruct = wgsl( /* wgsl */`
-	struct TransformStruct {
-		matrixWorld: mat4x4f,
-		inverseMatrixWorld: mat4x4f,
-		nodeOffset: u32,
-		_alignment0: u32,
-		_alignment1: u32,
-		_alignment2: u32,
-	}
-` );
+const transformStruct = wgslStruct( 'TransformStruct', 36 * 4, {
+	matrixWorld: 'mat4x4f',
+	inverseMatrixWorld: 'mat4x4f',
+	nodeOffset: 'u32',
+	_alignment0: 'u32',
+	_alignment1: 'u32',
+	_alignment2: 'u32',
+} );
 
 function dereferenceIndex( indexAttr, indirectBuffer ) {
 
@@ -71,17 +105,15 @@ function getTotalBVHByteLength( bvh ) {
 
 }
 
-const intersectionResultStruct = wgsl( /* wgsl */`
-	struct IntersectionResult {
-		didHit: bool,
-		indices: vec4u,
-		normal: vec3f,
-		barycoord: vec3f,
-		side: f32,
-		dist: f32,
-		objectIndex: u32,
-	};
-` );
+const intersectionResultStruct = wgslStruct( 'IntersectionResult', 16 * 4, {
+	indices: 'vec4u',
+	normal: 'vec3f',
+	didHit: 'bool',
+	barycoord: 'vec3f',
+	objectIndex: 'u32',
+	side: 'f32',
+	dist: 'f32',
+} );
 
 const intersectsTriangle = wgslFn( /* wgsl */ `
 
@@ -330,15 +362,22 @@ export class BVHComputeFns {
 		this.attributes = attributes;
 
 		this.bvh = bvh;
-		this.storageBufferAttributes = {
+		this.storage = {
 			index: null,
 			attributes: null,
 			nodes: null,
 			transforms: null,
 		};
 
-		this.attributesStruct = null;
-		this.raycastFirstHitFn = null;
+		this.structs = {
+			attributes: null,
+			transform: null,
+			intersection: null,
+		};
+
+		this.fns = {
+			raycastFirstHit: null,
+		};
 
 		this.update();
 
@@ -361,46 +400,26 @@ export class BVHComputeFns {
 
 			const object = bvh.getObjectFromId( compositeId );
 			const instanceId = bvh.getInstanceFromId( compositeId );
-			const meshBvh = this.getBVH( object, instanceId );
+			const range = { start: 0, count: 0, vertexStart: 0, vertexCount: 0 };
+			const primBvh = this.getBVH( object, instanceId, range );
 
 			// if we haven't added this bvh, yet
-			if ( ! geometryInfo.find( info => info.bvh === meshBvh ) ) {
-
-				// TODO: account for indirect buffer here?
+			if ( ! geometryInfo.find( info => info.bvh === primBvh ) ) {
 
 				// save the geometry info to write later and increment the buffer sizes
 				const info = {
 					index: geometryInfo.length,
-					bvh: meshBvh,
-					geometry: object.geometry,
-					range: {
-						start: 0,
-						count: 0,
-						vertexStart: 0,
-						vertexCount: 0,
-					},
+					bvh: primBvh,
+					geometry: primBvh.geometry,
+					range: range,
 
 					bvhBufferOffsets: null,
 					indexBufferOffset: null,
 
 				};
 
-				if ( object.isBatchedMesh ) {
-
-					const geometryId = object.getGeometryIdAt( instanceId );
-					const range = object.getGeometryRangeAt( geometryId );
-					Object.assign( info.range, range );
-
-				} else {
-
-					const geometry = object.geometry;
-					info.range.count = geometry.index ? geometry.index.count : geometry.attributes.position.count,
-					info.range.vertexCount = geometry.attributes.position.count;
-
-				}
-
 				// increase the buffer sizes for bvh and geometry
-				bvhNodesBufferLength += getTotalBVHByteLength( meshBvh );
+				bvhNodesBufferLength += getTotalBVHByteLength( primBvh );
 				indexBufferLength += info.range.count;
 				attributesBufferLength += info.range.vertexCount;
 				geometryInfo.push( info );
@@ -408,7 +427,7 @@ export class BVHComputeFns {
 			}
 
 			// save the index of the bvh associated with this transform
-			meshBvh._roots.forEach( ( root, i ) => {
+			primBvh._roots.forEach( ( root, i ) => {
 
 				transformInfo.push( {
 					data: geometryInfo.find( info => object.geometry === info.geometry ),
@@ -464,11 +483,11 @@ export class BVHComputeFns {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRUCT_SIZE * 4 * transformInfo.length );
+		const transformArrayBuffer = new ArrayBuffer( transformStruct.byteSize * transformInfo.length );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
-			appendTransformData( info, _inverseMatrix, i, transformArrayBuffer );
+			this.writeTransformData( info, _inverseMatrix, i, transformArrayBuffer );
 
 		} );
 
@@ -476,44 +495,18 @@ export class BVHComputeFns {
 
 		// set up the storage buffers
 		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), TRANSFORM_STRUCT_SIZE ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), transformStruct.uintSize ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
 
-		this.storageBufferAttributes.transforms = transformsStorage;
-		this.storageBufferAttributes.nodes = bvhNodesStorage;
-		this.storageBufferAttributes.index = indexStorage;
-		this.storageBufferAttributes.attributes = attributesStorage;
-		this.attributesStruct = attributeStruct;
-		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
-
-		function appendTransformData( info, premultiplyMatrix, writeOffset, target ) {
-
-			const transformBufferF32 = new Float32Array( target );
-			const transformBufferU32 = new Uint32Array( target );
-
-			const { object, instanceId, root, data } = info;
-			const { bvhNodeOffsets } = data;
-
-			if ( object.isInstancedMesh || object.isBatchedMesh ) {
-
-				object.getMatrixAt( instanceId, _matrix ).premultiply( object.matrixWorld );
-
-			} else {
-
-				_matrix.copy( object.matrixWorld );
-
-			}
-
-			_matrix.premultiply( premultiplyMatrix );
-			_matrix.toArray( transformBufferF32, writeOffset * TRANSFORM_STRUCT_SIZE );
-
-			_matrix.invert();
-			_matrix.toArray( transformBufferF32, writeOffset * TRANSFORM_STRUCT_SIZE + 16 );
-
-			transformBufferU32[ writeOffset * TRANSFORM_STRUCT_SIZE + 32 ] = bvhNodeOffsets[ root ];
-
-		}
+		this.storage.transforms = transformsStorage;
+		this.storage.nodes = bvhNodesStorage;
+		this.storage.index = indexStorage;
+		this.storage.attributes = attributesStorage;
+		this.structs.attributes = attributeStruct;
+		this.structs.transform = transformStruct;
+		this.structs.intersectionResult = intersectionResultStruct;
+		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
@@ -522,10 +515,9 @@ export class BVHComputeFns {
 			const targetF32 = new Float32Array( target );
 
 			const result = [];
-
+			let tlasOffset = 0;
 			bvh._roots.forEach( root => {
 
-				let tlasOffset = 0;
 				const rootBuffer16 = new Uint16Array( root );
 				const rootBuffer32 = new Uint32Array( root );
 				result.push( nodeWriteOffset );
@@ -575,7 +567,6 @@ export class BVHComputeFns {
 
 						targetU32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ];
 						targetU32[ n32 + 7 ] = rootBuffer32[ r32 + 7 ];
-
 
 					}
 
@@ -677,19 +668,48 @@ export class BVHComputeFns {
 
 	}
 
-	getBVH( object, id ) {
+	writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer ) {
 
-		if ( object.isInstancedMesh ) {
+		const transformBufferF32 = new Float32Array( targetBuffer );
+		const transformBufferU32 = new Uint32Array( targetBuffer );
 
-			return object.geometry.boundsTree;
+		const { object, instanceId, root, data } = info;
+		const { bvhNodeOffsets } = data;
 
-		} else if ( object.isBatchedMesh ) {
+		if ( object.isInstancedMesh || object.isBatchedMesh ) {
 
-			const geometryId = object.getGeometryIdAt( id );
+			object.getMatrixAt( instanceId, _matrix ).premultiply( object.matrixWorld );
+
+		} else {
+
+			_matrix.copy( object.matrixWorld );
+
+		}
+
+		_matrix.premultiply( premultiplyMatrix );
+		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.uintSize );
+
+		_matrix.invert();
+		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.uintSize + 16 );
+
+		transformBufferU32[ writeOffset * transformStruct.uintSize + 32 ] = bvhNodeOffsets[ root ];
+
+	}
+
+	getBVH( object, instanceId, rangeTarget ) {
+
+		if ( object.isBatchedMesh ) {
+
+			const geometryId = object.getGeometryIdAt( instanceId );
+			const range = object.getGeometryRangeAt( geometryId );
+			Object.assign( rangeTarget, range );
 			return object.boundsTrees[ geometryId ];
 
 		} else {
 
+			const geometry = object.geometry;
+			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+			rangeTarget.vertexCount = geometry.attributes.position.count;
 			return object.geometry.boundsTree;
 
 		}
