@@ -390,7 +390,7 @@ export class BVHComputeFns {
 		const nodeBufferFloat = new Float32Array( nodeBuffer );
 		const bvhNodeOffsets = [];
 		let nodeWriteOffset = 0;
-		appendBVHData( bvh, 0, true );
+		appendBVHData( bvh, 0, true, bvhs, transformBVHs );
 		bvhs.forEach( ( bvh, i ) => {
 
 			bvhNodeOffsets.push( appendBVHData( bvh, geometryOffsets[ i ], false ) );
@@ -438,15 +438,16 @@ export class BVHComputeFns {
 		this.attributesStruct = attributeStruct;
 		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct );
 
-		function appendBVHData( bvh, geometryOffsets, tlas = false ) {
+		function appendBVHData( bvh, geometryOffset, tlas = false, bvhs = null, transformBVHs = null ) {
 
 			const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 			const UINT32_PER_NODE = BYTES_PER_NODE / 4;
 			const IS_LEAFNODE_FLAG = 0xFFFF;
 			const result = [];
 
-			bvh._roots.forEach( ( root, rootIndex ) => {
+			bvh._roots.forEach( root => {
 
+				let tlasOffset = 0;
 				const rootBuffer16 = new Uint16Array( root );
 				const rootBuffer32 = new Uint32Array( root );
 				result.push( nodeWriteOffset );
@@ -463,16 +464,31 @@ export class BVHComputeFns {
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
 
-						nodeBuffer16[ n16 + 14 ] = rootBuffer16[ r16 + 14 ];
 						if ( tlas ) {
 
+							const count = rootBuffer16[ r16 + 14 ];
+							const offset = rootBuffer32[ r32 + 6 ];
+
+							// each root is expanded into a separate transform so we need to expand
+							// the embedded offsets and counts.
+							let rootsCount = 0;
+							for ( let o = offset, l = offset + count; o < l; o ++ ) {
+
+								rootsCount += bvhs[ transformBVHs[ o ] ]._roots.length;
+
+							}
+
 							// 0xFFFF == mesh leaf, 0xFF00 == TLAS leaf
-							nodeBuffer32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ];
+							nodeBuffer32[ n32 + 6 ] = tlasOffset; // rootBuffer32[ r32 + 6 ];
+							nodeBuffer16[ n16 + 14 ] = rootsCount; //rootBuffer16[ r16 + 14 ];
 							nodeBuffer16[ n16 + 15 ] = 0xFF00;
+
+							tlasOffset += rootsCount;
 
 						} else {
 
-							nodeBuffer32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ] + geometryOffsets[ rootIndex ];
+							nodeBuffer32[ n32 + 6 ] = rootBuffer32[ r32 + 6 ] + geometryOffset;
+							nodeBuffer16[ n16 + 14 ] = rootBuffer16[ r16 + 14 ];
 							nodeBuffer16[ n16 + 15 ] = IS_LEAFNODE_FLAG;
 
 						}
@@ -497,7 +513,6 @@ export class BVHComputeFns {
 
 		function appendGeometryData( geometry, offsets = null, indirectBuffer = null ) {
 
-			const result = [];
 
 			let vertexStart = 0;
 			let vertexCount = geometry.attributes.position.count;
@@ -511,7 +526,7 @@ export class BVHComputeFns {
 			// write indices — when an indirect buffer is present, dereference it to
 			// resolve the BVH's triangle order into a flat index buffer
 			// store as triangle offset (not vertex-index offset) to match BVH leaf format
-			result.push( indexOffset / 3 );
+			const result = indexOffset / 3;
 
 			if ( indirectBuffer ) {
 
