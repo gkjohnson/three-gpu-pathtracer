@@ -4,6 +4,9 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
+import { RenderTarget2DArrayWebGPU } from './RenderTarget2DArrayWebGPU.js';
+import { getTextures } from '../core/utils/sceneUpdateUtils.js';
+import { getTextureHash } from '../core/utils/sceneUpdateUtils.js';
 
 const MATERIAL_STRIDE = 260;
 
@@ -39,6 +42,9 @@ export class WebGPUPathTracer {
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
+
+		// texture array for material textures
+		this._textureArray = new RenderTarget2DArrayWebGPU( 1024, 1024 );
 
 		// options
 		this.renderScale = 1;
@@ -98,6 +104,7 @@ export class WebGPUPathTracer {
 		} = results;
 
 		const pathTracer = this._pathTracer;
+		const renderer = this._renderer;
 
 		const newGeometryData = {};
 
@@ -139,7 +146,12 @@ export class WebGPUPathTracer {
 
 		}
 
-		const newMaterialsData = this.writeMaterialsBuffer( materials, [] );
+		// collect textures and update texture array
+		const textures = getTextures( materials );
+		const textureArray = this._textureArray;
+		textureArray.setTextures( renderer, textures );
+
+		const newMaterialsData = this.writeMaterialsBuffer( materials, textures );
 
 		const newMaterialsBuffer = new StorageBufferAttribute( newMaterialsData, MATERIAL_STRIDE );
 		newMaterialsBuffer.name = 'Material Data';
@@ -254,9 +266,9 @@ export class WebGPUPathTracer {
 				// Both wgsl struct and elements should be in column-major format
 				for ( let i = 0; i < 3; i ++ ) {
 
-					array[ offset + 4 * i + 0 ] = elements[ i + 0 ];
-					array[ offset + 4 * i + 1 ] = elements[ i + 1 ];
-					array[ offset + 4 * i + 2 ] = elements[ i + 2 ];
+					array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
+					array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
+					array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
 					array[ offset + 4 * i + 3 ] = 0; // padding float
 
 				}
@@ -278,14 +290,10 @@ export class WebGPUPathTracer {
 		}
 
 		const floatArray = new Float32Array( materials.length * MATERIAL_STRIDE );
-
-		// on some devices (Google Pixel 6) the "floatBitsToInt" function does not work correctly so we
-		// can't encode texture ids that way.
-		// const intArray = new Int32Array( floatArray.buffer );
+		const intArray = new Int32Array( floatArray.buffer );
 
 		// TODO: make features work
 		// features.reset();
-		console.log( materials[ 0 ].color.r, materials[ 0 ].color.g, materials[ 0 ].color.b );
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];
@@ -332,19 +340,19 @@ export class WebGPUPathTracer {
 			floatArray[ index ++ ] = m.color.r;
 			floatArray[ index ++ ] = m.color.g;
 			floatArray[ index ++ ] = m.color.b;
-			floatArray[ index ++ ] = getTexture( m, 'map' );
+			intArray[ index ++ ] = getTexture( m, 'map' );
 
 			// metalness & roughness - offset 4
 			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'metalnessMap' );
+			intArray[ index ++ ] = getTexture( m, 'metalnessMap' );
 			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'roughnessMap' );
+			intArray[ index ++ ] = getTexture( m, 'roughnessMap' );
 
 			// transmission & emissiveIntensity - offset 8
 			// three.js assumes a default f0 of 0.04 if no ior is provided which equates to an ior of 1.5
 			floatArray[ index ++ ] = getField( m, 'ior', 1.5 );
 			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'transmissionMap' );
+			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
 			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
 
 			// emission - offset 12
@@ -362,10 +370,10 @@ export class WebGPUPathTracer {
 
 			}
 
-			floatArray[ index ++ ] = getTexture( m, 'emissiveMap' );
+			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
 
 			// normals - offset 16
-			floatArray[ index ++ ] = getTexture( m, 'normalMap' );
+			intArray[ index ++ ] = getTexture( m, 'normalMap' );
 			index ++; // because of vec2 alignment
 			if ( 'normalScale' in m ) {
 
@@ -381,8 +389,8 @@ export class WebGPUPathTracer {
 
 			// clearcoat - offset 20
 			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
-			floatArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
+			intArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
+			intArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
 			index ++; // because of vec2 alignment
 
 			// offset 24
@@ -399,11 +407,11 @@ export class WebGPUPathTracer {
 			}
 
 			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
+			intArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
 
 			// iridescence - offset 28
-			floatArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
-			floatArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
+			intArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
+			intArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
 
 			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
 			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
@@ -431,15 +439,15 @@ export class WebGPUPathTracer {
 
 			}
 
-			floatArray[ index ++ ] = getTexture( m, 'specularColorMap' );
+			intArray[ index ++ ] = getTexture( m, 'specularColorMap' );
 
 			// specular intensity - offset 40
 			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
-			floatArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
+			intArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
 
 			// isThinFilm
 			const isThinFilm = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			floatArray[ index ++ ] = Number( isThinFilm );
+			intArray[ index ++ ] = Number( isThinFilm );
 			index ++;
 
 			// attenuation - offset 44
@@ -460,8 +468,8 @@ export class WebGPUPathTracer {
 			floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
 
 			// alphaMap - offset 48
-			floatArray[ index ++ ] = getTexture( m, 'alphaMap' );
-			floatArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
+			intArray[ index ++ ] = getTexture( m, 'alphaMap' );
+			intArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 
@@ -488,7 +496,7 @@ export class WebGPUPathTracer {
 
 			}
 
-			floatArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
+			intArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
 			floatArray[ index ++ ] = getField( m, 'sheen', 0.0 );
 			index ++; // vec3 alignment requirements
 
@@ -507,18 +515,18 @@ export class WebGPUPathTracer {
 
 			}
 
-			floatArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
+			intArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
 
 			// sheenRoughness, flags - offset 60
 			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
-			floatArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
+			intArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
 
-			floatArray[ index ++ ] = Number( m.vertexColors );
-			floatArray[ index ++ ] = Number( m.flatShading );
+			intArray[ index ++ ] = Number( m.vertexColors );
+			intArray[ index ++ ] = Number( m.flatShading );
 
 			// transparent, fogVolume - offset 64
-			floatArray[ index ++ ] = Number( m.transparent );
-			floatArray[ index ++ ] = 0;
+			intArray[ index ++ ] = Number( m.transparent );
+			intArray[ index ++ ] = 0;
 			index ++;
 			index ++;
 
@@ -583,6 +591,15 @@ export class WebGPUPathTracer {
 
 		}
 
+
+		// pass texture array to path tracer if it supports it
+		if ( this._pathTracer.setTextures ) {
+
+			this._textureArray.update( this._renderer );
+			this._pathTracer.setTextures( this._textureArray.texture );
+
+		}
+
 		this._updateScale();
 		this._pathTracer.update();
 
@@ -595,6 +612,7 @@ export class WebGPUPathTracer {
 	dispose() {
 
 		this._pathTracer.dispose();
+		this._textureArray.dispose();
 
 	}
 

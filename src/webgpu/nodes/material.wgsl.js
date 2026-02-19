@@ -27,6 +27,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		material: Material,
 		surfaceHit: IntersectionResult,
 		attributes: ptr<storage, array<VertexAttributes>, read>,
+		textures: texture_2d_array<f32>,
+		textureSampler: sampler,
 	) -> SurfaceRecord {
 		let pointAttributes = getPointAttributes( attributes, surfaceHit.indices.xyz, surfaceHit.barycoord );
 		let uv = pointAttributes.uv;
@@ -52,11 +54,20 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		}
 
+		if ( material.map != -1 ) {
+
+			let uvPrime = material.mapTransform * vec3f( uv, 1 );
+			let texColor = textureSampleLevel( textures, textureSampler, uv.xy, i32( material.map ), 0 );
+			albedo *= vec4f( texColor.rgb, 1.0 );
+
+		}
+
 		var roughness = material.roughness;
 		if ( material.roughnessMap != -1 ) {
 
 			let uvPrime = material.roughnessMapTransform * vec3f( uv, 1 );
-			/* SAMPLE ROUGHNESS TEXTURE roughness *= */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.roughnessMap ), 0 );
+			roughness *= texColor.g;
 
 		}
 
@@ -64,7 +75,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		if ( material.metalnessMap != -1 ) {
 
 			let uvPrime = material.metalnessMapTransform * vec3f( uv, 1 );
-			/* SAMPLE METALNESS TEXTURE metalness *= */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.metalnessMap ), 0 );
+			metalness *= texColor.b;
 
 		}
 
@@ -72,28 +84,36 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		if ( material.emissiveMap != -1 ) {
 
 			let uvPrime = material.emissiveMapTransform * vec3f( uv, 1 );
-			/* SAMPLE EMISSION TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.emissiveMap ), 0 );
+			emission *= texColor.rgb;
+
 		}
 
 		var transmission = material.transmission;
 		if ( material.transmissionMap != -1 ) {
 
 			let uvPrime = material.transmissionMapTransform * vec3f( uv, 1 );
-			/* SAMPLE transmission TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.transmissionMap ), 0 );
+			transmission *= texColor.r;
+
 		}
 
 		var clearcoat = material.clearcoat;
 		if ( material.clearcoatMap != -1 ) {
 
 			let uvPrime = material.clearcoatMapTransform * vec3f( uv, 1 );
-			/* SAMPLE clearcoat TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatMap ), 0 );
+			clearcoat *= texColor.r;
+
 		}
 
 		var clearcoatRoughness = material.clearcoatRoughness;
 		if ( material.clearcoatRoughnessMap != -1 ) {
 
 			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( uv, 1 );
-			/* SAMPLE clearcoatRoughness TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatRoughnessMap ), 0 );
+			clearcoatRoughness *= texColor.r;
+
 		}
 
 		var clearcoatNormal = baseNormal;
@@ -101,45 +121,57 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		clearcoatNormal *= surfaceHit.side;
 
 		var sheenColor = material.sheenColor;
-		if ( material.emissiveMap != -1 ) {
+		if ( material.sheenColorMap != -1 ) {
 
 			let uvPrime = material.sheenColorMapTransform * vec3f( uv, 1 );
-			/* SAMPLE sheenColor TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.sheenColorMap ), 0 );
+			sheenColor *= texColor.rgb;
+
 		}
 
 		var sheenRoughness = material.sheenRoughness;
-		if ( material.emissiveMap != -1 ) {
+		if ( material.sheenRoughnessMap != -1 ) {
 
 			let uvPrime = material.sheenRoughnessMapTransform * vec3f( uv, 1 );
-			/* SAMPLE sheenRoughness TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.sheenRoughnessMap ), 0 );
+			sheenRoughness *= texColor.r;
+
 		}
 
 		var iridescence = material.iridescence;
-		if ( material.emissiveMap != -1 ) {
+		if ( material.iridescenceMap != -1 ) {
 
 			let uvPrime = material.iridescenceMapTransform * vec3f( uv, 1 );
-			/* SAMPLE iridescence TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceMap ), 0 );
+			iridescence *= texColor.r;
+
 		}
 
 		var iridescenceThickness = material.iridescenceThicknessMaximum;
-		if ( material.emissiveMap != -1 ) {
+		if ( material.iridescenceThicknessMap != -1 ) {
 
 			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( uv, 1 );
-			/* SAMPLE iridescenceThickness TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceThicknessMap ), 0 );
+			iridescenceThickness *= texColor.r;
+
 		}
 
 		var specularColor = material.specularColor;
-		if ( material.emissiveMap != -1 ) {
+		if ( material.specularColorMap != -1 ) {
 
 			let uvPrime = material.specularColorMapTransform * vec3f( uv, 1 );
-			/* SAMPLE specularColor TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.specularColorMap ), 0 );
+			specularColor *= texColor.rgb;
+
 		}
 
 		var specularIntensity = material.specularIntensity;
-		if ( material.emissiveMap != -1 ) {
+		if ( material.specularIntensityMap != -1 ) {
 
 			let uvPrime = material.specularIntensityMapTransform * vec3f( uv, 1 );
-			/* SAMPLE specularIntensity TEXTURE */
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.specularIntensityMap ), 0 );
+			specularIntensity *= texColor.r;
+
 		}
 
 		var surf: SurfaceRecord;

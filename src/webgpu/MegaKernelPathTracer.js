@@ -138,6 +138,13 @@ export class MegaKernelPathTracer {
 
 	}
 
+	setTextures( textureArray ) {
+
+		this.kernel.textures = textureArray;
+		this.kernel.computeNode.parameters.textureSampler.node.value = textureArray;
+
+	}
+
 	setCamera( camera ) {
 
 		this.camera = camera;

@@ -1,6 +1,6 @@
-import { IndirectStorageBufferAttribute, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, Matrix4, Vector2, StorageTexture, DataArrayTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { uniform, storage, globalId, textureStore } from 'three/tsl';
+import { uniform, storage, globalId, textureStore, texture, sampler } from 'three/tsl';
 import megakernelShader from '../nodes/megakernel.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -30,6 +30,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			bvh: storage( new IndirectStorageBufferAttribute(), 'BVHNode' ).toReadOnly(), // TODO: fill this in
 
 			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill this in
+
+			// texture array for material textures
+			textures: texture( new DataArrayTexture( null, 1, 1, 1 ) ),
+			textureSampler: sampler( new DataArrayTexture( null, 1, 1, 1 ) ),
 
 			// compute variables
 			globalId: globalId,

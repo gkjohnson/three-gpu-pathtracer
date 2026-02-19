@@ -81,7 +81,7 @@ export const materialStruct = wgsl( /* wgsl */`
 
 		// offset 40 floats
 		specularIntensity: f32,
-		specualrIntensityMap: i32,
+		specularIntensityMap: i32,
 		thinFilm: i32, // actually a boolean
 
 		// offset 44 floats

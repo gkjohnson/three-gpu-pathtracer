@@ -34,6 +34,10 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 		materials: ptr<storage, array<Material>, read>,
 
+		// texture array for material textures
+		textures: texture_2d_array<f32>,
+		textureSampler: sampler,
+
 	) -> void {
 
 		// make sure we don't bleed over the edge of our tile
@@ -77,7 +81,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 				let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
 
-				let surf = getSurfaceRecord( material, hitResult, geom_attributes );
+				let surf = getSurfaceRecord( material, hitResult, geom_attributes, textures, textureSampler );
 
 				let scatterRec = bsdfSample( - ray.direction, surf );
 
