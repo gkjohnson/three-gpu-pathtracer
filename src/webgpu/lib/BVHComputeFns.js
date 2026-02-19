@@ -8,6 +8,10 @@ import {
 	constants,
 } from 'three-mesh-bvh/webgpu';
 
+const BYTES_PER_NODE = 6 * 4 + 4 + 4;
+const UINT32_PER_NODE = BYTES_PER_NODE / 4;
+const IS_LEAFNODE_FLAG = 0xFFFF;
+
 // TODO: clean up "update" function, separate it into chunks
 // TODO: separate update functions into utilities
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
@@ -58,6 +62,12 @@ function dereferenceIndex( indexAttr, indirectBuffer ) {
 	}
 
 	return result;
+
+}
+
+function getTotalBVHByteLength( bvh ) {
+
+	return bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 
 }
 
@@ -344,67 +354,70 @@ export class BVHComputeFns {
 		const transformInfo = [];
 
 		// accumulate the sizes of the bvh nodes buffer, number of objects, and geometry buffers
-		let bvhNodesBufferLength = 0;
-		let objectTransformsCount = 0;
+		let bvhNodesBufferLength = getTotalBVHByteLength( bvh );
 		let indexBufferLength = 0;
 		let attributesBufferLength = 0;
-		bvhNodesBufferLength += bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 		bvh.primitiveBuffer.forEach( compositeId => {
 
 			const object = bvh.getObjectFromId( compositeId );
 			const instanceId = bvh.getInstanceFromId( compositeId );
 			const meshBvh = this.getBVH( object, instanceId );
 
-			// add a new transform for each bvh root
-			objectTransformsCount += meshBvh._roots.length;
-
 			// if we haven't added this bvh, yet
 			if ( ! geometryInfo.find( info => info.bvh === meshBvh ) ) {
 
-				// increase the buffer size
-				bvhNodesBufferLength += meshBvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
+				// TODO: account for indirect buffer here?
 
 				// save the geometry info to write later and increment the buffer sizes
-				const indirectBuffer = meshBvh._indirectBuffer || null;
 				const info = {
 					index: geometryInfo.length,
 					bvh: meshBvh,
 					geometry: object.geometry,
-					range: undefined,
-					indirectBuffer: indirectBuffer,
+					range: {
+						start: 0,
+						count: 0,
+						vertexStart: 0,
+						vertexCount: 0,
+					},
 
 					bvhBufferOffsets: null,
 					indexBufferOffset: null,
 
-
 				};
-
-				geometryInfo.push( info );
 
 				if ( object.isBatchedMesh ) {
 
 					const geometryId = object.getGeometryIdAt( instanceId );
 					const range = object.getGeometryRangeAt( geometryId );
-					info.range = range;
-
-					indexBufferLength += range.indexCount === - 1 ? range.vertexCount : range.indexCount;
-					attributesBufferLength += range.vertexCount;
+					Object.assign( info.range, range );
 
 				} else {
 
 					const geometry = object.geometry;
-					indexBufferLength += geometry.index ? geometry.index.count : geometry.attributes.position.count;
-					attributesBufferLength += geometry.attributes.position.count;
+					info.range.count = geometry.index ? geometry.index.count : geometry.attributes.position.count,
+					info.range.vertexCount = geometry.attributes.position.count;
 
 				}
+
+				// increase the buffer sizes for bvh and geometry
+				bvhNodesBufferLength += getTotalBVHByteLength( meshBvh );
+				indexBufferLength += info.range.count;
+				attributesBufferLength += info.range.vertexCount;
+				geometryInfo.push( info );
 
 			}
 
 			// save the index of the bvh associated with this transform
-			transformInfo.push( {
-				data: geometryInfo.find( info => object.geometry === info.geometry ),
-				object,
-				instanceId,
+			meshBvh._roots.forEach( ( root, i ) => {
+
+				transformInfo.push( {
+					data: geometryInfo.find( info => object.geometry === info.geometry ),
+					root: i,
+					object,
+					instanceId,
+					compositeId,
+				} );
+
 			} );
 
 		} );
@@ -426,67 +439,67 @@ export class BVHComputeFns {
 		const indexBuffer = new Uint32Array( indexBufferLength );
 		const attributesBuffer = new ArrayBuffer( attributesBufferLength * attributes.length * 4 * 4 );
 		const bvhNodesBuffer = new ArrayBuffer( bvhNodesBufferLength );
-		appendBVHData( bvh, 0, transformInfo, bvhNodesBuffer, true );
+
+		// append TLAS data
+		appendBVHData( bvh, 0, transformInfo, 0, bvhNodesBuffer, true );
+		nodeWriteOffset += getTotalBVHByteLength( bvh ) / BYTES_PER_NODE;
 		geometryInfo.forEach( info => {
 
-			const { geometry, range, indirectBuffer } = info;
-			const indexOffset = appendGeometryData( geometry, range, indirectBuffer );
-			const bvhNodeOffsets = appendBVHData( info.bvh, indexOffset, transformInfo, bvhNodesBuffer, false );
-
-			info.indexBufferOffset = indexOffset;
+			// append bvh data
+			const bvhNodeOffsets = appendBVHData( info.bvh, indexOffset / 3, transformInfo, nodeWriteOffset, bvhNodesBuffer, false );
 			info.bvhNodeOffsets = bvhNodeOffsets;
+
+			// append geometry data
+			appendGeometryData( info.geometry, info.range, indexOffset, attributesOffset, info.bvh._indirectBuffer );
+			info.indexBufferOffset = indexOffset;
+
+			// step the write offsets forward
+			indexOffset += info.range.count;
+			attributesOffset += info.range.vertexCount;
+			nodeWriteOffset += getTotalBVHByteLength( info.bvh ) / BYTES_PER_NODE;
 
 		} );
 
 		//
 
 		// write the transforms
-		let transformWriteOffset = 0;
-		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRUCT_SIZE * 4 * objectTransformsCount );
+		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRUCT_SIZE * 4 * transformInfo.length );
 		const transformBufferF32 = new Float32Array( transformArrayBuffer );
 		const transformBufferU32 = new Uint32Array( transformArrayBuffer );
-		bvh.primitiveBuffer.forEach( ( compositeId, i ) => {
+		transformInfo.forEach( ( info, i ) => {
 
+			const { compositeId, data, root } = info;
 			bvh.getObjectMatrix( compositeId, _matrix );
 			_inverseMatrix.copy( _matrix ).invert();
 
-			const objectBvh = transformInfo[ i ].data.bvh;
-			const bvhOffset = transformInfo[ i ].data.bvhNodeOffsets;
-			objectBvh._roots.forEach( ( root, ri ) => {
-
-				_matrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRUCT_SIZE );
-				_inverseMatrix.toArray( transformBufferF32, transformWriteOffset * TRANSFORM_STRUCT_SIZE + 16 );
-				transformBufferU32[ transformWriteOffset * TRANSFORM_STRUCT_SIZE + 32 ] = bvhOffset[ ri ];
-				transformWriteOffset ++;
-
-			} );
+			const { bvhNodeOffsets } = data;
+			_matrix.toArray( transformBufferF32, i * TRANSFORM_STRUCT_SIZE );
+			_inverseMatrix.toArray( transformBufferF32, i * TRANSFORM_STRUCT_SIZE + 16 );
+			transformBufferU32[ i * TRANSFORM_STRUCT_SIZE + 32 ] = bvhNodeOffsets[ root ];
 
 		} );
 
 		//
 
 		// set up the storage buffers
-		const nodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
 		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRUCT_SIZE ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
 
 		this.storageBufferAttributes.transforms = transformsStorage;
-		this.storageBufferAttributes.nodes = nodesStorage;
+		this.storageBufferAttributes.nodes = bvhNodesStorage;
 		this.storageBufferAttributes.index = indexStorage;
 		this.storageBufferAttributes.attributes = attributesStorage;
 		this.attributesStruct = attributeStruct;
-		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
+		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
 
-		function appendBVHData( bvh, geometryOffset, transformInfo, target, tlas = false ) {
+		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
 			const targetU16 = new Uint16Array( target );
 			const targetU32 = new Uint32Array( target );
 			const targetF32 = new Float32Array( target );
 
-			const BYTES_PER_NODE = 6 * 4 + 4 + 4;
-			const UINT32_PER_NODE = BYTES_PER_NODE / 4;
-			const IS_LEAFNODE_FLAG = 0xFFFF;
 			const result = [];
 
 			bvh._roots.forEach( root => {
@@ -555,22 +568,9 @@ export class BVHComputeFns {
 
 		}
 
-		function appendGeometryData( geometry, offsets = null, indirectBuffer = null ) {
+		function appendIndexData( geometry, range, indexOffset, attributesOffset, indirectBuffer = null ) {
 
-			let vertexStart = 0;
-			let vertexCount = geometry.attributes.position.count;
-			if ( offsets ) {
-
-				vertexStart = offsets.vertexStart;
-				vertexCount = offsets.vertexCount;
-
-			}
-
-			// write indices — when an indirect buffer is present, dereference it to
-			// resolve the BVH's triangle order into a flat index buffer
-			// store as triangle offset (not vertex-index offset) to match BVH leaf format
-			const result = indexOffset / 3;
-
+			const { start, count, vertexStart } = range;
 			if ( indirectBuffer ) {
 
 				const dereferencedIndex = dereferenceIndex( geometry.index, indirectBuffer );
@@ -584,43 +584,34 @@ export class BVHComputeFns {
 
 			} else if ( geometry.index ) {
 
-				let indexStart = 0;
-				let indexCount = geometry.index.count;
-				if ( offsets ) {
+				for ( let i = 0; i < count; i ++ ) {
 
-					indexStart = offsets.indexStart;
-					indexCount = offsets.indexCount;
+					indexBuffer[ i + indexOffset ] = geometry.index.getX( i + start ) - vertexStart + attributesOffset;
 
 				}
 
-				for ( let i = 0; i < indexCount; i ++ ) {
-
-					indexBuffer[ i + indexOffset ] = geometry.index.getX( i + indexStart ) - vertexStart + attributesOffset;
-
-				}
-
-				indexOffset += indexCount;
+				indexOffset += count;
 
 			} else {
 
-				let indexStart = 0;
-				let indexCount = geometry.attributes.position.count;
-				if ( offsets ) {
+				for ( let i = 0; i < count; i ++ ) {
 
-					indexStart = offsets.vertexStart;
-					indexCount = offsets.vertexCount;
+					indexBuffer[ i + indexOffset ] = i + start + attributesOffset;
 
 				}
 
-				for ( let i = 0; i < indexCount; i ++ ) {
-
-					indexBuffer[ i + indexOffset ] = i + indexStart + attributesOffset;
-
-				}
-
-				indexOffset += indexCount;
+				indexOffset += count;
 
 			}
+
+
+		}
+
+		function appendGeometryData( geometry, range, indexOffset, attributesOffset, indirectBuffer = null ) {
+
+			appendIndexData( geometry, range, indexOffset, attributesOffset, indirectBuffer );
+
+			const { vertexStart, vertexCount } = range;
 
 			const attributesBufferF32 = new Float32Array( attributesBuffer );
 			attributes.forEach( ( key, interleavedOffset ) => {
@@ -664,7 +655,6 @@ export class BVHComputeFns {
 			} );
 
 			attributesOffset += vertexCount;
-			return result;
 
 		}
 
