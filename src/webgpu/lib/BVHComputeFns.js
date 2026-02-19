@@ -617,6 +617,10 @@ export class BVHComputeFns {
 
 	}
 
-	dispose() {}
+	dispose() {
+
+		// TODO: dispose buffers
+
+	}
 
 }
