@@ -85,7 +85,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 				}
 
 				let nodeIndex = stack[ pointer ];
-				let node = ${ name }nodes[ nodeIndex ];
+				let node = ${ name }nodes.value[ nodeIndex ];
 				pointer = pointer - 1;
 
 				var boundsHitDist: f32 = 0.0;
@@ -106,13 +106,13 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 					for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
 
-						let i0 = ${ name }index[ ti * 3u ];
-						let i1 = ${ name }index[ ti * 3u + 1u ];
-						let i2 = ${ name }index[ ti * 3u + 2u ];
+						let i0 = ${ name }index.value[ ti * 3u ];
+						let i1 = ${ name }index.value[ ti * 3u + 1u ];
+						let i2 = ${ name }index.value[ ti * 3u + 2u ];
 
-						let a = ${ name }attributes[ i0 ].position.xyz;
-						let b = ${ name }attributes[ i1 ].position.xyz;
-						let c = ${ name }attributes[ i2 ].position.xyz;
+						let a = ${ name }attributes.value[ i0 ].position.xyz;
+						let b = ${ name }attributes.value[ i1 ].position.xyz;
+						let c = ${ name }attributes.value[ i2 ].position.xyz;
 
 						var triResult = intersectsTriangle( ray, a, b, c );
 
@@ -175,7 +175,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 				}
 
 				let currNodeIndex = tlasStack[ tlasPointer ];
-				let node = ${ name }nodes[ currNodeIndex ];
+				let node = ${ name }nodes.value[ currNodeIndex ];
 				tlasPointer = tlasPointer - 1;
 
 				var boundsHitDist: f32 = 0.0;
@@ -196,7 +196,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 					for ( var t = offset; t < offset + count; t = t + 1u ) {
 
-						let transform = ${ name }transforms[ t ];
+						let transform = ${ name }transforms.value[ t ];
 
 						// Transform ray into object local space
 						var localRay: Ray;
@@ -427,8 +427,8 @@ export class BVHComputeFns {
 			}
 		` );
 
-		const nodesStorage = storage( new StorageBufferAttribute( nodeBuffer32, 8 ), `${ name }BVHNode` ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRUCT_SIZE ), `${ name }TransformStruct` ).toReadOnly().setName( `${ name }transforms` );
+		const nodesStorage = storage( new StorageBufferAttribute( nodeBuffer32, 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
+		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRUCT_SIZE ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( attributesBuffer, attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
 
