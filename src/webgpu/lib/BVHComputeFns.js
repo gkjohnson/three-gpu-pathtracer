@@ -624,48 +624,43 @@ export class BVHComputeFns {
 			}
 
 			const attributesBufferF32 = new Float32Array( attributesBuffer );
-			const groups = geometry.groups.length === 0 ? [ { start: vertexStart, count: vertexCount } ] : geometry.groups;
-			groups.forEach( ( { start, count }, groupIndex ) => {
+			attributes.forEach( ( key, interleavedOffset ) => {
 
-				attributes.forEach( ( key, interleavedOffset ) => {
+				const attr = geometry.attributes[ key ];
+				self.getDefaultAttributeValue( key, _def );
 
-					const attr = geometry.attributes[ key ];
-					self.getDefaultAttributeValue( key, groupIndex, _def );
+				for ( let i = 0; i < vertexCount; i ++ ) {
 
-					for ( let i = 0; i < count; i ++ ) {
+					if ( attr ) {
 
-						if ( attr ) {
+						_vec.fromBufferAttribute( attr, i + vertexStart );
 
-							_vec.fromBufferAttribute( attr, i + start );
+						switch ( attr.itemSize ) {
 
-							switch ( attr.itemSize ) {
-
-							case 1:
-								_vec.y = _def.y;
-								_vec.z = _def.z;
-								_vec.w = _def.w;
-								break;
-							case 2:
-								_vec.z = _def.z;
-								_vec.w = _def.w;
-								break;
-							case 3:
-								_vec.w = _def.w;
-								break;
-
-							}
-
-						} else {
-
-							_vec.copy( _def );
+						case 1:
+							_vec.y = _def.y;
+							_vec.z = _def.z;
+							_vec.w = _def.w;
+							break;
+						case 2:
+							_vec.z = _def.z;
+							_vec.w = _def.w;
+							break;
+						case 3:
+							_vec.w = _def.w;
+							break;
 
 						}
 
-						_vec.toArray( attributesBufferF32, ( attributesOffset + i ) * attributesStructSize + interleavedOffset * 4 );
+					} else {
+
+						_vec.copy( _def );
 
 					}
 
-				} );
+					_vec.toArray( attributesBufferF32, ( attributesOffset + i ) * attributesStructSize + interleavedOffset * 4 );
+
+				}
 
 			} );
 
@@ -695,15 +690,11 @@ export class BVHComputeFns {
 
 	}
 
-	getDefaultAttributeValue( key, groupIndex, target ) {
+	getDefaultAttributeValue( key, target ) {
 
 		if ( key === 'color' ) {
 
 			target.set( 1, 1, 1, 1 );
-
-		} else if ( key === 'groupIndex' ) {
-
-			target.set( groupIndex, 0, 0, 1 );
 
 		} else {
 
