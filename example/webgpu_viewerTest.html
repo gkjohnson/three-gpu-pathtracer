@@ -1,0 +1,49 @@
+<html>
+	<head>
+		<title>WebGPU Model Viewer Fidelity Tests</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+		<style>
+			html, body {
+				margin: 0;
+				padding: 0;
+				background-color: #111;
+			}
+
+			.checkerboard {
+				background-image:
+					linear-gradient(45deg, #222 25%, transparent 25%),
+					linear-gradient(-45deg, #222 25%, transparent 25%),
+					linear-gradient(45deg, transparent 75%, #222 75%),
+					linear-gradient(-45deg, transparent 75%, #222 75%);
+				background-size: 20px 20px;
+				background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+			}
+
+			#container {
+				margin: auto;
+				position: relative;
+				display: flex;
+				flex-direction: row-reverse;
+			}
+
+			#container img {
+				position: absolute;
+     			width: 100%;
+     			height: 100%;
+				pointer-events: none;
+			}
+
+			body {
+				display: flex;
+			}
+		</style>
+
+	</head>
+	<body>
+		<div id="container">
+			<img/>
+		</div>
+		<script src="./webgpu_viewerTest.js" type="module"></script>
+	</body>
+</html>
