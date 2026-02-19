@@ -258,6 +258,7 @@ export const vertexAttributesStruct = wgsl( /* wgsl */ `
 	struct VertexAttributes {
 		color: vec3f,
 		normal: vec3f,
+		tangent: vec4f,
 		uv: vec2f,
 	}
 

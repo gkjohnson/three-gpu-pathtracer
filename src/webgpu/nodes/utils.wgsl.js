@@ -12,10 +12,13 @@ export const getPointAttributes = wgslFn( /* wgsl */ `
 		let a = attributes[ indices.x ];
 		let b = attributes[ indices.y ];
 		let c = attributes[ indices.z ];
+
 		let color = a.color * barycoord.x + b.color * barycoord.y + c.color * barycoord.z;
 		let normal = a.normal * barycoord.x + b.normal * barycoord.y + c.normal * barycoord.z;
+		let tangent = a.tangent * barycoord.x + b.tangent * barycoord.y + c.tangent * barycoord.z;
 		let uv = a.uv * barycoord.x + b.uv * barycoord.y + c.uv * barycoord.z;
-		return VertexAttributes(color, normal, uv);
+
+		return VertexAttributes(color, normal, tangent, uv);
 	}
 
 `, [ vertexAttributesStruct ] );

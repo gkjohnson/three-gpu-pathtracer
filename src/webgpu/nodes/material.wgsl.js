@@ -39,9 +39,28 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			normal = pointAttributes.normal;
 
 		}
-
+		normal = normalize( normal );
 		let baseNormal = normal;
-		/* READ TANGENT ATTRIBUTE FOR ANOTHER NORMAL? */
+
+		if ( material.normalMap != -1 ) {
+
+			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+			// resulting in NaNs and slow path tracing.
+			if ( length( pointAttributes.tangent ) > 0.0 ) {
+
+				let tangent = normalize( pointAttributes.tangent.xyz );
+				let bitangent = normalize( cross( normal, tangent ) * pointAttributes.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, normal );
+
+				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
+				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.normalMap ), 0 ).xyz;
+				texNormal = texNormal * 2.0 - 1.0;
+				texNormal = texNormal * vec3f( material.normalScale, 1.0 );
+				normal = normalize( vTBN * texNormal );
+
+			}
+
+		}
 
 		normal *= surfaceHit.side;
 
@@ -57,7 +76,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		if ( material.map != -1 ) {
 
 			let uvPrime = material.mapTransform * vec3f( uv, 1 );
-			let texColor = textureSampleLevel( textures, textureSampler, uv.xy, i32( material.map ), 0 );
+			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.map ), 0 );
 			albedo *= vec4f( texColor.rgb, 1.0 );
 
 		}
@@ -117,7 +136,25 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		}
 
 		var clearcoatNormal = baseNormal;
-		/* SAMPLE clearcoat tangent/normal texture for actual normal */
+		if ( material.clearcoatNormalMap != -1 ) {
+
+			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+			// resulting in NaNs and slow path tracing.
+			if ( length( pointAttributes.tangent ) > 0.0 ) {
+
+				let tangent = normalize( pointAttributes.tangent.xyz );
+				let bitangent = normalize( cross( normal, tangent ) * pointAttributes.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, clearcoatNormal );
+
+				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
+				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatNormalMap ), 0 ).xyz;
+				texNormal = texNormal * 2.0 - 1.0;
+				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
+				normal = normalize( vTBN * texNormal );
+
+			}
+
+		}
 		clearcoatNormal *= surfaceHit.side;
 
 		var sheenColor = material.sheenColor;

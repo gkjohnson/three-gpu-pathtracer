@@ -166,56 +166,98 @@ export class WebGPUPathTracer {
 	collectAttributes( geometry ) {
 
 		const count = geometry.attributes.position.count;
-		const data = new Float32Array( count * 12 );
+		const data = new Float32Array( count * 16 );
 
 		const colorAttr = geometry.attributes.color;
 		const normalAttr = geometry.attributes.normal;
 		const uvAttr = geometry.attributes.uv;
+		const tangentAttr = geometry.attributes.tangent;
 
 		for ( let i = 0; i < count; i ++ ) {
 
-			const offset = i * 12;
+			const offset = i * 16;
 
 			// color - vec3f, aligned to 4 floats (vec4)
-			if ( colorAttr ) {
+			{
 
-				data[ offset + 0 ] = colorAttr.getX( i );
-				data[ offset + 1 ] = colorAttr.getY( i );
-				data[ offset + 2 ] = colorAttr.getZ( i );
+				let r = 1.0;
+				let g = 1.0;
+				let b = 1.0;
 
-			} else {
+				if ( colorAttr ) {
 
-				data[ offset + 0 ] = 1.0;
-				data[ offset + 1 ] = 1.0;
-				data[ offset + 2 ] = 1.0;
+					r = colorAttr.getX( i );
+					g = colorAttr.getY( i );
+					b = colorAttr.getZ( i );
+
+				}
+
+				data[ offset + 0 ] = r;
+				data[ offset + 1 ] = g;
+				data[ offset + 2 ] = b;
 
 			}
 
 			// normal - vec3f, aligned to 4 floats (vec4)
-			if ( normalAttr ) {
+			{
 
-				data[ offset + 4 ] = normalAttr.getX( i );
-				data[ offset + 5 ] = normalAttr.getY( i );
-				data[ offset + 6 ] = normalAttr.getZ( i );
+				let x = 0.0;
+				let y = 0.0;
+				let z = 1.0;
 
-			} else {
+				if ( normalAttr ) {
 
-				data[ offset + 4 ] = 0.0;
-				data[ offset + 5 ] = 0.0;
-				data[ offset + 6 ] = 1.0;
+					x = normalAttr.getX( i );
+					y = normalAttr.getY( i );
+					z = normalAttr.getZ( i );
+
+				}
+
+				data[ offset + 4 ] = x;
+				data[ offset + 5 ] = y;
+				data[ offset + 6 ] = z;
+
+			}
+
+			// tangent - vec3f, aligned to 4 floats (vec4)
+			{
+
+				let x = 0.0;
+				let y = 1.0;
+				let z = 0.0;
+				let w = 1.0;
+
+				if ( tangentAttr ) {
+
+					x = tangentAttr.getX( i );
+					y = tangentAttr.getY( i );
+					z = tangentAttr.getZ( i );
+					w = tangentAttr.getW( i );
+
+				}
+
+				data[ offset + 8 ] = x;
+				data[ offset + 9 ] = y;
+				data[ offset + 10 ] = z;
+				data[ offset + 11 ] = w;
 
 			}
 
 			// uv - vec2f, aligned to 4 floats (vec4)
-			if ( uvAttr ) {
+			{
 
-				data[ offset + 8 ] = uvAttr.getX( i );
-				data[ offset + 9 ] = uvAttr.getY( i );
+				let x = 0.0;
+				let y = 0.0;
 
-			} else {
+				if ( uvAttr ) {
 
-				data[ offset + 8 ] = 0.0;
-				data[ offset + 9 ] = 0.0;
+					x = uvAttr.getX( i );
+					y = uvAttr.getY( i );
+
+				}
+
+				data[ offset + 12 ] = x;
+				data[ offset + 13 ] = y;
 
 			}
 
