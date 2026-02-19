@@ -1,5 +1,5 @@
 import { Matrix4, Vector4 } from 'three';
-import { StorageBufferAttribute } from 'three/src/Three.WebGPU.Nodes.js';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { storage, wgsl, wgslFn } from 'three/tsl';
 import {
 	intersectsBounds,
@@ -450,7 +450,8 @@ export class BVHComputeFns {
 			info.bvhNodeOffsets = bvhNodeOffsets;
 
 			// append geometry data
-			appendGeometryData( info.geometry, info.range, indexOffset, attributesOffset, info.bvh._indirectBuffer );
+			appendIndexData( info.geometry, info.bvh._indirectBuffer, info.range, attributesOffset, indexOffset, indexBuffer );
+			appendGeometryData( info.geometry, info.range, attributesOffset, attributesBuffer );
 			info.indexBufferOffset = indexOffset;
 
 			// step the write offsets forward
@@ -464,18 +465,10 @@ export class BVHComputeFns {
 
 		// write the transforms
 		const transformArrayBuffer = new ArrayBuffer( TRANSFORM_STRUCT_SIZE * 4 * transformInfo.length );
-		const transformBufferF32 = new Float32Array( transformArrayBuffer );
-		const transformBufferU32 = new Uint32Array( transformArrayBuffer );
 		transformInfo.forEach( ( info, i ) => {
 
-			const { compositeId, data, root } = info;
-			bvh.getObjectMatrix( compositeId, _matrix );
-			_inverseMatrix.copy( _matrix ).invert();
-
-			const { bvhNodeOffsets } = data;
-			_matrix.toArray( transformBufferF32, i * TRANSFORM_STRUCT_SIZE );
-			_inverseMatrix.toArray( transformBufferF32, i * TRANSFORM_STRUCT_SIZE + 16 );
-			transformBufferU32[ i * TRANSFORM_STRUCT_SIZE + 32 ] = bvhNodeOffsets[ root ];
+			_inverseMatrix.copy( bvh.matrixWorld ).invert();
+			appendTransformData( info, _inverseMatrix, i, transformArrayBuffer );
 
 		} );
 
@@ -483,7 +476,7 @@ export class BVHComputeFns {
 
 		// set up the storage buffers
 		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRUCT_SIZE ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), TRANSFORM_STRUCT_SIZE ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
 
@@ -493,6 +486,34 @@ export class BVHComputeFns {
 		this.storageBufferAttributes.attributes = attributesStorage;
 		this.attributesStruct = attributeStruct;
 		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
+
+		function appendTransformData( info, premultiplyMatrix, writeOffset, target ) {
+
+			const transformBufferF32 = new Float32Array( target );
+			const transformBufferU32 = new Uint32Array( target );
+
+			const { object, instanceId, root, data } = info;
+			const { bvhNodeOffsets } = data;
+
+			if ( object.isInstancedMesh || object.isBatchedMesh ) {
+
+				object.getMatrixAt( instanceId, _matrix ).premultiply( object.matrixWorld );
+
+			} else {
+
+				_matrix.copy( object.matrixWorld );
+
+			}
+
+			_matrix.premultiply( premultiplyMatrix );
+			_matrix.toArray( transformBufferF32, writeOffset * TRANSFORM_STRUCT_SIZE );
+
+			_matrix.invert();
+			_matrix.toArray( transformBufferF32, writeOffset * TRANSFORM_STRUCT_SIZE + 16 );
+
+			transformBufferU32[ writeOffset * TRANSFORM_STRUCT_SIZE + 32 ] = bvhNodeOffsets[ root ];
+
+		}
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
@@ -568,7 +589,7 @@ export class BVHComputeFns {
 
 		}
 
-		function appendIndexData( geometry, range, indexOffset, attributesOffset, indirectBuffer = null ) {
+		function appendIndexData( geometry, indirectBuffer, range, valueOffset, writeOffset, target ) {
 
 			const { start, count, vertexStart } = range;
 			if ( indirectBuffer ) {
@@ -576,44 +597,40 @@ export class BVHComputeFns {
 				const dereferencedIndex = dereferenceIndex( geometry.index, indirectBuffer );
 				for ( let i = 0; i < dereferencedIndex.length; i ++ ) {
 
-					indexBuffer[ i + indexOffset ] = dereferencedIndex[ i ] - vertexStart + attributesOffset;
+					target[ i + writeOffset ] = dereferencedIndex[ i ] - vertexStart + valueOffset;
 
 				}
 
-				indexOffset += dereferencedIndex.length;
+				writeOffset += dereferencedIndex.length;
 
 			} else if ( geometry.index ) {
 
 				for ( let i = 0; i < count; i ++ ) {
 
-					indexBuffer[ i + indexOffset ] = geometry.index.getX( i + start ) - vertexStart + attributesOffset;
+					target[ i + writeOffset ] = geometry.index.getX( i + start ) - vertexStart + valueOffset;
 
 				}
 
-				indexOffset += count;
+				writeOffset += count;
 
 			} else {
 
 				for ( let i = 0; i < count; i ++ ) {
 
-					indexBuffer[ i + indexOffset ] = i + start + attributesOffset;
+					target[ i + writeOffset ] = i + start + valueOffset;
 
 				}
 
-				indexOffset += count;
+				writeOffset += count;
 
 			}
 
-
 		}
 
-		function appendGeometryData( geometry, range, indexOffset, attributesOffset, indirectBuffer = null ) {
-
-			appendIndexData( geometry, range, indexOffset, attributesOffset, indirectBuffer );
+		function appendGeometryData( geometry, range, writeOffset, target ) {
 
 			const { vertexStart, vertexCount } = range;
-
-			const attributesBufferF32 = new Float32Array( attributesBuffer );
+			const attributesBufferF32 = new Float32Array( target );
 			attributes.forEach( ( key, interleavedOffset ) => {
 
 				const attr = geometry.attributes[ key ];
@@ -648,13 +665,13 @@ export class BVHComputeFns {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( attributesOffset + i ) * attributesStructSize + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributesStructSize + interleavedOffset * 4 );
 
 				}
 
 			} );
 
-			attributesOffset += vertexCount;
+			writeOffset += vertexCount;
 
 		}
 
