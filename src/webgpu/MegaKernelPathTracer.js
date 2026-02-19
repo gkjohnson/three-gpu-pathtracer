@@ -24,7 +24,7 @@ function* renderTask() {
 
 	kernel.geom_index = geometry.index;
 	kernel.geom_position = geometry.position;
-	kernel.geom_normals = geometry.normal;
+	kernel.geom_attributes = geometry.attributes;
 	kernel.geom_material_index = geometry.materialIndex;
 	kernel.bvh = geometry.bvh;
 	kernel.materials = geometry.materials;
@@ -82,7 +82,7 @@ export class MegaKernelPathTracer {
 			bvh: null,
 			index: null,
 			position: null,
-			normal: null,
+			attributes: null,
 
 			materialIndex: null,
 			materials: null,

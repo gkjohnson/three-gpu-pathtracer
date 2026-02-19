@@ -120,13 +120,14 @@ export class WebGPUPathTracer {
 			newPosition.name = 'Geometry Positions';
 			newGeometryData.position = newPosition;
 
-			const newNormals = new StorageBufferAttribute( geometry.attributes.normal.array, 3 );
-			newNormals.name = 'Geometry Normals';
-			newGeometryData.normal = newNormals;
-
 			const newBvhRoots = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
 			newBvhRoots.name = 'BVH Roots';
 			newGeometryData.bvh = newBvhRoots;
+
+			const attributeData = this.collectAttributes( geometry );
+			const newAttributes = new StorageBufferAttribute( attributeData, 12 );
+			newAttributes.name = 'Vertex Attributes';
+			newGeometryData.attributes = newAttributes;
 
 		}
 
@@ -147,6 +148,68 @@ export class WebGPUPathTracer {
 		pathTracer.setGeometryData( newGeometryData );
 
 		this.setCamera( camera );
+
+	}
+
+	collectAttributes( geometry ) {
+
+		const count = geometry.attributes.position.count;
+		const data = new Float32Array( count * 12 );
+
+		const colorAttr = geometry.attributes.color;
+		const normalAttr = geometry.attributes.normal;
+		const uvAttr = geometry.attributes.uv;
+
+		for ( let i = 0; i < count; i ++ ) {
+
+			const offset = i * 12;
+
+			// color - vec3f, aligned to 4 floats (vec4)
+			if ( colorAttr ) {
+
+				data[ offset + 0 ] = colorAttr.getX( i );
+				data[ offset + 1 ] = colorAttr.getY( i );
+				data[ offset + 2 ] = colorAttr.getZ( i );
+
+			} else {
+
+				data[ offset + 0 ] = 1.0;
+				data[ offset + 1 ] = 1.0;
+				data[ offset + 2 ] = 1.0;
+
+			}
+
+			// normal - vec3f, aligned to 4 floats (vec4)
+			if ( normalAttr ) {
+
+				data[ offset + 4 ] = normalAttr.getX( i );
+				data[ offset + 5 ] = normalAttr.getY( i );
+				data[ offset + 6 ] = normalAttr.getZ( i );
+
+			} else {
+
+				data[ offset + 4 ] = 0.0;
+				data[ offset + 5 ] = 0.0;
+				data[ offset + 6 ] = 1.0;
+
+			}
+
+			// uv - vec2f, aligned to 4 floats (vec4)
+			if ( uvAttr ) {
+
+				data[ offset + 8 ] = uvAttr.getX( i );
+				data[ offset + 9 ] = uvAttr.getY( i );
+
+			} else {
+
+				data[ offset + 8 ] = 0.0;
+				data[ offset + 9 ] = 0.0;
+
+			}
+
+		}
+
+		return data;
 
 	}
 

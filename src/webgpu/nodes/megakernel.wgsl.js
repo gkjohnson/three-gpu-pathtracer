@@ -28,7 +28,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		// scene
 		geom_position: ptr<storage, array<vec3f>, read>,
 		geom_index: ptr<storage, array<vec3u>, read>,
-		geom_normals: ptr<storage, array<vec3f>, read>,
+		geom_attributes: ptr<storage, array<VertexAttributes>, read>,
 		geom_material_index: ptr<storage, array<u32>, read>,
 		bvh: ptr<storage, array<BVHNode>, read>,
 
@@ -77,8 +77,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 				let hitPosition = getVertexAttribute( hitResult.barycoord, hitResult.indices.xyz, geom_position );
 
-				// TODO: Replace geom_normals with geom_uvs
-				let surf = getSurfaceRecord( material, hitResult, geom_normals, geom_normals );
+				let surf = getSurfaceRecord( material, hitResult, geom_attributes );
 
 				let scatterRec = bsdfSample( - ray.direction, surf );
 

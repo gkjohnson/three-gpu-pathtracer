@@ -18,7 +18,7 @@ import {
 } from './sampling.wgsl';
 import { pcgRand, pcgRand2 } from './random.wgsl';
 import { getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
-import { getBasisFromNormalFunc, inverseMat3x3Func } from './utils.wgsl.js';
+import { getBasisFromNormalFunc, getPointAttributes, inverseMat3x3Func } from './utils.wgsl.js';
 import { getRefractionHalfVectorFunc, getHalfVectorFunc } from './utils.wgsl.js';
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
@@ -26,16 +26,15 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 	fn getSurfaceRecord(
 		material: Material,
 		surfaceHit: IntersectionResult,
-		uvs: ptr<storage, array<vec3f>, read>,
-		normals: ptr<storage, array<vec3f>, read>,
+		attributes: ptr<storage, array<VertexAttributes>, read>,
 	) -> SurfaceRecord {
-
-		let uv = getVertexAttribute( surfaceHit.barycoord, surfaceHit.indices.xyz, uvs ).xy;
+		let pointAttributes = getPointAttributes( attributes, surfaceHit.indices.xyz, surfaceHit.barycoord );
+		let uv = pointAttributes.uv;
 
 		var normal = surfaceHit.normal * surfaceHit.side;
 		if ( material.flatShading == 0 ) {
 
-			normal = getVertexAttribute( surfaceHit.barycoord, surfaceHit.indices.xyz, normals );
+			normal = pointAttributes.normal;
 
 		}
 
@@ -48,8 +47,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		if ( material.vertexColors == 1 ) {
 
-			// TODO: pass vertex colors here if they exist
-			let vertexColor = getVertexAttribute( surfaceHit.barycoord, surfaceHit.indices.xyz, uvs );
+			let vertexColor = pointAttributes.color;
 			albedo *= vec4f( vertexColor, 1.0 );
 
 		}
@@ -399,6 +397,7 @@ export const pbrtBsdfFunc = wgslFn( /* wgsl */`
 	bsdfEvalFunc,
 	getLobeWeightsFunc,
 	pcgRand,
+	getPointAttributes,
 	lobeWeightsStruct
 ] );
 

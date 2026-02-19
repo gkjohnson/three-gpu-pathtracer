@@ -25,7 +25,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// bvh and geometry definition
 			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3u' ).toReadOnly(),
 			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
-			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
+			geom_attributes: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'VertexAttributes' ).toReadOnly(),
 			geom_material_index: storage( new IndirectStorageBufferAttribute( 1, 1 ), 'u32' ).toReadOnly(),
 			bvh: storage( new IndirectStorageBufferAttribute(), 'BVHNode' ).toReadOnly(), // TODO: fill this in
 
