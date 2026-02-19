@@ -95,6 +95,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let hitPosition = a * input.barycoord.x + b * input.barycoord.y + c * input.barycoord.z;
 				let hitNormal = normalize( cross( c - a, b - a ) );
 
+				// TODO: pass side of the intersection result
 				let hit = IntersectionResult(
 					/* didHit */ true,
 					vec4u( input.indices, 0 ),
@@ -104,7 +105,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 					/* dist */ 0,
 				);
 
-				// TODO: pass UVs
 				let surf = getSurfaceRecord( material, hit, geom_attributes, textures, textureSampler );
 
 				let scatterRec = bsdfSample( input.view, surf );

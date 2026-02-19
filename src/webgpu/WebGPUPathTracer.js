@@ -634,13 +634,8 @@ export class WebGPUPathTracer {
 		}
 
 
-		// pass texture array to path tracer if it supports it
-		if ( this._pathTracer.setTextures ) {
-
-			this._textureArray.update( this._renderer );
-			this._pathTracer.setTextures( this._textureArray.texture );
-
-		}
+		this._textureArray.update( this._renderer );
+		this._pathTracer.setTextures( this._textureArray.texture );
 
 		this._updateScale();
 		this._pathTracer.update();

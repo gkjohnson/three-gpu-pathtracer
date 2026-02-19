@@ -85,6 +85,7 @@ export class RenderTarget2DArrayWebGPU {
 
 		this._width = width;
 		this._height = height;
+		// Depth must be > 1 for three.js to treat RT as a texture_2d_array and not texture_2d
 		this._depth = Math.max( depth, 2 );
 
 		// Dispose old render target
