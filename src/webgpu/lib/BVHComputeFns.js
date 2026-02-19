@@ -23,7 +23,6 @@ import {
 // and / or use local variable definitions for the pointers to clean up the code
 // TODO: see if there's a "build" step that can be leveraged fro nodes
 // TODO: allow for "slotting" a new type of callback (eg distance, etc) so multiple types of queries can be made
-// NEXT: Get a basic version working with megakernel
 
 const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
@@ -271,25 +270,6 @@ export class BVHComputeFns {
 
 		this.attributesStruct = null;
 		this.raycastFirstHitFn = null;
-
-		this.getBVH = ( object, id = - 1 ) => {
-
-			if ( object.isInstancedMesh ) {
-
-				return object.geometry.boundsTree;
-
-			} else if ( object.isBatchedMesh ) {
-
-				const geometryId = object.getGeometryIdAt( id );
-				return object.boundsTrees[ geometryId ];
-
-			} else {
-
-				return object.geometry.boundsTree;
-
-			}
-
-		};
 
 		this.update();
 
@@ -636,11 +616,34 @@ export class BVHComputeFns {
 
 	}
 
+	getBVH( object, id ) {
+
+		if ( object.isInstancedMesh ) {
+
+			return object.geometry.boundsTree;
+
+		} else if ( object.isBatchedMesh ) {
+
+			const geometryId = object.getGeometryIdAt( id );
+			return object.boundsTrees[ geometryId ];
+
+		} else {
+
+			return object.geometry.boundsTree;
+
+		}
+
+	}
+
 	getDefaultAttributeValue( key, groupIndex, target ) {
 
 		if ( key === 'color' ) {
 
 			target.set( 1, 1, 1, 1 );
+
+		} else if ( key === 'groupIndex' ) {
+
+			target.set( groupIndex, 0, 0, 1 );
 
 		} else {
 
