@@ -81,36 +81,38 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
 					let hitResult = ${ name }RaycastFirstHit( ray );
-					if ( hitResult.didHit ) {
-
-						resultColor = vec3f( 1, 0, 0 );
-
-					} else {
-
-						resultColor = vec3f( 0, 0, 1 );
-
-					}
-
-					break;
-
+					// resultColor = hitResult.normal;
+					// break;
 					// if ( hitResult.didHit ) {
 
-					// 	let hitPosition = ray.origin + ray.direction * hitResult.dist;
-					// 	let scatterRec = bsdfEval( hitResult.normal, - ray.direction );
-
-					// 	// white diffuse surface
-					// 	throughputColor *= scatterRec.value / scatterRec.pdf;
-
-					// 	ray.origin = hitPosition;
-					// 	ray.direction = scatterRec.direction;
+					// 	resultColor = vec3f( 1, 0, 0 );
 
 					// } else {
 
-					// 	let background = vec3f( 0.5 );
-					// 	resultColor += background * throughputColor;
-					// 	break;
+					// 	resultColor = vec3f( 0, 0, 1 );
 
 					// }
+
+					// break;
+
+					if ( hitResult.didHit ) {
+
+						let hitPosition = ray.origin + ray.direction * hitResult.dist;
+						let scatterRec = bsdfEval( hitResult.normal, - ray.direction );
+
+						// white diffuse surface
+						throughputColor *= hitResult.normal * scatterRec.value / scatterRec.pdf;
+
+						ray.origin = hitPosition;
+						ray.direction = scatterRec.direction;
+
+					} else {
+
+						let background = vec3f( 0.5 );
+						resultColor += background * throughputColor;
+						break;
+
+					}
 
 				}
 
