@@ -444,12 +444,11 @@ export class BVHComputeFns {
 		//
 
 		// construct the attribute struct
-		const attributesStructSize = 4 * attributes.length;
-		const attributeStruct = wgsl( /* wgsl */`
-			struct ${ name }GeometryStruct {
-				${ attributes.map( key => `${ key }: vec4f,` ).join( '\n' ) }
-			}
-		` );
+		const attributeStruct = wgslStruct(
+			`${ name }GeometryStruct`,
+			4 * 4 * attributes.length,
+			attributes.reduce( ( o, key ) => ( { ...o, [ key ]: 'vec4f' } ), {} ),
+		);
 
 		// write the geometry buffer attributes & bvh data
 		let attributesOffset = 0;
@@ -495,14 +494,13 @@ export class BVHComputeFns {
 
 		// set up the storage buffers
 		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), transformStruct.uintSize ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), transformStruct.uintSize ), transformStruct.name ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.uintSize ), attributeStruct.name ).toReadOnly().setName( `${ name }attributes` );
 
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
 		this.storage.index = indexStorage;
-		this.storage.attributes = attributesStorage;
 		this.structs.attributes = attributeStruct;
 		this.structs.transform = transformStruct;
 		this.structs.intersectionResult = intersectionResultStruct;
@@ -656,7 +654,7 @@ export class BVHComputeFns {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributesStructSize + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributeStruct.uintSize + interleavedOffset * 4 );
 
 				}
 
