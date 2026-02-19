@@ -2,11 +2,9 @@ import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute } from 'three/src/Three.WebGPU.Nodes.js';
 import { storage, wgsl, wgslFn } from 'three/tsl';
 import {
-	intersectsTriangle,
 	intersectsBounds,
 	rayStruct,
 	bvhNodeStruct,
-	intersectionResultStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
 
@@ -63,7 +61,67 @@ function dereferenceIndex( indexAttr, indirectBuffer ) {
 
 }
 
-function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct ) {
+const intersectionResultStruct = wgsl( /* wgsl */`
+	struct IntersectionResult {
+		didHit: bool,
+		indices: vec4u,
+		normal: vec3f,
+		barycoord: vec3f,
+		side: f32,
+		dist: f32,
+		objectIndex: u32,
+	};
+` );
+
+const intersectsTriangle = wgslFn( /* wgsl */ `
+
+	fn intersectsTriangle( ray: Ray, a: vec3f, b: vec3f, c: vec3f ) -> IntersectionResult {
+
+		var result: IntersectionResult;
+		result.didHit = false;
+
+		let edge1 = b - a;
+		let edge2 = c - a;
+		let n = cross( edge1, edge2 );
+
+		let det = - dot( ray.direction, n );
+
+		if ( abs( det ) < TRI_INTERSECT_EPSILON ) {
+
+			return result;
+
+		}
+
+		let invdet = 1.0 / det;
+
+		let AO = ray.origin - a;
+		let DAO = cross( AO, ray.direction );
+
+		let u = dot( edge2, DAO ) * invdet;
+		let v = -dot( edge1, DAO ) * invdet;
+		let t = dot( AO, n ) * invdet;
+
+		let w = 1.0 - u - v;
+
+		if ( u < - TRI_INTERSECT_EPSILON || v < - TRI_INTERSECT_EPSILON || w < - TRI_INTERSECT_EPSILON || t < TRI_INTERSECT_EPSILON ) {
+
+			return result;
+
+		}
+
+		result.didHit = true;
+		result.barycoord = vec3f( w, u, v );
+		result.dist = t;
+		result.side = sign( det );
+		result.normal = result.side * normalize( n );
+
+		return result;
+
+	}
+
+`, [ rayStruct, intersectionResultStruct, constants ] );
+
+function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct ) {
 
 	const geometryRaycastFirstHitFn = wgslFn( /* wgsl */`
 		fn ${ name }RaycastGeometryFirstHit( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
@@ -207,6 +265,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
 							bestHit = blasHit;
+							bestHit.objectIndex = t;
 
 							// Transform normal to world space: normal matrix = transpose( inverse )
 							bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
@@ -358,7 +417,7 @@ export class BVHComputeFns {
 		let attributesOffset = 0;
 		let indexOffset = 0;
 		const indexBuffer = new Uint32Array( indexBufferLength );
-		const attributesBuffer = new Float32Array( attributesBufferLength * attributes.length * 4 );
+		const attributesBuffer = new ArrayBuffer( attributesBufferLength * attributes.length * 4 * 4 );
 		geometryInfo.forEach( ( { geometry, range, indirectBuffer } ) => {
 
 			const offset = appendGeometryData( geometry, range, indirectBuffer );
@@ -411,14 +470,14 @@ export class BVHComputeFns {
 		const nodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
 		const transformsStorage = storage( new StorageBufferAttribute( transformBufferF32, TRANSFORM_STRUCT_SIZE ), 'TransformStruct' ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( attributesBuffer, attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributesStructSize ), `${ name }GeometryStruct` ).toReadOnly().setName( `${ name }attributes` );
 
 		this.storageBufferAttributes.transforms = transformsStorage;
 		this.storageBufferAttributes.nodes = nodesStorage;
 		this.storageBufferAttributes.index = indexStorage;
 		this.storageBufferAttributes.attributes = attributesStorage;
 		this.attributesStruct = attributeStruct;
-		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct );
+		this.raycastFirstHitFn = buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
 
 		function appendBVHData( bvh, geometryOffset, transformBVHs, target, tlas = false ) {
 
@@ -564,6 +623,7 @@ export class BVHComputeFns {
 
 			}
 
+			const attributesBufferF32 = new Float32Array( attributesBuffer );
 			const groups = geometry.groups.length === 0 ? [ { start: vertexStart, count: vertexCount } ] : geometry.groups;
 			groups.forEach( ( { start, count }, groupIndex ) => {
 
@@ -601,7 +661,7 @@ export class BVHComputeFns {
 
 						}
 
-						_vec.toArray( attributesBuffer, ( attributesOffset + i ) * attributesStructSize + interleavedOffset * 4 );
+						_vec.toArray( attributesBufferF32, ( attributesOffset + i ) * attributesStructSize + interleavedOffset * 4 );
 
 					}
 

@@ -1,5 +1,5 @@
 import { Vector2, Clock, Scene, PerspectiveCamera } from 'three/webgpu';
-import { MeshBVH } from 'three-mesh-bvh';
+import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
@@ -59,7 +59,7 @@ export class WebGPUPathTracer {
 
 			if ( child.isMesh && ! child.geometry.boundsTree ) {
 
-				child.geometry.boundsTree = new MeshBVH( child.geometry );
+				child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 1 } );
 
 			}
 
