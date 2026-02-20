@@ -10,7 +10,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 	constructor( name = 'bvh_' ) {
 
-		const megakernelShaderParams = {
+		const parameters = {
 			bvhData: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -85,8 +85,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let hitResult = ${ name }RaycastFirstHit( ray );
 					if ( hitResult.didHit ) {
 
+						let vertexData = ${ name }sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
 						let hitPosition = ray.origin + ray.direction * hitResult.dist;
-						let scatterRec = bsdfEval( hitResult.normal, - ray.direction );
+						let scatterRec = bsdfEval( normalize( vertexData.normal.xyz ), - ray.direction );
 
 						let transform = ${ name }transforms.value[ hitResult.objectIndex ];
 						let material = ${ name }materials.value[ transform.materialIndex ];
@@ -117,15 +118,16 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			}
 
 		`, [
-			proxy( 'bvhData.value.storage.materials', megakernelShaderParams ),
-			proxy( 'bvhData.value.structs.material', megakernelShaderParams ),
-			proxy( 'bvhData.value.fns.raycastFirstHit', megakernelShaderParams ),
+			proxy( 'bvhData.value.storage.materials', parameters ),
+			proxy( 'bvhData.value.structs.material', parameters ),
+			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
+			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			ndcToCameraRay, pcgRand3, pcgInit, lambertBsdfFunc,
 		] );
 
-		super( shader( megakernelShaderParams ) );
+		super( shader( parameters ) );
 
-		this.defineUniformAccessors( megakernelShaderParams );
+		this.defineUniformAccessors( parameters );
 
 	}
 

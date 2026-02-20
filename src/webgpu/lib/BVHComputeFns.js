@@ -462,6 +462,25 @@ export class BVHComputeFns {
 		this.structs.attributes = attributeStruct;
 		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, structs.transform );
 
+		const interpolateBody = Object.keys( attributeStruct.fields )
+			.map( key => {
+
+				return `result.${ key } = a0.${ key } * barycoord.x + a1.${ key } * barycoord.y + a2.${ key } * barycoord.z;`;
+
+			} ).join( '\n' );
+		this.fns.sampleTrianglePoint = wgslFn( /* wgsl */`
+			fn ${ name }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct.name } {
+
+				var result: ${ attributeStruct.name };
+				var a0 = ${ name }attributes.value[ indices.x ];
+				var a1 = ${ name }attributes.value[ indices.y ];
+				var a2 = ${ name }attributes.value[ indices.z ];
+				${ interpolateBody }
+				return result;
+
+			}
+		`, [ attributesStorage, attributeStruct ] );
+
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
 			const targetU16 = new Uint16Array( target );

@@ -28,6 +28,7 @@ export class WGSLStructNode extends CodeNode {
 		super( code, includes, 'wgsl' );
 		this.name = name;
 		this.byteSize = byteSize;
+		this.fields = fields;
 
 	}
 

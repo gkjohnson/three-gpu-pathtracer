@@ -23,6 +23,6 @@ export const queuedHitStruct = wgsl( /* wgsl */`
 		view: vec3f,
 		currentBounce: u32,
 		throughputColor: vec3f,
-		materialIndex: u32,
+		objectIndex: u32,
 	};
 ` );

@@ -1,17 +1,19 @@
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
+import { constants } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { materialStruct } from '../../nodes/structs.wgsl.js';
 import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
+import { proxy } from '../../lib/NodeProxy.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( name = 'bvh_' ) {
 
 		const parameters = {
+			bvhData: { value: null },
+
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -26,11 +28,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
-
-			// bvh and geometry definition
-			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
-			geom_normals: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
-			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill in initial values
 
 			globalId: globalId,
 		};
@@ -55,11 +52,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
 				hitQueueSize: ptr<storage, array<u32>, read_write>,
 
-				// scene
-				geom_position: ptr<storage, array<vec3f>, read>,
-				geom_normals: ptr<storage, array<vec3f>, read>,
-				materials: ptr<storage, array<Material>, read>,
-
 				globalId: vec3u
 			) -> void {
 
@@ -80,10 +72,13 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				pcgInitialize( indexUV, seed );
 
-				let material = materials[ input.materialIndex ];
-				let hitPosition = getVertexAttribute( input.barycoord, input.indices.xyz, geom_position );
-				let hitNormal = getVertexAttribute( input.barycoord, input.indices.xyz, geom_normals );
-				let scatterRec = bsdfEval( hitNormal, input.view );
+				let object = ${ name }transforms.value[ input.objectIndex ];
+				let material = ${ name }materials.value[ object.materialIndex ];
+				var vertexData = ${ name }sampleTrianglePoint( input.barycoord, input.indices.xyz );
+				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.position = object.matrixWorld * vertexData.position;
+
+				let scatterRec = bsdfEval( vertexData.normal.xyz, input.view );
 
 				if ( input.currentBounce >= bounces ) {
 
@@ -99,7 +94,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
-					rayQueue[ index ].ray.origin = hitPosition;
+					rayQueue[ index ].ray.origin = vertexData.position.xyz;
 					rayQueue[ index ].ray.direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
@@ -108,7 +103,15 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ queuedRayStruct, lambertBsdfFunc, constants, getVertexAttribute, pcgRand3, pcgInit, queuedHitStruct, materialStruct ] );
+		`, [
+			proxy( 'bvhData.value.structs.material', parameters ),
+			proxy( 'bvhData.value.structs.transform', parameters ),
+			proxy( 'bvhData.value.storage.materials', parameters ),
+			proxy( 'bvhData.value.storage.transforms', parameters ),
+			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
+			queuedRayStruct, lambertBsdfFunc, constants,
+			pcgRand3, pcgInit, queuedHitStruct,
+		] );
 
 		super( fn( parameters ) );
 

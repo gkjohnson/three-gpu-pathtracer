@@ -102,7 +102,7 @@ export class MegaKernelPathTracer {
 	setBVHData( bvhData ) {
 
 		this.kernel.bvhData = bvhData;
-		this._task = null;
+		this.reset();
 
 	}
 
