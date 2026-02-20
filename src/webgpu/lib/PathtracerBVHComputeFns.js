@@ -104,6 +104,7 @@ export class PathtracerBVHComputeFns extends BVHComputeFns {
 			proxyGeometry.index = new BufferAttribute( array, 1 );
 			rangeTarget.start = 0;
 
+			// TODO: need to handle SkinnedMeshBVH here
 			const newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, maxLeafSize: 5 } );
 			bvhMap.set( bvh, { bvh: newBVH, range: { ...rangeTarget } } );
 			return newBVH;

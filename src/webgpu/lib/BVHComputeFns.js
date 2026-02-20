@@ -556,8 +556,6 @@ export class BVHComputeFns {
 
 		function appendIndexData( bvh, range, valueOffset, writeOffset, target ) {
 
-			// TODO: check if this is a skinned mesh bvh and use the mesh geometry
-
 			const { geometry } = bvh;
 			const { start, count, vertexStart } = range;
 			if ( bvh.indirect ) {
@@ -597,9 +595,8 @@ export class BVHComputeFns {
 
 		function appendGeometryData( bvh, range, writeOffset, target ) {
 
-			// TODO: check if this is a skinned mesh bvh and use the mesh geometry
-
-			const { geometry } = bvh;
+			// if "mesh" is present then it is assumed to be a SkinnedMeshBVH
+			const { geometry, mesh = null } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
 			attributes.forEach( ( key, interleavedOffset ) => {
@@ -611,7 +608,16 @@ export class BVHComputeFns {
 
 					if ( attr ) {
 
-						_vec.fromBufferAttribute( attr, i + vertexStart );
+						if ( key === 'position' && mesh ) {
+
+							// TODO: normals and tangents need to be transformed here, as well
+							mesh.getVertexPosition( i + vertexStart, _vec );
+
+						} else {
+
+							_vec.fromBufferAttribute( attr, i + vertexStart );
+
+						}
 
 						switch ( attr.itemSize ) {
 
