@@ -17,9 +17,6 @@ const IS_LEAFNODE_FLAG = 0xFFFF;
 // TODO: add material support w/ function to easily update material
 // 		- add a callback for writing a property for a geometry to a range
 // TODO: add skinned mesh bvh support
-// TODO: add overrideable functions for custom implementations (custom attributes, transform fields)
-// TODO: see if it's possible to replace function contents and dependencies in-place so that
-// a node fn can be updated without regenerating all other materials.
 // TODO: see if we can reference wgslFn names directly rather than constructing them inline over and over
 // and / or use local variable definitions for the pointers to clean up the code
 // TODO: see if there's a "build" step that can be leveraged for nodes to make integration more simple
@@ -30,17 +27,6 @@ const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
-
-// stride is 36 floats (144 bytes) to match WGSL struct alignment:
-// mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-const transformStruct = wgslStruct( 'TransformStruct', 36 * 4, {
-	matrixWorld: 'mat4x4f',
-	inverseMatrixWorld: 'mat4x4f',
-	nodeOffset: 'u32',
-	_alignment0: 'u32',
-	_alignment1: 'u32',
-	_alignment2: 'u32',
-} );
 
 function dereferenceIndex( indexAttr, indirectBuffer ) {
 
@@ -67,6 +53,17 @@ function getTotalBVHByteLength( bvh ) {
 	return bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 
 }
+
+// stride is 36 floats (144 bytes) to match WGSL struct alignment:
+// mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
+const transformStruct = wgslStruct( 'TransformStruct', 36 * 4, {
+	matrixWorld: 'mat4x4f',
+	inverseMatrixWorld: 'mat4x4f',
+	nodeOffset: 'u32',
+	_alignment0: 'u32',
+	_alignment1: 'u32',
+	_alignment2: 'u32',
+} );
 
 const intersectionResultStruct = wgslStruct( 'IntersectionResult', 16 * 4, {
 	indices: 'vec4u',
