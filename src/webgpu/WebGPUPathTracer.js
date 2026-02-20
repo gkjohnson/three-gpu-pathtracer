@@ -26,7 +26,7 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
-		this._pathTracer.setBVHComputeFns( this._bvhComputeFns );
+		this._pathTracer.setBVHData( this._bvhData );
 		this.setCamera( this.camera );
 
 	}
@@ -69,8 +69,8 @@ export class WebGPUPathTracer {
 		const objectBVH = new ObjectBVH( scene );
 		const bvhComputeFns = new PathtracerBVHComputeFns( objectBVH );
 
-		this._bvhComputeFns = bvhComputeFns;
-		this._pathTracer.setBVHComputeFns( bvhComputeFns );
+		this._bvhData = bvhComputeFns;
+		this._pathTracer.setBVHData( bvhComputeFns );
 		this.setCamera( camera );
 
 	}

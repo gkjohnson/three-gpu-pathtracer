@@ -4,12 +4,15 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
 import { lambertBsdfFunc } from '../nodes/sampling.wgsl.js';
+import { proxy } from '../lib/NodeProxy.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( bvhComputeFns ) {
+	constructor( name = 'bvh_' ) {
 
 		const megakernelShaderParams = {
+			bvhData: { value: null },
+
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -27,7 +30,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const { fns, storage, structs, name } = bvhComputeFns;
 		const shader = wgslFn( /* wgsl */`
 
 			fn compute(
@@ -115,7 +117,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			}
 
 		`, [
-			fns.raycastFirstHit, storage.materials, structs.material,
+			proxy( 'bvhData.value.storage.materials', megakernelShaderParams ),
+			proxy( 'bvhData.value.structs.material', megakernelShaderParams ),
+			proxy( 'bvhData.value.fns.raycastFirstHit', megakernelShaderParams ),
 			ndcToCameraRay, pcgRand3, pcgInit, lambertBsdfFunc,
 		] );
 

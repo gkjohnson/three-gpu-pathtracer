@@ -69,9 +69,6 @@ export class MegaKernelPathTracer {
 		this.bounces = 7;
 		this.tiles = new Vector2( 2, 2 );
 
-		// bvh data
-		this.bvhComputeFns = null;
-
 		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
@@ -96,16 +93,15 @@ export class MegaKernelPathTracer {
 		this.sampleCountTarget.generateMipmaps = false;
 
 		// kernels
-		this.kernel = null;
+		this.kernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
 
 	}
 
-	setBVHComputeFns( bvhComputeFns ) {
+	setBVHData( bvhData ) {
 
-		this.bvhComputeFns = bvhComputeFns;
-		this.kernel = new PathTracerMegaKernel( bvhComputeFns ).setWorkgroupSize( 8, 8, 1 );
+		this.kernel.bvhData = bvhData;
 		this._task = null;
 
 	}
