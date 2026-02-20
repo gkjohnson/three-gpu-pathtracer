@@ -66,7 +66,7 @@ export class WebGPUPathTracer {
 		} );
 
 		// Build TLAS and compute functions
-		const objectBVH = new ObjectBVH( scene );
+		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
 		const bvhData = new PathtracerBVHComputeFns( objectBVH );
 		bvhData.update();
 

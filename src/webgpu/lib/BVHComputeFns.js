@@ -384,10 +384,11 @@ export class BVHComputeFns {
 			}
 
 			// save the index of the bvh associated with this transform
+			const data = geometryInfo.find( info => object.geometry === info.geometry );
 			primBvh._roots.forEach( ( root, i ) => {
 
 				transformInfo.push( {
-					data: geometryInfo.find( info => object.geometry === info.geometry ),
+					data,
 					root: i,
 					object,
 					instanceId,
@@ -509,24 +510,25 @@ export class BVHComputeFns {
 
 						if ( tlas ) {
 
+							// 0xFFFF == mesh leaf, 0xFF00 == TLAS leaf
+							targetU32[ n32 + 6 ] = tlasOffset;
+							targetU16[ n16 + 15 ] = 0xFF00;
+
 							const count = rootBuffer16[ r16 + 14 ];
-							const offset = rootBuffer32[ r32 + 6 ];
+							// const offset = rootBuffer32[ r32 + 6 ];
 
 							// each root is expanded into a separate transform so we need to expand
 							// the embedded offsets and counts.
 							let rootsCount = 0;
-							for ( let o = offset, l = offset + count; o < l; o ++ ) {
+							for ( let o = 0; o < count; o ++ ) {
 
-								rootsCount += transformInfo[ o ].data.bvh._roots.length;
+								const roots = transformInfo[ tlasOffset ].data.bvh._roots.length;
+								tlasOffset += roots;
+								rootsCount += roots;
 
 							}
 
-							// 0xFFFF == mesh leaf, 0xFF00 == TLAS leaf
-							targetU32[ n32 + 6 ] = tlasOffset; // rootBuffer32[ r32 + 6 ];
-							targetU16[ n16 + 14 ] = rootsCount; //rootBuffer16[ r16 + 14 ];
-							targetU16[ n16 + 15 ] = 0xFF00;
-
-							tlasOffset += rootsCount;
+							targetU16[ n16 + 14 ] = rootsCount;
 
 						} else {
 
