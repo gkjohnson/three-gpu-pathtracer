@@ -27,7 +27,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const { fns, name } = bvhComputeFns;
+		const { fns, storage, structs, name } = bvhComputeFns;
 		const shader = wgslFn( /* wgsl */`
 
 			fn compute(
@@ -86,8 +86,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let hitPosition = ray.origin + ray.direction * hitResult.dist;
 						let scatterRec = bsdfEval( hitResult.normal, - ray.direction );
 
+						let transform = ${ name }transforms.value[ hitResult.objectIndex ];
+						let material = ${ name }materials.value[ transform.materialIndex ];
+
 						// white diffuse surface
-						throughputColor *= hitResult.normal * scatterRec.value / scatterRec.pdf;
+						throughputColor *= material.albedo * scatterRec.value / scatterRec.pdf;
 
 						ray.origin = hitPosition;
 						ray.direction = scatterRec.direction;
@@ -111,7 +114,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			}
 
-		`, [ fns.raycastFirstHit, ndcToCameraRay, pcgRand3, pcgInit, lambertBsdfFunc ] );
+		`, [
+			fns.raycastFirstHit, storage.materials, structs.material,
+			ndcToCameraRay, pcgRand3, pcgInit, lambertBsdfFunc,
+		] );
 
 		super( shader( megakernelShaderParams ) );
 

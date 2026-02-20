@@ -5,7 +5,7 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
-import { BVHComputeFns } from './lib/BVHComputeFns.js';
+import { PathtracerBVHComputeFns } from './lib/PathtracerBVHComputeFns.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
@@ -59,7 +59,7 @@ export class WebGPUPathTracer {
 
 			if ( child.isMesh && ! child.geometry.boundsTree ) {
 
-				child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 1 } );
+				child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 5 } );
 
 			}
 
@@ -67,7 +67,7 @@ export class WebGPUPathTracer {
 
 		// Build TLAS and compute functions
 		const objectBVH = new ObjectBVH( scene );
-		const bvhComputeFns = new BVHComputeFns( objectBVH );
+		const bvhComputeFns = new PathtracerBVHComputeFns( objectBVH );
 
 		this._bvhComputeFns = bvhComputeFns;
 		this._pathTracer.setBVHComputeFns( bvhComputeFns );

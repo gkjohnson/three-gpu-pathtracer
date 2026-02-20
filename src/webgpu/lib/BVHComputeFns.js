@@ -1,5 +1,5 @@
 import { Matrix4, Vector4 } from 'three';
-import { CodeNode, StorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { storage, wgslFn } from 'three/tsl';
 import {
 	intersectsBounds,
@@ -7,13 +7,12 @@ import {
 	bvhNodeStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
+import { wgslStruct } from './WGSLStructNode.js';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 const UINT32_PER_NODE = BYTES_PER_NODE / 4;
 const IS_LEAFNODE_FLAG = 0xFFFF;
 
-// TODO: clean up "update" function, separate it into chunks
-// TODO: separate update functions into utilities
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
 // 		- add a callback for writing a property for a geometry to a range
@@ -26,47 +25,11 @@ const IS_LEAFNODE_FLAG = 0xFFFF;
 // TODO: see if there's a "build" step that can be leveraged for nodes to make integration more simple
 // TODO: allow for "slotting" a new type of callback (eg distance, etc) so multiple types of queries can be made
 // 		- add a "shapecast" style function with functions and return types that can be slotted in
-// NEXT: add support for custom transform fields
 
 const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
-
-// a more structured "struct" node that bookkeeps the struct name, byte size
-class WGSLStructNode extends CodeNode {
-
-	get uintSize() {
-
-		return this.byteSize / 4;
-
-	}
-
-	constructor( name, byteSize, fields, includes = [] ) {
-
-		const content = Object
-			.entries( fields )
-			.map( ( [ name, type ] ) => {
-
-				return `${ name }: ${ type },`;
-
-			} ).join( '\n' );
-
-		const code = /* wgsl */`
-			struct ${ name } {
-				${ content }
-			}
-		`;
-
-		super( code, includes, 'wgsl' );
-		this.name = name;
-		this.byteSize = byteSize;
-
-	}
-
-}
-
-const wgslStruct = ( ...args ) => new WGSLStructNode( ...args );
 
 // stride is 36 floats (144 bytes) to match WGSL struct alignment:
 // mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
@@ -378,14 +341,12 @@ export class BVHComputeFns {
 			raycastFirstHit: null,
 		};
 
-		this.update();
-
 	}
 
 	update() {
 
 		const self = this;
-		const { attributes, name, bvh } = this;
+		const { attributes, structs, name, bvh } = this;
 
 		// collect the BVHs
 		const geometryInfo = [];
@@ -481,7 +442,7 @@ export class BVHComputeFns {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( transformStruct.byteSize * transformInfo.length );
+		const transformArrayBuffer = new ArrayBuffer( structs.transform.byteSize * transformInfo.length );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
@@ -493,7 +454,7 @@ export class BVHComputeFns {
 
 		// set up the storage buffers
 		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), transformStruct.uintSize ), transformStruct.name ).toReadOnly().setName( `${ name }transforms` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.uintSize ), structs.transform.name ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.uintSize ), attributeStruct.name ).toReadOnly().setName( `${ name }attributes` );
 
@@ -502,7 +463,7 @@ export class BVHComputeFns {
 		this.storage.index = indexStorage;
 		this.storage.attributes = attributesStorage;
 		this.structs.attributes = attributeStruct;
-		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
+		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, structs.transform );
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
