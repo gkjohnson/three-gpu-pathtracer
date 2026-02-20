@@ -1,6 +1,6 @@
 import { Matrix4, Vector4 } from 'three';
 import { CodeNode, StorageBufferAttribute } from 'three/webgpu';
-import { storage, wgsl, wgslFn } from 'three/tsl';
+import { storage, wgslFn } from 'three/tsl';
 import {
 	intersectsBounds,
 	rayStruct,
@@ -166,7 +166,7 @@ const intersectsTriangle = wgslFn( /* wgsl */ `
 function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct ) {
 
 	const geometryRaycastFirstHitFn = wgslFn( /* wgsl */`
-		fn ${ name }RaycastGeometryFirstHit( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
+		fn ${ name }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
 
 			var bestHit: IntersectionResult;
 			bestHit.didHit = false;
@@ -303,7 +303,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 						localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
 						localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
 
-						let blasHit = ${ name }RaycastGeometryFirstHit( localRay, transform.nodeOffset, bestHit.dist );
+						let blasHit = ${ name }RaycastFirstHit_blas( localRay, transform.nodeOffset, bestHit.dist );
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
 							bestHit = blasHit;
@@ -360,8 +360,8 @@ export class BVHComputeFns {
 
 		this.name = name;
 		this.attributes = attributes;
-
 		this.bvh = bvh;
+
 		this.storage = {
 			index: null,
 			attributes: null,
@@ -370,9 +370,8 @@ export class BVHComputeFns {
 		};
 
 		this.structs = {
+			transform: transformStruct,
 			attributes: null,
-			transform: null,
-			intersection: null,
 		};
 
 		this.fns = {
@@ -501,9 +500,8 @@ export class BVHComputeFns {
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
 		this.storage.index = indexStorage;
+		this.storage.attributes = attributesStorage;
 		this.structs.attributes = attributeStruct;
-		this.structs.transform = transformStruct;
-		this.structs.intersectionResult = intersectionResultStruct;
 		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct );
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
@@ -716,15 +714,19 @@ export class BVHComputeFns {
 
 	getDefaultAttributeValue( key, target ) {
 
-		if ( key === 'color' ) {
+		switch ( key ) {
 
+		case 'position':
+		case 'color':
 			target.set( 1, 1, 1, 1 );
+			break;
 
-		} else {
-
-			target.set( 0, 0, 0, 1 );
+		default:
+			target.set( 0, 0, 0, 0 );
 
 		}
+
+		return target;
 
 	}
 
