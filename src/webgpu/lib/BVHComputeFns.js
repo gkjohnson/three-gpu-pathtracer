@@ -671,21 +671,35 @@ export class BVHComputeFns {
 
 	getBVH( object, instanceId, rangeTarget ) {
 
-		if ( object.isBatchedMesh ) {
+		let bvh = null;
+		if ( object.boundsTree ) {
+
+			// TODO
+			// this is a case where a mesh has morph targets and skinned meshes
+
+		} else if ( object.isBatchedMesh ) {
 
 			const geometryId = object.getGeometryIdAt( instanceId );
 			const range = object.getGeometryRangeAt( geometryId );
 			Object.assign( rangeTarget, range );
-			return object.boundsTrees[ geometryId ];
+			bvh = object.boundsTrees[ geometryId ];
 
 		} else {
 
 			const geometry = object.geometry;
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
-			return object.geometry.boundsTree;
+			bvh = object.geometry.boundsTree;
 
 		}
+
+		if ( ! bvh ) {
+
+			throw new Error( 'BVHComputeFns: BVH not found.' );
+
+		}
+
+		return bvh;
 
 	}
 

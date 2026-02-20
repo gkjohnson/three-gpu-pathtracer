@@ -67,10 +67,11 @@ export class WebGPUPathTracer {
 
 		// Build TLAS and compute functions
 		const objectBVH = new ObjectBVH( scene );
-		const bvhComputeFns = new PathtracerBVHComputeFns( objectBVH );
+		const bvhData = new PathtracerBVHComputeFns( objectBVH );
+		bvhData.update();
 
-		this._bvhData = bvhComputeFns;
-		this._pathTracer.setBVHData( bvhComputeFns );
+		this._bvhData = bvhData;
+		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 
 	}
