@@ -346,7 +346,7 @@ export class BVHComputeFns {
 		const { attributes, structs, name, bvh } = this;
 
 		// collect the BVHs
-		const geometryInfo = [];
+		const bvhInfo = [];
 		const transformInfo = [];
 
 		// accumulate the sizes of the bvh nodes buffer, number of objects, and geometry buffers
@@ -361,13 +361,12 @@ export class BVHComputeFns {
 			const primBvh = this.getBVH( object, instanceId, range );
 
 			// if we haven't added this bvh, yet
-			if ( ! geometryInfo.find( info => info.bvh === primBvh ) ) {
+			if ( ! bvhInfo.find( info => info.bvh === primBvh ) ) {
 
 				// save the geometry info to write later and increment the buffer sizes
 				const info = {
-					index: geometryInfo.length,
+					index: bvhInfo.length,
 					bvh: primBvh,
-					geometry: primBvh.geometry,
 					range: range,
 
 					bvhBufferOffsets: null,
@@ -379,12 +378,12 @@ export class BVHComputeFns {
 				bvhNodesBufferLength += getTotalBVHByteLength( primBvh );
 				indexBufferLength += info.range.count;
 				attributesBufferLength += info.range.vertexCount;
-				geometryInfo.push( info );
+				bvhInfo.push( info );
 
 			}
 
 			// save the index of the bvh associated with this transform
-			const data = geometryInfo.find( info => object.geometry === info.geometry );
+			const data = bvhInfo.find( info => primBvh === info.bvh );
 			primBvh._roots.forEach( ( root, i ) => {
 
 				transformInfo.push( {
@@ -419,15 +418,15 @@ export class BVHComputeFns {
 		// append TLAS data
 		appendBVHData( bvh, 0, transformInfo, 0, bvhNodesBuffer, true );
 		nodeWriteOffset += getTotalBVHByteLength( bvh ) / BYTES_PER_NODE;
-		geometryInfo.forEach( info => {
+		bvhInfo.forEach( info => {
 
 			// append bvh data
 			const bvhNodeOffsets = appendBVHData( info.bvh, indexOffset / 3, transformInfo, nodeWriteOffset, bvhNodesBuffer, false );
 			info.bvhNodeOffsets = bvhNodeOffsets;
 
 			// append geometry data
-			appendIndexData( info.geometry, info.bvh._indirectBuffer, info.range, attributesOffset, indexOffset, indexBuffer );
-			appendGeometryData( info.geometry, info.range, attributesOffset, attributesBuffer );
+			appendIndexData( info.bvh, info.range, attributesOffset, indexOffset, indexBuffer );
+			appendGeometryData( info.bvh, info.range, attributesOffset, attributesBuffer );
 			info.indexBufferOffset = indexOffset;
 
 			// step the write offsets forward
@@ -555,12 +554,15 @@ export class BVHComputeFns {
 
 		}
 
-		function appendIndexData( geometry, indirectBuffer, range, valueOffset, writeOffset, target ) {
+		function appendIndexData( bvh, range, valueOffset, writeOffset, target ) {
 
+			// TODO: check if this is a skinned mesh bvh and use the mesh geometry
+
+			const { geometry } = bvh;
 			const { start, count, vertexStart } = range;
-			if ( indirectBuffer ) {
+			if ( bvh.indirect ) {
 
-				const dereferencedIndex = dereferenceIndex( geometry.index, indirectBuffer );
+				const dereferencedIndex = dereferenceIndex( geometry.index, bvh._indirectBuffer );
 				for ( let i = 0; i < dereferencedIndex.length; i ++ ) {
 
 					target[ i + writeOffset ] = dereferencedIndex[ i ] - vertexStart + valueOffset;
@@ -593,8 +595,11 @@ export class BVHComputeFns {
 
 		}
 
-		function appendGeometryData( geometry, range, writeOffset, target ) {
+		function appendGeometryData( bvh, range, writeOffset, target ) {
 
+			// TODO: check if this is a skinned mesh bvh and use the mesh geometry
+
+			const { geometry } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
 			attributes.forEach( ( key, interleavedOffset ) => {
