@@ -5,7 +5,7 @@ import { constants } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
-import { proxy } from '../../lib/NodeProxy.js';
+import { proxy } from '../../lib/nodes/NodeProxy.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 

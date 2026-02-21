@@ -4,7 +4,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
 import { lambertBsdfFunc } from '../nodes/sampling.wgsl.js';
-import { proxy } from '../lib/NodeProxy.js';
+import { proxy } from '../lib/nodes/NodeProxy.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
