@@ -1,5 +1,9 @@
 import { FunctionNode, Node } from 'three/webgpu';
 
+// TODO: allow for glsl and wgsl version
+// TODO: allow for structs
+// TODO: allow for arbitrary includes (support array?)
+
 // minimal node that outputs a raw WGSL expression verbatim when built,
 // bypassing TSL's temp variable wrapping and type formatting
 class RawExpression extends Node {

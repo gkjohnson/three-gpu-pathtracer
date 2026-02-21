@@ -1,21 +1,20 @@
-import { BufferAttribute, BufferGeometry, StorageBufferAttribute } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { BVHComputeData } from './BVHComputeData.js';
-import { wgslStruct } from './nodes/WGSLStructNode.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 
-const transformStruct = wgslStruct( 'TransformStruct', {
+const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	nodeOffset: 'uint',
 	materialIndex: 'uint',
 	_alignment0: 'uint',
 	_alignment1: 'uint',
-} );
+}, 'TransformStruct' );
 
-const materialStruct = wgslStruct( 'MaterialStruct', {
+const materialStruct = new StructTypeNode( {
 	albedo: 'vec3f',
-} );
+}, 'MaterialStruct' );
 
 export class PathtracerBVHComputeData extends BVHComputeData {
 

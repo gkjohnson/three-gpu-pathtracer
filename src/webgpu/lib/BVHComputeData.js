@@ -1,5 +1,5 @@
 import { Matrix4, Vector4 } from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, wgslFn } from 'three/tsl';
 import {
 	intersectsBounds,
@@ -7,7 +7,6 @@ import {
 	bvhNodeStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
-import { wgslStruct } from './nodes/WGSLStructNode.js';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 const UINT32_PER_NODE = BYTES_PER_NODE / 4;
@@ -56,16 +55,16 @@ function getTotalBVHByteLength( bvh ) {
 
 // stride is 36 floats (144 bytes) to match WGSL struct alignment:
 // mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-const transformStruct = wgslStruct( 'TransformStruct', {
+const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	nodeOffset: 'uint',
 	_alignment0: 'uint',
 	_alignment1: 'uint',
 	_alignment2: 'uint',
-} );
+}, 'TransformStruct' );
 
-const intersectionResultStruct = wgslStruct( 'IntersectionResult', {
+const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
@@ -73,7 +72,7 @@ const intersectionResultStruct = wgslStruct( 'IntersectionResult', {
 	objectIndex: 'uint',
 	side: 'float',
 	dist: 'float',
-} );
+}, 'IntersectionResult' );
 
 const intersectsTriangle = wgslFn( /* wgsl */ `
 
@@ -401,9 +400,9 @@ export class BVHComputeData {
 		//
 
 		// construct the attribute struct
-		const attributeStruct = wgslStruct(
-			`${ name }GeometryStruct`,
+		const attributeStruct = new StructTypeNode(
 			attributes.reduce( ( o, key ) => ( { ...o, [ key ]: 'vec4f' } ), {} ),
+			`${ name }GeometryStruct`,
 		);
 
 		// write the geometry buffer attributes & bvh data
@@ -461,10 +460,11 @@ export class BVHComputeData {
 		this.structs.attributes = attributeStruct;
 		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, structs.transform );
 
-		const interpolateBody = Object.keys( attributeStruct.fields )
-			.map( key => {
+		const interpolateBody = attributeStruct
+			.membersLayout
+			.map( ( { name } ) => {
 
-				return `result.${ key } = a0.${ key } * barycoord.x + a1.${ key } * barycoord.y + a2.${ key } * barycoord.z;`;
+				return `result.${ name } = a0.${ name } * barycoord.x + a1.${ name } * barycoord.y + a2.${ name } * barycoord.z;`;
 
 			} ).join( '\n' );
 		this.fns.sampleTrianglePoint = wgslFn( /* wgsl */`
