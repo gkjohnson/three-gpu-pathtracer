@@ -4,16 +4,16 @@ import { wgslStruct } from './nodes/WGSLStructNode.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 
-const transformStruct = wgslStruct( 'TransformStruct', 36 * 4, {
+const transformStruct = wgslStruct( 'TransformStruct', {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
-	nodeOffset: 'u32',
-	materialIndex: 'u32',
-	_alignment0: 'u32',
-	_alignment1: 'u32',
+	nodeOffset: 'uint',
+	materialIndex: 'uint',
+	_alignment0: 'uint',
+	_alignment1: 'uint',
 } );
 
-const materialStruct = wgslStruct( 'MaterialStruct', 4 * 4, {
+const materialStruct = wgslStruct( 'MaterialStruct', {
 	albedo: 'vec3f',
 } );
 
@@ -35,11 +35,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		super.update();
 
 		const { materials, structs, name } = this;
-		const materialBuffer = new ArrayBuffer( structs.material.byteSize * materials.length );
+		const materialBuffer = new ArrayBuffer( structs.material.getLength() * materials.length * 4 );
 		const materialBufferF32 = new Float32Array( materialBuffer );
 		materials.forEach( ( mat, i ) => {
 
-			mat.color.toArray( materialBufferF32, i * structs.material.uintSize );
+			mat.color.toArray( materialBufferF32, i * structs.material.getLength() );
 
 		} );
 
@@ -65,7 +65,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const index = materials.indexOf( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
-		transformBufferU32[ writeOffset * transformStruct.uintSize + 33 ] = index;
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
 	}
 

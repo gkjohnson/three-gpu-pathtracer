@@ -56,23 +56,23 @@ function getTotalBVHByteLength( bvh ) {
 
 // stride is 36 floats (144 bytes) to match WGSL struct alignment:
 // mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-const transformStruct = wgslStruct( 'TransformStruct', 36 * 4, {
+const transformStruct = wgslStruct( 'TransformStruct', {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
-	nodeOffset: 'u32',
-	_alignment0: 'u32',
-	_alignment1: 'u32',
-	_alignment2: 'u32',
+	nodeOffset: 'uint',
+	_alignment0: 'uint',
+	_alignment1: 'uint',
+	_alignment2: 'uint',
 } );
 
-const intersectionResultStruct = wgslStruct( 'IntersectionResult', 16 * 4, {
+const intersectionResultStruct = wgslStruct( 'IntersectionResult', {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
 	barycoord: 'vec3f',
-	objectIndex: 'u32',
-	side: 'f32',
-	dist: 'f32',
+	objectIndex: 'uint',
+	side: 'float',
+	dist: 'float',
 } );
 
 const intersectsTriangle = wgslFn( /* wgsl */ `
@@ -403,7 +403,6 @@ export class BVHComputeData {
 		// construct the attribute struct
 		const attributeStruct = wgslStruct(
 			`${ name }GeometryStruct`,
-			4 * 4 * attributes.length,
 			attributes.reduce( ( o, key ) => ( { ...o, [ key ]: 'vec4f' } ), {} ),
 		);
 
@@ -439,7 +438,7 @@ export class BVHComputeData {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( structs.transform.byteSize * transformInfo.length );
+		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformInfo.length * 4 );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
@@ -451,9 +450,9 @@ export class BVHComputeData {
 
 		// set up the storage buffers
 		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.uintSize ), structs.transform.name ).toReadOnly().setName( `${ name }transforms` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform.name ).toReadOnly().setName( `${ name }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.uintSize ), attributeStruct.name ).toReadOnly().setName( `${ name }attributes` );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct.name ).toReadOnly().setName( `${ name }attributes` );
 
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
@@ -642,7 +641,7 @@ export class BVHComputeData {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributeStruct.uintSize + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributeStruct.getLength() + interleavedOffset * 4 );
 
 				}
 
@@ -673,12 +672,12 @@ export class BVHComputeData {
 		}
 
 		_matrix.premultiply( premultiplyMatrix );
-		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.uintSize );
+		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.getLength() );
 
 		_matrix.invert();
-		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.uintSize + 16 );
+		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.getLength() + 16 );
 
-		transformBufferU32[ writeOffset * transformStruct.uintSize + 32 ] = bvhNodeOffsets[ root ];
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 32 ] = bvhNodeOffsets[ root ];
 
 	}
 

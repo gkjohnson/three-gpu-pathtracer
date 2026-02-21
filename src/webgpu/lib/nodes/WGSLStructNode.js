@@ -1,33 +1,12 @@
-import { CodeNode } from 'three/webgpu';
+import { StructTypeNode } from 'three/webgpu';
 
 // a more structured "struct" node that bookkeeps the struct name, byte size
-export class WGSLStructNode extends CodeNode {
+export class WGSLStructNode extends StructTypeNode {
 
-	get uintSize() {
+	constructor( name, fields ) {
 
-		return this.byteSize / 4;
-
-	}
-
-	constructor( name, byteSize, fields, includes = [] ) {
-
-		const content = Object
-			.entries( fields )
-			.map( ( [ name, type ] ) => {
-
-				return `${ name }: ${ type },`;
-
-			} ).join( '\n' );
-
-		const code = /* wgsl */`
-			struct ${ name } {
-				${ content }
-			}
-		`;
-
-		super( code, includes, 'wgsl' );
+		super( fields );
 		this.name = name;
-		this.byteSize = byteSize;
 		this.fields = fields;
 
 	}
