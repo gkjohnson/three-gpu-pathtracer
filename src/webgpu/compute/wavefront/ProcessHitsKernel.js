@@ -3,8 +3,8 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { materialStruct, vertexAttributesStruct } from '../../nodes/structs.wgsl.js';
-import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
+import { materialStruct } from '../../nodes/structs.wgsl.js';
+import { getSurfaceRecordFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 
 export class ProcessHitsKernel extends ComputeKernel {

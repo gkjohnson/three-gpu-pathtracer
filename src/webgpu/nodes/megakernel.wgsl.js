@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from './random.wgsl.js';
-import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from './material.wgsl.js';
+import { getSurfaceRecordFunc, pbrtBsdfFunc } from './material.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 
 export const megakernelShader = wgslFn( /* wgsl */`

@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants as bvhConstants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { hitResultQueueElementStruct, rayQueueElementStruct, materialStruct, constants } from './structs.wgsl';
-import { lambertBsdfFunc } from './sampling.wgsl';
+import { lambertBsdfFunc } from './material.wgsl';
 import { pcgInit, pcgCycleState } from './random.wgsl';
 
 export const generateRays = wgslFn( /* wgsl */ `

@@ -31,6 +31,13 @@ export const pcg4d = wgslFn( /* wgsl */ `
 	}
 ` );
 
+export const pcgCycleState = wgslFn( /* wgsl */ `
+	fn pcgCycleState(n: u32) -> void {
+		for (var i = 0u; i < n; i++) {
+			pcg4d(&g_state.s0);
+		}
+` );
+
 export const pcgRand = wgslFn( /*wgsl*/`
 	fn pcgRand() -> f32 {
 		pcg4d(&g_state.s0);
@@ -38,17 +45,16 @@ export const pcgRand = wgslFn( /*wgsl*/`
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-// TODO: test if abs there is necessary
-export const pcgRand3 = wgslFn( /*wgsl*/`
-	fn pcgRand3() -> vec3f {
-		pcg4d(&g_state.s0);
-		return abs( vec3f(g_state.s0.xyz) / f32(0xffffffffu) );
-	}
-`, [ pcg4d, pcgStateStruct ] );
-
 export const pcgRand2 = wgslFn( /*wgsl*/`
 	fn pcgRand2() -> vec2f {
 		pcg4d(&g_state.s0);
 		return abs( vec2f(g_state.s0.xy) / f32(0xffffffffu) );
+	}
+`, [ pcg4d, pcgStateStruct ] );
+
+export const pcgRand3 = wgslFn( /*wgsl*/`
+	fn pcgRand3() -> vec3f {
+		pcg4d(&g_state.s0);
+		return abs( vec3f(g_state.s0.xyz) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );

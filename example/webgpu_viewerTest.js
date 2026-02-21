@@ -15,7 +15,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGPUPathTracer, GradientEquirectTexture } from '../src/index.js';
+import { WebGPUPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 
