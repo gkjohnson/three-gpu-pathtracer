@@ -1,4 +1,4 @@
-import { Vector2, Clock, Scene, PerspectiveCamera } from 'three/webgpu';
+import { Vector2, Scene, PerspectiveCamera } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -36,7 +36,6 @@ export class WebGPUPathTracer {
 		// members
 		this._renderer = renderer;
 		this._pathTracer = new MegaKernelPathTracer( renderer );
-		this._clock = new Clock();
 
 		// options
 		this.renderScale = 1;
