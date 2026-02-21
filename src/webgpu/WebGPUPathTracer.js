@@ -5,7 +5,7 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
-import { PathtracerBVHComputeFns } from './lib/PathtracerBVHComputeFns.js';
+import { PathtracerBVHComputeData } from './lib/PathtracerBVHComputeData.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
@@ -67,7 +67,7 @@ export class WebGPUPathTracer {
 
 		// Build TLAS and compute functions
 		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
-		const bvhData = new PathtracerBVHComputeFns( objectBVH );
+		const bvhData = new PathtracerBVHComputeData( objectBVH );
 		bvhData.update();
 
 		this._bvhData = bvhData;

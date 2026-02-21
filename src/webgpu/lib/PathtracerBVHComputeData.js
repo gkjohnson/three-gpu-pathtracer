@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, StorageBufferAttribute } from 'three/webgpu';
-import { BVHComputeFns } from './BVHComputeFns.js';
+import { BVHComputeData } from './BVHComputeData.js';
 import { wgslStruct } from './WGSLStructNode.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
@@ -17,7 +17,7 @@ const materialStruct = wgslStruct( 'MaterialStruct', 4 * 4, {
 	albedo: 'vec3f',
 } );
 
-export class PathtracerBVHComputeFns extends BVHComputeFns {
+export class PathtracerBVHComputeData extends BVHComputeData {
 
 	constructor( ...args ) {
 

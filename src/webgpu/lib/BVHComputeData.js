@@ -309,7 +309,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 }
 
-export class BVHComputeFns {
+export class BVHComputeData {
 
 	constructor( bvh, options = {} ) {
 
@@ -708,7 +708,7 @@ export class BVHComputeFns {
 
 		if ( ! bvh ) {
 
-			throw new Error( 'BVHComputeFns: BVH not found.' );
+			throw new Error( 'BVHComputeData: BVH not found.' );
 
 		}
 
