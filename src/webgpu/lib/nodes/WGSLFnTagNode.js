@@ -1,6 +1,5 @@
 import { FunctionNode, Node } from 'three/webgpu';
 
-// TODO: allow for glsl and wgsl version
 // TODO: allow for structs
 // TODO: allow for arbitrary includes (support array?)
 
@@ -31,7 +30,7 @@ export class WGSLFnTagNode extends FunctionNode {
 
 	}
 
-	constructor( tokens, args ) {
+	constructor( tokens, args, lang = 'wgsl' ) {
 
 		// extract FunctionNode dependencies for includes — only function definitions
 		// need to be pre-registered so their code appears before ours in the output.
@@ -53,7 +52,7 @@ export class WGSLFnTagNode extends FunctionNode {
 
 		}
 
-		super( '', includes, 'wgsl' );
+		super( '', includes, lang );
 
 		this.tokens = tokens;
 		this.args = args;
