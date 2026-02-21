@@ -11,7 +11,6 @@ function* renderTask() {
 		kernel,
 		geometry,
 		bounces,
-		envInfo,
 
 		tiles,
 		outputTarget,
