@@ -7,7 +7,7 @@ import {
 	bvhNodeStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
-import { wgslStruct } from './WGSLStructNode.js';
+import { wgslStruct } from './nodes/WGSLStructNode.js';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 const UINT32_PER_NODE = BYTES_PER_NODE / 4;
