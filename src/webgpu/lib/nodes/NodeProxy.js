@@ -2,6 +2,12 @@ import { Node } from 'three/webgpu';
 
 export class NodeProxy extends Node {
 
+	static get type() {
+
+		return 'NodeProxy';
+
+	}
+
 	get node() {
 
 		const { properties, object } = this;
@@ -33,12 +39,21 @@ export class NodeProxy extends Node {
 
 	}
 
+	// delegate type resolution to the target node
 	getNodeType( builder ) {
 
 		return this.node.getNodeType( builder );
 
 	}
 
+	// include the target node's cache key so the proxy invalidates when the target changes
+	customCacheKey() {
+
+		return this.node.getCacheKey();
+
+	}
+
+	// return the target node as the output so the builder uses it for analyze/generate
 	setup( builder ) {
 
 		return this.node;
