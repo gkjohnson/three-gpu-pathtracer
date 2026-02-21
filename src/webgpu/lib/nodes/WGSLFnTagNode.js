@@ -1,8 +1,5 @@
 import { FunctionNode, Node } from 'three/webgpu';
 
-// TODO: allow for structs
-// TODO: allow for arbitrary includes (support array?)
-
 // minimal node that outputs a raw WGSL expression verbatim when built,
 // bypassing TSL's temp variable wrapping and type formatting
 class RawExpression extends Node {
@@ -22,6 +19,27 @@ class RawExpression extends Node {
 
 }
 
+// returns the StructTypeNode from either a direct StructTypeNode or a struct() callable wrapper
+function getStructLayout( arg ) {
+
+	if ( arg && arg.isNode && arg.isStructLayoutNode ) return arg;
+	if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
+	return null;
+
+}
+
+// returns the node that should be registered as an include for the given arg,
+// or null if the arg doesn't represent a dependency (e.g. a string, number, or plain node)
+function getIncludeNode( arg ) {
+
+	if ( typeof arg === 'function' && arg.functionNode ) return arg.functionNode;
+	if ( arg && arg.isNode && arg.functionNode ) return arg.functionNode;
+	if ( getStructLayout( arg ) ) return getStructLayout( arg );
+	if ( arg && arg.isNode && arg.isCodeNode ) return arg;
+	return null;
+
+}
+
 export class WGSLFnTagNode extends FunctionNode {
 
 	static get type() {
@@ -32,21 +50,28 @@ export class WGSLFnTagNode extends FunctionNode {
 
 	constructor( tokens, args, lang = 'wgsl' ) {
 
-		// extract FunctionNode dependencies for includes — only function definitions
-		// need to be pre-registered so their code appears before ours in the output.
+		// extract dependencies for includes — function definitions, struct types,
+		// and code nodes need to be pre-registered so their code appears before ours.
 		// callable wrappers and FunctionCallNodes are unwrapped to the underlying FunctionNode;
 		// plain nodes (uniforms, storage, etc) are built inline in generate() and don't need includes.
+		// arrays are treated as explicit include lists — each element is registered as a dependency.
 		const includes = [];
 
 		for ( const arg of args ) {
 
-			if ( typeof arg === 'function' && arg.functionNode ) {
+			if ( Array.isArray( arg ) ) {
 
-				includes.push( arg.functionNode );
+				for ( const element of arg ) {
 
-			} else if ( arg && arg.isNode && arg.functionNode ) {
+					const node = getIncludeNode( element );
+					if ( node ) includes.push( node );
 
-				includes.push( arg.functionNode );
+				}
+
+			} else {
+
+				const node = getIncludeNode( arg );
+				if ( node ) includes.push( node );
 
 			}
 
@@ -59,19 +84,57 @@ export class WGSLFnTagNode extends FunctionNode {
 
 	}
 
-	// parse the function signature from the static template parts (tokens[0] always
-	// contains the full signature since interpolations only appear in the body)
+	// assemble the signature from tokens and arg names (struct types may appear
+	// in the signature as return types or parameter types), then parse it
 	getNodeFunction( builder ) {
 
-		const { tokens } = this;
+		const { tokens, args } = this;
 		const nodeData = builder.getDataFromNode( this );
 		let nodeFunction = nodeData.nodeFunction;
 		if ( nodeFunction === undefined ) {
 
-			const braceIndex = tokens[ 0 ].indexOf( '{' );
+			// reconstruct the full code with known names for struct args
+			// and dummy identifiers for everything else
+			let fullCode = '';
+			for ( let i = 0, l = tokens.length; i < l; i ++ ) {
+
+				fullCode += tokens[ i ];
+
+				if ( i < args.length ) {
+
+					const arg = args[ i ];
+					if ( Array.isArray( arg ) ) {
+
+						// include array — no text output
+
+					} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
+
+						fullCode += String( arg );
+
+					} else {
+
+						const structLayout = getStructLayout( arg );
+						if ( structLayout ) {
+
+							// use getNodeType to get the correct name (may be auto-generated)
+							fullCode += structLayout.getNodeType( builder );
+
+						} else {
+
+							fullCode += '_arg' + i;
+
+						}
+
+					}
+
+				}
+
+			}
+
+			const braceIndex = fullCode.indexOf( '{' );
 			const sig = braceIndex !== - 1
-				? tokens[ 0 ].substring( 0, braceIndex )
-				: tokens[ 0 ];
+				? fullCode.substring( 0, braceIndex )
+				: fullCode;
 
 			nodeFunction = builder.parser.parseFunction( sig + ' {}' );
 			nodeData.nodeFunction = nodeFunction;
@@ -100,7 +163,16 @@ export class WGSLFnTagNode extends FunctionNode {
 			if ( i < args.length ) {
 
 				const arg = args[ i ];
-				if ( typeof arg === 'function' && arg.functionNode ) {
+				if ( Array.isArray( arg ) ) {
+
+					// include array — no text output
+
+				} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
+
+					// raw literal — output verbatim
+					parts.push( String( arg ) );
+
+				} else if ( typeof arg === 'function' && arg.functionNode ) {
 
 					// callable wrapper (from wgslFn/wgslFnTag) — resolve to function name
 					parts.push( arg.functionNode.build( builder, 'property' ) );
@@ -110,6 +182,12 @@ export class WGSLFnTagNode extends FunctionNode {
 					// FunctionCallNode — use generate() to get the inline call expression
 					// (build() would wrap it in a temp variable that lives outside our WGSL scope)
 					parts.push( arg.generate( builder ) );
+
+				} else if ( getStructLayout( arg ) ) {
+
+					// struct (StructTypeNode or struct() callable) — build to register
+					// the struct definition, output just the type name
+					parts.push( getStructLayout( arg ).build( builder ) );
 
 				} else {
 
