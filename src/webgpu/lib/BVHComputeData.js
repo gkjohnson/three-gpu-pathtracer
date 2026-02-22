@@ -3,10 +3,12 @@ import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage } from 'three/tsl';
 import {
 	intersectsBounds,
+	constants,
+} from './wgsl/common.wgsl.js';
+import {
 	rayStruct,
 	bvhNodeStruct,
-	constants,
-} from 'three-mesh-bvh/webgpu';
+} from './wgsl/structs.wgsl.js';
 import { wgslTagFn } from './nodes/WGSLTagFnNode.js';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;

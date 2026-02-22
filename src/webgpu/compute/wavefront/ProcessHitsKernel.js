@@ -1,7 +1,7 @@
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { constants } from 'three-mesh-bvh/webgpu';
+import { constants } from '../../lib/wgsl/common.wgsl.js';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';

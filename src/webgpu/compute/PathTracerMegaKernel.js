@@ -1,5 +1,5 @@
 import { Matrix4, Vector2, StorageTexture } from 'three/webgpu';
-import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
+import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../nodes/random.wgsl.js';

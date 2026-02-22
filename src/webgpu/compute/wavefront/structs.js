@@ -1,5 +1,5 @@
 import { wgsl } from 'three/tsl';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export const QUEUED_RAY_SIZE = 16;
 
