@@ -125,14 +125,14 @@ const intersectsTriangle = wgslFnTag/* wgsl */ `
 	}
 `;
 
-function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct ) {
+function buildRaycastFirstHitFn( prefix, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct ) {
 
 	const geometryRaycastFirstHitFn = wgslFnTag/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, attributeStruct ] }
 
 		// fn
-		fn ${ name }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+		fn ${ prefix }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
 
 			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
@@ -221,7 +221,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 		${ [ rayStruct, bvhNodeStruct, constants, transformStruct ] }
 
 		// fn
-		fn ${ name }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
+		fn ${ prefix }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
 
 			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
@@ -312,11 +312,11 @@ export class BVHComputeData {
 	constructor( bvh, options = {} ) {
 
 		const {
-			name = 'bvh_',
-			attributes = [ 'position', 'normal', 'uv0' ],
+			prefix = 'bvh_',
+			attributes = { position: 'vec4f' },
 		} = options;
 
-		this.name = name;
+		this.prefix = prefix;
 		this.attributes = attributes;
 		this.bvh = bvh;
 
@@ -341,7 +341,7 @@ export class BVHComputeData {
 	update() {
 
 		const self = this;
-		const { attributes, structs, name, bvh } = this;
+		const { attributes, structs, prefix, bvh } = this;
 
 		// collect the BVHs
 		const bvhInfo = [];
@@ -399,17 +399,14 @@ export class BVHComputeData {
 		//
 
 		// construct the attribute struct
-		const attributeStruct = new StructTypeNode(
-			attributes.reduce( ( o, key ) => ( { ...o, [ key ]: 'vec4f' } ), {} ),
-			`${ name }GeometryStruct`,
-		);
+		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
 
 		// write the geometry buffer attributes & bvh data
 		let attributesOffset = 0;
 		let indexOffset = 0;
 		let nodeWriteOffset = 0;
 		const indexBuffer = new Uint32Array( indexBufferLength );
-		const attributesBuffer = new ArrayBuffer( attributesBufferLength * attributes.length * 4 * 4 );
+		const attributesBuffer = new ArrayBuffer( attributesBufferLength * attributeStruct.getLength() * 4 );
 		const bvhNodesBuffer = new ArrayBuffer( bvhNodesBufferLength );
 
 		// append TLAS data
@@ -447,17 +444,17 @@ export class BVHComputeData {
 		//
 
 		// set up the storage buffers
-		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ name }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform.name ).toReadOnly().setName( `${ name }transforms` );
-		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ name }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct.name ).toReadOnly().setName( `${ name }attributes` );
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ prefix }nodes` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform.name ).toReadOnly().setName( `${ prefix }transforms` );
+		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ prefix }index` );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct.name ).toReadOnly().setName( `${ prefix }attributes` );
 
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
 		this.storage.index = indexStorage;
 		this.storage.attributes = attributesStorage;
 		this.structs.attributes = attributeStruct;
-		this.fns.raycastFirstHit = buildRaycastFirstHitFn( name, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, structs.transform );
+		this.fns.raycastFirstHit = buildRaycastFirstHitFn( prefix, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, structs.transform );
 
 		const interpolateBody = attributeStruct
 			.membersLayout
@@ -468,7 +465,7 @@ export class BVHComputeData {
 			} ).join( '\n' );
 		this.fns.sampleTrianglePoint = wgslFnTag/* wgsl */`
 			// fn
-			fn ${ name }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct } {
+			fn ${ prefix }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct } {
 
 				var result: ${ attributeStruct };
 				var a0 = ${ attributesStorage }[ indices.x ];
@@ -598,16 +595,18 @@ export class BVHComputeData {
 			const { geometry, mesh = null } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
-			attributes.forEach( ( key, interleavedOffset ) => {
+			attributeStruct.membersLayout.forEach( ( { name }, interleavedOffset ) => {
 
-				const attr = geometry.attributes[ key ];
-				self.getDefaultAttributeValue( key, _def );
+				// TODO: we should be able to have access to memory layout offsets here via the struct
+				// API but it's not currently available.
+				const attr = geometry.attributes[ name ];
+				self.getDefaultAttributeValue( name, _def );
 
 				for ( let i = 0; i < vertexCount; i ++ ) {
 
 					if ( attr ) {
 
-						if ( key === 'position' && mesh ) {
+						if ( name === 'position' && mesh ) {
 
 							// TODO: normals and tangents need to be transformed here, as well
 							mesh.getVertexPosition( i + vertexStart, _vec );

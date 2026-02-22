@@ -18,9 +18,16 @@ const materialStruct = new StructTypeNode( {
 
 export class PathtracerBVHComputeData extends BVHComputeData {
 
-	constructor( ...args ) {
+	constructor( bvh, options = {} ) {
 
-		super( ...args );
+		super( bvh, {
+			attributes: {
+				position: 'vec4f',
+				normal: 'vec4f',
+				uv0: 'vec4f',
+			},
+			...options,
+		} );
 
 		this.structs.transform = transformStruct;
 		this.structs.material = materialStruct;
@@ -33,7 +40,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		super.update();
 
-		const { materials, structs, name } = this;
+		const { materials, structs, prefix: name } = this;
 		const materialBuffer = new ArrayBuffer( structs.material.getLength() * materials.length * 4 );
 		const materialBufferF32 = new Float32Array( materialBuffer );
 		materials.forEach( ( mat, i ) => {
