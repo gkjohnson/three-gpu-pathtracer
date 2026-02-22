@@ -222,7 +222,7 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
 	return wgslTagFn/* wgsl */`
 		// includes
-		${ [ rayStruct, bvhNodeStruct, constants, transformStruct ] }
+		${ [ rayStruct, bvhNodeStruct, constants, structs.transform ] }
 
 		// fn
 		fn ${ prefix }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
