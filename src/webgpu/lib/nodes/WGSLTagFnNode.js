@@ -1,19 +1,18 @@
 import { FunctionNode, Node } from 'three/webgpu';
 
-// minimal node that outputs a raw WGSL expression verbatim when built,
-// bypassing TSL's temp variable wrapping and type formatting
-class RawExpression extends Node {
+// minimal node that outputs a raw WGSL expression verbatim when built
+class LiteralExpression extends Node {
 
-	constructor( code ) {
+	constructor( literal ) {
 
 		super();
-		this.code = code;
+		this.literal = literal;
 
 	}
 
 	build() {
 
-		return this.code;
+		return this.literal;
 
 	}
 
@@ -56,8 +55,7 @@ class InlineCallNode extends Node {
 
 }
 
-// returns the node that should be registered as an include for the given arg,
-// or null if the arg doesn't represent a dependency (e.g. a string, number, or plain node)
+// returns the node that should be registered as an include for the given arg
 function getIncludeNode( arg ) {
 
 	if ( typeof arg === 'function' ) {
@@ -89,24 +87,16 @@ export class WGSLTagFnNode extends FunctionNode {
 
 	constructor( tokens, args, lang = 'wgsl' ) {
 
-		// extract dependencies for includes from the original args — function definitions,
-		// struct types, and code nodes need to be pre-registered so their code appears before ours.
-		// callable wrappers and FunctionCallNodes are unwrapped to the underlying FunctionNode;
-		// plain nodes (uniforms, storage, etc) are built inline in generate() and don't need includes.
-		// arrays are treated as explicit include lists — each element is registered as a dependency.
+		// assemble all the nodes needed for includes
 		const includes = [];
-
 		for ( const arg of args ) {
 
 			if ( Array.isArray( arg ) ) {
 
 				for ( const element of arg ) {
 
-					// unwrap callable wrappers; accept any remaining node directly
-					// (storage, uniforms, etc. need to be built to register bindings)
 					const node = getIncludeNode( element );
 					if ( node ) includes.push( node );
-					else if ( element && element.isNode ) includes.push( element );
 
 				}
 
@@ -119,10 +109,10 @@ export class WGSLTagFnNode extends FunctionNode {
 
 		}
 
-		// normalize args so generate() can resolve them uniformly with build():
-		// - callable wrappers → PropertyRefNode (emits just the function name)
-		// - struct callables → StructTypeNode (emits the type name via build)
-		// - FunctionCallNodes → InlineCallNode (emits inline call, bypassing TempNode)
+		// normalize args so generate function can resolve them with build() later:
+		// - callable wrappers > PropertyRefNode (emits just the function name)
+		// - struct callables > StructTypeNode (emits the type name via build)
+		// - FunctionCallNodes > InlineCallNode (emits inline call)
 		const normalizedArgs = args.map( arg => {
 
 			if ( typeof arg === 'function' && arg.functionNode ) return new PropertyRefNode( arg.functionNode );
@@ -139,8 +129,7 @@ export class WGSLTagFnNode extends FunctionNode {
 
 	}
 
-	// assemble the signature from tokens and arg names (struct types may appear
-	// in the signature as return types or parameter types), then parse it
+	// assemble the signature from tokens and arg names then parse
 	getNodeFunction( builder ) {
 
 		const { tokens, args } = this;
@@ -164,11 +153,18 @@ export class WGSLTagFnNode extends FunctionNode {
 
 					} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
 
+						// literals
 						fullCode += String( arg );
 
 					} else if ( arg.isStructLayoutNode ) {
 
+						// struct type node
 						fullCode += arg.getNodeType( builder );
+
+					} else if ( arg.isStruct ) {
+
+						// struct
+						fullCode += arg.layout.getNodeType( builder );
 
 					} else {
 
@@ -180,11 +176,11 @@ export class WGSLTagFnNode extends FunctionNode {
 
 			}
 
-			const braceIndex = fullCode.indexOf( '{' );
-			let sig = braceIndex !== - 1 ? fullCode.substring( 0, braceIndex ) : fullCode;
-			sig = sig.replace( /\/\/.+[\n\r]/g, '' );
+			// remove comments
+			fullCode = fullCode.replace( /\/\/.+[\n\r]/g, '' );
 
-			nodeFunction = builder.parser.parseFunction( sig + ' {}' );
+			// parse it so we have the signature defined - we will define the body content after
+			nodeFunction = builder.parser.parseFunction( fullCode );
 			nodeData.nodeFunction = nodeFunction;
 
 		}
@@ -193,21 +189,17 @@ export class WGSLTagFnNode extends FunctionNode {
 
 	}
 
+	// get the code for the function
 	generate( builder, output ) {
 
 		const { tokens, args } = this;
 
-		// let FunctionNode.generate handle includes, code registration, property naming,
-		// and type normalization (e.g. stripping "-> void" which is not valid WGSL)
+		// rebuild the function body again because we can call "build", now
 		const result = super.generate( builder, output );
-
-		// assemble the body by interleaving static tokens with resolved node names
-		const parts = [];
-
+		let fullCode = '';
 		for ( let i = 0, l = tokens.length; i < l; i ++ ) {
 
-			parts.push( tokens[ i ] );
-
+			fullCode += tokens[ i ];
 			if ( i < args.length ) {
 
 				const arg = args[ i ];
@@ -217,11 +209,11 @@ export class WGSLTagFnNode extends FunctionNode {
 
 				} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
 
-					parts.push( String( arg ) );
+					fullCode += String( arg );
 
 				} else {
 
-					parts.push( arg.build( builder ) );
+					fullCode += arg.build( builder );
 
 				}
 
@@ -232,17 +224,8 @@ export class WGSLTagFnNode extends FunctionNode {
 		const { type } = this.getNodeFunction( builder );
 		const nodeCode = builder.getCodeFromNode( this, type );
 
-		// use the declaration from super (handles type normalization and name assignment),
-		// replace its empty body with the assembled body from the template
-		const declaration = nodeCode.code;
-		const declPrefix = declaration.substring( 0, declaration.indexOf( '{' ) + 1 );
-
-		const assembledCode = parts.join( '' );
-		const bodyStart = assembledCode.indexOf( '{' ) + 1;
-		const bodyEnd = assembledCode.lastIndexOf( '}' );
-		const body = assembledCode.substring( bodyStart, bodyEnd );
-
-		nodeCode.code = declPrefix + body + '}\n';
+		fullCode = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).replace( /\s+/g, ' ' ).trim();
+		nodeCode.code = fullCode;
 
 		return result;
 
@@ -256,8 +239,8 @@ export const wgslTagFn = ( tokens, ...args ) => {
 
 	const fn = ( ...params ) => {
 
-		// wrap string parameter values as raw WGSL expressions
-		// so they output verbatim as identifiers (e.g. local variable names)
+		// wrap string parameter values as raw WGSL expressions so they
+		// output verbatim as identifiers like local variable names
 		if ( params.length === 1 && params[ 0 ] && typeof params[ 0 ] === 'object' && ! params[ 0 ].isNode ) {
 
 			const obj = params[ 0 ];
@@ -265,7 +248,7 @@ export const wgslTagFn = ( tokens, ...args ) => {
 
 				if ( typeof obj[ key ] === 'string' ) {
 
-					obj[ key ] = new RawExpression( obj[ key ] );
+					obj[ key ] = new LiteralExpression( obj[ key ] );
 
 				}
 
