@@ -22,30 +22,9 @@ class RawExpression extends Node {
 // returns the StructTypeNode from either a direct StructTypeNode or a struct() callable wrapper
 function getStructLayout( arg ) {
 
-	if ( arg && arg.isNode && arg.isStructLayoutNode ) return arg;
+	if ( arg && arg.isStructLayoutNode ) return arg;
 	if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
 	return null;
-
-}
-
-// replaces any string parameters on a FunctionCallNode with RawExpression nodes
-// so they output as raw WGSL identifiers (e.g. local variable names)
-function convertStringParams( callNode ) {
-
-	const params = callNode.parameters;
-	if ( params && typeof params === 'object' && ! Array.isArray( params ) && ! params.isNode ) {
-
-		const converted = {};
-		for ( const key in params ) {
-
-			const v = params[ key ];
-			converted[ key ] = ( typeof v === 'string' ) ? new RawExpression( v ) : v;
-
-		}
-
-		callNode.setParameters( converted );
-
-	}
 
 }
 
@@ -56,7 +35,7 @@ function getIncludeNode( arg ) {
 	if ( typeof arg === 'function' && arg.functionNode ) return arg.functionNode;
 	if ( arg && arg.isNode && arg.functionNode ) return arg.functionNode;
 	if ( getStructLayout( arg ) ) return getStructLayout( arg );
-	if ( arg && arg.isNode && arg.isCodeNode ) return arg;
+	if ( arg && arg.isCodeNode ) return arg;
 	return null;
 
 }
@@ -203,10 +182,7 @@ export class WGSLFnTagNode extends FunctionNode {
 				} else if ( arg.isNode && arg.functionNode ) {
 
 					// FunctionCallNode — use generate() to get the inline call expression
-					// (build() would wrap it in a temp variable that lives outside our WGSL scope).
-					// convert any string params to RawExpression — the function may have been
-					// created by wgslFn (which doesn't handle string-to-node conversion)
-					convertStringParams( arg );
+					// (build() would wrap it in a temp variable that lives outside our WGSL scope)
 					parts.push( arg.generate( builder ) );
 
 				} else if ( getStructLayout( arg ) ) {
