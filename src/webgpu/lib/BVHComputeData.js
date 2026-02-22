@@ -127,6 +127,9 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 
 function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
+	// TODO: reduce the redundancy between these functions - possibly using code snippets or
+	// macro-expansion-style mechanisms?
+
 	const geometryRaycastFirstHitFn = wgslTagFn/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, structs.attributes ] }

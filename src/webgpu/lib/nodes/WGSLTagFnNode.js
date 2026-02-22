@@ -233,6 +233,8 @@ export class WGSLTagFnNode extends FunctionNode {
 
 }
 
+// template tag literal function version of "wgslFn" so easy interpolation of TSL nodes
+// TODO: add a raw "wgsl" version for code snippets
 export const wgslTagFn = ( tokens, ...args ) => {
 
 	const functionNode = new WGSLTagFnNode( tokens, args );
