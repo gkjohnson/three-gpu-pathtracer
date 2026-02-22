@@ -1,13 +1,13 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage, struct } from 'three/tsl';
+import { storage } from 'three/tsl';
 import {
 	intersectsBounds,
 	rayStruct,
 	bvhNodeStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
-import { wgslFnTag } from './nodes/WGSLFnTagNode';
+import { wgslTagFn } from './nodes/WGSLTagFnNode.js';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 const UINT32_PER_NODE = BYTES_PER_NODE / 4;
@@ -75,7 +75,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	dist: 'float',
 }, 'IntersectionResult' );
 
-const intersectsTriangle = wgslFnTag/* wgsl */ `
+const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// includes
 	${ [ rayStruct, constants ] }
 
@@ -127,7 +127,7 @@ const intersectsTriangle = wgslFnTag/* wgsl */ `
 
 function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
-	const geometryRaycastFirstHitFn = wgslFnTag/* wgsl */`
+	const geometryRaycastFirstHitFn = wgslTagFn/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, structs.attributes ] }
 
@@ -216,7 +216,7 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 		}
 	`;
 
-	return wgslFnTag/* wgsl */`
+	return wgslTagFn/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, transformStruct ] }
 
@@ -463,7 +463,7 @@ export class BVHComputeData {
 				return `result.${ name } = a0.${ name } * barycoord.x + a1.${ name } * barycoord.y + a2.${ name } * barycoord.z;`;
 
 			} ).join( '\n' );
-		this.fns.sampleTrianglePoint = wgslFnTag/* wgsl */`
+		this.fns.sampleTrianglePoint = wgslTagFn/* wgsl */`
 			// fn
 			fn ${ prefix }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct } {
 

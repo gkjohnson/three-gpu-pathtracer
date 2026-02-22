@@ -250,7 +250,7 @@ export class WGSLTagFnNode extends FunctionNode {
 
 }
 
-const wgslFnTag = ( tokens, ...args ) => {
+export const wgslTagFn = ( tokens, ...args ) => {
 
 	const functionNode = new WGSLTagFnNode( tokens, args );
 
@@ -281,8 +281,4 @@ const wgslFnTag = ( tokens, ...args ) => {
 
 	return fn;
 
-};
-
-export {
-	wgslFnTag,
 };
