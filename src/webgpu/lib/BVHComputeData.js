@@ -1,6 +1,6 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage } from 'three/tsl';
+import { storage, struct } from 'three/tsl';
 import {
 	intersectsBounds,
 	rayStruct,
@@ -125,11 +125,13 @@ const intersectsTriangle = wgslFnTag/* wgsl */ `
 	}
 `;
 
-function buildRaycastFirstHitFn( prefix, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct ) {
+function buildRaycastFirstHitFn( prefix, storage, structs ) {
+
+
 
 	const geometryRaycastFirstHitFn = wgslFnTag/* wgsl */`
 		// includes
-		${ [ rayStruct, bvhNodeStruct, constants, attributeStruct ] }
+		${ [ rayStruct, bvhNodeStruct, constants, structs.attributes ] }
 
 		// fn
 		fn ${ prefix }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
@@ -151,7 +153,7 @@ function buildRaycastFirstHitFn( prefix, nodesStorage, transformsStorage, indexS
 				}
 
 				let nodeIndex = stack[ pointer ];
-				let node = ${ nodesStorage }[ nodeIndex ];
+				let node = ${ storage.nodes }[ nodeIndex ];
 				pointer = pointer - 1;
 
 				var boundsHitDist: f32 = 0.0;
@@ -172,13 +174,13 @@ function buildRaycastFirstHitFn( prefix, nodesStorage, transformsStorage, indexS
 
 					for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
 
-						let i0 = ${ indexStorage }[ ti * 3u ];
-						let i1 = ${ indexStorage }[ ti * 3u + 1u ];
-						let i2 = ${ indexStorage }[ ti * 3u + 2u ];
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
 
-						let a = ${ attributesStorage }[ i0 ].position.xyz;
-						let b = ${ attributesStorage }[ i1 ].position.xyz;
-						let c = ${ attributesStorage }[ i2 ].position.xyz;
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
 
@@ -240,7 +242,7 @@ function buildRaycastFirstHitFn( prefix, nodesStorage, transformsStorage, indexS
 				}
 
 				let currNodeIndex = tlasStack[ tlasPointer ];
-				let node = ${ nodesStorage }[ currNodeIndex ];
+				let node = ${ storage.nodes }[ currNodeIndex ];
 				tlasPointer = tlasPointer - 1;
 
 				var boundsHitDist: f32 = 0.0;
@@ -261,7 +263,7 @@ function buildRaycastFirstHitFn( prefix, nodesStorage, transformsStorage, indexS
 
 					for ( var t = offset; t < offset + count; t = t + 1u ) {
 
-						let transform = ${ transformsStorage }[ t ];
+						let transform = ${ storage.transforms }[ t ];
 
 						// Transform ray into object local space
 						var localRay: Ray;
@@ -454,7 +456,7 @@ export class BVHComputeData {
 		this.storage.index = indexStorage;
 		this.storage.attributes = attributesStorage;
 		this.structs.attributes = attributeStruct;
-		this.fns.raycastFirstHit = buildRaycastFirstHitFn( prefix, bvhNodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, structs.transform );
+		this.fns.raycastFirstHit = buildRaycastFirstHitFn( prefix, this.storage, this.structs );
 
 		const interpolateBody = attributeStruct
 			.membersLayout
