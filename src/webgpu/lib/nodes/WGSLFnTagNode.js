@@ -19,12 +19,40 @@ class RawExpression extends Node {
 
 }
 
-// returns the StructTypeNode from either a direct StructTypeNode or a struct() callable wrapper
-function getStructLayout( arg ) {
+// wraps a FunctionNode so that build() returns just the function name
+class PropertyRefNode extends Node {
 
-	if ( arg && arg.isStructLayoutNode ) return arg;
-	if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
-	return null;
+	constructor( node ) {
+
+		super();
+		this.node = node;
+
+	}
+
+	build( builder ) {
+
+		return this.node.build( builder, 'property' );
+
+	}
+
+}
+
+// wraps a FunctionCallNode so that build() returns the inline call expression,
+// bypassing TempNode's variable wrapping
+class InlineCallNode extends Node {
+
+	constructor( node ) {
+
+		super();
+		this.node = node;
+
+	}
+
+	build( builder ) {
+
+		return this.node.generate( builder );
+
+	}
 
 }
 
@@ -32,15 +60,26 @@ function getStructLayout( arg ) {
 // or null if the arg doesn't represent a dependency (e.g. a string, number, or plain node)
 function getIncludeNode( arg ) {
 
-	if ( typeof arg === 'function' && arg.functionNode ) return arg.functionNode;
-	if ( arg && arg.isNode && arg.functionNode ) return arg.functionNode;
-	if ( getStructLayout( arg ) ) return getStructLayout( arg );
-	if ( arg && arg.isCodeNode ) return arg;
+	if ( typeof arg === 'function' ) {
+
+		if ( arg.functionNode ) return arg.functionNode;
+		if ( arg.isStruct ) return arg.layout;
+		return null;
+
+	}
+
+	if ( arg && arg.isNode ) {
+
+		if ( arg.functionNode ) return arg.functionNode;
+		if ( arg.isStructLayoutNode || arg.isCodeNode ) return arg;
+
+	}
+
 	return null;
 
 }
 
-export class WGSLFnTagNode extends FunctionNode {
+export class WGSLTagFnNode extends FunctionNode {
 
 	static get type() {
 
@@ -50,8 +89,8 @@ export class WGSLFnTagNode extends FunctionNode {
 
 	constructor( tokens, args, lang = 'wgsl' ) {
 
-		// extract dependencies for includes — function definitions, struct types,
-		// and code nodes need to be pre-registered so their code appears before ours.
+		// extract dependencies for includes from the original args — function definitions,
+		// struct types, and code nodes need to be pre-registered so their code appears before ours.
 		// callable wrappers and FunctionCallNodes are unwrapped to the underlying FunctionNode;
 		// plain nodes (uniforms, storage, etc) are built inline in generate() and don't need includes.
 		// arrays are treated as explicit include lists — each element is registered as a dependency.
@@ -80,10 +119,23 @@ export class WGSLFnTagNode extends FunctionNode {
 
 		}
 
+		// normalize args so generate() can resolve them uniformly with build():
+		// - callable wrappers → PropertyRefNode (emits just the function name)
+		// - struct callables → StructTypeNode (emits the type name via build)
+		// - FunctionCallNodes → InlineCallNode (emits inline call, bypassing TempNode)
+		const normalizedArgs = args.map( arg => {
+
+			if ( typeof arg === 'function' && arg.functionNode ) return new PropertyRefNode( arg.functionNode );
+			if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
+			if ( arg && arg.isNode && arg.functionNode ) return new InlineCallNode( arg );
+			return arg;
+
+		} );
+
 		super( '', includes, lang );
 
 		this.tokens = tokens;
-		this.args = args;
+		this.args = normalizedArgs;
 
 	}
 
@@ -114,19 +166,13 @@ export class WGSLFnTagNode extends FunctionNode {
 
 						fullCode += String( arg );
 
+					} else if ( arg.isStructLayoutNode ) {
+
+						fullCode += arg.getNodeType( builder );
+
 					} else {
 
-						const structLayout = getStructLayout( arg );
-						if ( structLayout ) {
-
-							// use getNodeType to get the correct name (may be auto-generated)
-							fullCode += structLayout.getNodeType( builder );
-
-						} else {
-
-							fullCode += '_arg' + i;
-
-						}
+						fullCode += '_arg' + i;
 
 					}
 
@@ -171,25 +217,7 @@ export class WGSLFnTagNode extends FunctionNode {
 
 				} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
 
-					// raw literal — output verbatim
 					parts.push( String( arg ) );
-
-				} else if ( typeof arg === 'function' && arg.functionNode ) {
-
-					// callable wrapper (from wgslFn/wgslFnTag) — resolve to function name
-					parts.push( arg.functionNode.build( builder, 'property' ) );
-
-				} else if ( arg.isNode && arg.functionNode ) {
-
-					// FunctionCallNode — use generate() to get the inline call expression
-					// (build() would wrap it in a temp variable that lives outside our WGSL scope)
-					parts.push( arg.generate( builder ) );
-
-				} else if ( getStructLayout( arg ) ) {
-
-					// struct (StructTypeNode or struct() callable) — build to register
-					// the struct definition, output just the type name
-					parts.push( getStructLayout( arg ).build( builder ) );
 
 				} else {
 
@@ -224,7 +252,7 @@ export class WGSLFnTagNode extends FunctionNode {
 
 const wgslFnTag = ( tokens, ...args ) => {
 
-	const functionNode = new WGSLFnTagNode( tokens, args );
+	const functionNode = new WGSLTagFnNode( tokens, args );
 
 	const fn = ( ...params ) => {
 
