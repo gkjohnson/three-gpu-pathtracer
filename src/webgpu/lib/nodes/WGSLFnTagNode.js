@@ -28,6 +28,27 @@ function getStructLayout( arg ) {
 
 }
 
+// replaces any string parameters on a FunctionCallNode with RawExpression nodes
+// so they output as raw WGSL identifiers (e.g. local variable names)
+function convertStringParams( callNode ) {
+
+	const params = callNode.parameters;
+	if ( params && typeof params === 'object' && ! Array.isArray( params ) && ! params.isNode ) {
+
+		const converted = {};
+		for ( const key in params ) {
+
+			const v = params[ key ];
+			converted[ key ] = ( typeof v === 'string' ) ? new RawExpression( v ) : v;
+
+		}
+
+		callNode.setParameters( converted );
+
+	}
+
+}
+
 // returns the node that should be registered as an include for the given arg,
 // or null if the arg doesn't represent a dependency (e.g. a string, number, or plain node)
 function getIncludeNode( arg ) {
@@ -63,8 +84,11 @@ export class WGSLFnTagNode extends FunctionNode {
 
 				for ( const element of arg ) {
 
+					// unwrap callable wrappers; accept any remaining node directly
+					// (storage, uniforms, etc. need to be built to register bindings)
 					const node = getIncludeNode( element );
 					if ( node ) includes.push( node );
+					else if ( element && element.isNode ) includes.push( element );
 
 				}
 
@@ -132,9 +156,8 @@ export class WGSLFnTagNode extends FunctionNode {
 			}
 
 			const braceIndex = fullCode.indexOf( '{' );
-			const sig = braceIndex !== - 1
-				? fullCode.substring( 0, braceIndex )
-				: fullCode;
+			let sig = braceIndex !== - 1 ? fullCode.substring( 0, braceIndex ) : fullCode;
+			sig = sig.replace( /\/\/.+[\n\r]/g, '' );
 
 			nodeFunction = builder.parser.parseFunction( sig + ' {}' );
 			nodeData.nodeFunction = nodeFunction;
@@ -180,7 +203,10 @@ export class WGSLFnTagNode extends FunctionNode {
 				} else if ( arg.isNode && arg.functionNode ) {
 
 					// FunctionCallNode — use generate() to get the inline call expression
-					// (build() would wrap it in a temp variable that lives outside our WGSL scope)
+					// (build() would wrap it in a temp variable that lives outside our WGSL scope).
+					// convert any string params to RawExpression — the function may have been
+					// created by wgslFn (which doesn't handle string-to-node conversion)
+					convertStringParams( arg );
 					parts.push( arg.generate( builder ) );
 
 				} else if ( getStructLayout( arg ) ) {

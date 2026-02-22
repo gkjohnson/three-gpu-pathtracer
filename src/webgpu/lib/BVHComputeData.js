@@ -1,12 +1,13 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage, wgslFn } from 'three/tsl';
+import { storage } from 'three/tsl';
 import {
 	intersectsBounds,
 	rayStruct,
 	bvhNodeStruct,
 	constants,
 } from 'three-mesh-bvh/webgpu';
+import { wgslFnTag } from './nodes/WGSLFnTagNode';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 const UINT32_PER_NODE = BYTES_PER_NODE / 4;
@@ -74,11 +75,14 @@ const intersectionResultStruct = new StructTypeNode( {
 	dist: 'float',
 }, 'IntersectionResult' );
 
-const intersectsTriangle = wgslFn( /* wgsl */ `
+const intersectsTriangle = wgslFnTag/* wgsl */ `
+	// includes
+	${ [ rayStruct, constants ] }
 
-	fn intersectsTriangle( ray: Ray, a: vec3f, b: vec3f, c: vec3f ) -> IntersectionResult {
+	// fn
+	fn intersectsTriangle( ray: Ray, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
-		var result: IntersectionResult;
+		var result: ${ intersectionResultStruct };
 		result.didHit = false;
 
 		let edge1 = b - a;
@@ -119,15 +123,18 @@ const intersectsTriangle = wgslFn( /* wgsl */ `
 		return result;
 
 	}
-
-`, [ rayStruct, intersectionResultStruct, constants ] );
+`;
 
 function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexStorage, attributesStorage, attributeStruct, transformStruct ) {
 
-	const geometryRaycastFirstHitFn = wgslFn( /* wgsl */`
-		fn ${ name }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> IntersectionResult {
+	const geometryRaycastFirstHitFn = wgslFnTag/* wgsl */`
+		// includes
+		${ [ rayStruct, bvhNodeStruct, constants, attributeStruct ] }
 
-			var bestHit: IntersectionResult;
+		// fn
+		fn ${ name }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+
+			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
 			bestHit.dist = bestDist;
 
@@ -144,11 +151,11 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 				}
 
 				let nodeIndex = stack[ pointer ];
-				let node = ${ name }nodes.value[ nodeIndex ];
+				let node = ${ nodesStorage }[ nodeIndex ];
 				pointer = pointer - 1;
 
 				var boundsHitDist: f32 = 0.0;
-				if ( ! intersectsBounds( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+				if ( ! ${ intersectsBounds }( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
 
 					continue;
 
@@ -165,15 +172,15 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 					for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
 
-						let i0 = ${ name }index.value[ ti * 3u ];
-						let i1 = ${ name }index.value[ ti * 3u + 1u ];
-						let i2 = ${ name }index.value[ ti * 3u + 2u ];
+						let i0 = ${ indexStorage }[ ti * 3u ];
+						let i1 = ${ indexStorage }[ ti * 3u + 1u ];
+						let i2 = ${ indexStorage }[ ti * 3u + 2u ];
 
-						let a = ${ name }attributes.value[ i0 ].position.xyz;
-						let b = ${ name }attributes.value[ i1 ].position.xyz;
-						let c = ${ name }attributes.value[ i2 ].position.xyz;
+						let a = ${ attributesStorage }[ i0 ].position.xyz;
+						let b = ${ attributesStorage }[ i1 ].position.xyz;
+						let c = ${ attributesStorage }[ i2 ].position.xyz;
 
-						var triResult = intersectsTriangle( ray, a, b, c );
+						var triResult = ${ intersectsTriangle }( ray, a, b, c );
 
 						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
 
@@ -207,17 +214,16 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 			return bestHit;
 
 		}
-	`, [
-		nodesStorage, indexStorage, attributesStorage,
-		intersectsTriangle, intersectsBounds,
-		rayStruct, bvhNodeStruct, intersectionResultStruct, constants,
-		attributeStruct,
-	] );
+	`;
 
-	return wgslFn( /* wgsl */`
-		fn ${ name }RaycastFirstHit( ray: Ray ) -> IntersectionResult {
+	return wgslFnTag /* wgsl */`
+		// includes
+		${ [ rayStruct, bvhNodeStruct, constants, transformStruct ] }
 
-			var bestHit: IntersectionResult;
+		// fn
+		fn ${ name }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
+
+			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
 			bestHit.dist = INFINITY;
 
@@ -234,11 +240,11 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 				}
 
 				let currNodeIndex = tlasStack[ tlasPointer ];
-				let node = ${ name }nodes.value[ currNodeIndex ];
+				let node = ${ nodesStorage }[ currNodeIndex ];
 				tlasPointer = tlasPointer - 1;
 
 				var boundsHitDist: f32 = 0.0;
-				if ( ! intersectsBounds( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+				if ( ! ${ intersectsBounds }( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
 
 					continue;
 
@@ -255,14 +261,14 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 					for ( var t = offset; t < offset + count; t = t + 1u ) {
 
-						let transform = ${ name }transforms.value[ t ];
+						let transform = ${ transformsStorage }[ t ];
 
 						// Transform ray into object local space
 						var localRay: Ray;
 						localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
 						localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
 
-						let blasHit = ${ name }RaycastFirstHit_blas( localRay, transform.nodeOffset, bestHit.dist );
+						let blasHit = ${ geometryRaycastFirstHitFn( { ray: 'localRay', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
 							bestHit = blasHit;
@@ -297,14 +303,7 @@ function buildRaycastFirstHitFn( name, nodesStorage, transformsStorage, indexSto
 
 			return bestHit;
 
-		}
-	`, [
-		geometryRaycastFirstHitFn,
-		nodesStorage, transformsStorage,
-		intersectsBounds,
-		rayStruct, bvhNodeStruct, intersectionResultStruct, constants,
-		transformStruct,
-	] );
+		}`;
 
 }
 
@@ -467,18 +466,19 @@ export class BVHComputeData {
 				return `result.${ name } = a0.${ name } * barycoord.x + a1.${ name } * barycoord.y + a2.${ name } * barycoord.z;`;
 
 			} ).join( '\n' );
-		this.fns.sampleTrianglePoint = wgslFn( /* wgsl */`
-			fn ${ name }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct.name } {
+		this.fns.sampleTrianglePoint = wgslFnTag/* wgsl */`
+			// fn
+			fn ${ name }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct } {
 
-				var result: ${ attributeStruct.name };
-				var a0 = ${ name }attributes.value[ indices.x ];
-				var a1 = ${ name }attributes.value[ indices.y ];
-				var a2 = ${ name }attributes.value[ indices.z ];
+				var result: ${ attributeStruct };
+				var a0 = ${ attributesStorage }[ indices.x ];
+				var a1 = ${ attributesStorage }[ indices.y ];
+				var a2 = ${ attributesStorage }[ indices.z ];
 				${ interpolateBody }
 				return result;
 
 			}
-		`, [ attributesStorage, attributeStruct ] );
+		`;
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
