@@ -1,13 +1,11 @@
-import { wgslFn, wgsl } from 'three/tsl';
+import { wgslFn, uint, float } from 'three/tsl';
 import { bvhNodeBoundsStruct, rayStruct } from './structs.wgsl.js';
 
-export const constants = wgsl( /* wgsl */`
-
-	const BVH_STACK_DEPTH = 60u;
-	const INFINITY = 1e20;
-	const TRI_INTERSECT_EPSILON = 1e-5;
-
-` );
+export const constants = {
+	BVH_STACK_DEPTH: uint( 60 ),
+	INFINITY: float( 1e20 ),
+	TRI_INTERSECT_EPSILON: float( 1e-5 ),
+};
 
 export const ndcToCameraRay = wgslFn( /* wgsl*/`
 

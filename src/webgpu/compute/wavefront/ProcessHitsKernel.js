@@ -109,7 +109,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			proxy( 'bvhData.value.storage.materials', parameters ),
 			proxy( 'bvhData.value.storage.transforms', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-			queuedRayStruct, lambertBsdfFunc, constants,
+			queuedRayStruct, lambertBsdfFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
 		] );
 

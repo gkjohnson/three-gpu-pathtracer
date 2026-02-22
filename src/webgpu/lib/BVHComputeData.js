@@ -79,11 +79,12 @@ const intersectionResultStruct = new StructTypeNode( {
 
 const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// includes
-	${ [ rayStruct, constants ] }
+	${ [ rayStruct ] }
 
 	// fn
 	fn intersectsTriangle( ray: Ray, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
+		var TRI_INTERSECT_EPSILON = ${ constants.TRI_INTERSECT_EPSILON };
 		var result: ${ intersectionResultStruct };
 		result.didHit = false;
 
@@ -132,9 +133,10 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 	// TODO: reduce the redundancy between these functions - possibly using code snippets or
 	// macro-expansion-style mechanisms?
 
+	const { BVH_STACK_DEPTH, INFINITY } = constants;
 	const geometryRaycastFirstHitFn = wgslTagFn/* wgsl */`
 		// includes
-		${ [ rayStruct, bvhNodeStruct, constants, structs.attributes ] }
+		${ [ rayStruct, bvhNodeStruct, structs.attributes ] }
 
 		// fn
 		fn ${ prefix }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
@@ -144,12 +146,12 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 			bestHit.dist = bestDist;
 
 			var pointer: i32 = 0;
-			var stack: array<u32, BVH_STACK_DEPTH>;
+			var stack: array<u32, ${ BVH_STACK_DEPTH }>;
 			stack[ 0 ] = rootNodeIndex;
 
 			loop {
 
-				if ( pointer < 0 || pointer >= i32( BVH_STACK_DEPTH ) ) {
+				if ( pointer < 0 || pointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
 
 					break;
 
@@ -230,15 +232,15 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
 			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
-			bestHit.dist = INFINITY;
+			bestHit.dist = ${ INFINITY };
 
 			var tlasPointer: i32 = 0;
-			var tlasStack: array<u32, BVH_STACK_DEPTH>;
+			var tlasStack: array<u32, ${ BVH_STACK_DEPTH }>;
 			tlasStack[ 0 ] = 0u;
 
 			loop {
 
-				if ( tlasPointer < 0 || tlasPointer >= i32( BVH_STACK_DEPTH ) ) {
+				if ( tlasPointer < 0 || tlasPointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
 
 					break;
 
@@ -449,7 +451,7 @@ export class BVHComputeData {
 		//
 
 		// set up the storage buffers
-		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), 'BVHNode' ).toReadOnly().setName( `${ prefix }nodes` );
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), bvhNodeStruct.name ).toReadOnly().setName( `${ prefix }nodes` );
 		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform.name ).toReadOnly().setName( `${ prefix }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ prefix }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct.name ).toReadOnly().setName( `${ prefix }attributes` );
