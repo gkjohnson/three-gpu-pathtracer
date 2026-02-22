@@ -127,8 +127,6 @@ const intersectsTriangle = wgslFnTag/* wgsl */ `
 
 function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
-
-
 	const geometryRaycastFirstHitFn = wgslFnTag/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, structs.attributes ] }
@@ -218,7 +216,7 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 		}
 	`;
 
-	return wgslFnTag /* wgsl */`
+	return wgslFnTag/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, transformStruct ] }
 
@@ -656,6 +654,7 @@ export class BVHComputeData {
 
 	writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer ) {
 
+		const { structs } = this;
 		const transformBufferF32 = new Float32Array( targetBuffer );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 
@@ -673,12 +672,12 @@ export class BVHComputeData {
 		}
 
 		_matrix.premultiply( premultiplyMatrix );
-		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.getLength() );
+		_matrix.toArray( transformBufferF32, writeOffset * structs.transform.getLength() );
 
 		_matrix.invert();
-		_matrix.toArray( transformBufferF32, writeOffset * transformStruct.getLength() + 16 );
+		_matrix.toArray( transformBufferF32, writeOffset * structs.transform.getLength() + 16 );
 
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 32 ] = bvhNodeOffsets[ root ];
+		transformBufferU32[ writeOffset * structs.transform.getLength() + 32 ] = bvhNodeOffsets[ root ];
 
 	}
 
