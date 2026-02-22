@@ -78,11 +78,8 @@ const intersectionResultStruct = new StructTypeNode( {
 }, 'IntersectionResult' );
 
 const intersectsTriangle = wgslTagFn/* wgsl */ `
-	// includes
-	${ [ rayStruct ] }
-
 	// fn
-	fn intersectsTriangle( ray: Ray, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
+	fn intersectsTriangle( ray: ${ rayStruct }, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
 		var TRI_INTERSECT_EPSILON = ${ constants.TRI_INTERSECT_EPSILON };
 		var result: ${ intersectionResultStruct };
@@ -136,10 +133,10 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 	const { BVH_STACK_DEPTH, INFINITY } = constants;
 	const geometryRaycastFirstHitFn = wgslTagFn/* wgsl */`
 		// includes
-		${ [ rayStruct, bvhNodeStruct, structs.attributes ] }
+		${ [ bvhNodeStruct, structs.attributes ] }
 
 		// fn
-		fn ${ prefix }RaycastFirstHit_blas( ray: Ray, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+		fn ${ prefix }RaycastFirstHit_blas( ray: ${ rayStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
 
 			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
