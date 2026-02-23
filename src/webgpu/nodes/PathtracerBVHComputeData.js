@@ -1,5 +1,5 @@
 import { BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { BVHComputeData } from './BVHComputeData.js';
+import { BVHComputeData } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 

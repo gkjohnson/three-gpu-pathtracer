@@ -5,7 +5,7 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
-import { PathtracerBVHComputeData } from './lib/PathtracerBVHComputeData.js';
+import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
