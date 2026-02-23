@@ -8,7 +8,7 @@ import { proxy } from '../lib/nodes/NodeProxy.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( name = 'bvh_' ) {
+	constructor() {
 
 		const parameters = {
 			bvhData: { value: null },
@@ -82,15 +82,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
-					let hitResult = ${ name }RaycastFirstHit( ray );
+					let hitResult = bvh_RaycastFirstHit( ray );
 					if ( hitResult.didHit ) {
 
-						let vertexData = ${ name }sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
+						let vertexData = bvh_sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
 						let hitPosition = ray.origin + ray.direction * hitResult.dist;
 						let scatterRec = bsdfEval( normalize( vertexData.normal.xyz ), - ray.direction );
 
-						let transform = ${ name }transforms.value[ hitResult.objectIndex ];
-						let material = ${ name }materials.value[ transform.materialIndex ];
+						let transform = bvh_transforms.value[ hitResult.objectIndex ];
+						let material = bvh_materials.value[ transform.materialIndex ];
 
 						// white diffuse surface
 						throughputColor *= material.albedo * scatterRec.value / scatterRec.pdf;
@@ -120,6 +120,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		`, [
 			proxy( 'bvhData.value.storage.materials', parameters ),
 			proxy( 'bvhData.value.structs.material', parameters ),
+			proxy( 'bvhData.value.structs.transform', parameters ),
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			ndcToCameraRay, pcgRand3, pcgInit, lambertBsdfFunc,

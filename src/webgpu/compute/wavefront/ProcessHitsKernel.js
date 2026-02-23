@@ -1,7 +1,6 @@
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { constants } from '../../lib/wgsl/common.wgsl.js';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
@@ -9,7 +8,7 @@ import { proxy } from '../../lib/nodes/NodeProxy.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor( name = 'bvh_' ) {
+	constructor() {
 
 		const parameters = {
 			bvhData: { value: null },
@@ -72,9 +71,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				pcgInitialize( indexUV, seed );
 
-				let object = ${ name }transforms.value[ input.objectIndex ];
-				let material = ${ name }materials.value[ object.materialIndex ];
-				var vertexData = ${ name }sampleTrianglePoint( input.barycoord, input.indices.xyz );
+				let object = bvh_transforms.value[ input.objectIndex ];
+				let material = bvh_materials.value[ object.materialIndex ];
+				var vertexData = bvh_sampleTrianglePoint( input.barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 

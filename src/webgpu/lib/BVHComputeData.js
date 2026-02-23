@@ -1,6 +1,6 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage, storageBarrier } from 'three/tsl';
+import { storage } from 'three/tsl';
 import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
@@ -505,8 +505,6 @@ export class BVHComputeData {
 
 				}
 
-				writeOffset += dereferencedIndex.length;
-
 			} else if ( geometry.index ) {
 
 				for ( let i = 0; i < count; i ++ ) {
@@ -515,8 +513,6 @@ export class BVHComputeData {
 
 				}
 
-				writeOffset += count;
-
 			} else {
 
 				for ( let i = 0; i < count; i ++ ) {
@@ -524,8 +520,6 @@ export class BVHComputeData {
 					target[ i + writeOffset ] = i + start + valueOffset;
 
 				}
-
-				writeOffset += count;
 
 			}
 

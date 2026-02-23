@@ -7,7 +7,7 @@ import { proxy } from '../../lib/nodes/NodeProxy.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
-	constructor( name = 'bvh_' ) {
+	constructor() {
 
 		const parameters = {
 			bvhData: { value: null },
@@ -63,7 +63,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// run intersection
-				let hitResult = ${ name }RaycastFirstHit( input.ray );
+				let hitResult = bvh_RaycastFirstHit( input.ray );
 				if ( hitResult.didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
