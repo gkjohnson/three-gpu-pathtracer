@@ -9,7 +9,7 @@ import {
 	rayStruct,
 	bvhNodeStruct,
 } from './wgsl/structs.wgsl.js';
-import { wgslTagFn } from './nodes/WGSLTagFnNode.js';
+import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 
 const BYTES_PER_NODE = 6 * 4 + 4 + 4;
 const UINT32_PER_NODE = BYTES_PER_NODE / 4;
@@ -127,17 +127,11 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 
 function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
-	// TODO: reduce the redundancy between these functions - possibly using code snippets or
-	// macro-expansion-style mechanisms?
-
 	const { BVH_STACK_DEPTH, INFINITY } = constants;
-	const geometryRaycastFirstHitFn = wgslTagFn/* wgsl */`
-		// includes
-		${ [ bvhNodeStruct, structs.attributes ] }
+	const getFnBody = leafSnippet => {
 
-		// fn
-		fn ${ prefix }RaycastFirstHit_blas( ray: ${ rayStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
-
+		// returns a function with a snippet inserted for the leaf intersection test
+		return wgslTagCode/* wgsl */`
 			var bestHit: ${ intersectionResultStruct };
 			bestHit.didHit = false;
 			bestHit.dist = bestDist;
@@ -171,29 +165,7 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 
 				if ( isLeaf ) {
 
-					let triCount = infoX & 0x0000ffffu;
-					let triOffset = infoY;
-
-					for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
-
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
-
-						var triResult = ${ intersectsTriangle }( ray, a, b, c );
-
-						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
-
-							bestHit = triResult;
-							bestHit.indices = vec4u( i0, i1, i2, ti );
-
-						}
-
-					}
+					${ leafSnippet }
 
 				} else {
 
@@ -216,98 +188,91 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 			}
 
 			return bestHit;
+		`;
+
+	};
+
+	const blasFn = wgslTagFn/* wgsl */`
+		// includes
+		${ [ bvhNodeStruct, structs.attributes ] }
+
+		// fn
+		fn ${ prefix }RaycastFirstHit_blas( ray: ${ rayStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+
+			${ getFnBody( wgslTagCode/* wgsl */`
+
+				let triCount = infoX & 0x0000ffffu;
+				let triOffset = infoY;
+
+				for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
+
+					let i0 = ${ storage.index }[ ti * 3u ];
+					let i1 = ${ storage.index }[ ti * 3u + 1u ];
+					let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+					let a = ${ storage.attributes }[ i0 ].position.xyz;
+					let b = ${ storage.attributes }[ i1 ].position.xyz;
+					let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+					var triResult = ${ intersectsTriangle }( ray, a, b, c );
+
+					if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+
+						bestHit = triResult;
+						bestHit.indices = vec4u( i0, i1, i2, ti );
+
+					}
+
+				}
+
+			` ) }
 
 		}
 	`;
 
-	return wgslTagFn/* wgsl */`
+	const tlasFn = wgslTagFn/* wgsl */`
 		// includes
 		${ [ rayStruct, bvhNodeStruct, constants, structs.transform ] }
 
 		// fn
 		fn ${ prefix }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
 
-			var bestHit: ${ intersectionResultStruct };
-			bestHit.didHit = false;
-			bestHit.dist = ${ INFINITY };
+			let bestDist = ${ INFINITY };
+			let rootNodeIndex = 0u;
 
-			var tlasPointer: i32 = 0;
-			var tlasStack: array<u32, ${ BVH_STACK_DEPTH }>;
-			tlasStack[ 0 ] = 0u;
+			${ getFnBody( wgslTagCode/* wgsl */`
 
-			loop {
+				let count = infoX & 0x0000ffffu;
+				let offset = infoY;
 
-				if ( tlasPointer < 0 || tlasPointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
+				for ( var t = offset; t < offset + count; t = t + 1u ) {
 
-					break;
+					let transform = ${ storage.transforms }[ t ];
 
-				}
+					// Transform ray into object local space
+					var localRay: Ray;
+					localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
+					localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
 
-				let currNodeIndex = tlasStack[ tlasPointer ];
-				let node = ${ storage.nodes }[ currNodeIndex ];
-				tlasPointer = tlasPointer - 1;
+					let blasHit = ${ blasFn( { ray: 'localRay', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
+					if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
-				var boundsHitDist: f32 = 0.0;
-				if ( ! ${ intersectsBounds }( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+						bestHit = blasHit;
+						bestHit.objectIndex = t;
 
-					continue;
-
-				}
-
-				let infoX = node.splitAxisOrTriangleCount;
-				let infoY = node.rightChildOrTriangleOffset;
-				let isLeaf = ( infoX & 0xffff0000u ) != 0u;
-
-				if ( isLeaf ) {
-
-					let count = infoX & 0x0000ffffu;
-					let offset = infoY;
-
-					for ( var t = offset; t < offset + count; t = t + 1u ) {
-
-						let transform = ${ storage.transforms }[ t ];
-
-						// Transform ray into object local space
-						var localRay: Ray;
-						localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
-						localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
-
-						let blasHit = ${ geometryRaycastFirstHitFn( { ray: 'localRay', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
-						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
-
-							bestHit = blasHit;
-							bestHit.objectIndex = t;
-
-							// Transform normal to world space: normal matrix = transpose( inverse )
-							bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
-
-						}
+						// Transform normal to world space: normal matrix = transpose( inverse )
+						bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
 
 					}
 
-				} else {
-
-					let leftIndex = currNodeIndex + 1u;
-					let splitAxis = infoX & 0x0000ffffu;
-					let rightIndex = currNodeIndex + infoY;
-
-					let leftToRight = ray.direction[ splitAxis ] >= 0.0;
-					let c1 = select( rightIndex, leftIndex, leftToRight );
-					let c2 = select( leftIndex, rightIndex, leftToRight );
-
-					tlasPointer = tlasPointer + 1;
-					tlasStack[ tlasPointer ] = c2;
-
-					tlasPointer = tlasPointer + 1;
-					tlasStack[ tlasPointer ] = c1;
-
 				}
 
-			}
+			` ) }
 
-			return bestHit;
+		}
+	`;
 
-		}`;
+	return tlasFn;
 
 }
 
