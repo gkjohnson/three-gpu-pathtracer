@@ -691,7 +691,8 @@ export class BVHComputeData {
 
 		if ( object.isInstancedMesh || object.isBatchedMesh ) {
 
-			object.getMatrixAt( instanceId, _matrix ).premultiply( object.matrixWorld );
+			object.getMatrixAt( instanceId, _matrix );
+			_matrix.premultiply( object.matrixWorld );
 
 		} else {
 
