@@ -16,10 +16,12 @@ const materialStruct = new StructTypeNode( {
 	albedo: 'vec3f',
 }, 'MaterialStruct' );
 
+// Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
 
 	constructor( bvh, options = {} ) {
 
+		// TODO: once supported we should use the appropriately-sized member sizes
 		super( bvh, {
 			attributes: {
 				position: 'vec4f',
@@ -40,6 +42,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		super.update();
 
+		// build material storage
 		const { materials, structs, prefix: name } = this;
 		const materialBuffer = new ArrayBuffer( structs.material.getLength() * materials.length * 4 );
 		const materialBufferF32 = new Float32Array( materialBuffer );
@@ -61,6 +64,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
 
+		// write material data to the transforms
 		const { materials } = this;
 		const material = info.object.material;
 		if ( ! materials.includes( material ) ) {
@@ -87,6 +91,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		} else if ( bvh.indirect ) {
 
+			// "indirect" bvhs are not supported since they cannot be unpacked in a way tht will allow for coherent material indices
 			const proxyGeometry = new BufferGeometry();
 			proxyGeometry.attributes = bvh.geometry.attributes;
 
