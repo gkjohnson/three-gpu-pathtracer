@@ -15,11 +15,6 @@ import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 // TODO: add material support w/ function to easily update material
 // 		- add a callback for writing a property for a geometry to a range
 // TODO: add skinned mesh bvh support
-// TODO: see if we can reference wgslFn names directly rather than constructing them inline over and over
-// and / or use local variable definitions for the pointers to clean up the code
-// TODO: see if there's a "build" step that can be leveraged for nodes to make integration more simple
-// TODO: allow for "slotting" a new type of callback (eg distance, etc) so multiple types of queries can be made
-// 		- add a "shapecast" style function with functions and return types that can be slotted in
 
 // temporary shim so StructTypeNodes can be passed to storage functions
 Object.defineProperty( StructTypeNode.prototype, 'layout', {
@@ -316,6 +311,141 @@ export class BVHComputeData {
 		this.fns = {
 			raycastFirstHit: null,
 		};
+
+	}
+
+	getShapecastFn( options ) {
+
+		const {
+			name,
+			shapeStruct,
+			resultStruct,
+
+			boundsOrderFn,
+			intersectsBoundsFn,
+			intersectRangeFn,
+			transformShapeFn,
+			transformResultFn,
+		} = options;
+
+		const { BVH_STACK_DEPTH, INFINITY } = constants;
+		const getFnBody = leafSnippet => {
+
+			// returns a function with a snippet inserted for the leaf intersection test
+			return wgslTagCode/* wgsl */`
+				var bestHit: ${ resultStruct };
+				bestHit.didHit = false;
+				bestHit.dist = bestDist;
+
+				var pointer: i32 = 0;
+				var stack: array<u32, ${ BVH_STACK_DEPTH }>;
+				stack[ 0 ] = rootNodeIndex;
+
+				loop {
+
+					if ( pointer < 0 || pointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
+
+						break;
+
+					}
+
+					let nodeIndex = stack[ pointer ];
+					let node = ${ storage.nodes }[ nodeIndex ];
+					pointer = pointer - 1;
+
+					var boundsHitDist: f32 = 0.0;
+					if ( ! ${ intersectsBoundsFn }( shape, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+
+						continue;
+
+					}
+
+					let infoX = node.splitAxisOrTriangleCount;
+					let infoY = node.rightChildOrTriangleOffset;
+					let isLeaf = ( infoX & 0xffff0000u ) != 0u;
+
+					if ( isLeaf ) {
+
+						let count = infoX & 0x0000ffffu;
+						let offset = infoY;
+						${ leafSnippet }
+
+					} else {
+
+						let leftIndex = nodeIndex + 1u;
+						let splitAxis = infoX & 0x0000ffffu;
+						let rightIndex = nodeIndex + infoY;
+
+						let leftToRight = ${ boundsOrderFn }( splitAxis, node );
+						let c1 = select( rightIndex, leftIndex, leftToRight );
+						let c2 = select( leftIndex, rightIndex, leftToRight );
+
+						pointer = pointer + 1;
+						stack[ pointer ] = c2;
+
+						pointer = pointer + 1;
+						stack[ pointer ] = c1;
+
+					}
+
+				}
+
+				return bestHit;
+			`;
+
+		};
+
+		const blasFn = wgslTagFn/* wgsl */`
+			// fn
+			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ resultStruct } {
+
+				${ getFnBody( wgslTagCode/* wgsl */`
+
+					let result = ${ intersectRangeFn( { offset: 'offset', count: 'count' } ) }
+					if ( result.didHit && result.dist < bestHit.dist ) {
+
+						bestHit = result;
+
+					}
+
+				` ) }
+
+			}
+		`;
+
+		const tlasFn = wgslTagFn/* wgsl */`
+			// fn
+			fn ${ name }( shape: ${ shapeStruct } ) -> ${ resultStruct } {
+
+				let bestDist = ${ INFINITY };
+				let rootNodeIndex = 0u;
+
+				${ getFnBody( wgslTagCode/* wgsl */`
+
+					for ( var t = offset; t < offset + count; t = t + 1u ) {
+
+						let transform = ${ storage.transforms }[ t ];
+
+						// Transform shape into object local space
+						let localShape = ${ transformShapeFn }( shape, transform );
+						let blasHit = ${ blasFn( { shape: 'localShape', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
+						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
+
+							bestHit = blasHit;
+							bestHit.objectIndex = t;
+
+							${ transformResultFn }( &bestHit, transform.inverseMatrixWorld );
+
+						}
+
+					}
+
+				` ) }
+
+			}
+		`;
+
+		return tlasFn;
 
 	}
 
