@@ -1,4 +1,4 @@
-import { FunctionNode, Node } from 'three/webgpu';
+import { CodeNode, FunctionNode, Node } from 'three/webgpu';
 
 // minimal node that outputs a raw WGSL expression verbatim when built
 class LiteralExpression extends Node {
@@ -77,6 +77,83 @@ function getIncludeNode( arg ) {
 
 }
 
+// extract dependency nodes from template args for include registration
+function extractIncludes( args ) {
+
+	const includes = [];
+	for ( const arg of args ) {
+
+		if ( Array.isArray( arg ) ) {
+
+			for ( const element of arg ) {
+
+				const node = getIncludeNode( element );
+				if ( node ) includes.push( node );
+
+			}
+
+		} else {
+
+			const node = getIncludeNode( arg );
+			if ( node ) includes.push( node );
+
+		}
+
+	}
+
+	return includes;
+
+}
+
+// normalize args so generate can resolve them uniformly with build():
+// - callable wrappers > PropertyRefNode (emits just the function name)
+// - struct callables > StructTypeNode (emits the type name via build)
+// - FunctionCallNodes > InlineCallNode (emits inline call)
+function normalizeArgs( args ) {
+
+	return args.map( arg => {
+
+		if ( typeof arg === 'function' && arg.functionNode ) return new PropertyRefNode( arg.functionNode );
+		if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
+		if ( arg && arg.isNode && arg.functionNode ) return new InlineCallNode( arg );
+		return arg;
+
+	} );
+
+}
+
+// interleave static tokens with resolved arg values
+function assembleTemplate( tokens, args, builder ) {
+
+	let code = '';
+	for ( let i = 0, l = tokens.length; i < l; i ++ ) {
+
+		code += tokens[ i ];
+		if ( i < args.length ) {
+
+			const arg = args[ i ];
+			if ( Array.isArray( arg ) ) {
+
+				// include array — no text output
+
+			} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
+
+				code += String( arg );
+
+			} else {
+
+				code += arg.build( builder );
+
+			}
+
+		}
+
+	}
+
+	return code;
+
+}
+
 export class WGSLTagFnNode extends FunctionNode {
 
 	static get type() {
@@ -87,45 +164,10 @@ export class WGSLTagFnNode extends FunctionNode {
 
 	constructor( tokens, args, lang = 'wgsl' ) {
 
-		// assemble all the nodes needed for includes
-		const includes = [];
-		for ( const arg of args ) {
-
-			if ( Array.isArray( arg ) ) {
-
-				for ( const element of arg ) {
-
-					const node = getIncludeNode( element );
-					if ( node ) includes.push( node );
-
-				}
-
-			} else {
-
-				const node = getIncludeNode( arg );
-				if ( node ) includes.push( node );
-
-			}
-
-		}
-
-		// normalize args so generate function can resolve them with build() later:
-		// - callable wrappers > PropertyRefNode (emits just the function name)
-		// - struct callables > StructTypeNode (emits the type name via build)
-		// - FunctionCallNodes > InlineCallNode (emits inline call)
-		const normalizedArgs = args.map( arg => {
-
-			if ( typeof arg === 'function' && arg.functionNode ) return new PropertyRefNode( arg.functionNode );
-			if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
-			if ( arg && arg.isNode && arg.functionNode ) return new InlineCallNode( arg );
-			return arg;
-
-		} );
-
-		super( '', includes, lang );
+		super( '', extractIncludes( args ), lang );
 
 		this.tokens = tokens;
-		this.args = normalizedArgs;
+		this.args = normalizeArgs( args );
 
 	}
 
@@ -192,40 +234,13 @@ export class WGSLTagFnNode extends FunctionNode {
 	// get the code for the function
 	generate( builder, output ) {
 
-		const { tokens, args } = this;
-
-		// rebuild the function body again because we can call "build", now
 		const result = super.generate( builder, output );
-		let fullCode = '';
-		for ( let i = 0, l = tokens.length; i < l; i ++ ) {
-
-			fullCode += tokens[ i ];
-			if ( i < args.length ) {
-
-				const arg = args[ i ];
-				if ( Array.isArray( arg ) ) {
-
-					// include array — no text output
-
-				} else if ( typeof arg === 'string' || typeof arg === 'number' ) {
-
-					fullCode += String( arg );
-
-				} else {
-
-					fullCode += arg.build( builder );
-
-				}
-
-			}
-
-		}
+		const fullCode = assembleTemplate( this.tokens, this.args, builder );
 
 		const { type } = this.getNodeFunction( builder );
 		const nodeCode = builder.getCodeFromNode( this, type );
 
-		fullCode = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).replace( /\s+/g, ' ' ).trim();
-		nodeCode.code = fullCode;
+		nodeCode.code = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).replace( /\s+/g, ' ' ).trim();
 
 		return result;
 
@@ -233,8 +248,40 @@ export class WGSLTagFnNode extends FunctionNode {
 
 }
 
-// template tag literal function version of "wgslFn" so easy interpolation of TSL nodes
-// TODO: add a raw "wgsl" version for code snippets
+export class WGSLTagCodeNode extends CodeNode {
+
+	static get type() {
+
+		return 'WGSLTagCodeNode';
+
+	}
+
+	constructor( tokens, args, lang = 'wgsl' ) {
+
+		super( '', extractIncludes( args ), lang );
+
+		this.tokens = tokens;
+		this.args = normalizeArgs( args );
+
+	}
+
+	generate( builder ) {
+
+		// build includes so dependencies are registered before the parent code block
+		const includes = this.getIncludes( builder );
+		for ( const include of includes ) {
+
+			include.build( builder );
+
+		}
+
+		return assembleTemplate( this.tokens, this.args, builder );
+
+	}
+
+}
+
+// template tag literal function version of "wgslFn" for easy interpolation of TSL nodes
 export const wgslTagFn = ( tokens, ...args ) => {
 
 	const functionNode = new WGSLTagFnNode( tokens, args );
@@ -267,3 +314,6 @@ export const wgslTagFn = ( tokens, ...args ) => {
 	return fn;
 
 };
+
+// template tag literal for reusable WGSL code snippets with dependency resolution
+export const wgslTagCode = ( tokens, ...args ) => new WGSLTagCodeNode( tokens, args );
