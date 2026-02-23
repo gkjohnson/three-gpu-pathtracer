@@ -11,10 +11,6 @@ import {
 } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 
-const BYTES_PER_NODE = 6 * 4 + 4 + 4;
-const UINT32_PER_NODE = BYTES_PER_NODE / 4;
-const IS_LEAFNODE_FLAG = 0xFFFF;
-
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
 // 		- add a callback for writing a property for a geometry to a range
@@ -25,11 +21,54 @@ const IS_LEAFNODE_FLAG = 0xFFFF;
 // TODO: allow for "slotting" a new type of callback (eg distance, etc) so multiple types of queries can be made
 // 		- add a "shapecast" style function with functions and return types that can be slotted in
 
+// temporary shim so StructTypeNodes can be passed to storage functions
+Object.defineProperty( StructTypeNode.prototype, 'layout', {
+
+	get() {
+
+		return this;
+
+	}
+
+} );
+StructTypeNode.prototype.isStruct = true;
+
+//
+
+// structs
+const transformStruct = new StructTypeNode( {
+	matrixWorld: 'mat4x4f',
+	inverseMatrixWorld: 'mat4x4f',
+	nodeOffset: 'uint',
+	_alignment0: 'uint',
+	_alignment1: 'uint',
+	_alignment2: 'uint',
+}, 'TransformStruct' );
+
+const intersectionResultStruct = new StructTypeNode( {
+	indices: 'vec4u',
+	normal: 'vec3f',
+	didHit: 'bool',
+	barycoord: 'vec3f',
+	objectIndex: 'uint',
+	side: 'float',
+	dist: 'float',
+}, 'IntersectionResult' );
+
+//
+
+// node constants
+const BYTES_PER_NODE = 6 * 4 + 4 + 4;
+const UINT32_PER_NODE = BYTES_PER_NODE / 4;
+const IS_LEAFNODE_FLAG = 0xFFFF;
+
+// scratch
 const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 
+// functions
 function dereferenceIndex( indexAttr, indirectBuffer ) {
 
 	const indexArray = indexAttr ? indexAttr.array : null;
@@ -55,27 +94,6 @@ function getTotalBVHByteLength( bvh ) {
 	return bvh._roots.reduce( ( v, root ) => v + root.byteLength, 0 );
 
 }
-
-// stride is 36 floats (144 bytes) to match WGSL struct alignment:
-// mat4x4f (64) + mat4x4f (64) + u32 (4) + 12 bytes padding to align to 16
-const transformStruct = new StructTypeNode( {
-	matrixWorld: 'mat4x4f',
-	inverseMatrixWorld: 'mat4x4f',
-	nodeOffset: 'uint',
-	_alignment0: 'uint',
-	_alignment1: 'uint',
-	_alignment2: 'uint',
-}, 'TransformStruct' );
-
-const intersectionResultStruct = new StructTypeNode( {
-	indices: 'vec4u',
-	normal: 'vec3f',
-	didHit: 'bool',
-	barycoord: 'vec3f',
-	objectIndex: 'uint',
-	side: 'float',
-	dist: 'float',
-}, 'IntersectionResult' );
 
 const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// fn
@@ -125,7 +143,7 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 	}
 `;
 
-function buildRaycastFirstHitFn( prefix, storage, structs ) {
+function buildRaycastFirstHitFn( prefix, storage ) {
 
 	const { BVH_STACK_DEPTH, INFINITY } = constants;
 	const getFnBody = leafSnippet => {
@@ -193,9 +211,6 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 	};
 
 	const blasFn = wgslTagFn/* wgsl */`
-		// includes
-		${ [ bvhNodeStruct, structs.attributes ] }
-
 		// fn
 		fn ${ prefix }RaycastFirstHit_blas( ray: ${ rayStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
 
@@ -231,9 +246,6 @@ function buildRaycastFirstHitFn( prefix, storage, structs ) {
 	`;
 
 	const tlasFn = wgslTagFn/* wgsl */`
-		// includes
-		${ [ rayStruct, bvhNodeStruct, constants, structs.transform ] }
-
 		// fn
 		fn ${ prefix }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
 
@@ -413,10 +425,10 @@ export class BVHComputeData {
 		//
 
 		// set up the storage buffers
-		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), bvhNodeStruct.name ).toReadOnly().setName( `${ prefix }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform.name ).toReadOnly().setName( `${ prefix }transforms` );
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), bvhNodeStruct ).toReadOnly().setName( `${ prefix }nodes` );
+		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform ).toReadOnly().setName( `${ prefix }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ prefix }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct.name ).toReadOnly().setName( `${ prefix }attributes` );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct ).toReadOnly().setName( `${ prefix }attributes` );
 
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
