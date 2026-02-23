@@ -29,9 +29,9 @@ export const ndcToCameraRay = wgslFn( /* wgsl*/`
 	}
 `, [ rayStruct ] );
 
-export const intersectsBounds = wgslFn( /* wgsl */`
+export const rayIntersectsBounds = wgslFn( /* wgsl */`
 
-	fn intersectsBounds(
+	fn rayIntersectsBounds(
 		ray: Ray,
 		bounds: BVHBoundingBox,
 		dist: ptr<function, f32>

@@ -1,14 +1,8 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage } from 'three/tsl';
-import {
-	intersectsBounds,
-	constants,
-} from './wgsl/common.wgsl.js';
-import {
-	rayStruct,
-	bvhNodeStruct,
-} from './wgsl/structs.wgsl.js';
+import { storage, storageBarrier } from 'three/tsl';
+import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
+import { rayStruct, bvhNodeStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
@@ -16,7 +10,8 @@ import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 // 		- add a callback for writing a property for a geometry to a range
 // TODO: add skinned mesh bvh support
 
-// temporary shim so StructTypeNodes can be passed to storage functions
+// temporary shim so StructTypeNodes can be passed to storage functions until
+// this is fixed in three.js
 Object.defineProperty( StructTypeNode.prototype, 'layout', {
 
 	get() {
@@ -138,151 +133,6 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 	}
 `;
 
-function buildRaycastFirstHitFn( prefix, storage ) {
-
-	const { BVH_STACK_DEPTH, INFINITY } = constants;
-	const getFnBody = leafSnippet => {
-
-		// returns a function with a snippet inserted for the leaf intersection test
-		return wgslTagCode/* wgsl */`
-			var bestHit: ${ intersectionResultStruct };
-			bestHit.didHit = false;
-			bestHit.dist = bestDist;
-
-			var pointer: i32 = 0;
-			var stack: array<u32, ${ BVH_STACK_DEPTH }>;
-			stack[ 0 ] = rootNodeIndex;
-
-			loop {
-
-				if ( pointer < 0 || pointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
-
-					break;
-
-				}
-
-				let nodeIndex = stack[ pointer ];
-				let node = ${ storage.nodes }[ nodeIndex ];
-				pointer = pointer - 1;
-
-				var boundsHitDist: f32 = 0.0;
-				if ( ! ${ intersectsBounds }( ray, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
-
-					continue;
-
-				}
-
-				let infoX = node.splitAxisOrTriangleCount;
-				let infoY = node.rightChildOrTriangleOffset;
-				let isLeaf = ( infoX & 0xffff0000u ) != 0u;
-
-				if ( isLeaf ) {
-
-					${ leafSnippet }
-
-				} else {
-
-					let leftIndex = nodeIndex + 1u;
-					let splitAxis = infoX & 0x0000ffffu;
-					let rightIndex = nodeIndex + infoY;
-
-					let leftToRight = ray.direction[ splitAxis ] >= 0.0;
-					let c1 = select( rightIndex, leftIndex, leftToRight );
-					let c2 = select( leftIndex, rightIndex, leftToRight );
-
-					pointer = pointer + 1;
-					stack[ pointer ] = c2;
-
-					pointer = pointer + 1;
-					stack[ pointer ] = c1;
-
-				}
-
-			}
-
-			return bestHit;
-		`;
-
-	};
-
-	const blasFn = wgslTagFn/* wgsl */`
-		// fn
-		fn ${ prefix }RaycastFirstHit_blas( ray: ${ rayStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
-
-			${ getFnBody( wgslTagCode/* wgsl */`
-
-				let triCount = infoX & 0x0000ffffu;
-				let triOffset = infoY;
-
-				for ( var ti = triOffset; ti < triOffset + triCount; ti = ti + 1u ) {
-
-					let i0 = ${ storage.index }[ ti * 3u ];
-					let i1 = ${ storage.index }[ ti * 3u + 1u ];
-					let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-					let a = ${ storage.attributes }[ i0 ].position.xyz;
-					let b = ${ storage.attributes }[ i1 ].position.xyz;
-					let c = ${ storage.attributes }[ i2 ].position.xyz;
-
-					var triResult = ${ intersectsTriangle }( ray, a, b, c );
-
-					if ( triResult.didHit && triResult.dist < bestHit.dist ) {
-
-						bestHit = triResult;
-						bestHit.indices = vec4u( i0, i1, i2, ti );
-
-					}
-
-				}
-
-			` ) }
-
-		}
-	`;
-
-	const tlasFn = wgslTagFn/* wgsl */`
-		// fn
-		fn ${ prefix }RaycastFirstHit( ray: Ray ) -> ${ intersectionResultStruct } {
-
-			let bestDist = ${ INFINITY };
-			let rootNodeIndex = 0u;
-
-			${ getFnBody( wgslTagCode/* wgsl */`
-
-				let count = infoX & 0x0000ffffu;
-				let offset = infoY;
-
-				for ( var t = offset; t < offset + count; t = t + 1u ) {
-
-					let transform = ${ storage.transforms }[ t ];
-
-					// Transform ray into object local space
-					var localRay: Ray;
-					localRay.origin = ( transform.inverseMatrixWorld * vec4f( ray.origin, 1.0 ) ).xyz;
-					localRay.direction = ( transform.inverseMatrixWorld * vec4f( ray.direction, 0.0 ) ).xyz;
-
-					let blasHit = ${ blasFn( { ray: 'localRay', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
-					if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
-
-						bestHit = blasHit;
-						bestHit.objectIndex = t;
-
-						// Transform normal to world space: normal matrix = transpose( inverse )
-						bestHit.normal = normalize( ( transpose( transform.inverseMatrixWorld ) * vec4f( bestHit.normal, 0.0 ) ).xyz );
-
-					}
-
-				}
-
-			` ) }
-
-		}
-	`;
-
-	return tlasFn;
-
-}
-
 export class BVHComputeData {
 
 	constructor( bvh, options = {} ) {
@@ -328,6 +178,7 @@ export class BVHComputeData {
 			transformResultFn,
 		} = options;
 
+		const { storage } = this;
 		const { BVH_STACK_DEPTH, INFINITY } = constants;
 		const getFnBody = leafSnippet => {
 
@@ -376,7 +227,7 @@ export class BVHComputeData {
 						let splitAxis = infoX & 0x0000ffffu;
 						let rightIndex = nodeIndex + infoY;
 
-						let leftToRight = ${ boundsOrderFn }( splitAxis, node );
+						let leftToRight = ${ boundsOrderFn }( shape, splitAxis, node );
 						let c1 = select( rightIndex, leftIndex, leftToRight );
 						let c2 = select( leftIndex, rightIndex, leftToRight );
 
@@ -401,7 +252,7 @@ export class BVHComputeData {
 
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					let result = ${ intersectRangeFn( { offset: 'offset', count: 'count' } ) }
+					let result = ${ intersectRangeFn }( shape, offset, count, bestDist );
 					if ( result.didHit && result.dist < bestHit.dist ) {
 
 						bestHit = result;
@@ -427,14 +278,14 @@ export class BVHComputeData {
 						let transform = ${ storage.transforms }[ t ];
 
 						// Transform shape into object local space
-						let localShape = ${ transformShapeFn }( shape, transform );
+						let localShape = ${ transformShapeFn }( shape, transform.inverseMatrixWorld );
 						let blasHit = ${ blasFn( { shape: 'localShape', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
 							bestHit = blasHit;
 							bestHit.objectIndex = t;
 
-							${ transformResultFn }( &bestHit, transform.inverseMatrixWorld );
+							${ transformResultFn }( &bestHit, transform.matrixWorld, transform.inverseMatrixWorld );
 
 						}
 
@@ -565,28 +416,8 @@ export class BVHComputeData {
 		this.storage.index = indexStorage;
 		this.storage.attributes = attributesStorage;
 		this.structs.attributes = attributeStruct;
-		this.fns.raycastFirstHit = buildRaycastFirstHitFn( prefix, this.storage, this.structs );
 
-		const interpolateBody = attributeStruct
-			.membersLayout
-			.map( ( { name } ) => {
-
-				return `result.${ name } = a0.${ name } * barycoord.x + a1.${ name } * barycoord.y + a2.${ name } * barycoord.z;`;
-
-			} ).join( '\n' );
-		this.fns.sampleTrianglePoint = wgslTagFn/* wgsl */`
-			// fn
-			fn ${ prefix }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ attributeStruct } {
-
-				var result: ${ attributeStruct };
-				var a0 = ${ attributesStorage }[ indices.x ];
-				var a1 = ${ attributesStorage }[ indices.y ];
-				var a2 = ${ attributesStorage }[ indices.z ];
-				${ interpolateBody }
-				return result;
-
-			}
-		`;
+		this._initFns();
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
@@ -760,6 +591,98 @@ export class BVHComputeData {
 			writeOffset += vertexCount;
 
 		}
+
+	}
+
+	_initFns() {
+
+		const { storage, structs, fns, prefix } = this;
+
+		// raycast first hit
+		fns.raycastFirstHit = this.getShapecastFn( {
+			name: prefix + 'RaycastFirstHit',
+			shapeStruct: rayStruct,
+			resultStruct: intersectionResultStruct,
+
+			boundsOrderFn: wgslTagFn/* wgsl */`
+				fn getBoundsOrder( ray: ${ rayStruct }, splitAxis: u32, node: ${ bvhNodeStruct } ) -> bool {
+
+					return ray.direction[ splitAxis ] >= 0.0;
+
+				}
+			`,
+			intersectsBoundsFn: rayIntersectsBounds,
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+
+					var bestHit: ${ intersectionResultStruct };
+					bestHit.didHit = false;
+					bestHit.dist = bestDist;
+
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectsTriangle }( ray, a, b, c );
+						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+
+							bestHit = triResult;
+							bestHit.indices = vec4u( i0, i1, i2, ti );
+
+						}
+
+					}
+
+					return bestHit;
+
+				}
+			`,
+			transformShapeFn: wgslTagFn/* wgsl */`
+				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f ) -> ${ rayStruct } {
+
+					var localRay: Ray;
+					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
+					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+					return localRay;
+
+				}
+			`,
+			transformResultFn: wgslTagFn/* wgsl */`
+				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, toWorld: mat4x4f, toLocal: mat4x4f ) -> void {
+
+					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+
+				}
+			`,
+		} );
+
+		const interpolateBody = structs
+			.attributes
+			.membersLayout
+			.map( ( { name } ) => {
+
+				return `result.${ name } = a0.${ name } * barycoord.x + a1.${ name } * barycoord.y + a2.${ name } * barycoord.z;`;
+
+			} ).join( '\n' );
+		fns.sampleTrianglePoint = wgslTagFn/* wgsl */`
+			// fn
+			fn ${ prefix }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ structs.attributes } {
+
+				var result: ${ structs.attributes };
+				var a0 = ${ storage.attributes }[ indices.x ];
+				var a1 = ${ storage.attributes }[ indices.y ];
+				var a2 = ${ storage.attributes }[ indices.z ];
+				${ interpolateBody }
+				return result;
+
+			}
+		`;
 
 	}
 
