@@ -1,5 +1,29 @@
 import { Node } from 'three/webgpu';
 
+class ProxyCallNode extends Node {
+
+	static get type() {
+
+		return 'ProxyCallNode';
+
+	}
+
+	constructor( proxyNode, params ) {
+
+		super();
+		this.proxyNode = proxyNode;
+		this.params = params;
+
+	}
+
+	setup() {
+
+		return this.proxyNode.node.call( ...this.params );
+
+	}
+
+}
+
 export class NodeProxy extends Node {
 
 	static get type() {
@@ -62,4 +86,11 @@ export class NodeProxy extends Node {
 
 }
 
-export const proxy = ( ...args ) => new NodeProxy( ...args );
+export const proxy = ( ...args ) => {
+
+	const nodeProxy = new NodeProxy( ...args );
+	const fn = ( ...params ) => new ProxyCallNode( nodeProxy, params );
+	fn.functionNode = nodeProxy;
+	return fn;
+
+};
