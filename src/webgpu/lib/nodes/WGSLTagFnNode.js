@@ -281,10 +281,7 @@ export class WGSLTagCodeNode extends CodeNode {
 
 }
 
-// template tag literal function version of "wgslFn" for easy interpolation of TSL nodes
-export const wgslTagFn = ( tokens, ...args ) => {
-
-	const functionNode = new WGSLTagFnNode( tokens, args );
+const getFn = functionNode => {
 
 	const fn = ( ...params ) => {
 
@@ -310,10 +307,15 @@ export const wgslTagFn = ( tokens, ...args ) => {
 	};
 
 	fn.functionNode = functionNode;
-
 	return fn;
 
 };
 
-// template tag literal for reusable WGSL code snippets with dependency resolution
+// template tag literal function version of "wgslFn" & "wgsl" to generate
+// functions & code snippets respectively
+export const wgslTagFn = ( tokens, ...args ) => getFn( new WGSLTagFnNode( tokens, args ) );
 export const wgslTagCode = ( tokens, ...args ) => new WGSLTagCodeNode( tokens, args );
+
+// glsl versions
+export const glslTagFn = ( tokens, ...args ) => getFn( new WGSLTagFnNode( tokens, args, 'glsl' ) );
+export const glslTagCode = ( tokens, ...args ) => new WGSLTagCodeNode( tokens, args, 'glsl' );
