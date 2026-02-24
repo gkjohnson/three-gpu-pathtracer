@@ -1,4 +1,4 @@
-import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock } from 'three/webgpu';
+import { DataTexture, Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock, LinearFilter } from 'three/webgpu';
 import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -38,6 +38,18 @@ export class WebGPUPathTracer {
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 		this._queueReset = false;
 		this._clock = new Clock();
+
+		this._envColorTexture = new DataTexture( );
+		this._envColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
+		this._envColorTexture.needsUpdate = true;
+		this._envColorTexture.minFilter = LinearFilter;
+		this._envColorTexture.magFilter = LinearFilter;
+
+		this._backgroundColorTexture = new DataTexture( );
+		this._backgroundColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
+		this._backgroundColorTexture.needsUpdate = true;
+		this._backgroundColorTexture.minFilter = LinearFilter;
+		this._backgroundColorTexture.magFilter = LinearFilter;
 
 		// options
 		this.renderScale = 1;
@@ -98,17 +110,18 @@ export class WebGPUPathTracer {
 
 		const pathTracer = this._pathTracer;
 
-		let environment = scene.environment;
-		if ( environment?.isCubeTexture ) {
+		const environment = convertToTexture( scene.environment, this._envColorTexture );
+		const background = convertToTexture( scene.background, this._backgroundColorTexture );
 
-			environment = new CubeToEquirectGenerator( this._renderer ).generate( scene.environment );
-
-		}
-
-		pathTracer.setEnvironment( environment,
-			scene.environment !== null ? ( scene.environmentIntensity ?? 1 ) : 0,
+		pathTracer.setEnvironment(
+			environment,
+			scene.environmentIntensity,
 			scene.environmentRotation,
-			scene.backgroundBlurriness ?? 0,
+
+			background,
+			scene.backgroundIntensity,
+			scene.backgroundRotation,
+			scene.backgroundBlurriness,
 		);
 
 		const newGeometryData = {};
@@ -247,5 +260,36 @@ function dereferenceIndex( geometry, indirectBuffer, target ) {
 		}
 
 	}
+
+}
+
+function convertToTexture( value, colorTexture ) {
+
+	if ( ! value ) {
+
+		for ( let i = 0; i < 3; i ++ ) {
+
+			colorTexture.image.data[ i ] = 0;
+
+		}
+
+		colorTexture.needsUpdate = true;
+		value = colorTexture;
+
+	} else if ( value.isColor ) {
+
+		colorTexture.image.data[ 0 ] = value.r * 255;
+		colorTexture.image.data[ 1 ] = value.g * 255;
+		colorTexture.image.data[ 2 ] = value.b * 255;
+		colorTexture.needsUpdate = true;
+		value = colorTexture;
+
+	} else if ( value?.isCubeTexture ) {
+
+		value = new CubeToEquirectGenerator( this._renderer ).generate( value );
+
+	}
+
+	return value;
 
 }

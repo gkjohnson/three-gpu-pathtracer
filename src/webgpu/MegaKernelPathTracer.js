@@ -141,20 +141,35 @@ export class MegaKernelPathTracer {
 
 	}
 
-	setEnvironment( environment, intensity, rotation, blur ) {
+	setEnvironment(
+		envMap,
+		envMapIntensity,
+		envMapRotation,
 
-		if ( environment !== null ) {
+		background,
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
 
-			this.envInfo.updateFrom( environment );
+		if ( envMap !== null ) {
+
+			this.envInfo.updateFrom( envMap );
 			this.kernel.envMap = this.envInfo.map;
 			this.kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
 
 		}
 
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( rotation ).invert();
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
 		this.kernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		this.kernel.envMapIntensity = intensity;
-		this.kernel.envMapBlur = blur;
+		this.kernel.envMapIntensity = envMapIntensity;
+
+		this.kernel.background = background;
+		this.kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+		this.kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		this.kernel.backgroundIntensity = backgroundIntensity;
+		this.kernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 

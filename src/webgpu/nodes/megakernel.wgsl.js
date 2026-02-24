@@ -30,7 +30,12 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		envMapSampler: sampler,
 		envMapRotation: mat3x3f,
 		envMapIntensity: f32,
-		envMapBlur: f32,
+
+		background: texture_2d<f32>,
+		backgroundSampler: sampler,
+		backgroundRotation: mat3x3f,
+		backgroundIntensity: f32,
+		backgroundBlur: f32,
 
 		// scene
 		geom_position: ptr<storage, array<vec3f>, read>,
@@ -42,10 +47,16 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		materials: ptr<storage, array<Material>, read>,
 
 	) -> void {
-		let env = EnvironmentInfo(
+		let envInfo = EnvironmentInfo(
 			envMapRotation,
 			envMapIntensity,
-			envMapBlur,
+			0.0 // blur,
+		);
+
+		let backgroundInfo = EnvironmentInfo(
+			backgroundRotation,
+			backgroundIntensity,
+			backgroundBlur,
 		);
 
 		// make sure we don't bleed over the edge of our tile
@@ -111,8 +122,18 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 			} else {
 
-				let background = sampleEnvironment( envMap, envMapSampler, env, ray.direction, pcgRand2() );
-				resultColor += background * throughputColor;
+				var light: vec3f;
+				if ( bounce > 0u ) {
+
+					light = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
+
+				} else {
+
+					light = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+
+				}
+
+				resultColor += light * throughputColor;
 				break;
 
 			}
