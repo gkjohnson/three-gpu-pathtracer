@@ -219,6 +219,7 @@ export class MegaKernelPathTracer {
 	dispose() {
 
 		// TODO: dispose of all buffers
+		this.envInfo.dispose();
 		this._task = null;
 
 	}

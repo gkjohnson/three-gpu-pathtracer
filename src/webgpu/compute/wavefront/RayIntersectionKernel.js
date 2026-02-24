@@ -4,7 +4,7 @@ import { texture, sampler, uniform, storage, wgslFn, textureStore, globalId } fr
 import { bvhIntersectFirstHit, constants } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgRand2, pcgInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
-import { sampleBackgroundFn } from '../../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -111,7 +111,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					let background = sampleBackground( envMap, envMapSampler, env, input.ray.direction, pcgRand2() );
+					let background = sampleEnvironment( envMap, envMapSampler, env, input.ray.direction, pcgRand2() );
 					let newColor = background * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
@@ -124,7 +124,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ sampleBackgroundFn, queuedRayStruct, bvhIntersectFirstHit, constants, pcgRand3, pcgRand2, pcgInit, queuedHitStruct ] );
+		`, [ sampleEnvironmentFn, queuedRayStruct, bvhIntersectFirstHit, constants, pcgRand3, pcgRand2, pcgInit, queuedHitStruct ] );
 
 		super( fn( parameters ) );
 

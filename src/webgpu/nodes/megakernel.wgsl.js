@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { ndcToCameraRay, bvhIntersectFirstHit, constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from './random.wgsl.js';
-import { sampleBackgroundFn, lambertBsdfFunc } from './sampling.wgsl.js';
+import { sampleEnvironmentFn, lambertBsdfFunc } from './sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from './structs.wgsl.js';
 
 export const megakernelShader = wgslFn( /* wgsl */`
@@ -111,7 +111,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 			} else {
 
-				let background = sampleBackground( envMap, envMapSampler, env, ray.direction, pcgRand2() );
+				let background = sampleEnvironment( envMap, envMapSampler, env, ray.direction, pcgRand2() );
 				resultColor += background * throughputColor;
 				break;
 
@@ -128,7 +128,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 
 	}
 `, [
-	sampleBackgroundFn,
+	sampleEnvironmentFn,
 	ndcToCameraRay,
 	bvhIntersectFirstHit,
 	constants,

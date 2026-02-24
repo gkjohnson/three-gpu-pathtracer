@@ -82,9 +82,9 @@ const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
-export const sampleBackgroundFn = wgslFn( /* wgsl */ `
+export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 
-	fn sampleBackground(
+	fn sampleEnvironment(
 		envMap: texture_2d<f32>,
 		envMapSampler: sampler,
 		env: EnvironmentInfo,
