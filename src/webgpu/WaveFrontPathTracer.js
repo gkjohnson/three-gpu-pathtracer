@@ -228,7 +228,11 @@ export class WaveFrontPathTracer {
 	setBVHData( bvhData ) {
 
 		this.rayIntersectionKernel.bvhData = bvhData;
+		this.rayIntersectionKernel.needsUpdate = true;
+
 		this.hitProcessKernel.bvhData = bvhData;
+		this.hitProcessKernel.needsUpdate = true;
+
 		this.reset();
 
 	}
