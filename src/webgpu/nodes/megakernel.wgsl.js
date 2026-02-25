@@ -35,7 +35,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		backgroundSampler: sampler,
 		backgroundRotation: mat3x3f,
 		backgroundIntensity: f32,
-		backgroundBlur: f32,
+		backgroundBlurriness: f32,
 
 		// scene
 		geom_position: ptr<storage, array<vec3f>, read>,
@@ -56,7 +56,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		let backgroundInfo = EnvironmentInfo(
 			backgroundRotation,
 			backgroundIntensity,
-			backgroundBlur,
+			backgroundBlurriness,
 		);
 
 		// make sure we don't bleed over the edge of our tile
@@ -84,6 +84,7 @@ export const megakernelShader = wgslFn( /* wgsl */`
 		// TODO: jittering the ray by [-1, 1] seems to look better but is larger than a pixel?
 		var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
 		var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
+		ray.direction = normalize( ray.direction );
 
 		var resultColor = vec3f( 0.0 );
 		var throughputColor = vec3f( 1.0 );

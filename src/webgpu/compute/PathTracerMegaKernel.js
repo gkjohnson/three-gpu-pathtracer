@@ -32,7 +32,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundSampler: sampler( new DataTexture() ),
 			backgroundRotation: uniform( new Matrix3() ),
 			backgroundIntensity: uniform( 1 ),
-			backgroundMapBlur: uniform( 0 ),
+			backgroundBlurriness: uniform( 0 ),
 
 			// bvh and geometry definition
 			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3u' ).toReadOnly(),
