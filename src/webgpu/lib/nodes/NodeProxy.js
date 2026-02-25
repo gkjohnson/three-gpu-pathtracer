@@ -88,9 +88,15 @@ export class NodeProxy extends Node {
 
 export const proxy = ( ...args ) => {
 
+	return new NodeProxy( ...args );
+
+};
+
+export const proxyFn = ( ...args ) => {
+
 	const nodeProxy = new NodeProxy( ...args );
 	const fn = ( ...params ) => new ProxyCallNode( nodeProxy, params );
 	fn.functionNode = nodeProxy;
-	return fn;
+	return nodeProxy;
 
 };
