@@ -121,24 +121,32 @@ export class MegaKernelPathTracer {
 		backgroundBlurriness,
 	) {
 
+		const { kernel } = this;
+
+		if ( kernel.background.isTexture ) {
+
+			kernel.background.dispose();
+
+		}
+
 		if ( envMap !== null ) {
 
 			this.envInfo.updateFrom( envMap );
-			this.kernel.envMap = this.envInfo.map;
-			this.kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
 
 		}
 
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		this.kernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		this.kernel.envMapIntensity = envMapIntensity;
+		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		kernel.envMapIntensity = envMapIntensity;
 
-		this.kernel.background = background;
-		this.kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		kernel.background = background;
+		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
 		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
-		this.kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		this.kernel.backgroundIntensity = backgroundIntensity;
-		this.kernel.backgroundBlurriness = backgroundBlurriness;
+		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		kernel.backgroundIntensity = backgroundIntensity;
+		kernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 
