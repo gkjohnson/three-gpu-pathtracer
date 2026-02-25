@@ -12,6 +12,13 @@ export class ComputeKernel {
 
 	}
 
+	set needsUpdate( v ) {
+
+		// TODO: hack to force the kernel to rebuild since "needsUpdate" is not respected
+		this.setWorkgroupSize( ...this.workgroupSize );
+
+	}
+
 	constructor( fn, options = {} ) {
 
 		const {
@@ -60,7 +67,6 @@ export class ComputeKernel {
 
 	setWorkgroupSize( x = 64, y = 1, z = 1 ) {
 
-		// this.workgroupSize = [ x, y, z ];
 		this.kernel = this._fn.computeKernel( [ x, y, z ] );
 		return this;
 

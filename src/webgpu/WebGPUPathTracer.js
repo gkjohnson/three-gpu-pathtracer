@@ -1,9 +1,11 @@
-import { Color, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock } from 'three/webgpu';
-import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
+import { Vector2, Scene, PerspectiveCamera } from 'three/webgpu';
+import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
+import { ObjectBVH } from './lib/ObjectBVH.js';
+import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 
 const _resolution = new Vector2();
 export class WebGPUPathTracer {
@@ -24,7 +26,8 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
-		this._generator = new PathTracingSceneGenerator();
+		this._pathTracer.setBVHData( this._bvhData );
+		this.setCamera( this.camera );
 
 	}
 
@@ -32,11 +35,7 @@ export class WebGPUPathTracer {
 
 		// members
 		this._renderer = renderer;
-		this._generator = new PathTracingSceneGenerator();
-		// this._pathTracer = new MegaKernelPathTracer( renderer );
-		this._pathTracer = new WaveFrontPathTracer( renderer );
-		this._queueReset = false;
-		this._clock = new Clock();
+		this._pathTracer = new MegaKernelPathTracer( renderer );
 
 		// options
 		this.renderScale = 1;
@@ -54,11 +53,25 @@ export class WebGPUPathTracer {
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
 
-		const generator = this._generator;
-		generator.setObjects( scene );
+		// Build BVH for each mesh geometry
+		scene.traverse( child => {
 
-		const result = generator.generate();
-		return this._updateFromResults( scene, camera, result );
+			if ( child.isMesh && ! child.geometry.boundsTree ) {
+
+				child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 5 } );
+
+			}
+
+		} );
+
+		// Build TLAS and compute functions
+		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
+		const bvhData = new PathtracerBVHComputeData( objectBVH );
+		bvhData.update();
+
+		this._bvhData = bvhData;
+		this._pathTracer.setBVHData( bvhData );
+		this.setCamera( camera );
 
 	}
 
@@ -82,80 +95,6 @@ export class WebGPUPathTracer {
 	reset() {
 
 		this._pathTracer.reset();
-
-	}
-
-	_updateFromResults( scene, camera, results ) {
-
-		const {
-			materials,
-			geometry,
-			bvh,
-			bvhChanged,
-			needsMaterialIndexUpdate,
-		} = results;
-
-		const pathTracer = this._pathTracer;
-
-		const newGeometryData = {};
-
-		if ( bvhChanged ) {
-
-			// dereference a new index attribute if we're using indirect storage
-			const dereferencedIndexAttr = geometry.index.clone();
-			const indirectBuffer = bvh._indirectBuffer;
-			if ( indirectBuffer ) {
-
-				dereferenceIndex( geometry, indirectBuffer, dereferencedIndexAttr );
-
-			}
-
-			const newIndex = new StorageBufferAttribute( dereferencedIndexAttr.array, 3 );
-			newIndex.name = 'Geometry Index';
-			newGeometryData.index = newIndex;
-
-			const newPosition = new StorageBufferAttribute( geometry.attributes.position.array, 3 );
-			newPosition.name = 'Geometry Positions';
-			newGeometryData.position = newPosition;
-
-			const newNormals = new StorageBufferAttribute( geometry.attributes.normal.array, 3 );
-			newNormals.name = 'Geometry Normals';
-			newGeometryData.normal = newNormals;
-
-			const newBvhRoots = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
-			newBvhRoots.name = 'BVH Roots';
-			newGeometryData.bvh = newBvhRoots;
-
-		}
-
-		if ( needsMaterialIndexUpdate ) {
-
-			const newMaterialIndex = new StorageBufferAttribute( geometry.attributes.materialIndex.array, 1 );
-			newMaterialIndex.name = 'Material Index';
-			newGeometryData.materialIndex = newMaterialIndex;
-
-		}
-
-		const newMaterialsData = new Float32Array( materials.length * 3 );
-		const defaultColor = new Color();
-		for ( let i = 0; i < materials.length; i ++ ) {
-
-			const material = materials[ i ];
-			const color = material.color ?? defaultColor;
-			// Make sure those are in linear-sRGB space
-			newMaterialsData[ 3 * i + 0 ] = color.r;
-			newMaterialsData[ 3 * i + 1 ] = color.g;
-			newMaterialsData[ 3 * i + 2 ] = color.b;
-
-		}
-
-		const newMaterialsBuffer = new StorageBufferAttribute( newMaterialsData, 3 );
-		newMaterialsBuffer.name = 'Material Data';
-		newGeometryData.materials = newMaterialsBuffer;
-
-		pathTracer.setGeometryData( newGeometryData );
-
-		this.setCamera( camera );
 
 	}
 
@@ -212,25 +151,6 @@ export class WebGPUPathTracer {
 	async getLatestSampleTimestamp() {
 
 		return await this._pathTracer.getLatestSampleTimestamp();
-
-	}
-
-}
-
-// TODO: Expose in three-mesh-bvh?
-function dereferenceIndex( geometry, indirectBuffer, target ) {
-
-	const unpacked = target.array;
-	const indexArray = geometry.index ? geometry.index.array : null;
-	for ( let i = 0, l = indirectBuffer.length; i < l; i ++ ) {
-
-		const i3 = 3 * i;
-		const v3 = 3 * indirectBuffer[ i ];
-		for ( let c = 0; c < 3; c ++ ) {
-
-			unpacked[ i3 + c ] = indexArray ? indexArray[ v3 + c ] : v3 + c;
-
-		}
 
 	}
 

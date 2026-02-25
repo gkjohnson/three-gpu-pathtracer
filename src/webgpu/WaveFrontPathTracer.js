@@ -225,23 +225,15 @@ export class WaveFrontPathTracer {
 
 	}
 
-	setGeometryData( geometry ) {
+	setBVHData( bvhData ) {
 
-		for ( const propName in geometry ) {
+		this.rayIntersectionKernel.bvhData = bvhData;
+		this.rayIntersectionKernel.needsUpdate = true;
 
-			const prop = this.geometry[ propName ];
-			if ( prop === undefined ) {
+		this.hitProcessKernel.bvhData = bvhData;
+		this.hitProcessKernel.needsUpdate = true;
 
-				console.error( `Invalid property name in geometry data: ${propName}` );
-				continue;
-
-			}
-
-			// TODO: cannot dispose at the moment
-			// prop.dispose();
-			this.geometry[ propName ] = geometry[ propName ];
-
-		}
+		this.reset();
 
 	}
 

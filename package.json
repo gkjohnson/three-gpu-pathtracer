@@ -46,7 +46,7 @@
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.183.1",
-    "three-mesh-bvh": "^0.9.5",
+    "three-mesh-bvh": "^0.9.8",
     "typescript": "^5.9.2",
     "vite": "^6.2.2",
     "yargs": "^17.5.1"

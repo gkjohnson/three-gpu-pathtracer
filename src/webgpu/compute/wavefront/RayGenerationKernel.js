@@ -2,7 +2,7 @@ import { Vector2, Matrix4 } from 'three';
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { wgslFn, uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
+import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
 import { QUEUED_RAY_SIZE, queuedRayStruct } from './structs.js';
 
