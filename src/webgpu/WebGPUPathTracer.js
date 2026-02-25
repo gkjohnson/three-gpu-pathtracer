@@ -86,8 +86,8 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 
-		const environment = convertToTexture( scene.environment, this._envColorTexture );
-		const background = convertToTexture( scene.background, this._backgroundColorTexture );
+		const environment = convertToTexture( this._renderer, scene.environment, this._envColorTexture );
+		const background = convertToTexture( this._renderer, scene.background, this._backgroundColorTexture );
 
 		this._pathTracer.setEnvironment(
 			environment,
@@ -183,7 +183,7 @@ export class WebGPUPathTracer {
 
 }
 
-function convertToTexture( value, colorTexture ) {
+function convertToTexture( renderer, value, colorTexture ) {
 
 	if ( ! value ) {
 
@@ -206,7 +206,7 @@ function convertToTexture( value, colorTexture ) {
 
 	} else if ( value?.isCubeTexture ) {
 
-		value = new CubeToEquirectGenerator( this._renderer ).generate( value );
+		value = new CubeToEquirectGenerator( renderer ).generate( value );
 
 	}
 
