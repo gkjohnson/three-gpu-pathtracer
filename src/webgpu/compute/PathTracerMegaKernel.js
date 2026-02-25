@@ -3,9 +3,8 @@ import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
-import { lambertBsdfFunc } from '../nodes/sampling.wgsl.js';
+import { lambertBsdfFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 import { proxy } from '../lib/nodes/NodeProxy.js';
-import { sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
