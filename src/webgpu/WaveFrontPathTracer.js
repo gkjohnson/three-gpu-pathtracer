@@ -63,7 +63,6 @@ function* renderTask() {
 
 		// Step 1: Top up the ray queue
 		// set up the ray prime kernel
-		primeRayGenerationDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
 		primeRayGenerationDispatchKernel.tileCount.copy( tiles );
 		primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
@@ -73,7 +72,6 @@ function* renderTask() {
 		primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
 
 		// set up the ray generation kernel
-		enqueueRaysKernel.setWorkgroupSize( 8, 8, 1 );
 		enqueueRaysKernel.seed ++;
 		enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
 		enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
@@ -94,7 +92,6 @@ function* renderTask() {
 
 		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
 		// TODO: setting dispatch size to 10000 is causing failures / missed rays
-		rayIntersectionKernel.setWorkgroupSize( 64, 1, 1 );
 		const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
 		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 		rayIntersectionKernel.rayQueue = rayQueue;
@@ -109,7 +106,6 @@ function* renderTask() {
 
 		// mark the rays as consumed
 		const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
-		updateRayQueueParamsKernel.setWorkgroupSize( 1, 1, 1 );
 		updateRayQueueParamsKernel.processed = processed;
 		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
 		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
@@ -117,7 +113,6 @@ function* renderTask() {
 		// TODO: we should use an indirect dispatch here to only kick off the number of threads
 		// as needed to iterate over all the fields
 		// Step 3: attenuate ray color, scatter, run russian roulette
-		hitProcessKernel.setWorkgroupSize( 64, 1, 1 );
 		hitProcessKernel.sampleCountTarget = sampleCountTarget;
 		hitProcessKernel.bounces = bounces;
 		hitProcessKernel.rayQueue = rayQueue;
@@ -131,7 +126,6 @@ function* renderTask() {
 
 		// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
 		// is cached per parameters and resets?
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
 
@@ -234,23 +228,15 @@ export class WaveFrontPathTracer {
 
 	}
 
-	setGeometryData( geometry ) {
+	setBVHData( bvhData ) {
 
-		for ( const propName in geometry ) {
+		this.rayIntersectionKernel.bvhData = bvhData;
+		this.rayIntersectionKernel.needsUpdate = true;
 
-			const prop = this.geometry[ propName ];
-			if ( prop === undefined ) {
+		this.hitProcessKernel.bvhData = bvhData;
+		this.hitProcessKernel.needsUpdate = true;
 
-				console.error( `Invalid property name in geometry data: ${propName}` );
-				continue;
-
-			}
-
-			// TODO: cannot dispose at the moment
-			// prop.dispose();
-			this.geometry[ propName ] = geometry[ propName ];
-
-		}
+		this.reset();
 
 	}
 
@@ -386,38 +372,30 @@ export class WaveFrontPathTracer {
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
 		// clear buffers
-		sampleCountClearKernel.setWorkgroupSize( 8, 8, 1 );
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
 		outputTargetClearKernel.target = outputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
-		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
 		outputTargetClearKernel.target = prevOutputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 		// clear queues
 		// TODO: why do we need to se the work group size here?
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = rayQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayQueueSize.count ] );
 
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count ] );
 
 		// clear dispatch sizes
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitProcessDispatch;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitProcessDispatch.count ] );
 
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = rayGenerationDispatch;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayGenerationDispatch.count ] );
 
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = tileIndexBuffer;
 		renderer.compute( zeroDispatchKernel.kernel, [ tileIndexBuffer.count ] );
 

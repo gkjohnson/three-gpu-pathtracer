@@ -9,7 +9,6 @@ function* renderTask() {
 		renderer,
 		camera,
 		kernel,
-		geometry,
 		bounces,
 
 		tiles,
@@ -22,13 +21,6 @@ function* renderTask() {
 	// init parameters
 	kernel.outputTarget = outputTarget;
 	kernel.sampleCountTarget = sampleCountTarget;
-
-	kernel.geom_index = geometry.index;
-	kernel.geom_position = geometry.position;
-	kernel.geom_normals = geometry.normal;
-	kernel.geom_material_index = geometry.materialIndex;
-	kernel.bvh = geometry.bvh;
-	kernel.materials = geometry.materials;
 
 	kernel.bounces = bounces;
 	kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
@@ -78,17 +70,6 @@ export class MegaKernelPathTracer {
 		this.bounces = 7;
 		this.tiles = new Vector2( 2, 2 );
 
-		// geometry fields
-		this.geometry = {
-			bvh: null,
-			index: null,
-			position: null,
-			normal: null,
-
-			materialIndex: null,
-			materials: null,
-		};
-
 		this.envInfo = new EquirectHdrInfoUniform();
 
 		// targets
@@ -121,23 +102,11 @@ export class MegaKernelPathTracer {
 
 	}
 
-	setGeometryData( geometry ) {
+	setBVHData( bvhData ) {
 
-		for ( const propName in geometry ) {
-
-			const prop = this.geometry[ propName ];
-			if ( prop === undefined ) {
-
-				console.error( `Invalid property name in geometry data: ${propName}` );
-				continue;
-
-			}
-
-			// TODO: cannot dispose at the moment
-			// prop.dispose();
-			this.geometry[ propName ] = geometry[ propName ];
-
-		}
+		this.kernel.bvhData = bvhData;
+		this.kernel.needsUpdate = true;
+		this.reset();
 
 	}
 
@@ -259,7 +228,6 @@ export class MegaKernelPathTracer {
 		this.samples = 0;
 		this._task = null;
 
-
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
@@ -276,7 +244,7 @@ export class MegaKernelPathTracer {
 
 	update() {
 
-		if ( ! this.camera ) {
+		if ( ! this.camera || ! this.kernel ) {
 
 			return;
 

@@ -1,9 +1,9 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { texture, sampler, uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { bvhIntersectFirstHit, constants } from 'three-mesh-bvh/webgpu';
-import { pcgRand3, pcgRand2, pcgInit } from '../../nodes/random.wgsl.js';
+import { uniform, texture, sampler, storage, wgslFn, textureStore, globalId } from 'three/tsl';
+import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
+import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
@@ -11,6 +11,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 	constructor() {
 
 		const parameters = {
+			bvhData: { value: null },
+
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -21,12 +23,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
-
-			// bvh and geometry definition
-			geom_index: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3u' ).toReadOnly(),
-			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
-			geom_material_index: storage( new IndirectStorageBufferAttribute( 1, 1 ), 'u32' ).toReadOnly(),
-			bvh: storage( new IndirectStorageBufferAttribute(), 'BVHNode' ).toReadOnly(), // TODO: fill in sizes
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -58,12 +54,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 				// hits
 				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
 				hitQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
-
-				// scene
-				geom_position: ptr<storage, array<vec3f>, read>,
-				geom_index: ptr<storage, array<vec3u>, read>,
-				geom_material_index: ptr<storage, array<u32>, read>,
-				bvh: ptr<storage, array<BVHNode>, read>,
 
 				// environment
 				envMap: texture_2d<f32>,
@@ -110,19 +100,17 @@ export class RayIntersectionKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// run intersection
-				let ray = input.ray;
-				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
+				let hitResult = bvh_RaycastFirstHit( input.ray );
 				if ( hitResult.didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
-					let materialIndex = geom_material_index[ hitResult.indices.x ];
 					let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
 					hitQueue[ index ].view = - input.ray.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
 					hitQueue[ index ].barycoord = hitResult.barycoord;
 					hitQueue[ index ].pixel_x = input.pixel.x;
 					hitQueue[ index ].pixel_y = input.pixel.y;
-					hitQueue[ index ].materialIndex = materialIndex;
+					hitQueue[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue[ index ].throughputColor = input.throughputColor;
 					hitQueue[ index ].currentBounce = input.currentBounce;
 
@@ -131,11 +119,11 @@ export class RayIntersectionKernel extends ComputeKernel {
 					var light: vec3f;
 					if ( input.currentBounce > 0u ) {
 
-						light = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
+						light = sampleEnvironment( envMap, envMapSampler, envInfo, input.ray.direction, pcgRand2() );
 
 					} else {
 
-						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.ray.direction, pcgRand2() );
 
 					}
 					let newColor = light * input.throughputColor;
@@ -150,7 +138,12 @@ export class RayIntersectionKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ sampleEnvironmentFn, queuedRayStruct, bvhIntersectFirstHit, constants, pcgRand3, pcgRand2, pcgInit, queuedHitStruct ] );
+		`, [
+			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
+			proxy( 'bvhData.value.structs.material', parameters ),
+			queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
+			sampleEnvironmentFn
+		] );
 
 		super( fn( parameters ) );
 
