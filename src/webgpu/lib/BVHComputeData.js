@@ -582,8 +582,6 @@ export class BVHComputeData {
 
 			} );
 
-			writeOffset += vertexCount;
-
 		}
 
 	}
