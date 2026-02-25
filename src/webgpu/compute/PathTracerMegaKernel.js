@@ -113,6 +113,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// scene ray
 				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
+				ray.direction = normalize( ray.direction );
 
 				var resultColor = vec3f( 0.0 );
 				var throughputColor = vec3f( 1.0 );
