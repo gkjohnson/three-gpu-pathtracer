@@ -1,9 +1,10 @@
-import { Vector2, Scene, PerspectiveCamera } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
+import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 
@@ -36,6 +37,18 @@ export class WebGPUPathTracer {
 		// members
 		this._renderer = renderer;
 		this._pathTracer = new MegaKernelPathTracer( renderer );
+
+		this._envColorTexture = new DataTexture( );
+		this._envColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
+		this._envColorTexture.needsUpdate = true;
+		this._envColorTexture.minFilter = LinearFilter;
+		this._envColorTexture.magFilter = LinearFilter;
+
+		this._backgroundColorTexture = new DataTexture( );
+		this._backgroundColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
+		this._backgroundColorTexture.needsUpdate = true;
+		this._backgroundColorTexture.minFilter = LinearFilter;
+		this._backgroundColorTexture.magFilter = LinearFilter;
 
 		// options
 		this.renderScale = 1;
@@ -72,6 +85,20 @@ export class WebGPUPathTracer {
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
+
+		const environment = convertToTexture( this._renderer, scene.environment, this._envColorTexture );
+		const background = convertToTexture( this._renderer, scene.background, this._backgroundColorTexture );
+
+		this._pathTracer.setEnvironment(
+			environment,
+			scene.environmentIntensity,
+			scene.environmentRotation,
+
+			background,
+			scene.backgroundIntensity,
+			scene.backgroundRotation,
+			scene.backgroundBlurriness,
+		);
 
 	}
 
@@ -153,5 +180,36 @@ export class WebGPUPathTracer {
 		return await this._pathTracer.getLatestSampleTimestamp();
 
 	}
+
+}
+
+function convertToTexture( renderer, value, colorTexture ) {
+
+	if ( ! value ) {
+
+		for ( let i = 0; i < 3; i ++ ) {
+
+			colorTexture.image.data[ i ] = 0;
+
+		}
+
+		colorTexture.needsUpdate = true;
+		value = colorTexture;
+
+	} else if ( value.isColor ) {
+
+		colorTexture.image.data[ 0 ] = value.r * 255;
+		colorTexture.image.data[ 1 ] = value.g * 255;
+		colorTexture.image.data[ 2 ] = value.b * 255;
+		colorTexture.needsUpdate = true;
+		value = colorTexture;
+
+	} else if ( value?.isCubeTexture ) {
+
+		value = new CubeToEquirectGenerator( renderer ).generate( value );
+
+	}
+
+	return value;
 
 }

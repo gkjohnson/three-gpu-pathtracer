@@ -86,7 +86,10 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				// write the ray data
 				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
-				rayQueue[ index ].ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );;
+				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
+				ray.direction = normalize( ray.direction );
+
+				rayQueue[ index ].ray = ray;
 				rayQueue[ index ].pixel = indexUV;
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;

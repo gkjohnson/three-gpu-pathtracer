@@ -1,9 +1,10 @@
-import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
+import { uniform, texture, sampler, storage, wgslFn, textureStore, globalId } from 'three/tsl';
+import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -22,6 +23,18 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
+
+			// environment
+			envMap: texture( new DataTexture() ),
+			envMapSampler: sampler( new DataTexture() ),
+			envMapRotation: uniform( new Matrix3() ),
+			envMapIntensity: uniform( 1 ),
+
+			background: texture( new DataTexture() ),
+			backgroundSampler: sampler( new DataTexture() ),
+			backgroundRotation: uniform( new Matrix3() ),
+			backgroundIntensity: uniform( 1 ),
+			backgroundBlurriness: uniform( 0 ),
 
 			globalId: globalId,
 		};
@@ -42,8 +55,32 @@ export class RayIntersectionKernel extends ComputeKernel {
 				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
 				hitQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
 
+				// environment
+				envMap: texture_2d<f32>,
+				envMapSampler: sampler,
+				envMapRotation: mat3x3f,
+				envMapIntensity: f32,
+
+				background: texture_2d<f32>,
+				backgroundSampler: sampler,
+				backgroundRotation: mat3x3f,
+				backgroundIntensity: f32,
+				backgroundBlurriness: f32,
+
 				globalId: vec3u
 			) -> void {
+
+				let envInfo = EnvironmentInfo(
+					envMapRotation,
+					envMapIntensity,
+					0.0 // blur,
+				);
+
+				let backgroundInfo = EnvironmentInfo(
+					backgroundRotation,
+					backgroundIntensity,
+					backgroundBlurriness,
+				);
 
 				// skip any rays invocations beyond the ray count
 				let queueCapacity = arrayLength( rayQueue );
@@ -75,12 +112,21 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].pixel_y = input.pixel.y;
 					hitQueue[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue[ index ].throughputColor = input.throughputColor;
-					hitQueue[ index ].currentBounce = input.currentBounce;;
+					hitQueue[ index ].currentBounce = input.currentBounce;
 
 				} else {
 
-					let background = vec3f( 0.5 );
-					let newColor = background * input.throughputColor;
+					var light: vec3f;
+					if ( input.currentBounce > 0u ) {
+
+						light = sampleEnvironment( envMap, envMapSampler, envInfo, input.ray.direction, pcgRand2() );
+
+					} else {
+
+						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.ray.direction, pcgRand2() );
+
+					}
+					let newColor = light * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
@@ -95,7 +141,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 		`, [
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.structs.material', parameters ),
-			queuedRayStruct, pcgRand3, pcgInit, queuedHitStruct ] );
+			queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
+			sampleEnvironmentFn
+		] );
 
 		super( fn( parameters ) );
 

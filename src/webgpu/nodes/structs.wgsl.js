@@ -64,3 +64,14 @@ export const hitResultQueueElementStruct = wgsl( /* wgsl */`
 	};
 ` );
 
+export const environmentInfoStruct = wgsl( /* wgsl */ `
+
+	struct EnvironmentInfo {
+
+		rotation: mat3x3f,
+		intensity: f32,
+		blur: f32,
+
+	};
+
+` );

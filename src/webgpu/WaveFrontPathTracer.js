@@ -1,4 +1,4 @@
-import { IndirectStorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
+import { Matrix4, IndirectStorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
@@ -6,6 +6,7 @@ import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -168,6 +169,8 @@ export class WaveFrontPathTracer {
 			materials: null,
 		};
 
+		this.envInfo = new EquirectHdrInfoUniform();
+
 		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
@@ -237,6 +240,40 @@ export class WaveFrontPathTracer {
 
 	}
 
+	setEnvironment(
+		envMap,
+		envMapIntensity,
+		envMapRotation,
+
+		background,
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
+
+		const kernel = this.rayIntersectionKernel;
+
+		if ( envMap !== null ) {
+
+			this.envInfo.updateFrom( envMap );
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		kernel.envMapIntensity = envMapIntensity;
+
+		kernel.background = background;
+		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		kernel.backgroundIntensity = backgroundIntensity;
+		kernel.backgroundBlurriness = backgroundBlurriness;
+
+	}
+
 	setCamera( camera ) {
 
 		this.camera = camera;
@@ -298,6 +335,7 @@ export class WaveFrontPathTracer {
 	dispose() {
 
 		// TODO: dispose of all buffers
+		this.envInfo.dispose();
 		this._task = null;
 
 	}

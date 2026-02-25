@@ -1,6 +1,7 @@
-import { StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
+import { Matrix4, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 function* renderTask() {
 
@@ -69,6 +70,8 @@ export class MegaKernelPathTracer {
 		this.bounces = 7;
 		this.tiles = new Vector2( 2, 2 );
 
+		this.envInfo = new EquirectHdrInfoUniform();
+
 		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
@@ -104,6 +107,38 @@ export class MegaKernelPathTracer {
 		this.kernel.bvhData = bvhData;
 		this.kernel.needsUpdate = true;
 		this.reset();
+
+	}
+
+	setEnvironment(
+		envMap,
+		envMapIntensity,
+		envMapRotation,
+
+		background,
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
+
+		if ( envMap !== null ) {
+
+			this.envInfo.updateFrom( envMap );
+			this.kernel.envMap = this.envInfo.map;
+			this.kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+		this.kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		this.kernel.envMapIntensity = envMapIntensity;
+
+		this.kernel.background = background;
+		this.kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+		this.kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		this.kernel.backgroundIntensity = backgroundIntensity;
+		this.kernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 
@@ -168,6 +203,7 @@ export class MegaKernelPathTracer {
 	dispose() {
 
 		// TODO: dispose of all buffers
+		this.envInfo.dispose();
 		this._task = null;
 
 	}
