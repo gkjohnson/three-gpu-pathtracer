@@ -62,27 +62,6 @@ export class ObjectBVH extends BVH {
 
 	}
 
-	getObjectMatrix( compositeId, target ) {
-
-		const { idMask, idBits, objects, matrixWorld } = this;
-		const id = getObjectId( compositeId, idMask );
-		const instanceId = getInstanceId( compositeId, idBits, idMask );
-		const object = objects[ id ];
-		if ( object.isInstancedMesh || object.isBatchedMesh ) {
-
-			object.getMatrixAt( instanceId, target ).premultiply( object.matrixWorld );
-
-		} else {
-
-			target.copy( object.matrixWorld );
-
-		}
-
-		_inverseMatrix.copy( matrixWorld ).invert();
-		target.premultiply( _inverseMatrix );
-
-	}
-
 	getObjectFromId( compositeId ) {
 
 		const { idMask, objects } = this;
@@ -484,10 +463,10 @@ export class ObjectBVH extends BVH {
 			} else if ( object.isBatchedMesh && includeInstances ) {
 
 				const { instanceCount, maxInstanceCount } = object;
-				let instance = 0;
+				let foundInstances = 0;
 				let iter = 0;
-				// TODO: use a better check here, like "maxInstanceCount"
-				while ( instance < instanceCount && iter < maxInstanceCount ) {
+
+				while ( foundInstances < instanceCount && iter < maxInstanceCount ) {
 
 					iter ++;
 
@@ -495,10 +474,10 @@ export class ObjectBVH extends BVH {
 					// instance were active
 					try {
 
-						object.getVisibleAt( instance );
+						object.getVisibleAt( iter );
 
-						target[ index ] = ( instance << idBits ) | i;
-						instance ++;
+						target[ index ] = ( iter << idBits ) | i;
+						foundInstances ++;
 						index ++;
 
 					} catch {
