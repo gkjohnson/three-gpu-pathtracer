@@ -254,20 +254,37 @@ export class WaveFrontPathTracer {
 
 	}
 
-	setEnvironment( environment, intensity, rotation, blur ) {
+	setEnvironment(
+		envMap,
+		envMapIntensity,
+		envMapRotation,
 
-		if ( environment !== null ) {
+		background,
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
 
-			this.envInfo.updateFrom( environment );
-			this.rayIntersectionKernel.envMap = this.envInfo.map;
-			this.rayIntersectionKernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+		const kernel = this.rayIntersectionKernel;
+
+		if ( envMap !== null ) {
+
+			this.envInfo.updateFrom( envMap );
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
 
 		}
 
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( rotation ).invert();
-		this.rayIntersectionKernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		this.rayIntersectionKernel.envMapIntensity = intensity;
-		this.rayIntersectionKernel.envMapBlur = blur;
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		kernel.envMapIntensity = envMapIntensity;
+
+		kernel.background = background;
+		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		kernel.backgroundIntensity = backgroundIntensity;
+		kernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 

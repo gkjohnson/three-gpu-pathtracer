@@ -33,7 +33,12 @@ export class RayIntersectionKernel extends ComputeKernel {
 			envMapSampler: sampler( new DataTexture() ),
 			envMapRotation: uniform( new Matrix3() ),
 			envMapIntensity: uniform( 1 ),
-			envMapBlur: uniform( 0 ),
+
+			background: texture( new DataTexture() ),
+			backgroundSampler: sampler( new DataTexture() ),
+			backgroundRotation: uniform( new Matrix3() ),
+			backgroundIntensity: uniform( 1 ),
+			backgroundBlurriness: uniform( 0 ),
 
 			globalId: globalId,
 		};
@@ -65,15 +70,26 @@ export class RayIntersectionKernel extends ComputeKernel {
 				envMapSampler: sampler,
 				envMapRotation: mat3x3f,
 				envMapIntensity: f32,
-				envMapBlur: f32,
+
+				background: texture_2d<f32>,
+				backgroundSampler: sampler,
+				backgroundRotation: mat3x3f,
+				backgroundIntensity: f32,
+				backgroundBlurriness: f32,
 
 				globalId: vec3u
 			) -> void {
 
-				let env = EnvironmentInfo(
+				let envInfo = EnvironmentInfo(
 					envMapRotation,
 					envMapIntensity,
-					envMapBlur,
+					0.0 // blur,
+				);
+
+				let backgroundInfo = EnvironmentInfo(
+					backgroundRotation,
+					backgroundIntensity,
+					backgroundBlurriness,
 				);
 
 				// skip any rays invocations beyond the ray count
@@ -94,7 +110,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// run intersection
-				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, input.ray );
+				let ray = input.ray;
+				let hitResult = bvhIntersectFirstHit( geom_index, geom_position, bvh, ray );
 				if ( hitResult.didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
@@ -107,12 +124,21 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].pixel_y = input.pixel.y;
 					hitQueue[ index ].materialIndex = materialIndex;
 					hitQueue[ index ].throughputColor = input.throughputColor;
-					hitQueue[ index ].currentBounce = input.currentBounce;;
+					hitQueue[ index ].currentBounce = input.currentBounce;
 
 				} else {
 
-					let background = sampleEnvironment( envMap, envMapSampler, env, input.ray.direction, pcgRand2() );
-					let newColor = background * input.throughputColor;
+					var light: vec3f;
+					if ( input.currentBounce > 0u ) {
+
+						light = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
+
+					} else {
+
+						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+
+					}
+					let newColor = light * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
