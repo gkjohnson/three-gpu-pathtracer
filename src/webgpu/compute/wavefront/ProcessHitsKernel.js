@@ -77,8 +77,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				// TODO: pass side and triangle normal
-				let surface = getSurfaceRecord( material, vertexData, 1.0, vertexData.normal.xyz );
+				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal );
 
 				let scatterRec = bsdfSample( input.view, surface );
 

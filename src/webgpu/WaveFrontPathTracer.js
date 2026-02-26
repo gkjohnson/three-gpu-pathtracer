@@ -7,13 +7,14 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { QUEUED_HIT_SIZE, QUEUED_RAY_SIZE } from './compute/wavefront/structs.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
 const MAX_BUFFER_SIZE = 134217728;
-const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( 16 * 4 ) );
-const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( 16 * 4 ) );
+const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( QUEUED_RAY_SIZE * 4 ) );
+const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( QUEUED_HIT_SIZE * 4 ) );
 
 function* renderTask() {
 
