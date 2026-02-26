@@ -2,7 +2,7 @@ import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
+import { lambertBsdfFunc, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 
@@ -83,11 +83,10 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-					color += ( vec3( 0 ) - color.xyz ) / f32( sampleCount );
-
+					let prevColor = textureLoad( prevOutputTarget, indexUV );
+					let blendedColor = weightedAlphaBlend( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+					textureStore( outputTarget, indexUV, blendedColor );
 
 				} else {
 
@@ -110,6 +109,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			queuedRayStruct, lambertBsdfFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
+			weightedAlphaBlendFn,
 		] );
 
 		super( fn( parameters ) );

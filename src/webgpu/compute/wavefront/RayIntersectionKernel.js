@@ -4,7 +4,7 @@ import { uniform, texture, sampler, storage, wgslFn, textureStore, globalId } fr
 import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
-import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -116,24 +116,22 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					var light: vec3f;
+					var resultColor: vec4f;
 					if ( input.currentBounce > 0u ) {
 
-						light = sampleEnvironment( envMap, envMapSampler, envInfo, input.ray.direction, pcgRand2() );
+						resultColor = sampleEnvironment( envMap, envMapSampler, envInfo, input.ray.direction, pcgRand2() ) * vec4f( input.throughputColor, 1.0 );
 
 					} else {
 
-						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.ray.direction, pcgRand2() );
+						resultColor = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.ray.direction, pcgRand2() );
 
 					}
-					let newColor = light * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-					color += ( newColor - color.xyz ) / f32( sampleCount );
-
+					let prevColor = textureLoad( prevOutputTarget, indexUV );
+					let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+					textureStore( outputTarget, indexUV, blendedColor );
 
 				}
 
@@ -142,7 +140,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.structs.material', parameters ),
 			queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
-			sampleEnvironmentFn
+			sampleEnvironmentFn, weightedAlphaBlendFn,
 		] );
 
 		super( fn( parameters ) );

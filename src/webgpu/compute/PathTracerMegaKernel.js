@@ -3,7 +3,7 @@ import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
-import { lambertBsdfFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
+import { lambertBsdfFunc, sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy } from '../lib/nodes/NodeProxy.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -110,7 +110,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// scene ray
-				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
+				var jitter = 100.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
@@ -155,19 +155,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
 				let prevColor = textureLoad( prevOutputTarget, indexUV );
-
-				let weight = 1.0 / f32( sampleCount );
-				let invWeight = 1.0 - weight;
-				let totalAlpha = prevColor.a * invWeight + resultColor.a * weight;
-				var blendedColor = vec4f( 0 );
-				if ( totalAlpha != 0.0 ) {
-
-					let prevContrib = prevColor.rgb * invWeight * prevColor.a / totalAlpha;
-					let resContrib = resultColor.rgb * weight * resultColor.a / totalAlpha;
-					blendedColor = vec4f( prevContrib + resContrib, totalAlpha );
-
-				}
-
+				let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 				textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
 				textureStore( outputTarget, indexUV, blendedColor );
 
@@ -180,7 +168,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			ndcToCameraRay, pcgRand2, pcgRand3, pcgInit, lambertBsdfFunc,
-			sampleEnvironmentFn,
+			sampleEnvironmentFn, weightedAlphaBlendFn,
 		] );
 
 		super( shader( parameters ) );
