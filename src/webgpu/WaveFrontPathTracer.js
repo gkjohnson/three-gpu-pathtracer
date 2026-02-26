@@ -253,6 +253,12 @@ export class WaveFrontPathTracer {
 
 		const kernel = this.rayIntersectionKernel;
 
+		if ( kernel.background.isTexture ) {
+
+			kernel.background.dispose();
+
+		}
+
 		if ( envMap !== null ) {
 
 			this.envInfo.updateFrom( envMap );

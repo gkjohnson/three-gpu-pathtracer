@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 const options = {
+	enable: true,
 	useMegakernel: true,
 };
 
@@ -76,7 +77,7 @@ controls.addEventListener( 'change', () => {
 } );
 
 const gui = new GUI();
-
+gui.add( options, 'enable' );
 gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
@@ -93,7 +94,15 @@ window.addEventListener( 'resize', onResize );
 function animate() {
 
 	// update the camera and render one sample
-	pathTracer.renderSample();
+	if ( options.enable ) {
+
+		pathTracer.renderSample();
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }
 
