@@ -110,7 +110,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// scene ray
-				var jitter = 100.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 

@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -139,7 +139,17 @@ export class WebGPUPathTracer {
 
 		const blitQuad = this._blitQuad;
 		blitQuad.material.texture = this._pathTracer.outputTarget;
-		blitQuad.render( this._renderer );
+
+		const renderer = this._renderer;
+		const originalToneMapping = renderer.toneMapping;
+		const originalExposure = renderer.toneMappingExposure;
+		renderer.toneMapping = NoToneMapping;
+		renderer.toneMappingExposure = 1.0;
+		blitQuad.material.toneMapping = originalToneMapping;
+		blitQuad.material.toneMappingExposure = originalExposure;
+		blitQuad.render( renderer );
+		renderer.toneMapping = originalToneMapping;
+		renderer.toneMappingExposure = originalExposure;
 
 	}
 

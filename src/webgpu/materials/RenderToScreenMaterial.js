@@ -1,25 +1,59 @@
-import { MeshBasicNodeMaterial, StorageTexture } from 'three/webgpu';
-import { uv, varying, texture } from 'three/tsl';
+import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
+import { uv, varying, texture, vec4, toneMapping } from 'three/tsl';
 
+// Material to apply tone mapping _before_ applying alpha blending
 export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	get texture() {
 
-		return this.colorNode.value;
+		return this._texNode.value;
 
 	}
 
 	set texture( v ) {
 
-		this.colorNode.value = v;
+		this._texNode.value = v;
+
+	}
+
+	get toneMapping() {
+
+		return this._toneMapping.toneMapping;
+
+	}
+
+	set toneMapping( v ) {
+
+		this._toneMapping.toneMapping = v;
+
+	}
+
+	get exposure() {
+
+		return this._toneMapping.exposureNode.value;
+
+	}
+
+	set exposure( v ) {
+
+		this._toneMapping.exposureNode.value = v;
 
 	}
 
 	constructor( params ) {
 
 		super();
+
+		const texNode = texture( new StorageTexture(), varying( uv() ) );
+		this._texNode = texNode;
+
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, texNode );
+		this._toneMapping = toneMappingNode;
+
+		// apply alpha _after_ applying tone mapping
 		this.transparent = true;
-		this.colorNode = texture( new StorageTexture(), varying( uv() ) );
+		this.colorNode = vec4( texNode.rgb.mul( texNode.a ), texNode.a );
+
 		this.setValues( params );
 
 	}
