@@ -2,9 +2,10 @@ import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { getSurfaceRecordFunc, lambertBsdfFunc, weightedAlphaBlendFn } from '../../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
