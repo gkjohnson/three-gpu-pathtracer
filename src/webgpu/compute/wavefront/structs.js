@@ -3,7 +3,7 @@ import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export const QUEUED_RAY_SIZE = 16;
 
-export const QUEUED_HIT_SIZE = 16;
+export const QUEUED_HIT_SIZE = 20;
 
 export const queuedRayStruct = wgsl( /* wgsl */ `
 	struct QueuedRay {
@@ -24,5 +24,7 @@ export const queuedHitStruct = wgsl( /* wgsl */`
 		currentBounce: u32,
 		throughputColor: vec3f,
 		objectIndex: u32,
+		normal: vec3f,
+		side: f32,
 	};
 ` );

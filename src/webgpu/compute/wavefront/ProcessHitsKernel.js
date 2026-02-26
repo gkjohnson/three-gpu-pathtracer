@@ -2,7 +2,7 @@ import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { lambertBsdfFunc } from '../../nodes/sampling.wgsl.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 
@@ -77,7 +77,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let scatterRec = bsdfEval( vertexData.normal.xyz, input.view );
+				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal );
+
+				let scatterRec = bsdfSample( input.view, surface );
 
 				if ( input.currentBounce >= bounces ) {
 
@@ -96,7 +98,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].ray.origin = vertexData.position.xyz;
 					rayQueue[ index ].ray.direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
+					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 
 				}
@@ -108,7 +110,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			proxy( 'bvhData.value.storage.materials', parameters ),
 			proxy( 'bvhData.value.storage.transforms', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-			queuedRayStruct, lambertBsdfFunc,
+			queuedRayStruct, lambertBsdfFunc, getSurfaceRecordFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
 		] );
 
