@@ -3,15 +3,23 @@ import { StructTypeNode } from 'three/webgpu';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
 
 export const constants = wgsl( /* wgsl */ `
-	const PI: f32 = 3.141592653589793;
+
+		// TODO: expose modification of this value
+		const filterGlossyFactor: f32 = 0.5;
+
+		const PI: f32 = 3.141592653589793;
+
 ` );
 
 export const scatterRecordStruct = wgsl( /* wgsl */ `
+
 	struct ScatterRecord {
+		color: vec3f,
+		specularPdf: f32,
 		direction: vec3f,
-		pdf: f32, // Actually just a probability
-		value: f32,
+		pdf: f32,
 	};
+
 ` );
 
 export const materialStruct = new StructTypeNode( {
@@ -133,13 +141,59 @@ export const materialStruct = new StructTypeNode( {
 }, 'Material' );
 
 export const surfaceRecordStruct = wgsl( /* wgsl */`
-	struct SurfaceRecord {
-		normal: vec3f,
-		albedo: vec3f,
 
+	struct SurfaceRecord {
+		// surface type
+		volumeParticle: bool,
+
+		// geometry
+		faceNormal: vec3f,
+		frontFace: bool,
+		normal: vec3f,
+		normalBasis: mat3x3f,
+		normalInvBasis: mat3x3f,
+
+		// cached properties
+		eta: f32,
+		f0: f32,
+
+		// material
 		roughness: f32,
+		filteredRoughness: f32,
 		metalness: f32,
+		color: vec3f,
+		emission: vec3f,
+
+		// transmission
+		ior: f32,
+		transmission: f32,
+		thinFilm: bool,
+		attenuationColor: vec3f,
+		attenuationDistance:  f32,
+
+		// clearcoat
+		clearcoatNormal: vec3f,
+		clearcoatBasis: mat3x3f,
+		clearcoatInvBasis: mat3x3f,
+		clearcoat: f32,
+		clearcoatRoughness: f32,
+		filteredClearcoatRoughness: f32,
+
+		// sheen
+		sheen: f32,
+		sheenColor: vec3f,
+		sheenRoughness: f32,
+
+		// iridescence
+		iridescence: f32,
+		iridescenceIor: f32,
+		iridescenceThickness: f32,
+
+		// specular
+		specularColor: vec3f,
+		specularIntensity: f32,
 	};
+
 ` );
 
 // TODO: write a proposal for a storage-backed structs and arrays in structs for three.js

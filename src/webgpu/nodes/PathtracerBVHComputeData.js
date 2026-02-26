@@ -24,6 +24,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			attributes: {
 				position: 'vec4f',
 				normal: 'vec4f',
+				tangent: 'vec4f',
+				color: 'vec4f',
 				uv0: 'vec4f',
 			},
 			...options,

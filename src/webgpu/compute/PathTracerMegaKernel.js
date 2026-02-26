@@ -3,7 +3,7 @@ import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
-import { lambertBsdfFunc } from '../nodes/sampling.wgsl.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc } from '../nodes/material.wgsl.js';
 import { proxy } from '../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 
@@ -125,13 +125,16 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let vertexData = bvh_sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
 						let hitPosition = ray.origin + ray.direction * hitResult.dist;
-						let scatterRec = bsdfEval( normalize( vertexData.normal.xyz ), - ray.direction );
 
 						let transform = bvh_transforms.value[ hitResult.objectIndex ];
 						let material = bvh_materials.value[ transform.materialIndex ];
 
+						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal );
+
+						let scatterRec = bsdfSample( - ray.direction, surface );
+
 						// white diffuse surface
-						throughputColor *= material.color * scatterRec.value / scatterRec.pdf;
+						throughputColor *= scatterRec.color / scatterRec.pdf;
 
 						ray.origin = hitPosition;
 						ray.direction = scatterRec.direction;
@@ -172,7 +175,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			ndcToCameraRay, pcgRand2, pcgRand3, pcgInit, lambertBsdfFunc,
-			sampleEnvironmentFn,
+			sampleEnvironmentFn, getSurfaceRecordFunc,
 		] );
 
 		super( shader( parameters ) );
