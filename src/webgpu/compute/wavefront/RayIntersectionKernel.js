@@ -108,6 +108,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].view = - input.ray.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
 					hitQueue[ index ].barycoord = hitResult.barycoord;
+					hitQueue[ index ].normal = hitResult.normal.xyz;
+					hitQueue[ index ].side = hitResult.side;
 					hitQueue[ index ].pixel_x = input.pixel.x;
 					hitQueue[ index ].pixel_y = input.pixel.y;
 					hitQueue[ index ].objectIndex = hitResult.objectIndex;
