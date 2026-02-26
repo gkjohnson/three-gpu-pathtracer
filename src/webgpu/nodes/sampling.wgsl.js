@@ -53,9 +53,9 @@ const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 ` );
 
 const sampleEquirectColorFn = wgslFn( /* wgsl */ `
-	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec3f {
+	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
 
-		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 ).rgb;
+		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 );
 
 	}
 `, [ equirectDirectionToUvFn ] );
@@ -90,13 +90,13 @@ export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 		env: EnvironmentInfo,
 		direction: vec3f,
 		uv: vec2f,
-	) -> vec3f {
+	) -> vec4f {
 
 		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * env.blur;
-
 		let sampleDir = normalize( env.rotation * direction + offsetDir );
+		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
 
-		return env.intensity * sampleEquirectColor( envMap, envMapSampler, sampleDir );
+		return vec4f( env.intensity * col.rgb, col.a );
 
 	}
 

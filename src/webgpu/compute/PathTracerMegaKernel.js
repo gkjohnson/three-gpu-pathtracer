@@ -114,7 +114,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
-				var resultColor = vec3f( 0.0 );
+				var resultColor = vec4f( 0.0 );
 				var throughputColor = vec3f( 1.0 );
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
@@ -137,18 +137,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
-						var light: vec3f;
 						if ( bounce > 0u ) {
 
-							light = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
+							let envColor = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
+							resultColor = vec4f( throughputColor * envColor.rgb, 1.0 );
 
 						} else {
 
-							light = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+							resultColor = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
 
 						}
 
-						resultColor += light * throughputColor;
 						break;
 
 					}
@@ -156,11 +155,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
-				var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-				color += ( resultColor - color.xyz ) / f32( sampleCount );
+				var color = textureLoad( prevOutputTarget, indexUV );
+				color += ( resultColor - color ) / f32( sampleCount );
 
 				textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-				textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+				textureStore( outputTarget, indexUV, color );
 
 			}
 
