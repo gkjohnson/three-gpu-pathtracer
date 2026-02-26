@@ -131,7 +131,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let material = bvh_materials.value[ transform.materialIndex ];
 
 						// white diffuse surface
-						throughputColor *= material.albedo * scatterRec.value / scatterRec.pdf;
+						throughputColor *= material.color * scatterRec.value / scatterRec.pdf;
 
 						ray.origin = hitPosition;
 						ray.direction = scatterRec.direction;

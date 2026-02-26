@@ -96,7 +96,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].ray.origin = vertexData.position.xyz;
 					rayQueue[ index ].ray.direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = input.throughputColor * material.albedo * scatterRec.value / scatterRec.pdf;
+					rayQueue[ index ].throughputColor = input.throughputColor * material.color * scatterRec.value / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 
 				}
