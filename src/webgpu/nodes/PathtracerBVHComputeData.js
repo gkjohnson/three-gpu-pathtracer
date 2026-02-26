@@ -360,52 +360,52 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			index ++;
 			index ++;
 
-			// map transform 15
+			// map transform - offset 68
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
 
-			// metalnessMap transform 17
+			// metalnessMap transform - offset 80
 			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
 
-			// roughnessMap transform 19
+			// roughnessMap transform - offset 92
 			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
 
-			// transmissionMap transform 21
+			// transmissionMap transform - offset 104
 			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
 
-			// emissiveMap transform 22
+			// emissiveMap transform - offset 116
 			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
 
-			// normalMap transform 25
+			// normalMap transform - offset 128
 			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
 
-			// clearcoatMap transform 27
+			// clearcoatMap transform - offset 140
 			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
 
-			// clearcoatNormalMap transform 29
+			// clearcoatNormalMap transform - offset 152
 			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
 
-			// clearcoatRoughnessMap transform 31
+			// clearcoatRoughnessMap transform - offset 164
 			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
 
-			// sheenColorMap transform 33
+			// sheenColorMap transform - offset 176
 			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
 
-			// sheenRoughnessMap transform 35
+			// sheenRoughnessMap transform - offset 188
 			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
 
-			// iridescenceMap transform 37
+			// iridescenceMap transform - offset 200
 			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
 
-			// iridescenceThicknessMap transform 39
+			// iridescenceThicknessMap transform - offset 212
 			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
 
-			// specularColorMap transform 41
+			// specularColorMap transform - offset 224
 			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
 
-			// specularIntensityMap transform 43
+			// specularIntensityMap transform - offset 236
 			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
 
-			// alphaMap transform 45
+			// alphaMap transform - offset 248
 			index += writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
 
 		}

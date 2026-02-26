@@ -123,21 +123,21 @@ export const materialStruct = new StructTypeNode( {
 	clearcoatNormalMapTransform: 'mat3',
 	// offset 164 floats
 	clearcoatRoughnessMapTransform: 'mat3',
-	// offset 186 floats
+	// offset 176 floats
 	sheenColorMapTransform: 'mat3',
-	// offset 198 floats
+	// offset 188 floats
 	sheenRoughnessMapTransform: 'mat3',
-	// offset 210 floats
+	// offset 200 floats
 	iridescenceMapTransform: 'mat3',
-	// offset 222 floats
+	// offset 212 floats
 	iridescenceThicknessMapTransform: 'mat3',
-	// offset 234 floats
+	// offset 224 floats
 	specularColorMapTransform: 'mat3',
-	// offset 246 floats
+	// offset 236 floats
 	specularIntensityMapTransform: 'mat3',
-	// offset 258 floats
+	// offset 248 floats
 	alphaMapTransform: 'mat3',
-	// total size = 270
+	// total size = 260
 }, 'Material' );
 
 export const surfaceRecordStruct = wgsl( /* wgsl */`
