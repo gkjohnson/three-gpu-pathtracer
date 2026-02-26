@@ -3,12 +3,9 @@ import { StructTypeNode } from 'three/webgpu';
 import { rayStruct } from 'three-mesh-bvh/webgpu';
 
 export const constants = wgsl( /* wgsl */ `
-
-		// TODO: expose modification of this value
-		const filterGlossyFactor: f32 = 0.5;
-
-		const PI: f32 = 3.141592653589793;
-
+	// TODO: expose modification of this value
+	const filterGlossyFactor: f32 = 0.5;
+	const PI: f32 = 3.141592653589793;
 ` );
 
 export const scatterRecordStruct = new StructTypeNode( {
@@ -198,37 +195,27 @@ export const surfaceRecordStruct = new StructTypeNode( {
 // `, [ hitResultQueueElementStruct ] );
 
 export const rayQueueElementStruct = wgsl( /* wgsl */ `
-
 	struct RayQueueElement {
 		ray: Ray,
 		throughputColor: vec3f,
 		currentBounce: u32,
 		pixel: vec2u,
 	};
-
 `, [ rayStruct ] );
 
-export const hitResultQueueElementStruct = wgsl( /* wgsl */`
-	struct HitResultQueueElement {
-		normal: vec3f,
-		pixel_x: u32,
-		position: vec3f,
-		pixel_y: u32,
-		view: vec3f,
-		currentBounce: u32,
-		throughputColor: vec3f,
-		vertexIndex: u32,
-	};
-` );
+export const hitResultQueueElementStruct = new StructTypeNode( {
+	normal: 'vec3f',
+	pixel_x: 'u32',
+	position: 'vec3f',
+	pixel_y: 'u32',
+	view: 'vec3f',
+	currentBounce: 'u32',
+	throughputColor: 'vec3f',
+	vertexIndex: 'u32',
+}, 'HitResultQueueElement' );
 
-export const environmentInfoStruct = wgsl( /* wgsl */ `
-
-	struct EnvironmentInfo {
-
-		rotation: mat3x3f,
-		intensity: f32,
-		blur: f32,
-
-	};
-
-` );
+export const environmentInfoStruct = new StructTypeNode( {
+	rotation: 'mat3x3f',
+	intensity: 'float',
+	blur: 'float',
+}, 'EnvironmentInfo' );
