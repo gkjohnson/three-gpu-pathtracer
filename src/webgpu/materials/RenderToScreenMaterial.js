@@ -18,6 +18,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 	constructor( params ) {
 
 		super();
+		this.transparent = true;
 		this.colorNode = texture( new StorageTexture(), varying( uv() ) );
 		this.setValues( params );
 

@@ -114,7 +114,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
-				var resultColor = vec4f( 0.0 );
+				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
@@ -139,8 +139,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						if ( bounce > 0u ) {
 
-							let envColor = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
-							resultColor = vec4f( throughputColor * envColor.rgb, 1.0 );
+							resultColor = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() ) * vec4f( throughputColor, 1.0 );
 
 						} else {
 
@@ -155,11 +154,22 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
-				var color = textureLoad( prevOutputTarget, indexUV );
-				color += ( resultColor - color ) / f32( sampleCount );
+				let prevColor = textureLoad( prevOutputTarget, indexUV );
+
+				let weight = 1.0 / f32( sampleCount );
+				let invWeight = 1.0 - weight;
+				let totalAlpha = prevColor.a * invWeight + resultColor.a * weight;
+				var blendedColor = vec4f( 0 );
+				if ( totalAlpha != 0.0 ) {
+
+					let prevContrib = prevColor.rgb * invWeight * prevColor.a / totalAlpha;
+					let resContrib = resultColor.rgb * weight * resultColor.a / totalAlpha;
+					blendedColor = vec4f( prevContrib + resContrib, totalAlpha );
+
+				}
 
 				textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-				textureStore( outputTarget, indexUV, color );
+				textureStore( outputTarget, indexUV, blendedColor );
 
 			}
 
