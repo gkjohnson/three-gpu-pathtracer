@@ -68,9 +68,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
-				let seed = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
 
-				pcgInitialize( indexUV, seed );
+				g_state.s0 = input.pcgStateS0;
 
 				let object = bvh_transforms.value[ input.objectIndex ];
 				var material = bvh_materials.value[ object.materialIndex ];
@@ -105,6 +104,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
+					rayQueue[ index ].pcgStateS0 = g_state.s0;
 
 				}
 
