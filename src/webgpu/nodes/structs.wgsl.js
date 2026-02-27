@@ -193,10 +193,11 @@ export const surfaceRecordStruct = new StructTypeNode( {
 // 	};
 // `, [ hitResultQueueElementStruct ] );
 
-// TODO: when possible this should be changed to pass the "rayStruct"
-// in as a type so dependencies are carried
 export const rayQueueElementStruct = new StructTypeNode( {
-	ray: 'Ray',
+	origin: 'vec3',
+	_alignment0: 'uint',
+	direction: 'vec3',
+	_alignment1: 'uint',
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
 	pixel: 'vec2u',
