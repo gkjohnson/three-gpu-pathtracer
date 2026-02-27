@@ -4,7 +4,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore, wgslFn } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc } from '../nodes/material.wgsl.js';
-import { sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy } from '../lib/nodes/NodeProxy.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -115,7 +115,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
-				var resultColor = vec3f( 0.0 );
+				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
@@ -126,8 +126,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let vertexData = bvh_sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
 						let hitPosition = ray.origin + ray.direction * hitResult.dist;
 
-						let transform = bvh_transforms.value[ hitResult.objectIndex ];
-						let material = bvh_materials.value[ transform.materialIndex ];
+						let object = bvh_transforms.value[ hitResult.objectIndex ];
+						var material = bvh_materials.value[ object.materialIndex ];
+
+						// apply per-object colors
+						material.color *= object.color.rgb;
+						material.opacity *= object.color.a;
 
 						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal );
 
@@ -141,18 +145,16 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
-						var light: vec3f;
 						if ( bounce > 0u ) {
 
-							light = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() );
+							resultColor = sampleEnvironment( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() ) * vec4f( throughputColor, 1.0 );
 
 						} else {
 
-							light = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+							resultColor = sampleEnvironment( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
 
 						}
 
-						resultColor += light * throughputColor;
 						break;
 
 					}
@@ -160,11 +162,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
-				var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-				color += ( resultColor - color.xyz ) / f32( sampleCount );
-
+				let prevColor = textureLoad( prevOutputTarget, indexUV );
+				let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 				textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-				textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+				textureStore( outputTarget, indexUV, blendedColor );
 
 			}
 
@@ -175,7 +176,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			ndcToCameraRay, pcgRand2, pcgRand3, pcgInit, lambertBsdfFunc,
-			sampleEnvironmentFn, getSurfaceRecordFunc,
+			sampleEnvironmentFn, getSurfaceRecordFunc, weightedAlphaBlendFn,
 		] );
 
 		super( shader( parameters ) );

@@ -3,8 +3,9 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
-import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
+import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -22,10 +23,10 @@ export class ProcessHitsKernel extends ComputeKernel {
 			bounces: uniform( 1 ),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), 'QueuedRay' ),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), 'QueuedHit' ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
 			globalId: globalId,
@@ -72,7 +73,12 @@ export class ProcessHitsKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				let object = bvh_transforms.value[ input.objectIndex ];
-				let material = bvh_materials.value[ object.materialIndex ];
+				var material = bvh_materials.value[ object.materialIndex ];
+
+				// apply per-object colors
+				material.color *= object.color.rgb;
+				material.opacity *= object.color.a;
+
 				var vertexData = bvh_sampleTrianglePoint( input.barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
@@ -85,18 +91,17 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-					color += ( vec3( 0 ) - color.xyz ) / f32( sampleCount );
-
+					let prevColor = textureLoad( prevOutputTarget, indexUV );
+					let blendedColor = weightedAlphaBlend( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+					textureStore( outputTarget, indexUV, blendedColor );
 
 				} else {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
-					rayQueue[ index ].ray.origin = vertexData.position.xyz;
-					rayQueue[ index ].ray.direction = scatterRec.direction;
+					rayQueue[ index ].origin = vertexData.position.xyz;
+					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
@@ -112,6 +117,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
 			queuedRayStruct, lambertBsdfFunc, getSurfaceRecordFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
+			weightedAlphaBlendFn,
 		] );
 
 		super( fn( parameters ) );

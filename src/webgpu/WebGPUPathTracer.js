@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, NearestFilter } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, NearestFilter } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -9,6 +9,7 @@ import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 
 const _resolution = new Vector2();
+const _color = new Color();
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -131,7 +132,7 @@ export class WebGPUPathTracer {
 			_backgroundColorTexture,
 		} = this;
 
-		const environment = convertToTexture( _renderer, scene.environment, _envColorTexture );
+		const environment = convertToTexture( _renderer, scene.environment || _color.set( 0 ), _envColorTexture );
 		const background = convertToTexture( _renderer, scene.background, _backgroundColorTexture );
 
 		_pathTracer.setEnvironment(
@@ -166,7 +167,17 @@ export class WebGPUPathTracer {
 
 		const blitQuad = this._blitQuad;
 		blitQuad.material.texture = this._pathTracer.outputTarget;
-		blitQuad.render( this._renderer );
+
+		const renderer = this._renderer;
+		const originalToneMapping = renderer.toneMapping;
+		const originalExposure = renderer.toneMappingExposure;
+		renderer.toneMapping = NoToneMapping;
+		renderer.toneMappingExposure = 1.0;
+		blitQuad.material.toneMapping = originalToneMapping;
+		blitQuad.material.toneMappingExposure = originalExposure;
+		blitQuad.render( renderer );
+		renderer.toneMapping = originalToneMapping;
+		renderer.toneMappingExposure = originalExposure;
 
 	}
 
@@ -215,11 +226,13 @@ function convertToTexture( renderer, value, colorTexture ) {
 
 	if ( ! value ) {
 
-		for ( let i = 0; i < 3; i ++ ) {
+		const clearAlpha = renderer.getClearAlpha();
+		renderer.getClearColor( _color );
 
-			colorTexture.image.data[ i ] = 0;
-
-		}
+		colorTexture.image.data[ 0 ] = _color.r * 255;
+		colorTexture.image.data[ 1 ] = _color.g * 255;
+		colorTexture.image.data[ 2 ] = _color.b * 255;
+		colorTexture.image.data[ 3 ] = clearAlpha * 255;
 
 		colorTexture.needsUpdate = true;
 		value = colorTexture;
@@ -229,6 +242,8 @@ function convertToTexture( renderer, value, colorTexture ) {
 		colorTexture.image.data[ 0 ] = value.r * 255;
 		colorTexture.image.data[ 1 ] = value.g * 255;
 		colorTexture.image.data[ 2 ] = value.b * 255;
+		colorTexture.image.data[ 3 ] = 255;
+
 		colorTexture.needsUpdate = true;
 		value = colorTexture;
 

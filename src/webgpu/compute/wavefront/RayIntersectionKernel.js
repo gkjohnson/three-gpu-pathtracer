@@ -2,9 +2,10 @@ import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } 
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
+import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
-import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -18,10 +19,10 @@ export class RayIntersectionKernel extends ComputeKernel {
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), 'QueuedRay' ).toReadOnly(),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toReadOnly(),
 
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), 'QueuedHit' ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
 			// environment
@@ -100,12 +101,13 @@ export class RayIntersectionKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// run intersection
-				let hitResult = bvh_RaycastFirstHit( input.ray );
+				let ray = Ray( input.origin, input.direction );
+				let hitResult = bvh_RaycastFirstHit( ray );
 				if ( hitResult.didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
 					let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
-					hitQueue[ index ].view = - input.ray.direction;
+					hitQueue[ index ].view = - input.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
 					hitQueue[ index ].barycoord = hitResult.barycoord;
 					hitQueue[ index ].normal = hitResult.normal.xyz;
@@ -118,24 +120,22 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					var light: vec3f;
+					var resultColor: vec4f;
 					if ( input.currentBounce > 0u ) {
 
-						light = sampleEnvironment( envMap, envMapSampler, envInfo, input.ray.direction, pcgRand2() );
+						resultColor = sampleEnvironment( envMap, envMapSampler, envInfo, input.direction, pcgRand2() ) * vec4f( input.throughputColor, 1.0 );
 
 					} else {
 
-						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.ray.direction, pcgRand2() );
+						resultColor = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.direction, pcgRand2() );
 
 					}
-					let newColor = light * input.throughputColor;
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-					color += ( newColor - color.xyz ) / f32( sampleCount );
-
+					let prevColor = textureLoad( prevOutputTarget, indexUV );
+					let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+					textureStore( outputTarget, indexUV, blendedColor );
 
 				}
 
@@ -143,8 +143,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 		`, [
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.structs.material', parameters ),
-			queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
-			sampleEnvironmentFn
+			rayStruct, queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
+			sampleEnvironmentFn, weightedAlphaBlendFn,
 		] );
 
 		super( fn( parameters ) );
