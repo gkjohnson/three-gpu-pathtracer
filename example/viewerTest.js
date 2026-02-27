@@ -22,8 +22,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
 
-const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
-const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
+const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
+const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
 
 const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
@@ -375,7 +375,7 @@ async function updateModel() {
 	const modelInfo = modelDatabase[ params.model ];
 	const {
 		verticalFoV = 45,
-		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
+		lighting = '../../../environments/lightroom_14b.hdr',
 	} = modelInfo;
 
 	let {
@@ -488,6 +488,6 @@ async function updateModel() {
 
 function updateImage() {
 
-	imgEl.src = `https://github.khronos.org/glTF-Render-Fidelity/images/goldens/${ params.model }/${ params.imageType }-golden.png`;
+	imgEl.src = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
 
 }
