@@ -1,6 +1,5 @@
 import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
 
 export const constants = wgsl( /* wgsl */ `
 	// TODO: expose modification of this value
