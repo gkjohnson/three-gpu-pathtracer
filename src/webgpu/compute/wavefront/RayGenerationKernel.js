@@ -94,6 +94,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue[ index ].pixel = indexUV;
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
+				rayQueue[ index ].pcgStateS0 = g_state.s0;
 
 				// write the active params
 				textureStore( sampleCountTarget, indexUV, vec4( ACTIVE_FLAG | samples ) );
