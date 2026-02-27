@@ -15,7 +15,7 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileCount: uniform( new Vector2() ),
 			tileOffset: uniform( 1 ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), 'QueuedRay' ).toReadOnly(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
 			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),

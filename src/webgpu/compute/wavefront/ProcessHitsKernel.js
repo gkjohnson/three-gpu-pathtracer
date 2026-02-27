@@ -23,10 +23,10 @@ export class ProcessHitsKernel extends ComputeKernel {
 			bounces: uniform( 1 ),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), 'QueuedRay' ),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), 'QueuedHit' ),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
 			globalId: globalId,
