@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, NearestFilter } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -23,12 +23,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	get samples() {
+
+		return this._pathTracer.samples;
+
+	}
+
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this.setCamera( this.camera );
+		this.updateEnvironment();
 
 	}
 
@@ -82,23 +89,18 @@ export class WebGPUPathTracer {
 		const bvhData = new PathtracerBVHComputeData( objectBVH );
 		bvhData.update();
 
+		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
+		this.updateEnvironment();
 
-		const environment = convertToTexture( this._renderer, scene.environment, this._envColorTexture );
-		const background = convertToTexture( this._renderer, scene.background, this._backgroundColorTexture );
+	}
 
-		this._pathTracer.setEnvironment(
-			environment,
-			scene.environmentIntensity,
-			scene.environmentRotation,
+	// TODO: support async generation of ObjectBVH
+	setSceneAsync( ...args ) {
 
-			background,
-			scene.backgroundIntensity,
-			scene.backgroundRotation,
-			scene.backgroundBlurriness,
-		);
+		this.setScene( ...args );
 
 	}
 
@@ -116,6 +118,32 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.setCamera( camera );
 		this.reset();
+
+	}
+
+	updateEnvironment() {
+
+		const {
+			_renderer,
+			_pathTracer,
+			scene,
+			_envColorTexture,
+			_backgroundColorTexture,
+		} = this;
+
+		const environment = convertToTexture( _renderer, scene.environment, _envColorTexture );
+		const background = convertToTexture( _renderer, scene.background, _backgroundColorTexture );
+
+		_pathTracer.setEnvironment(
+			environment,
+			scene.environmentIntensity,
+			scene.environmentRotation,
+
+			background,
+			scene.backgroundIntensity,
+			scene.backgroundRotation,
+			scene.backgroundBlurriness,
+		);
 
 	}
 

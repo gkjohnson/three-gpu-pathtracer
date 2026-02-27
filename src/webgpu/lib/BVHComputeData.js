@@ -406,8 +406,10 @@ export class BVHComputeData {
 		//
 
 		// set up the storage buffers
-		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 8 ), bvhNodeStruct ).toReadOnly().setName( `${ prefix }nodes` );
-		const transformsStorage = storage( new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), structs.transform.getLength() ), structs.transform ).toReadOnly().setName( `${ prefix }transforms` );
+
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 1 ), bvhNodeStruct ).toReadOnly().setName( `${ prefix }nodes` );
+		const transformsBuffer = new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), 1 );
+		const transformsStorage = storage( transformsBuffer, structs.transform ).toReadOnly().setName( `${ prefix }transforms` );
 		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ prefix }index` );
 		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct ).toReadOnly().setName( `${ prefix }attributes` );
 
