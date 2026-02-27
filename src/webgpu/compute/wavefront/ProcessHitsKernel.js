@@ -72,7 +72,12 @@ export class ProcessHitsKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				let object = bvh_transforms.value[ input.objectIndex ];
-				let material = bvh_materials.value[ object.materialIndex ];
+				var material = bvh_materials.value[ object.materialIndex ];
+
+				// apply per-object colors
+				material.color *= object.color.rgb;
+				material.opacity *= object.color.a;
+
 				var vertexData = bvh_sampleTrianglePoint( input.barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;

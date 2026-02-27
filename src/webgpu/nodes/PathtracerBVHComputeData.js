@@ -1,10 +1,11 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4 } from 'three/webgpu';
 import { BVHComputeData } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
+const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -12,6 +13,7 @@ const transformStruct = new StructTypeNode( {
 	materialIndex: 'uint',
 	_alignment0: 'uint',
 	_alignment1: 'uint',
+	color: 'vec4f',
 }, 'TransformStruct' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
@@ -420,7 +422,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// write material data to the transforms
 		const { materials } = this;
-		const material = info.object.material;
+		const { object, instanceId } = info;
+		const material = object.material;
 		if ( ! materials.includes( material ) ) {
 
 			materials.push( material );
@@ -430,6 +433,27 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const index = materials.indexOf( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
+
+		// write color
+		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
+		// if colors have not been defined.
+		if ( object.isInstancedMesh && object.instanceColor ) {
+
+			object.getColorAt( instanceId, _colorVec );
+			_colorVec.w = 1.0;
+
+		} else if ( object.isBatchedMesh && object._colorsTexture ) {
+
+			object.getColorAt( instanceId, _colorVec );
+
+		} else {
+
+			_colorVec.setScalar( 1 );
+
+		}
+
+		const transformBufferF32 = new Float32Array( targetBuffer );
+		_colorVec.toArray( transformBufferF32, writeOffset * transformStruct.getLength() + 36 );
 
 	}
 
