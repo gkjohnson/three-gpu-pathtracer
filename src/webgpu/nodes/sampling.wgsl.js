@@ -35,9 +35,9 @@ const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 ` );
 
 const sampleEquirectColorFn = wgslFn( /* wgsl */ `
-	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec3f {
+	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
 
-		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 ).rgb;
+		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 );
 
 	}
 `, [ equirectDirectionToUvFn ] );
@@ -72,14 +72,33 @@ export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 		env: EnvironmentInfo,
 		direction: vec3f,
 		uv: vec2f,
-	) -> vec3f {
+	) -> vec4f {
 
 		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * env.blur;
-
 		let sampleDir = normalize( env.rotation * direction + offsetDir );
+		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
 
-		return env.intensity * sampleEquirectColor( envMap, envMapSampler, sampleDir );
+		return vec4f( env.intensity * col.rgb, col.a );
 
 	}
 
 `, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
+
+export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
+	fn weightedAlphaBlend( prevColor: vec4f, newColor: vec4f, weight: f32 ) -> vec4f {
+
+		let invWeight = 1.0 - weight;
+		let totalAlpha = prevColor.a * invWeight + newColor.a * weight;
+		var blendedColor = vec4f( 0 );
+		if ( totalAlpha != 0.0 ) {
+
+			let prevContrib = prevColor.rgb * invWeight * prevColor.a / totalAlpha;
+			let resContrib = newColor.rgb * weight * newColor.a / totalAlpha;
+			blendedColor = vec4f( prevContrib + resContrib, totalAlpha );
+
+		}
+
+		return blendedColor;
+
+	}
+` );
