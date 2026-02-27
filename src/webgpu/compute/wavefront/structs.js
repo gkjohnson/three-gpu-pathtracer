@@ -1,15 +1,14 @@
-import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 import { StructTypeNode } from 'three/webgpu';
 
-// TODO: when possible this should be changed to pass the "rayStruct"
-// in as a type so dependencies are carried
 export const queuedRayStruct = new StructTypeNode( {
-	ray: 'Ray',
+	origin: 'vec3f',
+	_alignment0: 'uint',
+	direction: 'vec3f',
+	_alignment1: 'uint',
 	throughputColor: 'vec3f',
-	currentBounce: 'u32',
+	currentBounce: 'uint',
 	pixel: 'vec2u',
 }, 'QueuedRay' );
-queuedRayStruct.getLength = () => rayStruct.getLength() + 8;
 
 export const queuedHitStruct = new StructTypeNode( {
 	indices: 'vec3u',

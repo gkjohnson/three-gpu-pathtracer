@@ -5,7 +5,6 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
-import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
@@ -90,7 +89,8 @@ export class RayGenerationKernel extends ComputeKernel {
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
-				rayQueue[ index ].ray = ray;
+				rayQueue[ index ].origin = ray.origin;
+				rayQueue[ index ].direction = ray.direction;
 				rayQueue[ index ].pixel = indexUV;
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
@@ -99,7 +99,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				textureStore( sampleCountTarget, indexUV, vec4( ACTIVE_FLAG | samples ) );
 
 			}
-		`, [ rayStruct, queuedRayStruct, ndcToCameraRay, pcgInit, pcgRand2 ] )( params );
+		`, [ queuedRayStruct, ndcToCameraRay, pcgInit, pcgRand2 ] )( params );
 
 		super( kernel );
 

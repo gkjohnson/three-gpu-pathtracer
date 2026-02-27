@@ -101,12 +101,13 @@ export class RayIntersectionKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// run intersection
-				let hitResult = bvh_RaycastFirstHit( input.ray );
+				let ray = Ray( input.origin, input.direction );
+				let hitResult = bvh_RaycastFirstHit( ray );
 				if ( hitResult.didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
 					let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
-					hitQueue[ index ].view = - input.ray.direction;
+					hitQueue[ index ].view = - input.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
 					hitQueue[ index ].barycoord = hitResult.barycoord;
 					hitQueue[ index ].normal = hitResult.normal.xyz;
@@ -122,11 +123,11 @@ export class RayIntersectionKernel extends ComputeKernel {
 					var light: vec3f;
 					if ( input.currentBounce > 0u ) {
 
-						light = sampleEnvironment( envMap, envMapSampler, envInfo, input.ray.direction, pcgRand2() );
+						light = sampleEnvironment( envMap, envMapSampler, envInfo, input.direction, pcgRand2() );
 
 					} else {
 
-						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.ray.direction, pcgRand2() );
+						light = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.direction, pcgRand2() );
 
 					}
 					let newColor = light * input.throughputColor;

@@ -5,7 +5,6 @@ import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
-import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -96,8 +95,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
-					rayQueue[ index ].ray.origin = vertexData.position.xyz;
-					rayQueue[ index ].ray.direction = scatterRec.direction;
+					rayQueue[ index ].origin = vertexData.position.xyz;
+					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
@@ -111,7 +110,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			proxy( 'bvhData.value.storage.materials', parameters ),
 			proxy( 'bvhData.value.storage.transforms', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-			rayStruct, queuedRayStruct, lambertBsdfFunc, getSurfaceRecordFunc,
+			queuedRayStruct, lambertBsdfFunc, getSurfaceRecordFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
 		] );
 
