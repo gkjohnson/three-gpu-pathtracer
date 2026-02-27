@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } 
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, wgslFn, textureStore, globalId } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
+import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
 import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
@@ -19,10 +19,10 @@ export class RayIntersectionKernel extends ComputeKernel {
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), 'QueuedRay' ).toReadOnly(),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toReadOnly(),
 
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), 'QueuedHit' ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
 			// environment
