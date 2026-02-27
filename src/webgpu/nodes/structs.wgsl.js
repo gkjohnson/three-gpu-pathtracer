@@ -194,24 +194,24 @@ export const surfaceRecordStruct = new StructTypeNode( {
 // 	};
 // `, [ hitResultQueueElementStruct ] );
 
-export const rayQueueElementStruct = wgsl( /* wgsl */ `
-	struct RayQueueElement {
-		ray: Ray,
-		throughputColor: vec3f,
-		currentBounce: u32,
-		pixel: vec2u,
-	};
-`, [ rayStruct ] );
+// TODO: when possible this should be changed to pass the "rayStruct"
+// in as a type so dependencies are carried
+export const rayQueueElementStruct = new StructTypeNode( {
+	ray: 'Ray',
+	throughputColor: 'vec3f',
+	currentBounce: 'uint',
+	pixel: 'vec2u',
+}, 'RayQueueElement' );
 
 export const hitResultQueueElementStruct = new StructTypeNode( {
 	normal: 'vec3f',
-	pixel_x: 'u32',
+	pixel_x: 'uint',
 	position: 'vec3f',
-	pixel_y: 'u32',
+	pixel_y: 'uint',
 	view: 'vec3f',
-	currentBounce: 'u32',
+	currentBounce: 'uint',
 	throughputColor: 'vec3f',
-	vertexIndex: 'u32',
+	vertexIndex: 'uint',
 }, 'HitResultQueueElement' );
 
 export const environmentInfoStruct = new StructTypeNode( {

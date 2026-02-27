@@ -1,30 +1,29 @@
-import { wgsl } from 'three/tsl';
 import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
+import { StructTypeNode } from 'three/webgpu';
 
 export const QUEUED_RAY_SIZE = 16;
 
 export const QUEUED_HIT_SIZE = 20;
 
-export const queuedRayStruct = wgsl( /* wgsl */ `
-	struct QueuedRay {
-		ray: Ray,
-		throughputColor: vec3f,
-		currentBounce: u32,
-		pixel: vec2u,
-	};
-`, [ rayStruct ] );
+// TODO: when possible this should be changed to pass the "rayStruct"
+// in as a type so dependencies are carried
+export const queuedRayStruct = new StructTypeNode( {
+	ray: 'Ray',
+	throughputColor: 'vec3f',
+	currentBounce: 'u32',
+	pixel: 'vec2u',
+}, 'QueuedRay' );
+queuedRayStruct.getLength = () => 16;
 
-export const queuedHitStruct = wgsl( /* wgsl */`
-	struct QueuedHit {
-		indices: vec3u,
-		pixel_x: u32,
-		barycoord: vec3f,
-		pixel_y: u32,
-		view: vec3f,
-		currentBounce: u32,
-		throughputColor: vec3f,
-		objectIndex: u32,
-		normal: vec3f,
-		side: f32,
-	};
-` );
+export const queuedHitStruct = new StructTypeNode( {
+	indices: 'vec3u',
+	pixel_x: 'uint',
+	barycoord: 'vec3f',
+	pixel_y: 'uint',
+	view: 'vec3f',
+	currentBounce: 'uint',
+	throughputColor: 'vec3f',
+	objectIndex: 'uint',
+	normal: 'vec3f',
+	side: 'float',
+}, 'QueuedHit' );

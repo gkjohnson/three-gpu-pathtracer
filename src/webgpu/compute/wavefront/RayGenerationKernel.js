@@ -5,6 +5,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
 import { QUEUED_RAY_SIZE, queuedRayStruct } from './structs.js';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
@@ -98,7 +99,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				textureStore( sampleCountTarget, indexUV, vec4( ACTIVE_FLAG | samples ) );
 
 			}
-		`, [ queuedRayStruct, ndcToCameraRay, pcgInit, pcgRand2 ] )( params );
+		`, [ rayStruct, queuedRayStruct, ndcToCameraRay, pcgInit, pcgRand2 ] )( params );
 
 		super( kernel );
 

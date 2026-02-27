@@ -2,6 +2,7 @@ import { IndirectStorageBufferAttribute } from 'three/webgpu';
 import { wgslFn, uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { queuedRayStruct } from './structs.js';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
@@ -30,7 +31,7 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ queuedRayStruct ] )( params );
+		`, [ rayStruct, queuedRayStruct ] )( params );
 
 		super( kernel );
 

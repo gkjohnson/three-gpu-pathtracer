@@ -5,6 +5,7 @@ import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -110,7 +111,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			proxy( 'bvhData.value.storage.materials', parameters ),
 			proxy( 'bvhData.value.storage.transforms', parameters ),
 			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-			queuedRayStruct, lambertBsdfFunc, getSurfaceRecordFunc,
+			rayStruct, queuedRayStruct, lambertBsdfFunc, getSurfaceRecordFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
 		] );
 

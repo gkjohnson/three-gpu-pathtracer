@@ -5,6 +5,7 @@ import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -143,7 +144,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 		`, [
 			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 			proxy( 'bvhData.value.structs.material', parameters ),
-			queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
+			rayStruct, queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
 			sampleEnvironmentFn
 		] );
 
