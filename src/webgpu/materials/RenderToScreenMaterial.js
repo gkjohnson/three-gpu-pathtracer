@@ -24,7 +24,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	set toneMapping( v ) {
 
-		this._toneMapping.toneMapping = v;
+		this._toneMapping.setToneMapping( v );
 
 	}
 
@@ -52,7 +52,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 		// apply alpha _after_ applying tone mapping
 		this.transparent = true;
-		this.colorNode = vec4( texNode.rgb.mul( texNode.a ), texNode.a );
+		this.colorNode = vec4( toneMappingNode.rgb.mul( toneMappingNode.a ), toneMappingNode.a );
 
 		this.setValues( params );
 
