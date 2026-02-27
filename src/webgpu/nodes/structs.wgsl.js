@@ -1,26 +1,18 @@
 import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
 
 export const constants = wgsl( /* wgsl */ `
-
-		// TODO: expose modification of this value
-		const filterGlossyFactor: f32 = 0.5;
-
-		const PI: f32 = 3.141592653589793;
-
+	// TODO: expose modification of this value
+	const filterGlossyFactor: f32 = 0.5;
+	const PI: f32 = 3.141592653589793;
 ` );
 
-export const scatterRecordStruct = wgsl( /* wgsl */ `
-
-	struct ScatterRecord {
-		color: vec3f,
-		specularPdf: f32,
-		direction: vec3f,
-		pdf: f32,
-	};
-
-` );
+export const scatterRecordStruct = new StructTypeNode( {
+	color: 'vec3f',
+	specularPdf: 'float',
+	direction: 'vec3f',
+	pdf: 'float',
+}, 'ScatterRecord' );
 
 export const materialStruct = new StructTypeNode( {
 	// offset 0
@@ -140,61 +132,57 @@ export const materialStruct = new StructTypeNode( {
 	// total size = 260
 }, 'Material' );
 
-export const surfaceRecordStruct = wgsl( /* wgsl */`
+export const surfaceRecordStruct = new StructTypeNode( {
+	// surface type
+	volumeParticle: 'bool',
 
-	struct SurfaceRecord {
-		// surface type
-		volumeParticle: bool,
+	// geometry
+	faceNormal: 'vec3f',
+	frontFace: 'bool',
+	normal: 'vec3f',
+	normalBasis: 'mat3x3f',
+	normalInvBasis: 'mat3x3f',
 
-		// geometry
-		faceNormal: vec3f,
-		frontFace: bool,
-		normal: vec3f,
-		normalBasis: mat3x3f,
-		normalInvBasis: mat3x3f,
+	// cached properties
+	eta: 'f32',
+	f0: 'f32',
 
-		// cached properties
-		eta: f32,
-		f0: f32,
+	// material
+	roughness: 'f32',
+	filteredRoughness: 'f32',
+	metalness: 'f32',
+	color: 'vec3f',
+	emission: 'vec3f',
 
-		// material
-		roughness: f32,
-		filteredRoughness: f32,
-		metalness: f32,
-		color: vec3f,
-		emission: vec3f,
+	// transmission
+	ior: 'f32',
+	transmission: 'f32',
+	thinFilm: 'bool',
+	attenuationColor: 'vec3f',
+	attenuationDistance: ' f32',
 
-		// transmission
-		ior: f32,
-		transmission: f32,
-		thinFilm: bool,
-		attenuationColor: vec3f,
-		attenuationDistance:  f32,
+	// clearcoat
+	clearcoatNormal: 'vec3f',
+	clearcoatBasis: 'mat3x3f',
+	clearcoatInvBasis: 'mat3x3f',
+	clearcoat: 'f32',
+	clearcoatRoughness: 'f32',
+	filteredClearcoatRoughness: 'f32',
 
-		// clearcoat
-		clearcoatNormal: vec3f,
-		clearcoatBasis: mat3x3f,
-		clearcoatInvBasis: mat3x3f,
-		clearcoat: f32,
-		clearcoatRoughness: f32,
-		filteredClearcoatRoughness: f32,
+	// sheen
+	sheen: 'f32',
+	sheenColor: 'vec3f',
+	sheenRoughness: 'f32',
 
-		// sheen
-		sheen: f32,
-		sheenColor: vec3f,
-		sheenRoughness: f32,
+	// iridescence
+	iridescence: 'f32',
+	iridescenceIor: 'f32',
+	iridescenceThickness: 'f32',
 
-		// iridescence
-		iridescence: f32,
-		iridescenceIor: f32,
-		iridescenceThickness: f32,
-
-		// specular
-		specularColor: vec3f,
-		specularIntensity: f32,
-	};
-
-` );
+	// specular
+	specularColor: 'vec3f',
+	specularIntensity: 'f32',
+}, 'SurfaceRecord' );
 
 // TODO: write a proposal for a storage-backed structs and arrays in structs for three.js
 //
@@ -205,38 +193,29 @@ export const surfaceRecordStruct = wgsl( /* wgsl */`
 // 	};
 // `, [ hitResultQueueElementStruct ] );
 
-export const rayQueueElementStruct = wgsl( /* wgsl */ `
+export const rayQueueElementStruct = new StructTypeNode( {
+	origin: 'vec3',
+	_alignment0: 'uint',
+	direction: 'vec3',
+	_alignment1: 'uint',
+	throughputColor: 'vec3f',
+	currentBounce: 'uint',
+	pixel: 'vec2u',
+}, 'RayQueueElement' );
 
-	struct RayQueueElement {
-		ray: Ray,
-		throughputColor: vec3f,
-		currentBounce: u32,
-		pixel: vec2u,
-	};
+export const hitResultQueueElementStruct = new StructTypeNode( {
+	normal: 'vec3f',
+	pixel_x: 'uint',
+	position: 'vec3f',
+	pixel_y: 'uint',
+	view: 'vec3f',
+	currentBounce: 'uint',
+	throughputColor: 'vec3f',
+	vertexIndex: 'uint',
+}, 'HitResultQueueElement' );
 
-`, [ rayStruct ] );
-
-export const hitResultQueueElementStruct = wgsl( /* wgsl */`
-	struct HitResultQueueElement {
-		normal: vec3f,
-		pixel_x: u32,
-		position: vec3f,
-		pixel_y: u32,
-		view: vec3f,
-		currentBounce: u32,
-		throughputColor: vec3f,
-		vertexIndex: u32,
-	};
-` );
-
-export const environmentInfoStruct = wgsl( /* wgsl */ `
-
-	struct EnvironmentInfo {
-
-		rotation: mat3x3f,
-		intensity: f32,
-		blur: f32,
-
-	};
-
-` );
+export const environmentInfoStruct = new StructTypeNode( {
+	rotation: 'mat3x3f',
+	intensity: 'float',
+	blur: 'float',
+}, 'EnvironmentInfo' );
