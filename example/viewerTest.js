@@ -30,7 +30,7 @@ const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
-const isWebGPU = urlParams.get( 'hideUI' ) === 'true';
+const isWebGPU = urlParams.get( 'isWebGPU' ) === 'true';
 
 const params = {
 
