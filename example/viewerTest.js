@@ -10,26 +10,32 @@ import {
 	Group,
 	Sphere,
 	Box3,
+	Vector2,
 } from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer } from '../src/index.js';
+import { WebGLPathTracer, WebGPUPathTracer } from '../src/index.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
 
-const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
-const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
+const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
+const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
 
 const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
+const isWebGPU = urlParams.get( 'hideUI' ) === 'true';
 
 const params = {
+
+	isWebGPU,
+	useMegakernel: true,
 
 	enable: true,
 	bounces: 10,
@@ -78,19 +84,7 @@ async function init() {
 
 	}
 
-	// renderer
-	renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-	renderer.physicallyCorrectLights = true;
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.setClearAlpha( 0 );
-	containerEl.appendChild( renderer.domElement );
-
-	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.tiles.set( params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	createRenderer( params.isWebGPU );
 
 	// scene
 	scene = new Scene();
@@ -113,6 +107,41 @@ async function init() {
 	onHashChange();
 
 	animate();
+
+}
+
+function createRenderer( isWebGPU ) {
+
+	if ( isWebGPU ) {
+
+		// renderer - WebGPU version
+		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+		renderer.init();
+		renderer.toneMapping = ACESFilmicToneMapping;
+		renderer.setClearAlpha( 0 );
+		containerEl.appendChild( renderer.domElement );
+
+		// path tracer - WebGPU version
+		pathTracer = new WebGPUPathTracer( renderer );
+		pathTracer.useMegakernel( params.useMegakernel );
+
+	} else {
+
+		// renderer
+		renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+		renderer.physicallyCorrectLights = true;
+		renderer.toneMapping = ACESFilmicToneMapping;
+		renderer.setClearAlpha( 0 );
+		containerEl.appendChild( renderer.domElement );
+
+		// path tracer
+		pathTracer = new WebGLPathTracer( renderer );
+		pathTracer.filterGlossyFactor = 0.5;
+		pathTracer.tiles.set( params.tiles );
+		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+
+	}
 
 }
 
@@ -147,7 +176,7 @@ function animate() {
 
 		pathTracer.renderSample();
 
-	} else if ( delaySamples > 0 || ! params.enable ) {
+	} else if ( ( delaySamples > 0 || ! params.enable ) && renderer.initialized !== false ) {
 
 		delaySamples = Math.max( delaySamples - 1, 0 );
 		renderer.render( scene, camera );
@@ -234,6 +263,35 @@ function buildGui() {
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
+
+	let webgpuOptions;
+	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
+
+		const size = renderer.getSize( new Vector2() );
+		pathTracer.dispose();
+		containerEl.removeChild( renderer.domElement );
+		renderer.dispose();
+
+		createRenderer( v );
+		renderer.setSize( size.x, size.y );
+		renderer.setPixelRatio( window.devicePixelRatio );
+		pathTracer.setScene( scene, camera );
+
+		onParamsChange();
+
+		webgpuOptions.show( v );
+
+	} );
+
+	webgpuOptions = pathTracingFolder.add( params, 'useMegakernel' );
+	webgpuOptions.onChange( () => {
+
+		pathTracer.useMegakernel( params.useMegakernel );
+		pathTracer.reset();
+
+	} );
+	webgpuOptions.show( params.isWebGPU );
+
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'scale', 0.1, 1 ).onChange( onParamsChange );
@@ -261,7 +319,9 @@ function buildGui() {
 		'gltf-sample-viewer',
 		'model-viewer',
 		'rhodonite',
-		'stellar'
+		'stellar',
+		'vray',
+		'blender-cycles',
 	] ).onChange( updateImage );
 	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
 	comparisonFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
@@ -315,7 +375,7 @@ async function updateModel() {
 	const modelInfo = modelDatabase[ params.model ];
 	const {
 		verticalFoV = 45,
-		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
+		lighting = '../../../environments/lightroom_14b.hdr',
 	} = modelInfo;
 
 	let {
@@ -428,6 +488,6 @@ async function updateModel() {
 
 function updateImage() {
 
-	imgEl.src = `https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
+	imgEl.src = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
 
 }

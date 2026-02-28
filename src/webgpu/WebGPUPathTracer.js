@@ -24,12 +24,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	get samples() {
+
+		return this._pathTracer.samples;
+
+	}
+
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this.setCamera( this.camera );
+		this.updateEnvironment();
 
 	}
 
@@ -83,23 +90,18 @@ export class WebGPUPathTracer {
 		const bvhData = new PathtracerBVHComputeData( objectBVH );
 		bvhData.update();
 
+		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
+		this.updateEnvironment();
 
-		const environment = convertToTexture( this._renderer, scene.environment || _color.set( 0 ), this._envColorTexture );
-		const background = convertToTexture( this._renderer, scene.background, this._backgroundColorTexture );
+	}
 
-		this._pathTracer.setEnvironment(
-			environment,
-			scene.environmentIntensity,
-			scene.environmentRotation,
+	// TODO: support async generation of ObjectBVH
+	setSceneAsync( ...args ) {
 
-			background,
-			scene.backgroundIntensity,
-			scene.backgroundRotation,
-			scene.backgroundBlurriness,
-		);
+		this.setScene( ...args );
 
 	}
 
@@ -117,6 +119,32 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.setCamera( camera );
 		this.reset();
+
+	}
+
+	updateEnvironment() {
+
+		const {
+			_renderer,
+			_pathTracer,
+			scene,
+			_envColorTexture,
+			_backgroundColorTexture,
+		} = this;
+
+		const environment = convertToTexture( _renderer, scene.environment || _color.set( 0 ), _envColorTexture );
+		const background = convertToTexture( _renderer, scene.background, _backgroundColorTexture );
+
+		_pathTracer.setEnvironment(
+			environment,
+			scene.environmentIntensity,
+			scene.environmentRotation,
+
+			background,
+			scene.backgroundIntensity,
+			scene.backgroundRotation,
+			scene.backgroundBlurriness,
+		);
 
 	}
 
@@ -215,6 +243,7 @@ function convertToTexture( renderer, value, colorTexture ) {
 		colorTexture.image.data[ 1 ] = value.g * 255;
 		colorTexture.image.data[ 2 ] = value.b * 255;
 		colorTexture.image.data[ 3 ] = 255;
+
 		colorTexture.needsUpdate = true;
 		value = colorTexture;
 
