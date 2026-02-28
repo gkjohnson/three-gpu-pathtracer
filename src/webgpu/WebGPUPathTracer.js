@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, RenderTarget, FloatType, MathUtils } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -30,6 +30,12 @@ export class WebGPUPathTracer {
 
 	}
 
+	get fadeState() {
+
+		return MathUtils.clamp( ( performance.now() - this._resetTime - this.renderDelay ) / this.fadeDuration, 0, 1 );
+
+	}
+
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
@@ -58,11 +64,18 @@ export class WebGPUPathTracer {
 		this._backgroundColorTexture.minFilter = LinearFilter;
 		this._backgroundColorTexture.magFilter = LinearFilter;
 
+		this._resetTime = - 1;
+		this._size = new Vector2();
+		this._lowResTarget = new RenderTarget( 1, 1, { type: FloatType } );
+		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+
 		// options
+		this.renderDelay = 500;
+		this.fadeDuration = 500;
+		this.dynamicLowRes = true;
+		this.lowResScale = 0.2;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
-		this.renderToCanvas = true;
-		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -148,13 +161,33 @@ export class WebGPUPathTracer {
 
 	}
 
+	setSize( x, y ) {
+
+		if ( this._size.x !== x || this._size.y !== y ) {
+
+			this._size.set( x, y );
+			this.reset();
+
+		}
+
+	}
+
 	reset() {
 
 		this._pathTracer.reset();
+		this._resetTime = performance.now();
 
 	}
 
 	renderSample() {
+
+		const renderer = this._renderer;
+		const size = this._size;
+		const blitQuad = this._blitQuad;
+		const pathTracer = this._pathTracer;
+		const lowResTarget = this._lowResTarget;
+		const resetTime = this._resetTime;
+		const { renderDelay, dynamicLowRes, fadeState, synchronizeRenderSize, renderScale, lowResScale } = this;
 
 		if ( ! this._renderer._initialized ) {
 
@@ -162,49 +195,91 @@ export class WebGPUPathTracer {
 
 		}
 
-		this._updateScale();
-		this._pathTracer.update();
-
-		const blitQuad = this._blitQuad;
-		blitQuad.material.texture = this._pathTracer.outputTarget;
-
-		const renderer = this._renderer;
+		// clear renderer fields
 		const originalToneMapping = renderer.toneMapping;
 		const originalExposure = renderer.toneMappingExposure;
+		const originalTarget = renderer.getRenderTarget();
+		const originalAutoClear = renderer.autoClear;
 		renderer.toneMapping = NoToneMapping;
 		renderer.toneMappingExposure = 1.0;
+
+		// handle canvas-size auto synchronization
+		if ( synchronizeRenderSize ) {
+
+			renderer.getDrawingBufferSize( _resolution );
+			const w = Math.floor( renderScale * _resolution.x );
+			const h = Math.floor( renderScale * _resolution.y );
+			this.setSize( w, h );
+
+		}
+
+		// check if we should be in low res mode and calculate the target size
+		let { width, height } = size;
+		const lowResMode = performance.now() - resetTime < renderDelay;
+		if ( lowResMode ) {
+
+			width = Math.ceil( lowResScale * width );
+			height = Math.ceil( lowResScale * height );
+
+		}
+
+		// set the size if necessary
+		pathTracer.getSize( _resolution );
+
+		const resized = _resolution.x !== width || _resolution.y !== height;
+		if ( resized ) {
+
+			if ( ! lowResMode ) {
+
+				// copy the low reset content if we're transitioning to the full
+				// resolution view so we can fade to it
+				lowResTarget.setSize( width, height );
+				renderer.setRenderTarget( lowResTarget );
+				renderer.autoClear = true;
+				blitQuad.material.texture = pathTracer.outputTarget;
+				blitQuad.material.toneMapping = NoToneMapping;
+				blitQuad.material.toneMappingExposure = 1.0;
+				blitQuad.render( renderer );
+				renderer.setRenderTarget( originalTarget );
+				renderer.autoClear = originalAutoClear;
+
+			}
+
+			pathTracer.setSize( width, height );
+
+		}
+
+		// update the samples
+		if ( ! lowResMode || lowResMode && dynamicLowRes ) {
+
+			pathTracer.lowResMode = true;
+			pathTracer.update();
+
+		}
+
+		// render the content to the canvas
+		renderer.autoClear = false;
+		blitQuad.material.opacity = lowResMode && dynamicLowRes ? 1.0 : fadeState;
+		blitQuad.material.texture = pathTracer.outputTarget;
 		blitQuad.material.toneMapping = originalToneMapping;
 		blitQuad.material.toneMappingExposure = originalExposure;
 		blitQuad.render( renderer );
+
+		// reset the renderer
+		renderer.autoClear = originalAutoClear;
 		renderer.toneMapping = originalToneMapping;
 		renderer.toneMappingExposure = originalExposure;
+		renderer.setRenderTarget( originalTarget );
 
 	}
 
 	dispose() {
 
 		this._pathTracer.dispose();
-
-	}
-
-	_updateScale() {
-
-		// update the path tracer scale if it has changed
-		if ( this.synchronizeRenderSize ) {
-
-			this._renderer.getDrawingBufferSize( _resolution );
-
-			const w = Math.floor( this.renderScale * _resolution.x );
-			const h = Math.floor( this.renderScale * _resolution.y );
-
-			this._pathTracer.getSize( _resolution );
-			if ( _resolution.x !== w || _resolution.y !== h ) {
-
-				this._pathTracer.setSize( w, h );
-
-			}
-
-		}
+		this._blitQuad.dispose();
+		this._lowResTarget.dispose();
+		this._envColorTexture.dispose();
+		this._backgroundColorTexture.dispose();
 
 	}
 
@@ -243,7 +318,6 @@ function convertToTexture( renderer, value, colorTexture ) {
 		colorTexture.image.data[ 1 ] = value.g * 255;
 		colorTexture.image.data[ 2 ] = value.b * 255;
 		colorTexture.image.data[ 3 ] = 255;
-
 		colorTexture.needsUpdate = true;
 		value = colorTexture;
 

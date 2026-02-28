@@ -158,6 +158,7 @@ export class WaveFrontPathTracer {
 		this.samples = 0;
 		this.bounces = 7;
 		this.tiles = new Vector2( 3, 3 );
+		this.lowResMode = false;
 
 		// geometry fields
 		this.geometry = {
@@ -423,7 +424,8 @@ export class WaveFrontPathTracer {
 		}
 
 		// TODO: run this multiple times / adjust loop to process more rays at once
-		for ( let i = 0; i < 5; i ++ ) {
+		const iterations = this.lowResMode ? this.bounces : 5;
+		for ( let i = 0; i < iterations; i ++ ) {
 
 			this._task.next();
 
