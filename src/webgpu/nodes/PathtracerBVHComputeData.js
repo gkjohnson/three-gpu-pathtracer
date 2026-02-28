@@ -1,4 +1,4 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, Vector3 } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';

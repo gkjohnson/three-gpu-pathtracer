@@ -1,4 +1,4 @@
-import { Matrix4, Vector3, Vector4 } from 'three';
+import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage } from 'three/tsl';
 import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
