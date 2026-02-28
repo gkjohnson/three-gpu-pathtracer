@@ -116,7 +116,6 @@ const IS_LEAFNODE_FLAG = 0xFFFF;
 // scratch
 const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
-const _vec3 = /* @__PURE__ */ new Vector3();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 
