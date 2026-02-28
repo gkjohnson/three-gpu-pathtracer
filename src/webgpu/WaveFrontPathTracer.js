@@ -424,8 +424,7 @@ export class WaveFrontPathTracer {
 		}
 
 		// TODO: run this multiple times / adjust loop to process more rays at once
-		const iterations = this.lowResMode ? this.bounces : 5;
-		for ( let i = 0; i < iterations; i ++ ) {
+		for ( let i = 0; i < 5; i ++ ) {
 
 			this._task.next();
 
