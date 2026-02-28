@@ -27,6 +27,7 @@ StructTypeNode.prototype.isStruct = true;
 
 const applyBoneTransform = ( () => {
 
+	// a vec4-compatible version of SkinnedMesh.applyBoneTransform to support directions, positions
 	const _base = new Vector4();
 	const _skinIndex = new Vector4();
 	const _skinWeight = new Vector4();

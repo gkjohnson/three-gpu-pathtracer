@@ -466,6 +466,20 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			const data = bvhMap.get( bvh );
 			Object.assign( rangeTarget, data.range );
+
+			// make sure the mesh and bvh are updated if it's being reused across updates
+			if ( bvh !== data.bvh && bvh instanceof SkinnedMeshBVH ) {
+
+				const sourceMesh = bvh.mesh;
+				const clonedMesh = data.bvh.mesh;
+				clonedMesh.matrixWorld
+					.copy( sourceMesh.matrixWorld )
+					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
+
+				bvh.refit();
+
+			}
+
 			return data.bvh;
 
 		} else if ( bvh.indirect ) {
