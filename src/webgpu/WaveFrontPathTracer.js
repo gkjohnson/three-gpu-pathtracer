@@ -241,6 +241,13 @@ export class WaveFrontPathTracer {
 
 	}
 
+	setTextures( texture ) {
+
+		this.hitProcessKernel.textures = texture;
+		this.hitProcessKernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,

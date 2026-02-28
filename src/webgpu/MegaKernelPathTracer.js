@@ -113,7 +113,7 @@ export class MegaKernelPathTracer {
 	setTextures( texture ) {
 
 		this.kernel.textures = texture;
-		this.kernel.kernel.computeNode.parameters.texturesSampler.node.value = texture;
+		this.kernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
 
 	}
 

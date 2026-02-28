@@ -36,6 +36,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
+		this._pathTracer.setTextures( this.textureArray.texture );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
