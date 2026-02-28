@@ -25,6 +25,47 @@ StructTypeNode.prototype.isStruct = true;
 
 //
 
+const _base = new Vector3();
+const _skinIndex = new Vector4();
+const _skinWeight = new Vector4();
+const _matrix4 = new Matrix4();
+const _vector3 = new Vector3();
+
+function applyBoneTransformNormal( mesh, index, target ) {
+
+	const skeleton = mesh.skeleton;
+	const geometry = mesh.geometry;
+
+	_skinIndex.fromBufferAttribute( geometry.attributes.skinIndex, index );
+	_skinWeight.fromBufferAttribute( geometry.attributes.skinWeight, index );
+
+	_base.copy( target ).transformDirection( mesh.bindMatrix );
+
+	target.set( 0, 0, 0 );
+
+	for ( let i = 0; i < 4; i ++ ) {
+
+		const weight = _skinWeight.getComponent( i );
+
+		if ( weight !== 0 ) {
+
+			const boneIndex = _skinIndex.getComponent( i );
+
+			_matrix4.multiplyMatrices( skeleton.bones[ boneIndex ].matrixWorld, skeleton.boneInverses[ boneIndex ] );
+
+			target.addScaledVector( _vector3.copy( _base ).transformDirection( _matrix4 ), weight );
+
+		}
+
+	}
+
+	return target.transformDirection( mesh.bindMatrixInverse );
+
+}
+
+
+//
+
 // structs
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
@@ -545,9 +586,14 @@ export class BVHComputeData {
 
 						if ( name === 'position' && mesh ) {
 
-							// TODO: normals and tangents need to be transformed here, as well
 							mesh.getVertexPosition( i + vertexStart, _vec3 );
 							_vec.set( ..._vec3, 1 );
+
+						} else if ( ( name === 'normal' || name === 'tangent' ) && mesh ) {
+
+							_vec3.fromBufferAttribute( attr, i + vertexStart );
+							applyBoneTransformNormal( mesh, i + vertexStart, _vec3 );
+							_vec.set( ..._vec3, 0 );
 
 						} else {
 
