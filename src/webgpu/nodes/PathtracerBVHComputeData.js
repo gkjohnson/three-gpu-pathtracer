@@ -10,9 +10,9 @@ const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	nodeOffset: 'uint',
+	visible: 'uint',
 	materialIndex: 'uint',
 	_alignment0: 'uint',
-	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -432,7 +432,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const index = materials.indexOf( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw

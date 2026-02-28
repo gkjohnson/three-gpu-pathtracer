@@ -30,9 +30,9 @@ const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	nodeOffset: 'uint',
+	visible: 'uint',
 	_alignment0: 'uint',
 	_alignment1: 'uint',
-	_alignment2: 'uint',
 }, 'TransformStruct' );
 
 const intersectionResultStruct = new StructTypeNode( {
@@ -276,6 +276,11 @@ export class BVHComputeData {
 					for ( var t = offset; t < offset + count; t = t + 1u ) {
 
 						let transform = ${ storage.transforms }[ t ];
+						if ( transform.visible == 0u ) {
+
+							continue;
+
+						}
 
 						// Transform shape into object local space
 						let localShape = ${ transformShapeFn }( shape, transform.inverseMatrixWorld );
@@ -690,7 +695,6 @@ export class BVHComputeData {
 
 		const { object, instanceId, root, data } = info;
 		const { bvhNodeOffsets } = data;
-
 		if ( object.isInstancedMesh || object.isBatchedMesh ) {
 
 			object.getMatrixAt( instanceId, _matrix );
@@ -702,13 +706,25 @@ export class BVHComputeData {
 
 		}
 
+		// write transform
 		_matrix.premultiply( premultiplyMatrix );
 		_matrix.toArray( transformBufferF32, writeOffset * structs.transform.getLength() );
 
+		// write inverse transform
 		_matrix.invert();
 		_matrix.toArray( transformBufferF32, writeOffset * structs.transform.getLength() + 16 );
 
+		// write node offset
 		transformBufferU32[ writeOffset * structs.transform.getLength() + 32 ] = bvhNodeOffsets[ root ];
+
+		let visible = object.visible;
+		if ( object.isInstancedMesh || object.isBatchedMesh ) {
+
+			visible = visible && object.getVisibleAt( instanceId );
+
+		}
+
+		transformBufferU32[ writeOffset * structs.transform.getLength() + 33 ] = visible ? 1 : 0;
 
 	}
 
