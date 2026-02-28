@@ -25,43 +25,62 @@ StructTypeNode.prototype.isStruct = true;
 
 //
 
-const _base = new Vector3();
-const _skinIndex = new Vector4();
-const _skinWeight = new Vector4();
-const _matrix4 = new Matrix4();
-const _vector3 = new Vector3();
+const applyBoneTransform = ( () => {
 
-function applyBoneTransformNormal( mesh, index, target ) {
+	const _base = new Vector4();
+	const _skinIndex = new Vector4();
+	const _skinWeight = new Vector4();
+	const _matrix4 = new Matrix4();
+	const _vector4 = new Vector4();
+	return function applyBoneTransform( mesh, index, target ) {
 
-	const skeleton = mesh.skeleton;
-	const geometry = mesh.geometry;
+		const skeleton = mesh.skeleton;
+		const geometry = mesh.geometry;
 
-	_skinIndex.fromBufferAttribute( geometry.attributes.skinIndex, index );
-	_skinWeight.fromBufferAttribute( geometry.attributes.skinWeight, index );
+		_skinIndex.fromBufferAttribute( geometry.attributes.skinIndex, index );
+		_skinWeight.fromBufferAttribute( geometry.attributes.skinWeight, index );
 
-	_base.copy( target ).transformDirection( mesh.bindMatrix );
+		if ( target.isVector4 ) {
 
-	target.set( 0, 0, 0 );
+			_base.copy( target );
+			target.set( 0, 0, 0, 0 );
 
-	for ( let i = 0; i < 4; i ++ ) {
+		} else {
 
-		const weight = _skinWeight.getComponent( i );
-
-		if ( weight !== 0 ) {
-
-			const boneIndex = _skinIndex.getComponent( i );
-
-			_matrix4.multiplyMatrices( skeleton.bones[ boneIndex ].matrixWorld, skeleton.boneInverses[ boneIndex ] );
-
-			target.addScaledVector( _vector3.copy( _base ).transformDirection( _matrix4 ), weight );
+			_base.set( ...target, 1 );
+			target.set( 0, 0, 0 );
 
 		}
 
-	}
+		_base.applyMatrix4( mesh.bindMatrix );
 
-	return target.transformDirection( mesh.bindMatrixInverse );
+		for ( let i = 0; i < 4; i ++ ) {
 
-}
+			const weight = _skinWeight.getComponent( i );
+
+			if ( weight !== 0 ) {
+
+				const boneIndex = _skinIndex.getComponent( i );
+
+				_matrix4.multiplyMatrices( skeleton.bones[ boneIndex ].matrixWorld, skeleton.boneInverses[ boneIndex ] );
+
+				target.addScaledVector( _vector4.copy( _base ).applyMatrix4( _matrix4 ), weight );
+
+			}
+
+		}
+
+		if ( target.isVector4 ) {
+
+			target.w = _base.w;
+
+		}
+
+		return target.applyMatrix4( mesh.bindMatrixInverse );
+
+	};
+
+} )();
 
 
 //
@@ -584,22 +603,7 @@ export class BVHComputeData {
 
 					if ( attr ) {
 
-						if ( name === 'position' && mesh ) {
-
-							mesh.getVertexPosition( i + vertexStart, _vec3 );
-							_vec.set( ..._vec3, 1 );
-
-						} else if ( ( name === 'normal' || name === 'tangent' ) && mesh ) {
-
-							_vec3.fromBufferAttribute( attr, i + vertexStart );
-							applyBoneTransformNormal( mesh, i + vertexStart, _vec3 );
-							_vec.set( ..._vec3, 0 );
-
-						} else {
-
-							_vec.fromBufferAttribute( attr, i + vertexStart );
-
-						}
+						_vec.fromBufferAttribute( attr, i + vertexStart );
 
 						switch ( attr.itemSize ) {
 
@@ -615,6 +619,12 @@ export class BVHComputeData {
 						case 3:
 							_vec.w = _def.w;
 							break;
+
+						}
+
+						if ( mesh && ( name === 'position' || name === 'normal' || name === 'tangent' ) ) {
+
+							applyBoneTransform( mesh, i + vertexStart, _vec );
 
 						}
 
