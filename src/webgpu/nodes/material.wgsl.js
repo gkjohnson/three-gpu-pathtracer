@@ -35,8 +35,10 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		hitNormal: vec3f,
+		textures: texture_2d_array<f32>,
+		textureSampler: sampler,
 	) -> SurfaceRecord {
-		let uv = vertexData.uv0.xy;
+		let uv = vertexData.uv.xy;
 
 		var normal = hitNormal * side;
 		if ( material.flatShading == 0 ) {
@@ -48,7 +50,6 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		let baseNormal = normal;
 
 		if ( material.normalMap != -1 ) {
-			/*
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 			// resulting in NaNs and slow path tracing.
@@ -66,8 +67,6 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			}
 
-			*/
-
 		}
 
 		normal *= side;
@@ -83,84 +82,69 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		if ( material.map != -1 ) {
 
-			/*
 			let uvPrime = material.mapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.map ), 0 );
 			albedo *= vec4f( texColor.rgb, 1.0 );
-			*/
 
 		}
 
 		var roughness = material.roughness;
 		if ( material.roughnessMap != -1 ) {
 
-			/*
 			let uvPrime = material.roughnessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.roughnessMap ), 0 );
 			roughness *= texColor.g;
-			*/
 
 		}
 
 		var metalness = material.metalness;
 		if ( material.metalnessMap != -1 ) {
 
-			/*
 			let uvPrime = material.metalnessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.metalnessMap ), 0 );
 			metalness *= texColor.b;
-			*/
 
 		}
 
 		var emission = material.emissiveIntensity * material.emissive;
 		if ( material.emissiveMap != -1 ) {
 
-			/*
 			let uvPrime = material.emissiveMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.emissiveMap ), 0 );
 			emission *= texColor.rgb;
-			*/
 
 		}
 
 		var transmission = material.transmission;
 		if ( material.transmissionMap != -1 ) {
 
-			/*
 			let uvPrime = material.transmissionMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.transmissionMap ), 0 );
 			transmission *= texColor.r;
-			*/
 
 		}
 
 		var clearcoat = material.clearcoat;
 		if ( material.clearcoatMap != -1 ) {
 
-			/*
 			let uvPrime = material.clearcoatMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatMap ), 0 );
 			clearcoat *= texColor.r;
-			*/
 
 		}
 
 		var clearcoatRoughness = material.clearcoatRoughness;
 		if ( material.clearcoatRoughnessMap != -1 ) {
 
-			/*
 			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatRoughnessMap ), 0 );
 			clearcoatRoughness *= texColor.r;
-			*/
 
 		}
 
 		var clearcoatNormal = baseNormal;
 		if ( material.clearcoatNormalMap != -1 ) {
 
-			/*
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 			// resulting in NaNs and slow path tracing.
 			if ( length( vertexData.tangent ) > 0.0 ) {
@@ -176,7 +160,6 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 				normal = normalize( vTBN * texNormal );
 
 			}
-			*/
 
 		}
 		clearcoatNormal *= side;
@@ -184,66 +167,54 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
 
-			/*
 			let uvPrime = material.sheenColorMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.sheenColorMap ), 0 );
 			sheenColor *= texColor.rgb;
-			*/
 
 		}
 
 		var sheenRoughness = material.sheenRoughness;
 		if ( material.sheenRoughnessMap != -1 ) {
 
-			/*
 			let uvPrime = material.sheenRoughnessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.sheenRoughnessMap ), 0 );
 			sheenRoughness *= texColor.r;
-			*/
 
 		}
 
 		var iridescence = material.iridescence;
 		if ( material.iridescenceMap != -1 ) {
 
-			/*
 			let uvPrime = material.iridescenceMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceMap ), 0 );
 			iridescence *= texColor.r;
-			*/
 
 		}
 
 		var iridescenceThickness = material.iridescenceThicknessMaximum;
 		if ( material.iridescenceThicknessMap != -1 ) {
 
-			/*
 			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceThicknessMap ), 0 );
 			iridescenceThickness *= texColor.r;
-			*/
 
 		}
 
 		var specularColor = material.specularColor;
 		if ( material.specularColorMap != -1 ) {
 
-			/*
 			let uvPrime = material.specularColorMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.specularColorMap ), 0 );
 			specularColor *= texColor.rgb;
-			*/
 
 		}
 
 		var specularIntensity = material.specularIntensity;
 		if ( material.specularIntensityMap != -1 ) {
 
-			/*
 			let uvPrime = material.specularIntensityMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.specularIntensityMap ), 0 );
 			specularIntensity *= texColor.r;
-			*/
 
 		}
 

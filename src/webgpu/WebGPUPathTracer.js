@@ -7,6 +7,7 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
+import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -64,6 +65,8 @@ export class WebGPUPathTracer {
 		this.renderToCanvas = true;
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
+		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
+
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
@@ -89,6 +92,9 @@ export class WebGPUPathTracer {
 		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
 		const bvhData = new PathtracerBVHComputeData( objectBVH );
 		bvhData.update();
+
+		this.textureArray.setTextures( bvhData.textures );
+		this._pathTracer.setTextures( this.textureArray.texture );
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -162,13 +168,15 @@ export class WebGPUPathTracer {
 
 		}
 
+		const renderer = this._renderer;
+
 		this._updateScale();
+		this.textureArray.update( renderer );
 		this._pathTracer.update();
 
 		const blitQuad = this._blitQuad;
 		blitQuad.material.texture = this._pathTracer.outputTarget;
 
-		const renderer = this._renderer;
 		const originalToneMapping = renderer.toneMapping;
 		const originalExposure = renderer.toneMappingExposure;
 		renderer.toneMapping = NoToneMapping;

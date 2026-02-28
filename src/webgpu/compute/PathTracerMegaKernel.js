@@ -39,6 +39,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundIntensity: uniform( 1 ),
 			backgroundBlurriness: uniform( 0 ),
 
+			textures: texture( new DataTexture() ),
+			texturesSampler: sampler( new DataTexture() ),
+
 			// compute variables
 			globalId: globalId,
 		};
@@ -74,6 +77,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundRotation: mat3x3f,
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
+
+				textures: texture_2d_array<f32>,
+				texturesSampler: sampler
 
 			) -> void {
 
@@ -133,7 +139,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						material.color *= object.color.rgb;
 						material.opacity *= object.color.a;
 
-						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal );
+						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal, textures, texturesSampler );
 
 						let scatterRec = bsdfSample( - ray.direction, surface );
 
