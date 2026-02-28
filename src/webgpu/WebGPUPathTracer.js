@@ -252,7 +252,7 @@ export class WebGPUPathTracer {
 		// update the samples
 		if ( ! lowResMode || lowResMode && dynamicLowRes ) {
 
-			pathTracer.lowResMode = true;
+			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();
 
 		}
