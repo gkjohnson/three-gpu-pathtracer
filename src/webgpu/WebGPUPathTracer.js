@@ -229,19 +229,12 @@ export class WebGPUPathTracer {
 		const resized = _resolution.x !== width || _resolution.y !== height;
 		if ( resized ) {
 
-			if ( ! lowResMode ) {
+			if ( ! lowResMode && dynamicLowRes ) {
 
 				// copy the low reset content if we're transitioning to the full
 				// resolution view so we can fade to it
 				lowResTarget.setSize( width, height );
-				renderer.setRenderTarget( lowResTarget );
-				renderer.autoClear = true;
-				blitQuad.material.texture = pathTracer.outputTarget;
-				blitQuad.material.toneMapping = NoToneMapping;
-				blitQuad.material.toneMappingExposure = 1.0;
-				blitQuad.render( renderer );
-				renderer.setRenderTarget( originalTarget );
-				renderer.autoClear = originalAutoClear;
+				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget.texture );
 
 			}
 
