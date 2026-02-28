@@ -1,4 +1,4 @@
-import { Matrix4, Vector4 } from 'three';
+import { Matrix4, Vector3, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage } from 'three/tsl';
 import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
@@ -55,6 +55,7 @@ const IS_LEAFNODE_FLAG = 0xFFFF;
 // scratch
 const _def = /* @__PURE__ */ new Vector4();
 const _vec = /* @__PURE__ */ new Vector4();
+const _vec3 = /* @__PURE__ */ new Vector3();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _inverseMatrix = /* @__PURE__ */ new Matrix4();
 
@@ -545,7 +546,8 @@ export class BVHComputeData {
 						if ( name === 'position' && mesh ) {
 
 							// TODO: normals and tangents need to be transformed here, as well
-							mesh.getVertexPosition( i + vertexStart, _vec );
+							mesh.getVertexPosition( i + vertexStart, _vec3 );
+							_vec.set( ..._vec3, 1 );
 
 						} else {
 

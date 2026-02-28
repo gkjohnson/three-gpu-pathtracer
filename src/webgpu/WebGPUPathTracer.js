@@ -75,7 +75,11 @@ export class WebGPUPathTracer {
 
 				if ( ! child.boundsTree ) {
 
-					child.boundsTree = new SkinnedMeshBVH( child, { strategy: SAH, maxLeafSize: 5 } );
+					child.boundsTree = new SkinnedMeshBVH( child, { strategy: SAH, maxLeafSize: 5, indirect: true } );
+
+				} else {
+
+					child.boundsTree.refit();
 
 				}
 
