@@ -329,7 +329,7 @@ export class BVHComputeData {
 					bvh: primBvh,
 					range: range,
 
-					bvhBufferOffsets: null,
+					bvhNodeOffsets: null,
 					indexBufferOffset: null,
 
 				};
@@ -713,8 +713,11 @@ export class BVHComputeData {
 		let bvh = null;
 		if ( object.boundsTree ) {
 
-			// TODO
 			// this is a case where a mesh has morph targets and skinned meshes
+			const geometry = object.geometry;
+			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+			rangeTarget.vertexCount = geometry.attributes.position.count;
+			bvh = object.boundsTree;
 
 		} else if ( object.isBatchedMesh ) {
 
@@ -729,12 +732,6 @@ export class BVHComputeData {
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
 			bvh = object.geometry.boundsTree;
-
-		}
-
-		if ( ! bvh ) {
-
-			throw new Error( 'BVHComputeData: BVH not found.' );
 
 		}
 
