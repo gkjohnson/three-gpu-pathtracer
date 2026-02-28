@@ -794,6 +794,12 @@ export class BVHComputeData {
 
 		}
 
+		if ( ! bvh ) {
+
+			throw new Error( 'BVHComputeData: BVH not found.' );
+
+		}
+
 		return bvh;
 
 	}
