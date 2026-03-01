@@ -49,6 +49,8 @@ function* renderTask() {
 	primeRayGenerationDispatchKernel.tileOffset = 0;
 
 	const tileSize = new Vector2();
+	const samplesPerIteration = RAYS_TO_PROCESS / ( sampleCountTarget.width * sampleCountTarget.height * bounces );
+	let samples = 0;
 	while ( true ) {
 
 		this.getTileSize( tileSize );
@@ -139,8 +141,10 @@ function* renderTask() {
 		// - separate "volume" step?
 		// - allow for simultaneous writes by queue pixel writes, sorting, and blending them in a single thread
 
-		yield;
+		samples += samplesPerIteration;
+		this.samples = Math.floor( samples );
 
+		yield;
 
 	}
 
@@ -375,6 +379,7 @@ export class WaveFrontPathTracer {
 		}
 
 		this._task = null;
+		this.samples = 0;
 
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
