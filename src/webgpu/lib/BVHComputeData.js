@@ -680,10 +680,10 @@ export class BVHComputeData {
 
 					// calculate a scale multiplier for the triangle and ray to prevent
 					// floating point errors
-					let multiplier = length( ray.direction );
+					let multiplier = 1.0 / length( ray.direction );
 					var scaledRay = ray;
-					scaledRay.direction /= multiplier;
-					scaledRay.origin /= multiplier;
+					scaledRay.direction *= multiplier;
+					scaledRay.origin *= multiplier;
 
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
