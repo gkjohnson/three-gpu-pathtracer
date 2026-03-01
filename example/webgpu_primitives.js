@@ -96,6 +96,12 @@ function animate() {
 	// update the camera and render one sample
 	if ( options.enable ) {
 
+		if ( ! pathTracer.dynamicLowRes && pathTracer.fadeState !== 1 ) {
+
+			renderer.render( scene, camera );
+
+		}
+
 		pathTracer.renderSample();
 
 	} else {

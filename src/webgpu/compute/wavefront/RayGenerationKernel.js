@@ -85,7 +85,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// write the ray data
-				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * pcgRand2() / vec2f( targetDimensions.xy );
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
