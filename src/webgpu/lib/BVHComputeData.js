@@ -678,17 +678,24 @@ export class BVHComputeData {
 					bestHit.didHit = false;
 					bestHit.dist = bestDist;
 
+					// calculate a scale multiplier for the triangle and ray to prevent
+					// floating point errors
+					let multiplier = length( ray.direction );
+					var scaledRay = ray;
+					scaledRay.direction /= multiplier;
+					scaledRay.origin /= multiplier;
+
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
 						let i0 = ${ storage.index }[ ti * 3u ];
 						let i1 = ${ storage.index }[ ti * 3u + 1u ];
 						let i2 = ${ storage.index }[ ti * 3u + 2u ];
 
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						var a = ${ storage.attributes }[ i0 ].position.xyz * multiplier;
+						var b = ${ storage.attributes }[ i1 ].position.xyz * multiplier;
+						var c = ${ storage.attributes }[ i2 ].position.xyz * multiplier;
 
-						var triResult = ${ intersectsTriangle }( ray, a, b, c );
+						var triResult = ${ intersectsTriangle }( scaledRay, a, b, c );
 						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
 
 							bestHit = triResult;
