@@ -7,6 +7,7 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
+import { SkinnedMeshBVH } from './lib/SkinnedMeshBVH.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -93,9 +94,25 @@ export class WebGPUPathTracer {
 		// Build BVH for each mesh geometry
 		scene.traverse( child => {
 
-			if ( child.isMesh && ! child.geometry.boundsTree ) {
+			if ( child.isSkinnedMesh ) {
 
-				child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 5 } );
+				if ( ! child.boundsTree ) {
+
+					child.boundsTree = new SkinnedMeshBVH( child, { strategy: SAH, maxLeafSize: 5, indirect: true } );
+
+				} else {
+
+					child.boundsTree.refit();
+
+				}
+
+			} else if ( child.isMesh ) {
+
+				if ( ! child.geometry.boundsTree ) {
+
+					child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 5 } );
+
+				}
 
 			}
 

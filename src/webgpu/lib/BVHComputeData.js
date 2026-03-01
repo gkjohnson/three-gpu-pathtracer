@@ -25,6 +25,67 @@ StructTypeNode.prototype.isStruct = true;
 
 //
 
+const applyBoneTransform = ( () => {
+
+	// a vec4-compatible version of SkinnedMesh.applyBoneTransform to support directions, positions
+	const _base = new Vector4();
+	const _skinIndex = new Vector4();
+	const _skinWeight = new Vector4();
+	const _matrix4 = new Matrix4();
+	const _vector4 = new Vector4();
+	return function applyBoneTransform( mesh, index, target ) {
+
+		const skeleton = mesh.skeleton;
+		const geometry = mesh.geometry;
+
+		_skinIndex.fromBufferAttribute( geometry.attributes.skinIndex, index );
+		_skinWeight.fromBufferAttribute( geometry.attributes.skinWeight, index );
+
+		if ( target.isVector4 ) {
+
+			_base.copy( target );
+			target.set( 0, 0, 0, 0 );
+
+		} else {
+
+			_base.set( ...target, 1 );
+			target.set( 0, 0, 0 );
+
+		}
+
+		_base.applyMatrix4( mesh.bindMatrix );
+
+		for ( let i = 0; i < 4; i ++ ) {
+
+			const weight = _skinWeight.getComponent( i );
+
+			if ( weight !== 0 ) {
+
+				const boneIndex = _skinIndex.getComponent( i );
+
+				_matrix4.multiplyMatrices( skeleton.bones[ boneIndex ].matrixWorld, skeleton.boneInverses[ boneIndex ] );
+
+				target.addScaledVector( _vector4.copy( _base ).applyMatrix4( _matrix4 ), weight );
+
+			}
+
+		}
+
+		if ( target.isVector4 ) {
+
+			target.w = _base.w;
+
+		}
+
+		return target.applyMatrix4( mesh.bindMatrixInverse );
+
+	};
+
+} )();
+
+
+//
+
 // structs
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
@@ -334,7 +395,7 @@ export class BVHComputeData {
 					bvh: primBvh,
 					range: range,
 
-					bvhBufferOffsets: null,
+					bvhNodeOffsets: null,
 					indexBufferOffset: null,
 
 				};
@@ -551,16 +612,7 @@ export class BVHComputeData {
 
 					if ( attr ) {
 
-						if ( name === 'position' && mesh ) {
-
-							// TODO: normals and tangents need to be transformed here, as well
-							mesh.getVertexPosition( i + vertexStart, _vec );
-
-						} else {
-
-							_vec.fromBufferAttribute( attr, i + vertexStart );
-
-						}
+						_vec.fromBufferAttribute( attr, i + vertexStart );
 
 						switch ( attr.itemSize ) {
 
@@ -576,6 +628,12 @@ export class BVHComputeData {
 						case 3:
 							_vec.w = _def.w;
 							break;
+
+						}
+
+						if ( mesh && ( name === 'position' || name === 'normal' || name === 'tangent' ) ) {
+
+							applyBoneTransform( mesh, i + vertexStart, _vec );
 
 						}
 
@@ -733,8 +791,11 @@ export class BVHComputeData {
 		let bvh = null;
 		if ( object.boundsTree ) {
 
-			// TODO
 			// this is a case where a mesh has morph targets and skinned meshes
+			const geometry = object.geometry;
+			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+			rangeTarget.vertexCount = geometry.attributes.position.count;
+			bvh = object.boundsTree;
 
 		} else if ( object.isBatchedMesh ) {
 
