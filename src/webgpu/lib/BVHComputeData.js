@@ -776,7 +776,7 @@ export class BVHComputeData {
 		transformBufferU32[ writeOffset * structs.transform.getLength() + 32 ] = bvhNodeOffsets[ root ];
 
 		let visible = object.visible;
-		if ( object.isInstancedMesh || object.isBatchedMesh ) {
+		if ( object.isBatchedMesh ) {
 
 			visible = visible && object.getVisibleAt( instanceId );
 
