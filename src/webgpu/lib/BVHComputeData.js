@@ -225,7 +225,9 @@ export class BVHComputeData {
 
 				} else if ( item instanceof GeometryBVH ) {
 
-					return new Mesh( item.geometry );
+					const dummy = new Mesh();
+					dummy.geometry.boundsTree = item;
+					return dummy;
 
 				}
 
