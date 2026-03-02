@@ -5,7 +5,6 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
-import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { SkinnedMeshBVH } from './lib/SkinnedMeshBVH.js';
@@ -123,8 +122,7 @@ export class WebGPUPathTracer {
 		} );
 
 		// Build TLAS and compute functions
-		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
-		const bvhData = new PathtracerBVHComputeData( objectBVH );
+		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
