@@ -6,12 +6,13 @@ import {
 	LinearFilter,
 	NoToneMapping,
 	QuadMesh,
+	NoBlending,
 } from 'three/webgpu';
-import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial';
+import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 
 function getTextureHash( texture ) {
 
-	return texture ? `${ texture.uuid }:${ texture.version }` : null;
+	return texture && texture.source ? `${ texture.source.uuid }:${ texture.source.version }` : null;
 
 }
 
@@ -63,8 +64,9 @@ export class RenderTarget2DArray {
 		this.texture.isArrayTexture = true;
 
 		this.textures = [];
-		this.hashes = [ null ];
+		this.hashes = [];
 		this.quadMesh = new QuadMesh( new RenderToScreenNodeMaterial() );
+		this.quadMesh.material.blending = NoBlending;
 
 	}
 
@@ -88,15 +90,16 @@ export class RenderTarget2DArray {
 
 	update( renderer ) {
 
-		if ( renderer.initialized ) {
+		if ( this.textures.length > 0 && renderer.initialized ) {
 
 			this._renderTextures( renderer, this.textures );
+			this.textures.length = 0;
 
 		}
 
 	}
 
-	_renderTextures( renderer, textures ) {
+	_renderTextures( renderer ) {
 
 		// Save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
@@ -111,7 +114,7 @@ export class RenderTarget2DArray {
 
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
-			const texture = textures[ i ];
+			const texture = this.textures[ i ];
 			const hash = getTextureHash( texture );
 			if ( texture && ( hashes[ i ] !== hash || texture.isRenderTarget ) ) {
 
