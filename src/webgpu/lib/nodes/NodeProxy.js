@@ -18,24 +18,20 @@ class ProxyCallNode extends Node {
 
 	setup() {
 
-		return this.proxyNode.node.call( ...this.params );
+		return this.proxyNode.proxyNode.call( ...this.params );
 
 	}
 
 }
 
-export class NodeProxy extends Node {
+export class NodeProxy {
 
-	static get type() {
+	// getter for the node being proxied to
+	get proxyNode() {
 
-		return 'NodeProxy';
-
-	}
-
-	get node() {
-
-		const { properties, object } = this;
-		let value = object;
+		const { proxyObject, proxyProperty } = this;
+		const properties = proxyProperty.split( '.' );
+		let value = proxyObject;
 		for ( let i = 0, l = properties.length; i < l; i ++ ) {
 
 			value = value[ properties[ i ] ];
@@ -56,31 +52,52 @@ export class NodeProxy extends Node {
 
 	constructor( property, object = null ) {
 
-		super();
-		this.object = object;
-		this.property = property;
-		this.properties = property.split( '.' );
+		// store the proxy property and objects so they can be changed later
+		this.proxyObject = object;
+		this.proxyProperty = property;
 
-	}
+		// set up a proxy to redirect all calls to the proxied node in order to avoid replicating
+		// expected members for all node types.
+		return new Proxy( this, {
 
-	// delegate type resolution to the target node
-	getNodeType( builder ) {
+			get( target, property ) {
 
-		return this.node.getNodeType( builder );
+				if ( property in target ) {
 
-	}
+					return Reflect.get( target, property );
 
-	// include the target node's cache key so the proxy invalidates when the target changes
-	customCacheKey() {
+				} else {
 
-		return this.node.getCacheKey();
+					const value = Reflect.get( target.proxyNode, property );
+					if ( typeof value === 'function' ) {
 
-	}
+						return value.bind( target.proxyNode );
 
-	// return the target node as the output so the builder uses it for analyze/generate
-	setup( builder ) {
+					} else {
 
-		return this.node;
+						return value;
+
+					}
+
+				}
+
+			},
+
+			set( target, property, value ) {
+
+				if ( property in target ) {
+
+					return Reflect.set( target, property, value );
+
+				} else {
+
+					throw new Error( 'NodeProxy: Cannot set members of proxied nodes.' );
+
+				}
+
+			},
+
+		} );
 
 	}
 
@@ -97,6 +114,6 @@ export const proxyFn = ( ...args ) => {
 	const nodeProxy = new NodeProxy( ...args );
 	const fn = ( ...params ) => new ProxyCallNode( nodeProxy, params );
 	fn.functionNode = nodeProxy;
-	return nodeProxy;
+	return fn;
 
 };
