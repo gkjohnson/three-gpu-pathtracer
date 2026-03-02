@@ -1,14 +1,16 @@
 import { Matrix4, Vector4 } from 'three';
-import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
+import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage } from 'three/tsl';
 import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
+import { GeometryBVH, SAH } from 'three-mesh-bvh';
+import { ObjectBVH } from './ObjectBVH.js';
 
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
 // 		- add a callback for writing a property for a geometry to a range
-// TODO: add skinned mesh bvh support
+// TODO: Add support for other geometry types (tris, lines, custom BVHs etc)
 
 // temporary shim so StructTypeNodes can be passed to storage functions until
 // this is fixed in three.js
@@ -197,6 +199,41 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 export class BVHComputeData {
 
 	constructor( bvh, options = {} ) {
+
+		// convert the bvh argument to an ObjectBVH. Supports the following as arguments
+		// - Object3D
+		// - BufferGeometry
+		// - GeometryBVH
+		// - Array of the above
+		if ( ! ( bvh instanceof ObjectBVH ) ) {
+
+			if ( ! Array.isArray( bvh ) ) {
+
+				bvh = [ bvh ];
+
+			}
+
+			const objects = bvh.map( item => {
+
+				if ( item.isObject3D ) {
+
+					return item;
+
+				} else if ( item.isBufferGeometry ) {
+
+					return new Mesh( item );
+
+				} else if ( item instanceof GeometryBVH ) {
+
+					return new Mesh( item.geometry );
+
+				}
+
+			} );
+
+			bvh = new ObjectBVH( objects, { strategy: SAH, maxLeafSize: 1 } );
+
+		}
 
 		const {
 			prefix = 'bvh_',
