@@ -1,18 +1,19 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4 } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+import { SkinnedMeshBVH } from '../lib/SkinnedMeshBVH.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	nodeOffset: 'uint',
+	visible: 'uint',
 	materialIndex: 'uint',
 	_alignment0: 'uint',
-	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -439,7 +440,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const index = materials.indexOf( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
@@ -472,6 +473,20 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			const data = bvhMap.get( bvh );
 			Object.assign( rangeTarget, data.range );
+
+			// make sure the mesh and bvh are updated if it's being reused across updates
+			if ( bvh !== data.bvh && bvh instanceof SkinnedMeshBVH ) {
+
+				const sourceMesh = bvh.mesh;
+				const clonedMesh = data.bvh.mesh;
+				clonedMesh.matrixWorld
+					.copy( sourceMesh.matrixWorld )
+					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
+
+				bvh.refit();
+
+			}
+
 			return data.bvh;
 
 		} else if ( bvh.indirect ) {
@@ -500,8 +515,24 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			proxyGeometry.index = new BufferAttribute( array, 1 );
 			rangeTarget.start = 0;
 
-			// TODO: need to handle SkinnedMeshBVH here
-			const newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, maxLeafSize: 5 } );
+			let newBVH;
+			if ( bvh instanceof SkinnedMeshBVH ) {
+
+				const sourceMesh = bvh.mesh;
+				const clonedMesh = new SkinnedMesh( proxyGeometry );
+				clonedMesh.copy( sourceMesh );
+				clonedMesh.matrixWorld
+					.copy( sourceMesh.matrixWorld )
+					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
+
+				newBVH = new SkinnedMeshBVH( clonedMesh, { strategy: SAH, maxLeafSize: 5 } );
+
+			} else {
+
+				newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, maxLeafSize: 5 } );
+
+			}
+
 			bvhMap.set( bvh, { bvh: newBVH, range: { ...rangeTarget } } );
 			return newBVH;
 

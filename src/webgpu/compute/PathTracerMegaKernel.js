@@ -117,7 +117,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// scene ray
-				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * pcgRand2() / vec2f( targetDimensions.xy );
 				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
@@ -130,7 +130,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					if ( hitResult.didHit ) {
 
 						let vertexData = bvh_sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
-						let hitPosition = ray.origin + ray.direction * hitResult.dist;
 
 						let object = bvh_transforms.value[ hitResult.objectIndex ];
 						var material = bvh_materials.value[ object.materialIndex ];
@@ -146,7 +145,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// white diffuse surface
 						throughputColor *= scatterRec.color / scatterRec.pdf;
 
-						ray.origin = hitPosition;
+						ray.origin = vertexData.position.xyz;
 						ray.direction = scatterRec.direction;
 
 					} else {

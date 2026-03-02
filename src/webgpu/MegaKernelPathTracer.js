@@ -14,6 +14,7 @@ function* renderTask() {
 		tiles,
 		outputTarget,
 		sampleCountTarget,
+		lowResMode,
 	} = this;
 
 	camera.updateMatrixWorld();
@@ -28,7 +29,17 @@ function* renderTask() {
 
 	while ( true ) {
 
-		const tileSize = this.getTileSize( kernel.tileSize );
+		const tileSize = kernel.tileSize;
+		if ( lowResMode ) {
+
+			this.getSize( tileSize );
+
+		} else {
+
+			this.getSize( tileSize ).divide( tiles ).ceil();
+
+		}
+
 		const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
 		kernel.seed += 1;
 
@@ -69,6 +80,7 @@ export class MegaKernelPathTracer {
 		this.samples = 0;
 		this.bounces = 7;
 		this.tiles = new Vector2( 2, 2 );
+		this.lowResMode = false;
 
 		this.envInfo = new EquirectHdrInfoUniform();
 
@@ -204,14 +216,6 @@ export class MegaKernelPathTracer {
 	setTiles( tiles ) {
 
 		this.tiles.copy( tiles );
-
-	}
-
-	getTileSize( target ) {
-
-		this.getSize( target ).divide( this.tiles ).ceil();
-
-		return target;
 
 	}
 
