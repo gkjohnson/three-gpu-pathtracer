@@ -123,7 +123,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let hitResult = bvh_RaycastFirstHit( ray );
 					if ( hitResult.didHit ) {
 
-						let vertexData = bvh_sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
 
 						let object = bvh_transforms.value[ hitResult.objectIndex ];
 						var material = bvh_materials.value[ object.materialIndex ];
@@ -131,6 +130,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// apply per-object colors
 						material.color *= object.color.rgb;
 						material.opacity *= object.color.a;
+
+						var vertexData = bvh_sampleTrianglePoint( hitResult.barycoord, hitResult.indices.xyz );
+						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+						vertexData.position = object.matrixWorld * vertexData.position;
 
 						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal );
 
