@@ -93,6 +93,8 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping
+		// NOTE: alpha is being multiplied twice here to accommodate some odd blending in three.js
+		// See mrdoob/three.js#33104. It's possible this should be removed or rethought once fixed.
 		this.transparent = true;
 		this.colorNode = vec4( toneMappingNode.rgb.mul( toneMappingNode.a ), toneMappingNode.a );
 

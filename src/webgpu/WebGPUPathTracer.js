@@ -71,7 +71,6 @@ export class WebGPUPathTracer {
 		this._size = new Vector2();
 		this._lowResTarget = new StorageTexture( 1, 1 );
 		this._lowResTarget.type = FloatType;
-		// new RenderTarget( 1, 1, { type: FloatType } );
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// options
