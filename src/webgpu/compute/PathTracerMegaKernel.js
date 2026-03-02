@@ -39,6 +39,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundIntensity: uniform( 1 ),
 			backgroundBlurriness: uniform( 0 ),
 
+			textures: texture( new DataTexture() ),
+			textureSampler: sampler( new DataTexture() ),
+
 			// compute variables
 			globalId: globalId,
 		};
@@ -74,6 +77,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundRotation: mat3x3f,
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
+
+				textures: texture_2d_array<f32>,
+				textureSampler: sampler
 
 			) -> void {
 
@@ -135,7 +141,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
-						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal );
+						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal, textures, textureSampler );
 
 						let scatterRec = bsdfSample( - ray.direction, surface );
 

@@ -122,6 +122,13 @@ export class MegaKernelPathTracer {
 
 	}
 
+	setTextures( texture ) {
+
+		this.kernel.textures = texture;
+		this.kernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,

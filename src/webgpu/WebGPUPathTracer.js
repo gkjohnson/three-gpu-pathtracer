@@ -7,6 +7,7 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
+import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { SkinnedMeshBVH } from './lib/SkinnedMeshBVH.js';
 
 const _resolution = new Vector2();
@@ -42,6 +43,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
+		this._pathTracer.setTextures( this.textureArray.texture );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -80,6 +82,8 @@ export class WebGPUPathTracer {
 		this.lowResScale = 0.2;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
+
+		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -122,6 +126,9 @@ export class WebGPUPathTracer {
 		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
 		const bvhData = new PathtracerBVHComputeData( objectBVH );
 		bvhData.update();
+
+		this.textureArray.setTextures( this._renderer, bvhData.textures );
+		this._pathTracer.setTextures( this.textureArray.texture );
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -228,7 +235,6 @@ export class WebGPUPathTracer {
 		const delta = 1000 * timer.getDelta();
 		this._resetTime += delta;
 
-		// clear renderer fields
 		const originalToneMapping = renderer.toneMapping;
 		const originalExposure = renderer.toneMappingExposure;
 		const originalTarget = renderer.getRenderTarget();
