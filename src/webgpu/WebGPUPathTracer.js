@@ -127,7 +127,7 @@ export class WebGPUPathTracer {
 		const bvhData = new PathtracerBVHComputeData( objectBVH );
 		bvhData.update();
 
-		this.textureArray.setTextures( bvhData.textures );
+		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
 
 		this.scene = scene;
@@ -215,7 +215,6 @@ export class WebGPUPathTracer {
 		const pathTracer = this._pathTracer;
 		const lowResTarget = this._lowResTarget;
 		const timer = this._timer;
-		const textureArray = this.textureArray;
 		const {
 			renderDelay,
 			dynamicLowRes,
@@ -285,7 +284,6 @@ export class WebGPUPathTracer {
 		// update the samples
 		if ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) {
 
-			textureArray.update( renderer );
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();
 

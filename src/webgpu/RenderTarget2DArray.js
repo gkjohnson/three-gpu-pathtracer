@@ -12,7 +12,7 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 
 function getTextureHash( texture ) {
 
-	return texture && texture.source ? `${ texture.source.uuid }:${ texture.source.version }` : null;
+	return `${ texture.source.uuid }:${ texture.source.version }`;
 
 }
 
@@ -52,7 +52,7 @@ export class RenderTarget2DArray {
 		this.renderTarget = new RenderTarget( width, height, {
 			multiview: true,
 			depthBuffer: false,
-			depth: 2,
+			depth: 1,
 			format: textureOptions.format,
 			type: textureOptions.type,
 			minFilter: textureOptions.minFilter,
@@ -63,7 +63,6 @@ export class RenderTarget2DArray {
 		} );
 		this.texture.isArrayTexture = true;
 
-		this.textures = [];
 		this.hashes = [];
 		this.quadMesh = new QuadMesh( new RenderToScreenNodeMaterial() );
 		this.quadMesh.material.blending = NoBlending;
@@ -77,29 +76,23 @@ export class RenderTarget2DArray {
 
 	}
 
-	setTextures( textures ) {
+	setTextures( renderer, textures ) {
 
-		this.textures = textures;
 		const depth = textures.length || 1;
 		this.renderTarget.setSize( this.width, this.height, depth );
 		this.texture.isArrayTexture = true;
 
 		this.hashes.length = this.renderTarget.depth;
 
-	}
+		if ( textures.length > 0 ) {
 
-	update( renderer ) {
-
-		if ( this.textures.length > 0 && renderer.initialized ) {
-
-			this._renderTextures( renderer, this.textures );
-			this.textures.length = 0;
+			this._renderTextures( renderer, textures );
 
 		}
 
 	}
 
-	_renderTextures( renderer ) {
+	_renderTextures( renderer, textures ) {
 
 		// Save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
@@ -110,13 +103,13 @@ export class RenderTarget2DArray {
 		// Render each texture into each layer of the target
 		const quadMesh = this.quadMesh;
 		const hashes = this.hashes;
-		const depth = this.textures.length;
+		const depth = textures.length;
 
 		for ( let i = 0, l = depth; i < l; i ++ ) {
 
-			const texture = this.textures[ i ];
+			const texture = textures[ i ];
 			const hash = getTextureHash( texture );
-			if ( texture && ( hashes[ i ] !== hash || texture.isRenderTarget ) ) {
+			if ( hashes[ i ] !== hash ) {
 
 				// Revert to default texture transform before rendering
 				texture.matrixAutoUpdate = false;
