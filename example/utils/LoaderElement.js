@@ -142,11 +142,15 @@ export class LoaderElement {
 
 	}
 
-	setSamples( count, compiling = false ) {
+	setSamples( count, compiling = false, samplesPerSecond = null ) {
 
 		if ( compiling ) {
 
 			this._samples.innerText = 'compiling shader...';
+
+		} else if ( samplesPerSecond !== null ) {
+
+			this._samples.innerText = `${ Math.floor( count ) } samples (${ samplesPerSecond.toFixed( 1 ) } samples/sec)`;
 
 		} else {
 

@@ -61,6 +61,7 @@ let pathTracer, renderer, camera, scene, controls;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
+let samplesPerSecond;
 
 init();
 
@@ -156,6 +157,29 @@ function animate() {
 
 	}
 
+	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
+
+		const elapsed = pathTracer.getRenderTime() / 1000;
+		if ( elapsed > 5 ) {
+
+			pathTracer.getDetailedSampleCount().then( sampleCount => {
+
+				if ( elapsed > 0 ) {
+
+					samplesPerSecond = sampleCount.avg / elapsed;
+
+				}
+
+			} );
+
+		} else {
+
+			samplesPerSecond = null;
+
+		}
+
+	}
+
 	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
@@ -190,7 +214,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples, pathTracer.isCompiling, samplesPerSecond );
 
 }
 
