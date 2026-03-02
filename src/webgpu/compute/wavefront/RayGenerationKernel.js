@@ -2,9 +2,9 @@ import { Vector2, Matrix4 } from 'three';
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { wgslFn, uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
+import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
-import { QUEUED_RAY_SIZE, queuedRayStruct } from './structs.js';
+import { queuedRayStruct } from './structs.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
@@ -19,7 +19,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 			tileSize: uniform( new Vector2() ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
 			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
@@ -85,8 +85,12 @@ export class RayGenerationKernel extends ComputeKernel {
 				pcgInitialize( indexUV, seed );
 
 				// write the ray data
-				var jitter = 2.0 * ( pcgRand2() - vec2( 0.5 ) ) / vec2f( targetDimensions.xy );
-				rayQueue[ index ].ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );;
+				var jitter = 2.0 * pcgRand2() / vec2f( targetDimensions.xy );
+				var ray = ndcToCameraRay( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
+				ray.direction = normalize( ray.direction );
+
+				rayQueue[ index ].origin = ray.origin;
+				rayQueue[ index ].direction = ray.direction;
 				rayQueue[ index ].pixel = indexUV;
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;

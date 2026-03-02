@@ -1,16 +1,16 @@
-import { FrontSide, DoubleSide, BackSide, StorageBufferAttribute, PerspectiveCamera, Scene, Vector2, Clock } from 'three/webgpu';
-import { PathTracingSceneGenerator } from '../core/PathTracingSceneGenerator.js';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, RenderTarget, FloatType, Timer } from 'three/webgpu';
+import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
-import { RenderTarget2DArrayWebGPU } from './RenderTarget2DArrayWebGPU.js';
-import { getTextures } from '../core/utils/sceneUpdateUtils.js';
-import { getTextureHash } from '../core/utils/sceneUpdateUtils.js';
-
-const MATERIAL_STRIDE = 260;
+import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
+import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
+import { RenderTarget2DArray } from './RenderTarget2DArray.js';
+import { SkinnedMeshBVH } from './lib/SkinnedMeshBVH.js';
 
 const _resolution = new Vector2();
+const _color = new Color();
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -25,11 +25,26 @@ export class WebGPUPathTracer {
 
 	}
 
+	get samples() {
+
+		return this._pathTracer.samples;
+
+	}
+
+	get fadeState() {
+
+		return this._fadeState;
+
+	}
+
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
-		this._generator = new PathTracingSceneGenerator();
+		this._pathTracer.setBVHData( this._bvhData );
+		this._pathTracer.setTextures( this.textureArray.texture );
+		this.setCamera( this.camera );
+		this.updateEnvironment();
 
 	}
 
@@ -37,20 +52,37 @@ export class WebGPUPathTracer {
 
 		// members
 		this._renderer = renderer;
-		this._generator = new PathTracingSceneGenerator();
-		// this._pathTracer = new MegaKernelPathTracer( renderer );
-		this._pathTracer = new WaveFrontPathTracer( renderer );
-		this._queueReset = false;
-		this._clock = new Clock();
+		this._pathTracer = new MegaKernelPathTracer( renderer );
+		this._timer = new Timer();
 
-		// texture array for material textures
-		this._textureArray = new RenderTarget2DArrayWebGPU( 1024, 1024 );
+		this._envColorTexture = new DataTexture( );
+		this._envColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
+		this._envColorTexture.needsUpdate = true;
+		this._envColorTexture.minFilter = LinearFilter;
+		this._envColorTexture.magFilter = LinearFilter;
+
+		this._backgroundColorTexture = new DataTexture( );
+		this._backgroundColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
+		this._backgroundColorTexture.needsUpdate = true;
+		this._backgroundColorTexture.minFilter = LinearFilter;
+		this._backgroundColorTexture.magFilter = LinearFilter;
+
+		this._resetTime = - 1;
+		this._fadeState = 0;
+		this._size = new Vector2();
+		this._lowResTarget = new RenderTarget( 1, 1, { type: FloatType } );
+		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// options
+		this.minSamples = 1;
+		this.renderDelay = 500;
+		this.fadeDuration = 500;
+		this.dynamicLowRes = true;
+		this.lowResScale = 0.2;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
-		this.renderToCanvas = true;
-		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+
+		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -62,11 +94,52 @@ export class WebGPUPathTracer {
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
 
-		const generator = this._generator;
-		generator.setObjects( scene );
+		// Build BVH for each mesh geometry
+		scene.traverse( child => {
 
-		const result = generator.generate();
-		return this._updateFromResults( scene, camera, result );
+			if ( child.isSkinnedMesh ) {
+
+				if ( ! child.boundsTree ) {
+
+					child.boundsTree = new SkinnedMeshBVH( child, { strategy: SAH, maxLeafSize: 5, indirect: true } );
+
+				} else {
+
+					child.boundsTree.refit();
+
+				}
+
+			} else if ( child.isMesh ) {
+
+				if ( ! child.geometry.boundsTree ) {
+
+					child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 5 } );
+
+				}
+
+			}
+
+		} );
+
+		// Build TLAS and compute functions
+		const bvhData = new PathtracerBVHComputeData( scene );
+		bvhData.update();
+
+		this.textureArray.setTextures( this._renderer, bvhData.textures );
+		this._pathTracer.setTextures( this.textureArray.texture );
+
+		this.scene = scene;
+		this._bvhData = bvhData;
+		this._pathTracer.setBVHData( bvhData );
+		this.setCamera( camera );
+		this.updateEnvironment();
+
+	}
+
+	// TODO: support async generation of ObjectBVH
+	setSceneAsync( ...args ) {
+
+		this.setScene( ...args );
 
 	}
 
@@ -87,545 +160,69 @@ export class WebGPUPathTracer {
 
 	}
 
+	updateEnvironment() {
+
+		const {
+			_renderer,
+			_pathTracer,
+			scene,
+			_envColorTexture,
+			_backgroundColorTexture,
+		} = this;
+
+		const environment = convertToTexture( _renderer, scene.environment || _color.set( 0 ), _envColorTexture );
+		const background = convertToTexture( _renderer, scene.background, _backgroundColorTexture );
+
+		_pathTracer.setEnvironment(
+			environment,
+			scene.environmentIntensity,
+			scene.environmentRotation,
+
+			background,
+			scene.backgroundIntensity,
+			scene.backgroundRotation,
+			scene.backgroundBlurriness,
+		);
+
+	}
+
+	setSize( x, y ) {
+
+		if ( this._size.x !== x || this._size.y !== y ) {
+
+			this._size.set( x, y );
+			this.reset();
+
+		}
+
+	}
+
 	reset() {
 
 		this._pathTracer.reset();
+		this._resetTime = 0;
+		this._fadeState = 0;
 
 	}
 
-	_updateFromResults( scene, camera, results ) {
-
-		const {
-			materials,
-			geometry,
-			bvh,
-			bvhChanged,
-			needsMaterialIndexUpdate,
-		} = results;
-
-		const pathTracer = this._pathTracer;
-		const renderer = this._renderer;
-
-		const newGeometryData = {};
-
-		if ( bvhChanged ) {
-
-			// dereference a new index attribute if we're using indirect storage
-			const dereferencedIndexAttr = geometry.index.clone();
-			const indirectBuffer = bvh._indirectBuffer;
-			if ( indirectBuffer ) {
-
-				dereferenceIndex( geometry, indirectBuffer, dereferencedIndexAttr );
-
-			}
-
-			const newIndex = new StorageBufferAttribute( dereferencedIndexAttr.array, 3 );
-			newIndex.name = 'Geometry Index';
-			newGeometryData.index = newIndex;
-
-			const newPosition = new StorageBufferAttribute( geometry.attributes.position.array, 3 );
-			newPosition.name = 'Geometry Positions';
-			newGeometryData.position = newPosition;
-
-			const newBvhRoots = new StorageBufferAttribute( new Float32Array( bvh._roots[ 0 ] ), 8 );
-			newBvhRoots.name = 'BVH Roots';
-			newGeometryData.bvh = newBvhRoots;
-
-			const attributeData = this.collectAttributes( geometry );
-			const newAttributes = new StorageBufferAttribute( attributeData, 12 );
-			newAttributes.name = 'Vertex Attributes';
-			newGeometryData.attributes = newAttributes;
-
-		}
-
-		if ( needsMaterialIndexUpdate ) {
-
-			const newMaterialIndex = new StorageBufferAttribute( geometry.attributes.materialIndex.array, 1 );
-			newMaterialIndex.name = 'Material Index';
-			newGeometryData.materialIndex = newMaterialIndex;
-
-		}
-
-		// collect textures and update texture array
-		const textures = getTextures( materials );
-		const textureArray = this._textureArray;
-		textureArray.setTextures( renderer, textures );
-
-		const newMaterialsData = this.writeMaterialsBuffer( materials, textures );
-
-		const newMaterialsBuffer = new StorageBufferAttribute( newMaterialsData, MATERIAL_STRIDE );
-		newMaterialsBuffer.name = 'Material Data';
-		newGeometryData.materials = newMaterialsBuffer;
-
-		pathTracer.setGeometryData( newGeometryData );
-
-		this.setCamera( camera );
-
-	}
-
-	collectAttributes( geometry ) {
-
-		const count = geometry.attributes.position.count;
-		const data = new Float32Array( count * 16 );
-
-		const colorAttr = geometry.attributes.color;
-		const normalAttr = geometry.attributes.normal;
-		const uvAttr = geometry.attributes.uv;
-		const tangentAttr = geometry.attributes.tangent;
-
-		for ( let i = 0; i < count; i ++ ) {
-
-			const offset = i * 16;
-
-			// color - vec3f, aligned to 4 floats (vec4)
-			{
-
-				let r = 1.0;
-				let g = 1.0;
-				let b = 1.0;
-
-				if ( colorAttr ) {
-
-					r = colorAttr.getX( i );
-					g = colorAttr.getY( i );
-					b = colorAttr.getZ( i );
-
-				}
-
-				data[ offset + 0 ] = r;
-				data[ offset + 1 ] = g;
-				data[ offset + 2 ] = b;
-
-			}
-
-			// normal - vec3f, aligned to 4 floats (vec4)
-			{
-
-				let x = 0.0;
-				let y = 0.0;
-				let z = 1.0;
-
-				if ( normalAttr ) {
-
-					x = normalAttr.getX( i );
-					y = normalAttr.getY( i );
-					z = normalAttr.getZ( i );
-
-				}
-
-				data[ offset + 4 ] = x;
-				data[ offset + 5 ] = y;
-				data[ offset + 6 ] = z;
-
-			}
-
-			// tangent - vec3f, aligned to 4 floats (vec4)
-			{
-
-				let x = 0.0;
-				let y = 1.0;
-				let z = 0.0;
-				let w = 1.0;
-
-				if ( tangentAttr ) {
-
-					x = tangentAttr.getX( i );
-					y = tangentAttr.getY( i );
-					z = tangentAttr.getZ( i );
-					w = tangentAttr.getW( i );
-
-				}
-
-				data[ offset + 8 ] = x;
-				data[ offset + 9 ] = y;
-				data[ offset + 10 ] = z;
-				data[ offset + 11 ] = w;
-
-			}
-
-			// uv - vec2f, aligned to 4 floats (vec4)
-			{
-
-				let x = 0.0;
-				let y = 0.0;
-
-				if ( uvAttr ) {
-
-					x = uvAttr.getX( i );
-					y = uvAttr.getY( i );
-
-				}
-
-				data[ offset + 12 ] = x;
-				data[ offset + 13 ] = y;
-
-			}
-
-		}
-
-		return data;
-
-	}
-
-	writeMaterialsBuffer( materials, textures ) {
-
-		function getTexture( material, key, def = - 1 ) {
-
-			if ( key in material && material[ key ] ) {
-
-				const hash = getTextureHash( material[ key ] );
-				return textureLookUp[ hash ];
-
-			} else {
-
-				return def;
-
-			}
-
-		}
-
-		function getField( material, key, def ) {
-
-			return key in material ? material[ key ] : def;
-
-		}
-
-		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
-
-			const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
-
-			// check if texture exists
-			if ( texture ) {
-
-				if ( texture.matrixAutoUpdate ) {
-
-					texture.updateMatrix();
-
-				}
-
-				const elements = texture.matrix.elements;
-
-				// Both wgsl struct and elements should be in column-major format
-				for ( let i = 0; i < 3; i ++ ) {
-
-					array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
-					array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
-					array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
-					array[ offset + 4 * i + 3 ] = 0; // padding float
-
-				}
-
-			}
-
-			return 12;
-
-		}
-
-		let index = 0;
-
-		// index the list of textures based on shareable source
-		const textureLookUp = {};
-		for ( let i = 0, l = textures.length; i < l; i ++ ) {
-
-			textureLookUp[ getTextureHash( textures[ i ] ) ] = i;
-
-		}
-
-		const floatArray = new Float32Array( materials.length * MATERIAL_STRIDE );
-		const intArray = new Int32Array( floatArray.buffer );
-
-		// TODO: make features work
-		// features.reset();
-		for ( let i = 0, l = materials.length; i < l; i ++ ) {
-
-			const m = materials[ i ];
-
-			// if ( m.isFogVolumeMaterial ) {
-			//
-			// 	// features.setUsed( 'FOG' );
-			//
-			// 	for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
-			//
-			// 		floatArray[ index + j ] = 0;
-			//
-			// 	}
-			//
-			// 	// sample 0 .rgb
-			// 	floatArray[ index + 0 * 4 + 0 ] = m.color.r;
-			// 	floatArray[ index + 0 * 4 + 1 ] = m.color.g;
-			// 	floatArray[ index + 0 * 4 + 2 ] = m.color.b;
-			//
-			// 	// sample 2 .a
-			// 	floatArray[ index + 2 * 4 + 3 ] = getField( m, 'emissiveIntensity', 0.0 );
-			//
-			// 	// sample 3 .rgb
-			// 	floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
-			// 	floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
-			// 	floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
-			//
-			// 	// sample 13 .g
-			// 	// reusing opacity field
-			// 	floatArray[ index + 13 * 4 + 1 ] = m.density;
-			//
-			// 	// side
-			// 	floatArray[ index + 13 * 4 + 3 ] = 0.0;
-			//
-			// 	// sample 14 .b
-			// 	floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
-			//
-			// 	index += MATERIAL_STRIDE;
-			// 	continue;
-			//
-			// }
-
-			// color - offset 0
-			floatArray[ index ++ ] = m.color.r;
-			floatArray[ index ++ ] = m.color.g;
-			floatArray[ index ++ ] = m.color.b;
-			intArray[ index ++ ] = getTexture( m, 'map' );
-
-			// metalness & roughness - offset 4
-			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'metalnessMap' );
-			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'roughnessMap' );
-
-			// transmission & emissiveIntensity - offset 8
-			// three.js assumes a default f0 of 0.04 if no ior is provided which equates to an ior of 1.5
-			floatArray[ index ++ ] = getField( m, 'ior', 1.5 );
-			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
-			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
-
-			// emission - offset 12
-			if ( 'emissive' in m ) {
-
-				floatArray[ index ++ ] = m.emissive.r;
-				floatArray[ index ++ ] = m.emissive.g;
-				floatArray[ index ++ ] = m.emissive.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-
-			}
-
-			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
-
-			// normals - offset 16
-			intArray[ index ++ ] = getTexture( m, 'normalMap' );
-			index ++; // because of vec2 alignment
-			if ( 'normalScale' in m ) {
-
-				floatArray[ index ++ ] = m.normalScale.x;
-				floatArray[ index ++ ] = m.normalScale.y;
-
- 			} else {
-
- 				floatArray[ index ++ ] = 1;
- 				floatArray[ index ++ ] = 1;
-
- 			}
-
-			// clearcoat - offset 20
-			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
-			index ++; // because of vec2 alignment
-
-			// offset 24
-			if ( 'clearcoatNormalScale' in m ) {
-
-				floatArray[ index ++ ] = m.clearcoatNormalScale.x;
-				floatArray[ index ++ ] = m.clearcoatNormalScale.y;
-
-			} else {
-
-				floatArray[ index ++ ] = 1;
-				floatArray[ index ++ ] = 1;
-
-			}
-
-			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
-
-			// iridescence - offset 28
-			intArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
-			intArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
-
-			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
-
-			// offset 32
-			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );
-			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
-			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
-			// vec3f alignment requirements
-			index ++;
-			index ++;
-
-			// specular color - offset 36
-			if ( 'specularColor' in m ) {
-
-				floatArray[ index ++ ] = m.specularColor.r;
-				floatArray[ index ++ ] = m.specularColor.g;
-				floatArray[ index ++ ] = m.specularColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			intArray[ index ++ ] = getTexture( m, 'specularColorMap' );
-
-			// specular intensity - offset 40
-			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
-			intArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
-
-			// isThinFilm
-			const isThinFilm = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			intArray[ index ++ ] = Number( isThinFilm );
-			index ++;
-
-			// attenuation - offset 44
-			if ( 'attenuationColor' in m ) {
-
-				floatArray[ index ++ ] = m.attenuationColor.r;
-				floatArray[ index ++ ] = m.attenuationColor.g;
-				floatArray[ index ++ ] = m.attenuationColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
-
-			// alphaMap - offset 48
-			intArray[ index ++ ] = getTexture( m, 'alphaMap' );
-			intArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
-			floatArray[ index ++ ] = m.opacity;
-			floatArray[ index ++ ] = m.alphaTest;
-
-			// side & matte - offset 52
-			if ( ! isThinFilm && m.transmission > 0.0 ) {
-
-				floatArray[ index ++ ] = 0;
-
-			} else {
-
-				switch ( m.side ) {
-
-				case FrontSide:
-					floatArray[ index ++ ] = 1;
-					break;
-				case BackSide:
-					floatArray[ index ++ ] = - 1;
-					break;
-				case DoubleSide:
-					floatArray[ index ++ ] = 0;
-					break;
-
-				}
-
-			}
-
-			intArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
-			floatArray[ index ++ ] = getField( m, 'sheen', 0.0 );
-			index ++; // vec3 alignment requirements
-
-			// sheenColor - offset 56
-			if ( 'sheenColor' in m ) {
-
-				floatArray[ index ++ ] = m.sheenColor.r;
-				floatArray[ index ++ ] = m.sheenColor.g;
-				floatArray[ index ++ ] = m.sheenColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-
-			}
-
-			intArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
-
-			// sheenRoughness, flags - offset 60
-			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
-
-			intArray[ index ++ ] = Number( m.vertexColors );
-			intArray[ index ++ ] = Number( m.flatShading );
-
-			// transparent, fogVolume - offset 64
-			intArray[ index ++ ] = Number( m.transparent );
-			intArray[ index ++ ] = 0;
-			index ++;
-			index ++;
-
-			// map transform 15
-			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
-
-			// metalnessMap transform 17
-			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
-
-			// roughnessMap transform 19
-			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
-
-			// transmissionMap transform 21
-			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
-
-			// emissiveMap transform 22
-			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
-
-			// normalMap transform 25
-			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
-
-			// clearcoatMap transform 27
-			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
-
-			// clearcoatNormalMap transform 29
-			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
-
-			// clearcoatRoughnessMap transform 31
-			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
-
-			// sheenColorMap transform 33
-			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
-
-			// sheenRoughnessMap transform 35
-			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
-
-			// iridescenceMap transform 37
-			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
-
-			// iridescenceThicknessMap transform 39
-			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
-
-			// specularColorMap transform 41
-			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
-
-			// specularIntensityMap transform 43
-			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
-
-			// alphaMap transform 45
-			index += writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
-
-		}
-
-		return floatArray;
-
-	}
 	renderSample() {
+
+		const renderer = this._renderer;
+		const size = this._size;
+		const blitQuad = this._blitQuad;
+		const pathTracer = this._pathTracer;
+		const lowResTarget = this._lowResTarget;
+		const timer = this._timer;
+		const {
+			renderDelay,
+			dynamicLowRes,
+			synchronizeRenderSize,
+			renderScale,
+			lowResScale,
+			minSamples,
+		} = this;
+
+		timer.update();
 
 		if ( ! this._renderer._initialized ) {
 
@@ -633,44 +230,93 @@ export class WebGPUPathTracer {
 
 		}
 
+		const delta = 1000 * timer.getDelta();
+		this._resetTime += delta;
 
-		this._textureArray.update( this._renderer );
-		this._pathTracer.setTextures( this._textureArray.texture );
+		const originalToneMapping = renderer.toneMapping;
+		const originalExposure = renderer.toneMappingExposure;
+		const originalTarget = renderer.getRenderTarget();
+		const originalAutoClear = renderer.autoClear;
+		renderer.toneMapping = NoToneMapping;
+		renderer.toneMappingExposure = 1.0;
 
-		this._updateScale();
-		this._pathTracer.update();
+		// handle canvas-size auto synchronization
+		if ( synchronizeRenderSize ) {
 
-		const blitQuad = this._blitQuad;
-		blitQuad.material.texture = this._pathTracer.outputTarget;
-		blitQuad.render( this._renderer );
+			renderer.getDrawingBufferSize( _resolution );
+			const w = Math.floor( renderScale * _resolution.x );
+			const h = Math.floor( renderScale * _resolution.y );
+			this.setSize( w, h );
+
+		}
+
+		// check if we should be in low res mode and calculate the target size
+		let { width, height } = size;
+		const lowResMode = this._resetTime < renderDelay;
+		if ( lowResMode ) {
+
+			width = Math.ceil( lowResScale * width );
+			height = Math.ceil( lowResScale * height );
+
+		}
+
+		// set the size if necessary
+		pathTracer.getSize( _resolution );
+
+		const resized = _resolution.x !== width || _resolution.y !== height;
+		if ( resized ) {
+
+			if ( ! lowResMode && dynamicLowRes ) {
+
+				// copy the low reset content if we're transitioning to the full
+				// resolution view so we can fade to it
+				lowResTarget.setSize( width, height );
+				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget.texture );
+
+			}
+
+			pathTracer.setSize( width, height );
+
+		}
+
+		// update the samples
+		if ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) {
+
+			pathTracer.lowResMode = lowResMode;
+			pathTracer.update();
+
+		}
+
+		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
+
+			this._fadeState += delta / this.fadeDuration;
+			this._fadeState = Math.min( 1.0, this._fadeState );
+
+		}
+
+		// render the content to the canvas
+		renderer.autoClear = false;
+		blitQuad.material.opacity = lowResMode && dynamicLowRes ? 1.0 : this._fadeState;
+		blitQuad.material.texture = pathTracer.outputTarget;
+		blitQuad.material.toneMapping = originalToneMapping;
+		blitQuad.material.toneMappingExposure = originalExposure;
+		blitQuad.render( renderer );
+
+		// reset the renderer
+		renderer.autoClear = originalAutoClear;
+		renderer.toneMapping = originalToneMapping;
+		renderer.toneMappingExposure = originalExposure;
+		renderer.setRenderTarget( originalTarget );
 
 	}
 
 	dispose() {
 
 		this._pathTracer.dispose();
-		this._textureArray.dispose();
-
-	}
-
-	_updateScale() {
-
-		// update the path tracer scale if it has changed
-		if ( this.synchronizeRenderSize ) {
-
-			this._renderer.getDrawingBufferSize( _resolution );
-
-			const w = Math.floor( this.renderScale * _resolution.x );
-			const h = Math.floor( this.renderScale * _resolution.y );
-
-			this._pathTracer.getSize( _resolution );
-			if ( _resolution.x !== w || _resolution.y !== h ) {
-
-				this._pathTracer.setSize( w, h );
-
-			}
-
-		}
+		this._blitQuad.dispose();
+		this._lowResTarget.dispose();
+		this._envColorTexture.dispose();
+		this._backgroundColorTexture.dispose();
 
 	}
 
@@ -688,21 +334,36 @@ export class WebGPUPathTracer {
 
 }
 
-// TODO: Expose in three-mesh-bvh?
-function dereferenceIndex( geometry, indirectBuffer, target ) {
+function convertToTexture( renderer, value, colorTexture ) {
 
-	const unpacked = target.array;
-	const indexArray = geometry.index ? geometry.index.array : null;
-	for ( let i = 0, l = indirectBuffer.length; i < l; i ++ ) {
+	if ( ! value ) {
 
-		const i3 = 3 * i;
-		const v3 = 3 * indirectBuffer[ i ];
-		for ( let c = 0; c < 3; c ++ ) {
+		const clearAlpha = renderer.getClearAlpha();
+		renderer.getClearColor( _color );
 
-			unpacked[ i3 + c ] = indexArray ? indexArray[ v3 + c ] : v3 + c;
+		colorTexture.image.data[ 0 ] = _color.r * 255;
+		colorTexture.image.data[ 1 ] = _color.g * 255;
+		colorTexture.image.data[ 2 ] = _color.b * 255;
+		colorTexture.image.data[ 3 ] = clearAlpha * 255;
 
-		}
+		colorTexture.needsUpdate = true;
+		value = colorTexture;
+
+	} else if ( value.isColor ) {
+
+		colorTexture.image.data[ 0 ] = value.r * 255;
+		colorTexture.image.data[ 1 ] = value.g * 255;
+		colorTexture.image.data[ 2 ] = value.b * 255;
+		colorTexture.image.data[ 3 ] = 255;
+		colorTexture.needsUpdate = true;
+		value = colorTexture;
+
+	} else if ( value?.isCubeTexture ) {
+
+		value = new CubeToEquirectGenerator( renderer ).generate( value );
 
 	}
+
+	return value;
 
 }

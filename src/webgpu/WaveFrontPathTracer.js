@@ -1,4 +1,4 @@
-import { IndirectStorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
+import { Matrix4, IndirectStorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
@@ -6,14 +6,15 @@ import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
-import { QUEUED_HIT_SIZE, QUEUED_RAY_SIZE } from './compute/wavefront/structs.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
 const MAX_BUFFER_SIZE = 134217728;
-const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( QUEUED_RAY_SIZE * 4 ) );
-const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( QUEUED_HIT_SIZE * 4 ) );
+const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedRayStruct.getLength() * 4 ) );
+const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedHitStruct.getLength() * 4 ) );
 
 function* renderTask() {
 
@@ -48,6 +49,8 @@ function* renderTask() {
 	primeRayGenerationDispatchKernel.tileOffset = 0;
 
 	const tileSize = new Vector2();
+	const samplesPerIteration = RAYS_TO_PROCESS / ( sampleCountTarget.width * sampleCountTarget.height * bounces );
+	let samples = 0;
 	while ( true ) {
 
 		this.getTileSize( tileSize );
@@ -63,7 +66,6 @@ function* renderTask() {
 
 		// Step 1: Top up the ray queue
 		// set up the ray prime kernel
-		primeRayGenerationDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
 		primeRayGenerationDispatchKernel.tileCount.copy( tiles );
 		primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
@@ -73,7 +75,6 @@ function* renderTask() {
 		primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
 
 		// set up the ray generation kernel
-		enqueueRaysKernel.setWorkgroupSize( 8, 8, 1 );
 		enqueueRaysKernel.seed ++;
 		enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
 		enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
@@ -94,7 +95,6 @@ function* renderTask() {
 
 		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
 		// TODO: setting dispatch size to 10000 is causing failures / missed rays
-		rayIntersectionKernel.setWorkgroupSize( 64, 1, 1 );
 		const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
 		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 		rayIntersectionKernel.rayQueue = rayQueue;
@@ -109,7 +109,6 @@ function* renderTask() {
 
 		// mark the rays as consumed
 		const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
-		updateRayQueueParamsKernel.setWorkgroupSize( 1, 1, 1 );
 		updateRayQueueParamsKernel.processed = processed;
 		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
 		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
@@ -117,7 +116,6 @@ function* renderTask() {
 		// TODO: we should use an indirect dispatch here to only kick off the number of threads
 		// as needed to iterate over all the fields
 		// Step 3: attenuate ray color, scatter, run russian roulette
-		hitProcessKernel.setWorkgroupSize( 64, 1, 1 );
 		hitProcessKernel.sampleCountTarget = sampleCountTarget;
 		hitProcessKernel.bounces = bounces;
 		hitProcessKernel.rayQueue = rayQueue;
@@ -131,7 +129,6 @@ function* renderTask() {
 
 		// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
 		// is cached per parameters and resets?
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
 
@@ -144,8 +141,10 @@ function* renderTask() {
 		// - separate "volume" step?
 		// - allow for simultaneous writes by queue pixel writes, sorting, and blending them in a single thread
 
-		yield;
+		samples += samplesPerIteration;
+		this.samples = Math.floor( samples );
 
+		yield;
 
 	}
 
@@ -163,6 +162,7 @@ export class WaveFrontPathTracer {
 		this.samples = 0;
 		this.bounces = 7;
 		this.tiles = new Vector2( 3, 3 );
+		this.lowResMode = false;
 
 		// geometry fields
 		this.geometry = {
@@ -174,6 +174,8 @@ export class WaveFrontPathTracer {
 			materialIndex: null,
 			materials: null,
 		};
+
+		this.envInfo = new EquirectHdrInfoUniform();
 
 		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
@@ -199,12 +201,12 @@ export class WaveFrontPathTracer {
 		this.sampleCountTarget.generateMipmaps = false;
 
 		// queues
-		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, QUEUED_RAY_SIZE );
+		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
 		this.rayQueue.name = 'Ray Queue';
 		this.rayQueueSize = new IndirectStorageBufferAttribute( 2, 1 );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitQueue = new IndirectStorageBufferAttribute( MAX_HIT_COUNT, QUEUED_HIT_SIZE );
+		this.hitQueue = new IndirectStorageBufferAttribute( MAX_HIT_COUNT, queuedHitStruct.getLength() );
 		this.hitQueue.name = 'Hit Queue';
 		this.hitQueueSize = new IndirectStorageBufferAttribute( 2, 1 );
 		this.hitQueueSize.name = 'Hit Queue Size';
@@ -232,23 +234,62 @@ export class WaveFrontPathTracer {
 
 	}
 
-	setGeometryData( geometry ) {
+	setBVHData( bvhData ) {
 
-		for ( const propName in geometry ) {
+		this.rayIntersectionKernel.bvhData = bvhData;
+		this.rayIntersectionKernel.needsUpdate = true;
 
-			const prop = this.geometry[ propName ];
-			if ( prop === undefined ) {
+		this.hitProcessKernel.bvhData = bvhData;
+		this.hitProcessKernel.needsUpdate = true;
 
-				console.error( `Invalid property name in geometry data: ${propName}` );
-				continue;
+		this.reset();
 
-			}
+	}
 
-			// TODO: cannot dispose at the moment
-			// prop.dispose();
-			this.geometry[ propName ] = geometry[ propName ];
+	setTextures( texture ) {
+
+		this.hitProcessKernel.textures = texture;
+		this.hitProcessKernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
+
+	}
+
+	setEnvironment(
+		envMap,
+		envMapIntensity,
+		envMapRotation,
+
+		background,
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
+
+		const kernel = this.rayIntersectionKernel;
+
+		if ( kernel.background.isTexture ) {
+
+			kernel.background.dispose();
 
 		}
+
+		if ( envMap !== null ) {
+
+			this.envInfo.updateFrom( envMap );
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		kernel.envMapIntensity = envMapIntensity;
+
+		kernel.background = background;
+		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		kernel.backgroundIntensity = backgroundIntensity;
+		kernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 
@@ -320,6 +361,7 @@ export class WaveFrontPathTracer {
 	dispose() {
 
 		// TODO: dispose of all buffers
+		this.envInfo.dispose();
 		this._task = null;
 
 	}
@@ -351,43 +393,36 @@ export class WaveFrontPathTracer {
 		}
 
 		this._task = null;
+		this.samples = 0;
 
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
 		// clear buffers
-		sampleCountClearKernel.setWorkgroupSize( 8, 8, 1 );
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
 		outputTargetClearKernel.target = outputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
-		outputTargetClearKernel.setWorkgroupSize( 8, 8, 1 );
 		outputTargetClearKernel.target = prevOutputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 		// clear queues
 		// TODO: why do we need to se the work group size here?
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = rayQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayQueueSize.count ] );
 
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitQueueSize;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count ] );
 
 		// clear dispatch sizes
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = hitProcessDispatch;
 		renderer.compute( zeroDispatchKernel.kernel, [ hitProcessDispatch.count ] );
 
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = rayGenerationDispatch;
 		renderer.compute( zeroDispatchKernel.kernel, [ rayGenerationDispatch.count ] );
 
-		zeroDispatchKernel.setWorkgroupSize( 1, 1, 1 );
 		zeroDispatchKernel.target = tileIndexBuffer;
 		renderer.compute( zeroDispatchKernel.kernel, [ tileIndexBuffer.count ] );
 

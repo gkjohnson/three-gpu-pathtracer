@@ -2,7 +2,7 @@ import { Vector2, Vector3 } from 'three';
 import { IndirectStorageBufferAttribute } from 'three/webgpu';
 import { wgslFn, uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { QUEUED_RAY_SIZE, queuedRayStruct } from './structs.js';
+import { queuedRayStruct } from './structs.js';
 
 export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 
@@ -15,7 +15,7 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileCount: uniform( new Vector2() ),
 			tileOffset: uniform( 1 ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ).toReadOnly(),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
 			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),

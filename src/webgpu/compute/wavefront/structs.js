@@ -1,30 +1,26 @@
-import { wgsl } from 'three/tsl';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
+import { StructTypeNode } from 'three/webgpu';
 
-export const QUEUED_RAY_SIZE = 20;
+export const queuedRayStruct = new StructTypeNode( {
+	origin: 'vec3f',
+	_alignment0: 'uint',
+	direction: 'vec3f',
+	_alignment1: 'uint',
+	throughputColor: 'vec3f',
+	currentBounce: 'uint',
+	pixel: 'vec2u',
+	pcgStateS0: 'vec4u',
+}, 'QueuedRay' );
 
-export const QUEUED_HIT_SIZE = 20;
-
-export const queuedRayStruct = wgsl( /* wgsl */ `
-	struct QueuedRay {
-		ray: Ray,
-		throughputColor: vec3f,
-		currentBounce: u32,
-		pixel: vec2u,
-		pcgStateS0: vec4u,
-	};
-`, [ rayStruct ] );
-
-export const queuedHitStruct = wgsl( /* wgsl */`
-	struct QueuedHit {
-		indices: vec3u,
-		pixel_x: u32,
-		barycoord: vec3f,
-		pixel_y: u32,
-		view: vec3f,
-		currentBounce: u32,
-		throughputColor: vec3f,
-		materialIndex: u32,
-		pcgStateS0: vec4u,
-	};
-` );
+export const queuedHitStruct = new StructTypeNode( {
+	indices: 'vec3u',
+	pixel_x: 'uint',
+	barycoord: 'vec3f',
+	pixel_y: 'uint',
+	view: 'vec3f',
+	currentBounce: 'uint',
+	throughputColor: 'vec3f',
+	objectIndex: 'uint',
+	normal: 'vec3f',
+	side: 'float',
+	pcgStateS0: 'vec4u',
+}, 'QueuedHit' );

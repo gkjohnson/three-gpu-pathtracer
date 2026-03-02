@@ -1,42 +1,67 @@
 import { wgslFn } from 'three/tsl';
-import { scatterRecordStruct, constants, surfaceRecordStruct, lobeWeightsStruct } from './structs.wgsl';
+import {
+	inverseMat3x3Func,
+	getBasisFromNormalFunc,
+	getRefractionHalfVectorFunc,
+	getHalfVectorFunc,
+} from './utils.wgsl';
+import { constants, surfaceRecordStruct, scatterRecordStruct, lobeWeightsStruct } from './structs.wgsl';
 import {
 	sampleSphereCosineFn,
-	iorRatioToF0Func,
-	applyFilteredGlossyFunc,
-	diffuseEvalFunc,
-	transmissionEvalFunc,
-	specularEvalFunc,
-	clearcoatEvalFunc,
-	sheenAlbedoScalingFunc,
-	sheenColorFunc,
 	diffuseDirectionFunc,
 	specularDirectionFunc,
 	transmissionDirectionFunc,
 	clearcoatDirectionFunc,
 	getLobeWeightsFunc,
+	diffuseEvalFunc,
+	specularEvalFunc,
+	transmissionEvalFunc,
+	clearcoatEvalFunc,
+	sheenColorFunc,
+	sheenAlbedoScalingFunc,
 } from './sampling.wgsl';
 import { pcgRand, pcgRand2 } from './random.wgsl';
-import { getVertexAttribute, intersectionResultStruct } from 'three-mesh-bvh/webgpu';
-import { getBasisFromNormalFunc, getPointAttributes, inverseMat3x3Func } from './utils.wgsl.js';
-import { getRefractionHalfVectorFunc, getHalfVectorFunc } from './utils.wgsl.js';
+
+export const applyFilteredGlossyFunc = wgslFn( /* wgsl */ `
+
+	fn applyFilteredGlossy( roughness: f32, accumulatedRoughness: f32 ) -> f32 {
+
+		return clamp(
+			max(
+				roughness,
+				accumulatedRoughness * filterGlossyFactor * 5.0 ),
+			0.0,
+			1.0
+		);
+
+	}
+
+`, [ constants ] );
+
+export const iorToF0Func = wgslFn( /* wgsl */ `
+
+	fn iorToF0( ior: f32 ) -> f32 {
+		return pow( ( 1 - ior ) / ( 1 + ior ), 2 );
+	}
+
+` );
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
 		material: Material,
-		surfaceHit: IntersectionResult,
-		attributes: ptr<storage, array<VertexAttributes>, read>,
+		vertexData: bvh_GeometryStruct,
+		side: f32,
+		hitNormal: vec3f,
 		textures: texture_2d_array<f32>,
 		textureSampler: sampler,
 	) -> SurfaceRecord {
-		let pointAttributes = getPointAttributes( attributes, surfaceHit.indices.xyz, surfaceHit.barycoord );
-		let uv = pointAttributes.uv;
+		let uv = vertexData.uv.xy;
 
-		var normal = surfaceHit.normal * surfaceHit.side;
+		var normal = hitNormal * side;
 		if ( material.flatShading == 0 ) {
 
-			normal = pointAttributes.normal;
+			normal = vertexData.normal.xyz;
 
 		}
 		normal = normalize( normal );
@@ -46,10 +71,10 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 			// resulting in NaNs and slow path tracing.
-			if ( length( pointAttributes.tangent ) > 0.0 ) {
+			if ( length( vertexData.tangent ) > 0.0 ) {
 
-				let tangent = normalize( pointAttributes.tangent.xyz );
-				let bitangent = normalize( cross( normal, tangent ) * pointAttributes.tangent.w );
+				let tangent = normalize( vertexData.tangent.xyz );
+				let bitangent = normalize( cross( normal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, normal );
 
 				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
@@ -62,13 +87,13 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		}
 
-		normal *= surfaceHit.side;
+		normal *= side;
 
 		var albedo = vec4( material.color, material.opacity );
 
 		if ( material.vertexColors == 1 ) {
 
-			let vertexColor = pointAttributes.color;
+			let vertexColor = vertexData.color.xyz;
 			albedo *= vec4f( vertexColor, 1.0 );
 
 		}
@@ -140,10 +165,10 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 			// resulting in NaNs and slow path tracing.
-			if ( length( pointAttributes.tangent ) > 0.0 ) {
+			if ( length( vertexData.tangent ) > 0.0 ) {
 
-				let tangent = normalize( pointAttributes.tangent.xyz );
-				let bitangent = normalize( cross( normal, tangent ) * pointAttributes.tangent.w );
+				let tangent = normalize( vertexData.tangent.xyz );
+				let bitangent = normalize( cross( normal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, clearcoatNormal );
 
 				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
@@ -155,7 +180,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			}
 
 		}
-		clearcoatNormal *= surfaceHit.side;
+		clearcoatNormal *= side;
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
@@ -214,7 +239,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		var surf: SurfaceRecord;
 
 		surf.volumeParticle = false;
-		surf.faceNormal = surfaceHit.normal;
+		surf.faceNormal = hitNormal;
 		surf.normal = normal;
 
 		surf.metalness = metalness;
@@ -243,13 +268,13 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
-		surf.frontFace = surfaceHit.side == 1.0 || transmission == 0.0;
+		surf.frontFace = side == 1.0 || transmission == 0.0;
 		if ( material.thinFilm == 1 || surf.frontFace ) {
 			surf.eta = 1.0 / material.ior;
 		} else {
 			surf.eta = material.ior;
 		}
-		surf.f0 = iorRatioToF0( surf.eta );
+		surf.f0 = iorToF0( surf.eta );
 
 		// Compute the filtered roughness value to use during specular reflection computations.
 		// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
@@ -272,12 +297,10 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 `, [
 	inverseMat3x3Func,
-	iorRatioToF0Func,
+	iorToF0Func,
 	applyFilteredGlossyFunc,
 	getBasisFromNormalFunc,
-	getVertexAttribute,
 	surfaceRecordStruct,
-	intersectionResultStruct
 ] );
 
 export const lambertBsdfFunc = wgslFn( /* wgsl */`
@@ -296,7 +319,7 @@ export const lambertBsdfFunc = wgslFn( /* wgsl */`
 
 	}
 
-`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2, constants ] );
+`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2, constants, surfaceRecordStruct ] );
 
 export const bsdfEvalFunc = wgslFn( /* wgsl */ `
 
@@ -466,7 +489,5 @@ export const pbrtBsdfFunc = wgslFn( /* wgsl */`
 	bsdfEvalFunc,
 	getLobeWeightsFunc,
 	pcgRand,
-	getPointAttributes,
 	lobeWeightsStruct
 ] );
-

@@ -35,7 +35,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 
 ( async () => {
 
-	const req = await fetch( 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json' );
+	const req = await fetch( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json' );
 	const { scenarios } = await req.json();
 	const folderPath = path.resolve( process.cwd(), argv[ 'output-path' ] );
 	console.log( `Saving to "${ folderPath }"\n` );

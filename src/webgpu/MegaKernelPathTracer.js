@@ -1,6 +1,7 @@
-import { StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
+import { Matrix4, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 
 function* renderTask() {
 
@@ -8,12 +9,12 @@ function* renderTask() {
 		renderer,
 		camera,
 		kernel,
-		geometry,
 		bounces,
 
 		tiles,
 		outputTarget,
 		sampleCountTarget,
+		lowResMode,
 	} = this;
 
 	camera.updateMatrixWorld();
@@ -22,20 +23,23 @@ function* renderTask() {
 	kernel.outputTarget = outputTarget;
 	kernel.sampleCountTarget = sampleCountTarget;
 
-	kernel.geom_index = geometry.index;
-	kernel.geom_position = geometry.position;
-	kernel.geom_attributes = geometry.attributes;
-	kernel.geom_material_index = geometry.materialIndex;
-	kernel.bvh = geometry.bvh;
-	kernel.materials = geometry.materials;
-
 	kernel.bounces = bounces;
 	kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 	kernel.cameraToModelMatrix.copy( camera.matrixWorld );
 
 	while ( true ) {
 
-		const tileSize = this.getTileSize( kernel.tileSize );
+		const tileSize = kernel.tileSize;
+		if ( lowResMode ) {
+
+			this.getSize( tileSize );
+
+		} else {
+
+			this.getSize( tileSize ).divide( tiles ).ceil();
+
+		}
+
 		const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
 		kernel.seed += 1;
 
@@ -76,17 +80,9 @@ export class MegaKernelPathTracer {
 		this.samples = 0;
 		this.bounces = 7;
 		this.tiles = new Vector2( 2, 2 );
+		this.lowResMode = false;
 
-		// geometry fields
-		this.geometry = {
-			bvh: null,
-			index: null,
-			position: null,
-			attributes: null,
-
-			materialIndex: null,
-			materials: null,
-		};
+		this.envInfo = new EquirectHdrInfoUniform();
 
 		// targets
 		this.outputTarget = new StorageTexture( 1, 1, );
@@ -118,23 +114,58 @@ export class MegaKernelPathTracer {
 
 	}
 
-	setGeometryData( geometry ) {
+	setBVHData( bvhData ) {
 
-		for ( const propName in geometry ) {
+		this.kernel.bvhData = bvhData;
+		this.kernel.needsUpdate = true;
+		this.reset();
 
-			const prop = this.geometry[ propName ];
-			if ( prop === undefined ) {
+	}
 
-				console.error( `Invalid property name in geometry data: ${propName}` );
-				continue;
+	setTextures( texture ) {
 
-			}
+		this.kernel.textures = texture;
+		this.kernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
 
-			// TODO: cannot dispose at the moment
-			// prop.dispose();
-			this.geometry[ propName ] = geometry[ propName ];
+	}
+
+	setEnvironment(
+		envMap,
+		envMapIntensity,
+		envMapRotation,
+
+		background,
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
+
+		const { kernel } = this;
+
+		if ( kernel.background.isTexture ) {
+
+			kernel.background.dispose();
 
 		}
+
+		if ( envMap !== null ) {
+
+			this.envInfo.updateFrom( envMap );
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+		}
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		kernel.envMapIntensity = envMapIntensity;
+
+		kernel.background = background;
+		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		kernel.backgroundIntensity = backgroundIntensity;
+		kernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 
@@ -195,17 +226,10 @@ export class MegaKernelPathTracer {
 
 	}
 
-	getTileSize( target ) {
-
-		this.getSize( target ).divide( this.tiles ).ceil();
-
-		return target;
-
-	}
-
 	dispose() {
 
 		// TODO: dispose of all buffers
+		this.envInfo.dispose();
 		this._task = null;
 
 	}
@@ -230,7 +254,6 @@ export class MegaKernelPathTracer {
 		this.samples = 0;
 		this._task = null;
 
-
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
@@ -247,7 +270,7 @@ export class MegaKernelPathTracer {
 
 	update() {
 
-		if ( ! this.camera ) {
+		if ( ! this.camera || ! this.kernel ) {
 
 			return;
 

@@ -1,17 +1,19 @@
-import { IndirectStorageBufferAttribute, StorageTexture, DataArrayTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture, DataTexture, DataArrayTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { constants, getVertexAttribute } from 'three-mesh-bvh/webgpu';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { materialStruct } from '../../nodes/structs.wgsl.js';
-import { getSurfaceRecordFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
-import { queuedRayStruct, queuedHitStruct, QUEUED_RAY_SIZE, QUEUED_HIT_SIZE } from './structs.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
+import { queuedRayStruct, queuedHitStruct } from './structs.js';
+import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
 	constructor() {
 
 		const parameters = {
+			bvhData: { value: null },
+
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -21,16 +23,11 @@ export class ProcessHitsKernel extends ComputeKernel {
 			bounces: uniform( 1 ),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_RAY_SIZE ), 'QueuedRay' ),
+			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
 
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, QUEUED_HIT_SIZE ), 'QueuedHit' ),
+			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
-
-			// bvh and geometry definition
-			geom_position: storage( new IndirectStorageBufferAttribute( 1, 3 ), 'vec3f' ).toReadOnly(),
-			geom_attributes: storage( new IndirectStorageBufferAttribute( 1, 12 ), 'VertexAttributes' ).toReadOnly(),
-			materials: storage( new IndirectStorageBufferAttribute(), 'Material' ).toReadOnly(), // TODO: fill in initial values
 
 			// texture array for material textures
 			textures: texture( new DataArrayTexture( null, 1, 1, 1 ) ),
@@ -59,11 +56,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
 				hitQueueSize: ptr<storage, array<u32>, read_write>,
 
-				// scene
-				geom_position: ptr<storage, array<vec3f>, read>,
-				geom_attributes: ptr<storage, array<VertexAttributes>, read>,
-				materials: ptr<storage, array<Material>, read>,
-
 				// texture array for material textures
 				textures: texture_2d_array<f32>,
 				textureSampler: sampler,
@@ -84,30 +76,23 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
+
 				g_state.s0 = input.pcgStateS0;
 
-				let material = materials[ input.materialIndex ];
+				let object = bvh_transforms.value[ input.objectIndex ];
+				var material = bvh_materials.value[ object.materialIndex ];
 
-				let a = geom_position[ input.indices.x ];
-				let b = geom_position[ input.indices.y ];
-				let c = geom_position[ input.indices.z ];
+				// apply per-object colors
+				material.color *= object.color.rgb;
+				material.opacity *= object.color.a;
 
-				let hitPosition = a * input.barycoord.x + b * input.barycoord.y + c * input.barycoord.z;
-				let hitNormal = normalize( cross( c - a, b - a ) );
+				var vertexData = bvh_sampleTrianglePoint( input.barycoord, input.indices.xyz );
+				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.position = object.matrixWorld * vertexData.position;
 
-				// TODO: pass side of the intersection result
-				let hit = IntersectionResult(
-					/* didHit */ true,
-					vec4u( input.indices, 0 ),
-					hitNormal,
-					input.barycoord,
-					1.0, // input.side,
-					/* dist */ 0,
-				);
+				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal, textures, textureSampler );
 
-				let surf = getSurfaceRecord( material, hit, geom_attributes, textures, textureSampler );
-
-				let scatterRec = bsdfSample( input.view, surf );
+				let scatterRec = bsdfSample( input.view, surface );
 
 				// terminate ray if scatter is impossible or color is nan
 				// TODO: Investigate ways to not generate such scatters
@@ -124,18 +109,17 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					var color = textureLoad( prevOutputTarget, indexUV ).xyz;
-					color += ( vec3( 0 ) - color.xyz ) / f32( sampleCount );
-
+					let prevColor = textureLoad( prevOutputTarget, indexUV );
+					let blendedColor = weightedAlphaBlend( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
 					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, vec4( color, 1.0 ) );
+					textureStore( outputTarget, indexUV, blendedColor );
 
 				} else {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
-					rayQueue[ index ].ray.origin = hitPosition;
-					rayQueue[ index ].ray.direction = scatterRec.direction;
+					rayQueue[ index ].origin = vertexData.position.xyz;
+					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
@@ -145,14 +129,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 			}
 		`, [
-			queuedRayStruct,
-			getSurfaceRecordFunc,
-			constants,
-			getVertexAttribute,
-			pcgRand3,
-			pcgInit,
-			queuedHitStruct,
-			materialStruct,
+			proxy( 'bvhData.value.structs.material', parameters ),
+			proxy( 'bvhData.value.structs.transform', parameters ),
+			proxy( 'bvhData.value.storage.materials', parameters ),
+			proxy( 'bvhData.value.storage.transforms', parameters ),
+			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
+			queuedRayStruct, getSurfaceRecordFunc,
+			pcgRand3, pcgInit, queuedHitStruct,
+			weightedAlphaBlendFn,
 			// lambertBsdfFunc,
 			pbrtBsdfFunc,
 		] );
