@@ -240,7 +240,7 @@ export class WGSLTagFnNode extends FunctionNode {
 		const { type } = this.getNodeFunction( builder );
 		const nodeCode = builder.getCodeFromNode( this, type );
 
-		nodeCode.code = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).replace( /\s+/g, ' ' ).trim();
+		nodeCode.code = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).trim();
 
 		return result;
 

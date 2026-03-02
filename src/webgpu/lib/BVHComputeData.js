@@ -1,6 +1,6 @@
 import { Matrix4, Vector4 } from 'three';
 import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage } from 'three/tsl';
+import { storage, wgsl } from 'three/tsl';
 import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
@@ -658,6 +658,10 @@ export class BVHComputeData {
 		const { storage, structs, fns, prefix } = this;
 
 		// raycast first hit
+		const scratchScale = wgsl( /* wgsl */`
+			var<private> ${ prefix }rayScale = 1.0;
+		` );
+
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: prefix + 'RaycastFirstHit',
 			shapeStruct: rayStruct,
@@ -672,6 +676,7 @@ export class BVHComputeData {
 			`,
 			intersectsBoundsFn: rayIntersectsBounds,
 			intersectRangeFn: wgslTagFn/* wgsl */`
+				${ [ scratchScale ] }
 				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
 
 					var bestHit: ${ intersectionResultStruct };
@@ -680,7 +685,7 @@ export class BVHComputeData {
 
 					// calculate a scale multiplier for the triangle and ray to prevent
 					// floating point errors
-					let multiplier = 1.0 / length( ray.direction );
+					let multiplier = ${ prefix }rayScale;
 					var scaledRay = ray;
 					scaledRay.direction *= multiplier;
 					scaledRay.origin *= multiplier;
@@ -710,11 +715,15 @@ export class BVHComputeData {
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
+				${ [ scratchScale ] }
 				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f ) -> ${ rayStruct } {
 
 					var localRay: Ray;
 					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+
+					${ prefix }rayScale = 1.0 / length( localRay.direction );
+
 					return localRay;
 
 				}
