@@ -722,7 +722,7 @@ export class BVHComputeData {
 					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
-					${ prefix }rayScale = 1.0 / length( localRay.direction );
+					${ prefix }rayScale = max( 1.0, 1.0 / length( localRay.direction ) );
 
 					return localRay;
 
