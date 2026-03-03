@@ -1,5 +1,5 @@
 import { ColorManagement, FloatType, LinearFilter, RGBAFormat } from 'three';
-import { StorageTexture } from 'three/webgpu';
+import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 export class PathTracerBackend {
@@ -30,6 +30,13 @@ export class PathTracerBackend {
 		this.prevOutputTarget.name = 'Output #1';
 		this.prevOutputTarget.generateMipmaps = false;
 
+		this.sampleCountTarget = new StorageTexture( 1, 1, );
+		this.sampleCountTarget.format = RedIntegerFormat;
+		this.sampleCountTarget.type = UnsignedIntType;
+		this.sampleCountTarget.name = 'Sample Count';
+		this.sampleCountTarget.generateMipmaps = false;
+
+		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
 
 	}
@@ -76,12 +83,15 @@ export class PathTracerBackend {
 
 		this.outputTarget.dispose();
 		this.prevOutputTarget.dispose();
+		this.sampleCountTarget.dispose();
 
 		this.outputTarget = this.outputTarget.clone();
 		this.prevOutputTarget = this.outputTarget.clone();
+		this.sampleCountTarget = this.sampleCountTarget.clone();
 
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
+		this.sampleCountTarget.setSize( w, h );
 
 		this.reset();
 		return true;
@@ -123,7 +133,15 @@ export class PathTracerBackend {
 
 	reset() {
 
-		const { renderer, outputTargetClearKernel, outputTarget, prevOutputTarget } = this;
+		const {
+			renderer,
+			outputTargetClearKernel,
+			sampleCountClearKernel,
+
+			outputTarget,
+			prevOutputTarget,
+			sampleCountTarget,
+		} = this;
 
 		if ( ! renderer.initialized ) {
 
@@ -140,6 +158,9 @@ export class PathTracerBackend {
 		outputTargetClearKernel.target = prevOutputTarget;
 		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
+		sampleCountClearKernel.target = sampleCountTarget;
+		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
+
 		this.samples = 0;
 		this._renderTask = null;
 
@@ -149,6 +170,8 @@ export class PathTracerBackend {
 
 		this.outputTarget.dispose();
 		this.prevOutputTarget.dispose();
+		this.sampleCountTarget.dispose();
+
 		this._renderTask = null;
 
 	}
