@@ -4,8 +4,7 @@ import { storage, wgsl } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
-import { GeometryBVH, SAH } from 'three-mesh-bvh';
-import { ObjectBVH } from './ObjectBVH.js';
+import { GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
 
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material

@@ -1,10 +1,9 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
-import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
-import { SkinnedMeshBVH } from '../lib/SkinnedMeshBVH.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
