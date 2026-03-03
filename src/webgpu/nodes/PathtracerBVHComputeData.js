@@ -430,15 +430,26 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// write material data to the transforms
 		const { materials } = this;
-		const { object, instanceId } = info;
-		const material = object.material;
-		if ( ! materials.includes( material ) ) {
+		const { object, instanceId, root } = info;
 
+		// get the material associated with the bvh group
+		let material = object.material;
+		if ( Array.isArray( material ) ) {
+
+			const { materialIndex } = object.geometry.groups[ root ];
+			material = material[ materialIndex ];
+
+		}
+
+		// save the index
+		let index = materials.indexOf( material );
+		if ( index === - 1 ) {
+
+			index = materials.length;
 			materials.push( material );
 
 		}
 
-		const index = materials.indexOf( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
 
