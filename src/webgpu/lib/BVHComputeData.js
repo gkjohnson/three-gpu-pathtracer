@@ -152,8 +152,9 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// fn
 	fn intersectsTriangle( ray: ${ rayStruct }, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
+		// TODO: see if we can remove the "DIST" epsilon and account for it on ray origin bounce positioning
 		const DET_EPSILON = 1e-15;
-		const DIST_EPSILON = 1e-9;
+		const DIST_EPSILON = 1e-5;
 
 		var result: ${ intersectionResultStruct };
 		result.didHit = false;
