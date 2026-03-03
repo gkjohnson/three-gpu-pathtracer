@@ -208,7 +208,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			hitQueue,
 			hitQueueSize,
-			hitProcessDispatch,
+			// hitProcessDispatch,
 			tileIndexBuffer,
 
 			primeRayGenerationDispatchKernel,
