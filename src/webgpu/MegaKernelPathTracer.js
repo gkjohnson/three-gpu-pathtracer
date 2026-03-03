@@ -1,6 +1,5 @@
-import { Matrix4, StorageTexture, Vector2, RedIntegerFormat, UnsignedIntType } from 'three/webgpu';
+import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
-import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -10,22 +9,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		super( renderer );
 
-		this._renderTask = null;
-
 		// options
 		this.tiles = new Vector2( 2, 2 );
 		this.envInfo = new EquirectHdrInfoUniform();
 
-		// targets
-		this.sampleCountTarget = new StorageTexture( 1, 1, );
-		this.sampleCountTarget.format = RedIntegerFormat;
-		this.sampleCountTarget.type = UnsignedIntType;
-		this.sampleCountTarget.name = 'Sample Count';
-		this.sampleCountTarget.generateMipmaps = false;
-
 		// kernels
 		this.kernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
-		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 
 	}
 
@@ -84,42 +73,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setSize( w, h ) {
-
-		if ( super.setSize( w, h ) ) {
-
-			const { width, height } = this.outputTarget;
-			this.sampleCountTarget.dispose();
-			this.sampleCountTarget = this.sampleCountTarget.clone();
-			this.sampleCountTarget.setSize( width, height );
-
-		}
-
-	}
-
 	setTiles( tiles ) {
 
 		this.tiles.copy( tiles );
-
-	}
-
-	reset() {
-
-		const { renderer, sampleCountClearKernel, sampleCountTarget } = this;
-
-		if ( ! renderer.initialized ) {
-
-			return;
-
-		}
-
-		super.reset();
-
-		const { width, height } = sampleCountTarget;
-		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
-
-		sampleCountClearKernel.target = sampleCountTarget;
-		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
 	}
 
@@ -193,7 +149,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		super.dispose();
 
 		// TODO: dispose of all buffers
-		this.sampleCountTarget.dispose();
 		this.envInfo.dispose();
 
 	}
