@@ -46,14 +46,14 @@
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.183.1",
-    "three-mesh-bvh": "^0.9.8",
+    "three-mesh-bvh": "^0.9.9",
     "typescript": "^5.9.2",
     "vite": "^6.2.2",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
     "three": ">=0.180.0",
-    "three-mesh-bvh": ">=0.7.4",
+    "three-mesh-bvh": ">=0.9.9",
     "xatlas-web": "^0.1.0"
   },
   "scripts": {
