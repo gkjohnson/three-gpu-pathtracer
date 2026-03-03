@@ -442,6 +442,11 @@ async function updateModel() {
 
 				}
 
+			} ).then( value => {
+
+				loader.setPercentage( 1 );
+				return value;
+
 			} ),
 		new Promise( resolve => manager.onLoad = resolve ),
 	] );
