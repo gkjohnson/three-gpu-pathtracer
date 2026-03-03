@@ -1,5 +1,5 @@
 import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
-import { uv, varying, texture, vec4, toneMapping } from 'three/tsl';
+import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
 
 // Material to apply tone mapping _before_ applying alpha blending
 export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
@@ -16,6 +16,18 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
+	get fromTexture() {
+
+		return this._fromTexNode.value;
+
+	}
+
+	set fromTexture( v ) {
+
+		this._fromTexNode.value = v;
+
+	}
+
 	get toneMapping() {
 
 		return this._toneMapping.toneMapping;
@@ -25,6 +37,18 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 	set toneMapping( v ) {
 
 		this._toneMapping.setToneMapping( v );
+
+	}
+
+	get transition() {
+
+		return this._transitionUniform.value;
+
+	}
+
+	set transition( v ) {
+
+		this._transitionUniform.value = v;
 
 	}
 
@@ -47,10 +71,30 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const texNode = texture( new StorageTexture(), varying( uv() ) );
 		this._texNode = texNode;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, texNode );
+		const fromTexNode = texture( new StorageTexture(), varying( uv() ) );
+		this._fromTexNode = fromTexNode;
+
+		const transitionUniform = uniform( 1.0 );
+		this._transitionUniform = transitionUniform;
+
+		const fadedColor = wgslFn( /* wgsl */`
+			fn fade( col0: vec4f, col1: vec4f, transition: f32 ) -> vec4f {
+
+				return mix( col0, col1, transition );
+
+			}
+		` )( {
+			col0: fromTexNode,
+			col1: texNode,
+			transition: transitionUniform,
+		} );
+
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, fadedColor );
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping
+		// NOTE: alpha is being multiplied twice here to accommodate some odd blending in three.js
+		// See mrdoob/three.js#33104. It's possible this should be removed or rethought once fixed.
 		this.transparent = true;
 		this.colorNode = vec4( toneMappingNode.rgb.mul( toneMappingNode.a ), toneMappingNode.a );
 

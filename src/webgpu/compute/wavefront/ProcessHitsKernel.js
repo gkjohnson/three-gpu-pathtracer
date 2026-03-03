@@ -1,6 +1,6 @@
-import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, storage, wgslFn, textureStore, globalId } from 'three/tsl';
+import { uniform, storage, wgslFn, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
@@ -29,6 +29,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
+			textures: texture( new DataTexture() ),
+			textureSampler: sampler( new DataTexture() ),
+
 			globalId: globalId,
 		};
 
@@ -51,6 +54,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// hits
 				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
 				hitQueueSize: ptr<storage, array<u32>, read_write>,
+
+				textures: texture_2d_array<f32>,
+				textureSampler: sampler,
 
 				globalId: vec3u
 			) -> void {
@@ -82,7 +88,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal );
+				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal, textures, textureSampler );
 
 				let scatterRec = bsdfSample( input.view, surface );
 

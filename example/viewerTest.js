@@ -30,7 +30,7 @@ const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
-const isWebGPU = urlParams.get( 'hideUI' ) === 'true';
+const isWebGPU = urlParams.get( 'isWebGPU' ) === 'true';
 
 const params = {
 
@@ -87,7 +87,7 @@ async function init() {
 
 	}
 
-	createRenderer( params.isWebGPU );
+	await createRenderer( params.isWebGPU );
 
 	// scene
 	scene = new Scene();
@@ -113,13 +113,13 @@ async function init() {
 
 }
 
-function createRenderer( isWebGPU ) {
+async function createRenderer( isWebGPU ) {
 
 	if ( isWebGPU ) {
 
 		// renderer - WebGPU version
 		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
-		renderer.init();
+		await renderer.init();
 		renderer.toneMapping = ACESFilmicToneMapping;
 		renderer.setClearAlpha( 0 );
 		containerEl.appendChild( renderer.domElement );
@@ -299,14 +299,17 @@ function buildGui() {
 		containerEl.removeChild( renderer.domElement );
 		renderer.dispose();
 
-		createRenderer( v );
-		renderer.setSize( size.x, size.y );
-		renderer.setPixelRatio( window.devicePixelRatio );
-		pathTracer.setScene( scene, camera );
-
-		onParamsChange();
-
 		webgpuOptions.show( v );
+
+		createRenderer( v ).then( () => {
+
+			renderer.setSize( size.x, size.y );
+			renderer.setPixelRatio( window.devicePixelRatio );
+			pathTracer.setScene( scene, camera );
+
+			onParamsChange();
+
+		} );
 
 	} );
 

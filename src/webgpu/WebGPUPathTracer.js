@@ -1,12 +1,12 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, RenderTarget, FloatType, Timer } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
 import { MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
-import { ObjectBVH } from './lib/ObjectBVH.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
+import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { SkinnedMeshBVH } from './lib/SkinnedMeshBVH.js';
 
 const _resolution = new Vector2();
@@ -42,6 +42,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
+		this._pathTracer.setTextures( this.textureArray.texture );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -69,7 +70,8 @@ export class WebGPUPathTracer {
 		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._size = new Vector2();
-		this._lowResTarget = new RenderTarget( 1, 1, { type: FloatType } );
+		this._lowResTarget = new StorageTexture( 1, 1 );
+		this._lowResTarget.type = FloatType;
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// options
@@ -80,6 +82,8 @@ export class WebGPUPathTracer {
 		this.lowResScale = 0.2;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
+
+		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -119,9 +123,11 @@ export class WebGPUPathTracer {
 		} );
 
 		// Build TLAS and compute functions
-		const objectBVH = new ObjectBVH( scene, { strategy: SAH } );
-		const bvhData = new PathtracerBVHComputeData( objectBVH );
+		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
+
+		this.textureArray.setTextures( this._renderer, bvhData.textures );
+		this._pathTracer.setTextures( this.textureArray.texture );
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -228,7 +234,6 @@ export class WebGPUPathTracer {
 		const delta = 1000 * timer.getDelta();
 		this._resetTime += delta;
 
-		// clear renderer fields
 		const originalToneMapping = renderer.toneMapping;
 		const originalExposure = renderer.toneMappingExposure;
 		const originalTarget = renderer.getRenderTarget();
@@ -266,20 +271,12 @@ export class WebGPUPathTracer {
 
 				// copy the low reset content if we're transitioning to the full
 				// resolution view so we can fade to it
-				lowResTarget.setSize( width, height );
-				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget.texture );
+				lowResTarget.setSize( Math.ceil( lowResScale * width ), Math.ceil( lowResScale * height ) );
+				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
 
 			}
 
 			pathTracer.setSize( width, height );
-
-		}
-
-		// update the samples
-		if ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) {
-
-			pathTracer.lowResMode = lowResMode;
-			pathTracer.update();
 
 		}
 
@@ -290,9 +287,23 @@ export class WebGPUPathTracer {
 
 		}
 
+
+		// update the samples
+		if ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) {
+
+			pathTracer.lowResMode = lowResMode;
+			pathTracer.update();
+
+		}
+
+
 		// render the content to the canvas
-		renderer.autoClear = false;
-		blitQuad.material.opacity = lowResMode && dynamicLowRes ? 1.0 : this._fadeState;
+		const opacity = ( lowResMode && dynamicLowRes ? 1.0 : this._fadeState );
+
+		renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
+		blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
+		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+		blitQuad.material.fromTexture = lowResTarget;
 		blitQuad.material.texture = pathTracer.outputTarget;
 		blitQuad.material.toneMapping = originalToneMapping;
 		blitQuad.material.toneMappingExposure = originalExposure;

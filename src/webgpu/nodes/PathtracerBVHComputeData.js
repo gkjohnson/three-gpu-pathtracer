@@ -29,7 +29,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				normal: 'vec4f',
 				tangent: 'vec4f',
 				color: 'vec4f',
-				uv0: 'vec4f',
+				uv: 'vec4f',
 			},
 			...options,
 		} );
@@ -48,9 +48,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// build material storage
 		const { materials, structs, prefix: name } = this;
 
-		const materialAttribute = new StorageBufferAttribute( this.writeMaterialsBuffer( materials, [] ), structs.material.getLength() );
+		const { materialData, textures } = this.writeMaterialsBuffer( materials );
 
-		const materialStorage = storage( materialAttribute, structs.material.name ).toReadOnly().setName( `${ name }materials` );
+		this.textures = textures;
+
+		const materialAttribute = new StorageBufferAttribute( materialData, structs.material.getLength() );
+		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( `${ name }materials` );
 		this.storage.materials = materialStorage;
 
 		this.bvhMap.clear();
@@ -58,14 +61,22 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	writeMaterialsBuffer( materials, textures ) {
+	writeMaterialsBuffer( materials ) {
 
 		function getTexture( material, key, def = - 1 ) {
 
 			if ( key in material && material[ key ] ) {
 
 				const hash = getTextureHash( material[ key ] );
-				return textureLookUp[ hash ];
+
+				if ( ! textureLookUp.has( hash ) ) {
+
+					textureLookUp.set( hash, textureLookUp.size );
+					textures.push( material[ key ] );
+
+				}
+
+				return textureLookUp.get( hash );
 
 			} else {
 
@@ -114,13 +125,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		let index = 0;
 
-		// index the list of textures based on shareable source
-		const textureLookUp = {};
-		for ( let i = 0, l = textures.length; i < l; i ++ ) {
-
-			textureLookUp[ getTextureHash( textures[ i ] ) ] = i;
-
-		}
+		// Collect and index the list of textures based on shareable source
+		const textureLookUp = new Map();
+		const textures = [];
 
 		const floatArray = new Float32Array( materials.length * this.structs.material.getLength() );
 		const intArray = new Int32Array( floatArray.buffer );
@@ -413,7 +420,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		}
 
-		return floatArray;
+		return { materialData: floatArray, textures };
 
 	}
 
