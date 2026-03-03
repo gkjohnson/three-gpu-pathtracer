@@ -21,7 +21,6 @@ function* renderTask() {
 	const {
 		renderer,
 		camera,
-		geometry,
 		bounces,
 
 		tiles,
@@ -101,10 +100,6 @@ function* renderTask() {
 		rayIntersectionKernel.rayQueueSize = rayQueueSize;
 		rayIntersectionKernel.hitQueue = hitQueue;
 		rayIntersectionKernel.hitQueueSize = hitQueueSize;
-		rayIntersectionKernel.geom_index = geometry.index;
-		rayIntersectionKernel.geom_position = geometry.position;
-		rayIntersectionKernel.geom_material_index = geometry.materialIndex;
-		rayIntersectionKernel.bvh = geometry.bvh;
 		renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
 
 		// mark the rays as consumed
@@ -122,9 +117,6 @@ function* renderTask() {
 		hitProcessKernel.rayQueueSize = rayQueueSize;
 		hitProcessKernel.hitQueue = hitQueue;
 		hitProcessKernel.hitQueueSize = hitQueueSize;
-		hitProcessKernel.geom_position = geometry.position;
-		hitProcessKernel.geom_normals = geometry.normal;
-		hitProcessKernel.materials = geometry.materials;
 		renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
 
 		// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
@@ -163,18 +155,6 @@ export class WaveFrontPathTracer {
 		this.bounces = 7;
 		this.tiles = new Vector2( 3, 3 );
 		this.lowResMode = false;
-
-		// geometry fields
-		this.geometry = {
-			bvh: null,
-			index: null,
-			position: null,
-			normal: null,
-
-			materialIndex: null,
-			materials: null,
-		};
-
 		this.envInfo = new EquirectHdrInfoUniform();
 
 		// targets
