@@ -142,15 +142,28 @@ export class LoaderElement {
 
 	}
 
-	setSamples( count, compiling = false, samplesPerSecond = null ) {
+	setSamples( count, compiling = false, detailedSamples = null ) {
 
 		if ( compiling ) {
 
 			this._samples.innerText = 'compiling shader...';
 
-		} else if ( samplesPerSecond !== null ) {
+		} else if ( detailedSamples !== null ) {
 
-			this._samples.innerText = `${ Math.floor( count ) } samples (${ samplesPerSecond.toFixed( 1 ) } samples/sec)`;
+			const {
+				min,
+				max,
+				avg,
+				perSecond,
+			} = detailedSamples;
+
+			this._samples.innerText = `[${ min }..${ max }], avg = ${ avg } samples`;
+
+			if ( perSecond ) {
+
+				this._samples.innerText += ` (${ perSecond.toFixed( 1 ) } samples/sec)`;
+
+			}
 
 		} else {
 

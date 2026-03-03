@@ -325,7 +325,7 @@ export class WebGPUPathTracer {
 
 		// Create a temporary render target to read from the storage texture
 		const tempTarget = new RenderTarget( width, height, { format: sampleCountTarget.format, type: sampleCountTarget.type } );
-		tempTarget.textures[ 0 ] = this.sampleCountTarget;
+		tempTarget.textures[ 0 ] = sampleCountTarget;
 
 		const buffer = await renderer.readRenderTargetPixelsAsync( tempTarget, 0, 0, width, height );
 		const uintBuffer = new Uint32Array( buffer.buffer );

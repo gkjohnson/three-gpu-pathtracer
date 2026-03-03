@@ -61,7 +61,9 @@ let pathTracer, renderer, camera, scene, controls;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
-let samplesPerSecond;
+let detailedSampleCount = null;
+let lastDetailedSample = 0;
+const detailedSampleInterval = 4;
 
 init();
 
@@ -160,21 +162,22 @@ function animate() {
 	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
 
 		const elapsed = pathTracer.getRenderTime() / 1000;
-		if ( elapsed > 5 ) {
+		if ( elapsed < detailedSampleInterval ) {
 
+			detailedSampleCount = null;
+			lastDetailedSample = 0;
+
+		}
+
+		if ( elapsed - lastDetailedSample > detailedSampleInterval ) {
+
+			lastDetailedSample = elapsed;
 			pathTracer.getDetailedSampleCount().then( sampleCount => {
 
-				if ( elapsed > 0 ) {
-
-					samplesPerSecond = sampleCount.avg / elapsed;
-
-				}
+				sampleCount.perSecond = sampleCount.avg / elapsed;
+				detailedSampleCount = sampleCount;
 
 			} );
-
-		} else {
-
-			samplesPerSecond = null;
 
 		}
 
@@ -214,7 +217,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling, samplesPerSecond );
+	loader.setSamples( pathTracer.samples, pathTracer.isCompiling, detailedSampleCount );
 
 }
 
