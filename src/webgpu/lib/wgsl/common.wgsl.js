@@ -1,10 +1,9 @@
 import { wgslFn, uint, float } from 'three/tsl';
-import { bvhNodeBoundsStruct, rayStruct } from './structs.wgsl.js';
+import { rayStruct } from './structs.wgsl.js';
 
 export const constants = {
 	BVH_STACK_DEPTH: uint( 60 ),
 	INFINITY: float( 1e20 ),
-	TRI_INTERSECT_EPSILON: float( 1e-5 ),
 };
 
 export const ndcToCameraRay = wgslFn( /* wgsl*/`
@@ -28,41 +27,3 @@ export const ndcToCameraRay = wgslFn( /* wgsl*/`
 
 	}
 `, [ rayStruct ] );
-
-export const rayIntersectsBounds = wgslFn( /* wgsl */`
-
-	fn rayIntersectsBounds(
-		ray: Ray,
-		bounds: BVHBoundingBox,
-		dist: ptr<function, f32>
-	) -> bool {
-
-		let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
-		let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
-
-		let invDir = 1.0 / ray.direction;
-		let tMinPlane = ( boundsMin - ray.origin ) * invDir;
-		let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
-
-		let tMinHit = vec3f(
-			min( tMinPlane.x, tMaxPlane.x ),
-			min( tMinPlane.y, tMaxPlane.y ),
-			min( tMinPlane.z, tMaxPlane.z )
-		);
-
-		let tMaxHit = vec3f(
-			max( tMinPlane.x, tMaxPlane.x ),
-			max( tMinPlane.y, tMaxPlane.y ),
-			max( tMinPlane.z, tMaxPlane.z )
-		);
-
-		let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
-		let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
-
-		( *dist ) = max( t0, 0.0 );
-
-		return t1 >= ( *dist );
-
-	}
-
-`, [ rayStruct, bvhNodeBoundsStruct ] );

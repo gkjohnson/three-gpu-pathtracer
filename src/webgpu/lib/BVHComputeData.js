@@ -1,8 +1,8 @@
 import { Matrix4, Vector4 } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage } from 'three/tsl';
-import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
-import { rayStruct, bvhNodeStruct } from './wgsl/structs.wgsl.js';
+import { storage, wgsl } from 'three/tsl';
+import { constants } from './wgsl/common.wgsl.js';
+import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 import { GeometryBVH, SAH } from 'three-mesh-bvh';
 import { ObjectBVH } from './ObjectBVH.js';
@@ -152,7 +152,10 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// fn
 	fn intersectsTriangle( ray: ${ rayStruct }, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
-		var TRI_INTERSECT_EPSILON = ${ constants.TRI_INTERSECT_EPSILON };
+		// TODO: see if we can remove the "DIST" epsilon and account for it on ray origin bounce positioning
+		const DET_EPSILON = 1e-15;
+		const DIST_EPSILON = 1e-5;
+
 		var result: ${ intersectionResultStruct };
 		result.didHit = false;
 
@@ -161,8 +164,7 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 		let n = cross( edge1, edge2 );
 
 		let det = - dot( ray.direction, n );
-
-		if ( abs( det ) < TRI_INTERSECT_EPSILON ) {
+		if ( abs( det ) < DET_EPSILON ) {
 
 			return result;
 
@@ -174,12 +176,22 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 		let DAO = cross( AO, ray.direction );
 
 		let u = dot( edge2, DAO ) * invdet;
-		let v = -dot( edge1, DAO ) * invdet;
+		if ( u < 0.0 || u > 1.0 ) {
+
+			return result;
+
+		}
+
+		let v = - dot( edge1, DAO ) * invdet;
+		if ( v < 0.0 || u + v > 1.0 ) {
+
+			return result;
+
+		}
+
 		let t = dot( AO, n ) * invdet;
-
 		let w = 1.0 - u - v;
-
-		if ( u < - TRI_INTERSECT_EPSILON || v < - TRI_INTERSECT_EPSILON || w < - TRI_INTERSECT_EPSILON || t < TRI_INTERSECT_EPSILON ) {
+		if ( t < DIST_EPSILON ) {
 
 			return result;
 
@@ -304,8 +316,8 @@ export class BVHComputeData {
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
-					var boundsHitDist: f32 = 0.0;
-					if ( ! ${ intersectsBoundsFn }( shape, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+					var boundsHitDist: f32 = ${ intersectsBoundsFn }( shape, node.bounds );
+					if ( boundsHitDist < 0.0 || boundsHitDist > bestHit.dist ) {
 
 						continue;
 
@@ -697,6 +709,9 @@ export class BVHComputeData {
 		const { storage, structs, fns, prefix } = this;
 
 		// raycast first hit
+		const scratchRayScalar = wgsl( /* wgsl */`
+			var<private> ${ prefix }rayScalar = 1.0;
+		` );
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: prefix + 'RaycastFirstHit',
 			shapeStruct: rayStruct,
@@ -709,8 +724,50 @@ export class BVHComputeData {
 
 				}
 			`,
-			intersectsBoundsFn: rayIntersectsBounds,
+			intersectsBoundsFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
+				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+
+					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
+					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
+
+					let invDir = 1.0 / ray.direction;
+					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
+					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
+
+					let tMinHit = vec3f(
+						min( tMinPlane.x, tMaxPlane.x ),
+						min( tMinPlane.y, tMaxPlane.y ),
+						min( tMinPlane.z, tMaxPlane.z )
+					);
+
+					let tMaxHit = vec3f(
+						max( tMinPlane.x, tMaxPlane.x ),
+						max( tMinPlane.y, tMaxPlane.y ),
+						max( tMinPlane.z, tMaxPlane.z )
+					);
+
+					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
+					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
+
+					let dist = max( t0, 0.0 );
+					if ( t1 >= dist ) {
+
+						return dist * ${ prefix }rayScalar;
+
+					} else {
+
+						return - 1.0;
+
+					}
+
+				}
+
+			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
 				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
 
 					var bestHit: ${ intersectionResultStruct };
@@ -728,6 +785,7 @@ export class BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
+						triResult.dist *= ${ prefix }rayScalar;
 						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
 
 							bestHit = triResult;
@@ -742,11 +800,18 @@ export class BVHComputeData {
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
 				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f ) -> ${ rayStruct } {
 
 					var localRay: Ray;
 					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+
+					let len = length( localRay.direction );
+					localRay.direction /= len;
+					${ prefix }rayScalar = 1.0 / len;
+
 					return localRay;
 
 				}
