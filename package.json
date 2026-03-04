@@ -9,6 +9,7 @@
       "import": "./src/index.js",
       "require": "./build/index.umd.cjs"
     },
+    "./webgpu": "./src/webgpu/index.js",
     "./src/*": "./src/*"
   },
   "type": "module",
