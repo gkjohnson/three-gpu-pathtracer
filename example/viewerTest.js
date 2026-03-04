@@ -265,7 +265,7 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 
-	let webgpuOptions;
+	let webgpuOptions = null;
 	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
 
 		const size = renderer.getSize( new Vector2() );
