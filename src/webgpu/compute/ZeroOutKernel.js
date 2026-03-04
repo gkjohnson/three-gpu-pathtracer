@@ -1,29 +1,26 @@
 import { StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { textureStore, wgslFn, globalId } from 'three/tsl';
+import { textureStore, globalId } from 'three/tsl';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export class ZeroOutKernel extends ComputeKernel {
 
-	constructor( { textureType = 'rgba32float' } ) {
+	constructor() {
 
 		const params = {
 			globalId: globalId,
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 		};
 
-		const fn = wgslFn( /* wgsl */`
+		const fn = wgslTagFn/* wgsl */`
+			fn compute( globalId: vec3u ) -> void {
 
-			fn compute(
-				globalId: vec3u,
-				outputTarget: texture_storage_2d<${ textureType }, write>,
-			) -> void {
-
-				textureStore( outputTarget, globalId.xy, vec4( 0, 0, 0, 1 ) );
+				textureStore( ${ params.outputTarget }, globalId.xy, vec4( 0, 0, 0, 1 ) );
 
 			}
-		` )( params );
+		`;
 
-		super( fn );
+		super( fn( params ) );
 
 		this.defineUniformAccessors( {
 			target: params.outputTarget,

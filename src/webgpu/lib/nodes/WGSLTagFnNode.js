@@ -62,18 +62,17 @@ function getIncludeNode( arg ) {
 
 		if ( arg.functionNode ) return arg.functionNode;
 		if ( arg.isStruct ) return arg.layout;
+		else return null;
+
+	} else if ( arg.isNode ) {
+
+		return new PropertyRefNode( arg );
+
+	} else {
+
 		return null;
 
 	}
-
-	if ( arg && arg.isNode ) {
-
-		if ( arg.functionNode ) return arg.functionNode;
-		if ( arg.isStructLayoutNode || arg.isCodeNode ) return arg;
-
-	}
-
-	return null;
 
 }
 
@@ -116,6 +115,7 @@ function normalizeArgs( args ) {
 		if ( typeof arg === 'function' && arg.functionNode ) return new PropertyRefNode( arg.functionNode );
 		if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
 		if ( arg && arg.isNode && arg.functionNode ) return new InlineCallNode( arg );
+		if ( arg && arg.isNode ) return new PropertyRefNode( arg );
 		return arg;
 
 	} );
@@ -240,7 +240,7 @@ export class WGSLTagFnNode extends FunctionNode {
 		const { type } = this.getNodeFunction( builder );
 		const nodeCode = builder.getCodeFromNode( this, type );
 
-		nodeCode.code = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).replace( /\s+/g, ' ' ).trim();
+		nodeCode.code = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).trim();
 
 		return result;
 
