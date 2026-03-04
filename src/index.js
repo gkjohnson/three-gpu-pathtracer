@@ -18,6 +18,7 @@ export * from './utils/BlurredEnvMapGenerator.js';
 // materials
 export * from './materials/fullscreen/DenoiseMaterial.js';
 export * from './materials/surface/FogVolumeMaterial.js';
+export * from './materials/surface/AmbientOcclusionMaterial.js';
 
 // deprecated
 export * from './materials/pathtracing/PhysicalPathTracingMaterial.js';

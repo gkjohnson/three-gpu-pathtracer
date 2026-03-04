@@ -5,14 +5,14 @@ import {
 	WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGLPathTracer } from '../src/index.js';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
-const DB_URL = 'https://api.physicallybased.info/materials';
+const DB_URL = 'https://api.physicallybased.info/v2/materials';
 const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
 
 let pathTracer, renderer, controls, material;
@@ -81,7 +81,7 @@ async function init() {
 
 	// database set up
 	database = {};
-	dbJson.forEach( mat => database[ mat.name ] = mat );
+	dbJson.data.forEach( mat => database[ mat.name ] = mat );
 	params.material = Object.keys( database )[ 0 ];
 
 	// initialize scene
@@ -138,7 +138,7 @@ function applyMaterialInfo( info, material ) {
 	material.iridescenceThicknessRange = [ 0, 0 ];
 
 	// apply database values
-	if ( info.specularColor ) material.specularColor.setRGB( ...info.specularColor );
+	if ( info.specularColor ) material.specularColor.setRGB( ...info.specularColor[ 0 ].color[ 0 ].color );
 	if ( 'metalness' in info ) material.metalness = info.metalness;
 	if ( 'roughness' in info ) material.roughness = info.roughness;
 	if ( 'ior' in info ) material.ior = info.ior;
@@ -147,7 +147,7 @@ function applyMaterialInfo( info, material ) {
 
 		material.iridescence = 1.0;
 		material.iridescenceIOR = info.thinFilmIor;
-		material.iridescenceThicknessRange = [ info.thinFilmThickness, info.thinFilmThickness ];
+		material.iridescenceThicknessRange = [ info.thinFilmThickness[ 2 ] ?? info.thinFilmThickness[ 0 ], info.thinFilmThickness[ 2 ] ?? info.thinFilmThickness[ 0 ] ];
 
 	}
 
@@ -155,7 +155,7 @@ function applyMaterialInfo( info, material ) {
 
 		if ( info.color ) {
 
-			material.attenuationColor.setRGB( ...info.color );
+			material.attenuationColor.setRGB( ...info.color[ 0 ].color );
 
 		}
 
@@ -173,13 +173,13 @@ function applyMaterialInfo( info, material ) {
 
 		if ( info.color ) {
 
-			material.color.setRGB( ...info.color );
+			material.color.setRGB( ...info.color[ 0 ].color );
 
 		}
 
 	}
 
-	imgEl.src = info.reference[ 0 ];
+	imgEl.src = Object.values( info.images[ 1 ] )[ 0 ];
 
 }
 

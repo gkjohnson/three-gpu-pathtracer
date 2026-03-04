@@ -24,7 +24,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
-import { PhysicalCamera } from '../src/index.js';
+import { PhysicalCamera } from 'three-gpu-pathtracer';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';

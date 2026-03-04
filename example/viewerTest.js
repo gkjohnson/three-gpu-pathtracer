@@ -17,7 +17,7 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer, WebGPUPathTracer } from '../src/index.js';
+import { WebGLPathTracer, WebGPUPathTracer } from 'three-gpu-pathtracer';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
