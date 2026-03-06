@@ -483,8 +483,8 @@ export class BVHComputeData {
 		let attributesOffset = 0;
 		let indexOffset = 0;
 		let nodeWriteOffset = 0;
-		const indexBuffer = new Uint32Array( indexBufferLength );
-		const attributesBuffer = new ArrayBuffer( attributesBufferLength * attributeStruct.getLength() * 4 );
+		const indexBuffer = new Uint32Array( Math.max( indexBufferLength, 2 ) );
+		const attributesBuffer = new ArrayBuffer( Math.max( attributesBufferLength, 2 ) * attributeStruct.getLength() * 4 );
 		const bvhNodesBuffer = new ArrayBuffer( bvhNodesBufferLength );
 
 		// append TLAS data
@@ -511,7 +511,7 @@ export class BVHComputeData {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformInfo.length * 4 );
+		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * Math.max( transformInfo.length, 2 ) * 4 );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
@@ -560,7 +560,7 @@ export class BVHComputeData {
 					const n16 = n32 * 2;
 
 					// write bounds
-					targetF32.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), n32 );
+					targetF32.set( new Float32Array( 6 ), n32 );
 
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
@@ -651,6 +651,7 @@ export class BVHComputeData {
 			const { geometry, mesh = null } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
+			const stepSize = attributeStruct.getLength();
 			attributeStruct.membersLayout.forEach( ( { name }, interleavedOffset ) => {
 
 				// TODO: we should be able to have access to memory layout offsets here via the struct
@@ -693,7 +694,7 @@ export class BVHComputeData {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributeStruct.getLength() + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * stepSize + interleavedOffset * 4 );
 
 				}
 
