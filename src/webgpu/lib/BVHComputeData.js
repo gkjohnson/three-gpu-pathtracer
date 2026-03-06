@@ -567,7 +567,7 @@ export class BVHComputeData {
 					const n16 = n32 * 2;
 
 					// write bounds
-					targetF32.set( new Float32Array( 6 ), n32 );
+					targetF32.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), n32 );
 
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
@@ -658,7 +658,7 @@ export class BVHComputeData {
 			const { geometry, mesh = null } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
-			const stepSize = attributeStruct.getLength();
+			const attrStructLength = attributeStruct.getLength();
 			attributeStruct.membersLayout.forEach( ( { name }, interleavedOffset ) => {
 
 				// TODO: we should be able to have access to memory layout offsets here via the struct
@@ -701,7 +701,7 @@ export class BVHComputeData {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * stepSize + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attrStructLength + interleavedOffset * 4 );
 
 				}
 
