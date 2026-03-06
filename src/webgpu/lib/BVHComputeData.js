@@ -481,7 +481,7 @@ export class BVHComputeData {
 		// TODO: remove this when fixed in three
 		const transformBufferLength = Math.max( transformInfo.length, 2 );
 		indexBufferLength = Math.max( indexBufferLength, 2 );
-		attributesBufferLength = Math.max( indexBufferLength, 2 );
+		attributesBufferLength = Math.max( attributesBufferLength, 2 );
 
 		// construct the attribute struct
 		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
