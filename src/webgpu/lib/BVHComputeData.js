@@ -476,6 +476,13 @@ export class BVHComputeData {
 
 		//
 
+		// NOTE: These buffer lengths are increased to a minimum size of 2 to avoid the TSL of converting storage buffers
+		// with length 1 being converted to a scalar value.
+		// TODO: remove this when fixed in three
+		const transformBufferLength = Math.max( transformInfo.length, 2 );
+		indexBufferLength = Math.max( indexBufferLength, 2 );
+		attributesBufferLength = Math.max( indexBufferLength, 2 );
+
 		// construct the attribute struct
 		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
 
@@ -483,8 +490,8 @@ export class BVHComputeData {
 		let attributesOffset = 0;
 		let indexOffset = 0;
 		let nodeWriteOffset = 0;
-		const indexBuffer = new Uint32Array( Math.max( indexBufferLength, 2 ) );
-		const attributesBuffer = new ArrayBuffer( Math.max( attributesBufferLength, 2 ) * attributeStruct.getLength() * 4 );
+		const indexBuffer = new Uint32Array( indexBufferLength );
+		const attributesBuffer = new ArrayBuffer( attributesBufferLength * attributeStruct.getLength() * 4 );
 		const bvhNodesBuffer = new ArrayBuffer( bvhNodesBufferLength );
 
 		// append TLAS data
@@ -511,7 +518,7 @@ export class BVHComputeData {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * Math.max( transformInfo.length, 2 ) * 4 );
+		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformBufferLength * 4 );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
