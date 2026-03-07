@@ -567,7 +567,34 @@ export class BVHComputeData {
 					const n16 = n32 * 2;
 
 					// write bounds
-					targetF32.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), n32 );
+					const view = new Float32Array( root, i * BYTES_PER_NODE, 6 );
+					if ( i === 0 ) {
+
+						// if we're copying the root then check for cases where there are no primitives and therefore
+						// be a bounds of [ Infinity, - Infinity ]. Convert this to [ 1, - 1 ] for reliable GPU behavior.
+						for ( let i = 0; i < 3; i ++ ) {
+
+							const vMin = view[ i + 0 ];
+							const vMax = view[ i + 3 ];
+							if ( vMin > vMax ) {
+
+								targetF32[ n32 + i + 0 ] = 1;
+								targetF32[ n32 + i + 3 ] = - 1;
+
+							} else {
+
+								targetF32[ n32 + i + 0 ] = vMin;
+								targetF32[ n32 + i + 3 ] = vMax;
+
+							}
+
+						}
+
+					} else {
+
+						targetF32.set( view, n32 );
+
+					}
 
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
