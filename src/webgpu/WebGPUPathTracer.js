@@ -1,5 +1,5 @@
-import { RenderTarget, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
-import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
+import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
@@ -7,7 +7,6 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
-import { SkinnedMeshBVH } from './lib/SkinnedMeshBVH.js';
 
 const _resolution = new Vector2();
 const _color = new Color();

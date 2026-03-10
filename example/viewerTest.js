@@ -17,7 +17,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer, WebGPUPathTracer } from '../src/index.js';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -292,7 +293,7 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 
-	let webgpuOptions;
+	let webgpuOptions = null;
 	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
 
 		const size = renderer.getSize( new Vector2() );

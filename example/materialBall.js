@@ -7,7 +7,7 @@ import {
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DenoiseMaterial, WebGLPathTracer } from '../src/index.js';
+import { DenoiseMaterial, WebGLPathTracer } from 'three-gpu-pathtracer';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
