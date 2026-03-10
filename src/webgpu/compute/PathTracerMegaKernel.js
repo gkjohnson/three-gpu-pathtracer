@@ -12,7 +12,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 	constructor() {
 
-		const parameters = {
+		const params = {
 			bvhData: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -47,8 +47,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', parameters );
-		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', parameters );
+		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
+		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -84,8 +84,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			) -> void {
 
-				let transforms = &${ proxy( 'bvhData.value.storage.transforms', parameters ) };
-				let materials = &${ proxy( 'bvhData.value.storage.materials', parameters ) };
+				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
+				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -108,7 +108,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// to screen coordinates
 				let indexUV = offset + globalId.xy;
-				let targetDimensions = textureDimensions( ${ parameters.outputTarget } );
+				let targetDimensions = textureDimensions( ${ params.outputTarget } );
 				if ( indexUV.x >= targetDimensions.x || indexUV.y >= targetDimensions.y ) {
 
 					return;
@@ -172,17 +172,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				let sampleCount = textureLoad( ${ parameters.sampleCountTarget }, indexUV ).r + 1;
-				let prevColor = textureLoad( ${ parameters.prevOutputTarget }, indexUV );
+				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r + 1;
+				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-				textureStore( ${ parameters.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-				textureStore( ${ parameters.outputTarget }, indexUV, blendedColor );
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
+				textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
 			}`;
 
-		super( shader( parameters ) );
+		super( shader( params ) );
 
-		this.defineUniformAccessors( parameters );
+		this.defineUniformAccessors( params );
 
 	}
 
