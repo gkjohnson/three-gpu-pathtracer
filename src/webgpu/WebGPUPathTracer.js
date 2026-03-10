@@ -326,15 +326,48 @@ export class WebGPUPathTracer {
 
 	}
 
-	getSampleCount() {
+	async getDetailedSampleCount() {
 
-		return this._pathTracer.samples;
+
+		const sampleCountTarget = this._pathTracer.sampleCountTarget;
+		const { width, height } = sampleCountTarget;
+		const renderer = this._renderer;
+
+		// Create a stub "render target" with just textures field to read from the storage texture
+		const targetStub = { textures: [ sampleCountTarget ] };
+
+		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
+		const uintBuffer = new Uint32Array( buffer.buffer );
+
+		// Sum up all sample counts and divide by pixel count to get average samples per pixel
+		let totalSamples = 0;
+		let minSamples = Number.MAX_VALUE;
+		let maxSamples = - Number.MAX_VALUE;
+		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
+
+			// Each entry contains sample count in lower bits and active flag in high bit
+			// Mask out the active flag (0xF0000000) to get just the sample count
+			const samples = uintBuffer[ i ] & 0x0FFFFFFF;
+
+			totalSamples += samples;
+			minSamples = Math.min( minSamples, samples );
+			maxSamples = Math.max( maxSamples, samples );
+
+		}
+
+		return {
+			min: minSamples,
+			max: maxSamples,
+			avg: Math.floor( totalSamples / ( width * height ) ),
+		};
+
 
 	}
 
-	async getLatestSampleTimestamp() {
+	// Returns time since last reset in ms
+	getRenderTime() {
 
-		return await this._pathTracer.getLatestSampleTimestamp();
+		return this._resetTime;
 
 	}
 
