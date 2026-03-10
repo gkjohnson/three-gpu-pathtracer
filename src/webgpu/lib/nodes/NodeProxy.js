@@ -1,28 +1,4 @@
-import { Node } from 'three/webgpu';
-
-class ProxyCallNode extends Node {
-
-	static get type() {
-
-		return 'ProxyCallNode';
-
-	}
-
-	constructor( proxyNode, params ) {
-
-		super();
-		this.proxyNode = proxyNode;
-		this.params = params;
-
-	}
-
-	setup() {
-
-		return this.proxyNode.proxyNode.call( ...this.params );
-
-	}
-
-}
+import { FunctionCallNode } from 'three/webgpu';
 
 export class NodeProxy {
 
@@ -118,7 +94,16 @@ export const proxy = ( ...args ) => {
 export const proxyFn = ( ...args ) => {
 
 	const nodeProxy = new NodeProxy( ...args );
-	const fn = ( ...params ) => new ProxyCallNode( nodeProxy, params );
+	const fn = ( ...params ) => {
+
+		// match FunctionCallNode.call() convention
+		const parameters = params.length === 1 && params[ 0 ] && typeof params[ 0 ] === 'object' && ! params[ 0 ].isNode
+			? params[ 0 ]
+			: params;
+		return new FunctionCallNode( nodeProxy, parameters );
+
+	};
+
 	fn.functionNode = nodeProxy;
 	return fn;
 
