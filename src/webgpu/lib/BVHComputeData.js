@@ -476,6 +476,13 @@ export class BVHComputeData {
 
 		//
 
+		// NOTE: These buffer lengths are increased to a minimum size of 2 to avoid the TSL of converting storage buffers
+		// with length 1 being converted to a scalar value.
+		// TODO: remove this when fixed in three
+		const transformBufferLength = Math.max( transformInfo.length, 2 );
+		indexBufferLength = Math.max( indexBufferLength, 2 );
+		attributesBufferLength = Math.max( attributesBufferLength, 2 );
+
 		// construct the attribute struct
 		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
 
@@ -511,7 +518,7 @@ export class BVHComputeData {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformInfo.length * 4 );
+		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformBufferLength * 4 );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
@@ -560,7 +567,34 @@ export class BVHComputeData {
 					const n16 = n32 * 2;
 
 					// write bounds
-					targetF32.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), n32 );
+					const view = new Float32Array( root, i * BYTES_PER_NODE, 6 );
+					if ( i === 0 ) {
+
+						// if we're copying the root then check for cases where there are no primitives and therefore
+						// be a bounds of [ Infinity, - Infinity ]. Convert this to [ 1, - 1 ] for reliable GPU behavior.
+						for ( let i = 0; i < 3; i ++ ) {
+
+							const vMin = view[ i + 0 ];
+							const vMax = view[ i + 3 ];
+							if ( vMin > vMax ) {
+
+								targetF32[ n32 + i + 0 ] = 1;
+								targetF32[ n32 + i + 3 ] = - 1;
+
+							} else {
+
+								targetF32[ n32 + i + 0 ] = vMin;
+								targetF32[ n32 + i + 3 ] = vMax;
+
+							}
+
+						}
+
+					} else {
+
+						targetF32.set( view, n32 );
+
+					}
 
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
@@ -651,6 +685,7 @@ export class BVHComputeData {
 			const { geometry, mesh = null } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
+			const attrStructLength = attributeStruct.getLength();
 			attributeStruct.membersLayout.forEach( ( { name }, interleavedOffset ) => {
 
 				// TODO: we should be able to have access to memory layout offsets here via the struct
@@ -693,7 +728,7 @@ export class BVHComputeData {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributeStruct.getLength() + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attrStructLength + interleavedOffset * 4 );
 
 				}
 

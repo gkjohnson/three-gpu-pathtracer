@@ -128,7 +128,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const textureLookUp = new Map();
 		const textures = [];
 
-		const floatArray = new Float32Array( materials.length * this.structs.material.getLength() );
+		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
+		// TODO: remove this when fixed in three
+		const materialBufferLength = Math.max( materials.length, 2 );
+		const floatArray = new Float32Array( materialBufferLength * this.structs.material.getLength() );
 		const intArray = new Int32Array( floatArray.buffer );
 
 		// TODO: make features work
