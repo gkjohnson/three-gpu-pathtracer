@@ -1,6 +1,7 @@
 import { IndirectStorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { storage, wgslFn, globalId } from 'three/tsl';
+import { storage, globalId } from 'three/tsl';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export class ZeroOutBufferKernel extends ComputeKernel {
 
@@ -15,19 +16,15 @@ export class ZeroOutBufferKernel extends ComputeKernel {
 			outputTarget: storage( new IndirectStorageBufferAttribute( 1, 1 ), type ),
 		};
 
-		const fn = wgslFn( /* wgsl */`
+		const fn = wgslTagFn/* wgsl */`
+			fn compute( globalId: vec3u ) -> void {
 
-			fn compute(
-				globalId: vec3u,
-				outputTarget: ptr<storage, array<u32>, read_write>,
-			) -> void {
-
-				outputTarget[ globalId.x ] = 0;
+				${ params.outputTarget }[ globalId.x ] = 0;
 
 			}
-		` )( params );
+		`;
 
-		super( fn );
+		super( fn( params ) );
 
 		this.defineUniformAccessors( {
 			target: params.outputTarget,
