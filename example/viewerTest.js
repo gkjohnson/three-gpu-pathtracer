@@ -162,6 +162,7 @@ function animate() {
 	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
 
 		const elapsed = pathTracer.getRenderTime() / 1000;
+		// Reset sample count state if no sample is taken yet
 		if ( elapsed < detailedSampleInterval ) {
 
 			detailedSampleCount = null;
@@ -171,7 +172,7 @@ function animate() {
 
 		if ( elapsed - lastDetailedSample > detailedSampleInterval ) {
 
-			lastDetailedSample = elapsed;
+			lastDetailedSample = Math.floor( elapsed / detailedSampleInterval ) * detailedSampleInterval;
 			pathTracer.getDetailedSampleCount().then( sampleCount => {
 
 				sampleCount.perSecond = sampleCount.avg / elapsed;

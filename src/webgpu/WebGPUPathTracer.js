@@ -334,18 +334,17 @@ export class WebGPUPathTracer {
 		const { width, height } = sampleCountTarget;
 		const renderer = this._renderer;
 
-		// Create a temporary render target to read from the storage texture
-		const tempTarget = new RenderTarget( width, height, { format: sampleCountTarget.format, type: sampleCountTarget.type } );
-		tempTarget.textures[ 0 ] = sampleCountTarget;
+		// Create a stub "render target" with just textures field to read from the storage texture
+		const targetStub = { textures: [ sampleCountTarget ] };
 
-		const buffer = await renderer.readRenderTargetPixelsAsync( tempTarget, 0, 0, width, height );
+		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
 		const uintBuffer = new Uint32Array( buffer.buffer );
 
 		// Sum up all sample counts and divide by pixel count to get average samples per pixel
 		let totalSamples = 0;
 		let minSamples = Number.MAX_VALUE;
 		let maxSamples = - Number.MAX_VALUE;
-		for ( let i = 0; i < uintBuffer.length; i ++ ) {
+		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
 
 			// Each entry contains sample count in lower bits and active flag in high bit
 			// Mask out the active flag (0xF0000000) to get just the sample count
