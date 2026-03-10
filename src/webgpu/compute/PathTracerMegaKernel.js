@@ -47,8 +47,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const materialStorage = proxy( 'bvhData.value.storage.materials', parameters );
-		const transformStorage = proxy( 'bvhData.value.storage.transforms', parameters );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', parameters );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', parameters );
 
@@ -85,6 +83,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				textureSampler: sampler
 
 			) -> void {
+
+				let transforms = &${ proxy( 'bvhData.value.storage.transforms', parameters ) };
+				let materials = &${ proxy( 'bvhData.value.storage.materials', parameters ) };
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -132,8 +133,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let hitResult = ${ raycastFirstHitFn }( ray );
 					if ( hitResult.didHit ) {
 
-						let object = ${ transformStorage }[ hitResult.objectIndex ];
-						var material = ${ materialStorage }[ object.materialIndex ];
+						let object = transforms[ hitResult.objectIndex ];
+						var material = materials[ object.materialIndex ];
 
 						// apply per-object colors
 						material.color *= object.color.rgb;
