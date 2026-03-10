@@ -1,11 +1,12 @@
 import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore, wgslFn } from 'three/tsl';
+import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, lambertBsdfFunc } from '../nodes/material.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy } from '../lib/nodes/NodeProxy.js';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -46,15 +47,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const shader = wgslFn( /* wgsl */`
+		const shader = wgslTagFn/* wgsl */`
 
 			fn compute(
 
 				// indices and target
 				globalId: vec3u,
-				prevOutputTarget: texture_storage_2d<rgba32float, read>,
-				outputTarget: texture_storage_2d<rgba32float, write>,
-				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
 
 				// tiles
 				offset: vec2u,
@@ -104,7 +102,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// to screen coordinates
 				let indexUV = offset + globalId.xy;
-				let targetDimensions = textureDimensions( outputTarget );
+				let targetDimensions = textureDimensions( ${ parameters.outputTarget } );
 				if ( indexUV.x >= targetDimensions.x || indexUV.y >= targetDimensions.y ) {
 
 					return;
@@ -128,7 +126,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					let hitResult = bvh_RaycastFirstHit( ray );
 					if ( hitResult.didHit ) {
-
 
 						let object = bvh_transforms.value[ hitResult.objectIndex ];
 						var material = bvh_materials.value[ object.materialIndex ];
@@ -169,23 +166,23 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				let sampleCount = textureLoad( sampleCountTarget, indexUV ).r + 1;
-				let prevColor = textureLoad( prevOutputTarget, indexUV );
+				let sampleCount = textureLoad( ${ parameters.sampleCountTarget }, indexUV ).r + 1;
+				let prevColor = textureLoad( ${ parameters.prevOutputTarget }, indexUV );
 				let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-				textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-				textureStore( outputTarget, indexUV, blendedColor );
+				textureStore( ${ parameters.sampleCountTarget }, indexUV, vec4( sampleCount ) );
+				textureStore( ${ parameters.outputTarget }, indexUV, blendedColor );
 
 			}
 
-		`, [
-			proxy( 'bvhData.value.storage.materials', parameters ),
-			proxy( 'bvhData.value.structs.material', parameters ),
-			proxy( 'bvhData.value.structs.transform', parameters ),
-			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
-			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-			ndcToCameraRay, pcgRand2, pcgRand3, pcgInit, lambertBsdfFunc,
-			sampleEnvironmentFn, getSurfaceRecordFunc, weightedAlphaBlendFn,
-		] );
+	${ [
+		proxy( 'bvhData.value.storage.materials', parameters ),
+		proxy( 'bvhData.value.structs.material', parameters ),
+		proxy( 'bvhData.value.structs.transform', parameters ),
+		proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
+		proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
+		ndcToCameraRay, pcgRand2, pcgRand3, pcgInit, lambertBsdfFunc,
+		sampleEnvironmentFn, getSurfaceRecordFunc, weightedAlphaBlendFn,
+	] }`;
 
 		super( shader( parameters ) );
 

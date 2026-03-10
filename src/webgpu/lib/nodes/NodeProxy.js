@@ -26,6 +26,12 @@ class ProxyCallNode extends Node {
 
 export class NodeProxy {
 
+	get isNode() {
+
+		return true;
+
+	}
+
 	// getter for the node being proxied to
 	get proxyNode() {
 
