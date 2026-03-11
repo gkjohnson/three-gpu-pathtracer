@@ -18,6 +18,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			compensationTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			offset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
@@ -172,11 +173,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
+				// Kahan-compensated running mean: recover true mean before computing delta
+				let compensation = textureLoad( ${ params.compensationTarget }, indexUV );
 				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r + 1;
-				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV ) + compensation;
+
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
+
+				// simulate FP16 rounding via pack/unpack to compute the residual that will be lost at store
+				let storedColor = quantizeToF16( blendedColor );
+				let newCompensation = blendedColor - storedColor;
+
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-				textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+				textureStore( ${ params.outputTarget }, indexUV, storedColor );
+				textureStore( ${ params.compensationTarget }, indexUV, newCompensation );
 
 			}`;
 

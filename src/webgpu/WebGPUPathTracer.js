@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, HalfFloatType } from 'three/webgpu';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -70,7 +70,7 @@ export class WebGPUPathTracer {
 		this._fadeState = 0;
 		this._size = new Vector2();
 		this._lowResTarget = new StorageTexture( 1, 1 );
-		this._lowResTarget.type = FloatType;
+		this._lowResTarget.type = HalfFloatType;
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// options

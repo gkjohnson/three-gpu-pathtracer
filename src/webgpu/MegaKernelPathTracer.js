@@ -90,6 +90,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			tiles,
 			outputTarget,
 			sampleCountTarget,
+			compensationTarget,
 			lowResMode,
 		} = this;
 
@@ -98,6 +99,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// init parameters
 		kernel.outputTarget = outputTarget;
 		kernel.sampleCountTarget = sampleCountTarget;
+		kernel.compensationTarget = compensationTarget;
 
 		kernel.bounces = bounces;
 		kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );

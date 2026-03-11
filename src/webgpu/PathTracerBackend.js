@@ -1,4 +1,4 @@
-import { ColorManagement, FloatType, LinearFilter, RGBAFormat } from 'three';
+import { ColorManagement, HalfFloatType, LinearFilter, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
@@ -16,7 +16,7 @@ export class PathTracerBackend {
 
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
-		this.outputTarget.type = FloatType;
+		this.outputTarget.type = HalfFloatType;
 		this.outputTarget.magFilter = LinearFilter;
 		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
 		this.outputTarget.name = 'Output #0';
@@ -24,7 +24,7 @@ export class PathTracerBackend {
 
 		this.prevOutputTarget = new StorageTexture( 1, 1, );
 		this.prevOutputTarget.format = RGBAFormat;
-		this.prevOutputTarget.type = FloatType;
+		this.prevOutputTarget.type = HalfFloatType;
 		this.prevOutputTarget.magFilter = LinearFilter;
 		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
 		this.prevOutputTarget.name = 'Output #1';
@@ -36,8 +36,13 @@ export class PathTracerBackend {
 		this.sampleCountTarget.name = 'Sample Count';
 		this.sampleCountTarget.generateMipmaps = false;
 
-		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
-		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
+		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
+		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
+		this.compensationTarget = new StorageTexture( 1, 1 );
+		this.compensationTarget.format = RGBAFormat;
+		this.compensationTarget.type = HalfFloatType;
+		this.compensationTarget.name = 'Accumulation Compensation';
+		this.compensationTarget.generateMipmaps = false;
 
 	}
 
@@ -84,14 +89,17 @@ export class PathTracerBackend {
 		this.outputTarget.dispose();
 		this.prevOutputTarget.dispose();
 		this.sampleCountTarget.dispose();
+		this.compensationTarget.dispose();
 
 		this.outputTarget = this.outputTarget.clone();
 		this.prevOutputTarget = this.outputTarget.clone();
 		this.sampleCountTarget = this.sampleCountTarget.clone();
+		this.compensationTarget = this.compensationTarget.clone();
 
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
+		this.compensationTarget.setSize( w, h );
 
 		this.reset();
 		return true;
@@ -141,6 +149,7 @@ export class PathTracerBackend {
 			outputTarget,
 			prevOutputTarget,
 			sampleCountTarget,
+			compensationTarget,
 		} = this;
 
 		if ( ! renderer.initialized ) {
@@ -161,6 +170,9 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
+		outputTargetClearKernel.target = compensationTarget;
+		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
+
 		this.samples = 0;
 		this._renderTask = null;
 
@@ -171,6 +183,7 @@ export class PathTracerBackend {
 		this.outputTarget.dispose();
 		this.prevOutputTarget.dispose();
 		this.sampleCountTarget.dispose();
+		this.compensationTarget.dispose();
 
 		this._renderTask = null;
 
