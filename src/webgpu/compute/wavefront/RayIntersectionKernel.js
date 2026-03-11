@@ -6,6 +6,7 @@ import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { packCompensationFn, unpackCompensationFn } from '../../nodes/f16packing.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -17,6 +18,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			compensationTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
@@ -130,9 +132,12 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
+					let compensation = ${ unpackCompensationFn }( textureLoad( ${ params.compensationTarget }, indexUV ).r, prevColor );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor + compensation, resultColor, 1.0 / f32( sampleCount ) );
+					let storedColor = quantizeToF16( blendedColor );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+					textureStore( ${ params.outputTarget }, indexUV, storedColor );
+					textureStore( ${ params.compensationTarget }, indexUV, vec4u( ${ packCompensationFn }( blendedColor - storedColor, storedColor ) ) );
 
 				}
 

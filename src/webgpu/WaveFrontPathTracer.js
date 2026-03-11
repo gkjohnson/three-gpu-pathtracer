@@ -242,8 +242,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
 				rayIntersectionKernel.prevOutputTarget = this.prevOutputTarget;
 				rayIntersectionKernel.outputTarget = this.outputTarget;
+				rayIntersectionKernel.compensationTarget = this.compensationTarget;
 				hitProcessKernel.prevOutputTarget = this.prevOutputTarget;
 				hitProcessKernel.outputTarget = this.outputTarget;
+				hitProcessKernel.compensationTarget = this.compensationTarget;
 
 				// Step 1: Top up the ray queue
 				// set up the ray prime kernel

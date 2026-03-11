@@ -6,6 +6,7 @@ import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { packCompensationFn, unpackCompensationFn } from '../../nodes/f16packing.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -17,6 +18,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			compensationTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// settings
 			smoothNormals: uniform( 1 ),
@@ -95,9 +97,12 @@ export class ProcessHitsKernel extends ComputeKernel {
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
+					let compensation = ${ unpackCompensationFn }( textureLoad( ${ params.compensationTarget }, indexUV ).r, prevColor );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor + compensation, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
+					let storedColor = quantizeToF16( blendedColor );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+					textureStore( ${ params.outputTarget }, indexUV, storedColor );
+					textureStore( ${ params.compensationTarget }, indexUV, vec4u( ${ packCompensationFn }( blendedColor - storedColor, storedColor ) ) );
 
 				} else {
 
