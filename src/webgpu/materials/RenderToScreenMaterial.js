@@ -1,4 +1,4 @@
-import { FloatType, MeshBasicNodeMaterial, NearestFilter, NoToneMapping, StorageTexture } from 'three/webgpu';
+import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
 import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
 
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
@@ -108,6 +108,9 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const transitionUniform = uniform( 1.0 );
 		this._transitionUniform = transitionUniform;
 
+		// TODO: this is potentially expensive to perform custom filtering for a texture that may never
+		// actually be displayed. We should add a condition that only samples one texture if the transition
+		// value is 0 or 1
 		const fadedColor = wgslFn( /* wgsl */`
 			fn fade( col0: vec4f, col1: vec4f, transition: f32 ) -> vec4f {
 
