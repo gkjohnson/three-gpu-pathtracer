@@ -95,14 +95,19 @@ export class ProcessHitsKernel extends ComputeKernel {
 				if ( input.currentBounce >= bounces ) {
 
 					// terminate ray, write color
+					// Kahan-compensated running mean: recover true mean before computing delta
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let compensation = ${ unpackCompensationFn }( textureLoad( ${ params.compensationTarget }, indexUV ).r, prevColor );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor + compensation, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
+
+					// simulate FP16 rounding via pack/unpack to compute the residual that will be lost at store
 					let storedColor = quantizeToF16( blendedColor );
+					let newPackedComp = ${ packCompensationFn }( blendedColor - storedColor, storedColor );
+
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, storedColor );
-					textureStore( ${ params.compensationTarget }, indexUV, vec4u( ${ packCompensationFn }( blendedColor - storedColor, storedColor ) ) );
+					textureStore( ${ params.compensationTarget }, indexUV, vec4( newPackedComp ) );
 
 				} else {
 

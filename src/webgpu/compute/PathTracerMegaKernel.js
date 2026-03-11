@@ -188,7 +188,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 				textureStore( ${ params.outputTarget }, indexUV, storedColor );
-				textureStore( ${ params.compensationTarget }, indexUV, vec4u( newPackedComp ) );
+				textureStore( ${ params.compensationTarget }, indexUV, vec4( newPackedComp ) );
 
 			}`;
 
