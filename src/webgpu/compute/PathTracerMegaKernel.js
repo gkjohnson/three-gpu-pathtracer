@@ -173,20 +173,35 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// Kahan-compensated running mean: recover true mean before computing delta
-				let compensation = textureLoad( ${ params.compensationTarget }, indexUV );
-				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r + 1;
-				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV ) + compensation;
+				// decode relative compensation from packed r32uint
+				const COMP_SCALE: f32 = 127.0 * 2048.0;
+				let packedComp = textureLoad( ${ params.compensationTarget }, indexUV ).r;
+				let rawComp = vec4f(
+					f32( packedComp & 0xFFu ),
+					f32( ( packedComp >> 8u ) & 0xFFu ),
+					f32( ( packedComp >> 16u ) & 0xFFu ),
+					f32( ( packedComp >> 24u ) & 0xFFu )
+				) - 128.0;
+				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+				let compensation = ( rawComp / COMP_SCALE ) * prevColor;
 
-				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
+				// Kahan-compensated running mean: recover true mean before computing delta
+				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r + 1;
+				let blendedColor = ${ weightedAlphaBlendFn }( prevColor + compensation, resultColor, 1.0 / f32( sampleCount ) );
 
 				// simulate FP16 rounding via pack/unpack to compute the residual that will be lost at store
 				let storedColor = quantizeToF16( blendedColor );
 				let newCompensation = blendedColor - storedColor;
 
+				// encode relative compensation into packed r32uint
+				let safeStored = select( storedColor, vec4f( 1.0 ), abs( storedColor ) < vec4f( 1e-10 ) );
+				let relComp = newCompensation / safeStored;
+				let quantized = clamp( relComp * COMP_SCALE + 128.0, vec4f( 0.0 ), vec4f( 255.0 ) );
+				let newPackedComp = u32( quantized.r ) | ( u32( quantized.g ) << 8u ) | ( u32( quantized.b ) << 16u ) | ( u32( quantized.a ) << 24u );
+
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 				textureStore( ${ params.outputTarget }, indexUV, storedColor );
-				textureStore( ${ params.compensationTarget }, indexUV, newCompensation );
+				textureStore( ${ params.compensationTarget }, indexUV, vec4u( newPackedComp ) );
 
 			}`;
 

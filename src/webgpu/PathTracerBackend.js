@@ -39,8 +39,8 @@ export class PathTracerBackend {
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
 		this.compensationTarget = new StorageTexture( 1, 1 );
-		this.compensationTarget.format = RGBAFormat;
-		this.compensationTarget.type = HalfFloatType;
+		this.compensationTarget.format = RedIntegerFormat;
+		this.compensationTarget.type = UnsignedIntType;
 		this.compensationTarget.name = 'Accumulation Compensation';
 		this.compensationTarget.generateMipmaps = false;
 
@@ -170,8 +170,8 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		outputTargetClearKernel.target = compensationTarget;
-		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
+		sampleCountClearKernel.target = compensationTarget;
+		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
 		this.samples = 0;
 		this._renderTask = null;
