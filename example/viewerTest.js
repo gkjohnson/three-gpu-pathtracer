@@ -17,7 +17,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer, WebGPUPathTracer } from '../src/index.js';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -61,6 +62,9 @@ let pathTracer, renderer, camera, scene, controls;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
+let detailedSampleCount = null;
+let lastDetailedSample = 0;
+const detailedSampleInterval = 4;
 
 init();
 
@@ -156,6 +160,31 @@ function animate() {
 
 	}
 
+	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
+
+		const elapsed = pathTracer.getRenderTime() / 1000;
+		// Reset sample count state if no sample is taken yet
+		if ( elapsed < detailedSampleInterval ) {
+
+			detailedSampleCount = null;
+			lastDetailedSample = 0;
+
+		}
+
+		if ( elapsed - lastDetailedSample > detailedSampleInterval ) {
+
+			lastDetailedSample = Math.floor( elapsed / detailedSampleInterval ) * detailedSampleInterval;
+			pathTracer.getDetailedSampleCount().then( sampleCount => {
+
+				sampleCount.perSecond = sampleCount.avg / elapsed;
+				detailedSampleCount = sampleCount;
+
+			} );
+
+		}
+
+	}
+
 	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
 	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
 	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
@@ -190,7 +219,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples, pathTracer.isCompiling, detailedSampleCount );
 
 }
 
@@ -264,7 +293,7 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 
-	let webgpuOptions;
+	let webgpuOptions = null;
 	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
 
 		const size = renderer.getSize( new Vector2() );
@@ -414,6 +443,11 @@ async function updateModel() {
 					loader.setPercentage( 0.5 * progress.loaded / progress.total );
 
 				}
+
+			} ).then( value => {
+
+				loader.setPercentage( 1 );
+				return value;
 
 			} ),
 		new Promise( resolve => manager.onLoad = resolve ),

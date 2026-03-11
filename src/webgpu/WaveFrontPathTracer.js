@@ -1,5 +1,4 @@
-import { Matrix4, IndirectStorageBufferAttribute, StorageTexture, Vector2, FloatType, RGBAFormat, LinearFilter, RedIntegerFormat, UnsignedIntType, ColorManagement } from 'three/webgpu';
-import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { Matrix4, IndirectStorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
 import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
@@ -8,6 +7,7 @@ import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
+import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -16,189 +16,15 @@ const MAX_BUFFER_SIZE = 134217728;
 const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedRayStruct.getLength() * 4 ) );
 const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedHitStruct.getLength() * 4 ) );
 
-function* renderTask() {
-
-	const {
-		renderer,
-		camera,
-		geometry,
-		bounces,
-
-		tiles,
-		sampleCountTarget,
-
-		rayQueue,
-		rayQueueSize,
-		rayGenerationDispatch,
-
-		hitQueue,
-		hitQueueSize,
-		hitProcessDispatch,
-		tileIndexBuffer,
-
-		primeRayGenerationDispatchKernel,
-		enqueueRaysKernel,
-		rayIntersectionKernel,
-		updateRayQueueParamsKernel,
-		hitProcessKernel,
-		zeroDispatchKernel,
-	} = this;
-
-	camera.updateMatrixWorld();
-
-	primeRayGenerationDispatchKernel.tileOffset = 0;
-
-	const tileSize = new Vector2();
-	const samplesPerIteration = RAYS_TO_PROCESS / ( sampleCountTarget.width * sampleCountTarget.height * bounces );
-	let samples = 0;
-	while ( true ) {
-
-		this.getTileSize( tileSize );
-
-		// Swap targets to support devices without <rgba32float, read_write> textures
-		// Copy latest data to a new outputTarget to keep the appearance
-		renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
-		[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-		rayIntersectionKernel.prevOutputTarget = this.prevOutputTarget;
-		rayIntersectionKernel.outputTarget = this.outputTarget;
-		hitProcessKernel.prevOutputTarget = this.prevOutputTarget;
-		hitProcessKernel.outputTarget = this.outputTarget;
-
-		// Step 1: Top up the ray queue
-		// set up the ray prime kernel
-		primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
-		primeRayGenerationDispatchKernel.tileCount.copy( tiles );
-		primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
-		primeRayGenerationDispatchKernel.rayQueue = rayQueue;
-		primeRayGenerationDispatchKernel.rayQueueSize = rayQueueSize;
-		primeRayGenerationDispatchKernel.outputTileIndex = tileIndexBuffer;
-		primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
-
-		// set up the ray generation kernel
-		enqueueRaysKernel.seed ++;
-		enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
-		enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
-		enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
-		enqueueRaysKernel.tileSize.copy( tileSize );
-		enqueueRaysKernel.rayQueue = rayQueue;
-		enqueueRaysKernel.rayQueueSize = rayQueueSize;
-		enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
-
-		for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
-
-			// TODO: skip rays that have converged, have reach max samples
-			renderer.compute( primeRayGenerationDispatchKernel.kernel, [ 1, 1, 1 ] );
-			renderer.compute( enqueueRaysKernel.kernel, rayGenerationDispatch );
-			primeRayGenerationDispatchKernel.tileOffset = 1;
-
-		}
-
-		// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
-		// TODO: setting dispatch size to 10000 is causing failures / missed rays
-		const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
-		rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
-		rayIntersectionKernel.rayQueue = rayQueue;
-		rayIntersectionKernel.rayQueueSize = rayQueueSize;
-		rayIntersectionKernel.hitQueue = hitQueue;
-		rayIntersectionKernel.hitQueueSize = hitQueueSize;
-		rayIntersectionKernel.geom_index = geometry.index;
-		rayIntersectionKernel.geom_position = geometry.position;
-		rayIntersectionKernel.geom_material_index = geometry.materialIndex;
-		rayIntersectionKernel.bvh = geometry.bvh;
-		renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
-
-		// mark the rays as consumed
-		const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
-		updateRayQueueParamsKernel.processed = processed;
-		updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
-		renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
-
-		// TODO: we should use an indirect dispatch here to only kick off the number of threads
-		// as needed to iterate over all the fields
-		// Step 3: attenuate ray color, scatter, run russian roulette
-		hitProcessKernel.sampleCountTarget = sampleCountTarget;
-		hitProcessKernel.bounces = bounces;
-		hitProcessKernel.rayQueue = rayQueue;
-		hitProcessKernel.rayQueueSize = rayQueueSize;
-		hitProcessKernel.hitQueue = hitQueue;
-		hitProcessKernel.hitQueueSize = hitQueueSize;
-		hitProcessKernel.geom_position = geometry.position;
-		hitProcessKernel.geom_attributes = geometry.attributes;
-		hitProcessKernel.materials = geometry.materials;
-		renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
-
-		// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
-		// is cached per parameters and resets?
-		zeroDispatchKernel.target = hitQueueSize;
-		renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
-
-		// Step 4: connect to lights
-		// TODO
-
-		// Future
-		// - track variance to skip rays
-		// - switch to rays pushing themselves onto the queue when terminating to avoid tiles once enough pixels have completed
-		// - separate "volume" step?
-		// - allow for simultaneous writes by queue pixel writes, sorting, and blending them in a single thread
-
-		samples += samplesPerIteration;
-		this.samples = Math.floor( samples );
-
-		yield;
-
-	}
-
-}
-
-export class WaveFrontPathTracer {
+export class WaveFrontPathTracer extends PathTracerBackend {
 
 	constructor( renderer ) {
 
-		this.camera = null;
-		this.renderer = renderer;
-		this._task = null;
+		super( renderer );
 
 		// options
-		this.samples = 0;
-		this.bounces = 7;
 		this.tiles = new Vector2( 3, 3 );
-		this.lowResMode = false;
-
-		// geometry fields
-		this.geometry = {
-			bvh: null,
-			index: null,
-			position: null,
-			attributes: null,
-
-			materialIndex: null,
-			materials: null,
-		};
-
 		this.envInfo = new EquirectHdrInfoUniform();
-
-		// targets
-		this.outputTarget = new StorageTexture( 1, 1, );
-		this.outputTarget.format = RGBAFormat;
-		this.outputTarget.type = FloatType;
-		this.outputTarget.magFilter = LinearFilter;
-		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.outputTarget.name = 'Output #0';
-		this.outputTarget.generateMipmaps = false;
-
-		this.prevOutputTarget = new StorageTexture( 1, 1, );
-		this.prevOutputTarget.format = RGBAFormat;
-		this.prevOutputTarget.type = FloatType;
-		this.prevOutputTarget.magFilter = LinearFilter;
-		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.prevOutputTarget.name = 'Output #1';
-		this.prevOutputTarget.generateMipmaps = false;
-
-		this.sampleCountTarget = new StorageTexture( 1, 1, );
-		this.sampleCountTarget.format = RedIntegerFormat;
-		this.sampleCountTarget.type = UnsignedIntType;
-		this.sampleCountTarget.name = 'Sample Count';
-		this.sampleCountTarget.generateMipmaps = false;
 
 		// queues
 		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
@@ -224,8 +50,6 @@ export class WaveFrontPathTracer {
 		this.hitProcessKernel = new ProcessHitsKernel().setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
-		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
-		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
 
 		// later
@@ -293,57 +117,6 @@ export class WaveFrontPathTracer {
 
 	}
 
-	setCamera( camera ) {
-
-		this.camera = camera;
-		this.reset();
-
-	}
-
-	setTextures( textureArray ) {
-
-		this.hitProcessKernel.textures = textureArray;
-		this.hitProcessKernel.computeNode.parameters.textureSampler.node.value = textureArray;
-
-	}
-
-	setSize( w, h ) {
-
-		w = Math.ceil( w );
-		h = Math.ceil( h );
-
-		const { width, height } = this.outputTarget;
-		if ( width === w && height === h ) {
-
-			return;
-
-		}
-
-		this.outputTarget.dispose();
-		this.prevOutputTarget.dispose();
-		this.sampleCountTarget.dispose();
-
-		this.outputTarget = this.outputTarget.clone();
-		this.prevOutputTarget = this.outputTarget.clone();
-		this.sampleCountTarget = this.sampleCountTarget.clone();
-
-		this.outputTarget.setSize( w, h );
-		this.prevOutputTarget.setSize( w, h );
-		this.sampleCountTarget.setSize( w, h );
-
-		this.reset();
-
-	}
-
-	getSize( target ) {
-
-		target.x = this.outputTarget.width;
-		target.y = this.outputTarget.height;
-
-		return target;
-
-	}
-
 	setTiles( tiles ) {
 
 		this.tiles.copy( tiles );
@@ -360,9 +133,10 @@ export class WaveFrontPathTracer {
 
 	dispose() {
 
+		super.dispose();
+
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
-		this._task = null;
 
 	}
 
@@ -372,12 +146,9 @@ export class WaveFrontPathTracer {
 			renderer,
 
 			sampleCountClearKernel,
-			outputTargetClearKernel,
 			zeroDispatchKernel,
 
 			sampleCountTarget,
-			outputTarget,
-			prevOutputTarget,
 
 			hitProcessDispatch,
 			rayGenerationDispatch,
@@ -392,8 +163,7 @@ export class WaveFrontPathTracer {
 
 		}
 
-		this._task = null;
-		this.samples = 0;
+		super.reset();
 
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
@@ -401,12 +171,6 @@ export class WaveFrontPathTracer {
 		// clear buffers
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
-
-		outputTargetClearKernel.target = outputTarget;
-		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
-
-		outputTargetClearKernel.target = prevOutputTarget;
-		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
 
 		// clear queues
 		// TODO: why do we need to se the work group size here?
@@ -428,24 +192,135 @@ export class WaveFrontPathTracer {
 
 	}
 
-	update() {
+	*createRenderTask() {
 
-		if ( ! this.camera ) {
+		const {
+			renderer,
+			camera,
+			bounces,
 
-			return;
+			tiles,
+			sampleCountTarget,
 
-		}
+			rayQueue,
+			rayQueueSize,
+			rayGenerationDispatch,
 
-		if ( ! this._task ) {
+			hitQueue,
+			hitQueueSize,
+			// hitProcessDispatch,
+			tileIndexBuffer,
 
-			this._task = renderTask.call( this );
+			primeRayGenerationDispatchKernel,
+			enqueueRaysKernel,
+			rayIntersectionKernel,
+			updateRayQueueParamsKernel,
+			hitProcessKernel,
+			zeroDispatchKernel,
 
-		}
+			lowResMode
+		} = this;
 
-		// TODO: run this multiple times / adjust loop to process more rays at once
-		for ( let i = 0; i < 5; i ++ ) {
+		camera.updateMatrixWorld();
 
-			this._task.next();
+		primeRayGenerationDispatchKernel.tileOffset = 0;
+
+		const tileSize = new Vector2();
+		const samplesPerIteration = RAYS_TO_PROCESS / ( sampleCountTarget.width * sampleCountTarget.height * bounces );
+		const iter = lowResMode ? 5 : 1;
+		let samples = 0;
+
+		while ( true ) {
+
+			for ( let i = 0; i < iter; i ++ ) {
+
+				this.getTileSize( tileSize );
+
+				// Swap targets to support devices without <rgba32float, read_write> textures
+				// Copy latest data to a new outputTarget to keep the appearance
+				renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
+				[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
+				rayIntersectionKernel.prevOutputTarget = this.prevOutputTarget;
+				rayIntersectionKernel.outputTarget = this.outputTarget;
+				hitProcessKernel.prevOutputTarget = this.prevOutputTarget;
+				hitProcessKernel.outputTarget = this.outputTarget;
+
+				// Step 1: Top up the ray queue
+				// set up the ray prime kernel
+				primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
+				primeRayGenerationDispatchKernel.tileCount.copy( tiles );
+				primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
+				primeRayGenerationDispatchKernel.rayQueue = rayQueue;
+				primeRayGenerationDispatchKernel.rayQueueSize = rayQueueSize;
+				primeRayGenerationDispatchKernel.outputTileIndex = tileIndexBuffer;
+				primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
+
+				// set up the ray generation kernel
+				enqueueRaysKernel.seed ++;
+				enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
+				enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
+				enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
+				enqueueRaysKernel.tileSize.copy( tileSize );
+				enqueueRaysKernel.rayQueue = rayQueue;
+				enqueueRaysKernel.rayQueueSize = rayQueueSize;
+				enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
+
+				for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
+
+					// TODO: skip rays that have converged, have reach max samples
+					renderer.compute( primeRayGenerationDispatchKernel.kernel, [ 1, 1, 1 ] );
+					renderer.compute( enqueueRaysKernel.kernel, rayGenerationDispatch );
+					primeRayGenerationDispatchKernel.tileOffset = 1;
+
+				}
+
+				// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
+				// TODO: setting dispatch size to 10000 is causing failures / missed rays
+				const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
+				rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
+				rayIntersectionKernel.rayQueue = rayQueue;
+				rayIntersectionKernel.rayQueueSize = rayQueueSize;
+				rayIntersectionKernel.hitQueue = hitQueue;
+				rayIntersectionKernel.hitQueueSize = hitQueueSize;
+				renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
+
+				// mark the rays as consumed
+				const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
+				updateRayQueueParamsKernel.processed = processed;
+				updateRayQueueParamsKernel.rayQueueSize = rayQueueSize;
+				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
+
+				// TODO: we should use an indirect dispatch here to only kick off the number of threads
+				// as needed to iterate over all the fields
+				// Step 3: attenuate ray color, scatter, run russian roulette
+				hitProcessKernel.sampleCountTarget = sampleCountTarget;
+				hitProcessKernel.bounces = bounces;
+				hitProcessKernel.rayQueue = rayQueue;
+				hitProcessKernel.rayQueueSize = rayQueueSize;
+				hitProcessKernel.hitQueue = hitQueue;
+				hitProcessKernel.hitQueueSize = hitQueueSize;
+				renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
+
+				// TODO: for some reason we need to call "setWorkgroupSize" here? Is it because work group size
+				// is cached per parameters and resets?
+				zeroDispatchKernel.target = hitQueueSize;
+				renderer.compute( zeroDispatchKernel.kernel, [ hitQueueSize.count, 1, 1 ] );
+
+				// Step 4: connect to lights
+				// TODO
+
+				// Future
+				// - track variance to skip rays
+				// - switch to rays pushing themselves onto the queue when terminating to avoid tiles once enough pixels have completed
+				// - separate "volume" step?
+				// - allow for simultaneous writes by queue pixel writes, sorting, and blending them in a single thread
+
+				samples += samplesPerIteration;
+				this.samples = Math.floor( samples );
+
+			}
+
+			yield;
 
 		}
 

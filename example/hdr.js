@@ -16,7 +16,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { WebGLPathTracer } from '..';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { HDRImageGenerator } from './utils/HDRImageGenerator.js';

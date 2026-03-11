@@ -1,11 +1,10 @@
 import { Matrix4, Vector4 } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage } from 'three/tsl';
-import { rayIntersectsBounds, constants } from './wgsl/common.wgsl.js';
-import { rayStruct, bvhNodeStruct } from './wgsl/structs.wgsl.js';
+import { storage, wgsl } from 'three/tsl';
+import { constants } from './wgsl/common.wgsl.js';
+import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
-import { GeometryBVH, SAH } from 'three-mesh-bvh';
-import { ObjectBVH } from './ObjectBVH.js';
+import { GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
 
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
@@ -152,7 +151,10 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// fn
 	fn intersectsTriangle( ray: ${ rayStruct }, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
-		var TRI_INTERSECT_EPSILON = ${ constants.TRI_INTERSECT_EPSILON };
+		// TODO: see if we can remove the "DIST" epsilon and account for it on ray origin bounce positioning
+		const DET_EPSILON = 1e-15;
+		const DIST_EPSILON = 1e-5;
+
 		var result: ${ intersectionResultStruct };
 		result.didHit = false;
 
@@ -161,8 +163,7 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 		let n = cross( edge1, edge2 );
 
 		let det = - dot( ray.direction, n );
-
-		if ( abs( det ) < TRI_INTERSECT_EPSILON ) {
+		if ( abs( det ) < DET_EPSILON ) {
 
 			return result;
 
@@ -174,12 +175,22 @@ const intersectsTriangle = wgslTagFn/* wgsl */ `
 		let DAO = cross( AO, ray.direction );
 
 		let u = dot( edge2, DAO ) * invdet;
-		let v = -dot( edge1, DAO ) * invdet;
+		if ( u < 0.0 || u > 1.0 ) {
+
+			return result;
+
+		}
+
+		let v = - dot( edge1, DAO ) * invdet;
+		if ( v < 0.0 || u + v > 1.0 ) {
+
+			return result;
+
+		}
+
 		let t = dot( AO, n ) * invdet;
-
 		let w = 1.0 - u - v;
-
-		if ( u < - TRI_INTERSECT_EPSILON || v < - TRI_INTERSECT_EPSILON || w < - TRI_INTERSECT_EPSILON || t < TRI_INTERSECT_EPSILON ) {
+		if ( t < DIST_EPSILON ) {
 
 			return result;
 
@@ -225,7 +236,9 @@ export class BVHComputeData {
 
 				} else if ( item instanceof GeometryBVH ) {
 
-					return new Mesh( item.geometry );
+					const dummy = new Mesh();
+					dummy.geometry.boundsTree = item;
+					return dummy;
 
 				}
 
@@ -302,8 +315,8 @@ export class BVHComputeData {
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
-					var boundsHitDist: f32 = 0.0;
-					if ( ! ${ intersectsBoundsFn }( shape, node.bounds, &boundsHitDist ) || boundsHitDist > bestHit.dist ) {
+					var boundsHitDist: f32 = ${ intersectsBoundsFn }( shape, node.bounds );
+					if ( boundsHitDist < 0.0 || boundsHitDist > bestHit.dist ) {
 
 						continue;
 
@@ -463,6 +476,13 @@ export class BVHComputeData {
 
 		//
 
+		// NOTE: These buffer lengths are increased to a minimum size of 2 to avoid the TSL of converting storage buffers
+		// with length 1 being converted to a scalar value.
+		// TODO: remove this when fixed in three
+		const transformBufferLength = Math.max( transformInfo.length, 2 );
+		indexBufferLength = Math.max( indexBufferLength, 2 );
+		attributesBufferLength = Math.max( attributesBufferLength, 2 );
+
 		// construct the attribute struct
 		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
 
@@ -498,7 +518,7 @@ export class BVHComputeData {
 		//
 
 		// write the transforms
-		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformInfo.length * 4 );
+		const transformArrayBuffer = new ArrayBuffer( structs.transform.getLength() * transformBufferLength * 4 );
 		transformInfo.forEach( ( info, i ) => {
 
 			_inverseMatrix.copy( bvh.matrixWorld ).invert();
@@ -547,7 +567,34 @@ export class BVHComputeData {
 					const n16 = n32 * 2;
 
 					// write bounds
-					targetF32.set( new Float32Array( root, i * BYTES_PER_NODE, 6 ), n32 );
+					const view = new Float32Array( root, i * BYTES_PER_NODE, 6 );
+					if ( i === 0 ) {
+
+						// if we're copying the root then check for cases where there are no primitives and therefore
+						// be a bounds of [ Infinity, - Infinity ]. Convert this to [ 1, - 1 ] for reliable GPU behavior.
+						for ( let i = 0; i < 3; i ++ ) {
+
+							const vMin = view[ i + 0 ];
+							const vMax = view[ i + 3 ];
+							if ( vMin > vMax ) {
+
+								targetF32[ n32 + i + 0 ] = 1;
+								targetF32[ n32 + i + 3 ] = - 1;
+
+							} else {
+
+								targetF32[ n32 + i + 0 ] = vMin;
+								targetF32[ n32 + i + 3 ] = vMax;
+
+							}
+
+						}
+
+					} else {
+
+						targetF32.set( view, n32 );
+
+					}
 
 					const isLeaf = IS_LEAFNODE_FLAG === rootBuffer16[ r16 + 15 ];
 					if ( isLeaf ) {
@@ -638,6 +685,7 @@ export class BVHComputeData {
 			const { geometry, mesh = null } = bvh;
 			const { vertexStart, vertexCount } = range;
 			const attributesBufferF32 = new Float32Array( target );
+			const attrStructLength = attributeStruct.getLength();
 			attributeStruct.membersLayout.forEach( ( { name }, interleavedOffset ) => {
 
 				// TODO: we should be able to have access to memory layout offsets here via the struct
@@ -680,7 +728,7 @@ export class BVHComputeData {
 
 					}
 
-					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attributeStruct.getLength() + interleavedOffset * 4 );
+					_vec.toArray( attributesBufferF32, ( writeOffset + i ) * attrStructLength + interleavedOffset * 4 );
 
 				}
 
@@ -695,6 +743,9 @@ export class BVHComputeData {
 		const { storage, structs, fns, prefix } = this;
 
 		// raycast first hit
+		const scratchRayScalar = wgsl( /* wgsl */`
+			var<private> ${ prefix }rayScalar = 1.0;
+		` );
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: prefix + 'RaycastFirstHit',
 			shapeStruct: rayStruct,
@@ -707,8 +758,50 @@ export class BVHComputeData {
 
 				}
 			`,
-			intersectsBoundsFn: rayIntersectsBounds,
+			intersectsBoundsFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
+				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+
+					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
+					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
+
+					let invDir = 1.0 / ray.direction;
+					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
+					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
+
+					let tMinHit = vec3f(
+						min( tMinPlane.x, tMaxPlane.x ),
+						min( tMinPlane.y, tMaxPlane.y ),
+						min( tMinPlane.z, tMaxPlane.z )
+					);
+
+					let tMaxHit = vec3f(
+						max( tMinPlane.x, tMaxPlane.x ),
+						max( tMinPlane.y, tMaxPlane.y ),
+						max( tMinPlane.z, tMaxPlane.z )
+					);
+
+					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
+					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
+
+					let dist = max( t0, 0.0 );
+					if ( t1 >= dist ) {
+
+						return dist * ${ prefix }rayScalar;
+
+					} else {
+
+						return - 1.0;
+
+					}
+
+				}
+
+			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
 				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
 
 					var bestHit: ${ intersectionResultStruct };
@@ -726,6 +819,7 @@ export class BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
+						triResult.dist *= ${ prefix }rayScalar;
 						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
 
 							bestHit = triResult;
@@ -740,11 +834,18 @@ export class BVHComputeData {
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
 				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f ) -> ${ rayStruct } {
 
 					var localRay: Ray;
 					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+
+					let len = length( localRay.direction );
+					localRay.direction /= len;
+					${ prefix }rayScalar = 1.0 / len;
+
 					return localRay;
 
 				}

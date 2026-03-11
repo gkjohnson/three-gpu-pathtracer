@@ -1,10 +1,9 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
-import { MeshBVH, SAH } from 'three-mesh-bvh';
+import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
-import { SkinnedMeshBVH } from '../lib/SkinnedMeshBVH.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -129,7 +128,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const textureLookUp = new Map();
 		const textures = [];
 
-		const floatArray = new Float32Array( materials.length * this.structs.material.getLength() );
+		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
+		// TODO: remove this when fixed in three
+		const materialBufferLength = Math.max( materials.length, 2 );
+		const floatArray = new Float32Array( materialBufferLength * this.structs.material.getLength() );
 		const intArray = new Int32Array( floatArray.buffer );
 
 		// TODO: make features work
@@ -430,15 +432,26 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// write material data to the transforms
 		const { materials } = this;
-		const { object, instanceId } = info;
-		const material = object.material;
-		if ( ! materials.includes( material ) ) {
+		const { object, instanceId, root } = info;
 
+		// get the material associated with the bvh group
+		let material = object.material;
+		if ( Array.isArray( material ) ) {
+
+			const { materialIndex } = object.geometry.groups[ root ];
+			material = material[ materialIndex ];
+
+		}
+
+		// save the index
+		let index = materials.indexOf( material );
+		if ( index === - 1 ) {
+
+			index = materials.length;
 			materials.push( material );
 
 		}
 
-		const index = materials.indexOf( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
 
