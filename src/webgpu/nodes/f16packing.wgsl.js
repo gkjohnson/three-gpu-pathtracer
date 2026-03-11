@@ -5,8 +5,8 @@ export const unpackCompensationFn = wgslFn( /* wgsl */`
 
 		// FP16 has 10 mantissa bits so 2^-10 * 0.5 = 2^-11 = 1 / 2048 relative rounding error
 		// 127 maps the value to a signed 8 bit range
-		const COMP_SCALE = 127.0 * 2048.0;
-		let raw = vec4f(
+		const UNPACK_FACTOR = 1.0 / ( 127.0 * 2048.0 );
+		let quantized = vec4f(
 			f32( ( packed >> 0u ) & 0xFFu ),
 			f32( ( packed >> 8u ) & 0xFFu ),
 			f32( ( packed >> 16u ) & 0xFFu ),
@@ -14,7 +14,7 @@ export const unpackCompensationFn = wgslFn( /* wgsl */`
 		) - 128.0;
 
 		// scale the value by the input color to accommodate relative error differences
-		return ( raw / COMP_SCALE ) * color;
+		return UNPACK_FACTOR * quantized * color;
 
 	}
 ` );
@@ -22,21 +22,23 @@ export const unpackCompensationFn = wgslFn( /* wgsl */`
 export const packCompensationFn = wgslFn( /* wgsl */`
 	fn packCompensation( compensation: vec4f, color: vec4f ) -> u32 {
 
-		const COMP_SCALE = 127.0 * 2048.0;
+		// see above UNPACK_FACTOR comment
+		const PACK_FACTOR = 127.0 * 2048.0;
 
 		// avoid divide by zero
-		let safeScale = select( color, vec4f( 1.0 ), color == vec4f( 0.0 ) );
+		// note that select operates component-wise
+		let safeColor = select( color, vec4f( 1.0 ), color == vec4f( 0.0 ) );
 
 		// undo the above packing calculation, clamping to be safe
-		var quantized = ( compensation / safeScale ) * COMP_SCALE + 128.0;
-		quantized = clamp( quantized, vec4f( 0.0 ), vec4f( 255.0 ) );
+		var quantized = vec4u( PACK_FACTOR * compensation / safeColor ) + 128u;
+		quantized = clamp( quantized, vec4u( 0 ), vec4u( 255 ) );
 
 		// pack all the channels
-		return u32(
-			( u32( quantized.r ) << 0u ) |
-			( u32( quantized.g ) << 8u ) |
-			( u32( quantized.b ) << 16u ) |
-			( u32( quantized.a ) << 24u )
+		return (
+			( quantized.r << 0u ) |
+			( quantized.g << 8u ) |
+			( quantized.b << 16u ) |
+			( quantized.a << 24u )
 		);
 
 	}
