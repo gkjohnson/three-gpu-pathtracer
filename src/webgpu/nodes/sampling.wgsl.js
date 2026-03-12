@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { surfaceRecordStruct, environmentInfoStruct, constants } from './structs.wgsl.js';
+import { surfaceRecordStruct, environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { pcgRand2 } from './random.wgsl.js';
 import { saturateCosFunc, squareFunc, squareVecFunc } from './utils.wgsl.js';
 
@@ -81,7 +81,7 @@ export const applyFilteredGlossyFunc = wgslFn( /* wgsl */ `
 // [4] http://jcgt.org/published/0003/02/03/
 export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
-	fn ggxDirection( incidentDir: vec3f, roughness: vec2f, uv: vec2f ) -> vec3f {
+	fn ggxDirection( incidentDir: vec3f, alpha: vec2f, uv: vec2f ) -> vec3f {
 
 		// The GGX functions provide sampling and distribution information for normals as output so
 		// in order to get probability of scatter direction the half vector must be computed and provided.
@@ -98,7 +98,7 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
 		// Implementation from reference [1]
 		// stretch view
-		let V = normalize( vec3f( roughness * incidentDir.xy, incidentDir.z ) );
+		let V = normalize( vec3f( alpha * incidentDir.xy, incidentDir.z ) );
 
 		// orthonormal basis
 		var T1: vec3f;
@@ -129,7 +129,7 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 		var N = P1 * T1 + P2 * T2 + V * sqrt( max( 0.0, 1.0 - P1 * P1 - P2 * P2 ) );
 
 		// unstretch
-		N = normalize( vec3( roughness * N.xy, max( 0.0, N.z ) ) );
+		N = normalize( vec3( alpha * N.xy, max( 0.0, N.z ) ) );
 
 		return N;
 
@@ -142,11 +142,11 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 // See equation (34) from reference [0]
 export const ggxLamdaFunc = wgslFn( /* wgsl */ `
 
-	fn ggxLamda( theta: f32, roughness: f32 ) -> f32 {
+	fn ggxLamda( theta: f32, alpha: f32 ) -> f32 {
 
 		let tanTheta = tan( theta );
 		let tanTheta2 = tanTheta * tanTheta;
-		let alpha2 = roughness * roughness;
+		let alpha2 = alpha * alpha;
 
 		let numerator = - 1.0 + sqrt( 1.0 + alpha2 * tanTheta2 );
 		return numerator / 2.0;
@@ -158,22 +158,33 @@ export const ggxLamdaFunc = wgslFn( /* wgsl */ `
 // See equation (34) from reference [0]
 export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
 
-	fn ggxShadowMaskG1( theta: f32, roughness: f32 ) -> f32 {
+	fn ggxShadowMaskG1( theta: f32, alpha: f32 ) -> f32 {
 
-		return 1.0 / ( 1.0 + ggxLamda( theta, roughness ) );
+		return 1.0 / ( 1.0 + ggxLamda( theta, alpha ) );
 
 	}
 
 `, [ ggxLamdaFunc ] );
 
-// See equation (125) from reference [4]
+// See listing 2 from reference below
+// https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
 export const ggxShadowMaskG2Func = wgslFn( /* wgsl */ `
 
-	fn ggxShadowMaskG2( wi: vec3f, wo: vec3f, roughness: f32 ) -> f32 {
+	fn ggxShadowMaskG2( NdotV: f32, NdotL: f32, alpha: f32 ) -> f32 {
 
-		let incidentTheta = acos( wi.z );
-		let scatterTheta = acos( wo.z );
-		return 1.0 / ( 1.0 + ggxLamda( incidentTheta, roughness ) + ggxLamda( scatterTheta, roughness ) );
+		// Original formulation of G_SmithGGX Correlated
+		// lambda_v = ( -1 + sqrt ( alphaG2 * (1 - NdotL2 ) / NdotL2 + 1)) * 0.5 f;
+		// lambda_l = ( -1 + sqrt ( alphaG2 * (1 - NdotV2 ) / NdotV2 + 1)) * 0.5 f;
+		// G_SmithGGXCorrelated = 1 / (1 + lambda_v + lambda_l );
+		// V_SmithGGXCorrelated = G_SmithGGXCorrelated / (4.0 f * NdotL * NdotV );
+
+		// This is an optimized version
+		let alpha2 = alpha * alpha;
+		// Caution: the "NdotL *" and "NdotV *" are explicitely inversed , this is not a mistake.
+		let Lambda_GGXV = NdotL * sqrt (( - NdotV * alpha2 + NdotV ) * NdotV + alpha2 );
+		let Lambda_GGXL = NdotV * sqrt (( - NdotL * alpha2 + NdotL ) * NdotL + alpha2 );
+
+		return 0.5 / ( Lambda_GGXV + Lambda_GGXL );
 
 	}
 
@@ -182,18 +193,18 @@ export const ggxShadowMaskG2Func = wgslFn( /* wgsl */ `
 
 // See equation (33) from reference [0]
 export const ggxDistributionFunc = wgslFn( /* wgsl */ `
-	fn ggxDistribution( halfVector: vec3f, roughness: f32 ) -> f32 {
+	fn ggxDistribution( halfVectorAngleCos: f32, alpha: f32 ) -> f32 {
 
-		var a2 = roughness * roughness;
+		var a2 = alpha * alpha;
 		a2 = max( EPSILON, a2 );
-		let cosTheta = halfVector.z;
+		let cosTheta = halfVectorAngleCos;
 		let cosTheta4 = pow( cosTheta, 4.0 );
 
 		if ( cosTheta == 0.0 ) {
 			return 0.0;
 		}
 
-		let theta = acos( clamp( halfVector.z, -1.0, 1.0 ) );
+		let theta = acos( clamp( cosTheta, -1.0, 1.0 ) );
 		let tanTheta = tan( theta );
 		let tanTheta2 = pow( tanTheta, 2.0 );
 
@@ -206,13 +217,13 @@ export const ggxDistributionFunc = wgslFn( /* wgsl */ `
 
 // See equation (3) from reference [2]
 export const ggxPDFFunc = wgslFn( /* wgsl */ `
-	fn ggxPDF( wi: vec3f, halfVector: vec3f, roughness: f32 ) -> f32 {
+	fn ggxPDF( wo: vec3f, halfVector: vec3f, roughness: f32 ) -> f32 {
 
-		let incidentTheta = acos( wi.z );
-		let D = ggxDistribution( halfVector, roughness );
+		let incidentTheta = acos( wo.z );
+		let D = ggxDistribution( halfVector.z, roughness );
 		let G1 = ggxShadowMaskG1( incidentTheta, roughness );
 
-		return D * G1 * max( 0.0, dot( wi, halfVector ) ) / wi.z;
+		return D * G1 * max( 0.0, dot( wo, halfVector ) ) / wo.z;
 
 	}
 `, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );
@@ -449,13 +460,13 @@ export const disneyFresnelFunc = wgslFn( /* wgsl */ `
 export const diffuseEvalFunc = wgslFn( /* wgsl */ `
 
 	fn diffuseEval(
-		wo: vec3f, wi: vec3f, wh: vec3f,
-		surf: SurfaceRecord, color: ptr<function, vec3f>
+		wo: vec3f, wi: vec3f,
+		surf: SurfaceRecord, color: ptr<function, vec3f>,
 	) -> f32 {
 
 		// https://schuttejoe.github.io/post/disneybsdf/
-		let fl = schlickFresnel( wi.z, 0.0);
-		let fv = schlickFresnel( wo.z, 0.0);
+		let fl = schlickFresnel( wi.z, 0.0 );
+		let fv = schlickFresnel( wo.z, 0.0 );
 
 		let metalFactor = ( 1.0 - surf.metalness );
 		let transFactor = ( 1.0 - surf.transmission );
@@ -466,14 +477,15 @@ export const diffuseEvalFunc = wgslFn( /* wgsl */ `
 		// TODO: subsurface approx?
 
 		// float F = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
-		let F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
+		float F = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		*color = ( 1.0 - F ) * transFactor * metalFactor * wi.z * surf.color * ( retro + lambert ) / PI;
 
 		return wi.z / PI;
 
+
 	}
 
-`, [ disneyFresnelFunc, schlickFresnelFunc, constants ] );
+`, [ schlickFresnelFunc, constants ] );
 
 export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
@@ -528,8 +540,8 @@ export const specularEvalFunc = wgslFn( /* wgsl */ `
 		// PDF
 		// See 14.1.1 Microfacet BxDFs in https://www.pbr-book.org/
 		let incidentTheta = acos( wo.z );
-		let G = ggxShadowMaskG2( wi, wo, roughness );
-		let D = ggxDistribution( wh, roughness );
+		let G = ggxShadowMaskG2( wo.z, wi.z, roughness );
+		let D = ggxDistribution( wh.z, roughness );
 		let G1 = ggxShadowMaskG1( incidentTheta, roughness );
 		let ggxPdf = D * G1 * max( 0.0, abs( dot( wo, wh ) ) ) / abs ( wo.z );
 
@@ -545,7 +557,7 @@ export const specularDirectionFunc = wgslFn( /* wgsl */ `
 	fn specularDirection( wo: vec3f, surf: SurfaceRecord ) -> vec3f {
 
 		// sample ggx vndf distribution which gives a new normal
-		let roughness = surf.filteredRoughness;
+		let roughness = surf.roughness * surf.roughness;
 		let halfVector = ggxDirection(
 			wo,
 			vec2( roughness ),
@@ -557,7 +569,7 @@ export const specularDirectionFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ surfaceRecordStruct, ggxDirectionFunc ] );
+`, [ surfaceRecordStruct, ggxDirectionFunc, pcgRand2 ] );
 
 // TODO: This is just using a basic cosine-weighted specular distribution with an
 // incorrect PDF value at the moment. Update it to correctly use a GGX distribution
@@ -649,8 +661,8 @@ export const clearcoatEvalFunc = wgslFn( /* wgsl */ `
 		if ( frontFace ) {
 			eta = 1.0 / ior;
 		}
-		let G = ggxShadowMaskG2( wi, wo, roughness );
-		let D = ggxDistribution( wh, roughness );
+		let G = ggxShadowMaskG2( wo.z, wi.z, roughness );
+		let D = ggxDistribution( wh.z, roughness );
 		let F = schlickFresnel( dot( wi, wh ), f0 );
 
 		let fClearcoat = F * D * G / ( 4.0 * abs( wi.z * wo.z ) );
@@ -668,9 +680,11 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 	fn getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, clearcoatWo: vec3f, surf: SurfaceRecord) -> LobeWeights {
 
+		// TODO: experiment with this; I don't see any usage of normal?
 		let metalness = surf.metalness;
 		let transmission = surf.transmission;
 		// float fEstimate = evaluateFresnelWeight( dot( wo, wh ), surf.eta, surf.f0 );
+		// Why disney fresnel?
 		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 
 		let transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
@@ -682,17 +696,17 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.transmission = transmission * ( 1.0 - transSpecularProb );
 		weights.clearcoat = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
 
-		let totalWeight = weights.diffuse + weights.specular + weights.transmission + weights.clearcoat;
+		let totalWeight = weights.diffuse + weights.specular; // + weights.transmission + weights.clearcoat;
 		weights.diffuse /= totalWeight;
 		weights.specular /= totalWeight;
-		weights.transmission /= totalWeight;
-		weights.clearcoat /= totalWeight;
+		// weights.transmission /= totalWeight;
+		// weights.clearcoat /= totalWeight;
 
 		return weights;
 
 	}
 
-`, [ disneyFresnelFunc, schlickFresnelFunc ] );
+`, [ disneyFresnelFunc, schlickFresnelFunc, lobeWeightsStruct ] );
 
 // LOOKINTO: saturate is not needed because of satureateCos on args
 export const directionalAlbedoSheenFunc = wgslFn( /* wgsl */ `

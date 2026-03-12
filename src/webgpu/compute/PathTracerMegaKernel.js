@@ -3,14 +3,14 @@ import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { pcgRand2, pcgRand3, pcgInit } from '../nodes/random.wgsl.js';
-import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( material ) {
 
 		const parameters = {
 			bvhData: { value: null },
@@ -144,7 +144,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let surface = getSurfaceRecord( material, vertexData, hitResult.side, hitResult.normal, textures, textureSampler );
 
-						let scatterRec = bsdfSample( - ray.direction, surface );
+						let scatterRec = ${ material.getBsdfNode() }( - ray.direction, surface );
 
 						if ( scatterRec.pdf <= 0.0 || any( scatterRec.color != scatterRec.color ) ) {
 
@@ -180,7 +180,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let prevColor = textureLoad( ${ parameters.prevOutputTarget }, indexUV );
 				let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 				textureStore( ${ parameters.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-				textureStore( ${ parameters.outputTarget }, indexUV, blendedColor );
+				textureStore( ${ parameters.outputTarget }, indexUV, blendedColor ); // vec4( throughputColor, 1 ) );
 
 			}
 
@@ -190,7 +190,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		proxy( 'bvhData.value.structs.transform', parameters ),
 		proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
 		proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-		ndcToCameraRay, pcgRand2, pcgRand3, pcgInit, lambertBsdfFunc,
+		ndcToCameraRay, pcgRand2, pcgRand3, pcgInit,
 		sampleEnvironmentFn, getSurfaceRecordFunc, weightedAlphaBlendFn,
 	] }`;
 

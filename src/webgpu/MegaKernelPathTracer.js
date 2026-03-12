@@ -14,7 +14,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		this.envInfo = new EquirectHdrInfoUniform();
 
 		// kernels
-		this.kernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
+		this.kernel = new PathTracerMegaKernel( this.material ).setWorkgroupSize( 8, 8, 1 );
 
 	}
 

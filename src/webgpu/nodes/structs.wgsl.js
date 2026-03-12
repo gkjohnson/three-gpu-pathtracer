@@ -8,9 +8,6 @@ export const constants = wgsl( /* wgsl */ `
 		-0.4985314,  0.0415560,  1.0572252
 	);
 
-	// TODO: expose modification of this value
-	const filterGlossyFactor: f32 = 0.5;
-
 	const PI: f32 = 3.141592653589793;
 
 	const EPSILON: f32 = 1e-5;
@@ -158,7 +155,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 
 	// material
 	roughness: 'f32',
-	filteredRoughness: 'f32',
 	metalness: 'f32',
 	color: 'vec3f',
 	emission: 'vec3f',
@@ -176,7 +172,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	clearcoatInvBasis: 'mat3x3f',
 	clearcoat: 'f32',
 	clearcoatRoughness: 'f32',
-	filteredClearcoatRoughness: 'f32',
 
 	// sheen
 	sheen: 'f32',

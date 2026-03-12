@@ -1,6 +1,8 @@
 import { ColorManagement, FloatType, LinearFilter, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { PathtracingMaterial } from './materials/PathtracingMaterial.js';
+import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
 export class PathTracerBackend {
 
@@ -38,6 +40,8 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel( { textureType: 'r32uint' } ).setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel( { textureType: 'rgba32float' } ).setWorkgroupSize( 8, 8, 1 );
+
+		this.material = new GltfCompliantMaterial();
 
 	}
 

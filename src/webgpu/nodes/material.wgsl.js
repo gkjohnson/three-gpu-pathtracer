@@ -22,22 +22,6 @@ import {
 } from './sampling.wgsl';
 import { pcgRand, pcgRand2 } from './random.wgsl';
 
-export const applyFilteredGlossyFunc = wgslFn( /* wgsl */ `
-
-	fn applyFilteredGlossy( roughness: f32, accumulatedRoughness: f32 ) -> f32 {
-
-		return clamp(
-			max(
-				roughness,
-				accumulatedRoughness * filterGlossyFactor * 5.0 ),
-			0.0,
-			1.0
-		);
-
-	}
-
-`, [ constants ] );
-
 export const iorToF0Func = wgslFn( /* wgsl */ `
 
 	fn iorToF0( ior: f32 ) -> f32 {
@@ -262,8 +246,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.roughness = roughness * roughness;
-		surf.clearcoatRoughness = clearcoatRoughness * clearcoatRoughness;
+		surf.roughness = roughness;
+		surf.clearcoatRoughness = clearcoatRoughness;
 		surf.sheenRoughness = sheenRoughness;
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
@@ -275,15 +259,6 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			surf.eta = material.ior;
 		}
 		surf.f0 = iorToF0( surf.eta );
-
-		// Compute the filtered roughness value to use during specular reflection computations.
-		// The accumulated roughness value is scaled by a user setting and a "magic value" of 5.0.
-		// If we're exiting something transmissive then scale the factor down significantly so we can retain
-		// sharp internal reflections
-		// TODO: accumulate roughness in the main cycle
-		let accumulatedRoughness = 0.0;
-		surf.filteredRoughness = applyFilteredGlossy( surf.roughness, accumulatedRoughness );
-		surf.filteredClearcoatRoughness = applyFilteredGlossy( surf.clearcoatRoughness, accumulatedRoughness );
 
 		// get the normal frames
 		surf.normalBasis = getBasisFromNormal( surf.normal );
@@ -298,7 +273,6 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 `, [
 	inverseMat3x3Func,
 	iorToF0Func,
-	applyFilteredGlossyFunc,
 	getBasisFromNormalFunc,
 	surfaceRecordStruct,
 ] );
