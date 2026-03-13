@@ -72,21 +72,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let r = pcgRand() * cdf.y;
 
-				var result: ScatterRecord;
+				var wi: vec3f;
 				var wh: vec3f;
 
 				if ( r <= cdf.x ) { // diffuse
 
-					result.direction = diffuseDirection( wo, surf );
-					// result.color = vec3f( 0, 1, 0 );
-					wh = normalize( result.direction + wo );
+					wi = diffuseDirection( wo, surf );
+					wh = normalize( wi + wo );
 
 				} else if ( r <= cdf.y ) { // specular
 
 					wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
-					result.direction = - reflect( wo, wh );
-					// result.color = vec3f( 1, 0, 0 );
-					// wh = normalize( result.direction + wo );
+					wi = - reflect( wo, wh );
 
 				} else if ( r <= cdf.z ) { // transmission / refraction
 
@@ -98,24 +95,27 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
+				// TODO: Handle wi.z <= 0 better
+				var result: ScatterRecord;
 				result.pdf = 0;
-				if ( result.direction.z > 0.0 ) {
-					result.pdf += weights.diffuse * result.direction.z / PI;
+
+				if ( wi.z > 0.0 && weights.diffuse > 0.0 ) {
+					result.pdf += weights.diffuse * wi.z / PI;
 				}
 
-				let D = ggxDistribution( wh.z, alpha );
-				let incidentTheta = acos( wo.z );
-				let G1 = ggxShadowMaskG1( incidentTheta, alpha );
+				if ( wi.z > 0.0 && weights.specular > 0.0 ) {
+					let D = ggxDistribution( wh.z, alpha );
+					let incidentTheta = acos( wo.z );
+					let G1 = ggxShadowMaskG1( incidentTheta, alpha );
 
-				let specPdf = D * G1 * max( 0, dot( wo, wh ) ) / ( 4 * wo.z * dot( wo, wh ) );
+					let specPdf = D * G1 * max( 0, dot( wo, wh ) ) / ( 4 * wo.z * dot( wo, wh ) );
 
-				if ( result.direction.z > 0.0 ) {
 					result.pdf += weights.specular * specPdf;
 				}
 
-				result.color = bsdfEval( wo, result.direction, wh, surf );
-				result.color *= result.direction.z;
-				result.direction = normalize( normalBasis * result.direction );
+				result.color = bsdfEval( wo, wi, wh, surf );
+				result.color *= wi.z;
+				result.direction = normalize( normalBasis * wi );
 
 				return result;
 
