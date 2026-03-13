@@ -1,15 +1,16 @@
 import { IndirectStorageBufferAttribute, StorageTexture, DataArrayTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, storage, wgslFn, textureStore, globalId, texture, sampler } from 'three/tsl';
+import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( material ) {
 
 		const parameters = {
 			bvhData: { value: null },
@@ -36,7 +37,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const fn = wgslFn( /* wgsl */`
+		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
 				// indices and target
@@ -92,7 +93,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal, textures, textureSampler );
 
-				let scatterRec = bsdfSample( input.view, surface );
+				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
 
 				// terminate ray if scatter is impossible or color is nan
 				// TODO: Investigate ways to not generate such scatters
@@ -128,18 +129,17 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 			}
-		`, [
-			proxy( 'bvhData.value.structs.material', parameters ),
-			proxy( 'bvhData.value.structs.transform', parameters ),
-			proxy( 'bvhData.value.storage.materials', parameters ),
-			proxy( 'bvhData.value.storage.transforms', parameters ),
-			proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-			queuedRayStruct, getSurfaceRecordFunc,
-			pcgRand3, pcgInit, queuedHitStruct,
-			weightedAlphaBlendFn,
-			lambertBsdfFunc,
-			// pbrtBsdfFunc,
-		] );
+
+		${ [
+		proxy( 'bvhData.value.structs.material', parameters ),
+		proxy( 'bvhData.value.structs.transform', parameters ),
+		proxy( 'bvhData.value.storage.materials', parameters ),
+		proxy( 'bvhData.value.storage.transforms', parameters ),
+		proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
+		queuedRayStruct, getSurfaceRecordFunc,
+		pcgRand3, pcgInit, queuedHitStruct,
+		weightedAlphaBlendFn,
+	] }`;
 
 		super( fn( parameters ) );
 

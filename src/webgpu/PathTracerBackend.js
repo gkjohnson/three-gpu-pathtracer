@@ -60,6 +60,10 @@ export class PathTracerBackend {
 
 	}
 
+	setMaterial( material ) {
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,
