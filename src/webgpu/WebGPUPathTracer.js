@@ -339,11 +339,22 @@ export class WebGPUPathTracer {
 		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
 		const uintBuffer = new Uint32Array( buffer.buffer );
 
+		// copyTexture requires a multiple of 256 bytes for texelsPerRow
+		// Hence a multiple of 64 u32 per row
+		const texelsPerRow = Math.ceil( width / 64 ) * 64;
+
 		// Sum up all sample counts and divide by pixel count to get average samples per pixel
 		let totalSamples = 0;
 		let minSamples = Number.MAX_VALUE;
 		let maxSamples = - Number.MAX_VALUE;
 		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
+
+			// Skip padding
+			if ( i % texelsPerRow >= width ) {
+
+				continue;
+
+			}
 
 			// Each entry contains sample count in lower bits and active flag in high bit
 			// Mask out the active flag (0xF0000000) to get just the sample count
