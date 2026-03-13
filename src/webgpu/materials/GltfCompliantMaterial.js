@@ -1,8 +1,9 @@
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
 import { wgslFn } from 'three/tsl';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc } from '../nodes/gltfSampleMaterial.wgsl';
-import { diffuseDirectionFunc, getLobeWeightsFunc, ggxPDFFunc, specularDirectionFunc } from '../nodes/sampling.wgsl';
+import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc } from '../nodes/material.wgsl';
+import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
+import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
 import { scatterRecordStruct } from '../nodes/structs.wgsl';
 import { pcgRand } from '../nodes/random.wgsl';
 
@@ -100,17 +101,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.pdf = 0;
 
 				if ( wi.z > 0.0 && weights.diffuse > 0.0 ) {
+
 					result.pdf += weights.diffuse * wi.z / PI;
+
 				}
 
 				if ( wi.z > 0.0 && weights.specular > 0.0 ) {
-					let D = ggxDistribution( wh.z, alpha );
-					let incidentTheta = acos( wo.z );
-					let G1 = ggxShadowMaskG1( incidentTheta, alpha );
 
-					let specPdf = D * G1 * max( 0, dot( wo, wh ) ) / ( 4 * wo.z * dot( wo, wh ) );
+					result.pdf += weights.specular * ggxReflectionAdjustedPDF( wo, wh, alpha );
 
-					result.pdf += weights.specular * specPdf;
 				}
 
 				result.color = bsdfEval( wo, wi, wh, surf );
@@ -123,9 +122,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		`, [
 			bsdfEvalFunc,
-			ggxPDFFunc,
+			ggxReflectionAdjustedPDFFunc,
+			ggxDirectionFunc,
 			diffuseDirectionFunc,
-			specularDirectionFunc,
 			scatterRecordStruct,
 			getLobeWeightsFunc,
 			pcgRand,

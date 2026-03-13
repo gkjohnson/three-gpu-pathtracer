@@ -1,21 +1,5 @@
 import { wgslFn } from 'three/tsl';
 
-export const squareFunc = wgslFn( /* wgsl */ `
-
-	fn square( value: f32 ) -> f32 {
-		return value * value;
-	}
-
-` );
-
-export const squareVecFunc = wgslFn( /* wgsl */ `
-
-	fn squareVec( value: vec3f ) -> vec3f {
-		return value * value;
-	}
-
-` );
-
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
 	fn inverse(m: mat3x3f) -> mat3x3f {
@@ -71,37 +55,57 @@ export const saturateCosFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-export const getRefractionHalfVectorFunc = wgslFn( /* wgsl */ `
+export const iorToF0Func = wgslFn( /* wgsl */ `
 
-	fn getRefractionHalfVector( wi: vec3f, wo: vec3f, eta: f32 ) -> vec3f {
+	fn iorToF0( ior: f32 ) -> f32 {
+		return pow( ( 1 - ior ) / ( 1 + ior ), 2 );
+	}
 
-		// get the half vector - assuming if the light incident vector is on the other side
-		// of the that it's transmissive.
-		var h: vec3f;
-		if ( wi.z > 0.0 ) {
+` );
 
-			h = normalize( wi + wo );
+export const schlickFresnelFunc = wgslFn( /* wgsl */ `
 
-		} else {
+	fn schlickFresnel( cosine: f32, f0: f32 ) -> f32 {
 
-			// Scale by the ior ratio to retrieve the appropriate half vector
-			// From Section 2.2 on computing the transmission half vector:
-			// https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
-			h = normalize( wi + wo * eta );
+		return f0 + ( 1.0 - f0 ) * pow( 1.0 - cosine, 5.0 );
+
+	}
+
+` );
+
+export const schlickFresnelVecFunc = wgslFn( /* wgsl */ `
+
+	fn schlickFresnelVec( cosine: f32, f0: vec3f, f90: vec3f ) -> vec3f {
+
+		return f0 + ( f90 - f0 ) * pow( 1.0 - cosine, 5.0 );
+
+	}
+
+` );
+
+export const totalInternalReflectionFunc = wgslFn( /* wgsl */ `
+
+	fn totalInternalReflection( cosTheta: f32, eta: f32 ) -> bool {
+
+		let sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		return eta * sinTheta > 1.0;
+
+	}
+
+` );
+
+export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
+
+	fn evaluateFresnel( cosine: f32, eta: f32, f0: vec3f, f90: vec3f ) -> vec3f {
+
+		if ( totalInternalReflection( cosine, eta ) ) {
+
+			return f90;
 
 		}
 
-		h *= sign( h.z );
-		return h;
-
+		return f0 + ( f90 - f0 ) * pow( 1.0 - cosine, 5.0 );
 	}
 
-` );
+`, [ totalInternalReflectionFunc ] );
 
-export const getHalfVectorFunc = wgslFn( /* wgsl */ `
-
-	fn getHalfVector( a: vec3f, b: vec3f ) -> vec3f {
-		return normalize( a + b );
-	}
-
-` );

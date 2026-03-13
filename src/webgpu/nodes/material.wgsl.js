@@ -2,33 +2,14 @@ import { wgslFn } from 'three/tsl';
 import {
 	inverseMat3x3Func,
 	getBasisFromNormalFunc,
-	getRefractionHalfVectorFunc,
-	getHalfVectorFunc,
+	iorToF0Func,
+	schlickFresnelFunc,
+	schlickFresnelVecFunc,
 } from './utils.wgsl';
-import { constants, surfaceRecordStruct, scatterRecordStruct, lobeWeightsStruct } from './structs.wgsl';
-import {
-	sampleSphereCosineFn,
-	diffuseDirectionFunc,
-	specularDirectionFunc,
-	transmissionDirectionFunc,
-	clearcoatDirectionFunc,
-	getLobeWeightsFunc,
-	diffuseEvalFunc,
-	specularEvalFunc,
-	transmissionEvalFunc,
-	clearcoatEvalFunc,
-	sheenColorFunc,
-	sheenAlbedoScalingFunc,
-} from './sampling.wgsl';
-import { pcgRand, pcgRand2 } from './random.wgsl';
-
-export const iorToF0Func = wgslFn( /* wgsl */ `
-
-	fn iorToF0( ior: f32 ) -> f32 {
-		return pow( ( 1 - ior ) / ( 1 + ior ), 2 );
-	}
-
-` );
+import { ggxSmithVisibilityFunc, ggxDistributionFunc } from './ggx.wgsl';
+import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl';
+import { sampleSphereCosineFn } from './sampling.wgsl';
+import { pcgRand2 } from './random.wgsl';
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
@@ -295,173 +276,71 @@ export const lambertBsdfFunc = wgslFn( /* wgsl */`
 
 `, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2, constants, surfaceRecordStruct ] );
 
-export const bsdfEvalFunc = wgslFn( /* wgsl */ `
+/*
+ *
+ * N 			  : Macronormal of the surface
+ * V ( wo ) : View direction
+ * L ( wi ) : Light direction
+ * H ( wh ) : Halfvector between V and L, micronormal of the surface in ggx
+ * f0       : Amount of light reflected when looking at a surface head on - "fresnel 0"
+ * f90      : Amount of light reflected at grazing angles
+ *
+ */
 
-	fn bsdfEval(
-		wo: vec3f, clearcoatWo: vec3f, wi: vec3f, clearcoatWi: vec3f,
-		surf: SurfaceRecord, weights: LobeWeights
-	) -> ScatterRecord {
+// Disney Diffuse BRDF without subsurface approximation
+export const diffuseBrdfFunc = wgslFn( /* wgslFn */ `
 
-		let metalness = surf.metalness;
-		let transmission = surf.transmission;
+	fn diffuseBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
 
-		var result: ScatterRecord;
-		var spdf = 0.0;
-		var dpdf = 0.0;
-		var tpdf = 0.0;
-		var cpdf = 0.0;
-		result.color = vec3( 0.0 );
+		// https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
+		// See equation (4)
 
-		// LOOKINTO: Maybe we should calculate half vector earlier to avoid ifs here?
-		let halfVector = getRefractionHalfVector( wi, wo, surf.eta );
+		let fl = schlickFresnel( NdotL, 0.0 );
+		let fv = schlickFresnel( NdotV, 0.0 );
 
-		// diffuse
-		if ( weights.diffuse > 0.0 && wi.z > 0.0 ) {
+		let rr = 2.0 * surf.roughness * VdotH * VdotH;
+		let retro = rr * ( fl + fv + fl * fv * ( rr - 1.0f ) );
+		let fresnel = ( 1.0f - 0.5f * fl ) * ( 1.0f - 0.5f * fv );
 
-			dpdf = diffuseEval( wo, wi, halfVector, surf, &result.color );
-			result.color *= 1.0 - surf.transmission;
+		// TODO: subsurface approx?
 
-		}
-
-		// ggx specular
-		if ( weights.specular > 0.0 && wi.z > 0.0 ) {
-
-			let reflectanceHalfVector = getHalfVector( wi, wo );
-			var outColor: vec3f;
-			spdf = specularEval( wo, wi, reflectanceHalfVector, surf, &outColor );
-			result.color += outColor;
-
-		}
-
-		// transmission
-		if ( weights.transmission > 0.0 && wi.z < 0.0 ) {
-
-			tpdf = transmissionEval( wo, wi, halfVector, surf, &result.color );
-
-		}
-
-		// sheen
-		result.color *= mix( 1.0, sheenAlbedoScaling( wo, wi, surf ), surf.sheen );
-		result.color += sheenColor( wo, wi, halfVector, surf ) * surf.sheen;
-
-		// clearcoat
-		if ( clearcoatWi.z >= 0.0 && weights.clearcoat > 0.0 ) {
-
-			let clearcoatHalfVector = getHalfVector( clearcoatWo, clearcoatWi );
-			cpdf = clearcoatEval( clearcoatWo, clearcoatWi, clearcoatHalfVector, surf, &result.color );
-
-		}
-
-		result.pdf =
-			dpdf * weights.diffuse
-			+ spdf * weights.specular
-			+ tpdf * weights.transmission
-			+ cpdf * weights.clearcoat;
-
-		// retrieve specular rays for the shadows flag
-		result.specularPdf = spdf * weights.specular + cpdf * weights.clearcoat;
-
-		return result;
+		return ( surf.color / PI ) * ( retro + fresnel );
 
 	}
 
-`, [
-	getRefractionHalfVectorFunc,
-	getHalfVectorFunc,
-	diffuseEvalFunc,
-	transmissionEvalFunc,
-	specularEvalFunc,
-	clearcoatEvalFunc,
-	sheenAlbedoScalingFunc,
-	sheenColorFunc,
-	lobeWeightsStruct,
-	scatterRecordStruct
-] );
+`, [ constants, schlickFresnelFunc, surfaceRecordStruct ] );
 
-export const pbrtBsdfFunc = wgslFn( /* wgsl */`
+export const specularBrdfFunc = wgslFn( /* wgslFn */ `
 
-	fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
+	fn specularBrdf( NdotL: f32, NdotV: f32, NdotH: f32, alpha: f32 ) -> vec3f {
 
-		if ( surf.volumeParticle ) {
+		let Vis = ggxSmithVisibility( NdotV, NdotL, alpha );
+		let D = ggxDistribution( NdotH, alpha );
 
-			var result: ScatterRecord;
-			result.specularPdf = 0.0;
-			result.pdf = 1.0 / ( 4.0 * PI );
-			result.direction = sampleSphere( pcgRand2() );
-			result.color = surf.color / ( 4.0 * PI );
-			return result;
-
-		}
-
-		let wo = normalize( surf.normalInvBasis * worldWo );
-		let clearcoatWo = normalize( surf.clearcoatInvBasis * worldWo );
-		let normalBasis = surf.normalBasis;
-		let invBasis = surf.normalInvBasis;
-		let clearcoatNormalBasis = surf.clearcoatBasis;
-		let clearcoatInvBasis = surf.clearcoatInvBasis;
-
-		// using normal and basically-reflected ray since we don't have proper half vector here
-		let weights = getLobeWeights( wo, wo, vec3( 0, 0, 1 ), clearcoatWo, surf );
-
-		let pdf = vec4f( weights.diffuse, weights.specular, weights.transmission, weights.clearcoat );
-		var cdf: vec4f;
-		cdf.x = pdf.x;
-		cdf.y = pdf.y + cdf.x;
-		cdf.z = pdf.z + cdf.y;
-		cdf.w = pdf.w + cdf.z;
-
-		if( cdf.w != 0.0 ) {
-
-			let invMaxCdf = 1.0 / cdf.w;
-			cdf *= invMaxCdf;
-
-		} else {
-
-			cdf = vec4f( 1.0, 0.0, 0.0, 0.0 );
-
-		}
-
-		var wi: vec3f;
-		var clearcoatWi: vec3f;
-
-		let r = pcgRand();
-		if ( r <= cdf[0] ) { // diffuse
-
-			wi = diffuseDirection( wo, surf );
-			clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
-
-		} else if ( r <= cdf[1] ) { // specular
-
-			wi = specularDirection( wo, surf );
-			clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
-
-		} else if ( r <= cdf[2] ) { // transmission / refraction
-
-			wi = transmissionDirection( wo, surf );
-			clearcoatWi = normalize( clearcoatInvBasis * normalize( normalBasis * wi ) );
-
-		} else if ( r <= cdf[3] ) { // clearcoat
-
-			clearcoatWi = clearcoatDirection( clearcoatWo, surf );
-			wi = normalize( invBasis * normalize( clearcoatNormalBasis * clearcoatWi ) );
-
-		}
-
-		var result = bsdfEval( wo, clearcoatWo, wi, clearcoatWi, surf, weights );
-		result.direction = normalize( surf.normalBasis * wi );
-
-		return result;
+		return vec3f( D * Vis );
 
 	}
 
-`, [
-	constants,
-	diffuseDirectionFunc,
-	specularDirectionFunc,
-	transmissionDirectionFunc,
-	clearcoatDirectionFunc,
-	bsdfEvalFunc,
-	getLobeWeightsFunc,
-	pcgRand,
-	lobeWeightsStruct
-] );
+`, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
+
+export const fresnelMixFunc = wgslFn( /* wgslFn */ `
+
+	fn fresnelMix( VdotH: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
+
+		let f0 = iorToF0( ior );
+  	let F = schlickFresnel( abs( VdotH ), f0 );
+  	return base + F * layer;
+
+	}
+
+`, [ schlickFresnelFunc, iorToF0Func ] );
+
+export const conductorFresnelFunc = wgslFn( /* wgslFn */ `
+
+	fn conductorFresnel( VdotH: f32, f0: vec3f, bsdf: vec3f ) -> vec3f {
+
+	  return bsdf * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
+
+	}
+
+`, [ schlickFresnelVecFunc ] );

@@ -1,8 +1,8 @@
-import { IndirectStorageBufferAttribute, StorageTexture, DataTexture, DataArrayTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture, DataArrayTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, wgslFn, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
-import { getSurfaceRecordFunc, lambertBsdfFunc, pbrtBsdfFunc } from '../../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -137,8 +137,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 			queuedRayStruct, getSurfaceRecordFunc,
 			pcgRand3, pcgInit, queuedHitStruct,
 			weightedAlphaBlendFn,
-			// lambertBsdfFunc,
-			pbrtBsdfFunc,
+			lambertBsdfFunc,
+			// pbrtBsdfFunc,
 		] );
 
 		super( fn( parameters ) );
