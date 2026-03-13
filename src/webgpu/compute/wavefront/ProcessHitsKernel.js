@@ -30,9 +30,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
-			// texture array for material textures
-			textures: texture( new DataArrayTexture( null, 1, 1, 1 ) ),
-			textureSampler: sampler( new DataArrayTexture( null, 1, 1, 1 ) ),
+			textures: texture( new DataArrayTexture( ) ),
+			textureSampler: sampler( new DataArrayTexture( ) ),
 
 			globalId: globalId,
 		};

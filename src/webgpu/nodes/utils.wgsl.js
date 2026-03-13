@@ -46,15 +46,6 @@ export const getBasisFromNormalFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-export const saturateCosFunc = wgslFn( /* wgsl */ `
-	fn saturateCos( val: f32 ) -> f32 {
-
-		return clamp( val, 0.001, 1.0 );
-
-	}
-
-` );
-
 export const iorToF0Func = wgslFn( /* wgsl */ `
 
 	fn iorToF0( ior: f32 ) -> f32 {

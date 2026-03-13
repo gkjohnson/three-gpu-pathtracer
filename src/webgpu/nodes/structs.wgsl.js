@@ -4,7 +4,6 @@ import { StructTypeNode } from 'three/webgpu';
 export const constants = wgsl( /* wgsl */ `
 
 	const PI: f32 = 3.141592653589793;
-
 	const EPSILON: f32 = 1e-5;
 
 ` );
