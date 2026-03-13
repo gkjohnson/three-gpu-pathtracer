@@ -152,7 +152,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// white diffuse surface
 						throughputColor *= scatterRec.color / scatterRec.pdf;
 
 						ray.origin = vertexData.position.xyz;
@@ -176,11 +175,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
+				resultColor = clamp( resultColor, vec4( 0.0 ), vec4( 4.0 ) );
 				let sampleCount = textureLoad( ${ parameters.sampleCountTarget }, indexUV ).r + 1;
 				let prevColor = textureLoad( ${ parameters.prevOutputTarget }, indexUV );
 				let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 				textureStore( ${ parameters.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-				textureStore( ${ parameters.outputTarget }, indexUV, blendedColor ); // vec4( throughputColor, 1 ) );
+				textureStore( ${ parameters.outputTarget }, indexUV, blendedColor );
 
 			}
 

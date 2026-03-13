@@ -162,11 +162,13 @@ export const ggxPDFFunc = wgslFn( /* wgsl */ `
 // See equation (17) from [2]
 // Note: dot( wo, halfVector ) cancel out bc its guaranteed to be > 0
 export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
-	fn ggxReflectionAdjustedPDF( wo: vec3f, wh: vec3f, roughness: f32 ) -> f32 {
+	fn ggxReflectionAdjustedPDF( wo: vec3f, wh: vec3f, alpha: f32 ) -> f32 {
 
-		let D = ggxDistribution( wh.z, roughness );
-		let incidentTheta = acos( wo.z );
-		let G1 = ggxShadowMaskG1( incidentTheta, roughness );
+		let NdotV = max( wo.z, 1e-5 );
+		let NdotH = max( wh.z, 1e-5 );
+		let D = ggxDistribution( NdotH, alpha );
+		let incidentTheta = acos( NdotV );
+		let G1 = ggxShadowMaskG1( incidentTheta, alpha );
 
 		return D * G1 / ( 4 * wo.z );
 

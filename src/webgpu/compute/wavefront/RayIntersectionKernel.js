@@ -131,6 +131,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 						resultColor = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.direction, pcgRand2() );
 
 					}
+					resultColor = clamp( resultColor, vec4( 0.0 ), vec4( 4.0 ) );
 
 					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( prevOutputTarget, indexUV );

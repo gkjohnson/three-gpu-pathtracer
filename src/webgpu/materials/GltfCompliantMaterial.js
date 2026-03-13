@@ -35,10 +35,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let alpha = surf.roughness * surf.roughness;
 
-				let NdotV = wo.z;
-				let NdotL = wi.z;
-				let NdotH = wh.z;
-				let VdotH = dot( wo, wh );
+				let NdotV = max( wo.z, 1e-5 );
+				let NdotL = saturate( wi.z );
+				let NdotH = saturate( wh.z );
+				let VdotH = saturate( dot( wo, wh ) );
 
 				let specular = ${ this.specularBrdf }( NdotL, NdotV, NdotH, alpha );
 
@@ -113,7 +113,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				}
 
 				result.color = bsdfEval( wo, wi, wh, surf );
-				result.color *= wi.z;
+				result.color *= max( 0.0, wi.z );
 				result.direction = normalize( normalBasis * wi );
 
 				return result;
