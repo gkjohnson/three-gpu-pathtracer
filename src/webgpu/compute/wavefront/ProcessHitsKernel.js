@@ -1,4 +1,4 @@
-import { IndirectStorageBufferAttribute, StorageTexture, DataArrayTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
@@ -30,8 +30,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
-			textures: texture( new DataArrayTexture( ) ),
-			textureSampler: sampler( new DataArrayTexture( ) ),
+			textures: texture( new DataTexture( ) ),
+			textureSampler: sampler( new DataTexture( ) ),
 
 			globalId: globalId,
 		};

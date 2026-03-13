@@ -1,7 +1,6 @@
 import { ColorManagement, FloatType, LinearFilter, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { PathtracingMaterial } from './materials/PathtracingMaterial.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
 export class PathTracerBackend {

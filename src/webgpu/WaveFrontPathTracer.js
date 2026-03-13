@@ -81,6 +81,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.material = material;
 		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.reset();
 
 	}
 

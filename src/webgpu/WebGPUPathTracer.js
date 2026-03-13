@@ -136,6 +136,12 @@ export class WebGPUPathTracer {
 
 	}
 
+	setMaterial( material ) {
+
+		this._pathTracer.setMaterial( material );
+
+	}
+
 	// TODO: support async generation of ObjectBVH
 	setSceneAsync( ...args ) {
 

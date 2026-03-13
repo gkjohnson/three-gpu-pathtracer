@@ -37,6 +37,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.material = material;
 		this.kernel = new PathTracerMegaKernel( this.material ).setWorkgroupSize( 8, 8, 1 );
+		this.reset();
 
 	}
 

@@ -1,4 +1,4 @@
-import { DataTexture, DataArrayTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
