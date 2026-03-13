@@ -47,7 +47,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let metallic = ${ this.conductorFresnel }( VdotH, surf.color, specular );
 
-				return metallic; // mix( dielectric, metallic, surf.metalness );
+				return mix( dielectric, metallic, surf.metalness );
 
 			}
 
