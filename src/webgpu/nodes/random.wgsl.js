@@ -4,7 +4,7 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 	struct PcgState {
 		s0: vec4u,
 		s1: vec4u,
-		// pixel: vec2i,
+		pixel: vec2i,
 	};
 
 	var<private> g_state: PcgState;
@@ -12,7 +12,7 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 
 export const pcgInit = wgslFn( /* wgsl */`
 	fn pcgInitialize(p: vec2u, frame: u32) -> void {
-		// g_state.pixel = vec2i( p );
+		g_state.pixel = vec2i( p );
 
 		//white noise seed
 		g_state.s0 = vec4u(p, frame, u32(p.x) + u32(p.y));

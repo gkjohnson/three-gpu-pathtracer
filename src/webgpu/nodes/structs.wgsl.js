@@ -2,15 +2,11 @@ import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
 
 export const constants = wgsl( /* wgsl */ `
-	const XYZ_TO_REC709 = mat3x3f(
-		3.2404542, -0.9692660,  0.0556434,
-		-1.5371385,  1.8760108, -0.2040259,
-		-0.4985314,  0.0415560,  1.0572252
-	);
 
 	const PI: f32 = 3.141592653589793;
 
 	const EPSILON: f32 = 1e-5;
+
 ` );
 
 export const scatterRecordStruct = new StructTypeNode( {

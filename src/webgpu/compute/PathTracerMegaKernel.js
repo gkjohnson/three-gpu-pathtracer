@@ -43,10 +43,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
 
-			// texture array for material textures
-			textures: texture( new DataArrayTexture( null, 1, 1, 1 ) ),
-			textureSampler: sampler( new DataArrayTexture( null, 1, 1, 1 ) ),
-
 			// compute variables
 			globalId: globalId,
 		};

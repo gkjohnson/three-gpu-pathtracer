@@ -84,6 +84,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( r <= cdf.y ) { // specular
 
 					wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
+					if ( wh.z < 0 ) {
+
+						wh = -wh;
+
+					}
 					wi = - reflect( wo, wh );
 
 				} else if ( r <= cdf.z ) { // transmission / refraction
@@ -96,17 +101,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				// TODO: Handle wi.z <= 0 better
 				var result: ScatterRecord;
 				result.pdf = 0;
 
-				if ( wi.z > 0.0 && weights.diffuse > 0.0 ) {
+				if ( weights.diffuse > 0.0 ) {
 
 					result.pdf += weights.diffuse * wi.z / PI;
 
 				}
 
-				if ( wi.z > 0.0 && weights.specular > 0.0 ) {
+				if ( weights.specular > 0.0 ) {
 
 					result.pdf += weights.specular * ggxReflectionAdjustedPDF( wo, wh, alpha );
 
