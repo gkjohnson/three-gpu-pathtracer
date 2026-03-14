@@ -298,13 +298,17 @@ export const diffuseBrdfFunc = wgslFn( /* wgslFn */ `
 		let fl = schlickFresnel( NdotL, 0.0 );
 		let fv = schlickFresnel( NdotV, 0.0 );
 
-		let rr = 2.0 * surf.roughness * VdotH * VdotH;
-		let retro = rr * ( fl + fv + fl * fv * ( rr - 1.0f ) );
-		let fresnel = ( 1.0f - 0.5f * fl ) * ( 1.0f - 0.5f * fv );
+		let alpha = surf.roughness * surf.roughness;
+		let bias = mix( 0.0, 0.5, alpha) - 1;
+		let energyFactor = mix( 1.0, 1.0 / 1.51, alpha );
+
+		let rr = 2.0 * alpha * VdotH * VdotH;
+		let retro = rr * ( fl + fv + fl * fv * ( rr + 2.0 * bias ) );
+		let fresnel = ( 1.0 + bias * fl ) * ( 1.0f + bias * fv );
 
 		// TODO: subsurface approx?
 
-		return ( surf.color / PI ) * ( retro + fresnel );
+		return energyFactor * ( surf.color / PI ) * ( retro + fresnel );
 
 	}
 
