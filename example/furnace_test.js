@@ -1,11 +1,14 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, PerspectiveCamera, WebGPURenderer } from 'three/webgpu';
+import { WebGLRenderer } from 'three';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGLPathTracer } from 'three-gpu-pathtracer';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 const options = {
 	enable: true,
 	useMegakernel: true,
+	isWebGPU: true,
 };
 
 // init scene
@@ -47,24 +50,71 @@ scene.background = texture;
 const camera = new PerspectiveCamera( 40, 1, 1, 100 );
 camera.position.set( 0, 0, 18 );
 
-const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
-renderer.init();
-document.body.appendChild( renderer.domElement );
-renderer.setSize( innerWidth, innerHeight );
-renderer.setPixelRatio( devicePixelRatio );
-renderer.setAnimationLoop( animate );
+let renderer;
+let pathTracer;
 
-const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.useMegakernel( options.useMegakernel );
-pathTracer.setScene( scene, camera );
+function createRendererAndPathTracer() {
+
+	if ( renderer ) {
+
+		renderer.dispose();
+		pathTracer.dispose();
+		document.body.removeChild( renderer.domElement );
+
+	}
+
+	if ( options.isWebGPU ) {
+
+		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+		renderer.init();
+		pathTracer = new WebGPUPathTracer( renderer );
+		pathTracer.useMegakernel( options.useMegakernel );
+
+	} else {
+
+		renderer = new WebGLRenderer( { antialias: true } );
+		pathTracer = new WebGLPathTracer( renderer );
+
+	}
+
+	document.body.appendChild( renderer.domElement );
+	renderer.setSize( innerWidth, innerHeight );
+	renderer.setPixelRatio( devicePixelRatio );
+	renderer.setAnimationLoop( animate );
+	pathTracer.setScene( scene, camera );
+	pathTracer.reset();
+
+}
+
+createRendererAndPathTracer();
 
 const gui = new GUI();
 gui.add( options, 'enable' );
-gui.add( options, 'useMegakernel' ).onChange( () => {
+const megakernelController = gui.add( options, 'useMegakernel' ).onChange( () => {
 
-	pathTracer.useMegakernel( options.useMegakernel );
+	if ( options.isWebGPU ) {
+
+		pathTracer.useMegakernel( options.useMegakernel );
+
+	}
+
 	pathTracer.setScene( scene, camera );
 	pathTracer.reset();
+
+} );
+gui.add( options, 'isWebGPU' ).onChange( () => {
+
+	createRendererAndPathTracer();
+
+	if ( ! options.isWebGPU ) {
+
+		megakernelController.hide();
+
+	} else {
+
+		megakernelController.show();
+
+	}
 
 } );
 
