@@ -167,14 +167,16 @@ export class WGSLTagFnNode extends FunctionNode {
 		super( '', extractIncludes( args ), lang );
 
 		this.tokens = tokens;
-		this.args = normalizeArgs( args );
+		this.args = args;
 
 	}
 
 	// assemble the signature from tokens and arg names then parse
 	getNodeFunction( builder ) {
 
-		const { tokens, args } = this;
+		const { tokens } = this;
+		const args = normalizeArgs( this.args );
+
 		const nodeData = builder.getDataFromNode( this );
 		let nodeFunction = nodeData.nodeFunction;
 		if ( nodeFunction === undefined ) {
@@ -235,7 +237,7 @@ export class WGSLTagFnNode extends FunctionNode {
 	generate( builder, output ) {
 
 		const result = super.generate( builder, output );
-		const fullCode = assembleTemplate( this.tokens, this.args, builder );
+		const fullCode = assembleTemplate( this.tokens, normalizeArgs( this.args ), builder );
 
 		const { type } = this.getNodeFunction( builder );
 		const nodeCode = builder.getCodeFromNode( this, type );

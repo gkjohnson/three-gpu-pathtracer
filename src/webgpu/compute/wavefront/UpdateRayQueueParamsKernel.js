@@ -1,7 +1,7 @@
 import { IndirectStorageBufferAttribute } from 'three/webgpu';
-import { wgslFn, uniform, storage } from 'three/tsl';
+import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { queuedRayStruct } from './structs.js';
+import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
@@ -12,12 +12,10 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 		};
 
-		const kernel = wgslFn( /* wgsl */`
-			fn compute(
-				processed: u32,
-				rayQueueSize: ptr<storage, array<u32>, read_write>,
-			) -> void {
+		const fn = wgslTagFn/* wgsl */`
+			fn compute( processed: u32 ) -> void {
 
+				let rayQueueSize = &${ params.rayQueueSize };
 			    var queueSize = rayQueueSize[ 1 ] - rayQueueSize[ 0 ];
 				if ( processed > queueSize ) {
 
@@ -30,9 +28,9 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ queuedRayStruct ] )( params );
+		`;
 
-		super( kernel );
+		super( fn( params ) );
 
 		this.defineUniformAccessors( params );
 
