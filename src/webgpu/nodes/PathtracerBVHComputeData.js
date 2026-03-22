@@ -46,12 +46,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	useTransparencyRaycastFn() {
 
-		const { prefix, storage, fns } = this;
+		const { prefix, storage, structs, fns } = this;
 
 		// raycast first hit
 		const scratchRayScalar = wgsl( /* wgsl */`
 			var<private> ${ prefix }rayScalar = 1.0;
-			var<private> ${ prefix }objectId = 0u;
+			var<private> ${ prefix }material: ${ structs.material.name };
+			var<private> ${ prefix }baseOpacity = 1.0;
 		` );
 
 		fns.raycastFirstHit = this.getShapecastFn( {
@@ -70,6 +71,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				${ [ scratchRayScalar ] }
 
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+
+					// early-out if our object is completely transparent
+					if ( ${ prefix }baseOpacity == 0.0 ) {
+
+						return - 1.0;
+
+					}
 
 					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
 					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
@@ -130,12 +138,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						triResult.dist *= ${ prefix }rayScalar;
 						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
 
-							let object = ${ storage.transforms }[ ${ prefix }objectId ];
-							let material = ${ storage.materials }[ object.materialIndex ];
-							let opacity = material.opacity * object.color.a;
-							if ( material.transparent != 0 && opacity < ${ pcgRand }() ) {
 
-								continue;
+							let material = ${ prefix }material;
+							if ( material.transparent != 0 ) {
+
+								let opacity = ${ prefix }baseOpacity;
+								// TODO: sample albedo + alphaMap alpha
+								if ( opacity < ${ pcgRand }() ) {
+
+									continue;
+
+								}
 
 							}
 
@@ -162,7 +175,18 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let len = length( localRay.direction );
 					localRay.direction /= len;
 					${ prefix }rayScalar = 1.0 / len;
-					${ prefix }objectId = objectId;
+
+					let object = ${ storage.transforms }[ objectId ];
+					${ prefix }material = ${ storage.materials }[ object.materialIndex ];
+					if ( ${ prefix }material.transparent == 1 ) {
+
+						${ prefix }baseOpacity = ${ prefix }material.opacity * object.color.a;
+
+					} else {
+
+						${ prefix }baseOpacity = 1.0;
+
+					}
 
 					return localRay;
 
