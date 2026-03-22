@@ -124,6 +124,13 @@ export class PathTracerBackend {
 
 		}
 
+		if ( ! this.material.initialized ) {
+
+			this.material.init( renderer );
+			this.material.initialized = true;
+
+		}
+
 		if ( ! this._renderTask ) {
 
 			this._renderTask = this.createRenderTask();

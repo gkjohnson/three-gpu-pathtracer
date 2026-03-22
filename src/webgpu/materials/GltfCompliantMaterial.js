@@ -1,17 +1,27 @@
+import { wgslFn, texture, sampler, textureStore, globalId } from 'three/tsl';
+import { StorageTexture, RedFormat, LinearFilter, FloatType } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { wgslFn } from 'three/tsl';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc } from '../nodes/material.wgsl';
+import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralUniform, albedoIntegralMonteCarlo } from '../nodes/material.wgsl';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
 import { scatterRecordStruct } from '../nodes/structs.wgsl';
 import { pcgRand } from '../nodes/random.wgsl';
+import { ComputeKernel } from '../compute/ComputeKernel';
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	constructor( options = {} ) {
 
 		super();
+
+		this.turquinTexture = new StorageTexture( 32, 32 );
+		this.turquinTexture.format = RedFormat;
+		this.turquinTexture.type = FloatType;
+		this.turquinTexture.minFilter = LinearFilter;
+		this.turquinTexture.magFilter = LinearFilter;
+
+		const turquinNode = texture( this.turquinTexture ).setName( 'turquinTexture' );
 
 		const {
 			specularBrdf = specularBrdfFunc,
@@ -23,7 +33,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.specularBrdf = specularBrdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
-		this.conductorFresnel = conductorFresnel;
+		this.conductorFresnel = conductorFresnel( turquinNode );
+
+	}
+
+	init( renderer ) {
+
+		const turquinParams = {
+			texture: textureStore( this.turquinTexture ).toWriteOnly(),
+			globalId,
+		};
+		const turquinKernel = new ComputeKernel( albedoIntegralMonteCarlo( turquinParams ), { workgroupSize: [ 16, 16, 1 ] } );
+
+		renderer.compute( turquinKernel.kernel, [ 4, 4, 1 ] );
 
 	}
 
@@ -46,7 +68,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let dielectric = ${ this.fresnelMix }( VdotH, surf.ior, diffuse, specular );
 
-				let metallic = ${ this.conductorFresnel }( VdotH, surf.color, specular );
+				let metallic = ${ this.conductorFresnel }( NdotV, VdotH, surf.color, specular, alpha );
 
 				return mix( dielectric, metallic, surf.metalness );
 
