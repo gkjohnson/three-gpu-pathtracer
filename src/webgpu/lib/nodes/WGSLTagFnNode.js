@@ -21,16 +21,17 @@ class LiteralExpression extends Node {
 // wraps a FunctionNode so that build() returns just the function name
 class PropertyRefNode extends Node {
 
-	constructor( node ) {
+	constructor( node, output = 'property' ) {
 
 		super();
 		this.node = node;
+		this.output = output;
 
 	}
 
 	build( builder ) {
 
-		return this.node.build( builder, 'property' );
+		return this.node.build( builder, this.output );
 
 	}
 
@@ -93,8 +94,13 @@ function extractIncludes( args ) {
 
 		} else {
 
-			const node = getIncludeNode( arg );
-			if ( node ) includes.push( node );
+			// WGSLTagCodeNodes should be inlined if found in a template so skip it here
+			if ( ! ( arg instanceof WGSLTagCodeNode ) ) {
+
+				const node = getIncludeNode( arg );
+				if ( node ) includes.push( node );
+
+			}
 
 		}
 
@@ -115,7 +121,21 @@ function normalizeArgs( args ) {
 		if ( typeof arg === 'function' && arg.functionNode ) return new PropertyRefNode( arg.functionNode );
 		if ( typeof arg === 'function' && arg.isStruct ) return arg.layout;
 		if ( arg && arg.isNode && arg.functionNode ) return new InlineCallNode( arg );
-		if ( arg && arg.isNode ) return new PropertyRefNode( arg );
+		if ( arg && arg.isNode ) {
+
+			if ( arg instanceof WGSLTagCodeNode ) {
+
+				// use a custom flag for this node to inline the output
+				return new PropertyRefNode( arg, 'inline' );
+
+			} else {
+
+				return new PropertyRefNode( arg );
+
+			}
+
+		}
+
 		return arg;
 
 	} );
@@ -243,7 +263,6 @@ export class WGSLTagFnNode extends FunctionNode {
 		const nodeCode = builder.getCodeFromNode( this, type );
 
 		nodeCode.code = fullCode.replace( /\/\/.+[\n\r]/g, '' ).replace( /->\s*void/, '' ).trim();
-
 		return result;
 
 	}
@@ -263,21 +282,31 @@ export class WGSLTagCodeNode extends CodeNode {
 		super( '', extractIncludes( args ), lang );
 
 		this.tokens = tokens;
-		this.args = normalizeArgs( args );
+		this.args = args;
+
+	}
+
+	build( builder, output ) {
+
+		if ( output === 'inline' ) {
+
+			return assembleTemplate( this.tokens, normalizeArgs( this.args ), builder );
+
+		} else {
+
+			return super.build( builder, output );
+
+		}
 
 	}
 
 	generate( builder ) {
 
-		// build includes so dependencies are registered before the parent code block
-		const includes = this.getIncludes( builder );
-		for ( const include of includes ) {
+		super.generate( builder );
 
-			include.build( builder );
-
-		}
-
-		return assembleTemplate( this.tokens, this.args, builder );
+		const nodeCode = builder.getCodeFromNode( this, this.getNodeType( builder ) );
+		nodeCode.code = assembleTemplate( this.tokens, normalizeArgs( this.args ), builder );
+		return nodeCode.code;
 
 	}
 
