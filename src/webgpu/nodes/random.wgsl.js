@@ -22,26 +22,32 @@ export const pcgInit = wgslFn( /* wgsl */`
 	}
 `, [ pcgStateStruct ] );
 
+export const pcgGetSeed = wgslFn( /* wgsl */`
+	fn pcgGetSeed() -> vec4u {
+		return g_state.s0;
+	}
+`, [ pcgStateStruct ] );
+
+export const pcgSetSeed = wgslFn( /* wgsl */`
+	fn pcgSetSeed( s0: vec4u ) -> void {
+		g_state.s0 = s0;
+	}
+`, [ pcgStateStruct ] );
+
 export const pcg4d = wgslFn( /* wgsl */ `
 	fn pcg4d(v: ptr<private, vec4u>) -> void {
 		*v = *v * 1664525u + 1013904223u;
-		*v = *v + v.yzxy * v.wxyz;
+		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
 		*v = *v ^ (*v >> vec4u(16u));
-		*v = *v + v.yzxy * v.wxyz;
+		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
 	}
 ` );
 
-export const pcgCycleState = wgslFn( /* wgsl */ `
-	fn pcgCycleState(n: u32) -> void {
-		for (var i = 0u; i < n; i++) {
-			pcg4d(&g_state.s0);
-		}
-` );
-
-export const pcgRand = wgslFn( /*wgsl*/`
-	fn pcgRand() -> f32 {
+// TODO: test if abs there is necessary
+export const pcgRand3 = wgslFn( /*wgsl*/`
+	fn pcgRand3() -> vec3f {
 		pcg4d(&g_state.s0);
-		return abs( f32( g_state.s0.x ) / f32(0xffffffffu) );
+		return abs( vec3f(g_state.s0.xyz) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
@@ -52,9 +58,9 @@ export const pcgRand2 = wgslFn( /*wgsl*/`
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-export const pcgRand3 = wgslFn( /*wgsl*/`
-	fn pcgRand3() -> vec3f {
+export const pcgRand = wgslFn( /*wgsl*/`
+	fn pcgRand() -> f32 {
 		pcg4d(&g_state.s0);
-		return abs( vec3f(g_state.s0.xyz) / f32(0xffffffffu) );
+		return abs( f32(g_state.s0.x) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
