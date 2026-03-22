@@ -6,6 +6,7 @@ import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { pcgGetSeed, pcgSetSeed } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -69,7 +70,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
-				g_state.s0 = input.pcgStateS0;
+				${ pcgSetSeed }( input.pcgStateS0 );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -104,7 +105,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
-					rayQueue[ index ].pcgStateS0 = g_state.s0;
+					rayQueue[ index ].pcgStateS0 = ${ pcgGetSeed }();
 
 				}
 

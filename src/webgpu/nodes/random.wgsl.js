@@ -22,20 +22,24 @@ export const pcgInit = wgslFn( /* wgsl */`
 	}
 `, [ pcgStateStruct ] );
 
+export const pcgGetSeed = wgslFn( /* wgsl */`
+	fn pcgGetSeed() -> vec4u {
+		return g_state.s0;
+	}
+`, [ pcgStateStruct ] );
+
+export const pcgSetSeed = wgslFn( /* wgsl */`
+	fn pcgSetSeed( s0: vec4u ) -> void {
+		g_state.s0 = s0;
+	}
+`, [ pcgStateStruct ] );
+
 export const pcg4d = wgslFn( /* wgsl */ `
 	fn pcg4d(v: ptr<private, vec4u>) -> void {
 		*v = *v * 1664525u + 1013904223u;
 		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
 		*v = *v ^ (*v >> vec4u(16u));
 		v.x += v.y*v.w; v.y += v.z*v.x; v.z += v.x*v.y; v.w += v.y*v.z;
-	}
-` );
-
-export const pcgCycleState = wgslFn( /* wgsl */ `
-	fn pcgCycleState(n: u32) -> void {
-		for (var i = 0u; i < n; i++) {
-			pcg4d(&g_state.s0);
-		}
 	}
 ` );
 
