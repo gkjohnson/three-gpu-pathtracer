@@ -46,7 +46,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	useTransparencyRaycastFn() {
 
-		const { prefix, storage, structs, fns } = this;
+		const { prefix, storage, fns } = this;
 
 		// raycast first hit
 		const scratchRayScalar = wgsl( /* wgsl */`
@@ -133,7 +133,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let object = ${ storage.transforms }[ ${ prefix }objectId ];
 							let material = ${ storage.materials }[ object.materialIndex ];
 							let opacity = material.opacity * object.color.a;
-							if ( opacity < ${ pcgRand }() ) {
+							if ( material.transparent != 0 && opacity < ${ pcgRand }() ) {
 
 								continue;
 
