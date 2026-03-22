@@ -17,7 +17,7 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileOffset: uniform( 1 ),
 
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ),
 
 			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
 			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
@@ -33,24 +33,28 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let rayQueueSize = &${ params.rayQueueSize };
+				let queueSizes = &${ params.queueSizes };
 
 				let outputTileIndex = &${ params.outputTileIndex };
 				let outputDispatch = &${ params.outputDispatch };
 
+				// reset hit queue size from previous iteration
+				queueSizes[ 2 ] = 0u;
+				queueSizes[ 3 ] = 0u;
+
 				// keep the queue index small
 			    let queueCapacity = arrayLength( rayQueue );
-				if ( rayQueueSize[ 0 ] >= queueCapacity ) {
+				if ( queueSizes[ 0 ] >= queueCapacity ) {
 
 					// uint division results in a floored value
-					let offset = rayQueueSize[ 0 ] / queueCapacity;
-					rayQueueSize[ 0 ] = rayQueueSize[ 0 ] - queueCapacity * offset;
-					rayQueueSize[ 1 ] = rayQueueSize[ 1 ] - queueCapacity * offset;
+					let offset = queueSizes[ 0 ] / queueCapacity;
+					queueSizes[ 0 ] = queueSizes[ 0 ] - queueCapacity * offset;
+					queueSizes[ 1 ] = queueSizes[ 1 ] - queueCapacity * offset;
 
 				}
 
 				// calculate the amount of elements in the queue
-			    var queueSize = rayQueueSize[ 1 ] - rayQueueSize[ 0 ];
+			    var queueSize = queueSizes[ 1 ] - queueSizes[ 0 ];
 
 				// calculate the overhead of space in the queue and how much space we need to run a new tile
 				let overhead = queueCapacity - queueSize;

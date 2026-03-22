@@ -20,10 +20,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toReadOnly(),
-
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -62,10 +60,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let rayQueueSize = &${ params.rayQueueSize };
-
 				let hitQueue = &${ params.hitQueue };
-				let hitQueueSize = &${ params.hitQueueSize };
+				let queueSizes = &${ params.queueSizes };
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -81,8 +77,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				// skip any rays invocations beyond the ray count
 				let queueCapacity = arrayLength( rayQueue );
-				let rayIndex = ( globalId.x + rayQueueSize[ 0 ] );
-				if ( rayIndex >= rayQueueSize[ 1 ] ) {
+				let rayIndex = ( globalId.x + atomicLoad( &queueSizes[ 0 ] ) );
+				if ( rayIndex >= atomicLoad( &queueSizes[ 1 ] ) ) {
 
 					return;
 
@@ -102,7 +98,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				if ( hitResult.didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
-					let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
+					let index = atomicAdd( &queueSizes[ 3 ], 1 );
 					hitQueue[ index ].view = - input.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
 					hitQueue[ index ].barycoord = hitResult.barycoord;
