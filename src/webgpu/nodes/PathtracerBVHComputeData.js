@@ -1,11 +1,11 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
-import { storage, wgsl } from 'three/tsl';
+import { storage } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
-import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagCode, wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { pcgRand } from './random.wgsl.js';
 
 const _colorVec = new Vector4();
@@ -49,11 +49,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const { prefix, storage, structs, fns } = this;
 
 		// raycast first hit
-		const scratchRayScalar = wgsl( /* wgsl */`
+		const scratchRayScalar = wgslTagCode/* wgsl */`
 			var<private> ${ prefix }rayScalar = 1.0;
-			var<private> ${ prefix }material: ${ structs.material.name };
+			var<private> ${ prefix }material: ${ structs.material };
 			var<private> ${ prefix }baseOpacity = 1.0;
-		` );
+		`;
 
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: prefix + 'RaycastFirstHit',
