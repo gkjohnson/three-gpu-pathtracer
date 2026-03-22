@@ -97,7 +97,7 @@ const transformStruct = new StructTypeNode( {
 	_alignment1: 'uint',
 }, 'TransformStruct' );
 
-const intersectionResultStruct = new StructTypeNode( {
+export const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
@@ -147,7 +147,7 @@ function getTotalBVHByteLength( bvh ) {
 
 }
 
-const intersectsTriangle = wgslTagFn/* wgsl */ `
+export const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// fn
 	fn intersectsTriangle( ray: ${ rayStruct }, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 
@@ -394,7 +394,7 @@ export class BVHComputeData {
 						}
 
 						// Transform shape into object local space
-						let localShape = ${ transformShapeFn }( shape, transform.inverseMatrixWorld );
+						let localShape = ${ transformShapeFn }( shape, transform.inverseMatrixWorld, t );
 						let blasHit = ${ blasFn( { shape: 'localShape', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
@@ -836,7 +836,7 @@ export class BVHComputeData {
 			transformShapeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f ) -> ${ rayStruct } {
+				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f, objectId: u32 ) -> ${ rayStruct } {
 
 					var localRay: Ray;
 					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
