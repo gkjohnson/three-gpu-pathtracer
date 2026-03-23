@@ -22,13 +22,13 @@ export const pcgInit = wgslFn( /* wgsl */`
 	}
 `, [ pcgStateStruct ] );
 
-export const pcgGetSeed = wgslFn( /* wgsl */`
+export const getPcgSeed = wgslFn( /* wgsl */`
 	fn pcgGetSeed() -> vec4u {
 		return g_state.s0;
 	}
 `, [ pcgStateStruct ] );
 
-export const pcgSetSeed = wgslFn( /* wgsl */`
+export const setPcgSeed = wgslFn( /* wgsl */`
 	fn pcgSetSeed( s0: vec4u ) -> void {
 		g_state.s0 = s0;
 	}
