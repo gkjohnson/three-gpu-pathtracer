@@ -3,7 +3,7 @@ import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
-import { pcgGetSeed, pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
+import { getPcgSeed, pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
@@ -92,7 +92,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue[ index ].pixel = indexUV;
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
-				rayQueue[ index ].pcgStateS0 = ${ pcgGetSeed }();
+				rayQueue[ index ].pcgStateS0 = ${ getPcgSeed }();
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
