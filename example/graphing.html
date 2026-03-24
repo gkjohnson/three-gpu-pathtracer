@@ -12,29 +12,69 @@
             margin: 0;
             overflow: hidden;
         }
-
         canvas {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            cursor: none;
         }
+        #info {
+            position: absolute;
+            font-family: monospace;
+            color: white;
+            text-align: center;
+            width: 100%;
+            padding: 5px;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #dataContainer {
+            position: fixed;
+            font-family: monospace;
+            color: white;
+            pointer-events: none;
+            width: 0;
+            height: 0;
+            visibility: hidden;
+        }
+        #data {
+            margin-top: 10px;
+            transform: translate(-50%, 0);
+            display: inline-block;
+            white-space: pre;
+        }
+        #dataContainer::after {
+            content: '';
+            position: absolute;
+            border: 1px solid white;
+            border-radius: 10px;
+            width: 5px;
+            height: 5px;
+            top: 0;
+            left: 0;
+            display: inline-block;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
 
-		#info {
-			position: absolute;
-			font-family: monospace;
-			color: white;
-			text-align: center;
-			width: 100%;
-			padding: 5px;
-			pointer-events: none;
-		}
-
-		#dataContainer {
-			position: fixed;
-			font-family: monospace;
-			color: white;
-			pointer-events: none;
-			width: 0;
-			height: 0;
+<body>
+    <!-- عنصر كانفاس بدقة عالية -->
+    <canvas id="gpuGraphCanvas"></canvas>
+    <div id="dataContainer">
+        <div id="data">TEST</div>
+    </div>
+    <div id="info">Utility for graphing shader function outputs at highest resolution.</div>
+    <script type="module">
+        // ضبط الكانفاس تلقائيًا لأعلى دقة متاحة (يدعم شاشات 8k و 4k و Retina)
+        const canvas = document.getElementById('gpuGraphCanvas');
+        function resizeCanvasToDisplaySize() {
+            const dpr = window.devicePixelRatio || 1;
+            // الحجم المنطقي حسب الشاشة أو 8K كحد أقصى
+            const width = Math.min(window.innerWidth, 7680);
+            const height = Math.min(window.innerHeight, 4320);
+            canvas.width =
+			height: 0;
 			visibility: hidden;
 		}
 
