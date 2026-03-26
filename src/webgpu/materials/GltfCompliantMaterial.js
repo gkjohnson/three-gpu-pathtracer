@@ -2,7 +2,7 @@ import { wgslFn, texture, sampler, textureStore, globalId } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, FloatType } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralUniform, albedoIntegralMonteCarlo } from '../nodes/material.wgsl';
+import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic } from '../nodes/material.wgsl';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
 import { scatterRecordStruct } from '../nodes/structs.wgsl';
@@ -43,7 +43,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			texture: textureStore( this.turquinTexture ).toWriteOnly(),
 			globalId,
 		};
-		const turquinKernel = new ComputeKernel( albedoIntegralMonteCarlo( turquinParams ), { workgroupSize: [ 16, 16, 1 ] } );
+		const turquinKernel = new ComputeKernel( albedoIntegralMetallic( turquinParams ), { workgroupSize: [ 16, 16, 1 ] } );
 
 		renderer.compute( turquinKernel.kernel, [ 4, 4, 1 ] );
 

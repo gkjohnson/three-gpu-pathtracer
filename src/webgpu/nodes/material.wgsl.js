@@ -356,7 +356,7 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgslFn */ `
 
 // GGX Multibounce compensation using Turquin's method
 
-export const albedoIntegralUniform = wgslFn( /* wgsl */ `
+export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 
 	fn albedo(
 		texture: texture_storage_2d<r32float, write>,
@@ -364,61 +364,7 @@ export const albedoIntegralUniform = wgslFn( /* wgsl */ `
 		globalId: vec3u,
 	) -> void {
 
-		const INTEGRATION_DIMENSIONS = vec2( 128, 128 );
-
-		let dimensions = textureDimensions( texture ).xy;
-		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
-
-		let cosThetaO = uv.x;
-		let roughness = uv.y;
-		let alpha = roughness * roughness;
-
-		let wo = vec3( sqrt( 1 - cosThetaO * cosThetaO ), 0 , cosThetaO );
-
-		var result = 0.0;
-		for ( var i = 0; i < INTEGRATION_DIMENSIONS.x; i++ ) {
-
-			let phi = ( f32( i ) + 0.5 ) * 2.0 * PI / f32( INTEGRATION_DIMENSIONS.x );
-			let cosPhi = cos( phi );
-			let sinPhi = sin( phi );
-
-			for ( var j = 0; j < INTEGRATION_DIMENSIONS.y; j++ ) {
-
-				// cosTheta
-				let nu = ( f32( j ) + 0.5 ) / f32( INTEGRATION_DIMENSIONS.y );
-
-				let sinTheta = sqrt( 1 - nu * nu );
-
-				let wi = vec3( sinTheta * cosPhi, sinTheta * sinPhi, nu );
-
-				let wh = normalize( wi + wo );
-
-				let NdotV = max( wo.z, 1e-5 );
-				let NdotL = saturate( wi.z );
-				let NdotH = saturate( wh.z );
-
-				let specular = specularBrdf( NdotL, NdotV, NdotH, alpha );
-				let weight = 2.0 * PI / f32( INTEGRATION_DIMENSIONS.x * INTEGRATION_DIMENSIONS.y );
-				result += specular.x * NdotL * weight;
-			}
-
-		}
-
-		textureStore(texture, globalId.xy, vec4( saturate( result ) ));
-
-	}
-
-`, [ constants, specularBrdfFunc ] );
-
-export const albedoIntegralMonteCarlo = wgslFn( /* wgsl */ `
-
-	fn albedo(
-		texture: texture_storage_2d<r32float, write>,
-
-		globalId: vec3u,
-	) -> void {
-
-		const INTEGRATION_SAMPLES = 4096;
+		const INTEGRATION_SAMPLES = ( 1 << 20 );
 		pcgInitialize( globalId.xy, 0 );
 
 		let dimensions = textureDimensions( texture ).xy;
@@ -434,13 +380,14 @@ export const albedoIntegralMonteCarlo = wgslFn( /* wgsl */ `
 		var result = 0.0;
 		for ( var i = 0; i < INTEGRATION_SAMPLES; i++ ) {
 
-			var wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
-			if ( wh.z < 0 ) {
+			let wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
+			var wi = - reflect( wo, wh );
 
-				wh = -wh;
-
-			}
-			let wi = - reflect( wo, wh );
+			// if ( wi.z < 0 ) {
+			//
+			// 	wi = -wi;
+			//
+			// }
 
 			let NdotV = max( wo.z, 1e-5 );
 			let NdotL = saturate( wi.z );
