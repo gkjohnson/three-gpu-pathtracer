@@ -701,18 +701,18 @@ export class BVHComputeData {
 
 						switch ( attr.itemSize ) {
 
-						case 1:
-							_vec.y = _def.y;
-							_vec.z = _def.z;
-							_vec.w = _def.w;
-							break;
-						case 2:
-							_vec.z = _def.z;
-							_vec.w = _def.w;
-							break;
-						case 3:
-							_vec.w = _def.w;
-							break;
+							case 1:
+								_vec.y = _def.y;
+								_vec.z = _def.z;
+								_vec.w = _def.w;
+								break;
+							case 2:
+								_vec.z = _def.z;
+								_vec.w = _def.w;
+								break;
+							case 3:
+								_vec.w = _def.w;
+								break;
 
 						}
 
@@ -965,13 +965,13 @@ export class BVHComputeData {
 
 		switch ( key ) {
 
-		case 'position':
-		case 'color':
-			target.set( 1, 1, 1, 1 );
-			break;
+			case 'position':
+			case 'color':
+				target.set( 1, 1, 1, 1 );
+				break;
 
-		default:
-			target.set( 0, 0, 0, 0 );
+			default:
+				target.set( 0, 0, 0, 0 );
 
 		}
 

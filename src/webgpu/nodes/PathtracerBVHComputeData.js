@@ -324,15 +324,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				switch ( m.side ) {
 
-				case FrontSide:
-					floatArray[ index ++ ] = 1;
-					break;
-				case BackSide:
-					floatArray[ index ++ ] = - 1;
-					break;
-				case DoubleSide:
-					floatArray[ index ++ ] = 0;
-					break;
+					case FrontSide:
+						floatArray[ index ++ ] = 1;
+						break;
+					case BackSide:
+						floatArray[ index ++ ] = - 1;
+						break;
+					case DoubleSide:
+						floatArray[ index ++ ] = 0;
+						break;
 
 				}
 
