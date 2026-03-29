@@ -26,6 +26,25 @@ StructTypeNode.prototype.isStruct = true;
 
 //
 
+const isVisible = object => {
+
+	let curr = object;
+	while ( curr ) {
+
+		if ( curr.visible === false ) {
+
+			return false;
+
+		}
+
+		curr = curr.parent;
+
+	}
+
+	return true;
+
+};
+
 const applyBoneTransform = ( () => {
 
 	// a vec4-compatible version of SkinnedMesh.applyBoneTransform to support directions, positions
@@ -913,7 +932,7 @@ export class BVHComputeData {
 		// write node offset
 		transformBufferU32[ writeOffset * structs.transform.getLength() + 32 ] = bvhNodeOffsets[ root ];
 
-		let visible = object.visible;
+		let visible = isVisible( object );
 		if ( object.isBatchedMesh ) {
 
 			visible = visible && object.getVisibleAt( instanceId );
