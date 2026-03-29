@@ -301,15 +301,42 @@ export class BVHComputeData {
 			shapeStruct,
 			resultStruct,
 
-			boundsOrderFn,
+			boundsOrderFn = null,
 			intersectsBoundsFn,
 			intersectRangeFn,
-			transformShapeFn,
-			transformResultFn,
+			transformShapeFn = null,
+			transformResultFn = null,
 		} = options;
 
 		const { storage } = this;
 		const { BVH_STACK_DEPTH, INFINITY } = constants;
+
+		// handle optional functions
+		let transformResultSnippet = '';
+		if ( transformResultFn ) {
+
+			transformResultSnippet = wgslTagCode/* wgsl */`${ transformResultFn }( &bestHit, i );`;
+
+		}
+
+		let transformShapeSnippet = '';
+		if ( transformShapeFn ) {
+
+			transformShapeSnippet = wgslTagCode/* wgsl */`${ transformShapeFn }( &localShape, i );`;
+
+		}
+
+		let leftToRightSnippet = '';
+		if ( boundsOrderFn ) {
+
+			leftToRightSnippet = wgslTagCode/* wgsl */`
+				let leftToRight = ${ boundsOrderFn }( shape, splitAxis, node );
+				c1 = select( rightIndex, leftIndex, leftToRight );
+				c2 = select( leftIndex, rightIndex, leftToRight );
+			`;
+
+		}
+
 		const getFnBody = leafSnippet => {
 
 			// returns a function with a snippet inserted for the leaf intersection test
@@ -357,9 +384,9 @@ export class BVHComputeData {
 						let splitAxis = infoX & 0x0000ffffu;
 						let rightIndex = nodeIndex + infoY;
 
-						let leftToRight = ${ boundsOrderFn }( shape, splitAxis, node );
-						let c1 = select( rightIndex, leftIndex, leftToRight );
-						let c2 = select( leftIndex, rightIndex, leftToRight );
+						var c1 = rightIndex;
+						var c2 = leftIndex;
+						${ leftToRightSnippet }
 
 						pointer = pointer + 1;
 						stack[ pointer ] = c2;
@@ -403,9 +430,9 @@ export class BVHComputeData {
 
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					for ( var t = offset; t < offset + count; t = t + 1u ) {
+					for ( var i = offset; i < offset + count; i ++ ) {
 
-						let transform = ${ storage.transforms }[ t ];
+						let transform = ${ storage.transforms }[ i ];
 						if ( transform.visible == 0u ) {
 
 							continue;
@@ -413,14 +440,15 @@ export class BVHComputeData {
 						}
 
 						// Transform shape into object local space
-						let localShape = ${ transformShapeFn }( shape, transform.inverseMatrixWorld );
+						var localShape = shape;
+						${ transformShapeSnippet }
 						let blasHit = ${ blasFn( { shape: 'localShape', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
 						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
 							bestHit = blasHit;
-							bestHit.objectIndex = t;
+							bestHit.objectIndex = i;
 
-							${ transformResultFn }( &bestHit, transform.matrixWorld, transform.inverseMatrixWorld );
+							${ transformResultSnippet }
 
 						}
 
@@ -855,23 +883,22 @@ export class BVHComputeData {
 			transformShapeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f ) -> ${ rayStruct } {
+				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
-					var localRay: Ray;
-					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
-					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
+					ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
+					ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
-					let len = length( localRay.direction );
-					localRay.direction /= len;
+					let len = length( ray.direction );
+					ray.direction /= len;
 					${ prefix }rayScalar = 1.0 / len;
-
-					return localRay;
 
 				}
 			`,
 			transformResultFn: wgslTagFn/* wgsl */`
-				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, toWorld: mat4x4f, toLocal: mat4x4f ) -> void {
+				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, objectIndex: u32 ) -> void {
 
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
 					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
 
 				}
