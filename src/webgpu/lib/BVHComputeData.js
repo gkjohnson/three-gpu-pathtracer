@@ -4,7 +4,7 @@ import { storage, wgsl } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
-import { GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
+import { MeshBVH, SkinnedMeshBVH, GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
 
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
@@ -269,8 +269,12 @@ export class BVHComputeData {
 
 		const {
 			attributes = { position: 'vec4f' },
+			autogenerateBvh = true,
 		} = options;
 
+		this._bvhCache = new Map();
+
+		this.autogenerateBvh = autogenerateBvh;
 		this.attributes = attributes;
 		this.bvh = bvh;
 
@@ -479,6 +483,12 @@ export class BVHComputeData {
 			const range = { start: 0, count: 0, vertexStart: 0, vertexCount: 0 };
 			const primBvh = this.getBVH( object, instanceId, range );
 
+			if ( ! primBvh ) {
+
+				throw new Error( 'BVHComputeData: BVH not found.' );
+
+			}
+
 			// if we haven't added this bvh, yet
 			if ( ! bvhInfo.find( info => info.bvh === primBvh ) ) {
 
@@ -588,6 +598,7 @@ export class BVHComputeData {
 		this.structs.attributes = attributeStruct;
 
 		this._initFns();
+		this._bvhCache.clear();
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
@@ -976,14 +987,22 @@ export class BVHComputeData {
 
 	getBVH( object, instanceId, rangeTarget ) {
 
+		const { autogenerateBvh, _bvhCache } = this;
+
 		let bvh = null;
-		if ( object.boundsTree ) {
+		if ( object.boundsTree || object.isSkinnedMesh ) {
 
 			// this is a case where a mesh has morph targets and skinned meshes
 			const geometry = object.geometry;
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
 			bvh = object.boundsTree;
+
+			if ( bvh === null && autogenerateBvh ) {
+
+				// TODO: handle skinned meshes, skeletons, etc
+
+			}
 
 		} else if ( object.isBatchedMesh ) {
 
@@ -992,6 +1011,14 @@ export class BVHComputeData {
 			Object.assign( rangeTarget, range );
 			bvh = object.boundsTrees[ geometryId ];
 
+			if ( bvh === null && autogenerateBvh ) {
+
+				const id = `batched_${ object.geometry.uuid }_${ range.start }_${ range.count }`;
+				bvh = _bvhCache.get( id ) || new MeshBVH( object.geometry, { range: { ...rangeTarget } } );
+				_bvhCache.set( id, bvh );
+
+			}
+
 		} else {
 
 			const geometry = object.geometry;
@@ -999,11 +1026,13 @@ export class BVHComputeData {
 			rangeTarget.vertexCount = geometry.attributes.position.count;
 			bvh = object.geometry.boundsTree;
 
-		}
+			if ( bvh === null && autogenerateBvh ) {
 
-		if ( ! bvh ) {
+				const id = geometry.uuid;
+				bvh = _bvhCache.get( id ) || new MeshBVH( geometry );
+				_bvhCache.set( id, bvh );
 
-			throw new Error( 'BVHComputeData: BVH not found.' );
+			}
 
 		}
 
