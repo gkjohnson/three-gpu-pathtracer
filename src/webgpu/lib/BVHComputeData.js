@@ -313,7 +313,7 @@ export class BVHComputeData {
 		let transformResultSnippet = '';
 		if ( transformResultFn ) {
 
-			transformResultSnippet = wgslTagCode/* wgsl */`${ transformResultFn }( bestHit, i );`;
+			transformResultSnippet = wgslTagCode/* wgsl */`${ transformResultFn }( result, i );`;
 
 		}
 
@@ -334,6 +334,9 @@ export class BVHComputeData {
 			`;
 
 		}
+
+		let resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
+		let resultArg = resultStruct ? 'result' : '';
 
 		const getFnBody = leafSnippet => {
 
@@ -356,7 +359,7 @@ export class BVHComputeData {
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
-					if ( ${ intersectsBoundsFn }( shape, node.bounds, bestHit ) == 0u ) {
+					if ( ${ intersectsBoundsFn }( shape, node.bounds, ${ resultArg } ) == 0u ) {
 
 						continue;
 
@@ -398,12 +401,12 @@ export class BVHComputeData {
 
 		const blasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, bestHit: ptr<function, ${ resultStruct }> ) -> bool {
+			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, ${ resultPtrSnippet } ) -> bool {
 
 				var didHit = false;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					didHit = ${ intersectRangeFn }( shape, offset, count, bestHit ) || didHit;
+					didHit = ${ intersectRangeFn }( shape, offset, count, ${ resultArg } ) || didHit;
 
 				` ) }
 
@@ -414,7 +417,7 @@ export class BVHComputeData {
 
 		const tlasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }( shape: ${ shapeStruct }, bestHit: ptr<function, ${ resultStruct }> ) -> bool {
+			fn ${ name }( shape: ${ shapeStruct }, ${ resultPtrSnippet } ) -> bool {
 
 				const rootNodeIndex = 0u;
 				var didHit = false;
@@ -433,9 +436,9 @@ export class BVHComputeData {
 						var localShape = shape;
 						${ transformShapeSnippet }
 
-						if ( ${ blasFn }( localShape, transform.nodeOffset, bestHit ) ) {
+						if ( ${ blasFn }( localShape, transform.nodeOffset, ${ resultArg } ) ) {
 
-							bestHit.objectIndex = i;
+							${ resultStruct ? 'result.objectIndex = i;' : '' }
 							${ transformResultSnippet }
 
 							didHit = true;
