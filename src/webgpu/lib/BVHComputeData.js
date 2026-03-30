@@ -295,9 +295,9 @@ export class BVHComputeData {
 	getShapecastFn( options ) {
 
 		const {
-			name,
+			name = `bvh_${ Math.random().toString( 36 ).substring( 2, 7 ) }`,
 			shapeStruct,
-			resultStruct,
+			resultStruct = null,
 
 			boundsOrderFn = null,
 			intersectsBoundsFn,
@@ -456,6 +456,9 @@ export class BVHComputeData {
 
 			}
 		`;
+
+		tlasFn.outputStruct = resultStruct;
+		tlasFn.name = name;
 
 		return tlasFn;
 
