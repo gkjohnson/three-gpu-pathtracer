@@ -996,7 +996,7 @@ export class BVHComputeData {
 			const geometry = object.geometry;
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
-			bvh = object.boundsTree;
+			bvh = object.boundsTree || null;
 
 			if ( bvh === null && autogenerateBvh ) {
 
@@ -1011,7 +1011,7 @@ export class BVHComputeData {
 			const geometryId = object.getGeometryIdAt( instanceId );
 			const range = object.getGeometryRangeAt( geometryId );
 			Object.assign( rangeTarget, range );
-			bvh = object.boundsTrees[ geometryId ];
+			bvh = object.boundsTrees[ geometryId ] || null;
 
 			if ( bvh === null && autogenerateBvh ) {
 
@@ -1026,7 +1026,7 @@ export class BVHComputeData {
 			const geometry = object.geometry;
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
-			bvh = object.geometry.boundsTree;
+			bvh = object.geometry.boundsTree || null;
 
 			if ( bvh === null && autogenerateBvh ) {
 
