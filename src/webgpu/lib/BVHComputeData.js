@@ -335,8 +335,8 @@ export class BVHComputeData {
 
 		}
 
-		let resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
-		let resultArg = resultStruct ? 'result' : '';
+		const resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
+		const resultArg = resultStruct ? 'result' : '';
 
 		const getFnBody = leafSnippet => {
 
