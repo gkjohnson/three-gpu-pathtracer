@@ -340,7 +340,6 @@ export class BVHComputeData {
 			// returns a function with a snippet inserted for the leaf intersection test
 			return wgslTagCode/* wgsl */`
 				var bestHit: ${ resultStruct };
-				bestHit.didHit = false;
 				bestHit.dist = bestDist;
 
 				var pointer: i32 = 0;
@@ -359,8 +358,7 @@ export class BVHComputeData {
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
-					var boundsHitDist: f32 = ${ intersectsBoundsFn }( shape, node.bounds );
-					if ( boundsHitDist < 0.0 || boundsHitDist > bestHit.dist ) {
+					if ( ${ intersectsBoundsFn }( shape, node.bounds, &bestHit ) == 0u ) {
 
 						continue;
 
@@ -407,12 +405,7 @@ export class BVHComputeData {
 
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					let result = ${ intersectRangeFn }( shape, offset, count, bestDist );
-					if ( result.didHit && result.dist < bestHit.dist ) {
-
-						bestHit = result;
-
-					}
+					${ intersectRangeFn }( shape, offset, count, &bestHit );
 
 				` ) }
 
@@ -809,7 +802,7 @@ export class BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
 					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
 					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
@@ -834,13 +827,17 @@ export class BVHComputeData {
 					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
 
 					let dist = max( t0, 0.0 );
-					if ( t1 >= dist ) {
+					if ( t1 < dist ) {
 
-						return dist * bvh_rayScalar;
+						return 0u;
+
+					} else if ( result.didHit && dist * bvh_rayScalar >= result.dist ) {
+
+						return 0u;
 
 					} else {
 
-						return - 1.0;
+						return 1u;
 
 					}
 
@@ -850,11 +847,7 @@ export class BVHComputeData {
 			intersectRangeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
-
-					var bestHit: ${ intersectionResultStruct };
-					bestHit.didHit = false;
-					bestHit.dist = bestDist;
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> void {
 
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
@@ -868,16 +861,18 @@ export class BVHComputeData {
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
 						triResult.dist *= bvh_rayScalar;
-						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+						if ( triResult.didHit && triResult.dist < result.dist ) {
 
-							bestHit = triResult;
-							bestHit.indices = vec4u( i0, i1, i2, ti );
+							result.didHit = true;
+							result.dist = triResult.dist;
+							result.normal = triResult.normal;
+							result.side = triResult.side;
+							result.barycoord = triResult.barycoord;
+							result.indices = vec4u( i0, i1, i2, ti );
 
 						}
 
 					}
-
-					return bestHit;
 
 				}
 			`,
