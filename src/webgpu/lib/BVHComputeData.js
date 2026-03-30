@@ -268,11 +268,9 @@ export class BVHComputeData {
 		}
 
 		const {
-			prefix = 'bvh_',
 			attributes = { position: 'vec4f' },
 		} = options;
 
-		this.prefix = prefix;
 		this.attributes = attributes;
 		this.bvh = bvh;
 
@@ -466,7 +464,7 @@ export class BVHComputeData {
 	update() {
 
 		const self = this;
-		const { attributes, structs, prefix, bvh } = this;
+		const { attributes, structs, bvh } = this;
 
 		// collect the BVHs
 		const bvhInfo = [];
@@ -531,7 +529,7 @@ export class BVHComputeData {
 		attributesBufferLength = Math.max( attributesBufferLength, 2 );
 
 		// construct the attribute struct
-		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
+		const attributeStruct = new StructTypeNode( attributes, 'bvh_GeometryStruct' );
 
 		// write the geometry buffer attributes & bvh data
 		let attributesOffset = 0;
@@ -579,11 +577,11 @@ export class BVHComputeData {
 		// if itemSize for StorageBufferAttribute == arraySize,
 		// then buffer is treated not as array of structs, but as a single struct
 		// And that breaks code. For now itemSize = 1 does not seem to break anything
-		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 1 ), bvhNodeStruct ).toReadOnly().setName( `${ prefix }nodes` );
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 1 ), bvhNodeStruct ).toReadOnly().setName( 'bvh_nodes' );
 		const transformsBuffer = new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), 1 );
-		const transformsStorage = storage( transformsBuffer, structs.transform ).toReadOnly().setName( `${ prefix }transforms` );
-		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ prefix }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct ).toReadOnly().setName( `${ prefix }attributes` );
+		const transformsStorage = storage( transformsBuffer, structs.transform ).toReadOnly().setName( 'bvh_transforms' );
+		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( 'bvh_index' );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct ).toReadOnly().setName( 'bvh_attributes' );
 
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
@@ -787,14 +785,14 @@ export class BVHComputeData {
 
 	_initFns() {
 
-		const { storage, structs, fns, prefix } = this;
+		const { storage, structs, fns } = this;
 
 		// raycast first hit
 		const scratchRayScalar = wgsl( /* wgsl */`
-			var<private> ${ prefix }rayScalar = 1.0;
+			var<private> bvh_rayScalar = 1.0;
 		` );
 		fns.raycastFirstHit = this.getShapecastFn( {
-			name: prefix + 'RaycastFirstHit',
+			name: 'bvh_RaycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
@@ -835,7 +833,7 @@ export class BVHComputeData {
 					let dist = max( t0, 0.0 );
 					if ( t1 >= dist ) {
 
-						return dist * ${ prefix }rayScalar;
+						return dist * bvh_rayScalar;
 
 					} else {
 
@@ -866,7 +864,7 @@ export class BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
-						triResult.dist *= ${ prefix }rayScalar;
+						triResult.dist *= bvh_rayScalar;
 						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
 
 							bestHit = triResult;
@@ -891,7 +889,7 @@ export class BVHComputeData {
 
 					let len = length( ray.direction );
 					ray.direction /= len;
-					${ prefix }rayScalar = 1.0 / len;
+					bvh_rayScalar = 1.0 / len;
 
 				}
 			`,
@@ -915,7 +913,7 @@ export class BVHComputeData {
 			} ).join( '\n' );
 		fns.sampleTrianglePoint = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ prefix }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ structs.attributes } {
+			fn bvh_sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ structs.attributes } {
 
 				var result: ${ structs.attributes };
 				var a0 = ${ storage.attributes }[ indices.x ];

@@ -45,14 +45,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		super.update();
 
 		// build material storage
-		const { materials, structs, prefix: name } = this;
+		const { materials, structs } = this;
 
 		const { materialData, textures } = this.writeMaterialsBuffer( materials );
 
 		this.textures = textures;
 
 		const materialAttribute = new StorageBufferAttribute( materialData, structs.material.getLength() );
-		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( `${ name }materials` );
+		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( 'bvh_materials' );
 		this.storage.materials = materialStorage;
 
 		this.bvhMap.clear();
