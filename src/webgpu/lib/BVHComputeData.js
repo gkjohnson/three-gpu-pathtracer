@@ -298,6 +298,8 @@ export class BVHComputeData {
 
 	getShapecastFn( options ) {
 
+		// TODO: test with and verify use with TSL Fn - both passing them as arguments,
+		// calling the function from a TSL Fn.
 		const {
 			name = `bvh_${ Math.random().toString( 36 ).substring( 2, 7 ) }`,
 			shapeStruct,
