@@ -339,8 +339,6 @@ export class BVHComputeData {
 
 			// returns a function with a snippet inserted for the leaf intersection test
 			return wgslTagCode/* wgsl */`
-				var bestHit: ${ resultStruct };
-				bestHit.dist = bestDist;
 
 				var pointer: i32 = 0;
 				var stack: array<u32, ${ BVH_STACK_DEPTH }>;
@@ -394,20 +392,25 @@ export class BVHComputeData {
 
 				}
 
-				return bestHit;
 			`;
 
 		};
 
 		const blasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ resultStruct } {
+			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, _bestHit: ptr<function, ${ resultStruct }> ) -> bool {
 
+				var didHit = false;
+				var bestHit = *_bestHit;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					${ intersectRangeFn }( shape, offset, count, &bestHit );
+					didHit = ${ intersectRangeFn }( shape, offset, count, &bestHit ) || didHit;
 
 				` ) }
+
+				*_bestHit = bestHit;
+
+				return didHit;
 
 			}
 		`;
@@ -418,6 +421,9 @@ export class BVHComputeData {
 
 				let bestDist = ${ INFINITY };
 				let rootNodeIndex = 0u;
+
+				var bestHit: ${ resultStruct };
+				bestHit.dist = bestDist;
 
 				${ getFnBody( wgslTagCode/* wgsl */`
 
@@ -433,12 +439,10 @@ export class BVHComputeData {
 						// Transform shape into object local space
 						var localShape = shape;
 						${ transformShapeSnippet }
-						let blasHit = ${ blasFn( { shape: 'localShape', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
-						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
 
-							bestHit = blasHit;
+						if ( ${ blasFn }( localShape, transform.nodeOffset, &bestHit ) ) {
+
 							bestHit.objectIndex = i;
-
 							${ transformResultSnippet }
 
 						}
@@ -446,6 +450,8 @@ export class BVHComputeData {
 					}
 
 				` ) }
+
+				return bestHit;
 
 			}
 		`;
@@ -847,8 +853,9 @@ export class BVHComputeData {
 			intersectRangeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> void {
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
 
+					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
 						let i0 = ${ storage.index }[ ti * 3u ];
@@ -861,7 +868,7 @@ export class BVHComputeData {
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
 						triResult.dist *= bvh_rayScalar;
-						if ( triResult.didHit && triResult.dist < result.dist ) {
+						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							result.didHit = true;
 							result.dist = triResult.dist;
@@ -870,9 +877,13 @@ export class BVHComputeData {
 							result.barycoord = triResult.barycoord;
 							result.indices = vec4u( i0, i1, i2, ti );
 
+							didHit = true;
+
 						}
 
 					}
+
+					return didHit;
 
 				}
 			`,
