@@ -438,9 +438,7 @@ export class BVHComputeData {
 
 						if ( ${ blasFn }( localShape, transform.nodeOffset, ${ resultArg } ) ) {
 
-							${ resultStruct ? 'result.objectIndex = i;' : '' }
 							${ transformResultSnippet }
-
 							didHit = true;
 
 						}
@@ -905,6 +903,7 @@ export class BVHComputeData {
 
 					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
 					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+					hit.objectIndex = objectIndex;
 
 				}
 			`,
