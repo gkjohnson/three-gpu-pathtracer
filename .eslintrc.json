@@ -13,7 +13,7 @@
 			}
 		],
 		"quotes": [ "error", "single" ],
-		"indent": [ "error", "tab" ],
+		"indent": [ "error", "tab", { "SwitchCase": 1 } ],
 		"no-var": [ "error" ]
 	},
     	"overrides": [
