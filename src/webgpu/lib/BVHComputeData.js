@@ -1,4 +1,4 @@
-import { Matrix4, SkinnedMesh, Vector4 } from 'three';
+import { Matrix4, Vector4 } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, wgsl } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
