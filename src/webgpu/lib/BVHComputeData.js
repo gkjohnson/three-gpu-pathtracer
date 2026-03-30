@@ -1,4 +1,4 @@
-import { Matrix4, Vector4 } from 'three';
+import { Matrix4, SkinnedMesh, Vector4 } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, wgsl } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
@@ -1000,7 +1000,9 @@ export class BVHComputeData {
 
 			if ( bvh === null && autogenerateBvh ) {
 
-				// TODO: handle skinned meshes, skeletons, etc
+				const id = object.uuid;
+				bvh = _bvhCache.get( id ) || new SkinnedMeshBVH( object );
+				_bvhCache.set( id, bvh );
 
 			}
 
