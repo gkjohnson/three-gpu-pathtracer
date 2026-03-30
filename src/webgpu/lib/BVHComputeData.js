@@ -458,7 +458,7 @@ export class BVHComputeData {
 		`;
 
 		tlasFn.outputStruct = resultStruct;
-		tlasFn.name = name;
+		tlasFn.functionName = name;
 
 		return tlasFn;
 
