@@ -300,8 +300,11 @@ export class BVHComputeData {
 
 		// TODO: test with and verify use with TSL Fn - both passing them as arguments,
 		// calling the function from a TSL Fn.
+		// TODO: revisit the semantics and mental model of "transformShapeFn" and "transformResultFn".
+		// Are they "before" and "after" hooks? Should they include words implying a direction of transform?
+		// eg "toLocal" / "toWorld"?
 		const {
-			name = `bvh_${ Math.random().toString( 36 ).substring( 2, 7 ) }`,
+			name = `bvh_shapecast_fn_${ Math.random().toString( 36 ).substring( 2, 7 ) }`,
 			shapeStruct,
 			resultStruct = null,
 
