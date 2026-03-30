@@ -307,13 +307,13 @@ export class BVHComputeData {
 		} = options;
 
 		const { storage } = this;
-		const { BVH_STACK_DEPTH, INFINITY } = constants;
+		const { BVH_STACK_DEPTH } = constants;
 
 		// handle optional functions
 		let transformResultSnippet = '';
 		if ( transformResultFn ) {
 
-			transformResultSnippet = wgslTagCode/* wgsl */`${ transformResultFn }( &bestHit, i );`;
+			transformResultSnippet = wgslTagCode/* wgsl */`${ transformResultFn }( bestHit, i );`;
 
 		}
 
@@ -356,7 +356,7 @@ export class BVHComputeData {
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
-					if ( ${ intersectsBoundsFn }( shape, node.bounds, &bestHit ) == 0u ) {
+					if ( ${ intersectsBoundsFn }( shape, node.bounds, bestHit ) == 0u ) {
 
 						continue;
 
@@ -398,17 +398,14 @@ export class BVHComputeData {
 
 		const blasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, _bestHit: ptr<function, ${ resultStruct }> ) -> bool {
+			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, bestHit: ptr<function, ${ resultStruct }> ) -> bool {
 
 				var didHit = false;
-				var bestHit = *_bestHit;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					didHit = ${ intersectRangeFn }( shape, offset, count, &bestHit ) || didHit;
+					didHit = ${ intersectRangeFn }( shape, offset, count, bestHit ) || didHit;
 
 				` ) }
-
-				*_bestHit = bestHit;
 
 				return didHit;
 
@@ -417,14 +414,10 @@ export class BVHComputeData {
 
 		const tlasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }( shape: ${ shapeStruct } ) -> ${ resultStruct } {
+			fn ${ name }( shape: ${ shapeStruct }, bestHit: ptr<function, ${ resultStruct }> ) -> bool {
 
-				let bestDist = ${ INFINITY };
-				let rootNodeIndex = 0u;
-
-				var bestHit: ${ resultStruct };
-				bestHit.dist = bestDist;
-
+				const rootNodeIndex = 0u;
+				var didHit = false;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
 					for ( var i = offset; i < offset + count; i ++ ) {
@@ -440,10 +433,12 @@ export class BVHComputeData {
 						var localShape = shape;
 						${ transformShapeSnippet }
 
-						if ( ${ blasFn }( localShape, transform.nodeOffset, &bestHit ) ) {
+						if ( ${ blasFn }( localShape, transform.nodeOffset, bestHit ) ) {
 
 							bestHit.objectIndex = i;
 							${ transformResultSnippet }
+
+							didHit = true;
 
 						}
 
@@ -451,12 +446,12 @@ export class BVHComputeData {
 
 				` ) }
 
-				return bestHit;
+				return didHit;
 
 			}
 		`;
 
-		tlasFn.outputStruct = resultStruct;
+		tlasFn.outputType = resultStruct;
 		tlasFn.functionName = name;
 
 		return tlasFn;
