@@ -47,6 +47,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
+		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 
@@ -130,8 +131,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
-					let hitResult = ${ raycastFirstHitFn }( ray );
-					if ( hitResult.didHit ) {
+					var hitResult: ${ raycastOutput };
+					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
 						let object = transforms[ hitResult.objectIndex ];
 						var material = materials[ object.materialIndex ];

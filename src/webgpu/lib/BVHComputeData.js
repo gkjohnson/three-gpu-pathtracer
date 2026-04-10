@@ -4,7 +4,7 @@ import { storage, wgsl } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
-import { GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
+import { MeshBVH, SkinnedMeshBVH, GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
 
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
@@ -25,6 +25,25 @@ Object.defineProperty( StructTypeNode.prototype, 'layout', {
 StructTypeNode.prototype.isStruct = true;
 
 //
+
+const isVisible = object => {
+
+	let curr = object;
+	while ( curr ) {
+
+		if ( curr.visible === false ) {
+
+			return false;
+
+		}
+
+		curr = curr.parent;
+
+	}
+
+	return true;
+
+};
 
 const applyBoneTransform = ( () => {
 
@@ -249,11 +268,13 @@ export class BVHComputeData {
 		}
 
 		const {
-			prefix = 'bvh_',
 			attributes = { position: 'vec4f' },
+			autogenerateBvh = true,
 		} = options;
 
-		this.prefix = prefix;
+		this._bvhCache = new Map();
+
+		this.autogenerateBvh = autogenerateBvh;
 		this.attributes = attributes;
 		this.bvh = bvh;
 
@@ -277,27 +298,59 @@ export class BVHComputeData {
 
 	getShapecastFn( options ) {
 
+		// TODO: test with and verify use with TSL Fn - both passing them as arguments,
+		// calling the function from a TSL Fn.
+		// TODO: revisit the semantics and mental model of "transformShapeFn" and "transformResultFn".
+		// Are they "before" and "after" hooks? Should they include words implying a direction of transform?
+		// eg "toLocal" / "toWorld"?
 		const {
-			name,
+			name = `bvh_shapecast_fn_${ Math.random().toString( 36 ).substring( 2, 7 ) }`,
 			shapeStruct,
-			resultStruct,
+			resultStruct = null,
 
-			boundsOrderFn,
+			boundsOrderFn = null,
 			intersectsBoundsFn,
 			intersectRangeFn,
-			transformShapeFn,
-			transformResultFn,
+			transformShapeFn = null,
+			transformResultFn = null,
 		} = options;
 
 		const { storage } = this;
-		const { BVH_STACK_DEPTH, INFINITY } = constants;
+		const { BVH_STACK_DEPTH } = constants;
+
+		// handle optional functions
+		let transformResultSnippet = '';
+		if ( transformResultFn ) {
+
+			transformResultSnippet = wgslTagCode/* wgsl */`${ transformResultFn }( result, i );`;
+
+		}
+
+		let transformShapeSnippet = '';
+		if ( transformShapeFn ) {
+
+			transformShapeSnippet = wgslTagCode/* wgsl */`${ transformShapeFn }( &localShape, i );`;
+
+		}
+
+		let leftToRightSnippet = '';
+		if ( boundsOrderFn ) {
+
+			leftToRightSnippet = wgslTagCode/* wgsl */`
+				let leftToRight = ${ boundsOrderFn }( shape, splitAxis, node );
+				c1 = select( rightIndex, leftIndex, leftToRight );
+				c2 = select( leftIndex, rightIndex, leftToRight );
+			`;
+
+		}
+
+		const resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
+		const resultArg = resultStruct ? 'result' : '';
+
 		const getFnBody = leafSnippet => {
 
 			// returns a function with a snippet inserted for the leaf intersection test
 			return wgslTagCode/* wgsl */`
-				var bestHit: ${ resultStruct };
-				bestHit.didHit = false;
-				bestHit.dist = bestDist;
 
 				var pointer: i32 = 0;
 				var stack: array<u32, ${ BVH_STACK_DEPTH }>;
@@ -315,8 +368,7 @@ export class BVHComputeData {
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
-					var boundsHitDist: f32 = ${ intersectsBoundsFn }( shape, node.bounds );
-					if ( boundsHitDist < 0.0 || boundsHitDist > bestHit.dist ) {
+					if ( ${ intersectsBoundsFn }( shape, node.bounds, ${ resultArg } ) == 0u ) {
 
 						continue;
 
@@ -338,9 +390,9 @@ export class BVHComputeData {
 						let splitAxis = infoX & 0x0000ffffu;
 						let rightIndex = nodeIndex + infoY;
 
-						let leftToRight = ${ boundsOrderFn }( shape, splitAxis, node );
-						let c1 = select( rightIndex, leftIndex, leftToRight );
-						let c2 = select( leftIndex, rightIndex, leftToRight );
+						var c1 = rightIndex;
+						var c2 = leftIndex;
+						${ leftToRightSnippet }
 
 						pointer = pointer + 1;
 						stack[ pointer ] = c2;
@@ -352,41 +404,37 @@ export class BVHComputeData {
 
 				}
 
-				return bestHit;
 			`;
 
 		};
 
 		const blasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, bestDist: f32 ) -> ${ resultStruct } {
+			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, ${ resultPtrSnippet } ) -> bool {
 
+				var didHit = false;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					let result = ${ intersectRangeFn }( shape, offset, count, bestDist );
-					if ( result.didHit && result.dist < bestHit.dist ) {
-
-						bestHit = result;
-
-					}
+					didHit = ${ intersectRangeFn }( shape, offset, count, ${ resultArg } ) || didHit;
 
 				` ) }
+
+				return didHit;
 
 			}
 		`;
 
 		const tlasFn = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ name }( shape: ${ shapeStruct } ) -> ${ resultStruct } {
+			fn ${ name }( shape: ${ shapeStruct }, ${ resultPtrSnippet } ) -> bool {
 
-				let bestDist = ${ INFINITY };
-				let rootNodeIndex = 0u;
-
+				const rootNodeIndex = 0u;
+				var didHit = false;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					for ( var t = offset; t < offset + count; t = t + 1u ) {
+					for ( var i = offset; i < offset + count; i ++ ) {
 
-						let transform = ${ storage.transforms }[ t ];
+						let transform = ${ storage.transforms }[ i ];
 						if ( transform.visible == 0u ) {
 
 							continue;
@@ -394,14 +442,13 @@ export class BVHComputeData {
 						}
 
 						// Transform shape into object local space
-						let localShape = ${ transformShapeFn }( shape, transform.inverseMatrixWorld, t );
-						let blasHit = ${ blasFn( { shape: 'localShape', rootNodeIndex: 'transform.nodeOffset', bestDist: 'bestHit.dist' } ) };
-						if ( blasHit.didHit && blasHit.dist < bestHit.dist ) {
+						var localShape = shape;
+						${ transformShapeSnippet }
 
-							bestHit = blasHit;
-							bestHit.objectIndex = t;
+						if ( ${ blasFn }( localShape, transform.nodeOffset, ${ resultArg } ) ) {
 
-							${ transformResultFn }( &bestHit, transform.matrixWorld, transform.inverseMatrixWorld );
+							${ transformResultSnippet }
+							didHit = true;
 
 						}
 
@@ -409,8 +456,13 @@ export class BVHComputeData {
 
 				` ) }
 
+				return didHit;
+
 			}
 		`;
+
+		tlasFn.outputType = resultStruct;
+		tlasFn.functionName = name;
 
 		return tlasFn;
 
@@ -419,7 +471,7 @@ export class BVHComputeData {
 	update() {
 
 		const self = this;
-		const { attributes, structs, prefix, bvh } = this;
+		const { attributes, structs, bvh } = this;
 
 		// collect the BVHs
 		const bvhInfo = [];
@@ -435,6 +487,12 @@ export class BVHComputeData {
 			const instanceId = bvh.getInstanceFromId( compositeId );
 			const range = { start: 0, count: 0, vertexStart: 0, vertexCount: 0 };
 			const primBvh = this.getBVH( object, instanceId, range );
+
+			if ( ! primBvh ) {
+
+				throw new Error( 'BVHComputeData: BVH not found.' );
+
+			}
 
 			// if we haven't added this bvh, yet
 			if ( ! bvhInfo.find( info => info.bvh === primBvh ) ) {
@@ -484,7 +542,7 @@ export class BVHComputeData {
 		attributesBufferLength = Math.max( attributesBufferLength, 2 );
 
 		// construct the attribute struct
-		const attributeStruct = new StructTypeNode( attributes, `${ prefix }GeometryStruct` );
+		const attributeStruct = new StructTypeNode( attributes, 'bvh_GeometryStruct' );
 
 		// write the geometry buffer attributes & bvh data
 		let attributesOffset = 0;
@@ -532,11 +590,11 @@ export class BVHComputeData {
 		// if itemSize for StorageBufferAttribute == arraySize,
 		// then buffer is treated not as array of structs, but as a single struct
 		// And that breaks code. For now itemSize = 1 does not seem to break anything
-		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 1 ), bvhNodeStruct ).toReadOnly().setName( `${ prefix }nodes` );
+		const bvhNodesStorage = storage( new StorageBufferAttribute( new Uint32Array( bvhNodesBuffer ), 1 ), bvhNodeStruct ).toReadOnly().setName( 'bvh_nodes' );
 		const transformsBuffer = new StorageBufferAttribute( new Uint32Array( transformArrayBuffer ), 1 );
-		const transformsStorage = storage( transformsBuffer, structs.transform ).toReadOnly().setName( `${ prefix }transforms` );
-		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( `${ prefix }index` );
-		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct ).toReadOnly().setName( `${ prefix }attributes` );
+		const transformsStorage = storage( transformsBuffer, structs.transform ).toReadOnly().setName( 'bvh_transforms' );
+		const indexStorage = storage( new StorageBufferAttribute( indexBuffer, 1 ), 'uint' ).toReadOnly().setName( 'bvh_index' );
+		const attributesStorage = storage( new StorageBufferAttribute( new Uint32Array( attributesBuffer ), attributeStruct.getLength() ), attributeStruct ).toReadOnly().setName( 'bvh_attributes' );
 
 		this.storage.transforms = transformsStorage;
 		this.storage.nodes = bvhNodesStorage;
@@ -545,6 +603,7 @@ export class BVHComputeData {
 		this.structs.attributes = attributeStruct;
 
 		this._initFns();
+		this._bvhCache.clear();
 
 		function appendBVHData( bvh, geometryOffset, transformInfo, nodeWriteOffset, target, tlas = false ) {
 
@@ -701,18 +760,18 @@ export class BVHComputeData {
 
 						switch ( attr.itemSize ) {
 
-						case 1:
-							_vec.y = _def.y;
-							_vec.z = _def.z;
-							_vec.w = _def.w;
-							break;
-						case 2:
-							_vec.z = _def.z;
-							_vec.w = _def.w;
-							break;
-						case 3:
-							_vec.w = _def.w;
-							break;
+							case 1:
+								_vec.y = _def.y;
+								_vec.z = _def.z;
+								_vec.w = _def.w;
+								break;
+							case 2:
+								_vec.z = _def.z;
+								_vec.w = _def.w;
+								break;
+							case 3:
+								_vec.w = _def.w;
+								break;
 
 						}
 
@@ -740,14 +799,14 @@ export class BVHComputeData {
 
 	_initFns() {
 
-		const { storage, structs, fns, prefix } = this;
+		const { storage, structs, fns } = this;
 
 		// raycast first hit
 		const scratchRayScalar = wgsl( /* wgsl */`
-			var<private> ${ prefix }rayScalar = 1.0;
+			var<private> bvh_rayScalar = 1.0;
 		` );
 		fns.raycastFirstHit = this.getShapecastFn( {
-			name: prefix + 'RaycastFirstHit',
+			name: 'bvh_RaycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
@@ -761,7 +820,7 @@ export class BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
 					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
 					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
@@ -786,13 +845,17 @@ export class BVHComputeData {
 					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
 
 					let dist = max( t0, 0.0 );
-					if ( t1 >= dist ) {
+					if ( t1 < dist ) {
 
-						return dist * ${ prefix }rayScalar;
+						return 0u;
+
+					} else if ( result.didHit && dist * bvh_rayScalar >= result.dist ) {
+
+						return 0u;
 
 					} else {
 
-						return - 1.0;
+						return 1u;
 
 					}
 
@@ -802,12 +865,9 @@ export class BVHComputeData {
 			intersectRangeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
 
-					var bestHit: ${ intersectionResultStruct };
-					bestHit.didHit = false;
-					bestHit.dist = bestDist;
-
+					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
 						let i0 = ${ storage.index }[ ti * 3u ];
@@ -819,41 +879,47 @@ export class BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
-						triResult.dist *= ${ prefix }rayScalar;
-						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+						triResult.dist *= bvh_rayScalar;
+						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
-							bestHit = triResult;
-							bestHit.indices = vec4u( i0, i1, i2, ti );
+							result.didHit = true;
+							result.dist = triResult.dist;
+							result.normal = triResult.normal;
+							result.side = triResult.side;
+							result.barycoord = triResult.barycoord;
+							result.indices = vec4u( i0, i1, i2, ti );
+
+							didHit = true;
 
 						}
 
 					}
 
-					return bestHit;
+					return didHit;
 
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f, objectId: u32 ) -> ${ rayStruct } {
+				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
-					var localRay: Ray;
-					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
-					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
+					ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
+					ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
-					let len = length( localRay.direction );
-					localRay.direction /= len;
-					${ prefix }rayScalar = 1.0 / len;
-
-					return localRay;
+					let len = length( ray.direction );
+					ray.direction /= len;
+					bvh_rayScalar = 1.0 / len;
 
 				}
 			`,
 			transformResultFn: wgslTagFn/* wgsl */`
-				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, toWorld: mat4x4f, toLocal: mat4x4f ) -> void {
+				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, objectIndex: u32 ) -> void {
 
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
 					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+					hit.objectIndex = objectIndex;
 
 				}
 			`,
@@ -869,7 +935,7 @@ export class BVHComputeData {
 			} ).join( '\n' );
 		fns.sampleTrianglePoint = wgslTagFn/* wgsl */`
 			// fn
-			fn ${ prefix }sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ structs.attributes } {
+			fn bvh_sampleTrianglePoint( barycoord: vec3f, indices: vec3u ) -> ${ structs.attributes } {
 
 				var result: ${ structs.attributes };
 				var a0 = ${ storage.attributes }[ indices.x ];
@@ -913,7 +979,7 @@ export class BVHComputeData {
 		// write node offset
 		transformBufferU32[ writeOffset * structs.transform.getLength() + 32 ] = bvhNodeOffsets[ root ];
 
-		let visible = object.visible;
+		let visible = isVisible( object );
 		if ( object.isBatchedMesh ) {
 
 			visible = visible && object.getVisibleAt( instanceId );
@@ -926,34 +992,54 @@ export class BVHComputeData {
 
 	getBVH( object, instanceId, rangeTarget ) {
 
+		const { autogenerateBvh, _bvhCache } = this;
+
 		let bvh = null;
-		if ( object.boundsTree ) {
+		if ( object.boundsTree || object.isSkinnedMesh ) {
 
 			// this is a case where a mesh has morph targets and skinned meshes
 			const geometry = object.geometry;
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
-			bvh = object.boundsTree;
+			bvh = object.boundsTree || null;
+
+			if ( bvh === null && autogenerateBvh ) {
+
+				const id = object.uuid;
+				bvh = _bvhCache.get( id ) || new SkinnedMeshBVH( object );
+				_bvhCache.set( id, bvh );
+
+			}
 
 		} else if ( object.isBatchedMesh ) {
 
 			const geometryId = object.getGeometryIdAt( instanceId );
 			const range = object.getGeometryRangeAt( geometryId );
 			Object.assign( rangeTarget, range );
-			bvh = object.boundsTrees[ geometryId ];
+			bvh = object.boundsTrees[ geometryId ] || null;
+
+			if ( bvh === null && autogenerateBvh ) {
+
+				const id = `batched_${ object.geometry.uuid }_${ range.start }_${ range.count }`;
+				bvh = _bvhCache.get( id ) || new MeshBVH( object.geometry, { range: { ...rangeTarget } } );
+				_bvhCache.set( id, bvh );
+
+			}
 
 		} else {
 
 			const geometry = object.geometry;
 			rangeTarget.count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
 			rangeTarget.vertexCount = geometry.attributes.position.count;
-			bvh = object.geometry.boundsTree;
+			bvh = object.geometry.boundsTree || null;
 
-		}
+			if ( bvh === null && autogenerateBvh ) {
 
-		if ( ! bvh ) {
+				const id = geometry.uuid;
+				bvh = _bvhCache.get( id ) || new MeshBVH( geometry );
+				_bvhCache.set( id, bvh );
 
-			throw new Error( 'BVHComputeData: BVH not found.' );
+			}
 
 		}
 
@@ -965,13 +1051,13 @@ export class BVHComputeData {
 
 		switch ( key ) {
 
-		case 'position':
-		case 'color':
-			target.set( 1, 1, 1, 1 );
-			break;
+			case 'position':
+			case 'color':
+				target.set( 1, 1, 1, 1 );
+				break;
 
-		default:
-			target.set( 0, 0, 0, 0 );
+			default:
+				target.set( 0, 0, 0, 0 );
 
 		}
 

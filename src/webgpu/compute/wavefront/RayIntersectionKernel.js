@@ -38,7 +38,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-
+		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
 
 		const fn = wgslTagFn /* wgsl */`
@@ -94,8 +94,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
-				let hitResult = ${ raycastFirstHitFn }( ray );
-				if ( hitResult.didHit ) {
+				var hitResult: ${ raycastOutput };
+				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
 					let index = atomicAdd( &queueSizes[ 3 ], 1 );
