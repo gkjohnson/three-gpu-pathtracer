@@ -178,7 +178,7 @@ export class WGSLTagFnNode extends FunctionNode {
 
 	static get type() {
 
-		return 'WGSLFnTagNode';
+		return 'WGSLTagFnNode';
 
 	}
 

@@ -50,9 +50,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// raycast first hit
 		const scratchRayScalar = wgslTagCode/* wgsl */`
-			var<private> ${ prefix }rayScalar = 1.0;
-			var<private> ${ prefix }material: ${ structs.material };
-			var<private> ${ prefix }baseOpacity = 1.0;
+			var<private> bvh_rayScalar = 1.0;
+			var<private> bvh_material: ${ structs.material };
+			var<private> bvh_baseOpacity = 1.0;
 		`;
 
 		fns.raycastFirstHit = this.getShapecastFn( {
@@ -70,12 +70,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
 					// early-out if our object is completely transparent
-					if ( ${ prefix }baseOpacity == 0.0 ) {
+					if ( bvh_baseOpacity == 0.0 ) {
 
-						return - 1.0;
+						return 0u;
 
 					}
 
@@ -102,13 +102,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
 
 					let dist = max( t0, 0.0 );
-					if ( t1 >= dist ) {
+					if ( t1 < dist ) {
 
-						return dist * ${ prefix }rayScalar;
+						return 0u;
+
+					} else if ( result.didHit && dist * bvh_rayScalar >= result.dist ) {
+
+						return 0u;
 
 					} else {
 
-						return - 1.0;
+						return 1u;
 
 					}
 
@@ -118,12 +122,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intersectRangeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, bestDist: f32 ) -> ${ intersectionResultStruct } {
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
 
-					var bestHit: ${ intersectionResultStruct };
-					bestHit.didHit = false;
-					bestHit.dist = bestDist;
-
+					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
 						let i0 = ${ storage.index }[ ti * 3u ];
@@ -135,14 +136,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
-						triResult.dist *= ${ prefix }rayScalar;
-						if ( triResult.didHit && triResult.dist < bestHit.dist ) {
+						triResult.dist *= bvh_rayScalar;
+						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
-
-							let material = ${ prefix }material;
+							let material = bvh_material;
 							if ( material.transparent != 0 ) {
 
-								let opacity = ${ prefix }baseOpacity;
+								let opacity = bvh_baseOpacity;
 								// TODO: sample albedo + alphaMap alpha
 								if ( opacity < ${ pcgRand }() ) {
 
@@ -152,50 +152,56 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							bestHit = triResult;
-							bestHit.indices = vec4u( i0, i1, i2, ti );
+							result.didHit = true;
+							result.dist = triResult.dist;
+							result.normal = triResult.normal;
+							result.side = triResult.side;
+							result.barycoord = triResult.barycoord;
+							result.indices = vec4u( i0, i1, i2, ti );
+
+							didHit = true;
 
 						}
 
 					}
 
-					return bestHit;
+					return didHit;
 
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
 				${ [ scratchRayScalar ] }
 
-				fn transformRay( ray: ${ rayStruct }, toLocal: mat4x4f, objectId: u32 ) -> ${ rayStruct } {
+				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
-					var localRay: Ray;
-					localRay.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
-					localRay.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
+					ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
+					ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
-					let len = length( localRay.direction );
-					localRay.direction /= len;
-					${ prefix }rayScalar = 1.0 / len;
+					let len = length( ray.direction );
+					ray.direction /= len;
+					bvh_rayScalar = 1.0 / len;
 
-					let object = ${ storage.transforms }[ objectId ];
-					${ prefix }material = ${ storage.materials }[ object.materialIndex ];
-					if ( ${ prefix }material.transparent == 1 ) {
+					let object = ${ storage.transforms }[ objectIndex ];
+					bvh_material = ${ storage.materials }[ object.materialIndex ];
+					if ( bvh_material.transparent == 1 ) {
 
-						${ prefix }baseOpacity = ${ prefix }material.opacity * object.color.a;
+						bvh_baseOpacity = bvh_material.opacity * object.color.a;
 
 					} else {
 
-						${ prefix }baseOpacity = 1.0;
+						bvh_baseOpacity = 1.0;
 
 					}
-
-					return localRay;
 
 				}
 			`,
 			transformResultFn: wgslTagFn/* wgsl */`
-				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, toWorld: mat4x4f, toLocal: mat4x4f ) -> void {
+				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, objectIndex: u32 ) -> void {
 
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
 					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+					hit.objectIndex = objectIndex;
 
 				}
 			`,
@@ -208,14 +214,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		super.update();
 
 		// build material storage
-		const { materials, structs, prefix: name } = this;
+		const { materials, structs } = this;
 
 		const { materialData, textures } = this.writeMaterialsBuffer( materials );
 
 		this.textures = textures;
 
 		const materialAttribute = new StorageBufferAttribute( materialData, structs.material.getLength() );
-		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( `${ name }materials` );
+		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( 'bvh_materials' );
 		this.storage.materials = materialStorage;
 
 		this.bvhMap.clear();
@@ -487,15 +493,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				switch ( m.side ) {
 
-				case FrontSide:
-					floatArray[ index ++ ] = 1;
-					break;
-				case BackSide:
-					floatArray[ index ++ ] = - 1;
-					break;
-				case DoubleSide:
-					floatArray[ index ++ ] = 0;
-					break;
+					case FrontSide:
+						floatArray[ index ++ ] = 1;
+						break;
+					case BackSide:
+						floatArray[ index ++ ] = - 1;
+						break;
+					case DoubleSide:
+						floatArray[ index ++ ] = 0;
+						break;
 
 				}
 
