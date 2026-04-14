@@ -140,7 +140,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatNormalMap ), 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
-				normal = normalize( vTBN * texNormal );
+				clearcoatNormal = normalize( vTBN * texNormal );
 
 			}
 
@@ -170,7 +170,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			let uvPrime = material.iridescenceMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceMap ), 0 );
-			iridescence *= texColor.r;
+			iridescence *= texColor.g;
 
 		}
 
@@ -288,7 +288,7 @@ export const lambertBsdfFunc = wgslFn( /* wgsl */`
  */
 
 // Disney Diffuse BRDF without subsurface approximation
-export const diffuseBrdfFunc = wgslFn( /* wgslFn */ `
+export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn diffuseBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
 
@@ -314,7 +314,7 @@ export const diffuseBrdfFunc = wgslFn( /* wgslFn */ `
 
 `, [ constants, schlickFresnelFunc, surfaceRecordStruct ] );
 
-export const specularBrdfFunc = wgslFn( /* wgslFn */ `
+export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn specularBrdf( NdotL: f32, NdotV: f32, NdotH: f32, alpha: f32 ) -> vec3f {
 
@@ -327,7 +327,7 @@ export const specularBrdfFunc = wgslFn( /* wgslFn */ `
 
 `, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
 
-export const fresnelMixFunc = wgslFn( /* wgslFn */ `
+export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 	fn fresnelMix( VdotH: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
@@ -339,7 +339,7 @@ export const fresnelMixFunc = wgslFn( /* wgslFn */ `
 
 `, [ schlickFresnelFunc, iorToF0Func ] );
 
-export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgslFn */ `
+export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 
 	fn conductorFresnel( NdotV: f32, VdotH: f32, f0: vec3f, bsdf: vec3f, alpha: f32 ) -> vec3f {
 
