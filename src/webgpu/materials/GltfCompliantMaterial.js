@@ -106,12 +106,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( r <= cdf.y ) { // specular
 
 					wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
-					if ( wh.z < 0 ) {
-
-						wh = -wh;
-
-					}
-					wi = - reflect( wo, wh );
 
 				} else if ( r <= cdf.z ) { // transmission / refraction
 
