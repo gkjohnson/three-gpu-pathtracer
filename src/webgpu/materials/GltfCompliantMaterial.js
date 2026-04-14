@@ -107,6 +107,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
 
+					wi = - reflect( wo, wh );
+
 				} else if ( r <= cdf.z ) { // transmission / refraction
 
 					// NOT IMPLEMENTED

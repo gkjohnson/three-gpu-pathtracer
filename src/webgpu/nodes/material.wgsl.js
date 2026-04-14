@@ -383,12 +383,6 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 			let wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
 			var wi = - reflect( wo, wh );
 
-			// if ( wi.z < 0 ) {
-			//
-			// 	wi = -wi;
-			//
-			// }
-
 			let NdotV = max( wo.z, 1e-5 );
 			let NdotL = saturate( wi.z );
 			let NdotH = saturate( wh.z );
