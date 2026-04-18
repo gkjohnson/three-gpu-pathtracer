@@ -175,7 +175,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			let uvPrime = material.iridescenceMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceMap ), 0 );
-			iridescence *= texColor.g;
+			iridescence *= texColor.r;
 
 		}
 
@@ -184,7 +184,12 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.iridescenceThicknessMap ), 0 );
-			iridescenceThickness *= texColor.r;
+
+			iridescenceThickness = mix(
+				material.iridescenceThicknessMinimum,
+				material.iridescenceThicknessMaximum,
+				texColor.g,
+			);
 
 		}
 
