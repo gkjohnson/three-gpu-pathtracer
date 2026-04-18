@@ -148,7 +148,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						throughputColor *= scatterRec.color / scatterRec.pdf;
+						throughputColor *= scatterRec.color;
+						throughputColor /= scatterRec.pdf;
 
 						ray.origin = vertexData.position.xyz;
 						ray.direction = scatterRec.direction;

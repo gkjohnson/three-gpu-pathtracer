@@ -6,7 +6,12 @@ import {
 	schlickFresnelFunc,
 	schlickFresnelVecFunc,
 } from './utils.wgsl';
-import { ggxSmithVisibilityFunc, ggxDistributionFunc, ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from './ggx.wgsl';
+import {
+	ggxSmithVisibilityFunc,
+	ggxDistributionFunc,
+	ggxDirectionFunc,
+	ggxReflectionAdjustedPDFFunc,
+} from './ggx.wgsl';
 import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl';
 import { sampleSphereCosineFn } from './sampling.wgsl';
 import { pcgInit, pcgRand2 } from './random.wgsl';
@@ -383,12 +388,18 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 			let wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
 			var wi = - reflect( wo, wh );
 
-			let NdotV = max( wo.z, 1e-5 );
+			let NdotV = max( wo.z, EPSILON );
 			let NdotL = saturate( wi.z );
 			let NdotH = saturate( wh.z );
 
 			let specular = specularBrdf( NdotL, NdotV, NdotH, alpha );
-			let weight = 1 / ggxReflectionAdjustedPDF( wo, wh, alpha );
+			let pdf = ggxReflectionAdjustedPDF( NdotV, NdotH, alpha );
+
+			var weight = 0.0;
+			if ( pdf != 0.0 ) {
+				weight = 1 / pdf;
+			}
+
 			result += specular.x * NdotL * weight;
 
 		}

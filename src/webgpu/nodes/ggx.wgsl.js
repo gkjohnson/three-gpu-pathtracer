@@ -9,22 +9,10 @@ import { constants } from './structs.wgsl.js';
 // [2] http://jcgt.org/published/0007/04/01/
 // [4] http://jcgt.org/published/0003/02/03/
 // [5] https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+// trowbridge-reitz === GGX === GTR
 export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
 	fn ggxDirection( incidentDir: vec3f, alpha: vec2f, uv: vec2f ) -> vec3f {
-
-		// The GGX functions provide sampling and distribution information for normals as output so
-		// in order to get probability of scatter direction the half vector must be computed and provided.
-		// [0] https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
-		// [1] https://hal.archives-ouvertes.fr/hal-01509746/document
-		// [2] http://jcgt.org/published/0007/04/01/
-		// [4] http://jcgt.org/published/0003/02/03/
-
-		// trowbridge-reitz === GGX === GTR
-
-
-		// TODO: try GGXVNDF implementation from reference [2], here. Needs to update ggxDistribution
-		// function below, as well
 
 		// Implementation from reference [1]
 		// stretch view
@@ -85,13 +73,15 @@ export const ggxLamdaFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// TODO: write an optimized version, without tan/acos (see [5])
-// See equation (34) from reference [0]
+// Based on equation (34) from reference [0]
 export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
 
-	fn ggxShadowMaskG1( theta: f32, alpha: f32 ) -> f32 {
+	fn ggxShadowMaskG1( cosTheta: f32, alpha: f32 ) -> f32 {
 
-		return 1.0 / ( 1.0 + ggxLamda( theta, alpha ) );
+		let a2 = alpha * alpha;
+		let cosTheta2 = cosTheta * cosTheta;
+		let denom = cosTheta + sqrt( cosTheta2 * ( 1 - a2 ) + a2 );
+		return 2.0 * cosTheta / denom;
 
 	}
 
@@ -121,56 +111,28 @@ export const ggxSmithVisibilityFunc = wgslFn( /* wgsl */ `
 `, [ ggxLamdaFunc ] );
 
 
-// TODO: write an aptimized version without tan/acos (see [5])
-// See equation (33) from reference [0]
+// See listing 2 from reference [5]
 export const ggxDistributionFunc = wgslFn( /* wgsl */ `
-	fn ggxDistribution( halfVectorAngleCos: f32, alpha: f32 ) -> f32 {
+	fn ggxDistribution( NdotH: f32, alpha: f32 ) -> f32 {
 
-		var a2 = alpha * alpha;
-		a2 = max( EPSILON, a2 );
-		let cosTheta = halfVectorAngleCos;
-		let cosTheta4 = pow( cosTheta, 4.0 );
+		let a2 = max( alpha * alpha, EPSILON );
+		let denom = NdotH * NdotH * ( a2 - 1 ) + 1;
 
-		if ( cosTheta == 0.0 ) {
-			return 0.0;
-		}
-
-		let theta = acos( clamp( cosTheta, -1.0, 1.0 ) );
-		let tanTheta = tan( theta );
-		let tanTheta2 = pow( tanTheta, 2.0 );
-
-		let denom = PI * cosTheta4 * pow( a2 + tanTheta2, 2.0 );
-		return ( a2 / denom );
+		return ( a2 / ( PI * denom * denom ) );
 
 	}
 `, );
 
-// See equation (3) from reference [2]
-export const ggxPDFFunc = wgslFn( /* wgsl */ `
-	fn ggxPDF( wo: vec3f, wh: vec3f, roughness: f32 ) -> f32 {
-
-		let D = ggxDistribution( wh.z, roughness );
-		let incidentTheta = acos( wo.z );
-		let G1 = ggxShadowMaskG1( incidentTheta, roughness );
-
-		return D * G1 * max( 0.0, dot( wo, wh ) ) / wo.z;
-
-	}
-`, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );
-
 // ggxPDF, divided by the Jacobian of reflection operation
 // See equation (17) from [2]
-// Note: dot( wo, halfVector ) cancel out bc its guaranteed to be > 0
+// Note: HdotV cancel out bc its guaranteed to be > 0
 export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
-	fn ggxReflectionAdjustedPDF( wo: vec3f, wh: vec3f, alpha: f32 ) -> f32 {
+	fn ggxReflectionAdjustedPDF( NdotV: f32, NdotH: f32, alpha: f32 ) -> f32 {
 
-		let NdotV = max( wo.z, 1e-5 );
-		let NdotH = max( wh.z, 1e-5 );
 		let D = ggxDistribution( NdotH, alpha );
-		let incidentTheta = acos( NdotV );
-		let G1 = ggxShadowMaskG1( incidentTheta, alpha );
+		let G1 = ggxShadowMaskG1( NdotV, alpha );
 
-		return D * G1 / ( 4 * wo.z );
+		return D * G1 / ( 4 * NdotV );
 
 	}
 `, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );

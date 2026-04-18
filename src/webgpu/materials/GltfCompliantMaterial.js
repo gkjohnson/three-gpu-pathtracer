@@ -53,14 +53,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
-			fn bsdfEval( wo: vec3f, wi: vec3f, wh: vec3f, surf: SurfaceRecord ) -> vec3f {
+			fn bsdfEval( NdotL: f32, NdotV: f32, NdotH: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
 
 				let alpha = surf.roughness * surf.roughness;
-
-				let NdotV = max( wo.z, 1e-5 );
-				let NdotL = saturate( wi.z );
-				let NdotH = saturate( wh.z );
-				let VdotH = saturate( dot( wo, wh ) );
 
 				let specular = ${ this.specularBrdf }( NdotL, NdotV, NdotH, alpha );
 
@@ -119,6 +114,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
+				let NdotV = max( wo.z, EPSILON );
+				let NdotL = saturate( wi.z );
+				let NdotH = saturate( wh.z );
+				let VdotH = saturate( dot( wo, wh ) );
+
 				var result: ScatterRecord;
 				result.pdf = 0;
 
@@ -130,11 +130,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( weights.specular > 0.0 ) {
 
-					result.pdf += weights.specular * ggxReflectionAdjustedPDF( wo, wh, alpha );
+					result.pdf += weights.specular * ggxReflectionAdjustedPDF( NdotV, NdotH, alpha );
 
 				}
 
-				result.color = bsdfEval( wo, wi, wh, surf );
+				result.color = bsdfEval( NdotL, NdotV, NdotH, VdotH, surf );
 				result.color *= max( 0.0, wi.z );
 				result.direction = normalize( normalBasis * wi );
 
