@@ -1,4 +1,4 @@
-import { wgslFn, texture, sampler, textureStore, globalId } from 'three/tsl';
+import { wgslFn, texture, textureStore, globalId } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, FloatType, TextureLoader } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
