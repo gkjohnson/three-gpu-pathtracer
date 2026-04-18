@@ -1,5 +1,5 @@
 import { wgslFn, texture, sampler, textureStore, globalId } from 'three/tsl';
-import { StorageTexture, RedFormat, LinearFilter, FloatType } from 'three/webgpu';
+import { StorageTexture, RedFormat, LinearFilter, FloatType, TextureLoader } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
 import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic } from '../nodes/material.wgsl';
@@ -8,6 +8,7 @@ import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgs
 import { scatterRecordStruct } from '../nodes/structs.wgsl';
 import { pcgRand } from '../nodes/random.wgsl';
 import { ComputeKernel } from '../compute/ComputeKernel';
+import turquinMetal from '../../textures/turquinMetal.png';
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -15,7 +16,25 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		super();
 
-		this.turquinTexture = new StorageTexture( 32, 32 );
+		const {
+			specularBrdf = specularBrdfFunc,
+			diffuseBrdf = diffuseBrdfFunc,
+			fresnelMix = fresnelMixFunc,
+			conductorFresnel = conductorFresnelFunc,
+			calculateTurquinTexture = false,
+		} = options;
+
+		if ( calculateTurquinTexture ) {
+
+			this.turquinTexture = new StorageTexture( 32, 32 );
+
+		} else {
+
+			this.turquinTexture = new TextureLoader().load( turquinMetal );
+			this.turquinTexture.flipY = false;
+
+		}
+
 		this.turquinTexture.format = RedFormat;
 		this.turquinTexture.type = FloatType;
 		this.turquinTexture.minFilter = LinearFilter;
@@ -23,21 +42,21 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const turquinNode = texture( this.turquinTexture ).setName( 'turquinTexture' );
 
-		const {
-			specularBrdf = specularBrdfFunc,
-			diffuseBrdf = diffuseBrdfFunc,
-			fresnelMix = fresnelMixFunc,
-			conductorFresnel = conductorFresnelFunc,
-		} = options;
-
 		this.specularBrdf = specularBrdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
 		this.conductorFresnel = conductorFresnel( turquinNode );
+		this.calculateTurquinTexture = calculateTurquinTexture;
 
 	}
 
 	init( renderer ) {
+
+		if ( ! this.calculateTurquinTexture ) {
+
+			return;
+
+		}
 
 		const turquinParams = {
 			texture: textureStore( this.turquinTexture ).toWriteOnly(),
@@ -45,7 +64,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		};
 		const turquinKernel = new ComputeKernel( albedoIntegralMetallic( turquinParams ), { workgroupSize: [ 16, 16, 1 ] } );
 
-		renderer.compute( turquinKernel.kernel, [ 4, 4, 1 ] );
+		renderer.compute( turquinKernel.kernel, [ 2, 2, 1 ] );
 
 	}
 
