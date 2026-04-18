@@ -1,17 +1,17 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, texture, sampler, storage, wgslFn, textureStore, globalId } from 'three/tsl';
-import { pcgRand2, pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
+import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
+import { pcgRand2, pcgInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
-import { rayStruct } from '../../lib/wgsl/structs.wgsl.js';
+import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
 	constructor() {
 
-		const parameters = {
+		const params = {
 			bvhData: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -40,22 +40,12 @@ export class RayIntersectionKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const fn = wgslFn( /* wgsl */`
+		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
+		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+
+		const fn = wgslTagFn /* wgsl */`
 
 			fn compute(
-				// indices and target
-				prevOutputTarget: texture_storage_2d<rgba32float, read>,
-				outputTarget: texture_storage_2d<rgba32float, write>,
-				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
-
-				// rays
-				rayQueue: ptr<storage, array<QueuedRay>, read>,
-				rayQueueSize: ptr<storage, array<u32>, read>,
-
-				// hits
-				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
-				hitQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
-
 				// environment
 				envMap: texture_2d<f32>,
 				envMapSampler: sampler,
@@ -70,6 +60,12 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				globalId: vec3u
 			) -> void {
+
+				let rayQueue = &${ params.rayQueue };
+				let rayQueueSize = &${ params.rayQueueSize };
+
+				let hitQueue = &${ params.hitQueue };
+				let hitQueueSize = &${ params.hitQueueSize };
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -96,14 +92,14 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = rayQueue[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
-				let seed = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
+				let seed = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
 
-				pcgInitialize( indexUV, seed );
+				${ pcgInit }( indexUV, seed );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
-				let hitResult = bvh_RaycastFirstHit( ray );
-				if ( hitResult.didHit ) {
+				var hitResult: ${ raycastOutput };
+				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
 					let index = atomicAdd( &hitQueueSize[ 1 ], 1 );
@@ -124,33 +120,28 @@ export class RayIntersectionKernel extends ComputeKernel {
 					var resultColor: vec4f;
 					if ( input.currentBounce > 0u ) {
 
-						resultColor = sampleEnvironment( envMap, envMapSampler, envInfo, input.direction, pcgRand2() ) * vec4f( input.throughputColor, 1.0 );
+						resultColor = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, ${ pcgRand2 }() ) * vec4f( input.throughputColor, 1.0 );
 
 					} else {
 
-						resultColor = sampleEnvironment( background, backgroundSampler, backgroundInfo, input.direction, pcgRand2() );
+						resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, ${ pcgRand2 }() );
 
 					}
 
-					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					let prevColor = textureLoad( prevOutputTarget, indexUV );
-					let blendedColor = weightedAlphaBlend( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, blendedColor );
+					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
+					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
+					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
 				}
 
 			}
-		`, [
-			proxy( 'bvhData.value.fns.raycastFirstHit', parameters ),
-			proxy( 'bvhData.value.structs.material', parameters ),
-			rayStruct, queuedRayStruct, pcgRand2, pcgRand3, pcgInit, queuedHitStruct,
-			sampleEnvironmentFn, weightedAlphaBlendFn,
-		] );
+		`;
 
-		super( fn( parameters ) );
+		super( fn( params ) );
 
-		this.defineUniformAccessors( parameters );
+		this.defineUniformAccessors( params );
 
 	}
 

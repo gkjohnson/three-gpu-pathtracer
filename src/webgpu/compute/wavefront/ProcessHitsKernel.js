@@ -1,10 +1,9 @@
 import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { pcgRand3, pcgInit } from '../../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
-import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
@@ -12,7 +11,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 	constructor( material ) {
 
-		const parameters = {
+		const params = {
 			bvhData: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -36,32 +35,29 @@ export class ProcessHitsKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
+		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
-				// indices and target
-				prevOutputTarget: texture_storage_2d<rgba32float, read>,
-				outputTarget: texture_storage_2d<rgba32float, write>,
-				sampleCountTarget: texture_storage_2d<r32uint, read_write>,
-
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
 
-				// rays
-				rayQueue: ptr<storage, array<QueuedRay>, read_write>,
-				rayQueueSize: ptr<storage, array<atomic<u32>>, read_write>,
-
-				// hits
-				hitQueue: ptr<storage, array<QueuedHit>, read_write>,
-				hitQueueSize: ptr<storage, array<u32>, read_write>,
-
-				// texture array for material textures
 				textures: texture_2d_array<f32>,
 				textureSampler: sampler,
 
 				globalId: vec3u
 			) -> void {
+
+				let rayQueue = &${ params.rayQueue };
+				let rayQueueSize = &${ params.rayQueueSize };
+
+				let hitQueue = &${ params.hitQueue };
+				let hitQueueSize = &${ params.hitQueueSize };
+
+				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
+				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				// skip any rays invocations beyond the ray count
 				let hitQueueCapacity = arrayLength( hitQueue );
@@ -79,40 +75,29 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				g_state.s0 = input.pcgStateS0;
 
-				let object = bvh_transforms.value[ input.objectIndex ];
-				var material = bvh_materials.value[ object.materialIndex ];
+				let object = transforms[ input.objectIndex ];
+				var material = materials[ object.materialIndex ];
 
 				// apply per-object colors
 				material.color *= object.color.rgb;
 				material.opacity *= object.color.a;
 
-				var vertexData = bvh_sampleTrianglePoint( input.barycoord, input.indices.xyz );
+				var vertexData = ${ sampleTrianglePointFn }( input.barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = getSurfaceRecord( material, vertexData, input.side, input.normal, textures, textureSampler );
+				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
 
 				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
-
-				// terminate ray if scatter is impossible or color is nan
-				// TODO: Investigate ways to not generate such scatters
-				if ( scatterRec.pdf <= 0 || any( scatterRec.color != scatterRec.color ) ) {
-
-					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) );
-					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-
-					return;
-
-				}
 
 				if ( input.currentBounce >= bounces ) {
 
 					// terminate ray, write color
-					let sampleCount = ( textureLoad( sampleCountTarget, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					let prevColor = textureLoad( prevOutputTarget, indexUV );
-					let blendedColor = weightedAlphaBlend( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
-					textureStore( sampleCountTarget, indexUV, vec4( sampleCount ) );
-					textureStore( outputTarget, indexUV, blendedColor );
+					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
+					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
+					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
 				} else {
 
@@ -127,22 +112,11 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				}
 
-			}
+			}`;
 
-		${ [
-		proxy( 'bvhData.value.structs.material', parameters ),
-		proxy( 'bvhData.value.structs.transform', parameters ),
-		proxy( 'bvhData.value.storage.materials', parameters ),
-		proxy( 'bvhData.value.storage.transforms', parameters ),
-		proxy( 'bvhData.value.fns.sampleTrianglePoint', parameters ),
-		queuedRayStruct, getSurfaceRecordFunc,
-		pcgRand3, pcgInit, queuedHitStruct,
-		weightedAlphaBlendFn,
-	] }`;
+		super( fn( params ) );
 
-		super( fn( parameters ) );
-
-		this.defineUniformAccessors( parameters );
+		this.defineUniformAccessors( params );
 
 	}
 

@@ -1,8 +1,9 @@
 import { Vector2, Vector3 } from 'three';
 import { IndirectStorageBufferAttribute } from 'three/webgpu';
-import { wgslFn, uniform, storage } from 'three/tsl';
+import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { queuedRayStruct } from './structs.js';
+import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 
@@ -18,24 +19,24 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
 			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 
-			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
-			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'u32' ),
+			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
+			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
 		};
 
-		const kernel = wgslFn( /* wgsl */`
+		const fn = wgslTagFn/* wgsl */`
 			fn compute(
 				rayWorkGroupSize: vec3u,
 
 				tileSize: vec2u,
 				tileCount: vec2u,
 				tileOffset: u32,
-
-				rayQueue: ptr<storage, array<QueuedRay>, read>,
-				rayQueueSize: ptr<storage, array<u32>, read_write>,
-
-				outputTileIndex: ptr<storage, array<u32>, read_write>,
-				outputDispatch: ptr<storage, array<u32>, read_write>,
 			) -> void {
+
+				let rayQueue = &${ params.rayQueue };
+				let rayQueueSize = &${ params.rayQueueSize };
+
+				let outputTileIndex = &${ params.outputTileIndex };
+				let outputDispatch = &${ params.outputDispatch };
 
 				// keep the queue index small
 			    let queueCapacity = arrayLength( rayQueue );
@@ -79,9 +80,9 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 				}
 
 			}
-		`, [ queuedRayStruct ] )( params );
+		`;
 
-		super( kernel );
+		super( fn( params ) );
 
 		this.defineUniformAccessors( params );
 
