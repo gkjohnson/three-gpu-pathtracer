@@ -95,7 +95,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, input.resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
@@ -103,12 +103,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
+					let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 					rayQueue[ index ].origin = vertexData.position.xyz;
 					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue[ index ].pcgStateS0 = g_state.s0;
+					rayQueue[ index ].resultColor = resultColor;
 
 				}
 

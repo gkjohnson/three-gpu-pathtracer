@@ -155,6 +155,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
+
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
 
@@ -165,7 +167,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						if ( bounce > 0u ) {
 
-							resultColor = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() ) * vec4f( throughputColor, 1.0 );
+							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() ) * vec4f( throughputColor, 0.0 );
 
 						} else {
 
