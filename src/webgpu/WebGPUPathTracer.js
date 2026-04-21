@@ -7,6 +7,7 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
+import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -81,6 +82,8 @@ export class WebGPUPathTracer {
 		this.lowResScale = 0.2;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
+		this.generateMissingAttributes = true;
+		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
@@ -96,6 +99,12 @@ export class WebGPUPathTracer {
 
 		// Build BVH for each mesh geometry
 		scene.traverse( child => {
+
+			if ( this.generateMissingAttributes && child.geometry?.isBufferGeometry ) {
+
+				setCommonAttributes( child.geometry, this.commonAttributes );
+
+			}
 
 			if ( child.isSkinnedMesh ) {
 
