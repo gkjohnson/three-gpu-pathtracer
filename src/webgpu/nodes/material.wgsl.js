@@ -22,13 +22,13 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		material: Material,
 		vertexData: bvh_GeometryStruct,
 		side: f32,
-		hitNormal: vec3f,
+		faceNormal: vec3f,
 		textures: texture_2d_array<f32>,
 		textureSampler: sampler,
 	) -> SurfaceRecord {
 		let uv = vertexData.uv.xy;
 
-		var normal = hitNormal * side;
+		var normal = faceNormal * side;
 		if ( material.flatShading == 0 ) {
 
 			normal = vertexData.normal.xyz;
@@ -44,8 +44,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( normal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, normal );
+				let bitangent = normalize( cross( faceNormal, tangent ) * vertexData.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, faceNormal );
 
 				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
 				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.normalMap ), 0 ).xyz;
@@ -138,8 +138,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( clearcoatNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, clearcoatNormal );
+				let bitangent = normalize( cross( faceNormal, tangent ) * vertexData.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, faceNormal );
 
 				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
 				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatNormalMap ), 0 ).xyz;
@@ -214,7 +214,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		var surf: SurfaceRecord;
 
 		surf.volumeParticle = false;
-		surf.faceNormal = hitNormal;
+		surf.faceNormal = faceNormal;
 		surf.normal = normal;
 
 		surf.metalness = metalness;
