@@ -136,6 +136,12 @@ export class WebGPUPathTracer {
 
 	}
 
+	getMaterial() {
+
+		return this._pathTracer.getMaterial();
+
+	}
+
 	setMaterial( material ) {
 
 		this._pathTracer.setMaterial( material );

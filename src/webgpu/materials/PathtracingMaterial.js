@@ -7,6 +7,16 @@ export class PathtracingMaterial {
 
 	/**
 	 *
+	 * Called once per material
+	 * Adds ability to initialize state
+	 *
+	 */
+	init( /* renderer */ ) {
+
+	}
+
+	/**
+	 *
 	 * Must return a bsdf sampling function node with signature
 	 * ( worldView: vec3f, surface: Surface ) -> ScatterRecord
 	 *
@@ -17,13 +27,13 @@ export class PathtracingMaterial {
 
 	}
 
-	/**
-	 *
-	 * Called once per material
-	 * Adds ability to initialize state
-	 *
-	 */
-	init( /* renderer */ ) {
+	getData() {
+
+		return {
+
+			bsdfSample: this.getBsdfNode(),
+
+		};
 
 	}
 

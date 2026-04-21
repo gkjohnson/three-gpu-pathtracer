@@ -10,10 +10,12 @@ import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( material ) {
+	constructor( ) {
 
 		const params = {
 			bvhData: { value: null },
+
+			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -50,6 +52,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
+		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -149,7 +152,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
-						let scatterRec = ${ material.getBsdfNode() }( - ray.direction, surface );
+						let scatterRec = ${ bsdfSampleFn }( - ray.direction, surface );
 
 						if ( scatterRec.pdf <= 0.0 || any( scatterRec.color != scatterRec.color ) ) {
 
