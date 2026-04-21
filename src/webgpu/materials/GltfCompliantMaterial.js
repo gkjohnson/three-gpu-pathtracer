@@ -6,9 +6,10 @@ import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
 import { scatterRecordStruct } from '../nodes/structs.wgsl';
-import { pcgRand } from '../nodes/random.wgsl';
+import { pcgRand, pcgRand2 } from '../nodes/random.wgsl';
 import { ComputeKernel } from '../compute/ComputeKernel';
-import turquinMetal from '../../textures/turquinMetal.png';
+
+const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -30,7 +31,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		} else {
 
-			this.turquinTexture = new TextureLoader().load( turquinMetal );
+			this.turquinTexture = new TextureLoader().load( TURQUIN_METAL_URL );
 			this.turquinTexture.flipY = false;
 
 		}
@@ -169,6 +170,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			scatterRecordStruct,
 			getLobeWeightsFunc,
 			pcgRand,
+			pcgRand2,
 		] );
 
 	}

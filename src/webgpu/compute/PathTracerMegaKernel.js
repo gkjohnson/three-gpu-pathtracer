@@ -147,15 +147,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let surface = ${ getSurfaceRecordFunc }( material, vertexData, hitResult.side, hitResult.normal, textures, textureSampler );
 
+						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
+
 						let scatterRec = ${ material.getBsdfNode() }( - ray.direction, surface );
 
 						if ( scatterRec.pdf <= 0.0 || any( scatterRec.color != scatterRec.color ) ) {
 
-							return;
+							break;
 
 						}
-
-						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;

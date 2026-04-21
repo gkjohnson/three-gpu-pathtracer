@@ -138,7 +138,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( normal, tangent ) * vertexData.tangent.w );
+				let bitangent = normalize( cross( clearcoatNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, clearcoatNormal );
 
 				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
