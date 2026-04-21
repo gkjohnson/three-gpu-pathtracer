@@ -10,6 +10,7 @@ import { pcgRand, pcgRand2 } from '../nodes/random.wgsl';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
+const TURQUIN_METAL_TEXTURE = new TextureLoader().load( TURQUIN_METAL_URL );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -31,7 +32,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		} else {
 
-			this.turquinTexture = new TextureLoader().load( TURQUIN_METAL_URL );
+			this.turquinTexture = TURQUIN_METAL_TEXTURE;
 			this.turquinTexture.flipY = false;
 
 		}
