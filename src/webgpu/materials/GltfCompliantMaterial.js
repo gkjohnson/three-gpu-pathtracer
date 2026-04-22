@@ -10,7 +10,7 @@ import { pcgRand, pcgRand2 } from '../nodes/random.wgsl';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
-const TURQUIN_METAL_TEXTURE = await new TextureLoader().load( TURQUIN_METAL_URL );
+const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
