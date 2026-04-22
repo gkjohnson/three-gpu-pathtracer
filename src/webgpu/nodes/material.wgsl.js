@@ -364,6 +364,19 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 
 `, [ schlickFresnelVecFunc, turquinTexture ] );
 
+export const fresnelCoatFunc = wgslFn( /* wgsl */ `
+
+	fn fresnelCoat( VdotNc: f32, ior: f32, base: vec3f, layer: vec3f, weight: f32 ) -> vec3f {
+
+		let f0 = iorToF0( ior );
+		let F = schlickFresnel( abs( VdotNc ), f0 );
+
+		return mix( base, layer, weight * F );
+
+	}
+
+`, [ iorToF0Func, schlickFresnelFunc ] );
+
 // GGX Multibounce compensation using Turquin's method
 
 export const albedoIntegralMetallic = wgslFn( /* wgsl */ `

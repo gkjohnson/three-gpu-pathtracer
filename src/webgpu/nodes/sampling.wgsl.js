@@ -61,7 +61,7 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	fn getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, clearcoatWo: vec3f, surf: SurfaceRecord) -> LobeWeights {
+	fn getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, woClearcoat: vec3f, surf: SurfaceRecord) -> LobeWeights {
 
 		// TODO: experiment with this; I don't see any usage of normal?
 		let metalness = surf.metalness;
@@ -72,17 +72,20 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		let transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
 		let diffSpecularProb = 0.5 + 0.5 * metalness;
 
+		let clearcoatF0 = iorToF0( 1.5 );
+		let clearcoatFresnel = schlickFresnel( saturate( woClearcoat.z ), clearcoatF0 );
+
 		var weights: LobeWeights;
 		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
 		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
 		weights.transmission = transmission * ( 1.0 - transSpecularProb );
-		weights.clearcoat = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
+		weights.clearcoat =  ( weights.diffuse + weights.specular ) * surf.clearcoat * clearcoatFresnel;
 
-		let totalWeight = weights.diffuse + weights.specular; // + weights.transmission + weights.clearcoat;
+		let totalWeight = weights.diffuse + weights.specular + weights.clearcoat; // + weights.transmission + ;
 		weights.diffuse /= totalWeight;
 		weights.specular /= totalWeight;
+		weights.clearcoat /= totalWeight;
 		// weights.transmission /= totalWeight;
-		// weights.clearcoat /= totalWeight;
 
 		return weights;
 
