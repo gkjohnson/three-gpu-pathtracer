@@ -1,5 +1,6 @@
 import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
 import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
 // requested and available on the renderer which we don't have access to immediately. It's possible this
@@ -108,22 +109,32 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const transitionUniform = uniform( 1.0 );
 		this._transitionUniform = transitionUniform;
 
-		// TODO: this is potentially expensive to perform custom filtering for a texture that may never
-		// actually be displayed. We should add a condition that only samples one texture if the transition
-		// value is 0 or 1
-		const fadedColor = wgslFn( /* wgsl */`
-			fn fade( col0: vec4f, col1: vec4f, transition: f32 ) -> vec4f {
+		const fadedColor = wgslTagFn/* wgsl */`
+			fn fade( transition: f32, uv: vec2f ) -> vec4f {
 
-				return mix( col0, col1, transition );
+				if ( transition <= 0.0 ) {
+
+					return ${ sampleTexelFn }( ${ fromTexNode }, uv );
+
+				} else if ( transition >= 1.0 ) {
+
+					return ${ sampleTexelFn }( ${ texNode }, uv );
+
+				} else {
+
+					let col0 = ${ sampleTexelFn }( ${ fromTexNode }, uv );
+					let col1 = ${ sampleTexelFn }( ${ texNode }, uv );
+					return mix( col0, col1, transition );
+
+				}
 
 			}
-		` )( {
-			col0: sampleTexelFn( { tex: fromTexNode, coord: texUV } ),
-			col1: sampleTexelFn( { tex: texNode, coord: texUV } ),
-			transition: transitionUniform,
-		} );
+		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, fadedColor );
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, fadedColor( {
+			transition: transitionUniform,
+			uv: texUV,
+	 	} ) );
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping
