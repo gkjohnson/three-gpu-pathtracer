@@ -1,5 +1,5 @@
 import { wgslFn, texture, textureStore, globalId } from 'three/tsl';
-import { StorageTexture, RedFormat, LinearFilter, FloatType, TextureLoader } from 'three/webgpu';
+import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
 import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic } from '../nodes/material.wgsl';
@@ -38,7 +38,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		}
 
 		this.turquinTexture.format = RedFormat;
-		this.turquinTexture.type = FloatType;
+		this.turquinTexture.type = HalfFloatType;
 		this.turquinTexture.minFilter = LinearFilter;
 		this.turquinTexture.magFilter = LinearFilter;
 
