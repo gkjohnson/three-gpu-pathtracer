@@ -24,10 +24,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
-
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			hitQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
 
 			textures: texture( new DataTexture( ) ),
 			textureSampler: sampler( new DataTexture( ) ),
@@ -51,18 +49,16 @@ export class ProcessHitsKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let rayQueueSize = &${ params.rayQueueSize };
-
 				let hitQueue = &${ params.hitQueue };
-				let hitQueueSize = &${ params.hitQueueSize };
+				let queueSizes = &${ params.queueSizes };
 
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				// skip any rays invocations beyond the ray count
 				let hitQueueCapacity = arrayLength( hitQueue );
-				let hitIndex = ( globalId.x + hitQueueSize[ 0 ] );
-				if ( hitIndex >= hitQueueSize[ 1 ] ) {
+				let hitIndex = ( globalId.x + atomicLoad( &queueSizes[ 2 ] ) );
+				if ( hitIndex >= atomicLoad( &queueSizes[ 3 ] ) ) {
 
 					return;
 
@@ -102,7 +98,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				} else {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
-					let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % rayQueueCapacity;
+					let index = atomicAdd( &queueSizes[ 1 ], 1 ) % rayQueueCapacity;
 					let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 					rayQueue[ index ].origin = vertexData.position.xyz;
 					rayQueue[ index ].direction = scatterRec.direction;

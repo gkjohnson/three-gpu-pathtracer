@@ -116,7 +116,7 @@ const transformStruct = new StructTypeNode( {
 	_alignment1: 'uint',
 }, 'TransformStruct' );
 
-const intersectionResultStruct = new StructTypeNode( {
+export const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
@@ -166,7 +166,7 @@ function getTotalBVHByteLength( bvh ) {
 
 }
 
-const intersectsTriangle = wgslTagFn/* wgsl */ `
+export const intersectsTriangle = wgslTagFn/* wgsl */ `
 	// fn
 	fn intersectsTriangle( ray: ${ rayStruct }, a: vec3f, b: vec3f, c: vec3f ) -> ${ intersectionResultStruct } {
 

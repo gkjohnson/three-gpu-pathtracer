@@ -1,9 +1,12 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
-import { BVHComputeData } from '../lib/BVHComputeData.js';
+import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
 import { storage } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
+import { wgslTagCode, wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { pcgRand } from './random.wgsl.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -35,8 +38,165 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.structs.transform = transformStruct;
 		this.structs.material = materialStruct;
+		this.storage.materials = null;
 		this.materials = [];
 		this.bvhMap = new Map();
+
+	}
+
+	useTransparencyRaycastFn() {
+
+		const { prefix, storage, structs, fns } = this;
+
+		// raycast first hit
+		const scratchRayScalar = wgslTagCode/* wgsl */`
+			var<private> bvh_rayScalar = 1.0;
+			var<private> bvh_material: ${ structs.material };
+			var<private> bvh_baseOpacity = 1.0;
+		`;
+
+		fns.raycastFirstHit = this.getShapecastFn( {
+			name: prefix + 'RaycastFirstHit',
+			shapeStruct: rayStruct,
+			resultStruct: intersectionResultStruct,
+
+			boundsOrderFn: wgslTagFn/* wgsl */`
+				fn getBoundsOrder( ray: ${ rayStruct }, splitAxis: u32, node: ${ bvhNodeStruct } ) -> bool {
+
+					return ray.direction[ splitAxis ] >= 0.0;
+
+				}
+			`,
+			intersectsBoundsFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
+				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
+
+					// early-out if our object is completely transparent
+					if ( bvh_baseOpacity == 0.0 ) {
+
+						return 0u;
+
+					}
+
+					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
+					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
+
+					let invDir = 1.0 / ray.direction;
+					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
+					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
+
+					let tMinHit = min( tMinPlane, tMaxPlane );
+					let tMaxHit = max( tMinPlane, tMaxPlane );
+
+					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
+					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
+
+					let dist = max( t0, 0.0 );
+					if ( t1 < dist ) {
+
+						return 0u;
+
+					} else if ( result.didHit && dist * bvh_rayScalar >= result.dist ) {
+
+						return 0u;
+
+					} else {
+
+						return 1u;
+
+					}
+
+				}
+
+			`,
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
+
+					var didHit = false;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectsTriangle }( ray, a, b, c );
+						triResult.dist *= bvh_rayScalar;
+						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
+
+							let material = bvh_material;
+							if ( material.transparent != 0 ) {
+
+								let opacity = bvh_baseOpacity;
+								// TODO: sample albedo + alphaMap alpha
+								if ( opacity < ${ pcgRand }() ) {
+
+									continue;
+
+								}
+
+							}
+
+							result.didHit = true;
+							result.dist = triResult.dist;
+							result.normal = triResult.normal;
+							result.side = triResult.side;
+							result.barycoord = triResult.barycoord;
+							result.indices = vec4u( i0, i1, i2, ti );
+
+							didHit = true;
+
+						}
+
+					}
+
+					return didHit;
+
+				}
+			`,
+			transformShapeFn: wgslTagFn/* wgsl */`
+				${ [ scratchRayScalar ] }
+
+				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
+
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
+					ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
+					ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
+
+					let len = length( ray.direction );
+					ray.direction /= len;
+					bvh_rayScalar = 1.0 / len;
+
+					let object = ${ storage.transforms }[ objectIndex ];
+					bvh_material = ${ storage.materials }[ object.materialIndex ];
+					if ( bvh_material.transparent == 1 ) {
+
+						bvh_baseOpacity = bvh_material.opacity * object.color.a;
+
+					} else {
+
+						bvh_baseOpacity = 1.0;
+
+					}
+
+				}
+			`,
+			transformResultFn: wgslTagFn/* wgsl */`
+				fn transformResult( hit: ptr<function, ${ intersectionResultStruct }>, objectIndex: u32 ) -> void {
+
+					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
+					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+					hit.objectIndex = objectIndex;
+
+				}
+			`,
+		} );
 
 	}
 

@@ -21,7 +21,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).toAtomic(),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
 
 			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
@@ -40,7 +40,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let rayQueueSize = &${ params.rayQueueSize };
+				let queueSizes = &${ params.queueSizes };
 				let tileIndexBuffer = &${ params.tileIndexBuffer };
 
 				// don't overstep the edge of the tile
@@ -78,7 +78,7 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				// get the ray index
 				let queueCapacity = arrayLength( rayQueue );
-				let index = atomicAdd( &rayQueueSize[ 1 ], 1 ) % queueCapacity;
+				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
 
 				${ pcgInit }( indexUV, seed );
 

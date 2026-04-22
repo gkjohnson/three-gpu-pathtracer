@@ -9,21 +9,21 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
 		const params = {
 			processed: uniform( 0 ),
-			rayQueueSize: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ),
 		};
 
 		const fn = wgslTagFn/* wgsl */`
 			fn compute( processed: u32 ) -> void {
 
-				let rayQueueSize = &${ params.rayQueueSize };
-			    var queueSize = rayQueueSize[ 1 ] - rayQueueSize[ 0 ];
+				let queueSizes = &${ params.queueSizes };
+			    var queueSize = queueSizes[ 1 ] - queueSizes[ 0 ];
 				if ( processed > queueSize ) {
 
-					rayQueueSize[ 0 ] = rayQueueSize[ 1 ];
+					queueSizes[ 0 ] = queueSizes[ 1 ];
 
 				} else {
 
-					rayQueueSize[ 0 ] = rayQueueSize[ 0 ] + processed;
+					queueSizes[ 0 ] = queueSizes[ 0 ] + processed;
 
 				}
 
