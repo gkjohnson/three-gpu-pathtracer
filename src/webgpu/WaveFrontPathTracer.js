@@ -27,12 +27,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.envInfo = new EquirectHdrInfoUniform();
 
 		// queues
-		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, 16 );
+		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
 		this.rayQueue.name = 'Ray Queue';
 		this.rayQueueSize = new IndirectStorageBufferAttribute( 2, 1 );
 		this.rayQueueSize.name = 'Ray Queue Size';
 
-		this.hitQueue = new IndirectStorageBufferAttribute( MAX_HIT_COUNT, 16 );
+		this.hitQueue = new IndirectStorageBufferAttribute( MAX_HIT_COUNT, queuedHitStruct.getLength() );
 		this.hitQueue.name = 'Hit Queue';
 		this.hitQueueSize = new IndirectStorageBufferAttribute( 2, 1 );
 		this.hitQueueSize.name = 'Hit Queue Size';
@@ -47,7 +47,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
 		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = new ProcessHitsKernel().setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -74,6 +74,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.hitProcessKernel.textures = texture;
 		this.hitProcessKernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
+
+	}
+
+	setMaterial( material ) {
+
+		this.material = material;
+		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.reset();
 
 	}
 
