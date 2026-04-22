@@ -7,6 +7,7 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
+import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -81,6 +82,8 @@ export class WebGPUPathTracer {
 		this.lowResScale = 0.2;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
+		this.generateMissingAttributes = true;
+		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
@@ -96,6 +99,12 @@ export class WebGPUPathTracer {
 
 		// Build BVH for each mesh geometry
 		scene.traverse( child => {
+
+			if ( this.generateMissingAttributes && child.geometry?.isBufferGeometry ) {
+
+				setCommonAttributes( child.geometry, this.commonAttributes );
+
+			}
 
 			if ( child.isSkinnedMesh ) {
 
@@ -124,6 +133,7 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
+		bvhData.useTransparencyRaycastFn();
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
@@ -133,6 +143,18 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
+
+	}
+
+	getMaterial() {
+
+		return this._pathTracer.getMaterial();
+
+	}
+
+	setMaterial( material ) {
+
+		this._pathTracer.setMaterial( material );
 
 	}
 
@@ -339,11 +361,22 @@ export class WebGPUPathTracer {
 		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
 		const uintBuffer = new Uint32Array( buffer.buffer );
 
+		// copyTexture requires a multiple of 256 bytes for texelsPerRow
+		// Hence a multiple of 64 u32 per row
+		const texelsPerRow = Math.ceil( width / 64 ) * 64;
+
 		// Sum up all sample counts and divide by pixel count to get average samples per pixel
 		let totalSamples = 0;
 		let minSamples = Number.MAX_VALUE;
 		let maxSamples = - Number.MAX_VALUE;
 		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
+
+			// Skip padding
+			if ( i % texelsPerRow >= width ) {
+
+				continue;
+
+			}
 
 			// Each entry contains sample count in lower bits and active flag in high bit
 			// Mask out the active flag (0xF0000000) to get just the sample count

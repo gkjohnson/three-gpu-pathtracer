@@ -2,9 +2,10 @@ import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
 
 export const constants = wgsl( /* wgsl */ `
-	// TODO: expose modification of this value
-	const filterGlossyFactor: f32 = 0.5;
+
 	const PI: f32 = 3.141592653589793;
+	const EPSILON: f32 = 1e-5;
+
 ` );
 
 export const scatterRecordStruct = new StructTypeNode( {
@@ -149,7 +150,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 
 	// material
 	roughness: 'f32',
-	filteredRoughness: 'f32',
 	metalness: 'f32',
 	color: 'vec3f',
 	emission: 'vec3f',
@@ -167,7 +167,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	clearcoatInvBasis: 'mat3x3f',
 	clearcoat: 'f32',
 	clearcoatRoughness: 'f32',
-	filteredClearcoatRoughness: 'f32',
 
 	// sheen
 	sheen: 'f32',
@@ -184,15 +183,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	specularIntensity: 'f32',
 }, 'SurfaceRecord' );
 
-// TODO: write a proposal for a storage-backed structs and arrays in structs for three.js
-//
-// const hitResultQueueStruct = wgsl( /* wgsl */ `
-// 	struct HitResultQueue {
-// 		currentSize: atomic<u32>,
-// 		queue: array<HitResultQueueElement>,
-// 	};
-// `, [ hitResultQueueElementStruct ] );
-
 export const rayQueueElementStruct = new StructTypeNode( {
 	origin: 'vec3',
 	_alignment0: 'uint',
@@ -203,19 +193,15 @@ export const rayQueueElementStruct = new StructTypeNode( {
 	pixel: 'vec2u',
 }, 'RayQueueElement' );
 
-export const hitResultQueueElementStruct = new StructTypeNode( {
-	normal: 'vec3f',
-	pixel_x: 'uint',
-	position: 'vec3f',
-	pixel_y: 'uint',
-	view: 'vec3f',
-	currentBounce: 'uint',
-	throughputColor: 'vec3f',
-	vertexIndex: 'uint',
-}, 'HitResultQueueElement' );
-
 export const environmentInfoStruct = new StructTypeNode( {
 	rotation: 'mat3x3f',
 	intensity: 'float',
 	blur: 'float',
 }, 'EnvironmentInfo' );
+
+export const lobeWeightsStruct = new StructTypeNode( {
+	diffuse: 'float',
+	specular: 'float',
+	transmission: 'float',
+	clearcoat: 'float',
+}, 'LobeWeights' );

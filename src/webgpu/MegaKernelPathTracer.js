@@ -15,6 +15,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel().setWorkgroupSize( 8, 8, 1 );
+		this.setMaterial( this.material );
 
 	}
 
@@ -30,6 +31,20 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.kernel.textures = texture;
 		this.kernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
+
+	}
+
+	getMaterial() {
+
+		return this.material;
+
+	}
+
+	setMaterial( material ) {
+
+		this.kernel.material = material.getData();
+		this.kernel.needsUpdate = true;
+		this.reset();
 
 	}
 
