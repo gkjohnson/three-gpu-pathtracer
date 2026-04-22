@@ -1,7 +1,7 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
-import { pcgRand2, pcgInit } from '../../nodes/random.wgsl.js';
+import { pcgRand2, setPcgSeed } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -90,7 +90,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let indexUV = input.pixel;
 				let seed = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
 
-				${ pcgInit }( indexUV, seed );
+				${ setPcgSeed }( input.pcgStateS0 );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
