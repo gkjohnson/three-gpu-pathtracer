@@ -86,17 +86,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
 					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
 
-					let tMinHit = vec3f(
-						min( tMinPlane.x, tMaxPlane.x ),
-						min( tMinPlane.y, tMaxPlane.y ),
-						min( tMinPlane.z, tMaxPlane.z )
-					);
-
-					let tMaxHit = vec3f(
-						max( tMinPlane.x, tMaxPlane.x ),
-						max( tMinPlane.y, tMaxPlane.y ),
-						max( tMinPlane.z, tMaxPlane.z )
-					);
+					let tMinHit = min( tMinPlane, tMaxPlane );
+					let tMaxHit = max( tMinPlane, tMaxPlane );
 
 					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
 					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
