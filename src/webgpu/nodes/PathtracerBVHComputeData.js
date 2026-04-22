@@ -1,6 +1,6 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode } from 'three/webgpu';
 import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
-import { storage } from 'three/tsl';
+import { storage, float } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -49,11 +49,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const { prefix, storage, structs, fns } = this;
 
 		// raycast first hit
-		const scratchRayScalar = wgslTagCode/* wgsl */`
-			var<private> bvh_rayScalar = 1.0;
-			var<private> bvh_material: ${ structs.material };
-			var<private> bvh_baseOpacity = 1.0;
-		`;
+		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
+		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
+		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: prefix + 'RaycastFirstHit',
@@ -68,12 +66,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				}
 			`,
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
-				${ [ scratchRayScalar ] }
-
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
 					// early-out if our object is completely transparent
-					if ( bvh_baseOpacity == 0.0 ) {
+					if ( ${ baseOpacityScalar } == 0.0 ) {
 
 						return 0u;
 
@@ -97,7 +93,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						return 0u;
 
-					} else if ( result.didHit && dist * bvh_rayScalar >= result.dist ) {
+					} else if ( result.didHit && dist * ${ scratchRayScalar } >= result.dist ) {
 
 						return 0u;
 
@@ -111,8 +107,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
-				${ [ scratchRayScalar ] }
-
 				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
 
 					var didHit = false;
@@ -127,13 +121,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
-						triResult.dist *= bvh_rayScalar;
+						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
-							let material = bvh_material;
+							let material = ${ currentMaterial };
 							if ( material.transparent != 0 ) {
 
-								let opacity = bvh_baseOpacity;
+								let opacity = ${ baseOpacityScalar };
 								// TODO: sample albedo + alphaMap alpha
 								if ( opacity < ${ pcgRand }() ) {
 
@@ -161,8 +155,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
-				${ [ scratchRayScalar ] }
-
 				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
 					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
@@ -171,17 +163,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let len = length( ray.direction );
 					ray.direction /= len;
-					bvh_rayScalar = 1.0 / len;
+					${ scratchRayScalar } = 1.0 / len;
 
 					let object = ${ storage.transforms }[ objectIndex ];
-					bvh_material = ${ storage.materials }[ object.materialIndex ];
-					if ( bvh_material.transparent == 1 ) {
+					${ currentMaterial } = ${ storage.materials }[ object.materialIndex ];
+					if ( ${ currentMaterial }.transparent == 1 ) {
 
-						bvh_baseOpacity = bvh_material.opacity * object.color.a;
+						${ baseOpacityScalar } = ${ currentMaterial }.opacity * object.color.a;
 
 					} else {
 
-						bvh_baseOpacity = 1.0;
+						${ baseOpacityScalar } = 1.0;
 
 					}
 
