@@ -1,7 +1,7 @@
 import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { getSurfaceRecordFunc, lambertBsdfFunc } from '../../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -10,7 +10,7 @@ import { getPcgSeed, setPcgSeed } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( material ) {
 
 		const params = {
 			bvhData: { value: null },
@@ -85,14 +85,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
 
-				let scatterRec = ${ lambertBsdfFunc }( input.view, surface );
+				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
 
 				if ( input.currentBounce >= bounces ) {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, vec4f( 0, 0, 0, 1 ), 1.0 / f32( sampleCount ) );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, input.resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
@@ -100,12 +100,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &queueSizes[ 1 ], 1 ) % rayQueueCapacity;
+					let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 					rayQueue[ index ].origin = vertexData.position.xyz;
 					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue[ index ].pcgStateS0 = ${ getPcgSeed }();
+					rayQueue[ index ].resultColor = resultColor;
 
 				}
 

@@ -110,13 +110,14 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].throughputColor = input.throughputColor;
 					hitQueue[ index ].currentBounce = input.currentBounce;
 					hitQueue[ index ].pcgStateS0 = input.pcgStateS0;
+					hitQueue[ index ].resultColor = input.resultColor;
 
 				} else {
 
-					var resultColor: vec4f;
+					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
-						resultColor = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, ${ pcgRand2 }() ) * vec4f( input.throughputColor, 1.0 );
+						resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, ${ pcgRand2 }() ) * vec4f( input.throughputColor, 0.0 );
 
 					} else {
 

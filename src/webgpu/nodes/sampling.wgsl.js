@@ -1,5 +1,15 @@
 import { wgslFn } from 'three/tsl';
-import { environmentInfoStruct, constants } from './structs.wgsl.js';
+import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
+import { pcgRand2 } from './random.wgsl.js';
+import { evaluateFresnelFunc } from './utils.wgsl.js';
+
+/*
+wi     : incident vector or light vector (pointing toward the light)
+wo     : outgoing vector or view vector (pointing towards the camera)
+wh     : computed half vector from wo and wi
+Vectors above are assumed to be in tangent space. i.e. +z is along macronormal of the surface
+eta    : Greek character used to denote the "ratio of ior"
+*/
 
 // TODO: Move to a local (s, t, n) coordinate system
 // From RayTracingGems v1.9 chapter 16.6.2 -- Its shit!
@@ -7,6 +17,7 @@ import { environmentInfoStruct, constants } from './structs.wgsl.js';
 // result.xyz = cosine-wighted vector on the hemisphere oriented to a vector
 // result.w = pdf
 export const sampleSphereCosineFn = wgslFn( /* wgsl */ `
+
 	fn sampleSphereCosine(rng: vec2f, n: vec3f) -> vec4f {
 
 		let a = (1 - 2 * rng.x) * 0.99999;
@@ -17,9 +28,70 @@ export const sampleSphereCosineFn = wgslFn( /* wgsl */ `
 
 		return vec4f( direction, pdf );
 	}
+
 `, [ constants ] );
 
+export const sampleSphereFunc = wgslFn( /* wgsl */ `
+
+	fn sampleSphere( uv: vec2f ) -> vec3f {
+
+		let u = ( uv.x - 0.5 ) * 2.0;
+		let t = uv.y * PI * 2.0;
+		let f = sqrt( 1.0 - u * u );
+
+		return vec3f( f * cos( t ), f * sin( t ), u );
+
+	}
+
+`, [ constants ] );
+
+export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
+
+	fn diffuseDirection( wo: vec3f, surf: SurfaceRecord ) -> vec3f {
+
+		var lightDirection = sampleSphere( pcgRand2() );
+		lightDirection.z += 1.0;
+		lightDirection = normalize( lightDirection );
+
+		return lightDirection;
+
+	}
+
+`, [ sampleSphereFunc, pcgRand2 ] );
+
+export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
+
+	fn getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, clearcoatWo: vec3f, surf: SurfaceRecord) -> LobeWeights {
+
+		// TODO: experiment with this; I don't see any usage of normal?
+		let metalness = surf.metalness;
+		let transmission = surf.transmission;
+		let HdotL = dot( wh, wo );
+		let fEstimate = evaluateFresnel( HdotL, surf.eta, vec3f( surf.f0 ), vec3f( 1.0 ) ).x;
+
+		let transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
+		let diffSpecularProb = 0.5 + 0.5 * metalness;
+
+		var weights: LobeWeights;
+		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
+		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
+		weights.transmission = transmission * ( 1.0 - transSpecularProb );
+		weights.clearcoat = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
+
+		let totalWeight = weights.diffuse + weights.specular; // + weights.transmission + weights.clearcoat;
+		weights.diffuse /= totalWeight;
+		weights.specular /= totalWeight;
+		// weights.transmission /= totalWeight;
+		// weights.clearcoat /= totalWeight;
+
+		return weights;
+
+	}
+
+`, [ evaluateFresnelFunc, lobeWeightsStruct ] );
+
 const equirectDirectionToUvFn = wgslFn( /* wgsl */`
+
 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
 
 		// from Spherical.setFromCartesianCoords
@@ -32,14 +104,17 @@ const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 		return uv;
 
 	}
+
 ` );
 
 const sampleEquirectColorFn = wgslFn( /* wgsl */ `
+
 	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
 
 		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 );
 
 	}
+
 `, [ equirectDirectionToUvFn ] );
 
 const sampleHemisphereFn = wgslFn( /* wgsl */ `
@@ -85,6 +160,7 @@ export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 `, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
 
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
+
 	fn weightedAlphaBlend( prevColor: vec4f, newColor: vec4f, weight: f32 ) -> vec4f {
 
 		let invWeight = 1.0 - weight;
@@ -101,4 +177,5 @@ export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 		return blendedColor;
 
 	}
+
 ` );
