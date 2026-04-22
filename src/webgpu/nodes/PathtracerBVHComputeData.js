@@ -5,7 +5,7 @@ import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
-import { wgslTagCode, wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { pcgRand } from './random.wgsl.js';
 
 const _colorVec = new Vector4();
