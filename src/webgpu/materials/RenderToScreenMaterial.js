@@ -109,6 +109,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const transitionUniform = uniform( 1.0 );
 		this._transitionUniform = transitionUniform;
 
+		// NOTE: varyings cannot be referenced directly and must be passed as arguments
 		const getFadedColorFn = wgslTagFn/* wgsl */`
 			fn fade( uv: vec2f ) -> vec4f {
 
@@ -131,9 +132,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 			}
 		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( {
-			uv: texUV,
-	 	} ) );
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( texUV ) );
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping
