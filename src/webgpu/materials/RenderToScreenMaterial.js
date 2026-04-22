@@ -109,14 +109,14 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const transitionUniform = uniform( 1.0 );
 		this._transitionUniform = transitionUniform;
 
-		const fadedColor = wgslTagFn/* wgsl */`
-			fn fade( transition: f32, uv: vec2f ) -> vec4f {
+		const getFadedColorFn = wgslTagFn/* wgsl */`
+			fn fade( uv: vec2f ) -> vec4f {
 
-				if ( transition <= 0.0 ) {
+				if ( ${ transitionUniform } <= 0.0 ) {
 
 					return ${ sampleTexelFn }( ${ fromTexNode }, uv );
 
-				} else if ( transition >= 1.0 ) {
+				} else if ( ${ transitionUniform } >= 1.0 ) {
 
 					return ${ sampleTexelFn }( ${ texNode }, uv );
 
@@ -124,15 +124,14 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 					let col0 = ${ sampleTexelFn }( ${ fromTexNode }, uv );
 					let col1 = ${ sampleTexelFn }( ${ texNode }, uv );
-					return mix( col0, col1, transition );
+					return mix( col0, col1, ${ transitionUniform } );
 
 				}
 
 			}
 		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, fadedColor( {
-			transition: transitionUniform,
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( {
 			uv: texUV,
 	 	} ) );
 		this._toneMapping = toneMappingNode;
