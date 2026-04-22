@@ -70,12 +70,12 @@ export class WebGPUPathTracer {
 		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._size = new Vector2();
+		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+
+		// avoid mipmap gen on copy, not always supported with float type
 		this._lowResTarget = new StorageTexture( 1, 1 );
 		this._lowResTarget.type = FloatType;
-		this._lowResTarget.minFilter = NearestFilter;
-		this._lowResTarget.magFilter = NearestFilter;
 		this._lowResTarget.generateMipmaps = false;
-		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// options
 		this.minSamples = 1;

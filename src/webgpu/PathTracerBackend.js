@@ -1,4 +1,4 @@
-import { ColorManagement, FloatType, NearestFilter, RGBAFormat } from 'three';
+import { ColorManagement, FloatType, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
@@ -18,9 +18,6 @@ export class PathTracerBackend {
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
 		this.outputTarget.type = FloatType;
-		this.outputTarget.minFilter = NearestFilter;
-		this.outputTarget.magFilter = NearestFilter;
-		this.outputTarget.generateMipmaps = false;
 		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
 		this.outputTarget.name = 'Output #0';
 		this.outputTarget.generateMipmaps = false;
@@ -28,9 +25,6 @@ export class PathTracerBackend {
 		this.prevOutputTarget = new StorageTexture( 1, 1, );
 		this.prevOutputTarget.format = RGBAFormat;
 		this.prevOutputTarget.type = FloatType;
-		this.prevOutputTarget.minFilter = NearestFilter;
-		this.prevOutputTarget.magFilter = NearestFilter;
-		this.prevOutputTarget.generateMipmaps = false;
 		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
 		this.prevOutputTarget.name = 'Output #1';
 		this.prevOutputTarget.generateMipmaps = false;
