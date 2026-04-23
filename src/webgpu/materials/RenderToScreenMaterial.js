@@ -98,10 +98,10 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 		super();
 
-		const texNode = texture( new StorageTexture(), varying( uv() ) );
+		const texNode = texture( new StorageTexture() );
 		this._texNode = texNode;
 
-		const fromTexNode = texture( new StorageTexture(), varying( uv() ) );
+		const fromTexNode = texture( new StorageTexture() );
 		this._fromTexNode = fromTexNode;
 
 		const texUV = varying( uv() );
