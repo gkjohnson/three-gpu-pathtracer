@@ -1,6 +1,6 @@
 import { Matrix4, Vector4 } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage, wgsl } from 'three/tsl';
+import { storage, float } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
@@ -802,9 +802,7 @@ export class BVHComputeData {
 		const { storage, structs, fns } = this;
 
 		// raycast first hit
-		const scratchRayScalar = wgsl( /* wgsl */`
-			var<private> bvh_rayScalar = 1.0;
-		` );
+		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: 'bvh_RaycastFirstHit',
 			shapeStruct: rayStruct,
@@ -818,8 +816,6 @@ export class BVHComputeData {
 				}
 			`,
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
-				${ [ scratchRayScalar ] }
-
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
 					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
@@ -849,7 +845,7 @@ export class BVHComputeData {
 
 						return 0u;
 
-					} else if ( result.didHit && dist * bvh_rayScalar >= result.dist ) {
+					} else if ( result.didHit && dist * ${ scratchRayScalar } >= result.dist ) {
 
 						return 0u;
 
@@ -863,8 +859,6 @@ export class BVHComputeData {
 
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
-				${ [ scratchRayScalar ] }
-
 				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
 
 					var didHit = false;
@@ -879,7 +873,7 @@ export class BVHComputeData {
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
-						triResult.dist *= bvh_rayScalar;
+						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							result.didHit = true;
@@ -900,8 +894,6 @@ export class BVHComputeData {
 				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
-				${ [ scratchRayScalar ] }
-
 				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
 					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
@@ -910,7 +902,7 @@ export class BVHComputeData {
 
 					let len = length( ray.direction );
 					ray.direction /= len;
-					bvh_rayScalar = 1.0 / len;
+					${ scratchRayScalar } = 1.0 / len;
 
 				}
 			`,
