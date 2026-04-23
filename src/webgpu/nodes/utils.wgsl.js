@@ -100,3 +100,50 @@ export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 `, [ totalInternalReflectionFunc ] );
 
+export const applyWrapFunc = wgslFn( /* wgsl */ `
+
+	fn applyWrap( v: f32, wrapMode: i32 ) -> f32 {
+
+		var res = v;
+		if ( wrapMode == 1 ) {
+
+			// ClampToEdge
+			res = clamp( res, 0.0, 1.0 );
+
+		} else if ( wrapMode == 2 ) {
+
+			// MirroredRepeat
+			res = 1.0 - abs( 2.0 * fract( res * 0.5 ) - 1.0 );
+
+		} else {
+
+			// Repeat
+			res = fract( res );
+
+		}
+
+		return res;
+
+	}
+
+` );
+
+export const sampleTexelFunc = wgslFn( /* wgsl */ `
+
+	fn sampleTexel( textures: texture_2d_array<f32>, textureSampler: sampler, uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
+
+		let wrapS = ( packed >> 24 ) & 0x3;
+		let wrapT = ( packed >> 26 ) & 0x3;
+		let texIndex = packed & 0xFFFFFF;
+
+		let wrappedUv = vec2f(
+			applyWrap( uv.x, wrapS ),
+			applyWrap( uv.y, wrapT ),
+		);
+
+		return textureSampleLevel( textures, textureSampler, wrappedUv, texIndex, lod );
+
+	}
+
+`, [ applyWrapFunc ] );
+
