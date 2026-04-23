@@ -132,8 +132,9 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 
 	fn sampleTexel( textures: texture_2d_array<f32>, textureSampler: sampler, uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
-		let wrapS = ( packed >> 24 ) & 0x3;
-		let wrapT = ( packed >> 26 ) & 0x3;
+		let wrapS    = ( packed >> 24 ) & 0x3;
+		let wrapT    = ( packed >> 26 ) & 0x3;
+		let nearest  = ( packed >> 28 ) & 0x1;
 		let texIndex = packed & 0xFFFFFF;
 
 		let wrappedUv = vec2f(
@@ -141,7 +142,17 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 			applyWrap( uv.y, wrapT ),
 		);
 
-		return textureSampleLevel( textures, textureSampler, wrappedUv, texIndex, lod );
+		if ( nearest == 1 ) {
+
+			let dims = vec2f( textureDimensions( textures, 0 ).xy );
+			let texel = vec2i( wrappedUv * dims );
+			return textureLoad( textures, texel, texIndex, 0 );
+
+		} else {
+
+			return textureSampleLevel( textures, textureSampler, wrappedUv, texIndex, lod );
+
+		}
 
 	}
 

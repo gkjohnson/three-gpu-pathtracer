@@ -1,4 +1,4 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
 import { storage, float } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
@@ -248,7 +248,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				const idx = textureLookUp.get( hash );
 				const wrapS = encodeTextureWrap( texture.wrapS );
 				const wrapT = encodeTextureWrap( texture.wrapT );
-				return ( wrapT << 26 ) | ( wrapS << 24 ) | idx;
+				const nearest = texture.magFilter === NearestFilter ? 1 : 0;
+				return ( nearest << 28 ) | ( wrapT << 26 ) | ( wrapS << 24 ) | idx;
 
 			} else {
 
