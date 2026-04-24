@@ -126,7 +126,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( uv, 1 );
 			let texColor = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatRoughnessMap ), 0 );
-			clearcoatRoughness *= texColor.r;
+			clearcoatRoughness *= texColor.g;
 
 		}
 
