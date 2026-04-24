@@ -125,11 +125,25 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let material = ${ currentMaterial };
-							if ( material.transparent != 0 ) {
 
-								let opacity = ${ baseOpacityScalar };
+							// TODO: if material is a transmissive volume we may need to assume double-sidedness
+							if ( material.side != 0 && triResult.side != material.side ) {
+
+								continue;
+
+							}
+
+							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
+
 								// TODO: sample albedo + alphaMap alpha
-								if ( opacity < ${ pcgRand }() ) {
+								let opacity = ${ baseOpacityScalar };
+								if ( material.transparent != 0 && opacity < ${ pcgRand }() ) {
+
+									continue;
+
+								}
+
+								if ( opacity < material.alphaTest ) {
 
 									continue;
 
