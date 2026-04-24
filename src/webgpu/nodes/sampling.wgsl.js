@@ -76,7 +76,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
 		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
 
-		let clearcoatF0 = iorToF0( CLEARCOAT_IOR );
+		let clearcoatF0 = iorToF0( clearcoatIor );
 		let clearcoatFresnel = schlickFresnel( saturate( woClearcoat.z ), clearcoatF0 );
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
 
