@@ -7,6 +7,7 @@ import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 import { getPcgSeed, setPcgSeed } from '../../nodes/random.wgsl.js';
+import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -87,12 +88,16 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
 
-				if ( input.currentBounce >= bounces ) {
+				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
+
+				let isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+
+				if ( isTerminated ) {
 
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, input.resultColor, 1.0 / f32( sampleCount ) );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
@@ -100,7 +105,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
 					let index = atomicAdd( &queueSizes[ 1 ], 1 ) % rayQueueCapacity;
-					let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 					rayQueue[ index ].origin = vertexData.position.xyz;
 					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;

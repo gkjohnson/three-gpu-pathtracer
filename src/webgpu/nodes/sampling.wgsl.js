@@ -78,13 +78,16 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		var weights: LobeWeights;
 		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
 		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
-		weights.transmission = transmission * ( 1.0 - transSpecularProb );
-		weights.clearcoat =  ( weights.diffuse + weights.specular ) * surf.clearcoat * clearcoatFresnel;
 
-		let totalWeight = weights.diffuse + weights.specular + weights.clearcoat; // + weights.transmission + ;
-		weights.diffuse /= totalWeight;
-		weights.specular /= totalWeight;
-		weights.clearcoat /= totalWeight;
+		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
+
+		weights.transmission = transmission * ( 1.0 - transSpecularProb );
+
+		let totalWeight = weights.diffuse + weights.specular;
+		if ( totalWeight > 0 ) {
+			weights.diffuse = ( weights.diffuse / totalWeight ) * ( 1 - weights.clearcoat );
+			weights.specular = ( weights.specular / totalWeight ) * ( 1 - weights.clearcoat );
+		}
 		// weights.transmission /= totalWeight;
 
 		return weights;

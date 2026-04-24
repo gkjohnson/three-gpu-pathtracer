@@ -1,4 +1,5 @@
 import { wgslFn } from 'three/tsl';
+import { scatterRecordStruct } from './structs.wgsl';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
@@ -100,3 +101,10 @@ export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 `, [ totalInternalReflectionFunc ] );
 
+export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
+
+	fn isTerminatingScatter( scatterRec: ScatterRecord ) -> bool {
+		return scatterRec.pdf <= 0;
+	}
+
+`, [ scatterRecordStruct ] );

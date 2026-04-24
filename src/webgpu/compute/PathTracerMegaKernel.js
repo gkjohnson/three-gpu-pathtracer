@@ -7,6 +7,7 @@ import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -154,7 +155,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let scatterRec = ${ bsdfSampleFn }( - ray.direction, surface );
 
-						if ( scatterRec.pdf <= 0.0 || any( scatterRec.color != scatterRec.color ) ) {
+						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
 
@@ -163,6 +164,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
 
+						// TODO: Investigate offsetting this position to not self-intersect multiple times
+						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
+						// However that seems like a very large distance to offset
 						ray.origin = vertexData.position.xyz;
 						ray.direction = scatterRec.direction;
 

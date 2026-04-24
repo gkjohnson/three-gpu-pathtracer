@@ -95,7 +95,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 				let clearcoat = ${ this.specularBrdf }( LdotNc, VdotNc, HdotNc, clearcoatAlpha );
 
-				let coatedMaterial = ${ this.fresnelCoat }( VdotNc, 1.5, material, clearcoat, 0.0 );
+				let coatedMaterial = ${ this.fresnelCoat }( VdotNc, 1.5, material, clearcoat, surf.clearcoat );
 
 				return coatedMaterial;
 
@@ -118,15 +118,28 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let wo = normalize( invBasis * worldWo );
 				let woClearcoat = normalize( invClearcoatBasis * worldWo );
 
+				// TODO: handle such intersections better;
+				// Sometimes .z < 0.0 on a pretty round surface e.g. sphere
+				// Disabling this condition leads to more fireflies on ClearCoatCarPaint example
+				// This could also be fixed by offsetting rays by 1e-1
+				// Also, this will be an invalid condition when transmission is implemented
+				if ( wo.z < 0.0 || woClearcoat.z < 0.0 ) {
+
+					var res: ScatterRecord;
+					res.pdf = 0.0;
+					return res;
+
+				}
+
 				let weights = getLobeWeights( wo, woClearcoat, vec3( 0, 0, 1 ), vec3( 0, 0, 1 ), surf );
 
 				var cdf: vec4f;
 				cdf.x = weights.diffuse;
 				cdf.y = weights.specular + cdf.x;
-				cdf.z = 0; // pdf.transmission + cdf.y;
-				cdf.w = 0; // pdf.clearcoat + cdf.z;
+				cdf.z = weights.clearcoat + cdf.y;
+				cdf.w = 0; // weights.transmission + cdf.z;
 
-				let r = pcgRand() * cdf.y;
+				let r = pcgRand() * cdf.z;
 
 				var wi: vec3f;
 				var wiClearcoat: vec3f;
@@ -164,12 +177,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				}
 
 				let NdotV = max( wo.z, EPSILON );
-				let NdotL = saturate( wi.z );
+				let NdotL = max( wi.z, EPSILON );
 				let NdotH = saturate( wh.z );
 				let VdotH = saturate( dot( wo, wh ) );
 
 				let VdotNc = max( woClearcoat.z, EPSILON );
-				let LdotNc = saturate( wiClearcoat.z );
+				let LdotNc = max( wiClearcoat.z, EPSILON );
 				let HdotNc = saturate( whClearcoat.z );
 
 				var result: ScatterRecord;
@@ -177,13 +190,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( weights.diffuse > 0.0 ) {
 
-					result.pdf += weights.diffuse * wi.z / PI;
+					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
 
 				}
 
-				if ( weights.specular > 0.0 ) {
+				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
 
 					result.pdf += weights.specular * ggxReflectionAdjustedPDF( NdotV, NdotH, alpha );
+
+				}
+
+				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
+
+					result.pdf += weights.clearcoat * ggxReflectionAdjustedPDF( VdotNc, HdotNc, clearcoatAlpha );
 
 				}
 

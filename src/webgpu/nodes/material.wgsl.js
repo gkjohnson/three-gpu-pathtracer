@@ -44,8 +44,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( faceNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, faceNormal );
+				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
 				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
 				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.normalMap ), 0 ).xyz;
@@ -138,8 +138,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( faceNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, faceNormal );
+				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
 				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
 				var texNormal = textureSampleLevel( textures, textureSampler, uvPrime.xy, i32( material.clearcoatNormalMap ), 0 ).xyz;
