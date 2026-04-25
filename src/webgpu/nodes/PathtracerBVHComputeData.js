@@ -1,4 +1,4 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
 import { storage, float } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
@@ -125,11 +125,25 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let material = ${ currentMaterial };
-							if ( material.transparent != 0 ) {
 
-								let opacity = ${ baseOpacityScalar };
+							// TODO: if material is a transmissive volume we may need to assume double-sidedness
+							if ( material.side != 0 && triResult.side != material.side ) {
+
+								continue;
+
+							}
+
+							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
+
 								// TODO: sample albedo + alphaMap alpha
-								if ( opacity < ${ pcgRand }() ) {
+								let opacity = ${ baseOpacityScalar };
+								if ( material.transparent != 0 && opacity < ${ pcgRand }() ) {
+
+									continue;
+
+								}
+
+								if ( opacity < material.alphaTest ) {
 
 									continue;
 
@@ -214,24 +228,46 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	writeMaterialsBuffer( materials ) {
 
-		function getTexture( material, key, def = - 1 ) {
+		function encodeTextureWrap( wrap ) {
+
+			switch ( wrap ) {
+
+				case RepeatWrapping:
+					return 0;
+				case ClampToEdgeWrapping:
+					return 1;
+				case MirroredRepeatWrapping:
+					return 2;
+				default:
+					return 0;
+
+			}
+
+		}
+
+		function getTexture( material, key ) {
 
 			if ( key in material && material[ key ] ) {
 
-				const hash = getTextureHash( material[ key ] );
+				const texture = material[ key ];
+				const hash = getTextureHash( texture );
 
 				if ( ! textureLookUp.has( hash ) ) {
 
 					textureLookUp.set( hash, textureLookUp.size );
-					textures.push( material[ key ] );
+					textures.push( texture );
 
 				}
 
-				return textureLookUp.get( hash );
+				const idx = textureLookUp.get( hash );
+				const wrapS = encodeTextureWrap( texture.wrapS );
+				const wrapT = encodeTextureWrap( texture.wrapT );
+				const nearest = texture.magFilter === NearestFilter ? 1 : 0;
+				return ( nearest << 28 ) | ( wrapT << 26 ) | ( wrapS << 24 ) | idx;
 
 			} else {
 
-				return def;
+				return - 1;
 
 			}
 
