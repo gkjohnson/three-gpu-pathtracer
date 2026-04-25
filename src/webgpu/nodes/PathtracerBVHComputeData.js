@@ -149,8 +149,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 									let b = ${ storage.attributes }[ i1 ].uv.xy;
 									let c = ${ storage.attributes }[ i2 ].uv.xy;
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+									let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
-									opacity *= ${ sampleTexelFunc }( ${ texturesNode }, ${ samplerNode }, uv, material.map, 0 ).a;
+									opacity *= ${ sampleTexelFunc }( ${ texturesNode }, ${ samplerNode }, uvPrime.xy, material.map, 0 ).a;
 
 								}
 
@@ -162,8 +163,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 									let b = ${ storage.attributes }[ i1 ].uv.xy;
 									let c = ${ storage.attributes }[ i2 ].uv.xy;
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
-									opacity *= ${ sampleTexelFunc }( ${ texturesNode }, ${ samplerNode }, uv, material.alphaMap, 0 ).g;
+									opacity *= ${ sampleTexelFunc }( ${ texturesNode }, ${ samplerNode }, uvPrime.xy, material.alphaMap, 0 ).g;
 
 								}
 
