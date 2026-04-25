@@ -237,9 +237,9 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.roughness = roughness;
-		surf.clearcoatRoughness = clearcoatRoughness;
-		surf.sheenRoughness = sheenRoughness;
+		surf.roughness = clamp( roughness, 0.001, 1.0 );
+		surf.clearcoatRoughness = clamp( clearcoatRoughness, 0.001, 1.0 );
+		surf.sheenRoughness = clamp( sheenRoughness, 0.001, 1.0 );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.

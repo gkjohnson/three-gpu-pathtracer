@@ -22,6 +22,7 @@ export class WebGPUPathTracer {
 	set bounces( v ) {
 
 		this._pathTracer.bounces = v;
+		this._pathTracer.reset();
 
 	}
 
