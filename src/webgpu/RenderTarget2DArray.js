@@ -9,7 +9,6 @@ import {
 	NoBlending,
 	MeshBasicMaterial,
 } from 'three/webgpu';
-import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 
 function getTextureHash( texture ) {
 
