@@ -128,6 +128,11 @@ async function createRenderer( isWebGPU ) {
 		// path tracer - WebGPU version
 		pathTracer = new WebGPUPathTracer( renderer );
 		pathTracer.useMegakernel( params.useMegakernel );
+		if ( params.useMegakernel ) {
+
+			pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
+
+		}
 
 	} else {
 
@@ -141,11 +146,13 @@ async function createRenderer( isWebGPU ) {
 		// path tracer
 		pathTracer = new WebGLPathTracer( renderer );
 		pathTracer.filterGlossyFactor = 0.5;
-		pathTracer.tiles.set( params.tiles );
+		pathTracer.tiles.set( params.tiles, params.tiles );
 		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	}
+
+	detailedSampleCount = null;
 
 }
 
@@ -243,7 +250,7 @@ function onHashChange() {
 
 function onParamsChange() {
 
-	if ( pathTracer.tiles !== 1.0 ) {
+	if ( pathTracer.tiles.x * pathTracer.tiles.y !== 1.0 ) {
 
 		delaySamples = 1;
 
@@ -320,6 +327,7 @@ function buildGui() {
 
 		pathTracer.useMegakernel( params.useMegakernel );
 		pathTracer.reset();
+		detailedSampleCount = null;
 
 	} );
 	webgpuOptions.show( params.isWebGPU );
@@ -335,7 +343,12 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
-		pathTracer.tiles.set( v, v );
+		const tiles = pathTracer.tiles ?? pathTracer._pathTracer.tiles;
+		if ( tiles ) {
+
+			tiles.set( v, v );
+
+		}
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
