@@ -15,6 +15,13 @@ export const scatterRecordStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'ScatterRecord' );
 
+// NOTE: all "*Map" fields are bit-packed integers of texture index & settings:
+// bits 0-23: texture index
+// bits 24-25: wrapS setting
+// bits 26-27: wrapT setting
+// bit 28: filter setting
+// bits 29-30: unused
+// bit 31: negative bit used for indicating unused texture
 export const materialStruct = new StructTypeNode( {
 	// offset 0
 	color: 'vec3',
