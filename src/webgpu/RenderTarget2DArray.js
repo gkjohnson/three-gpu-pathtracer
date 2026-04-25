@@ -7,6 +7,7 @@ import {
 	NoToneMapping,
 	QuadMesh,
 	NoBlending,
+	MeshBasicMaterial,
 } from 'three/webgpu';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 
@@ -64,7 +65,7 @@ export class RenderTarget2DArray {
 		this.texture.isArrayTexture = true;
 
 		this.hashes = [];
-		this.quadMesh = new QuadMesh( new RenderToScreenNodeMaterial() );
+		this.quadMesh = new QuadMesh( new MeshBasicMaterial() );
 		this.quadMesh.material.blending = NoBlending;
 
 	}
@@ -115,7 +116,7 @@ export class RenderTarget2DArray {
 				texture.matrixAutoUpdate = false;
 				texture.matrix.identity();
 
-				quadMesh.material.texture = texture;
+				quadMesh.material.map = texture;
 
 				renderer.setRenderTarget( this.renderTarget, i );
 				quadMesh.render( renderer );

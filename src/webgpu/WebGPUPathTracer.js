@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, Vector3, Triangle } from 'three/webgpu';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -133,7 +133,7 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn();
+		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
