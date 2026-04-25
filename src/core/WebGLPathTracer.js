@@ -524,4 +524,20 @@ export class WebGLPathTracer {
 
 	}
 
+	getRenderTime() {
+
+		return this._clock.getElapsedTime() * 1e3;
+
+	}
+
+	async getDetailedSampleCount() {
+
+		return {
+			min: this.samples,
+			max: this.samples,
+			avg: this.samples,
+		};
+
+	}
+
 }
