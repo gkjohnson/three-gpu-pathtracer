@@ -47,6 +47,8 @@ const params = {
 	tiles: tiles,
 	scale: scale,
 
+	samplesPerFrame: 1,
+
 	model: '',
 	checkerboardTransparency: true,
 	displayImage: false,
@@ -210,7 +212,11 @@ function animate() {
 		pathTracer.enablePathTracing = params.enable;
 		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
 
-		pathTracer.renderSample();
+		for ( let i = 0; i < params.samplesPerFrame; i ++ ) {
+
+			pathTracer.renderSample();
+
+		}
 
 	} else if ( ( delaySamples > 0 || ! params.enable ) && renderer.initialized !== false ) {
 
@@ -250,7 +256,7 @@ function onHashChange() {
 
 function onParamsChange() {
 
-	if ( pathTracer.tiles.x * pathTracer.tiles.y !== 1.0 ) {
+	if ( pathTracer.tiles !== 1.0 ) {
 
 		delaySamples = 1;
 
@@ -353,6 +359,8 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
+
+	pathTracingFolder.add( params, 'samplesPerFrame', 1, 30, 1 );
 
 	const comparisonFolder = gui.addFolder( 'Comparison' );
 	comparisonFolder.add( params, 'displayImage' );
