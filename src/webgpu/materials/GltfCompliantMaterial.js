@@ -13,7 +13,7 @@ const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.met
 const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
 
 const CLEARCOAT_IOR = float( 1.5 );
-const EPSILON = float( 1e-3 );
+const MIN_INCIDENT_COS = float( 1e-3 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -82,7 +82,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fn bsdfEval(
 				NdotL: f32, NdotV: f32, NdotH: f32, VdotH: f32,
 				LdotNc: f32, VdotNc: f32, HdotNc: f32,
-				surf: SurfaceRecord
+				surf: ${ surfaceRecordStruct }
 			) -> vec3f {
 
 				let alpha = surf.roughness * surf.roughness;
@@ -180,13 +180,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				let NdotV = max( wo.z, ${ EPSILON } );
-				let NdotL = max( wi.z, ${ EPSILON } );
+				let NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
+				let NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
 				let NdotH = saturate( wh.z );
 				let VdotH = saturate( dot( wo, wh ) );
 
-				let VdotNc = max( woClearcoat.z, ${ EPSILON } );
-				let LdotNc = max( wiClearcoat.z, ${ EPSILON } );
+				let VdotNc = max( woClearcoat.z, ${ MIN_INCIDENT_COS } );
+				let LdotNc = max( wiClearcoat.z, ${ MIN_INCIDENT_COS } );
 				let HdotNc = saturate( whClearcoat.z );
 
 				if ( weights.diffuse > 0.0 ) {

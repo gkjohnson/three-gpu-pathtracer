@@ -1,10 +1,12 @@
 import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
 
+// TODO: Move to node-based constants that are embedded with wgslTagFn
 export const constants = wgsl( /* wgsl */ `
 
 	const PI: f32 = 3.141592653589793;
 	const EPSILON: f32 = 1e-5;
+	const MIN_ROUGHNESS: f32 = 1e-3;
 
 ` );
 

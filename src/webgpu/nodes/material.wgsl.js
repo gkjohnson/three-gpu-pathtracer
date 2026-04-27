@@ -6,16 +6,16 @@ import {
 	schlickFresnelFunc,
 	schlickFresnelVecFunc,
 	sampleTexelFunc,
-} from './utils.wgsl';
+} from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
 	ggxDistributionFunc,
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
-} from './ggx.wgsl';
-import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl';
-import { sampleSphereCosineFn } from './sampling.wgsl';
-import { pcgInit, pcgRand2 } from './random.wgsl';
+} from './ggx.wgsl.js';
+import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl.js';
+import { sampleSphereCosineFn } from './sampling.wgsl.js';
+import { pcgInit, pcgRand2 } from './random.wgsl.js';
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
@@ -238,9 +238,9 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.roughness = clamp( roughness, 0.001, 1.0 );
-		surf.clearcoatRoughness = clamp( clearcoatRoughness, 0.001, 1.0 );
-		surf.sheenRoughness = clamp( sheenRoughness, 0.001, 1.0 );
+		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
+		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
+		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
@@ -268,6 +268,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 	getBasisFromNormalFunc,
 	sampleTexelFunc,
 	surfaceRecordStruct,
+	constants,
 ] );
 
 export const lambertBsdfFunc = wgslFn( /* wgsl */`
