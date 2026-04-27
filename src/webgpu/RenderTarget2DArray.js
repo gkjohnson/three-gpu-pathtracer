@@ -1,4 +1,5 @@
 import {
+	MeshBasicMaterial,
 	RenderTarget,
 	RGBAFormat,
 	UnsignedByteType,
@@ -7,7 +8,6 @@ import {
 	NoToneMapping,
 	QuadMesh,
 	NoBlending,
-	MeshBasicMaterial,
 } from 'three/webgpu';
 
 function getTextureHash( texture ) {

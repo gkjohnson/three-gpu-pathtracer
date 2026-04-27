@@ -358,7 +358,7 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 	  let ss = bsdf * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
 
 		let uv = vec2( NdotV, sqrt( alpha ) );
-		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5);
+		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5 );
 
 		return ss * ( 1.0 + f0 * ( 1.0 - energySs ) / energySs );
 
@@ -371,7 +371,7 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 
 	fn albedo(
-		texture: texture_storage_2d<r32float, write>,
+		texture: texture_storage_2d<r16float, write>,
 
 		globalId: vec3u,
 	) -> void {
@@ -413,7 +413,7 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 
 		result /= f32( INTEGRATION_SAMPLES );
 
-		textureStore(texture, globalId.xy, vec4( result ));
+		textureStore( texture, globalId.xy, vec4( result ) );
 
 	}
 

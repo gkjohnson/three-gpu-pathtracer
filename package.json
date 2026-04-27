@@ -43,6 +43,7 @@
     "@types/node": "^24.3.1",
     "@types/three": "^0.184.0",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "canvas-capture": "^2.0.5",
     "eslint": "^8.56.0",
     "eslint-config-mdcs": "^5.0.0",
