@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { pcgRand2 } from './random.wgsl.js';
-import { evaluateFresnelFunc } from './utils.wgsl.js';
+import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -93,7 +93,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ evaluateFresnelFunc, lobeWeightsStruct, constants ] );
+`, [ schlickFresnelFunc, iorToF0Func, evaluateFresnelFunc, lobeWeightsStruct, constants ] );
 
 const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
