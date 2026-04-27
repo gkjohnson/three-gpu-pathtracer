@@ -29,6 +29,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		if ( calculateTurquinTexture ) {
 
 			this.turquinTexture = new StorageTexture( 32, 32 );
+			this.turquinTexture.type = HalfFloatType;
 
 		} else {
 
@@ -38,7 +39,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		}
 
 		this.turquinTexture.format = RedFormat;
-		this.turquinTexture.type = HalfFloatType;
 		this.turquinTexture.minFilter = LinearFilter;
 		this.turquinTexture.magFilter = LinearFilter;
 

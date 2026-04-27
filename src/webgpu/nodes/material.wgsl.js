@@ -358,7 +358,7 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 	  let ss = bsdf * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
 
 		let uv = vec2( NdotV, sqrt( alpha ) );
-		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5);
+		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5 );
 
 		return ss * ( 1.0 + f0 * ( 1.0 - energySs ) / energySs );
 
