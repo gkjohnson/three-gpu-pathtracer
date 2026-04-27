@@ -136,7 +136,7 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn();
+		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );

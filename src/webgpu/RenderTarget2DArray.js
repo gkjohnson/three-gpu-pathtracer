@@ -3,11 +3,12 @@ import {
 	RenderTarget,
 	RGBAFormat,
 	UnsignedByteType,
-	RepeatWrapping,
+	ClampToEdgeWrapping,
 	LinearFilter,
 	NoToneMapping,
 	QuadMesh,
 	NoBlending,
+	MeshBasicMaterial,
 } from 'three/webgpu';
 
 function getTextureHash( texture ) {
@@ -43,8 +44,8 @@ export class RenderTarget2DArray {
 			type: UnsignedByteType,
 			minFilter: LinearFilter,
 			magFilter: LinearFilter,
-			wrapS: RepeatWrapping,
-			wrapT: RepeatWrapping,
+			wrapS: ClampToEdgeWrapping,
+			wrapT: ClampToEdgeWrapping,
 			generateMipmaps: false,
 			...options,
 		};
