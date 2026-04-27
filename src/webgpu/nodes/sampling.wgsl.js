@@ -47,9 +47,9 @@ export const sampleSphereFunc = wgslFn( /* wgsl */ `
 
 export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
-	fn diffuseDirection( wo: vec3f, surf: SurfaceRecord ) -> vec3f {
+	fn diffuseDirection( wo: vec3f, uv: vec2f ) -> vec3f {
 
-		var lightDirection = sampleSphere( pcgRand2() );
+		var lightDirection = sampleSphere( uv );
 		lightDirection.z += 1.0;
 		lightDirection = normalize( lightDirection );
 
@@ -57,7 +57,7 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ sampleSphereFunc, pcgRand2 ] );
+`, [ sampleSphereFunc ] );
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 

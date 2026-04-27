@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/we
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { pcgRand2, pcgInit } from '../nodes/random.wgsl.js';
+import { pcgRand2, pcgInit, sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
@@ -123,10 +123,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
-				${ pcgInit }( indexUV, seed );
+				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				${ sobolInit }( pixelIndex, seed, 0 );
 
 				// scene ray
-				var jitter = 2.0 * ${ pcgRand2 }() / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
@@ -134,6 +135,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var throughputColor = vec3f( 1.0 );
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
+
+					${ sobolInit }( pixelIndex, seed, bounce );
 
 					var hitResult: ${ raycastOutput };
 					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
@@ -172,13 +175,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
+						let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 						if ( bounce > 0u ) {
 
-							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() ) * vec4f( throughputColor, 0.0 );
+							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );
 
 						} else {
 
-							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
 
 						}
 

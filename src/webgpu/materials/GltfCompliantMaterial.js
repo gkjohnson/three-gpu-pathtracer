@@ -6,7 +6,7 @@ import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
-import { pcgRand, pcgRand2 } from '../nodes/random.wgsl.js';
+import { SOBOL_INDEX_SCATTER_DIRECTION, SOBOL_INDEX_SCATTER_TYPE, sobolFuncs  } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
@@ -139,8 +139,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				cdf.z = weights.clearcoat + cdf.y;
 				cdf.w = 0; // weights.transmission + cdf.z;
 
-				let r = ${ pcgRand }() * cdf.z;
+				let r = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_SCATTER_TYPE } ) * cdf.z;
 
+				let directionUV = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_SCATTER_DIRECTION } );
 				var wi: vec3f;
 				var wiClearcoat: vec3f;
 				var wh: vec3f;
@@ -148,7 +149,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( r <= cdf.x ) { // diffuse
 
-					wi = ${ diffuseDirectionFunc }( wo, surf );
+					wi = ${ diffuseDirectionFunc }( wo, directionUV );
 					wh = normalize( wi + wo );
 
 					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
@@ -156,7 +157,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				} else if ( r <= cdf.y ) { // specular
 
-					wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ pcgRand2 }() );
+					wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), directionUV );
 					wi = - reflect( wo, wh );
 
 					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
@@ -164,7 +165,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				} else if ( r <= cdf.z ) { // clearcoat
 
-					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), ${ pcgRand2 }() );
+					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
 					wiClearcoat = - reflect( woClearcoat, whClearcoat );
 
 					wi = normalize( invBasis * clearcoatBasis * wiClearcoat );
