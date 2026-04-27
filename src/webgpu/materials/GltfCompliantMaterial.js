@@ -6,7 +6,7 @@ import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
 import { scatterRecordStruct } from '../nodes/structs.wgsl';
-import { pcgRand, pcgRand2 } from '../nodes/random.wgsl';
+import { pcgRand, pcgRand2, SOBOL_INDEX_SCATTER_DIRECTION, SOBOL_INDEX_SCATTER_TYPE, sobolFuncs } from '../nodes/random.wgsl';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
@@ -109,20 +109,20 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				cdf.z = 0; // pdf.transmission + cdf.y;
 				cdf.w = 0; // pdf.clearcoat + cdf.z;
 
-				let r = pcgRand() * cdf.y;
+				let r = sobol1( ${ SOBOL_INDEX_SCATTER_TYPE } ) * cdf.y;
 
+				let directionUv = sobol2( ${ SOBOL_INDEX_SCATTER_DIRECTION } );
 				var wi: vec3f;
 				var wh: vec3f;
 
 				if ( r <= cdf.x ) { // diffuse
 
-					wi = diffuseDirection( wo, surf );
+					wi = diffuseDirection( wo, directionUv );
 					wh = normalize( wi + wo );
 
 				} else if ( r <= cdf.y ) { // specular
 
-					wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
-
+					wh = ggxDirection( wo, vec2( alpha ), directionUv );
 					wi = - reflect( wo, wh );
 
 				} else if ( r <= cdf.z ) { // transmission / refraction
@@ -170,8 +170,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			diffuseDirectionFunc,
 			scatterRecordStruct,
 			getLobeWeightsFunc,
-			pcgRand,
-			pcgRand2,
+			sobolFuncs[ 1 ],
+			sobolFuncs[ 2 ],
 		] );
 
 	}
