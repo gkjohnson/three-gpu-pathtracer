@@ -2,11 +2,11 @@ import { texture, textureStore, globalId, float } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, FloatType, TextureLoader } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc } from '../nodes/material.wgsl';
-import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
-import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
-import { scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl';
-import { pcgRand, pcgRand2 } from '../nodes/random.wgsl';
+import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc } from '../nodes/material.wgsl.js';
+import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
+import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
+import { scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { pcgRand, pcgRand2 } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();

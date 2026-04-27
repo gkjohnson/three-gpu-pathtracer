@@ -345,6 +345,7 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 		let f0 = iorToF0( ior );
   	let F = schlickFresnel( abs( VdotH ), f0 );
+
   	return base + F * layer;
 
 	}

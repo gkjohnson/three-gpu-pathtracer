@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { scatterRecordStruct } from './structs.wgsl';
+import { scatterRecordStruct } from './structs.wgsl.js';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
