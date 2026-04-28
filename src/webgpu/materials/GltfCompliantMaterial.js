@@ -5,7 +5,7 @@ import { PathtracingMaterial } from './PathtracingMaterial';
 import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc } from '../nodes/material.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { pcgRand, pcgRand2 } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
@@ -79,26 +79,22 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
-			fn bsdfEval(
-				NdotL: f32, NdotV: f32, NdotH: f32, VdotH: f32,
-				LdotNc: f32, VdotNc: f32, HdotNc: f32,
-				surf: ${ surfaceRecordStruct }
-			) -> vec3f {
+			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
 				let alpha = surf.roughness * surf.roughness;
 
-				let specular = ${ this.specularBrdf }( NdotL, NdotV, NdotH, alpha );
-				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, VdotH, surf );
-				let dielectric = ${ this.fresnelMix }( VdotH, surf.ior, diffuse, specular );
+				let specular = ${ this.specularBrdf }( ctx.NdotL, ctx.NdotV, ctx.NdotH, alpha );
+				let diffuse = ${ this.diffuseBrdf }( ctx.NdotV, ctx.NdotL, ctx.VdotH, surf );
+				let dielectric = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
-				let metallic = ${ this.conductorFresnel }( NdotV, VdotH, surf.color, specular, alpha );
+				let metallic = ${ this.conductorFresnel }( ctx.NdotV, ctx.VdotH, surf.color, specular, alpha );
 
 				let material = mix( dielectric, metallic, surf.metalness );
 
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-				let clearcoat = ${ this.specularBrdf }( LdotNc, VdotNc, HdotNc, clearcoatAlpha );
+				let clearcoat = ${ this.specularBrdf }( ctx.LdotNc, ctx.VdotNc, ctx.HdotNc, clearcoatAlpha );
 
-				let coatedMaterial = ${ this.fresnelCoat }( VdotNc, ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
+				let coatedMaterial = ${ this.fresnelCoat }( ctx.VdotNc, ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
 
 				return coatedMaterial;
 
@@ -180,14 +176,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				let NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
-				let NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
-				let NdotH = saturate( wh.z );
-				let VdotH = saturate( dot( wo, wh ) );
+				var ctx: ${ bxdfContextStruct };
+				ctx.NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
+				ctx.NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
+				ctx.NdotH = saturate( wh.z );
+				ctx.VdotH = saturate( dot( wo, wh ) );
 
-				let VdotNc = max( woClearcoat.z, ${ MIN_INCIDENT_COS } );
-				let LdotNc = max( wiClearcoat.z, ${ MIN_INCIDENT_COS } );
-				let HdotNc = saturate( whClearcoat.z );
+				ctx.VdotNc = max( woClearcoat.z, ${ MIN_INCIDENT_COS } );
+				ctx.LdotNc = max( wiClearcoat.z, ${ MIN_INCIDENT_COS } );
+				ctx.HdotNc = saturate( whClearcoat.z );
 
 				if ( weights.diffuse > 0.0 ) {
 
@@ -197,21 +194,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
 
-					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( NdotV, NdotH, alpha );
+					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( ctx.NdotV, ctx.NdotH, alpha );
 
 				}
 
 				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
 
-					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( VdotNc, HdotNc, clearcoatAlpha );
+					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( ctx.VdotNc, ctx.HdotNc, clearcoatAlpha );
 
 				}
 
-				result.color = ${ bsdfEvalFunc }(
-					NdotL, NdotV, NdotH, VdotH,
-					LdotNc, VdotNc, HdotNc,
-					surf
-				);
+				result.color = ${ bsdfEvalFunc }( ctx, surf );
 				result.color *= max( 0.0, wi.z );
 				result.direction = normalize( normalBasis * wi );
 

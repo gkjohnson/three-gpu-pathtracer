@@ -192,16 +192,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	specularIntensity: 'f32',
 }, 'SurfaceRecord' );
 
-export const rayQueueElementStruct = new StructTypeNode( {
-	origin: 'vec3',
-	_alignment0: 'uint',
-	direction: 'vec3',
-	_alignment1: 'uint',
-	throughputColor: 'vec3f',
-	currentBounce: 'uint',
-	pixel: 'vec2u',
-}, 'RayQueueElement' );
-
 export const environmentInfoStruct = new StructTypeNode( {
 	rotation: 'mat3x3f',
 	intensity: 'float',
@@ -214,3 +204,15 @@ export const lobeWeightsStruct = new StructTypeNode( {
 	transmission: 'float',
 	clearcoat: 'float',
 }, 'LobeWeights' );
+
+export const bxdfContextStruct = new StructTypeNode( {
+	NdotV: 'float',
+	NdotL: 'float',
+	NdotH: 'float',
+	VdotH: 'float',
+
+	VdotNc: 'float',
+	LdotNc: 'float',
+	HdotNc: 'float',
+
+}, 'BxDFContext' );
