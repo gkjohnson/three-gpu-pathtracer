@@ -1,7 +1,7 @@
 import { wgslFn } from 'three/tsl';
 import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { pcgRand2 } from './random.wgsl.js';
-import { evaluateFresnelFunc } from './utils.wgsl.js';
+import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -61,7 +61,7 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	fn getLobeWeights(wo: vec3f, wi: vec3f, wh: vec3f, clearcoatWo: vec3f, surf: SurfaceRecord) -> LobeWeights {
+	fn getLobeWeights(wo: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord) -> LobeWeights {
 
 		// TODO: experiment with this; I don't see any usage of normal?
 		let metalness = surf.metalness;
@@ -75,20 +75,25 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		var weights: LobeWeights;
 		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
 		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
-		weights.transmission = transmission * ( 1.0 - transSpecularProb );
-		weights.clearcoat = surf.clearcoat * schlickFresnel( clearcoatWo.z, 0.04 );
 
-		let totalWeight = weights.diffuse + weights.specular; // + weights.transmission + weights.clearcoat;
-		weights.diffuse /= totalWeight;
-		weights.specular /= totalWeight;
+		let clearcoatF0 = iorToF0( clearcoatIor );
+		let clearcoatFresnel = schlickFresnel( saturate( woClearcoat.z ), clearcoatF0 );
+		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
+
+		weights.transmission = transmission * ( 1.0 - transSpecularProb );
+
+		let totalWeight = weights.diffuse + weights.specular;
+		if ( totalWeight > 0 ) {
+			weights.diffuse = ( weights.diffuse / totalWeight ) * ( 1 - weights.clearcoat );
+			weights.specular = ( weights.specular / totalWeight ) * ( 1 - weights.clearcoat );
+		}
 		// weights.transmission /= totalWeight;
-		// weights.clearcoat /= totalWeight;
 
 		return weights;
 
 	}
 
-`, [ evaluateFresnelFunc, lobeWeightsStruct ] );
+`, [ schlickFresnelFunc, iorToF0Func, evaluateFresnelFunc, lobeWeightsStruct, constants ] );
 
 const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 

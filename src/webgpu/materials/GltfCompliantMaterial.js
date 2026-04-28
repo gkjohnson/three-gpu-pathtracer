@@ -1,16 +1,19 @@
-import { wgslFn, texture, textureStore, globalId } from 'three/tsl';
+import { texture, textureStore, globalId, float } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic } from '../nodes/material.wgsl';
-import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl';
-import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl';
-import { scatterRecordStruct } from '../nodes/structs.wgsl';
-import { pcgRand, pcgRand2, SOBOL_INDEX_SCATTER_DIRECTION, SOBOL_INDEX_SCATTER_TYPE, sobolFuncs } from '../nodes/random.wgsl';
+import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, fresnelCoatFunc, conductorFresnelFunc, albedoIntegralMetallic } from '../nodes/material.wgsl.js';
+import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
+import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
+import { scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { SOBOL_INDEX_SCATTER_DIRECTION, SOBOL_INDEX_SCATTER_TYPE, sobolFuncs } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
 const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
+
+const CLEARCOAT_IOR = float( 1.5 );
+const MIN_INCIDENT_COS = float( 1e-3 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -23,6 +26,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			diffuseBrdf = diffuseBrdfFunc,
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
+			fresnelCoat = fresnelCoatFunc,
 			calculateTurquinTexture = false,
 		} = options;
 
@@ -48,6 +52,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
 		this.conductorFresnel = conductorFresnel( turquinNode );
+		this.fresnelCoat = fresnelCoat;
 		this.calculateTurquinTexture = calculateTurquinTexture;
 
 	}
@@ -74,88 +79,140 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
-			fn bsdfEval( NdotL: f32, NdotV: f32, NdotH: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
+			fn bsdfEval(
+				NdotL: f32, NdotV: f32, NdotH: f32, VdotH: f32,
+				LdotNc: f32, VdotNc: f32, HdotNc: f32,
+				surf: ${ surfaceRecordStruct }
+			) -> vec3f {
 
 				let alpha = surf.roughness * surf.roughness;
 
 				let specular = ${ this.specularBrdf }( NdotL, NdotV, NdotH, alpha );
-
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, VdotH, surf );
-
 				let dielectric = ${ this.fresnelMix }( VdotH, surf.ior, diffuse, specular );
 
 				let metallic = ${ this.conductorFresnel }( NdotV, VdotH, surf.color, specular, alpha );
 
-				return mix( dielectric, metallic, surf.metalness );
+				let material = mix( dielectric, metallic, surf.metalness );
+
+				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+				let clearcoat = ${ this.specularBrdf }( LdotNc, VdotNc, HdotNc, clearcoatAlpha );
+
+				let coatedMaterial = ${ this.fresnelCoat }( VdotNc, ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
+
+				return coatedMaterial;
 
 			}
 
 		`;
 
-		return wgslFn( /* wgsl */ `
+		return wgslTagFn/* wgsl */`
 
-			fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
+			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+
+				var result: ${ scatterRecordStruct };
+				result.pdf = 0.0;
 
 				let alpha = surf.roughness * surf.roughness;
+				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+
 				let normalBasis = surf.normalBasis;
 				let invBasis = surf.normalInvBasis;
-				let wo = normalize( invBasis * worldWo );
+				let clearcoatBasis = surf.clearcoatBasis;
+				let invClearcoatBasis = surf.clearcoatInvBasis;
 
-				let weights = getLobeWeights( wo, wo, vec3( 0, 0, 1 ), vec3( 0, 0, 1 ), surf );
+				let wo = normalize( invBasis * worldWo );
+				let woClearcoat = normalize( invClearcoatBasis * worldWo );
+
+				// TODO: handle such intersections better;
+				// Sometimes .z < 0.0 on a pretty round surface e.g. sphere
+				// Disabling this condition leads to more fireflies on ClearCoatCarPaint example
+				// This could also be fixed by offsetting rays by 1e-1
+				// Also, this will be an invalid condition when transmission is implemented
+				if ( wo.z < 0.0 || woClearcoat.z < 0.0 ) {
+
+					return result;
+
+				}
+
+				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				var cdf: vec4f;
 				cdf.x = weights.diffuse;
 				cdf.y = weights.specular + cdf.x;
-				cdf.z = 0; // pdf.transmission + cdf.y;
-				cdf.w = 0; // pdf.clearcoat + cdf.z;
+				cdf.z = weights.clearcoat + cdf.y;
+				cdf.w = 0; // weights.transmission + cdf.z;
 
-				let r = sobol1( ${ SOBOL_INDEX_SCATTER_TYPE } ) * cdf.y;
+				let r = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_SCATTER_TYPE } ) * cdf.z;
 
-				let directionUv = sobol2( ${ SOBOL_INDEX_SCATTER_DIRECTION } );
+				let directionUv = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_SCATTER_DIRECTION } );
 				var wi: vec3f;
+				var wiClearcoat: vec3f;
 				var wh: vec3f;
+				var whClearcoat: vec3f;
 
 				if ( r <= cdf.x ) { // diffuse
 
-					wi = diffuseDirection( wo, directionUv );
+					wi = ${ diffuseDirectionFunc }( wo, directionUv );
 					wh = normalize( wi + wo );
+
+					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
+					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
 
 				} else if ( r <= cdf.y ) { // specular
 
-					wh = ggxDirection( wo, vec2( alpha ), directionUv );
+					wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), directionUv );
 					wi = - reflect( wo, wh );
 
-				} else if ( r <= cdf.z ) { // transmission / refraction
+					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
+					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
 
-					// NOT IMPLEMENTED
+				} else if ( r <= cdf.z ) { // clearcoat
 
-				} else if ( r <= cdf.w ) { // clearcoat
+					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUv );
+					wiClearcoat = - reflect( woClearcoat, whClearcoat );
+
+					wi = normalize( invBasis * clearcoatBasis * wiClearcoat );
+					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
+
+				} else if ( r <= cdf.w ) { // transmission / refraction
 
 					// NOT IMPLEMENTED
 
 				}
 
-				let NdotV = max( wo.z, EPSILON );
-				let NdotL = saturate( wi.z );
+				let NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
+				let NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
 				let NdotH = saturate( wh.z );
 				let VdotH = saturate( dot( wo, wh ) );
 
-				var result: ScatterRecord;
-				result.pdf = 0;
+				let VdotNc = max( woClearcoat.z, ${ MIN_INCIDENT_COS } );
+				let LdotNc = max( wiClearcoat.z, ${ MIN_INCIDENT_COS } );
+				let HdotNc = saturate( whClearcoat.z );
 
 				if ( weights.diffuse > 0.0 ) {
 
-					result.pdf += weights.diffuse * wi.z / PI;
+					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
 
 				}
 
-				if ( weights.specular > 0.0 ) {
+				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
 
-					result.pdf += weights.specular * ggxReflectionAdjustedPDF( NdotV, NdotH, alpha );
+					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( NdotV, NdotH, alpha );
 
 				}
 
-				result.color = bsdfEval( NdotL, NdotV, NdotH, VdotH, surf );
+				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
+
+					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( VdotNc, HdotNc, clearcoatAlpha );
+
+				}
+
+				result.color = ${ bsdfEvalFunc }(
+					NdotL, NdotV, NdotH, VdotH,
+					LdotNc, VdotNc, HdotNc,
+					surf
+				);
 				result.color *= max( 0.0, wi.z );
 				result.direction = normalize( normalBasis * wi );
 
@@ -163,16 +220,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 			}
 
-		`, [
-			bsdfEvalFunc,
-			ggxReflectionAdjustedPDFFunc,
-			ggxDirectionFunc,
-			diffuseDirectionFunc,
-			scatterRecordStruct,
-			getLobeWeightsFunc,
-			sobolFuncs[ 1 ],
-			sobolFuncs[ 2 ],
-		] );
+		`;
 
 	}
 
