@@ -13,8 +13,6 @@ export const queuedRayStruct = new StructTypeNode( {
 
 	pixel: 'vec2u',
 
-	pcgStateS0: 'vec4u',
-
 	resultColor: 'vec4f',
 
 }, 'QueuedRay' );
@@ -35,8 +33,6 @@ export const queuedHitStruct = new StructTypeNode( {
 
 	normal: 'vec3f',
 	side: 'float',
-
-	pcgStateS0: 'vec4u',
 
 	resultColor: 'vec4f',
 

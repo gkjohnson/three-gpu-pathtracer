@@ -6,8 +6,8 @@ import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
-import { getPcgSeed, setPcgSeed } from '../../nodes/random.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
+import { sobolInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -23,6 +23,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
+			seed: uniform( 0 ),
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
@@ -40,6 +41,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
+				seed: u32,
+
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
@@ -71,7 +74,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
-				${ setPcgSeed }( input.pcgStateS0 );
+				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				${ sobolInit }( pixelIndex, seed, input.currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -110,7 +114,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
-					rayQueue[ index ].pcgStateS0 = ${ getPcgSeed }();
 					rayQueue[ index ].resultColor = resultColor;
 
 				}

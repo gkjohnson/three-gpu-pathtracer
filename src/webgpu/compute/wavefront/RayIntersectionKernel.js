@@ -1,7 +1,7 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
-import { pcgRand2, setPcgSeed } from '../../nodes/random.wgsl.js';
+import { SOBOL_INDEX_ENVIRONMENT_SAMPLE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -22,6 +22,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+
+			seed: uniform( 0 ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -44,6 +46,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const fn = wgslTagFn /* wgsl */`
 
 			fn compute(
+				seed: u32,
+
 				// environment
 				envMap: texture_2d<f32>,
 				envMapSampler: sampler,
@@ -88,9 +92,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = rayQueue[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
-				let seed = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + input.currentBounce;
 
-				${ setPcgSeed }( input.pcgStateS0 );
+				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				${ sobolInit }( pixelIndex, seed, input.currentBounce );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
@@ -104,24 +108,24 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].barycoord = hitResult.barycoord;
 					hitQueue[ index ].normal = hitResult.normal.xyz;
 					hitQueue[ index ].side = hitResult.side;
-					hitQueue[ index ].pixel_x = input.pixel.x;
-					hitQueue[ index ].pixel_y = input.pixel.y;
+					hitQueue[ index ].pixel_x = indexUV.x;
+					hitQueue[ index ].pixel_y = indexUV.y;
 					hitQueue[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue[ index ].throughputColor = input.throughputColor;
 					hitQueue[ index ].currentBounce = input.currentBounce;
-					hitQueue[ index ].pcgStateS0 = input.pcgStateS0;
 					hitQueue[ index ].resultColor = input.resultColor;
 
 				} else {
 
+					let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
-						resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, ${ pcgRand2 }() ) * vec4f( input.throughputColor, 0.0 );
+						resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng ) * vec4f( input.throughputColor, 0.0 );
 
 					} else {
 
-						resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, ${ pcgRand2 }() );
+						resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, rng );
 
 					}
 
