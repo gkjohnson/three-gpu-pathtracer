@@ -6,16 +6,16 @@ import {
 	schlickFresnelFunc,
 	schlickFresnelVecFunc,
 	sampleTexelFunc,
-} from './utils.wgsl';
+} from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
 	ggxDistributionFunc,
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
-} from './ggx.wgsl';
-import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl';
-import { sampleSphereCosineFn } from './sampling.wgsl';
-import { pcgInit, pcgRand2 } from './random.wgsl';
+} from './ggx.wgsl.js';
+import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl.js';
+import { sampleSphereCosineFn } from './sampling.wgsl.js';
+import { pcgInit, pcgRand2 } from './random.wgsl.js';
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
@@ -45,8 +45,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( faceNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, faceNormal );
+				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
 				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
 				var texNormal = sampleTexel( textures, textureSampler, uvPrime.xy, material.normalMap, 0 ).xyz;
@@ -127,7 +127,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( uv, 1 );
 			let texColor = sampleTexel( textures, textureSampler, uvPrime.xy, material.clearcoatRoughnessMap, 0 );
-			clearcoatRoughness *= texColor.r;
+			clearcoatRoughness *= texColor.g;
 
 		}
 
@@ -139,8 +139,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( faceNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, faceNormal );
+				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
+				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
 				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
 				var texNormal = sampleTexel( textures, textureSampler, uvPrime.xy, material.clearcoatNormalMap, 0 ).xyz;
@@ -238,9 +238,9 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.roughness = roughness;
-		surf.clearcoatRoughness = clearcoatRoughness;
-		surf.sheenRoughness = sheenRoughness;
+		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
+		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
+		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
@@ -268,6 +268,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 	getBasisFromNormalFunc,
 	sampleTexelFunc,
 	surfaceRecordStruct,
+	constants,
 ] );
 
 export const lambertBsdfFunc = wgslFn( /* wgsl */`
@@ -345,6 +346,7 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 		let f0 = iorToF0( ior );
   	let F = schlickFresnel( abs( VdotH ), f0 );
+
   	return base + F * layer;
 
 	}
@@ -365,6 +367,19 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 	}
 
 `, [ schlickFresnelVecFunc, turquinTexture ] );
+
+export const fresnelCoatFunc = wgslFn( /* wgsl */ `
+
+	fn fresnelCoat( VdotNc: f32, ior: f32, base: vec3f, layer: vec3f, weight: f32 ) -> vec3f {
+
+		let f0 = iorToF0( ior );
+		let F = schlickFresnel( abs( VdotNc ), f0 );
+
+		return mix( base, layer, weight * F );
+
+	}
+
+`, [ iorToF0Func, schlickFresnelFunc ] );
 
 // GGX Multibounce compensation using Turquin's method
 

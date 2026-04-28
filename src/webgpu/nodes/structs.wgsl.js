@@ -1,10 +1,12 @@
 import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
 
+// TODO: Move to node-based constants that are embedded with wgslTagFn
 export const constants = wgsl( /* wgsl */ `
 
 	const PI: f32 = 3.141592653589793;
 	const EPSILON: f32 = 1e-5;
+	const MIN_ROUGHNESS: f32 = 1e-3;
 
 ` );
 
@@ -190,16 +192,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	specularIntensity: 'f32',
 }, 'SurfaceRecord' );
 
-export const rayQueueElementStruct = new StructTypeNode( {
-	origin: 'vec3',
-	_alignment0: 'uint',
-	direction: 'vec3',
-	_alignment1: 'uint',
-	throughputColor: 'vec3f',
-	currentBounce: 'uint',
-	pixel: 'vec2u',
-}, 'RayQueueElement' );
-
 export const environmentInfoStruct = new StructTypeNode( {
 	rotation: 'mat3x3f',
 	intensity: 'float',
@@ -212,3 +204,15 @@ export const lobeWeightsStruct = new StructTypeNode( {
 	transmission: 'float',
 	clearcoat: 'float',
 }, 'LobeWeights' );
+
+export const bxdfContextStruct = new StructTypeNode( {
+	NdotV: 'float',
+	NdotL: 'float',
+	NdotH: 'float',
+	VdotH: 'float',
+
+	VdotNc: 'float',
+	LdotNc: 'float',
+	HdotNc: 'float',
+
+}, 'BxDFContext' );

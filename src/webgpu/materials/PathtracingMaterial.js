@@ -1,4 +1,4 @@
-import { lambertBsdfFunc } from '../nodes/material.wgsl';
+import { lambertBsdfFunc } from '../nodes/material.wgsl.js';
 
 /**
  * Defines a material sampled by the pathtracer
