@@ -164,6 +164,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						// russian roulette path termination
+						// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
 						if ( bounce >= 3 ) {
 							var rrProb = ${ luminanceFunc }( throughputColor * scatterRec.color / scatterRec.pdf );
 							rrProb /= ${ luminanceFunc }( throughputColor );
@@ -174,6 +176,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								break;
 
 							}
+
+							// perform sample clamping here to avoid bright pixels
 							throughputColor *= min( 1.0 / rrProb, 20.0 );
 						}
 

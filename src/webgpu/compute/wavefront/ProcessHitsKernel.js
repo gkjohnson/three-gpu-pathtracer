@@ -6,8 +6,8 @@ import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
-import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
-import { sobolInit } from '../../nodes/random.wgsl.js';
+import { isTerminatingScatterFunc, luminanceFunc } from '../../nodes/utils.wgsl.js';
+import { SOBOL_INDEX_RUSSIAN_ROULETTE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -74,8 +74,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
+				let currentBounce = input.currentBounce;
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ sobolInit }( pixelIndex, seed, input.currentBounce );
+				${ sobolInit }( pixelIndex, seed, currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -92,9 +93,29 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
 
-				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
+				var throughputColor = input.throughputColor;
+				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
 
-				let isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var isTerminated = currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+
+				// russian roulette path termination
+				// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
+				if ( currentBounce >= 3 ) {
+					var rrProb = ${ luminanceFunc }( throughputColor * scatterRec.color / scatterRec.pdf );
+					rrProb /= ${ luminanceFunc }( throughputColor );
+					rrProb = sqrt( rrProb );
+					rrProb = min( rrProb, 1.0 );
+					if ( ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+
+						isTerminated = true;
+
+					} else {
+
+						// perform sample clamping here to avoid bright pixels
+						throughputColor *= min( 1.0 / rrProb, 20.0 );
+
+					}
+				}
 
 				if ( isTerminated ) {
 
@@ -112,8 +133,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].origin = vertexData.position.xyz;
 					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
-					rayQueue[ index ].currentBounce = input.currentBounce + 1;
+					rayQueue[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
+					rayQueue[ index ].currentBounce = currentBounce + 1;
 					rayQueue[ index ].resultColor = resultColor;
 
 				}
