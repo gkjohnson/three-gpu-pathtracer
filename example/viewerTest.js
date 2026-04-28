@@ -47,7 +47,7 @@ const params = {
 	tiles: tiles,
 	scale: scale,
 
-	samplesPerFrame: 1,
+	iterationsPerFrame: 1,
 
 	model: '',
 	checkerboardTransparency: true,
@@ -212,7 +212,7 @@ function animate() {
 		pathTracer.enablePathTracing = params.enable;
 		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
 
-		for ( let i = 0; i < params.samplesPerFrame; i ++ ) {
+		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
 			pathTracer.renderSample();
 
@@ -360,7 +360,7 @@ function buildGui() {
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
 
-	pathTracingFolder.add( params, 'samplesPerFrame', 1, 30, 1 );
+	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 
 	const comparisonFolder = gui.addFolder( 'Comparison' );
 	comparisonFolder.add( params, 'displayImage' );
