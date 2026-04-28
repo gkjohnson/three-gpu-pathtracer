@@ -25,6 +25,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// options
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoUniform();
+		this.seed = 0;
 
 		// queues
 		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
@@ -172,6 +173,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.reset();
 
+		this.seed = 0;
+
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
@@ -257,7 +260,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
 
 				// set up the ray generation kernel
-				enqueueRaysKernel.seed ++;
+				enqueueRaysKernel.seed = this.seed;
 				enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
 				enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 				enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
@@ -282,6 +285,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				rayIntersectionKernel.rayQueue = rayQueue;
 				rayIntersectionKernel.queueSizes = queueSizes;
 				rayIntersectionKernel.hitQueue = hitQueue;
+				rayIntersectionKernel.seed = this.seed;
 				renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
 
 				// mark the rays as consumed
@@ -298,6 +302,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				hitProcessKernel.rayQueue = rayQueue;
 				hitProcessKernel.queueSizes = queueSizes;
 				hitProcessKernel.hitQueue = hitQueue;
+				hitProcessKernel.seed = this.seed;
 				renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
 				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel
 
@@ -312,6 +317,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				samples += samplesPerIteration;
 				this.samples = Math.floor( samples );
+				this.seed ++;
 
 			}
 

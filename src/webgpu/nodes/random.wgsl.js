@@ -70,10 +70,12 @@ export const pcgRand3 = wgslFn( /*wgsl*/`
 // - Code from https://www.shadertoy.com/view/WtGyDm
 // Ported from WebGL version at sobol.glsl.js
 
+// Alpha test should be the last index as it is summed with triangle index
 export const SOBOL_INDEX_RAY_JITTER = 0;
 export const SOBOL_INDEX_ENVIRONMENT_SAMPLE = 1;
 export const SOBOL_INDEX_SCATTER_TYPE = 2;
 export const SOBOL_INDEX_SCATTER_DIRECTION = 3;
+export const SOBOL_INDEX_ALPHA_TEST = 4;
 
 const sobolConstants = wgsl( /* wgsl */ `
 

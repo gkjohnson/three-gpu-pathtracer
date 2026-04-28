@@ -1,6 +1,5 @@
 import { wgslFn } from 'three/tsl';
 import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
-import { pcgRand2 } from './random.wgsl.js';
 import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
