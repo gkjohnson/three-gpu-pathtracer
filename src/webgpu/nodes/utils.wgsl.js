@@ -167,3 +167,11 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 
 `, [ applyWrapFunc ] );
 
+export const luminanceFunc = wgslFn( /* wgsl */ `
+
+	fn luminance( rgb: vec3f ) -> f32 {
+			const weights = vec3( 0.2126, 0.7152, 0.0722 );
+			return dot( weights, rgb );
+	}
+
+` );

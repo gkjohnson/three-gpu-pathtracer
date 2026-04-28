@@ -1,13 +1,13 @@
 import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { pcgRand2, pcgInit, sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
+import { texture, sampler, uniform, globalId, textureStore, luminance } from 'three/tsl';
+import { pcgRand2, pcgInit, sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, luminanceFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -162,6 +162,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							break;
 
+						}
+
+						if ( bounce >= 3 ) {
+							var rrProb = ${ luminanceFunc }( throughputColor * scatterRec.color / scatterRec.pdf );
+							rrProb /= ${ luminanceFunc }( throughputColor );
+							rrProb = sqrt( rrProb );
+							rrProb = min( rrProb, 1.0 );
+							if ( ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+
+								break;
+
+							}
+							throughputColor *= min( 1.0 / rrProb, 20.0 );
 						}
 
 						throughputColor *= scatterRec.color;

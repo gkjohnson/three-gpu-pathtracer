@@ -75,7 +75,8 @@ export const SOBOL_INDEX_RAY_JITTER = 0;
 export const SOBOL_INDEX_ENVIRONMENT_SAMPLE = 1;
 export const SOBOL_INDEX_SCATTER_TYPE = 2;
 export const SOBOL_INDEX_SCATTER_DIRECTION = 3;
-export const SOBOL_INDEX_ALPHA_TEST = 4;
+export const SOBOL_INDEX_RUSSIAN_ROULETTE = 4;
+export const SOBOL_INDEX_ALPHA_TEST = 5;
 
 const sobolConstants = wgsl( /* wgsl */ `
 
