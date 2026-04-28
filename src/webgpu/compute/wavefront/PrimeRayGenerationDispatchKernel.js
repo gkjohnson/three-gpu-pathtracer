@@ -1,8 +1,8 @@
 import { Vector2, Vector3 } from 'three';
-import { IndirectStorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { queuedRayStruct } from './structs.js';
+import { queuedRayStruct, queueSizesStructFree } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
@@ -16,11 +16,11 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileCount: uniform( new Vector2() ),
 			tileOffset: uniform( 1 ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ),
+			rayQueue: storage( new StorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
+			queueSizes: storage( new StorageBufferAttribute( 1, 1 ), queueSizesStructFree ),
 
-			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
-			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
+			outputTileIndex: storage( new StorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
+			outputDispatch: storage( new StorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
 		};
 
 		const fn = wgslTagFn/* wgsl */`
@@ -39,22 +39,22 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 				let outputDispatch = &${ params.outputDispatch };
 
 				// reset hit queue size from previous iteration
-				queueSizes[ 2 ] = 0u;
-				queueSizes[ 3 ] = 0u;
+				queueSizes.hitQueueStart = 0u;
+				queueSizes.hitQueueEnd = 0u;
 
 				// keep the queue index small
-			    let queueCapacity = arrayLength( rayQueue );
-				if ( queueSizes[ 0 ] >= queueCapacity ) {
+			  let queueCapacity = arrayLength( rayQueue );
+				if ( queueSizes.rayQueueStart >= queueCapacity ) {
 
 					// uint division results in a floored value
-					let offset = queueSizes[ 0 ] / queueCapacity;
-					queueSizes[ 0 ] = queueSizes[ 0 ] - queueCapacity * offset;
-					queueSizes[ 1 ] = queueSizes[ 1 ] - queueCapacity * offset;
+					let offset = queueSizes.rayQueueStart / queueCapacity;
+					queueSizes.rayQueueStart = queueSizes.rayQueueStart - queueCapacity * offset;
+					queueSizes.rayQueueEnd = queueSizes.rayQueueEnd - queueCapacity * offset;
 
 				}
 
 				// calculate the amount of elements in the queue
-			    var queueSize = queueSizes[ 1 ] - queueSizes[ 0 ];
+				let queueSize = queueSizes.rayQueueEnd - queueSizes.rayQueueStart;
 
 				// calculate the overhead of space in the queue and how much space we need to run a new tile
 				let overhead = queueCapacity - queueSize;

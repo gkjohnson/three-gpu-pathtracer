@@ -1,8 +1,8 @@
-import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
-import { queuedRayStruct, queuedHitStruct } from './structs.js';
+import { queuedRayStruct, queuedHitStruct, queueSizesStructHitFree } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
@@ -26,9 +26,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			rayQueue: storage( new StorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
+			hitQueue: storage( new StorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
+			queueSizes: storage( new StorageBufferAttribute( 1, queueSizesStructHitFree.getLength() ), queueSizesStructHitFree ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -62,8 +62,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// skip any rays invocations beyond the ray count
 				let hitQueueCapacity = arrayLength( hitQueue );
-				let hitIndex = ( globalId.x + atomicLoad( &queueSizes[ 2 ] ) );
-				if ( hitIndex >= atomicLoad( &queueSizes[ 3 ] ) ) {
+				let hitIndex = ( globalId.x + queueSizes.hitQueueStart );
+				if ( hitIndex >= queueSizes.hitQueueEnd ) {
 
 					return;
 
@@ -129,7 +129,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				} else {
 
 					let rayQueueCapacity = arrayLength( rayQueue );
-					let index = atomicAdd( &queueSizes[ 1 ], 1 ) % rayQueueCapacity;
+					let index = atomicAdd( &queueSizes.rayQueueEnd, 1 ) % rayQueueCapacity;
 					rayQueue[ index ].origin = vertexData.position.xyz;
 					rayQueue[ index ].direction = scatterRec.direction;
 					rayQueue[ index ].pixel = indexUV;

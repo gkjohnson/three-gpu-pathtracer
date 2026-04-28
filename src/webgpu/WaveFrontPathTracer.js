@@ -1,4 +1,4 @@
-import { Matrix4, IndirectStorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { Matrix4, StorageBufferAttribute, IndirectStorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
 import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
@@ -6,7 +6,7 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
-import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
+import { queuedHitStruct, queuedRayStruct, queueSizesStructFree } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)
@@ -35,7 +35,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitQueue.name = 'Hit Queue';
 
 		// [0] ray head, [1] ray count, [2] hit head, [3] hit count
-		this.queueSizes = new IndirectStorageBufferAttribute( 4, 1 );
+		this.queueSizes = new StorageBufferAttribute( 1, queueSizesStructFree.getLength() );
 		this.queueSizes.name = 'Queue Sizes';
 
 		// dispatches

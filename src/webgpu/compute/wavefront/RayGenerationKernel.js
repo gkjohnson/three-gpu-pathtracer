@@ -4,7 +4,7 @@ import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { getPcgSeed, SOBOL_INDEX_RAY_JITTER, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct } from './structs.js';
+import { queuedRayStruct, queueSizesStructHitFree } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class RayGenerationKernel extends ComputeKernel {
@@ -21,7 +21,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 1, queueSizesStructHitFree.getLength() ), queueSizesStructHitFree ),
 
 			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
@@ -78,7 +78,7 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				// get the ray index
 				let queueCapacity = arrayLength( rayQueue );
-				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
+				let index = atomicAdd( &queueSizes.rayQueueEnd, 1 ) % queueCapacity;
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, 0 );

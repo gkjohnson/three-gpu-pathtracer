@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } 
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
 import { SOBOL_INDEX_ENVIRONMENT_SAMPLE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct, queuedHitStruct } from './structs.js';
+import { queuedRayStruct, queuedHitStruct, queueSizesStructRayFree } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
@@ -21,7 +21,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			queueSizes: storage( new IndirectStorageBufferAttribute( 1, queueSizesStructRayFree.getLength() ), queueSizesStructRayFree ),
 
 			seed: uniform( 0 ),
 
@@ -81,15 +81,14 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				// skip any rays invocations beyond the ray count
 				let queueCapacity = arrayLength( rayQueue );
-				let rayIndex = ( globalId.x + atomicLoad( &queueSizes[ 0 ] ) );
-				if ( rayIndex >= atomicLoad( &queueSizes[ 1 ] ) ) {
+				let rayIndex = ( globalId.x + queueSizes.rayQueueStart );
+				if ( rayIndex >= queueSizes.rayQueueEnd ) {
 
 					return;
 
 				}
 
 				// get the ray info
-				let ACTIVE_FLAG = 0xF0000000u;
 				let input = rayQueue[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
 
@@ -101,8 +100,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 				var hitResult: ${ raycastOutput };
 				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
-					// TODO: we process all of these materials immediately to push to the ray queue
-					let index = atomicAdd( &queueSizes[ 3 ], 1 );
+					// TODO: we process all of these materials immediately to push to the hit queue
+					let index = atomicAdd( &queueSizes.hitQueueEnd, 1 );
 					hitQueue[ index ].view = - input.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
 					hitQueue[ index ].barycoord = hitResult.barycoord;
@@ -129,6 +128,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 					}
 
+					let ACTIVE_FLAG = 0xF0000000u;
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );

@@ -37,3 +37,33 @@ export const queuedHitStruct = new StructTypeNode( {
 	resultColor: 'vec4f',
 
 }, 'QueuedHit' );
+
+export const queueSizesStructFree = new StructTypeNode( {
+
+	rayQueueStart: 'uint',
+	rayQueueEnd: 'uint',
+
+	hitQueueStart: 'uint',
+	hitQueueEnd: 'uint',
+
+} );
+
+export const queueSizesStructRayFree = new StructTypeNode( {
+
+	rayQueueStart: 'uint',
+	rayQueueEnd: 'uint',
+
+	hitQueueStart: { type: 'uint', atomic: true },
+	hitQueueEnd: { type: 'uint', atomic: true },
+
+} );
+
+export const queueSizesStructHitFree = new StructTypeNode( {
+
+	rayQueueStart: { type: 'uint', atomic: true },
+	rayQueueEnd: { type: 'uint', atomic: true },
+
+	hitQueueStart: 'uint',
+	hitQueueEnd: 'uint',
+
+} );
