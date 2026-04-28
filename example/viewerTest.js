@@ -47,6 +47,8 @@ const params = {
 	tiles: tiles,
 	scale: scale,
 
+	iterationsPerFrame: 1,
+
 	model: '',
 	checkerboardTransparency: true,
 	displayImage: false,
@@ -128,6 +130,11 @@ async function createRenderer( isWebGPU ) {
 		// path tracer - WebGPU version
 		pathTracer = new WebGPUPathTracer( renderer );
 		pathTracer.useMegakernel( params.useMegakernel );
+		if ( params.useMegakernel ) {
+
+			pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
+
+		}
 
 	} else {
 
@@ -141,11 +148,13 @@ async function createRenderer( isWebGPU ) {
 		// path tracer
 		pathTracer = new WebGLPathTracer( renderer );
 		pathTracer.filterGlossyFactor = 0.5;
-		pathTracer.tiles.set( params.tiles );
+		pathTracer.tiles.set( params.tiles, params.tiles );
 		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	}
+
+	detailedSampleCount = null;
 
 }
 
@@ -203,7 +212,11 @@ function animate() {
 		pathTracer.enablePathTracing = params.enable;
 		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
 
-		pathTracer.renderSample();
+		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
+
+			pathTracer.renderSample();
+
+		}
 
 	} else if ( ( delaySamples > 0 || ! params.enable ) && renderer.initialized !== false ) {
 
@@ -320,6 +333,7 @@ function buildGui() {
 
 		pathTracer.useMegakernel( params.useMegakernel );
 		pathTracer.reset();
+		detailedSampleCount = null;
 
 	} );
 	webgpuOptions.show( params.isWebGPU );
@@ -335,11 +349,18 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
-		pathTracer.tiles.set( v, v );
+		const tiles = pathTracer.tiles ?? pathTracer._pathTracer.tiles;
+		if ( tiles ) {
+
+			tiles.set( v, v );
+
+		}
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
+
+	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 
 	const comparisonFolder = gui.addFolder( 'Comparison' );
 	comparisonFolder.add( params, 'displayImage' );
