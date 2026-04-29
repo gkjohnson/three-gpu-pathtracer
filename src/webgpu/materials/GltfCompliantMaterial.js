@@ -2,7 +2,7 @@ import { texture, textureStore, globalId, float } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
@@ -27,6 +27,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
 			fresnelCoat = fresnelCoatFunc,
+			iridescentDielectricLayer = iridescentDielectricLayerFunc,
+			iridescentConductorLayer = iridescentConductorLayerFunc,
 			calculateTurquinTexture = false,
 		} = options;
 
@@ -53,6 +55,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.fresnelMix = fresnelMix;
 		this.conductorFresnel = conductorFresnel( turquinNode );
 		this.fresnelCoat = fresnelCoat;
+		this.iridescentDielectricLayer = iridescentDielectricLayer;
+		this.iridescentConductorLayer = iridescentConductorLayer;
 		this.calculateTurquinTexture = calculateTurquinTexture;
 
 	}
@@ -85,9 +89,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let specular = ${ this.specularBrdf }( ctx.NdotL, ctx.NdotV, ctx.NdotH, alpha );
 				let diffuse = ${ this.diffuseBrdf }( ctx.NdotV, ctx.NdotL, ctx.VdotH, surf );
-				let dielectric = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
+				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
-				let metallic = ${ this.conductorFresnel }( ctx.NdotV, ctx.VdotH, surf.color, specular, alpha );
+				let dielectric = ${ this.iridescentDielectricLayer }(
+					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
+					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
+				);
+
+				let metallicBase = ${ this.conductorFresnel }( ctx.NdotV, ctx.VdotH, surf.color, specular, alpha );
+
+				let metallic = ${ this.iridescentConductorLayer }(
+					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
+					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
+				);
 
 				let material = mix( dielectric, metallic, surf.metalness );
 
