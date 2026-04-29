@@ -18,7 +18,7 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { RNG_PCG, RNG_SOBOL, RNG_SOBOL_TEXTURE, WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -37,6 +37,7 @@ const params = {
 
 	isWebGPU,
 	useMegakernel: true,
+	webgpuPRNG: RNG_SOBOL,
 
 	enable: true,
 	bounces: 10,
@@ -328,14 +329,27 @@ function buildGui() {
 
 	} );
 
-	webgpuOptions = pathTracingFolder.add( params, 'useMegakernel' );
-	webgpuOptions.onChange( () => {
+	webgpuOptions = pathTracingFolder.addFolder( 'WebGPU Options' );
+
+	webgpuOptions.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
 		pathTracer.reset();
 		detailedSampleCount = null;
 
 	} );
+
+	webgpuOptions.add( params, 'webgpuPRNG', {
+		PCG: RNG_PCG,
+		SOBOL: RNG_SOBOL,
+		SOBOL_TEXTURE: RNG_SOBOL_TEXTURE
+	} ).onChange( () => {
+
+		pathTracer.setPRNGType( params.webgpuPRNG );
+
+	} );
+
+
 	webgpuOptions.show( params.isWebGPU );
 
 	pathTracingFolder.add( params, 'enable' );
