@@ -8,11 +8,16 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
-import { sobolFuncs, sobolInitFunc, sobolNextBounceFunc } from './nodes/random.wgsl.js';
+import { pcgFunctions, sobolFunctions } from './nodes/random.wgsl.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { PathtracingMaterial } from './materials/PathtracingMaterial.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+
+export const RNG_PCG = 0;
+export const RNG_SOBOL = 1;
+
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -96,7 +101,7 @@ export class WebGPUPathTracer {
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
 		this.material = new GltfCompliantMaterial();
-		this.setRandomFunctions( 0 );
+		this.setRandomFunctions( RNG_SOBOL );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -163,16 +168,19 @@ export class WebGPUPathTracer {
 
 	}
 
-	setRandomFunctions( enumeration ) {
+	setRandomFunctions( type ) {
 
-		this.randomFunctions = {
-			init: sobolInitFunc,
-			nextBounce: sobolNextBounceFunc,
-			f32: sobolFuncs[ 1 ],
-			vec2f: sobolFuncs[ 2 ],
-			vec3f: sobolFuncs[ 3 ],
-			vec4f: sobolFuncs[ 4 ],
-		};
+		switch ( type ) {
+
+			case RNG_PCG:
+				this.randomFunctions = pcgFunctions;
+				break;
+
+			case RNG_SOBOL:
+			default:
+				this.randomFunctions = sobolFunctions;
+
+		}
 
 		this.material.setRandomFunctions( this.randomFunctions );
 		this._pathTracer.setRandomFunctions( this.randomFunctions );

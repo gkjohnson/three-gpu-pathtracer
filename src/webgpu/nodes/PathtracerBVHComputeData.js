@@ -6,7 +6,7 @@ import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { RNG_INDEX_ALPHA_TEST, sobolFuncs } from './random.wgsl.js';
+import { RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 
 const _colorVec = new Vector4();

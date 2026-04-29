@@ -13,24 +13,24 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 	struct PcgState {
 		s0: vec4u,
 		s1: vec4u,
-		pixel: vec2i,
 	};
 
 	var<private> g_state: PcgState;
 ` );
 
-export const pcgInit = wgslFn( /* wgsl */`
-	fn pcgInitialize(p: vec2u, frame: u32) -> void {
-		g_state.pixel = vec2i( p );
+const pcgInit = wgslFn( /* wgsl */`
+	fn pcgInitialize( pixelIndex: u32, pathIndex: u32, _bounceIndex: u32 ) -> void {
+		let pixel = vec2( ( pixelIndex >> 16 ) & 0xFF, pixelIndex & 0xFF );
 
 		//white noise seed
-		g_state.s0 = vec4u(p, frame, u32(p.x) + u32(p.y));
+		g_state.s0 = vec4u(pixel, pathIndex, pixel.x + pixel.y);
 
 		//blue noise seed
-		g_state.s1 = vec4u(frame, frame*15843, frame*31 + 4566, frame*2345 + 58585);
+		g_state.s1 = vec4u(pathIndex, pathIndex*15843, pathIndex*31 + 4566, pathIndex*2345 + 58585);
 	}
 `, [ pcgStateStruct ] );
 
+// Unneeded?
 export const getPcgSeed = wgslFn( /* wgsl */`
 	fn pcgGetSeed() -> vec4u {
 		return g_state.s0;
@@ -43,7 +43,7 @@ export const setPcgSeed = wgslFn( /* wgsl */`
 	}
 `, [ pcgStateStruct ] );
 
-export const pcg4d = wgslFn( /* wgsl */ `
+const pcg4d = wgslFn( /* wgsl */ `
 	fn pcg4d(v: ptr<private, vec4u>) -> void {
 		*v = *v * 1664525u + 1013904223u;
 		*v = *v + v.yzxy * v.wxyz;
@@ -52,26 +52,42 @@ export const pcg4d = wgslFn( /* wgsl */ `
 	}
 ` );
 
-export const pcgRand = wgslFn( /*wgsl*/`
-	fn pcgRand() -> f32 {
+const pcgRand = wgslFn( /*wgsl*/`
+	fn pcgRand( _id: u32 ) -> f32 {
 		pcg4d(&g_state.s0);
 		return abs( f32( g_state.s0.x ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-export const pcgRand2 = wgslFn( /*wgsl*/`
-	fn pcgRand2() -> vec2f {
+const pcgRand2 = wgslFn( /*wgsl*/`
+	fn pcgRand2( _id: u32 ) -> vec2f {
 		pcg4d(&g_state.s0);
-		return abs( vec2f(g_state.s0.xy) / f32(0xffffffffu) );
+		return abs( vec2f( g_state.s0.xy ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-export const pcgRand3 = wgslFn( /*wgsl*/`
-	fn pcgRand3() -> vec3f {
+const pcgRand3 = wgslFn( /*wgsl*/`
+	fn pcgRand3( _id: u32 ) -> vec3f {
 		pcg4d(&g_state.s0);
-		return abs( vec3f(g_state.s0.xyz) / f32(0xffffffffu) );
+		return abs( vec3f( g_state.s0.xyz ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
+
+const pcgRand4 = wgslFn( /*wgsl*/`
+	fn pcgRand3( _id: u32 ) -> vec4f {
+		pcg4d(&g_state.s0);
+		return abs( vec4f( g_state.s0 ) / f32(0xffffffffu) );
+	}
+`, [ pcg4d, pcgStateStruct ] );
+
+export const pcgFunctions = {
+	init: pcgInit,
+	nextBounce: wgslFn( /* wgsl */ 'fn noop() -> void {}' ),
+	f32: pcgRand,
+	vec2f: pcgRand2,
+	vec3f: pcgRand3,
+	vec4f: pcgRand4,
+};
 
 // References
 // - https://jcgt.org/published/0009/04/01/
@@ -345,11 +361,6 @@ const sobolGenerator = ( dim = 1 ) => {
 
 };
 
-// 0th node is intentionally empty to make access pattern more intuitive:
-// sobolFuncs[ i ] is a function node to sample i-dimensional vector
-// 1-dimensional vector = f32
-export const sobolFuncs = Array.from( { length: 5 }, ( _, i ) => sobolGenerator( i ) );
-
 export const sobolInitFunc = wgslTagFn`
 
 	fn sobolInit( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
@@ -371,3 +382,12 @@ export const sobolNextBounceFunc = wgslTagFn`
 	}
 
 `;
+
+export const sobolFunctions = {
+	init: sobolInitFunc,
+	nextBounce: sobolNextBounceFunc,
+	f32: sobolGenerator( 1 ),
+	vec2f: sobolGenerator( 2 ),
+	vec3f: sobolGenerator( 3 ),
+	vec4f: sobolGenerator( 4 ),
+};

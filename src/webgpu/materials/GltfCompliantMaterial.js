@@ -2,7 +2,15 @@ import { texture, textureStore, globalId, float } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc } from '../nodes/material.wgsl.js';
+import {
+	specularBrdfFunc,
+	diffuseBrdfFunc,
+	fresnelMixFunc,
+	conductorFresnelFunc,
+	albedoIntegralMetallic,
+	fresnelCoatFunc,
+	MIN_INCIDENT_COS,
+} from '../nodes/material.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
@@ -13,7 +21,6 @@ const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.met
 const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
 
 const CLEARCOAT_IOR = float( 1.5 );
-const MIN_INCIDENT_COS = float( 1e-3 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 

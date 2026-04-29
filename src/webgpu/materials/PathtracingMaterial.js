@@ -1,5 +1,8 @@
-import { lambertBsdfFunc } from '../nodes/material.wgsl.js';
+// import { lambertBsdfFunc } from '../nodes/material.wgsl.js';
 import { proxyFn } from '../lib/nodes/NodeProxy.js';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
+import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 
 /**
  * Defines a material sampled by the pathtracer
@@ -38,7 +41,23 @@ export class PathtracingMaterial {
 	 */
 	getBsdfNode() {
 
-		return lambertBsdfFunc;
+		return wgslTagFn`
+
+			fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
+
+				var record: ScatterRecord;
+
+				let wo = normalize( surf.normalInvBasis * worldWo );
+				let wi = ${ diffuseDirectionFunc }( wo, ${ this.rng.vec2f }( ${ RNG_INDEX_SCATTER_DIRECTION } ) );
+				record.color = surf.color * max( wi.z, 0.0 );
+				record.pdf = max( wi.z, 0.0 ) / PI;
+				record.direction = normalize( surf.normalBasis * wi );
+
+				return record;
+
+			}
+
+		`;
 
 	}
 
