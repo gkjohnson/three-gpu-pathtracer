@@ -8,15 +8,16 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
-import { pcgFunctions, sobolFunctions } from './nodes/random.wgsl.js';
+import { pcgFunctions, sobolFunctions, sobolTextureFunctions } from './nodes/random.wgsl.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
-import { PathtracingMaterial } from './materials/PathtracingMaterial.js';
+import { SobolNumberMapGenerator } from './SobolNumberMapGenerator.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
 
 export const RNG_PCG = 0;
 export const RNG_SOBOL = 1;
+export const RNG_SOBOL_TEXTURE = 2;
 
 export class WebGPUPathTracer {
 
@@ -101,7 +102,8 @@ export class WebGPUPathTracer {
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
 		this.material = new GltfCompliantMaterial();
-		this.setRandomFunctions( RNG_SOBOL );
+		this._sobolMap = new SobolNumberMapGenerator( renderer, 256 );
+		this.setRandomFunctions( RNG_SOBOL_TEXTURE );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -174,6 +176,10 @@ export class WebGPUPathTracer {
 
 			case RNG_PCG:
 				this.randomFunctions = pcgFunctions;
+				break;
+
+			case RNG_SOBOL_TEXTURE:
+				this.randomFunctions = sobolTextureFunctions( this._sobolMap.texture );
 				break;
 
 			case RNG_SOBOL:
@@ -293,6 +299,12 @@ export class WebGPUPathTracer {
 
 			this.material.init( renderer );
 			this.material.initialized = true;
+
+		}
+
+		if ( ! this._sobolMap.isGenerated ) {
+
+			this._sobolMap.generate();
 
 		}
 

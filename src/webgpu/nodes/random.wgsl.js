@@ -1,4 +1,4 @@
-import { uint, wgsl, wgslFn } from 'three/tsl';
+import { uint, float, wgsl, wgslFn, texture } from 'three/tsl';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 
 // Alpha test should be the last index as it is summed with triangle index
@@ -94,10 +94,10 @@ export const pcgFunctions = {
 // - Code from https://www.shadertoy.com/view/WtGyDm
 // Ported from WebGL version at sobol.glsl.js
 
-const sobolConstants = wgsl( /* wgsl */ `
+const SOBOL_MAX_POINTS = uint( 256 * 256 );
+const SOBOL_FACTOR = float( 1.0 / 16777216.0 );
 
-	const SOBOL_FACTOR: f32 = 1.0 / 16777216.0;
-	const SOBOL_MAX_POINTS: u32 = 256u * 256u;
+const sobolConstants = wgsl( /* wgsl */ `
 
 	const SOBOL_DIRECTIONS_1 = array<u32, 32>(
 		0x80000000u, 0xc0000000u, 0xa0000000u, 0xf0000000u,
@@ -251,9 +251,9 @@ export const generateSobolPointFunc = wgslTagFn`
 	fn generateSobolPoint( id: u32 ) -> vec4f {
 
 		var index = id;
-		if ( index >= SOBOL_MAX_POINTS ) {
+		if ( index >= ${ SOBOL_MAX_POINTS } ) {
 
-			index = index % SOBOL_MAX_POINTS;
+			index = index % ${ SOBOL_MAX_POINTS };
 			// return vec4( 0.0 );
 
 		}
@@ -265,7 +265,7 @@ export const generateSobolPointFunc = wgslTagFn`
 		let z = ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, SOBOL_DIRECTIONS_3 ) ) & 0x00ffffffu;
 		let w = ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, SOBOL_DIRECTIONS_4 ) ) & 0x00ffffffu;
 
-		return vec4( f32( x ), f32( y ), f32( z ), f32( w ) ) * SOBOL_FACTOR;
+		return vec4( f32( x ), f32( y ), f32( z ), f32( w ) ) * ${ SOBOL_FACTOR };
 
 	}
 
@@ -306,7 +306,7 @@ const sobolGetSeedFunc = wgslTagFn`
 
 `;
 
-const sobolGenerator = ( dim = 1 ) => {
+const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 
 	if ( dim <= 0 ) {
 
@@ -345,15 +345,13 @@ const sobolGenerator = ( dim = 1 ) => {
 
 			let shuffle_seed = ${ sobolNodes[ 1 ].hashCombine }( seed, 0u );
 			let shuffled_index = ${ sobolNodes[ 1 ].scramble }( ${ sobolNodes[ 1 ].reverseBits }( index ), shuffle_seed );
-			let sobol_pt = ${ generateSobolPointFunc }( shuffled_index )${ components };
-			// TODO: cache sobol point in a texture
-			// let sobol_pt = sobolGetTexturePoint( shuffled_index )${ components };
+			let sobol_pt = ${ sobolPointFunc }( shuffled_index )${ components };
 			var result = ${ utype }( sobol_pt * 16777216.0 );
 
 			let seed2 = ${ sobolNodes[ dim ].hashCombine }( seed, ${ combineValues } );
 			result = ${ sobolNodes[ dim ].scramble }( result, seed2 );
 
-			return SOBOL_FACTOR * ${ ftype }( result >> ${utype}( 8 ) );
+			return ${ SOBOL_FACTOR } * ${ ftype }( result >> ${utype}( 8 ) );
 
 		}
 
@@ -390,4 +388,39 @@ export const sobolFunctions = {
 	vec2f: sobolGenerator( 2 ),
 	vec3f: sobolGenerator( 3 ),
 	vec4f: sobolGenerator( 4 ),
+};
+
+export const sobolTextureFunctions = ( sobolTexture ) => {
+
+	const textureNode = texture( sobolTexture );
+	const sampleTextureFunc = wgslTagFn/* wgsl */`
+
+		fn sampleSobolPoint( id: u32 ) -> vec4f {
+
+			var index = id;
+			if ( index >= ${ SOBOL_MAX_POINTS } ) {
+
+				index = index % ${ SOBOL_MAX_POINTS };
+
+			}
+
+			let dim = textureDimensions( ${ textureNode } );
+			let y = index / dim.x;
+			let x = index - y * dim.x;
+
+			return textureLoad( ${ textureNode }, vec2( x, y ), 0 );
+
+		}
+
+	`;
+
+	return {
+		init: sobolInitFunc,
+		nextBounce: sobolNextBounceFunc,
+		f32: sobolGenerator( 1, sampleTextureFunc ),
+		vec2f: sobolGenerator( 2, sampleTextureFunc ),
+		vec3f: sobolGenerator( 3, sampleTextureFunc ),
+		vec4f: sobolGenerator( 4, sampleTextureFunc ),
+	};
+
 };
