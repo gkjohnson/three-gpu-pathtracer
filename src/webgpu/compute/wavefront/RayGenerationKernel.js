@@ -3,15 +3,18 @@ import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
-import { getPcgSeed, SOBOL_INDEX_RAY_JITTER, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
+import { RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { proxyFn } from '../../lib/nodes/NodeProxy.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
 	constructor() {
 
 		const params = {
+			random: { value: null },
+
 			cameraToModelMatrix: uniform( new Matrix4() ),
 			inverseProjectionMatrix: uniform( new Matrix4() ),
 
@@ -26,6 +29,11 @@ export class RayGenerationKernel extends ComputeKernel {
 			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
 			globalId: globalId,
+		};
+
+		const rng = {
+			init: proxyFn( 'random.value.init', params ),
+			vec2f: proxyFn( 'random.value.vec2f', params ),
 		};
 
 		const fn = wgslTagFn /* wgsl */`
@@ -81,10 +89,10 @@ export class RayGenerationKernel extends ComputeKernel {
 				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ sobolInit }( pixelIndex, seed, 0 );
+				${ rng.init }( pixelIndex, seed, 0 );
 
 				// write the ray data
-				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * ${ rng.vec2f }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 

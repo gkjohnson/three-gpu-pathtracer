@@ -1,9 +1,9 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
-import { SOBOL_INDEX_ENVIRONMENT_SAMPLE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
+import { RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
-import { proxy } from '../../lib/nodes/NodeProxy.js';
+import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
@@ -13,6 +13,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const params = {
 			bvhData: { value: null },
+			random: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -42,6 +43,10 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const rng = {
+			init: proxyFn( 'random.value.init', params ),
+			vec2f: proxyFn( 'random.value.vec2f', params ),
+		};
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -94,7 +99,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let indexUV = input.pixel;
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ sobolInit }( pixelIndex, seed, input.currentBounce );
+				${ rng.init }( pixelIndex, seed, input.currentBounce );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
@@ -117,7 +122,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
+					let rng = ${ rng.vec2f }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 

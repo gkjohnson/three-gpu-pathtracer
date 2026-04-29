@@ -48,7 +48,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
 		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel = new ProcessHitsKernel().setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -56,6 +56,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// later
 		this.volumeKernel = null;
 		this.lightConnectionKernel = null;
+
+	}
+
+	setRandomFunctions( randomFunctions ) {
+
+		this.enqueueRaysKernel.random = randomFunctions;
+		this.enqueueRaysKernel.needsUpdate = true;
+
+		this.rayIntersectionKernel.random = randomFunctions;
+		this.rayIntersectionKernel.needsUpdate = true;
+
+		this.hitProcessKernel.random = randomFunctions;
+		this.hitProcessKernel.needsUpdate = true;
 
 	}
 
@@ -80,8 +93,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setMaterial( material ) {
 
-		this.material = material;
-		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel.material = material.getData();
+		this.hitProcessKernel.needsUpdate = true;
 		this.reset();
 
 	}

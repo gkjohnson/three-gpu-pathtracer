@@ -8,6 +8,8 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
+import { sobolFuncs, sobolInitFunc, sobolNextBounceFunc } from './nodes/random.wgsl.js';
+import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -42,8 +44,10 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._pathTracer.setRandomFunctions( this.randomFunctions );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setTextures( this.textureArray.texture );
+		this._pathTracer.setMaterial( this.material );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -91,6 +95,9 @@ export class WebGPUPathTracer {
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
+		this.material = new GltfCompliantMaterial();
+		this.setRandomFunctions( 0 );
+
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
@@ -137,7 +144,7 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
+		bvhData.useTransparencyRaycastFn( this.textureArray.texture, this.randomFunctions );
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
@@ -152,12 +159,30 @@ export class WebGPUPathTracer {
 
 	getMaterial() {
 
-		return this._pathTracer.getMaterial();
+		return this.material;
+
+	}
+
+	setRandomFunctions( enumeration ) {
+
+		this.randomFunctions = {
+			init: sobolInitFunc,
+			nextBounce: sobolNextBounceFunc,
+			f32: sobolFuncs[ 1 ],
+			vec2f: sobolFuncs[ 2 ],
+			vec3f: sobolFuncs[ 3 ],
+			vec4f: sobolFuncs[ 4 ],
+		};
+
+		this.material.setRandomFunctions( this.randomFunctions );
+		this._pathTracer.setRandomFunctions( this.randomFunctions );
 
 	}
 
 	setMaterial( material ) {
 
+		this.material = material;
+		this.material.setRandomFunctions( this.randomFunctions );
 		this._pathTracer.setMaterial( material );
 
 	}
@@ -253,6 +278,13 @@ export class WebGPUPathTracer {
 		if ( ! this._renderer._initialized ) {
 
 			return;
+
+		}
+
+		if ( ! this.material.initialized ) {
+
+			this.material.init( renderer );
+			this.material.initialized = true;
 
 		}
 

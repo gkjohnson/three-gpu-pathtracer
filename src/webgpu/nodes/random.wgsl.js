@@ -1,7 +1,15 @@
 import { uint, wgsl, wgslFn } from 'three/tsl';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 
+// Alpha test should be the last index as it is summed with triangle index
+export const RNG_INDEX_RAY_JITTER = 0;
+export const RNG_INDEX_ENVIRONMENT_SAMPLE = 1;
+export const RNG_INDEX_SCATTER_TYPE = 2;
+export const RNG_INDEX_SCATTER_DIRECTION = 3;
+export const RNG_INDEX_ALPHA_TEST = 4;
+
 export const pcgStateStruct = wgsl( /* wgsl */`
+
 	struct PcgState {
 		s0: vec4u,
 		s1: vec4u,
@@ -69,13 +77,6 @@ export const pcgRand3 = wgslFn( /*wgsl*/`
 // - https://jcgt.org/published/0009/04/01/
 // - Code from https://www.shadertoy.com/view/WtGyDm
 // Ported from WebGL version at sobol.glsl.js
-
-// Alpha test should be the last index as it is summed with triangle index
-export const SOBOL_INDEX_RAY_JITTER = 0;
-export const SOBOL_INDEX_ENVIRONMENT_SAMPLE = 1;
-export const SOBOL_INDEX_SCATTER_TYPE = 2;
-export const SOBOL_INDEX_SCATTER_DIRECTION = 3;
-export const SOBOL_INDEX_ALPHA_TEST = 4;
 
 const sobolConstants = wgsl( /* wgsl */ `
 
@@ -228,7 +229,7 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 // 1-dimensional vector = f32
 const sobolNodes = Array.from( { length: 5 }, ( _, i ) => sobolScrambleNodesGenerator( i ) );
 
-const generateSobolPointFunc = wgslTagFn`
+export const generateSobolPointFunc = wgslTagFn`
   ${ [ sobolConstants ] }
 
 	fn generateSobolPoint( id: u32 ) -> vec4f {
@@ -344,7 +345,12 @@ const sobolGenerator = ( dim = 1 ) => {
 
 };
 
-export const sobolInit = wgslTagFn`
+// 0th node is intentionally empty to make access pattern more intuitive:
+// sobolFuncs[ i ] is a function node to sample i-dimensional vector
+// 1-dimensional vector = f32
+export const sobolFuncs = Array.from( { length: 5 }, ( _, i ) => sobolGenerator( i ) );
+
+export const sobolInitFunc = wgslTagFn`
 
 	fn sobolInit( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
 
@@ -356,8 +362,12 @@ export const sobolInit = wgslTagFn`
 
 `;
 
-// 0th node is intentionally empty to make access pattern more intuitive:
-// sobolFuncs[ i ] is a function node to sample i-dimensional vector
-// 1-dimensional vector = f32
-export const sobolFuncs = Array.from( { length: 5 }, ( _, i ) => sobolGenerator( i ) );
+export const sobolNextBounceFunc = wgslTagFn`
 
+	fn sobolNextBounce() -> void {
+
+		${ sobolBounceIndex }++;
+
+	}
+
+`;

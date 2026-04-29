@@ -6,7 +6,7 @@ import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { SOBOL_INDEX_ALPHA_TEST, sobolFuncs } from './random.wgsl.js';
+import { RNG_INDEX_ALPHA_TEST, sobolFuncs } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 
 const _colorVec = new Vector4();
@@ -45,7 +45,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	useTransparencyRaycastFn( textures ) {
+	useTransparencyRaycastFn( textures, randomFunctions ) {
 
 		const texturesNode = texture( textures );
 		const samplerNode = sampler( textures );
@@ -169,7 +169,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 && opacity < ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_ALPHA_TEST } + ti ) ) {
+								if ( material.transparent != 0 && opacity < ${ randomFunctions.f32 }( ${ RNG_INDEX_ALPHA_TEST } + ti ) ) {
 
 									continue;
 

@@ -7,14 +7,15 @@ import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
-import { sobolInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor( material ) {
+	constructor() {
 
 		const params = {
 			bvhData: { value: null },
+			random: { value: null },
+			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -37,6 +38,11 @@ export class ProcessHitsKernel extends ComputeKernel {
 		};
 
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
+		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
+		const rng = {
+			init: proxyFn( 'random.value.init', params ),
+			vec2f: proxyFn( 'random.value.vec2f', params ),
+		};
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -75,7 +81,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ sobolInit }( pixelIndex, seed, input.currentBounce );
+				${ rng.init }( pixelIndex, seed, input.currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -90,7 +96,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
 
-				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
+				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 
