@@ -20,6 +20,7 @@ export class SobolNumberMapGenerator {
 
 		this.renderer = renderer;
 		this.dimensions = dimensions;
+		this.isGenerated = false;
 
 	}
 
@@ -42,6 +43,8 @@ export class SobolNumberMapGenerator {
 		_quad.render( renderer );
 
 		renderer.setRenderTarget( ogTarget );
+
+		this.isGenerated = true;
 
 	}
 

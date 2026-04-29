@@ -103,7 +103,7 @@ export class WebGPUPathTracer {
 
 		this.material = new GltfCompliantMaterial();
 		this._sobolMap = new SobolNumberMapGenerator( renderer, 256 );
-		this.setRandomFunctions( RNG_SOBOL_TEXTURE );
+		this.setPRNGType( RNG_SOBOL_TEXTURE );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -149,9 +149,9 @@ export class WebGPUPathTracer {
 		} );
 
 		// Build TLAS and compute functions
-		const bvhData = new PathtracerBVHComputeData( scene );
+		const bvhData = new PathtracerBVHComputeData( scene, this.randomFunctions );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn( this.textureArray.texture, this.randomFunctions );
+		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
@@ -170,7 +170,7 @@ export class WebGPUPathTracer {
 
 	}
 
-	setRandomFunctions( type ) {
+	setPRNGType( type ) {
 
 		switch ( type ) {
 
@@ -189,6 +189,7 @@ export class WebGPUPathTracer {
 		}
 
 		this.material.setRandomFunctions( this.randomFunctions );
+		this._bvhData?.setRandomFunctions( this.randomFunctions );
 		this._pathTracer.setRandomFunctions( this.randomFunctions );
 
 	}
