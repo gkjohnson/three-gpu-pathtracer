@@ -55,6 +55,38 @@ export const iorToF0Func = wgslFn( /* wgsl */ `
 
 ` );
 
+export const iorToF0GeneralFunc = wgslFn( /* wgsl */ `
+
+	fn iorToF0General( transmittedIor: f32, incidentIor: f32 ) -> f32 {
+
+		return pow( ( transmittedIor - incidentIor ) / ( transmittedIor + incidentIor ), 2 );
+
+	}
+
+` );
+
+export const iorToF0GeneralVecFunc = wgslFn( /* wgsl */ `
+
+	fn iorToF0GeneralVec( transmittedIor: vec3f, incidentIor: vec3f ) -> vec3f {
+
+		let v = ( transmittedIor - incidentIor ) / ( transmittedIor + incidentIor );
+		return v * v;
+
+	}
+
+` );
+
+export const fresnel0ToIorFunc = wgslFn( /* wgsl */ `
+
+	fn fresnel0ToIor( f0: vec3f ) -> vec3f {
+
+		let sqrtF0 = sqrt( f0 );
+		return ( vec3( 1.0 ) + sqrtF0 ) / ( vec3( 1.0 ) - sqrtF0 );
+
+	}
+
+` );
+
 export const schlickFresnelFunc = wgslFn( /* wgsl */ `
 
 	fn schlickFresnel( cosine: f32, f0: f32 ) -> f32 {

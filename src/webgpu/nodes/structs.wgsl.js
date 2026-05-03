@@ -192,16 +192,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	specularIntensity: 'f32',
 }, 'SurfaceRecord' );
 
-export const rayQueueElementStruct = new StructTypeNode( {
-	origin: 'vec3',
-	_alignment0: 'uint',
-	direction: 'vec3',
-	_alignment1: 'uint',
-	throughputColor: 'vec3f',
-	currentBounce: 'uint',
-	pixel: 'vec2u',
-}, 'RayQueueElement' );
-
 export const environmentInfoStruct = new StructTypeNode( {
 	rotation: 'mat3x3f',
 	intensity: 'float',
