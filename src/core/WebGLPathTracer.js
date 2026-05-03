@@ -112,6 +112,11 @@ export class WebGLPathTracer {
 
 		this._lowResPathTracer = new PathTracingRenderer( renderer );
 		this._lowResPathTracer.tiles.set( 1, 1 );
+		this._pathTracer.onCompilationComplete = () => {
+
+			this._clock.start();
+
+		};
 		this._quad = new FullScreenQuad( new ClampedInterpolationMaterial( {
 			map: null,
 			transparent: true,
@@ -405,7 +410,6 @@ export class WebGLPathTracer {
 		}
 
 		// render the path tracing sample after enough time has passed
-		const delta = clock.getDelta() * 1e3;
 		const elapsedTime = clock.getElapsedTime() * 1e3;
 		if ( ! this.pausePathTracing && this.enablePathTracing && this.renderDelay <= elapsedTime && ! this.isCompiling ) {
 
@@ -427,7 +431,7 @@ export class WebGLPathTracer {
 
 				if ( this.fadeDuration !== 0 ) {
 
-					quad.material.opacity = Math.min( quad.material.opacity + delta / this.fadeDuration, 1 );
+					quad.material.opacity = Math.min( elapsedTime / this.fadeDuration, 1 );
 
 				} else {
 

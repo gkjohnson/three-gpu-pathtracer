@@ -11,7 +11,7 @@ const excludeList = [
 ];
 
 let totalTime = 0;
-const SAMPLES = 64;
+const SAMPLES = 4096;
 const argv = yargs( process.argv.slice( 2 ) )
 	.usage( 'Usage: $0 <command> [options]' )
 	.option( 'output-path', {
@@ -102,12 +102,13 @@ async function saveScreenshot( scenario, targetFolder ) {
 		defaultViewport: null,
 		args,
 		headless: argv.headless,
+		protocolTimeout: 60 * 60 * 1000,
 
 	} );
 
 	const page = await browser.newPage();
 
-	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
+	await page.goto( `http://localhost:5173/viewerTest.html?hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
 
 	try {
 
@@ -116,7 +117,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 			return new Promise( ( resolve, reject ) => {
 
-				const TIMEOUT = 240000;
+				const TIMEOUT = 15 * 60 * 1000;
 				const handle = setTimeout( () => {
 
 					reject( new Error( `Failed to render in ${ ( 1e-3 * TIMEOUT ).toFixed( 2 ) }s.` ) );

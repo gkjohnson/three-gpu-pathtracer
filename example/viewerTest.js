@@ -228,7 +228,12 @@ function animate() {
 	// rendering has completed
 	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
 
-		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
+		requestAnimationFrame( () => {
+
+			const renderTime = pathTracer.getRenderTime ? pathTracer.getRenderTime() : null;
+			window.dispatchEvent( new CustomEvent( 'render-complete', { detail: { renderTime } } ) );
+
+		} );
 
 	}
 

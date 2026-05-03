@@ -256,6 +256,11 @@ export class PathTracingRenderer {
 				if ( this._compilePromise === promise ) {
 
 					this._compilePromise = null;
+					if ( this.onCompilationComplete ) {
+
+						this.onCompilationComplete();
+
+					}
 
 				}
 
