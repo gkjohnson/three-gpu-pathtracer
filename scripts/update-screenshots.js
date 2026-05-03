@@ -31,6 +31,11 @@ const argv = yargs( process.argv.slice( 2 ) )
 		type: 'boolean',
 		default: false
 	} )
+	.option( 'webgpu', {
+		describe: 'Whether to run in a headless mode.',
+		type: 'boolean',
+		default: false
+	} )
 	.argv;
 
 ( async () => {
@@ -108,7 +113,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	const page = await browser.newPage();
 
-	await page.goto( `http://localhost:5173/viewerTest.html?hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
+	await page.goto( `http://localhost:5173/viewerTest.html?isWebGPU=true&hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
 
 	try {
 

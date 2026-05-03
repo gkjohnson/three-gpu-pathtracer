@@ -214,3 +214,15 @@ export const lobeWeightsStruct = new StructTypeNode( {
 	transmission: 'float',
 	clearcoat: 'float',
 }, 'LobeWeights' );
+
+export const bxdfContextStruct = new StructTypeNode( {
+	NdotV: 'float',
+	NdotL: 'float',
+	NdotH: 'float',
+	VdotH: 'float',
+
+	VdotNc: 'float',
+	LdotNc: 'float',
+	HdotNc: 'float',
+
+}, 'BxDFContext' );

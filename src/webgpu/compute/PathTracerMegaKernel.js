@@ -4,10 +4,11 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore, luminance } from 'three/tsl';
 import { pcgRand2, pcgInit, sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
-import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, sampleEnvironmentFn, sampleEquirectColorFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc } from '../nodes/utils.wgsl.js';
+import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -37,6 +38,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			envMapRotation: uniform( new Matrix3() ),
 			envMapIntensity: uniform( 1 ),
 
+			envMapMarginalWeights: texture( new DataTexture() ),
+			envMapMarginalWeightsSampler: sampler( new DataTexture() ),
+
+			envMapConditionalWeights: texture( new DataTexture() ),
+			envMapConditionalWeightsSampler: sampler( new DataTexture() ),
+
+			totalSum: uniform( 0 ),
+
 			background: texture( new DataTexture() ),
 			backgroundSampler: sampler( new DataTexture() ),
 			backgroundRotation: uniform( new Matrix3() ),
@@ -54,6 +63,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
+		const bsdfEvalScatterFn = proxyFn( 'material.value.bsdfEvalScatter', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -77,6 +87,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				envMapSampler: sampler,
 				envMapRotation: mat3x3f,
 				envMapIntensity: f32,
+
+				envMapMarginalWeights: texture_2d<f32>,
+				envMapMarginalWeightsSampler: sampler,
+
+				envMapConditionalWeights: texture_2d<f32>,
+				envMapConditionalWeightsSampler: sampler,
+
+				totalSum: f32,
 
 				background: texture_2d<f32>,
 				backgroundSampler: sampler,
@@ -133,6 +151,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
+				var lastPdf = 0.0;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -164,6 +183,50 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						// TODO: Investigate offsetting this position to not self-intersect multiple times
+						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
+						// However that seems like a very large distance to offset
+						let newPoint = vertexData.position.xyz;
+
+						// Direct light contribution
+
+						let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
+						let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
+						let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
+						let uv = vec2( u, v );
+						// let uv = uv0;
+
+
+						let direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
+						let color = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
+
+						let resolution = textureDimensions( envMap ).xy;
+						let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color ) / totalSum;
+						var envPdf = weight * ${ equirectDirectionPdfFunc }( direction );
+						// Light portal?
+						if ( dot( direction, surface.faceNormal ) < 0.0 ) {
+
+							envPdf = 0.0;
+
+						}
+
+						if ( envPdf > 0.0 ) {
+							var envRay: ${ rayStruct };
+							envRay.direction = direction;
+							envRay.origin = newPoint;
+							var envHitResult: ${ raycastOutput };
+							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) ) {
+
+								let bsdf = ${ bsdfEvalScatterFn }( -ray.direction, envRay.direction, surface );
+								let mis = envPdf * envPdf / ( bsdf.pdf * bsdf.pdf + envPdf * envPdf );
+								resultColor += vec4( throughputColor * bsdf.color * color * mis / envPdf, 0.0 );
+
+							}
+
+						}
+
+						// Direct light contribution end
+
 						// russian roulette path termination
 						// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
 						if ( bounce >= 3 ) {
@@ -181,21 +244,26 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							throughputColor *= min( 1.0 / rrProb, 20.0 );
 						}
 
-						throughputColor *= scatterRec.color;
-						throughputColor /= scatterRec.pdf;
 
-						// TODO: Investigate offsetting this position to not self-intersect multiple times
-						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
-						// However that seems like a very large distance to offset
-						ray.origin = vertexData.position.xyz;
+						throughputColor *= scatterRec.color / scatterRec.pdf;
+
+						ray.origin = newPoint;
 						ray.direction = scatterRec.direction;
+						lastPdf = scatterRec.pdf;
 
 					} else {
 
 						let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 						if ( bounce > 0u ) {
 
-							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );
+							let color = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
+
+							let resolution = textureDimensions( envMap ).xy;
+							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color.xyz ) / totalSum;
+							var envPdf = weight * ${ equirectDirectionPdfFunc }( ray.direction );
+
+							let mis = lastPdf * lastPdf / ( lastPdf * lastPdf + envPdf * envPdf );
+							resultColor += mis * color * vec4f( throughputColor, 0.0 );
 
 						} else {
 

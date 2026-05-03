@@ -96,7 +96,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
-	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
+	fn equirectDirectionToUv( direction: vec3f ) -> vec2f {
 
 		// from Spherical.setFromCartesianCoords
 		var uv = vec2f( atan2( direction.z, direction.x ), acos( direction.y ) );
@@ -111,7 +111,45 @@ const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 ` );
 
-const sampleEquirectColorFn = wgslFn( /* wgsl */ `
+export const equirectDirectionPdfFunc = wgslFn( /* wgsl */ `
+
+	fn equirectDirectionPdf( direction: vec3f ) -> f32 {
+
+		let uv = equirectDirectionToUv( direction );
+		let theta = uv.y * PI;
+		let sinTheta = sin( theta );
+		if ( sinTheta == 0.0 ) {
+
+			return 0.0;
+
+		}
+
+		return 1.0 / ( 2.0 * PI * PI * sinTheta );
+
+	}
+
+`, [ equirectDirectionToUvFn ] );
+
+export const equirectUvToDirectionFunc = wgslFn( /* wgsl */ `
+
+	fn equirectUvToDirection( uvIn: vec2f ) -> vec3f {
+
+		// undo above adjustments
+		let uv = vec2( uvIn.x - 0.5, 1.0 - uvIn.y );
+
+		// from Vector3.setFromSphericalCoords
+		let theta = uv.x * 2.0 * PI;
+		let phi = uv.y * PI;
+
+		let sinPhi = sin( phi );
+
+		return vec3( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
+
+	}
+
+`, [ constants ] );
+
+export const sampleEquirectColorFn = wgslFn( /* wgsl */ `
 
 	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
 

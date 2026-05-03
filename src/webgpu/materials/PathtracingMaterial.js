@@ -31,7 +31,8 @@ export class PathtracingMaterial {
 
 		return {
 
-			bsdfSample: this.getBsdfNode(),
+			bsdfSample: this.getBsdfSampleNode(),
+			bsdfEvalScatter: this.getBsdfEvalScatterNode(),
 
 		};
 
