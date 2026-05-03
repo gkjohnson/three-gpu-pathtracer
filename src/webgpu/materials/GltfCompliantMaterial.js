@@ -157,7 +157,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( r <= cdf.y ) { // specular
 
 					wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ pcgRand2 }() );
-					wi = - reflect( wo, wh );
+					wi = - normalize( reflect( wo, wh ) );
 
 					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
 					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
@@ -165,7 +165,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( r <= cdf.z ) { // clearcoat
 
 					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), ${ pcgRand2 }() );
-					wiClearcoat = - reflect( woClearcoat, whClearcoat );
+					wiClearcoat = - normalize( reflect( woClearcoat, whClearcoat ) );
 
 					wi = normalize( invBasis * clearcoatBasis * wiClearcoat );
 					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
