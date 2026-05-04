@@ -4,9 +4,9 @@ import { uniform, storage, textureStore, globalId, texture, sampler } from 'thre
 import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, queueSizesStructHitFree } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
-import { misHeuristicFunc, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { misHeuristicFunc } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
-import { isTerminatingScatterFunc, luminanceFunc } from '../../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../../nodes/utils.wgsl.js';
 import { SOBOL_INDEX_RUSSIAN_ROULETTE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {

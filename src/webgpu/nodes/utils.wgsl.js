@@ -207,3 +207,24 @@ export const luminanceFunc = wgslFn( /* wgsl */ `
 	}
 
 ` );
+
+export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
+
+	fn weightedAlphaBlend( prevColor: vec4f, newColor: vec4f, weight: f32 ) -> vec4f {
+
+		let invWeight = 1.0 - weight;
+		let totalAlpha = prevColor.a * invWeight + newColor.a * weight;
+		var blendedColor = vec4f( 0 );
+		if ( totalAlpha != 0.0 ) {
+
+			let prevContrib = prevColor.rgb * invWeight * prevColor.a / totalAlpha;
+			let resContrib = newColor.rgb * weight * newColor.a / totalAlpha;
+			blendedColor = vec4f( prevContrib + resContrib, totalAlpha );
+
+		}
+
+		return blendedColor;
+
+	}
+
+` );

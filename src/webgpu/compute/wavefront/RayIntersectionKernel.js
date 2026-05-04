@@ -4,9 +4,9 @@ import { uniform, texture, sampler, storage, textureStore, globalId } from 'thre
 import { SOBOL_INDEX_ENVIRONMENT_SAMPLE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, queueSizesStructRayFree } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
-import { equirectDirectionPdfFunc, misHeuristicFunc, sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { equirectDirectionPdfFunc, misHeuristicFunc, sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
-import { luminanceFunc } from '../../nodes/utils.wgsl.js';
+import { luminanceFunc, weightedAlphaBlendFn } from '../../nodes/utils.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 

@@ -1,13 +1,13 @@
 import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore, luminance } from 'three/tsl';
-import { pcgRand2, pcgInit, sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE, SOBOL_INDEX_LIGHT_INDEX } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
-import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn, sampleEquirectColorFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { isTerminatingScatterFunc, luminanceFunc } from '../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -190,17 +190,23 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// Direct light contribution
 
-						let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
-						let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
-						let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
-						let uv = vec2( u, v );
+						// let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
+						// if ( ) {
+							let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
+							let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
+							let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
+							let uv = vec2( u, v );
 
-						let direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
-						let color = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
+							let direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
+							let color = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
 
-						let resolution = textureDimensions( envMap ).xy;
-						let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color ) / totalSum;
-						var envPdf = weight * ${ equirectDirectionPdfFunc }( direction );
+							let resolution = textureDimensions( envMap ).xy;
+							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color ) / totalSum;
+							var envPdf = weight * ${ equirectDirectionPdfFunc }( direction );
+						// } else {
+						//
+						// }
+
 						// Light portal?
 						if ( dot( direction, surface.faceNormal ) < 0.0 ) {
 
