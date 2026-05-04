@@ -150,7 +150,7 @@ export class WebGPUPathTracer {
 		const lights = getLights( scene );
 		const lightData = this._serializeLights( lights );
 		const lightsAttribute = new StorageBufferAttribute( lightData, 1/* lightStruct.getLength() */ );
-		this._pathTracer.setLights( lightsAttribute );
+		this._pathTracer.setLights( lightsAttribute, lights.length );
 
 		this.scene = scene;
 		this._bvhData = bvhData;

@@ -8,16 +8,18 @@ export const LIGHT_TYPE_AREA_RECT = 3;
 export const LIGHT_TYPE_AREA_CIRC = 4;
 export const LIGHT_TYPE_ENVIRONMENT = 5;
 
-export const sampleRandomLightFunc = wgslTagFn/* wgsl */`
+export const sampleRandomLightFunc = ( lights ) => wgslTagFn/* wgsl */`
 
-	fn sampleRandomLight( u: f32, lights: ptr<storage, array<${ lightStruct }>> ) -> ${ lightRecordStruct } {
+	fn sampleRandomLight( u: f32, lightCount: u32 ) -> ${ lightRecordStruct } {
 
 		var result: ${ lightRecordStruct };
 
-		// TODO: explore for sophisticated strategies for light sample generation
-		let lightCount = arrayLength( lights );
+		// TODO: explore more complicated strategies for light sample generation
+		// pbrt suggests:
+		// 1. Sample based on relative strength
+		// 2. Have a separate BVH for lights only for fast querying
 		let lightIndex = u32( u * f32( lightCount ) );
-		let light = lights[ lightIndex ];
+		let light = ${ lights }[ lightIndex ];
 
 		if ( light.kind == ${ LIGHT_TYPE_DIRECTIONAL } ) {
 

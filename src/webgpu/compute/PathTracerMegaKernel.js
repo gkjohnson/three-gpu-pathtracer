@@ -18,7 +18,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const params = {
 			bvhData: { value: null },
-
+			lights: { value: null },
 			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -57,12 +57,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
 
-			lights: storage( new StorageBufferAttribute(), lightStruct ).toReadOnly(),
+			lightCount: uniform( 0 ),
 
 			// compute variables
 			globalId: globalId,
 		};
 
+		const lightsBuffer = proxy( 'lights.value', params );
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
@@ -109,12 +110,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				textures: texture_2d_array<f32>,
 				textureSampler: sampler,
 
-				lights: ptr<storage, array<${ lightStruct }>>,
+				lightCount: u32,
 
 			) -> void {
 
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
+				let lights = &${ lightsBuffer };
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -196,10 +198,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// Direct light contribution
 
-						let lightCount = arrayLength( lights );
 						let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
 						var lightRecord: ${ lightRecordStruct };
-						if ( lightType * f32( lightCount ) > ( f32( lightCount ) - 1.0 ) ) {
+						if ( lightType * ( f32( lightCount ) + 1.0 ) > f32( lightCount ) ) {
 
 							let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 							let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
@@ -216,9 +217,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							lightRecord = ${ sampleRandomLightFunc }( lightType, lights );
+							lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }( lightType, lightCount );
 
 						}
+
 						lightRecord.pdf /= f32( max( lightCount, 1 ) );
 
 						// Light portal?

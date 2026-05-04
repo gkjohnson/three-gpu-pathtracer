@@ -2,6 +2,9 @@ import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
+import { lightStruct } from './nodes/structs.wgsl.js';
+import { storage } from 'three/tsl';
+
 
 export class MegaKernelPathTracer extends PathTracerBackend {
 
@@ -35,9 +38,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setLights( lightsAttribute ) {
+	setLights( lightsAttribute, lightCount ) {
 
-		this.kernel.lights = lightsAttribute;
+		this.kernel.lights = storage( lightsAttribute, lightStruct ).setName( 'g_lights' ).toReadOnly();
+		this.kernel.lightCount = lightCount;
 		this.kernel.needsUpdate = true;
 
 	}
