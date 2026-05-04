@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import fetch from 'node-fetch';
 import { PNG } from 'pngjs';
-import { exec } from 'child_process';
+import { exec, spawnSync } from 'child_process';
 
 const excludeList = [
 	'khronos-MetalRoughSpheres-LDR',
@@ -77,6 +77,11 @@ const argv = yargs( process.argv.slice( 2 ) )
 		describe: 'Decimal delimiter for numbers in CSV output.',
 		type: 'string',
 		default: ',',
+	} )
+	.option( 'copy-clipboard', {
+		describe: 'Copy CSV content to the system clipboard after generation.',
+		type: 'boolean',
+		default: false,
 	} )
 	.argv;
 
@@ -270,6 +275,34 @@ function writeCSV( results, csvPath, decimalDelimiter = ',' ) {
 
 }
 
+function copyToClipboard( text ) {
+
+	try {
+
+		if ( process.platform === 'win32' ) {
+
+			spawnSync( 'clip', [], { input: text, encoding: 'utf8' } );
+
+		} else if ( process.platform === 'darwin' ) {
+
+			spawnSync( 'pbcopy', [], { input: text, encoding: 'utf8' } );
+
+		} else {
+
+			spawnSync( 'xclip', [ '-selection', 'clipboard' ], { input: text, encoding: 'utf8' } );
+
+		}
+
+		console.log( 'CSV content copied to clipboard.' );
+
+	} catch ( e ) {
+
+		console.error( 'Failed to copy to clipboard. Make sure xclip is installed on Linux.' );
+
+	}
+
+}
+
 ( async () => {
 
 	// Fetch scenarios
@@ -403,6 +436,11 @@ function writeCSV( results, csvPath, decimalDelimiter = ',' ) {
 		if ( argv.csv ) {
 
 			writeCSV( results, csvPath, argv[ 'decimal-delimiter' ] );
+			if ( argv[ 'copy-clipboard' ] ) {
+
+				copyToClipboard( fs.readFileSync( csvPath, 'utf8' ) );
+
+			}
 
 		}
 
