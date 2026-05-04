@@ -4,7 +4,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore, luminance } from 'three/tsl';
 import { pcgRand2, pcgInit, sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
-import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, sampleEnvironmentFn, sampleEquirectColorFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn, sampleEquirectColorFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc } from '../nodes/utils.wgsl.js';
@@ -194,8 +194,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
 						let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
 						let uv = vec2( u, v );
-						// let uv = uv0;
-
 
 						let direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
 						let color = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
@@ -218,7 +216,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) ) {
 
 								let bsdf = ${ bsdfEvalScatterFn }( -ray.direction, envRay.direction, surface );
-								let mis = envPdf * envPdf / ( bsdf.pdf * bsdf.pdf + envPdf * envPdf );
+								let mis = ${ misHeuristicFunc }( envPdf, bsdf.pdf );
 								resultColor += vec4( throughputColor * bsdf.color * color * mis / envPdf, 0.0 );
 
 							}
@@ -262,7 +260,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color.xyz ) / totalSum;
 							var envPdf = weight * ${ equirectDirectionPdfFunc }( ray.direction );
 
-							let mis = lastPdf * lastPdf / ( lastPdf * lastPdf + envPdf * envPdf );
+							let mis = ${ misHeuristicFunc }( lastPdf, envPdf );
 							resultColor += mis * color * vec4f( throughputColor, 0.0 );
 
 						} else {

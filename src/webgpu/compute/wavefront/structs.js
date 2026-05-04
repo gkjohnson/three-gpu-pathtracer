@@ -6,7 +6,7 @@ export const queuedRayStruct = new StructTypeNode( {
 	_alignment0: 'uint',
 
 	direction: 'vec3f',
-	_alignment1: 'uint',
+	lastPdf: 'float',
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
@@ -35,6 +35,11 @@ export const queuedHitStruct = new StructTypeNode( {
 	side: 'float',
 
 	resultColor: 'vec4f',
+
+	lightDirection: 'vec3f',
+	lightPdf: 'float',
+
+	lightColor: 'vec3f'
 
 }, 'QueuedHit' );
 

@@ -4,8 +4,9 @@ import { uniform, texture, sampler, storage, textureStore, globalId } from 'thre
 import { SOBOL_INDEX_ENVIRONMENT_SAMPLE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, queueSizesStructRayFree } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
-import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { equirectDirectionPdfFunc, misHeuristicFunc, sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { luminanceFunc } from '../../nodes/utils.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -24,6 +25,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			queueSizes: storage( new IndirectStorageBufferAttribute( 1, queueSizesStructRayFree.getLength() ), queueSizesStructRayFree ),
 
 			seed: uniform( 0 ),
+			totalSum: uniform( 0 ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -59,6 +61,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 				backgroundRotation: mat3x3f,
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
+
+				totalSum: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -120,7 +124,14 @@ export class RayIntersectionKernel extends ComputeKernel {
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
-						resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng ) * vec4f( input.throughputColor, 0.0 );
+						let color = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
+
+						let resolution = textureDimensions( envMap ).xy;
+						let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color.xyz ) / totalSum;
+						var envPdf = weight * ${ equirectDirectionPdfFunc }( ray.direction );
+
+						let mis = ${ misHeuristicFunc }( input.lastPdf, envPdf );
+						resultColor += mis * color * vec4f( input.throughputColor, 0.0 );
 
 					} else {
 

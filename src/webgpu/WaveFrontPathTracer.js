@@ -8,6 +8,7 @@ import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { queuedHitStruct, queuedRayStruct, queueSizesStructFree } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
+import { GenerateLightSampleKernel } from './compute/wavefront/GenerateLightSampleKernel.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -48,7 +49,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
 		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel = new ProcessHitsKernel().setWorkgroupSize( 64, 1, 1 );
+		this.generateLightKernel = new GenerateLightSampleKernel().setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -56,6 +58,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// later
 		this.volumeKernel = null;
 		this.lightConnectionKernel = null;
+
+		this.setMaterial( this.material );
 
 	}
 
@@ -66,6 +70,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.hitProcessKernel.bvhData = bvhData;
 		this.hitProcessKernel.needsUpdate = true;
+
+		this.generateLightKernel.bvhData = bvhData;
+		this.generateLightKernel.needsUpdate = true;
 
 		this.reset();
 
@@ -81,7 +88,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setMaterial( material ) {
 
 		this.material = material;
-		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel.material = material.getData();
+		this.hitProcessKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -97,32 +105,61 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		backgroundBlurriness,
 	) {
 
-		const kernel = this.rayIntersectionKernel;
-
-		if ( kernel.background.isTexture ) {
-
-			kernel.background.dispose();
-
-		}
-
 		if ( envMap !== null ) {
 
 			this.envInfo.updateFrom( envMap );
-			kernel.envMap = this.envInfo.map;
-			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
 
 		}
 
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		kernel.envMapIntensity = envMapIntensity;
+		{
 
-		kernel.background = background;
-		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
-		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
-		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		kernel.backgroundIntensity = backgroundIntensity;
-		kernel.backgroundBlurriness = backgroundBlurriness;
+			const kernel = this.rayIntersectionKernel;
+
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+			kernel.totalSum = this.envInfo.totalSum;
+
+			const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+			kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+			kernel.envMapIntensity = envMapIntensity;
+
+			if ( kernel.background.isTexture ) {
+
+				kernel.background.dispose();
+
+			}
+
+			kernel.background = background;
+			kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+			rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
+			kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+			kernel.backgroundIntensity = backgroundIntensity;
+			kernel.backgroundBlurriness = backgroundBlurriness;
+
+		}
+
+
+		{
+
+			const kernel = this.generateLightKernel;
+
+			kernel.envMap = this.envInfo.map;
+			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+
+			kernel.envMapMarginalWeights = this.envInfo.marginalWeights;
+			kernel.kernel.computeNode.parameters.envMapMarginalWeightsSampler.node.value = this.envInfo.marginalWeights;
+
+			kernel.envMapConditionalWeights = this.envInfo.conditionalWeights;
+			kernel.kernel.computeNode.parameters.envMapConditionalWeightsSampler.node.value = this.envInfo.conditionalWeights;
+
+			kernel.totalSum = this.envInfo.totalSum;
+
+			const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+			kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+			kernel.envMapIntensity = envMapIntensity;
+
+		}
 
 	}
 
@@ -221,6 +258,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			rayIntersectionKernel,
 			updateRayQueueParamsKernel,
 			hitProcessKernel,
+			generateLightKernel,
 
 			lowResMode
 		} = this;
@@ -293,6 +331,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				updateRayQueueParamsKernel.processed = processed;
 				updateRayQueueParamsKernel.queueSizes = queueSizes;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
+
+				const lightSampleDispatch = generateLightKernel.getDispatchSize( processed, 1, 1 );
+				generateLightKernel.seed = this.seed;
+				generateLightKernel.hitQueue = hitQueue;
+				generateLightKernel.queueSizes = queueSizes;
+				renderer.compute( generateLightKernel.kernel, lightSampleDispatch );
 
 				// TODO: we should use an indirect dispatch here to only kick off the number of threads
 				// as needed to iterate over all the fields

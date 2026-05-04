@@ -221,3 +221,14 @@ export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 	}
 
 ` );
+
+export const misHeuristicFunc = wgslFn( /* wgsl */ `
+
+	fn misHeuristic( a: f32, b: f32 ) -> f32 {
+
+		let a2 = a * a;
+		return a2 / ( a2 + b * b );
+
+	}
+
+` );

@@ -4,17 +4,18 @@ import { uniform, storage, textureStore, globalId, texture, sampler } from 'thre
 import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct, queueSizesStructHitFree } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
-import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { misHeuristicFunc, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc } from '../../nodes/utils.wgsl.js';
 import { SOBOL_INDEX_RUSSIAN_ROULETTE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor( material ) {
+	constructor() {
 
 		const params = {
 			bvhData: { value: null },
+			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -37,6 +38,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 		};
 
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
+		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
+		const bsdfEvalScatterFn = proxyFn( 'material.value.bsdfEvalScatter', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -91,10 +94,16 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
 
-				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
+				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
-				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				var resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+
+				if ( input.lightPdf != 0.0 ) {
+					let bsdf = ${ bsdfEvalScatterFn }( input.view,  input.lightDirection, surface );
+					let mis = ${ misHeuristicFunc }( input.lightPdf, bsdf.pdf ); // select( 1.0, misHeuristic( input.lightPdf, lightScatterRec.pdf ), input.lightPdf > 0.0 );
+					resultColor += vec4( throughputColor * bsdf.color * input.lightColor * mis / input.lightPdf, 0.0 );
+				}
 
 				var isTerminated = currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
@@ -136,6 +145,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = currentBounce + 1;
 					rayQueue[ index ].resultColor = resultColor;
+					rayQueue[ index ].lastPdf = scatterRec.pdf;
 
 				}
 
