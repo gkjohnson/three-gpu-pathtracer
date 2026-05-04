@@ -35,6 +35,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setLights( lightsAttribute ) {
+
+		this.kernel.lights = lightsAttribute;
+		this.kernel.needsUpdate = true;
+
+	}
+
 	getMaterial() {
 
 		return this.material;

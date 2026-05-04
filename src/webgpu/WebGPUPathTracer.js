@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Vector3, Quaternion, Matrix4, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, StorageBufferAttribute } from 'three/webgpu';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -8,9 +8,13 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
+import { getLights } from '../core/utils/sceneUpdateUtils.js';
+import { lightStruct } from './nodes/structs.wgsl.js';
+import { LIGHT_TYPE_AREA_CIRC, LIGHT_TYPE_AREA_RECT, LIGHT_TYPE_DIRECTIONAL, LIGHT_TYPE_POINT, LIGHT_TYPE_SPOT } from './nodes/lights.wgsl.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -141,6 +145,12 @@ export class WebGPUPathTracer {
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
+
+		// Serialize lights
+		const lights = getLights( scene );
+		const lightData = this._serializeLights( lights );
+		const lightsAttribute = new StorageBufferAttribute( lightData, 1/* lightStruct.getLength() */ );
+		this._pathTracer.setLights( lightsAttribute );
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -405,6 +415,138 @@ export class WebGPUPathTracer {
 	getRenderTime() {
 
 		return this._resetTime;
+
+	}
+
+	_serializeLights( lights ) {
+
+		const lightCount = lights.length;
+		const floatArray = new Float32Array( Math.max( lightCount, 2 ) * lightStruct.getLength() );
+		const intArray = new Int32Array( floatArray.buffer );
+
+		const _v = new Vector3();
+		const _worldQuaternion = new Quaternion();
+		const _eye = new Vector3();
+		const _target = new Vector3();
+		const _up = new Vector3( 0, 1, 0 );
+		const _m = new Matrix4();
+
+		for ( let i = 0; i < lightCount; i ++ ) {
+
+			const l = lights[ i ];
+			let index = i * lightStruct.getLength();
+
+			l.getWorldPosition( _v );
+			floatArray[ index ++ ] = _v.x;
+			floatArray[ index ++ ] = _v.y;
+			floatArray[ index ++ ] = _v.z;
+
+			let type = LIGHT_TYPE_AREA_RECT;
+			if ( l.isRectAreaLight && l.isCircular ) {
+
+				type = LIGHT_TYPE_AREA_CIRC;
+
+			} else if ( l.isSpotLight ) {
+
+				type = LIGHT_TYPE_SPOT;
+
+			} else if ( l.isDirectionalLight ) {
+
+				type = LIGHT_TYPE_DIRECTIONAL;
+
+			} else if ( l.isPointLight ) {
+
+				type = LIGHT_TYPE_POINT;
+
+			}
+
+			intArray[ index ++ ] = type;
+
+			floatArray[ index ++ ] = l.color.r;
+			floatArray[ index ++ ] = l.color.g;
+			floatArray[ index ++ ] = l.color.b;
+
+			floatArray[ index ++ ] = l.intensity;
+
+			l.getWorldQuaternion( _worldQuaternion );
+
+			if ( l.isRectAreaLight ) {
+
+				_v.set( l.width, 0, 0 ).applyQuaternion( _worldQuaternion );
+				floatArray[ index ++ ] = _v.x;
+				floatArray[ index ++ ] = _v.y;
+				floatArray[ index ++ ] = _v.z;
+				index ++; // Padding between u and v
+
+				_v.set( 0, l.height, 0 ).applyQuaternion( _worldQuaternion );
+				floatArray[ index ++ ] = _v.x;
+				floatArray[ index ++ ] = _v.y;
+				floatArray[ index ++ ] = _v.z;
+
+				const uX = l.width, uY = 0, uZ = 0;
+				const vX = 0, vY = l.height, vZ = 0;
+				const crossX = uY * vZ - uZ * vY;
+				const crossY = uZ * vX - uX * vZ;
+				const crossZ = uX * vY - uY * vX;
+				const area = Math.sqrt( crossX * crossX + crossY * crossY + crossZ * crossZ ) * ( l.isCircular ? ( Math.PI / 4.0 ) : 1.0 );
+				floatArray[ index ++ ] = area;
+
+			} else if ( l.isSpotLight ) {
+
+				const radius = l.radius || 0;
+				_eye.setFromMatrixPosition( l.matrixWorld );
+				_target.setFromMatrixPosition( l.target.matrixWorld );
+				_m.lookAt( _eye, _target, _up );
+				_worldQuaternion.setFromRotationMatrix( _m );
+
+				_v.set( 1, 0, 0 ).applyQuaternion( _worldQuaternion );
+				floatArray[ index ++ ] = _v.x;
+				floatArray[ index ++ ] = _v.y;
+				floatArray[ index ++ ] = _v.z;
+				index ++; // padding between u and v
+
+				_v.set( 0, 1, 0 ).applyQuaternion( _worldQuaternion );
+				floatArray[ index ++ ] = _v.x;
+				floatArray[ index ++ ] = _v.y;
+				floatArray[ index ++ ] = _v.z;
+
+				floatArray[ index ++ ] = Math.PI * radius * radius;
+
+				floatArray[ index ++ ] = radius;
+				floatArray[ index ++ ] = l.decay;
+				floatArray[ index ++ ] = l.distance;
+				floatArray[ index ++ ] = Math.cos( l.angle );
+				floatArray[ index ++ ] = Math.cos( l.angle * ( 1 - l.penumbra ) );
+				intArray[ index ++ ] = l.iesMap ? 0 : - 1;
+
+			} else if ( l.isPointLight ) {
+
+				// TODO: check this code
+				_v.setFromMatrixPosition( l.matrixWorld );
+				floatArray[ index ++ ] = _v.x;
+				floatArray[ index ++ ] = _v.y;
+				floatArray[ index ++ ] = _v.z;
+
+				index += 4;
+
+				floatArray[ index ++ ] = l.decay;
+				floatArray[ index ++ ] = l.distance;
+
+			} else if ( l.isDirectionalLight ) {
+
+				_v.setFromMatrixPosition( l.matrixWorld );
+				_target.setFromMatrixPosition( l.target.matrixWorld );
+				_target.subVectors( _v, _target ).normalize();
+
+				floatArray[ index ++ ] = _target.x;
+				floatArray[ index ++ ] = _target.y;
+				floatArray[ index ++ ] = _target.z;
+
+			}
+
+		}
+
+		return floatArray;
 
 	}
 

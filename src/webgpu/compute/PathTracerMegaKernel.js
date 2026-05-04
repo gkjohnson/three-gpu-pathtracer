@@ -1,7 +1,7 @@
-import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture, StorageBufferAttribute } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { texture, sampler, uniform, globalId, textureStore, storage } from 'three/tsl';
 import { sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE, SOBOL_INDEX_LIGHT_INDEX } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
@@ -9,6 +9,8 @@ import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
+import { lightRecordStruct, lightStruct } from '../nodes/structs.wgsl.js';
+import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc } from '../nodes/lights.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -54,6 +56,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
+
+			lights: storage( new StorageBufferAttribute(), lightStruct ).toReadOnly(),
 
 			// compute variables
 			globalId: globalId,
@@ -103,7 +107,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundBlurriness: f32,
 
 				textures: texture_2d_array<f32>,
-				textureSampler: sampler
+				textureSampler: sampler,
+
+				lights: ptr<storage, array<${ lightStruct }>>,
 
 			) -> void {
 
@@ -190,40 +196,48 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// Direct light contribution
 
-						// let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
-						// if ( ) {
+						let lightCount = arrayLength( lights );
+						let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
+						var lightRecord: ${ lightRecordStruct };
+						if ( lightType * f32( lightCount ) > ( f32( lightCount ) - 1.0 ) ) {
+
 							let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 							let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
 							let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
 							let uv = vec2( u, v );
 
-							let direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
-							let color = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
+							lightRecord.direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
+							lightRecord.emission = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
 
 							let resolution = textureDimensions( envMap ).xy;
-							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color ) / totalSum;
-							var envPdf = weight * ${ equirectDirectionPdfFunc }( direction );
-						// } else {
-						//
-						// }
+							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( lightRecord.emission ) / totalSum;
+							lightRecord.pdf = weight * ${ equirectDirectionPdfFunc }( lightRecord.direction );
+							lightRecord.kind = ${ LIGHT_TYPE_ENVIRONMENT };
+
+						} else {
+
+							lightRecord = ${ sampleRandomLightFunc }( lightType, lights );
+
+						}
+						lightRecord.pdf /= f32( max( lightCount, 1 ) );
 
 						// Light portal?
-						if ( dot( direction, surface.faceNormal ) < 0.0 ) {
+						if ( dot( lightRecord.direction, surface.faceNormal ) < 0.0 ) {
 
-							envPdf = 0.0;
+							lightRecord.pdf = 0.0;
 
 						}
 
-						if ( envPdf > 0.0 ) {
+						if ( lightRecord.pdf > 0.0 ) {
 							var envRay: ${ rayStruct };
-							envRay.direction = direction;
+							envRay.direction = lightRecord.direction;
 							envRay.origin = newPoint;
 							var envHitResult: ${ raycastOutput };
 							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) ) {
 
 								let bsdf = ${ bsdfEvalScatterFn }( -ray.direction, envRay.direction, surface );
-								let mis = ${ misHeuristicFunc }( envPdf, bsdf.pdf );
-								resultColor += vec4( throughputColor * bsdf.color * color * mis / envPdf, 0.0 );
+								let mis = select( 1.0, ${ misHeuristicFunc }( lightRecord.pdf, bsdf.pdf ), lightRecord.kind == ${ LIGHT_TYPE_ENVIRONMENT });
+								resultColor += vec4( throughputColor * bsdf.color * lightRecord.emission * mis / lightRecord.pdf, 0.0 );
 
 							}
 

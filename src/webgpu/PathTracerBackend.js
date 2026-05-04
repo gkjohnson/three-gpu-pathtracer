@@ -42,6 +42,10 @@ export class PathTracerBackend {
 
 	}
 
+	setLights( lightsAttribute ) {
+
+	}
+
 	setCamera( camera ) {
 
 		this.camera = camera;

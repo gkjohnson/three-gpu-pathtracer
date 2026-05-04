@@ -216,3 +216,36 @@ export const bxdfContextStruct = new StructTypeNode( {
 	HdotNc: 'float',
 
 }, 'BxDFContext' );
+
+export const lightStruct = new StructTypeNode( {
+
+	position: 'vec3f',
+	kind: 'int',
+
+	color: 'vec3f',
+	intensity: 'float',
+
+	u: 'vec3f',
+	v: 'vec3f',
+	area: 'float',
+
+	// spot light fields
+	radius: 'float',
+	near: 'float',
+	decay: 'float',
+	distance: 'float',
+	coneCos: 'float',
+	penumbraCos: 'float',
+	iesProfile: 'int',
+
+}, 'Light' );
+
+export const lightRecordStruct = new StructTypeNode( {
+
+	direction: 'vec3f',
+	dist: 'float',
+	emission: 'vec3f',
+	pdf: 'float',
+	kind: 'int',
+
+}, 'LightRecord' );

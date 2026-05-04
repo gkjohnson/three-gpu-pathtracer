@@ -85,6 +85,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setLights( lightsAttribute ) {
+
+	}
+
 	setMaterial( material ) {
 
 		this.material = material;
