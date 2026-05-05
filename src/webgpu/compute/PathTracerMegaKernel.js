@@ -10,7 +10,7 @@ import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { lightRecordStruct, lightStruct } from '../nodes/structs.wgsl.js';
-import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc } from '../nodes/lights.wgsl.js';
+import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc, intersectAreaLightAtIndexFunc, isMISWeightLightFunc } from '../nodes/lights.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -158,6 +158,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, 0 );
 
+				let lightsDenom = f32( max( lightCount, 1 ) );
 				// scene ray
 				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
@@ -172,7 +173,32 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					${ sobolInit }( pixelIndex, seed, bounce );
 
 					var hitResult: ${ raycastOutput };
-					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
+					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
+
+					// Forward sampling of area lights
+					if ( bounce > 0u ) {
+
+						let lightDist = select( 1e20, hitResult.dist, didHit );
+						for ( var i = 0u; i < lightCount; i ++ ) {
+
+							var testLightRec: ${ lightRecordStruct };
+							if ( ${ intersectAreaLightAtIndexFunc( lightsBuffer ) }( i, ray, &testLightRec ) ) {
+
+								if ( testLightRec.dist < lightDist ) {
+
+									testLightRec.pdf /= lightsDenom;
+									let mis = ${ misHeuristicFunc }( lastPdf, testLightRec.pdf );
+									resultColor += vec4( throughputColor * testLightRec.emission * mis, 0.0 );
+
+								}
+
+							}
+
+						}
+
+					}
+
+					if ( didHit ) {
 
 						let object = transforms[ hitResult.objectIndex ];
 						var material = materials[ object.materialIndex ];
@@ -231,7 +257,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						lightRecord.pdf /= f32( max( lightCount, 1 ) );
+						lightRecord.pdf /= lightsDenom;
 
 						// Light portal?
 						if ( dot( lightRecord.direction, surface.faceNormal ) < 0.0 ) {
@@ -248,7 +274,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) || envHitResult.dist > lightRecord.dist ) {
 
 								let bsdf = ${ bsdfEvalScatterFn }( -ray.direction, envRay.direction, surface );
-								let mis = select( 1.0, ${ misHeuristicFunc }( lightRecord.pdf, bsdf.pdf ), lightRecord.kind == ${ LIGHT_TYPE_ENVIRONMENT });
+								let mis = select( 1.0, ${ misHeuristicFunc }( lightRecord.pdf, bsdf.pdf ), ${ isMISWeightLightFunc }( lightRecord.kind ));
 								resultColor += vec4( throughputColor * bsdf.color * lightRecord.emission * mis / lightRecord.pdf, 0.0 );
 
 							}

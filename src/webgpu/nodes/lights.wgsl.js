@@ -1,6 +1,8 @@
 import { wgslFn } from 'three/tsl';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
-import { lightRecordStruct, constants } from './structs.wgsl.js';
+import { lightRecordStruct, lightStruct, constants } from './structs.wgsl.js';
+import { intersectsRectangleFunc, intersectsCircleFunc } from './shape.wgsl.js';
+import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
 
 export const LIGHT_TYPE_SPOT = 0;
 export const LIGHT_TYPE_DIRECTIONAL = 1;
@@ -205,3 +207,63 @@ export const sampleRandomLightFunc = ( lights ) => wgslTagFn/* wgsl */`
 
 `;
 
+export const intersectAreaLightAtIndexFunc = ( lights ) => wgslTagFn/* wgsl */`
+	${ [ intersectsRectangleFunc, intersectsCircleFunc, constants ] }
+
+	fn intersectAreaLightAtIndex( lightIndex: u32, ray: ${ rayStruct }, lightRec: ptr<function, ${ lightRecordStruct }> ) -> bool {
+
+		var didHit = false;
+		let light = ${ lights }[ lightIndex ];
+
+		if ( light.kind == ${ LIGHT_TYPE_AREA_RECT } || light.kind == ${ LIGHT_TYPE_AREA_CIRC } ) {
+
+			let u = light.u;
+			let v = light.v;
+
+			let newU = u / dot( u, u );
+			let newV = v / dot( v, v );
+
+			let normal = normalize( cross( u, v ) );
+			if ( dot( normal, ray.direction ) > 0.0 ) {
+
+				var dist: f32;
+
+				if ( light.kind == ${ LIGHT_TYPE_AREA_RECT } ) {
+
+					didHit = intersectsRectangle( light.position, normal, newU, newV, ray.origin, ray.direction, &dist );
+
+				} else if ( light.kind == ${ LIGHT_TYPE_AREA_CIRC } ) {
+
+					didHit = intersectsCircle( light.position, normal, newU, newV, ray.origin, ray.direction, &dist );
+
+				}
+
+				if ( didHit ) {
+
+					let cosTheta = dot( ray.direction, normal );
+					lightRec.dist = dist;
+					lightRec.pdf = ( dist * dist ) / ( light.area * cosTheta );
+					lightRec.emission = light.color * light.intensity;
+					lightRec.direction = ray.direction;
+					lightRec.kind = light.kind;
+
+				}
+
+			}
+
+		}
+
+		return didHit;
+
+	}
+`;
+
+export const isMISWeightLightFunc = wgslFn( /* wgsl */`
+
+	fn isMISWeightLight( kind: i32 ) -> bool {
+
+		return kind == ${ LIGHT_TYPE_ENVIRONMENT } || kind == ${ LIGHT_TYPE_AREA_CIRC } || kind == ${ LIGHT_TYPE_AREA_RECT };
+
+	}
+
+` );
