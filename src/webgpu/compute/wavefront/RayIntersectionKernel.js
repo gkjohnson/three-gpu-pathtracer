@@ -117,6 +117,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].throughputColor = input.throughputColor;
 					hitQueue[ index ].currentBounce = input.currentBounce;
 					hitQueue[ index ].resultColor = input.resultColor;
+					hitQueue[ index ].lightPdf = 0.0;
 
 				} else {
 

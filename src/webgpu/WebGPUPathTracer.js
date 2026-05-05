@@ -50,6 +50,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setTextures( this.textureArray.texture );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 

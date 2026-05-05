@@ -19,6 +19,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
+import { WebGPUPathTracer } from '../src/webgpu/WebGPUPathTracer.js';
+import { Vector2, WebGPURenderer } from 'three/webgpu';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb';
@@ -38,6 +40,7 @@ const params = {
 	height: 1,
 
 	// path tracer settings
+	isWebGPU: true,
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
 	filterGlossyFactor: 0.5,
@@ -50,20 +53,47 @@ const params = {
 
 init();
 
+async function createRenderer( isWebGPU ) {
+
+	if ( isWebGPU ) {
+
+		// renderer - WebGPU version
+		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+		await renderer.init();
+		renderer.toneMapping = ACESFilmicToneMapping;
+		renderer.setClearAlpha( 0 );
+		document.body.appendChild( renderer.domElement );
+
+		// path tracer - WebGPU version
+		pathTracer = new WebGPUPathTracer( renderer );
+		pathTracer.useMegakernel( false );
+
+	} else {
+
+		// renderer
+		renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+		renderer.physicallyCorrectLights = true;
+		renderer.toneMapping = ACESFilmicToneMapping;
+		document.body.appendChild( renderer.domElement );
+
+		// path tracer
+		pathTracer = new WebGLPathTracer( renderer );
+		pathTracer.filterGlossyFactor = 0.5;
+		pathTracer.tiles.set( params.tiles, params.tiles );
+		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+		pathTracer.textureSize.set( 2048, 2048 );
+		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+
+	}
+
+}
+
 async function init() {
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
-	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	document.body.appendChild( renderer.domElement );
-
-	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+	await createRenderer( params.isWebGPU );
 
 	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -144,6 +174,29 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'isWebGPU' ).onChange( () => {
+
+		const size = renderer.getSize( new Vector2() );
+		pathTracer.dispose();
+		document.body.removeChild( renderer.domElement );
+		renderer.dispose();
+
+		createRenderer( params.isWebGPU ).then( () => {
+
+			renderer.setSize( size.x, size.y );
+			renderer.setPixelRatio( window.devicePixelRatio );
+			pathTracer.setScene( scene, camera );
+
+			controls = new OrbitControls( camera, renderer.domElement );
+			controls.target.y = 1.5;
+			controls.update();
+			controls.addEventListener( 'change', () => pathTracer.updateCamera() );
+
+			onParamsChange();
+
+		} );
+
+	} );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
