@@ -235,7 +235,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// clear queues
 		// TODO: why do we need to se the work group size here?
 		zeroDispatchKernel.target = queueSizes;
-		renderer.compute( zeroDispatchKernel.kernel, [ queueSizes.count ] );
+		renderer.compute( zeroDispatchKernel.kernel, [ queueSizesStructFree.getLength() ] );
 
 		// clear dispatch sizes
 		zeroDispatchKernel.target = hitProcessDispatch;
