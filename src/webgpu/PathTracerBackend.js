@@ -42,7 +42,7 @@ export class PathTracerBackend {
 
 	}
 
-	setLights( lightsAttribute, lightCount ) {
+	setLights( lightsAttribute, lightCount, iesProfiles ) {
 
 	}
 

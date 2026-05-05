@@ -57,6 +57,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
 
+			iesProfiles: texture( new DataTexture() ),
+			iesProfilesSampler: sampler( new DataTexture() ),
+
 			lightCount: uniform( 0 ),
 
 			// compute variables
@@ -109,6 +112,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				textures: texture_2d_array<f32>,
 				textureSampler: sampler,
+
+				iesProfiles: texture_2d_array<f32>,
+				iesProfilesSampler: sampler,
 
 				lightCount: u32,
 
@@ -199,12 +205,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// Direct light contribution
 
 						let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
+						let lightUV = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 						var lightRecord: ${ lightRecordStruct };
 						if ( lightType * ( f32( lightCount ) + 1.0 ) > f32( lightCount ) ) {
 
-							let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
-							let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
-							let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
+							let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( lightUV.x, 0.0 ), 0 ).x;
+							let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( lightUV.y, v ), 0 ).x;
 							let uv = vec2( u, v );
 
 							lightRecord.direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
@@ -217,7 +223,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }( lightType, lightCount );
+							lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }(
+								lightType, lightUV, lightCount, newPoint, iesProfiles, iesProfilesSampler
+							);
 
 						}
 
@@ -235,7 +243,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							envRay.direction = lightRecord.direction;
 							envRay.origin = newPoint;
 							var envHitResult: ${ raycastOutput };
-							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) ) {
+							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) || envHitResult.dist > lightRecord.dist ) {
 
 								let bsdf = ${ bsdfEvalScatterFn }( -ray.direction, envRay.direction, surface );
 								let mis = select( 1.0, ${ misHeuristicFunc }( lightRecord.pdf, bsdf.pdf ), lightRecord.kind == ${ LIGHT_TYPE_ENVIRONMENT });

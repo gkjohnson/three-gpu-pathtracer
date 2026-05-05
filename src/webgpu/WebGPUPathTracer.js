@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Vector3, Quaternion, Matrix4, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, StorageBufferAttribute } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Vector3, Quaternion, Matrix4, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
@@ -8,7 +8,7 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
-import { getLights } from '../core/utils/sceneUpdateUtils.js';
+import { getIesTextures, getLights } from '../core/utils/sceneUpdateUtils.js';
 import { lightStruct } from './nodes/structs.wgsl.js';
 import { LIGHT_TYPE_AREA_CIRC, LIGHT_TYPE_AREA_RECT, LIGHT_TYPE_DIRECTIONAL, LIGHT_TYPE_POINT, LIGHT_TYPE_SPOT } from './nodes/lights.wgsl.js';
 
@@ -94,6 +94,9 @@ export class WebGPUPathTracer {
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
+		this.iesProfiles = new RenderTarget2DArray( 360, 180, {
+			type: HalfFloatType,
+		} );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -146,17 +149,12 @@ export class WebGPUPathTracer {
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		this._pathTracer.setTextures( this.textureArray.texture );
 
-		// Serialize lights
-		const lights = getLights( scene );
-		const lightData = this._serializeLights( lights );
-		const lightsAttribute = new StorageBufferAttribute( lightData, 1/* lightStruct.getLength() */ );
-		this._pathTracer.setLights( lightsAttribute, lights.length );
-
 		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -219,6 +217,17 @@ export class WebGPUPathTracer {
 			scene.backgroundRotation,
 			scene.backgroundBlurriness,
 		);
+
+	}
+
+	updateLights() {
+
+		// Serialize lights
+		const lights = getLights( this.scene );
+		const lightData = this._serializeLights( lights );
+		const lightsAttribute = new StorageBufferAttribute( lightData, lightStruct.getLength() );
+		this.iesProfiles.setTextures( this._renderer, getIesTextures( lights ) );
+		this._pathTracer.setLights( lightsAttribute, lights.length, this.iesProfiles.texture );
 
 	}
 
@@ -513,6 +522,7 @@ export class WebGPUPathTracer {
 				floatArray[ index ++ ] = Math.PI * radius * radius;
 
 				floatArray[ index ++ ] = radius;
+				index ++; // near
 				floatArray[ index ++ ] = l.decay;
 				floatArray[ index ++ ] = l.distance;
 				floatArray[ index ++ ] = Math.cos( l.angle );
@@ -521,13 +531,17 @@ export class WebGPUPathTracer {
 
 			} else if ( l.isPointLight ) {
 
-				// TODO: check this code
+				// u
 				_v.setFromMatrixPosition( l.matrixWorld );
 				floatArray[ index ++ ] = _v.x;
 				floatArray[ index ++ ] = _v.y;
 				floatArray[ index ++ ] = _v.z;
+				index ++;
 
+				// v
 				index += 4;
+				// area + radius + near
+				index += 3;
 
 				floatArray[ index ++ ] = l.decay;
 				floatArray[ index ++ ] = l.distance;

@@ -38,10 +38,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setLights( lightsAttribute, lightCount ) {
+	setLights( lightsAttribute, lightCount, iesProfiles ) {
 
 		this.kernel.lights = storage( lightsAttribute, lightStruct ).setName( 'g_lights' ).toReadOnly();
 		this.kernel.lightCount = lightCount;
+		this.kernel.iesProfiles = iesProfiles;
+		this.kernel.kernel.computeNode.parameters.iesProfilesSampler.node.value = iesProfiles;
 		this.kernel.needsUpdate = true;
 
 	}

@@ -20,6 +20,8 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { Vector2, WebGPURenderer } from 'three/webgpu';
+import { WebGPUPathTracer } from '../src/webgpu/WebGPUPathTracer.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf';
 const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
@@ -42,6 +44,7 @@ let loader;
 
 // gui parameters
 const params = {
+	isWebGPU: true,
 	multipleImportanceSampling: true,
 	bounces: 3,
 	renderScale: 1 / window.devicePixelRatio,
@@ -52,25 +55,54 @@ const params = {
 
 init();
 
+async function createRenderer( isWebGPU ) {
+
+	if ( isWebGPU ) {
+
+		// renderer - WebGPU version
+		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+		await renderer.init();
+		renderer.toneMapping = ACESFilmicToneMapping;
+		renderer.setClearAlpha( 0 );
+		document.body.appendChild( renderer.domElement );
+
+		// path tracer - WebGPU version
+		pathTracer = new WebGPUPathTracer( renderer );
+		// pathTracer.useMegakernel( params.useMegakernel );
+		// if ( params.useMegakernel ) {
+		//
+		// 	pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
+		//
+		// }
+
+	} else {
+
+		// renderer
+		renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+		renderer.physicallyCorrectLights = true;
+		renderer.toneMapping = ACESFilmicToneMapping;
+		renderer.shadowMap.enabled = true;
+		renderer.shadowMap.type = PCFSoftShadowMap;
+		document.body.appendChild( renderer.domElement );
+
+		// path tracer
+		pathTracer = new WebGLPathTracer( renderer );
+		pathTracer.filterGlossyFactor = 0.5;
+		pathTracer.tiles.set( params.tiles, params.tiles );
+		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+		pathTracer.textureSize.set( 2048, 2048 );
+		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+
+	}
+
+}
+
 async function init() {
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
-	// renderer
-	renderer = new WebGLRenderer();
-	renderer.shadowMap.enabled = true;
-	renderer.physicallyCorrectLights = true;
-	renderer.shadowMap.type = PCFSoftShadowMap;
-	renderer.toneMapping = ACESFilmicToneMapping;
-	document.body.appendChild( renderer.domElement );
-
-	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.textureSize.set( 2048, 2048 );
-	pathTracer.filterGlossyFactor = 0.5;
+	await createRenderer( params.isWebGPU );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -183,6 +215,29 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
+	ptFolder.add( params, 'isWebGPU' ).onChange( () => {
+
+		const size = renderer.getSize( new Vector2() );
+		pathTracer.dispose();
+		document.body.removeChild( renderer.domElement );
+		renderer.dispose();
+
+		createRenderer( params.isWebGPU ).then( () => {
+
+			renderer.setSize( size.x, size.y );
+			renderer.setPixelRatio( window.devicePixelRatio );
+			pathTracer.setScene( scene, camera );
+
+			controls = new OrbitControls( camera, renderer.domElement );
+			controls.target.y = 1.5;
+			controls.update();
+			controls.addEventListener( 'change', () => pathTracer.updateCamera() );
+
+			onParamsChange();
+
+		} );
+
+	} );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
