@@ -202,6 +202,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// However that seems like a very large distance to offset
 						let newPoint = vertexData.position.xyz;
 
+						// TODO: forward sample area lights?
 						// Direct light contribution
 
 						let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
@@ -223,8 +224,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
+							let lightRng = lightType * ( f32( lightCount ) + 1.0 ) / f32( lightCount );
 							lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }(
-								lightType, lightUV, lightCount, newPoint, iesProfiles, iesProfilesSampler
+								lightRng, lightUV, lightCount, newPoint, iesProfiles, iesProfilesSampler
 							);
 
 						}

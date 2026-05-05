@@ -37,8 +37,6 @@ export const getDistanceAttenuationFunc = wgslFn( /* wgsl */`
 
 		var distanceFalloff = 1.0 / max( pow( lightDistance, decayExponent ), EPSILON );
 
-		// return pow2( 1.0 - pow4( lightDistance / cutoffDistance ) );
-
 		if ( cutoffDistance > 0.0 ) {
 
 			distanceFalloff *= pow2( 1.0 - pow4( lightDistance / cutoffDistance ) );
@@ -158,7 +156,7 @@ export const sampleRandomLightFunc = ( lights ) => wgslTagFn/* wgsl */`
 		var result: ${ lightRecordStruct };
 
 		let lightIndex = u32( lightType * f32( lightCount ) );
-		let light = ${ lights }[ 0 ];
+		let light = ${ lights }[ lightIndex ];
 
 		if ( light.kind == ${ LIGHT_TYPE_SPOT } ) {
 
