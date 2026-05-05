@@ -1,4 +1,4 @@
-import { wgslFn } from '../lib/nodes/WGSLTagFnNode';
+import { wgslFn } from 'three/tsl';
 
 // Finds the point where the ray intersects the plane defined by u and v and checks if this point
 // falls in the bounds of the rectangle on that same plane.

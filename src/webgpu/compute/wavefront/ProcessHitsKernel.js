@@ -101,8 +101,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				if ( input.lightPdf != 0.0 ) {
 					let bsdf = ${ bsdfEvalScatterFn }( input.view,  input.lightDirection, surface );
-					let mis = ${ misHeuristicFunc }( input.lightPdf, bsdf.pdf ); // select( 1.0, misHeuristic( input.lightPdf, lightScatterRec.pdf ), input.lightPdf > 0.0 );
-					resultColor += vec4( throughputColor * bsdf.color * input.lightColor * mis / input.lightPdf, 0.0 );
+					let mis = select( 1.0, ${ misHeuristicFunc }( input.lightPdf, bsdf.pdf ), input.lightPdf > 0.0 );
+					resultColor += vec4( throughputColor * bsdf.color * input.lightColor * mis / abs( input.lightPdf ), 0.0 );
 				}
 
 				var isTerminated = currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );

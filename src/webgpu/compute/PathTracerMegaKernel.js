@@ -7,7 +7,7 @@ import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
+import { inverseMat3x3Func, isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { lightRecordStruct, lightStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc, intersectAreaLightAtIndexFunc, isMISWeightLightFunc } from '../nodes/lights.wgsl.js';
@@ -129,6 +129,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					envMapIntensity,
 					0.0 // blur,
 				);
+				let invEnvMapRotation = ${ inverseMat3x3Func }( envMapRotation );
 
 				let backgroundInfo = EnvironmentInfo(
 					backgroundRotation,
@@ -247,6 +248,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( lightRecord.emission ) / totalSum;
 							lightRecord.pdf = weight * ${ equirectDirectionPdfFunc }( lightRecord.direction );
 							lightRecord.kind = ${ LIGHT_TYPE_ENVIRONMENT };
+							lightRecord.direction = invEnvMapRotation * lightRecord.direction;
 
 						} else {
 

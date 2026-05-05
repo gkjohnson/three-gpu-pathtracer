@@ -9,6 +9,8 @@ import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { queuedHitStruct, queuedRayStruct, queueSizesStructFree } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 import { GenerateLightSampleKernel } from './compute/wavefront/GenerateLightSampleKernel.js';
+import { storage } from 'three/tsl';
+import { lightStruct } from './nodes/structs.wgsl.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -85,7 +87,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setLights( lightsAttribute ) {
+	setLights( lightsAttribute, lightCount, iesProfiles ) {
+
+		const kernel = this.generateLightKernel;
+		kernel.lights = storage( lightsAttribute, lightStruct ).setName( 'g_lights' ).toReadOnly();
+		kernel.lightCount = lightCount;
+		kernel.iesProfiles = iesProfiles;
+		kernel.kernel.computeNode.parameters.iesProfilesSampler.node.value = iesProfiles;
+		kernel.needsUpdate = true;
 
 	}
 

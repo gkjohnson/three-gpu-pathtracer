@@ -4,10 +4,12 @@ import { StorageBufferAttribute, DataTexture, Matrix3 } from 'three/webgpu';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
 import { queuedHitStruct, queueSizesStructHitFree } from './structs';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode';
-import { sobolInit, sobolFuncs, SOBOL_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl';
+import { sobolInit, sobolFuncs, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_LIGHT_INDEX } from '../../nodes/random.wgsl';
 import { rayStruct } from '../../lib/wgsl/structs.wgsl';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc } from '../../nodes/sampling.wgsl';
-import { luminanceFunc } from '../../nodes/utils.wgsl';
+import { inverseMat3x3Func, luminanceFunc } from '../../nodes/utils.wgsl';
+import { lightRecordStruct } from '../../nodes/structs.wgsl';
+import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc } from '../../nodes/lights.wgsl';
 
 export class GenerateLightSampleKernel extends ComputeKernel {
 
@@ -16,6 +18,7 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 		const params = {
 			bvhData: { value: null },
 			material: { value: null },
+			lights: { value: null },
 
 			// settings
 			seed: uniform( 0 ),
@@ -36,11 +39,16 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 			envMapConditionalWeights: texture( new DataTexture() ),
 			envMapConditionalWeightsSampler: sampler( new DataTexture() ),
 
+			iesProfiles: texture( new DataTexture() ),
+			iesProfilesSampler: sampler( new DataTexture() ),
+			lightCount: uniform( 0 ),
+
 			totalSum: uniform( 0 ),
 
 			globalId: globalId,
 		};
 
+		const lightsBuffer = proxy( 'lights.value', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
@@ -64,6 +72,11 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 
 				totalSum: f32,
 
+				iesProfiles: texture_2d_array<f32>,
+				iesProfilesSampler: sampler,
+
+				lightCount: u32,
+
 				globalId: vec3u
 			) -> void {
 
@@ -85,47 +98,68 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, currentBounce );
 
-				let uv0 = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
-				let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( uv0.x, 0.0 ), 0 ).x;
-				let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( uv0.y, v ), 0 ).x;
-				let uv = vec2( u, v );
+				let lightsDenom = f32( max( lightCount, 1 ) );
+				let invEnvMapRotation = ${ inverseMat3x3Func }( envMapRotation );
 
-				let direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
-				let color = envMapIntensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
+				let object = transforms[ hitQueue[ hitIndex ].objectIndex ];
+				var vertexData = ${ sampleTrianglePointFn }( hitQueue[ hitIndex ].barycoord, hitQueue[ hitIndex ].indices.xyz );
+				vertexData.position = object.matrixWorld * vertexData.position;
+				let newPoint = vertexData.position.xyz;
 
-				let resolution = textureDimensions( envMap ).xy;
-				let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color ) / totalSum;
-				var envPdf = weight * ${ equirectDirectionPdfFunc }( direction );
+				let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
+				let lightUV = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
+				var lightRecord: ${ lightRecordStruct };
+				if ( lightType * ( f32( lightCount ) + 1.0 ) > f32( lightCount ) ) {
 
-				if ( dot( direction, hitQueue[ hitIndex ].normal ) < 0.0 ) {
+					let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( lightUV.x, 0.0 ), 0 ).x;
+					let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( lightUV.y, v ), 0 ).x;
+					let uv = vec2( u, v );
 
-					envPdf = 0.0;
+					lightRecord.direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
+					lightRecord.emission = envMapIntensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
+
+					let resolution = textureDimensions( envMap ).xy;
+					let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( lightRecord.emission ) / totalSum;
+					lightRecord.pdf = weight * ${ equirectDirectionPdfFunc }( lightRecord.direction );
+					lightRecord.kind = ${ LIGHT_TYPE_ENVIRONMENT };
+					lightRecord.direction = invEnvMapRotation * lightRecord.direction;
+
+				} else {
+
+					let lightRng = lightType * ( f32( lightCount ) + 1.0 ) / f32( lightCount );
+					lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }(
+						lightRng, lightUV, lightCount, newPoint, iesProfiles, iesProfilesSampler
+					);
 
 				}
 
-				if ( envPdf > 0.0 ) {
+				lightRecord.pdf /= lightsDenom;
 
-					let object = transforms[ hitQueue[ hitIndex ].objectIndex ];
-					var vertexData = ${ sampleTrianglePointFn }( hitQueue[ hitIndex ].barycoord, hitQueue[ hitIndex ].indices.xyz );
-					vertexData.position = object.matrixWorld * vertexData.position;
+				if ( dot( lightRecord.direction, hitQueue[ hitIndex ].normal ) < 0.0 ) {
+
+					lightRecord.pdf = 0.0;
+
+				}
+
+				if ( lightRecord.pdf > 0.0 ) {
 
 					var envRay: ${ rayStruct };
-					envRay.direction = direction;
-					envRay.origin = vertexData.position.xyz;
+					envRay.direction = lightRecord.direction;
+					envRay.origin = newPoint;
 					var envHitResult: ${ raycastOutput };
 					let occluded = ${ raycastFirstHitFn }( envRay, &envHitResult );
 
 					if ( occluded ) {
 
-						envPdf = 0.0;
+						lightRecord.pdf = 0.0;
 
 					}
 
 				}
 
-				hitQueue[ hitIndex ].lightDirection = direction;
-				hitQueue[ hitIndex ].lightPdf = envPdf;
-				hitQueue[ hitIndex ].lightColor = color;
+				hitQueue[ hitIndex ].lightDirection = lightRecord.direction;
+				hitQueue[ hitIndex ].lightPdf = lightRecord.pdf * select( - 1.0, 1.0, lightRecord.kind == ${ LIGHT_TYPE_ENVIRONMENT } );
+				hitQueue[ hitIndex ].lightColor = lightRecord.emission;
 
 			}`;
 
