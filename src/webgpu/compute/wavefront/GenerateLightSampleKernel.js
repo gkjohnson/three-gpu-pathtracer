@@ -2,14 +2,14 @@ import { ComputeKernel } from '../ComputeKernel';
 import { texture, sampler, uniform, globalId, storage } from 'three/tsl';
 import { StorageBufferAttribute, DataTexture, Matrix3 } from 'three/webgpu';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
-import { queuedHitStruct, queueSizesStructHitFree } from './structs';
+import { hitQueueStruct } from './structs';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode';
 import { sobolInit, sobolFuncs, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_LIGHT_INDEX } from '../../nodes/random.wgsl';
 import { rayStruct } from '../../lib/wgsl/structs.wgsl';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc } from '../../nodes/sampling.wgsl';
 import { inverseMat3x3Func, luminanceFunc } from '../../nodes/utils.wgsl';
 import { lightRecordStruct } from '../../nodes/structs.wgsl';
-import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc } from '../../nodes/lights.wgsl';
+import { isMISWeightLightFunc, LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc } from '../../nodes/lights.wgsl';
 
 export class GenerateLightSampleKernel extends ComputeKernel {
 
@@ -24,8 +24,7 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 
 			// rays
-			hitQueue: storage( new StorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new StorageBufferAttribute( 1, queueSizesStructHitFree.getLength() ), queueSizesStructHitFree ),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -81,28 +80,29 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 			) -> void {
 
 				let hitQueue = &${ params.hitQueue };
-				let queueSizes = &${ params.queueSizes };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				// skip any rays invocations beyond the ray count
-				let hitQueueCapacity = arrayLength( hitQueue );
-				let hitIndex = ( globalId.x + queueSizes.hitQueueStart );
-				if ( hitIndex >= queueSizes.hitQueueEnd ) {
+				let hitQueueCapacity = arrayLength( &hitQueue.elements );
+				let hitIndex = ( globalId.x + hitQueue.start );
+				if ( hitIndex >= hitQueue.end ) {
 
 					return;
 
 				}
 
-				let indexUV = vec2u( hitQueue[ hitIndex ].pixel_x, hitQueue[ hitIndex ].pixel_y );
-				let currentBounce = hitQueue[ hitIndex ].currentBounce;
+				let hit = hitQueue.elements[ hitIndex ];
+
+				let indexUV = vec2u( hit.pixel_x, hit.pixel_y );
+				let currentBounce = hit.currentBounce;
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, currentBounce );
 
 				let lightsDenom = f32( max( lightCount, 1 ) );
 				let invEnvMapRotation = ${ inverseMat3x3Func }( envMapRotation );
 
-				let object = transforms[ hitQueue[ hitIndex ].objectIndex ];
-				var vertexData = ${ sampleTrianglePointFn }( hitQueue[ hitIndex ].barycoord, hitQueue[ hitIndex ].indices.xyz );
+				let object = transforms[ hit.objectIndex ];
+				var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices.xyz );
 				vertexData.position = object.matrixWorld * vertexData.position;
 				let newPoint = vertexData.position.xyz;
 
@@ -135,7 +135,7 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 
 				lightRecord.pdf /= lightsDenom;
 
-				if ( dot( lightRecord.direction, hitQueue[ hitIndex ].normal ) < 0.0 ) {
+				if ( dot( lightRecord.direction, hit.normal ) < 0.0 ) {
 
 					lightRecord.pdf = 0.0;
 
@@ -157,9 +157,9 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 
 				}
 
-				hitQueue[ hitIndex ].lightDirection = lightRecord.direction;
-				hitQueue[ hitIndex ].lightPdf = lightRecord.pdf * select( - 1.0, 1.0, lightRecord.kind == ${ LIGHT_TYPE_ENVIRONMENT } );
-				hitQueue[ hitIndex ].lightColor = lightRecord.emission;
+				hitQueue.elements[ hitIndex ].lightDirection = lightRecord.direction;
+				hitQueue.elements[ hitIndex ].lightPdf = lightRecord.pdf * select( - 1.0, 1.0, ${ isMISWeightLightFunc }( lightRecord.kind ) );
+				hitQueue.elements[ hitIndex ].lightColor = lightRecord.emission;
 
 			}`;
 

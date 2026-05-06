@@ -1,10 +1,10 @@
 import { Vector2, Matrix4 } from 'three';
-import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
-import { getPcgSeed, SOBOL_INDEX_RAY_JITTER, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct, queueSizesStructHitFree } from './structs.js';
+import { SOBOL_INDEX_RAY_JITTER, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
+import { rayQueueAtomicStruct } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class RayGenerationKernel extends ComputeKernel {
@@ -20,8 +20,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 			tileSize: uniform( new Vector2() ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 1, queueSizesStructHitFree.getLength() ), queueSizesStructHitFree ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 
 			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
@@ -40,7 +39,6 @@ export class RayGenerationKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let queueSizes = &${ params.queueSizes };
 				let tileIndexBuffer = &${ params.tileIndexBuffer };
 
 				// don't overstep the edge of the tile
@@ -77,8 +75,8 @@ export class RayGenerationKernel extends ComputeKernel {
 				}
 
 				// get the ray index
-				let queueCapacity = arrayLength( rayQueue );
-				let index = atomicAdd( &queueSizes.rayQueueEnd, 1 ) % queueCapacity;
+				let queueCapacity = arrayLength( &rayQueue.elements );
+				let index = atomicAdd( &rayQueue.end, 1 ) % queueCapacity;
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, 0 );
@@ -88,12 +86,12 @@ export class RayGenerationKernel extends ComputeKernel {
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
-				rayQueue[ index ].origin = ray.origin;
-				rayQueue[ index ].direction = ray.direction;
-				rayQueue[ index ].pixel = indexUV;
-				rayQueue[ index ].throughputColor = vec3f( 1.0 );
-				rayQueue[ index ].currentBounce = 0;
-				rayQueue[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
+				rayQueue.elements[ index ].origin = ray.origin;
+				rayQueue.elements[ index ].direction = ray.direction;
+				rayQueue.elements[ index ].pixel = indexUV;
+				rayQueue.elements[ index ].throughputColor = vec3f( 1.0 );
+				rayQueue.elements[ index ].currentBounce = 0;
+				rayQueue.elements[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );

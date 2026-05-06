@@ -1,4 +1,6 @@
+import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
+import { WGSLStructTypeNode } from '../../WGSLStructTypeNode';
 
 export const queuedRayStruct = new StructTypeNode( {
 
@@ -39,36 +41,54 @@ export const queuedHitStruct = new StructTypeNode( {
 	lightDirection: 'vec3f',
 	lightPdf: 'float',
 
-	lightColor: 'vec3f'
+	lightColor: 'vec3f',
+	hitDist: 'float',
 
 }, 'QueuedHit' );
 
-export const queueSizesStructFree = new StructTypeNode( {
 
-	rayQueueStart: 'uint',
-	rayQueueEnd: 'uint',
+export const hitQueueStruct = new WGSLStructTypeNode( 'HitQueue', wgsl( /* wgsl */`
 
-	hitQueueStart: 'uint',
-	hitQueueEnd: 'uint',
+	struct HitQueue {
+		start: u32,
+		end: u32,
+		_padding: array< u32, 2 >,
 
-} );
+		elements: array< ${ queuedHitStruct.name } >,
+	}
 
-export const queueSizesStructRayFree = new StructTypeNode( {
+`, [ queuedHitStruct ] ) );
 
-	rayQueueStart: 'uint',
-	rayQueueEnd: 'uint',
+export const hitQueueAtomicStruct = new WGSLStructTypeNode( 'HitQueue', wgsl( /* wgsl */`
 
-	hitQueueStart: { type: 'uint', atomic: true },
-	hitQueueEnd: { type: 'uint', atomic: true },
+	struct HitQueue {
+		start: atomic< u32 >,
+		end: atomic< u32 >,
+		_padding: array< u32, 2 >,
 
-} );
+		elements: array< ${ queuedHitStruct.name } >,
+	}
 
-export const queueSizesStructHitFree = new StructTypeNode( {
+`, [ queuedHitStruct ] ) );
 
-	rayQueueStart: { type: 'uint', atomic: true },
-	rayQueueEnd: { type: 'uint', atomic: true },
+export const rayQueueStruct = new WGSLStructTypeNode( 'RayQueue', wgsl( /* wgsl */`
 
-	hitQueueStart: 'uint',
-	hitQueueEnd: 'uint',
+	struct RayQueue {
+		start: u32,
+		end: u32,
 
-} );
+		elements: array< ${ queuedRayStruct.name } >,
+	}
+
+`, [ queuedRayStruct ] ) );
+
+export const rayQueueAtomicStruct = new WGSLStructTypeNode( 'RayQueue', wgsl( /* wgsl */`
+
+	struct RayQueue {
+		start: atomic< u32 >,
+		end: atomic< u32 >,
+
+		elements: array< ${ queuedRayStruct.name } >,
+	}
+
+`, [ queuedRayStruct ] ) );

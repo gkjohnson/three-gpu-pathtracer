@@ -2,7 +2,7 @@ import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgp
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
-import { queuedRayStruct, queuedHitStruct, queueSizesStructHitFree } from './structs.js';
+import { hitQueueStruct, rayQueueAtomicStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { misHeuristicFunc } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
@@ -27,9 +27,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 
 			// rays
-			rayQueue: storage( new StorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			hitQueue: storage( new StorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new StorageBufferAttribute( 1, queueSizesStructHitFree.getLength() ), queueSizesStructHitFree ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -58,15 +57,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
-				let queueSizes = &${ params.queueSizes };
 
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				// skip any rays invocations beyond the ray count
-				let hitQueueCapacity = arrayLength( hitQueue );
-				let hitIndex = ( globalId.x + queueSizes.hitQueueStart );
-				if ( hitIndex >= queueSizes.hitQueueEnd ) {
+				let hitQueueCapacity = arrayLength( &hitQueue.elements );
+				let hitIndex = ( globalId.x + hitQueue.start );
+				if ( hitIndex >= hitQueue.end ) {
 
 					return;
 
@@ -74,7 +72,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// get the ray info
 				let ACTIVE_FLAG = 0xF0000000u;
-				let input = hitQueue[ hitIndex ];
+				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
 				let currentBounce = input.currentBounce;
@@ -137,15 +135,15 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				} else {
 
-					let rayQueueCapacity = arrayLength( rayQueue );
-					let index = atomicAdd( &queueSizes.rayQueueEnd, 1 ) % rayQueueCapacity;
-					rayQueue[ index ].origin = vertexData.position.xyz;
-					rayQueue[ index ].direction = scatterRec.direction;
-					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
-					rayQueue[ index ].currentBounce = currentBounce + 1;
-					rayQueue[ index ].resultColor = resultColor;
-					rayQueue[ index ].lastPdf = scatterRec.pdf;
+					let rayQueueCapacity = arrayLength( &rayQueue.elements );
+					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
+					rayQueue.elements[ index ].origin = vertexData.position.xyz;
+					rayQueue.elements[ index ].direction = scatterRec.direction;
+					rayQueue.elements[ index ].pixel = indexUV;
+					rayQueue.elements[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
+					rayQueue.elements[ index ].currentBounce = currentBounce + 1;
+					rayQueue.elements[ index ].resultColor = resultColor;
+					rayQueue.elements[ index ].lastPdf = scatterRec.pdf;
 
 				}
 
