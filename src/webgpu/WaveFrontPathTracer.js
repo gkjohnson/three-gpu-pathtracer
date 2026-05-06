@@ -91,11 +91,16 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setLights( lightsAttribute, lightCount, iesProfiles ) {
 
 		const lightsNode = storage( lightsAttribute, lightStruct ).setName( 'g_lights' ).toReadOnly();
-		const kernel = this.generateLightKernel;
+		let kernel = this.generateLightKernel;
 		kernel.lights = lightsNode;
 		kernel.lightCount = lightCount;
 		kernel.iesProfiles = iesProfiles;
 		kernel.kernel.computeNode.parameters.iesProfilesSampler.node.value = iesProfiles;
+		kernel.needsUpdate = true;
+
+		kernel = this.rayIntersectionKernel;
+		kernel.lights = lightsNode;
+		kernel.lightCount = lightCount;
 		kernel.needsUpdate = true;
 
 	}

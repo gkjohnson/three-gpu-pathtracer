@@ -7,6 +7,8 @@ import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { equirectDirectionPdfFunc, misHeuristicFunc, sampleEnvironmentFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 import { luminanceFunc, weightedAlphaBlendFn } from '../../nodes/utils.wgsl.js';
+import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
+import { intersectAreaLightAtIndexFunc } from '../../nodes/lights.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -14,6 +16,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const params = {
 			bvhData: { value: null },
+			lights: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -25,6 +28,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			seed: uniform( 0 ),
 			totalSum: uniform( 0 ),
+			lightCount: uniform( 0 ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -43,6 +47,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const lightsBuffer = proxy( 'lights.value', params );
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -63,11 +68,15 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				totalSum: f32,
 
+				lightCount: u32,
+
 				globalId: vec3u
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
+
+				let lightsDenom = f32( max( lightCount, 1 ) );
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -102,6 +111,30 @@ export class RayIntersectionKernel extends ComputeKernel {
 				var hitResult: ${ raycastOutput };
 				let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 
+				// Forward sampling of area lights
+				var resultColor = input.resultColor;
+				if ( input.currentBounce > 0u ) {
+
+					let lightDist = select( 1e20, hitResult.dist, didHit );
+					for ( var i = 0u; i < lightCount; i ++ ) {
+
+						var testLightRec: ${ lightRecordStruct };
+						if ( ${ intersectAreaLightAtIndexFunc( lightsBuffer ) }( i, ray, &testLightRec ) ) {
+
+							if ( testLightRec.dist < lightDist ) {
+
+								testLightRec.pdf /= lightsDenom;
+								let mis = ${ misHeuristicFunc }( input.lastPdf, testLightRec.pdf );
+								resultColor += vec4( input.throughputColor * testLightRec.emission * mis, 0.0 );
+
+							}
+
+						}
+
+					}
+
+				}
+
 				if ( didHit ) {
 
 					// TODO: we process all of these materials immediately to push to the hit queue
@@ -116,14 +149,13 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue.elements[ index ].throughputColor = input.throughputColor;
 					hitQueue.elements[ index ].currentBounce = input.currentBounce;
-					hitQueue.elements[ index ].resultColor = input.resultColor;
+					hitQueue.elements[ index ].resultColor = resultColor;
 					hitQueue.elements[ index ].lightPdf = 0.0;
 					hitQueue.elements[ index ].hitDist = hitResult.dist;
 
 				} else {
 
 					let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
-					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
 						let color = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
