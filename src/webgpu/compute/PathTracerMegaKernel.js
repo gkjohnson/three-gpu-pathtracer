@@ -159,7 +159,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, 0 );
 
-				let lightsDenom = f32( max( lightCount, 1 ) );
+				let lightsDenom = f32( lightCount + 1 );
 				// scene ray
 				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
@@ -248,6 +248,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( lightRecord.emission ) / totalSum;
 							lightRecord.pdf = weight * ${ equirectDirectionPdfFunc }( lightRecord.direction );
 							lightRecord.kind = ${ LIGHT_TYPE_ENVIRONMENT };
+							lightRecord.dist = 1e20;
 							lightRecord.direction = invEnvMapRotation * lightRecord.direction;
 
 						} else {
@@ -319,6 +320,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let resolution = textureDimensions( envMap ).xy;
 							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color.xyz ) / totalSum;
 							var envPdf = weight * ${ equirectDirectionPdfFunc }( ray.direction );
+							envPdf /= lightsDenom;
 
 							let mis = ${ misHeuristicFunc }( lastPdf, envPdf );
 							resultColor += mis * color * vec4f( throughputColor, 0.0 );
