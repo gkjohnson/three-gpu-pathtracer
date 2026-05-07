@@ -138,6 +138,8 @@ export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 	}
 `, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );
 
+// ggxPDF, divided by the Jacobian of refraction operation
+// See equation (3) from [2] for pdf and (17) from [0] for Jacobian
 export const ggxRefractionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 
 	fn ggxRefractionAdjustedPDFFunc(
@@ -148,7 +150,7 @@ export const ggxRefractionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 		let D = ggxDistribution( NdotH, alpha );
 		let G1 = ggxShadowMaskG1( NdotV, alpha );
 
-		return D * G1 * abs( HdotV ) * abs( HdotL ) / ( abs( NdotV ) * pow2( eta * HdotV + HdotL ) );
+		return D * G1 * abs( HdotV ) * abs( HdotL ) / ( NdotV * pow2( eta * HdotV + HdotL ) );
 
 	}
 
