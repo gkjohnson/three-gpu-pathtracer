@@ -3,6 +3,7 @@ import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 import { lightRecordStruct, lightStruct, constants } from './structs.wgsl.js';
 import { intersectsRectangleFunc, intersectsCircleFunc } from './shape.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
+import { pow2, pow4 } from './utils.wgsl.js';
 
 export const LIGHT_TYPE_SPOT = 0;
 export const LIGHT_TYPE_DIRECTIONAL = 1;
@@ -19,18 +20,6 @@ export const getSpotAttenuationFunc = wgslFn( /* wgsl */`
 
 	}
 
-` );
-
-const pow2 = wgslFn( /* wgsl */`
-	fn pow2( x: f32 ) -> f32 {
-		return x * x;
-	}
-` );
-
-const pow4 = wgslFn( /* wgsl */`
-	fn pow4( x: f32 ) -> f32 {
-		return x * x * x * x;
-	}
 ` );
 
 export const getDistanceAttenuationFunc = wgslFn( /* wgsl */`

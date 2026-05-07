@@ -228,3 +228,32 @@ export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 	}
 
 ` );
+
+export const absMaxFunc = wgslFn( /* wgsl */`
+
+	fn absMax( value: f32, threshold: f32 ) -> f32 {
+		if ( value < 0 ) {
+
+			return min( value, -threshold );
+
+		} else {
+
+			return max( value, threshold );
+
+		}
+	}
+
+` );
+
+export const pow2 = wgslFn( /* wgsl */`
+	fn pow2( x: f32 ) -> f32 {
+		return x * x;
+	}
+` );
+
+export const pow4 = wgslFn( /* wgsl */`
+	fn pow4( x: f32 ) -> f32 {
+		return x * x * x * x;
+	}
+` );
+

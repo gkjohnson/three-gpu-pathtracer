@@ -1,5 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { constants } from './structs.wgsl.js';
+import { pow2 } from './utils.wgsl.js';
 
 // See sampling.wgsl for vector shorthand explanations
 // The GGX functions provide sampling and distribution information for normals as output so
@@ -80,8 +81,8 @@ export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
 
 		let a2 = alpha * alpha;
 		let cosTheta2 = cosTheta * cosTheta;
-		let denom = cosTheta + sqrt( cosTheta2 * ( 1 - a2 ) + a2 );
-		return 2.0 * cosTheta / denom;
+		let denom = abs( cosTheta ) + sqrt( cosTheta2 * ( 1 - a2 ) + a2 );
+		return 2.0 * abs( cosTheta ) / denom;
 
 	}
 
@@ -124,7 +125,7 @@ export const ggxDistributionFunc = wgslFn( /* wgsl */ `
 `, );
 
 // ggxPDF, divided by the Jacobian of reflection operation
-// See equation (17) from [2]
+// See equation (3) and (17) from [2]
 // Note: HdotV cancel out bc its guaranteed to be > 0
 export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 	fn ggxReflectionAdjustedPDF( NdotV: f32, NdotH: f32, alpha: f32 ) -> f32 {
@@ -136,3 +137,19 @@ export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 
 	}
 `, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );
+
+export const ggxRefractionAdjustedPDFFunc = wgslFn( /* wgsl */ `
+
+	fn ggxRefractionAdjustedPDFFunc(
+		NdotV: f32, HdotV: f32, HdotL: f32, NdotH: f32,
+		eta: f32, alpha: f32
+	) -> f32 {
+
+		let D = ggxDistribution( NdotH, alpha );
+		let G1 = ggxShadowMaskG1( NdotV, alpha );
+
+		return D * G1 * abs( HdotV ) * abs( HdotL ) / ( abs( NdotV ) * pow2( eta * HdotV + HdotL ) );
+
+	}
+
+`, [ ggxDistributionFunc, ggxShadowMaskG1Func, pow2 ] );

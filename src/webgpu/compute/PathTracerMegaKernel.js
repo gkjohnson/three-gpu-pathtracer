@@ -227,7 +227,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// TODO: Investigate offsetting this position to not self-intersect multiple times
 						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
 						// However that seems like a very large distance to offset
-						let newPoint = vertexData.position.xyz;
+						let offsetDir = surface.normal * sign( dot( surface.normal, scatterRec.direction ) );
+						let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;
 
 						// TODO: forward sample area lights?
 						// Direct light contribution
@@ -263,7 +264,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						lightRecord.pdf /= lightsDenom;
 
 						// Light portal?
-						if ( dot( lightRecord.direction, surface.faceNormal ) < 0.0 ) {
+						if ( dot( lightRecord.direction, offsetDir ) < 0.0 ) {
 
 							lightRecord.pdf = 0.0;
 

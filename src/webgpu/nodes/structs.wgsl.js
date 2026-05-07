@@ -209,11 +209,15 @@ export const bxdfContextStruct = new StructTypeNode( {
 	NdotV: 'float',
 	NdotL: 'float',
 	NdotH: 'float',
-	VdotH: 'float',
+	HdotV: 'float',
 
-	VdotNc: 'float',
-	LdotNc: 'float',
-	HdotNc: 'float',
+	HdotL: 'float',
+	NdotVc: 'float',
+	NdotLc: 'float',
+	NdotHc: 'float',
+
+	HdotLc: 'float',
+	HdotVc: 'float',
 
 }, 'BxDFContext' );
 

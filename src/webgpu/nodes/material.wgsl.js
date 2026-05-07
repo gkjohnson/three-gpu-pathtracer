@@ -9,6 +9,7 @@ import {
 	iorToF0GeneralFunc,
 	fresnel0ToIorFunc,
 	iorToF0GeneralVecFunc,
+	pow2,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
@@ -307,19 +308,26 @@ export const lambertBsdfFunc = wgslFn( /* wgsl */`
 // Disney Diffuse BRDF without subsurface approximation
 export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
-	fn diffuseBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
+	fn diffuseBrdf( NdotV: f32, HdotV: f32, NdotL: f32, HdotL: f32, surf: SurfaceRecord ) -> vec3f {
+
+		// Heaviside function effectively
+		if ( HdotV < 0.0 || HdotL < 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
 
 		// https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
 		// See equation (4)
 
-		let fl = schlickFresnel( NdotL, 0.0 );
-		let fv = schlickFresnel( NdotV, 0.0 );
+		let fl = schlickFresnel( abs( NdotL ), 0.0 );
+		let fv = schlickFresnel( abs( NdotV ), 0.0 );
 
 		let alpha = surf.roughness * surf.roughness;
 		let bias = mix( 0.0, 0.5, alpha) - 1;
 		let energyFactor = mix( 1.0, 1.0 / 1.51, alpha );
 
-		let rr = 2.0 * alpha * VdotH * VdotH;
+		let rr = 2.0 * alpha * HdotV * HdotV;
 		let retro = rr * ( fl + fv + fl * fv * ( rr + 2.0 * bias ) );
 		let fresnel = ( 1.0 + bias * fl ) * ( 1.0f + bias * fv );
 
@@ -331,11 +339,49 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ constants, schlickFresnelFunc, surfaceRecordStruct ] );
 
+export const specularBtdfFunc = wgslFn( /* wgsl */`
+
+	fn specularBtdf(
+		NdotL: f32, HdotL: f32, NdotV: f32, HdotV: f32, NdotH: f32,
+		alpha: f32, eta: f32,
+	) -> vec3f {
+
+		// Heaviside function for G term
+		if ( NdotV * HdotV < 0.0 || NdotL * HdotL < 0.0 || HdotV * HdotL > 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		// let reflectionVis = ggxSmithVisibility( abs( NdotV ), abs( NdotL ), alpha );
+		// let Vis = 4.0 * reflectionVis * abs( HdotV ) * abs( HdotL ) / pow2( eta * HdotV + HdotL );
+
+		let G1_i = ggxShadowMaskG1( abs(NdotV), alpha );
+		let G1_o = ggxShadowMaskG1( abs(NdotL), alpha );
+		// separable G2 product, no height correlation
+		let Vis = G1_i * G1_o * abs(HdotV) * abs(HdotL) /
+							( abs(NdotV) * abs(NdotL) * pow2(eta * HdotV + HdotL) );
+
+		let D = ggxDistribution( NdotH, alpha );
+
+		return vec3f( D * Vis );
+
+	}
+
+`, [ ggxSmithVisibilityFunc, ggxDistributionFunc, pow2 ] );
+
 export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
-	fn specularBrdf( NdotL: f32, NdotV: f32, NdotH: f32, alpha: f32 ) -> vec3f {
+	fn specularBrdf( NdotL: f32, HdotL: f32, NdotV: f32, HdotV: f32, NdotH: f32, alpha: f32 ) -> vec3f {
 
-		let Vis = ggxSmithVisibility( NdotV, NdotL, alpha );
+		// Heaviside function for G term
+		if ( HdotV < 0.0 || HdotL < 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		let Vis = ggxSmithVisibility( abs( NdotV ), abs( NdotL ), alpha );
 		let D = ggxDistribution( NdotH, alpha );
 
 		return vec3f( D * Vis );
@@ -349,7 +395,7 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 	fn fresnelMix( VdotH: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
 		let f0 = iorToF0( ior );
-  	let F = schlickFresnel( abs( VdotH ), f0 );
+  	let F = schlickFresnel( VdotH, f0 );
 
   	return base + F * layer;
 
@@ -515,10 +561,10 @@ export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 
 export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
-	fn fresnelCoat( VdotNc: f32, ior: f32, base: vec3f, layer: vec3f, weight: f32 ) -> vec3f {
+	fn fresnelCoat( NdotVc: f32, ior: f32, base: vec3f, layer: vec3f, weight: f32 ) -> vec3f {
 
 		let f0 = iorToF0( ior );
-		let F = schlickFresnel( abs( VdotNc ), f0 );
+		let F = schlickFresnel( NdotVc, f0 );
 
 		return mix( base, layer, weight * F );
 
@@ -558,8 +604,10 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 			let NdotV = max( wo.z, EPSILON );
 			let NdotL = saturate( wi.z );
 			let NdotH = saturate( wh.z );
+			let HdotV = saturate( dot( wo, wh ) );
+			let HdotL = saturate( dot( wi, wh ) );
 
-			let specular = specularBrdf( NdotL, NdotV, NdotH, alpha );
+			let specular = specularBrdf( NdotL, HdotL NdotV, HdotV, NdotH, alpha );
 			let pdf = ggxReflectionAdjustedPDF( NdotV, NdotH, alpha );
 
 			var weight = 0.0;

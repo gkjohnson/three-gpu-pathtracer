@@ -131,11 +131,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ currentMaterial };
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							if ( material.side != 0 && triResult.side != material.side ) {
-
-								continue;
-
-							}
+							// if ( material.side != 0 && triResult.side != material.side ) {
+							//
+							// 	continue;
+							//
+							// }
 
 							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
