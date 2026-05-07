@@ -29,6 +29,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
+		blurRoughness: f32,
 		textures: texture_2d_array<f32>,
 		textureSampler: sampler,
 	) -> SurfaceRecord {
@@ -243,9 +244,10 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
-		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
-		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
+		let minRoughness = max( MIN_ROUGHNESS, blurRoughness );
+		surf.roughness = clamp( roughness, minRoughness, 1.0 );
+		surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
+		surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.

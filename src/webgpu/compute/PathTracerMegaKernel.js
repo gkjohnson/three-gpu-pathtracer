@@ -1,7 +1,7 @@
-import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture, StorageBufferAttribute } from 'three/webgpu';
+import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore, storage } from 'three/tsl';
+import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE, SOBOL_INDEX_LIGHT_INDEX } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
@@ -9,12 +9,14 @@ import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { inverseMat3x3Func, isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
-import { lightRecordStruct, lightStruct } from '../nodes/structs.wgsl.js';
+import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc, intersectAreaLightAtIndexFunc, isMISWeightLightFunc } from '../nodes/lights.wgsl.js';
+
+const FILTER_GLOSSY = 1.0;
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( ) {
+	constructor() {
 
 		const params = {
 			bvhData: { value: null },
@@ -168,6 +170,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 				var lastPdf = 0.0;
+				var minPdf = 1.0;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -212,7 +215,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
-						let surface = ${ getSurfaceRecordFunc }( material, vertexData, hitResult.side, hitResult.normal, textures, textureSampler );
+						let blurRoughness = sqrt( clamp( 1.0 - ${ FILTER_GLOSSY } * minPdf, 0.0, 1.0 ) ) * 0.5;
+
+						let surface = ${ getSurfaceRecordFunc }(
+							material, vertexData, hitResult.side, hitResult.normal,
+							blurRoughness, textures, textureSampler
+						);
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
@@ -223,6 +231,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							break;
 
 						}
+
+						minPdf = min( minPdf, scatterRec.pdf );
 
 						// TODO: Investigate offsetting this position to not self-intersect multiple times
 						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
