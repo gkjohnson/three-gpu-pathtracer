@@ -343,7 +343,7 @@ export const specularBtdfFunc = wgslFn( /* wgsl */`
 
 	fn specularBtdf(
 		NdotL: f32, HdotL: f32, NdotV: f32, HdotV: f32, NdotH: f32,
-		alpha: f32, eta: f32,
+		alpha: f32, eta: f32, ior: f32,
 	) -> vec3f {
 
 		// Heaviside function for G term
@@ -356,15 +356,18 @@ export const specularBtdfFunc = wgslFn( /* wgsl */`
 		// let reflectionVis = ggxSmithVisibility( abs( NdotV ), abs( NdotL ), alpha );
 		// let Vis = 4.0 * reflectionVis * abs( HdotV ) * abs( HdotL ) / pow2( eta * HdotV + HdotL );
 
-		let G1_i = ggxShadowMaskG1( abs(NdotV), alpha );
-		let G1_o = ggxShadowMaskG1( abs(NdotL), alpha );
+		let G1_i = ggxShadowMaskG1( NdotV, alpha );
+		let G1_o = ggxShadowMaskG1( NdotL, alpha );
 		// separable G2 product, no height correlation
 		let Vis = G1_i * G1_o * abs(HdotV) * abs(HdotL) /
 							( abs(NdotV) * abs(NdotL) * pow2(eta * HdotV + HdotL) );
 
+		let f0 = iorToF0( ior );
+		let F = schlickFresnel( HdotV, f0 );
+
 		let D = ggxDistribution( NdotH, alpha );
 
-		return vec3f( D * Vis );
+		return vec3f( ( 1 - F ) * D * Vis );
 
 	}
 
@@ -392,10 +395,10 @@ export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
-	fn fresnelMix( VdotH: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
+	fn fresnelMix( HdotV: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
 		let f0 = iorToF0( ior );
-  	let F = schlickFresnel( VdotH, f0 );
+  	let F = schlickFresnel( HdotV, f0 );
 
   	return base + F * layer;
 
