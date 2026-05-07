@@ -74,7 +74,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.specular = weightLeft * ( surf.metalness + ( 1.0 - surf.metalness ) * fEstimate );
 		weightLeft -= weights.specular;
 
-		weights.transmission = weightLeft * surf.transmission;
+		weights.transmission = weightLeft * select( 0.0, surf.transmission, surf.transmission > 0.1 );
 		weightLeft -= weights.transmission;
 
 		weights.diffuse = weightLeft;
