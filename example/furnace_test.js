@@ -1,4 +1,4 @@
-import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, PerspectiveCamera, WebGPURenderer } from 'three/webgpu';
+import { Scene, SphereGeometry, MeshStandardMaterial, MeshPhysicalMaterial, Mesh, PerspectiveCamera, WebGPURenderer } from 'three/webgpu';
 import { WebGLRenderer } from 'three';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
@@ -9,6 +9,8 @@ const options = {
 	enable: true,
 	useMegakernel: true,
 	isWebGPU: true,
+
+	transmissive: true,
 };
 
 // init scene
@@ -18,21 +20,24 @@ const scene = new Scene();
 // roughness increases left to right
 // metalness increases top to bottom
 const sphereGeom = new SphereGeometry( 0.4, 100, 50 );
+const meshes = [];
 for ( let x = 0; x <= 10; x ++ ) {
 
 	for ( let y = 0; y <= 10; y ++ ) {
 
 		const mesh = new Mesh(
 			sphereGeom,
-			new MeshStandardMaterial( {
+			new MeshPhysicalMaterial( {
 				color: 0xffffff,
 				roughness: x / 10,
 				metalness: y / 10,
+				transmission: options.transmissive ? 1.0 : 0.0,
 			} )
 		);
 
 		mesh.position.x = x - 5;
 		mesh.position.y = 5 - y;
+		meshes.push( mesh );
 		scene.add( mesh );
 
 	}
@@ -115,6 +120,17 @@ gui.add( options, 'isWebGPU' ).onChange( () => {
 		megakernelController.show();
 
 	}
+
+} );
+gui.add( options, 'transmissive' ).onChange( () => {
+
+	for ( const mesh of meshes ) {
+
+		mesh.material.transmission = options.transmissive ? 1.0 : 0.0;
+
+	}
+
+	pathTracer.setScene( scene, camera );
 
 } );
 
