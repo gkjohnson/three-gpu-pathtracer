@@ -51,7 +51,7 @@
     "pixelmatch": "^5.3.0",
     "pngjs": "^6.0.0",
     "process": "^0.11.10",
-    "puppeteer": "^15.4.0",
+    "puppeteer": "^24.42.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.184.0",

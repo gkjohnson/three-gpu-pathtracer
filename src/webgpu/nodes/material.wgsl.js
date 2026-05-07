@@ -297,7 +297,7 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 		let fv = schlickFresnel( NdotV, 0.0 );
 
 		let alpha = surf.roughness * surf.roughness;
-		let bias = mix( 0.0, 0.5, alpha) - 1;
+		let bias = mix( 0.0, 0.5, alpha ) - 1;
 		let energyFactor = mix( 1.0, 1.0 / 1.51, alpha );
 
 		let rr = 2.0 * alpha * VdotH * VdotH;

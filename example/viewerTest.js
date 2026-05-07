@@ -346,6 +346,7 @@ function buildGui() {
 	} ).onChange( () => {
 
 		pathTracer.setPRNGType( params.webgpuPRNG );
+		pathTracer.reset();
 
 	} );
 
