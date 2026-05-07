@@ -2,7 +2,6 @@ import yargs from 'yargs';
 import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
-import fetch from 'node-fetch';
 import { PNG } from 'pngjs';
 import { exec, spawnSync } from 'child_process';
 
@@ -141,7 +140,7 @@ async function downloadGolden( scenarioName, targetPath ) {
 
 	}
 
-	const buffer = await response.buffer();
+	const buffer = Buffer.from( await response.arrayBuffer() );
 	fs.mkdirSync( path.dirname( targetPath ), { recursive: true } );
 	fs.writeFileSync( targetPath, buffer );
 
