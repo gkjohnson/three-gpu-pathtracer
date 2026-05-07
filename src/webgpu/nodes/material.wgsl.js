@@ -249,8 +249,8 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
-		surf.frontFace = side == 1.0 || transmission == 0.0;
-		if ( material.thinFilm == 1 || surf.frontFace ) {
+		let frontFace = side > 0.0 || transmission == 0.0;
+		if ( frontFace ) {
 			surf.eta = 1.0 / material.ior;
 		} else {
 			surf.eta = material.ior;

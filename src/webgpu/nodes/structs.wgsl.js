@@ -148,7 +148,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 
 	// geometry
 	faceNormal: 'vec3f',
-	frontFace: 'bool',
 	normal: 'vec3f',
 	normalBasis: 'mat3x3f',
 	normalInvBasis: 'mat3x3f',
