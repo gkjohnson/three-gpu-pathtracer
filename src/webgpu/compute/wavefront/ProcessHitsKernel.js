@@ -9,6 +9,8 @@ import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../../nodes/utils.wgsl.js';
 import { SOBOL_INDEX_RUSSIAN_ROULETTE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 
+const FILTER_GLOSSY = 1.0;
+
 export class ProcessHitsKernel extends ComputeKernel {
 
 	constructor() {
@@ -90,17 +92,22 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
+				let blurRoughness = sqrt( clamp( 1.0 - ${ FILTER_GLOSSY } * input.minPdf, 0.0, 1.0 ) ) * 0.5;
+
+				let surface = ${ getSurfaceRecordFunc }(
+					material, vertexData, input.side, input.normal,
+					blurRoughness, textures, textureSampler
+				);
 
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
-				var resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				var resultColor = input.resultColor + throughputColor * surface.emission;
 
 				if ( input.lightPdf != 0.0 ) {
 					let bsdf = ${ bsdfEvalScatterFn }( input.view,  input.lightDirection, surface );
 					let mis = select( 1.0, ${ misHeuristicFunc }( input.lightPdf, bsdf.pdf ), input.lightPdf > 0.0 );
-					resultColor += vec4( throughputColor * bsdf.color * input.lightColor * mis / abs( input.lightPdf ), 0.0 );
+					resultColor += throughputColor * bsdf.color * input.lightColor * mis / abs( input.lightPdf );
 				}
 
 				var isTerminated = currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
@@ -129,7 +136,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					// terminate ray, write color
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
+					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, vec4f( resultColor, 1.0 ), 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
@@ -137,13 +144,18 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( &rayQueue.elements );
 					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
-					rayQueue.elements[ index ].origin = vertexData.position.xyz;
+
+					let offsetDir = input.normal * sign( dot( input.normal, scatterRec.direction ) );
+					let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;
+
+					rayQueue.elements[ index ].origin = newPoint;
 					rayQueue.elements[ index ].direction = scatterRec.direction;
 					rayQueue.elements[ index ].pixel = indexUV;
 					rayQueue.elements[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue.elements[ index ].currentBounce = currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].lastPdf = scatterRec.pdf;
+					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 
 				}
 

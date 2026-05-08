@@ -104,7 +104,6 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 				let object = transforms[ hit.objectIndex ];
 				var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices.xyz );
 				vertexData.position = object.matrixWorld * vertexData.position;
-				let newPoint = vertexData.position.xyz;
 
 				let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
 				let lightUV = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
@@ -128,12 +127,15 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 
 					let lightRng = lightType * ( f32( lightCount ) + 1.0 ) / f32( lightCount );
 					lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }(
-						lightRng, lightUV, lightCount, newPoint, iesProfiles, iesProfilesSampler
+						lightRng, lightUV, lightCount, vertexData.position.xyz, iesProfiles, iesProfilesSampler
 					);
 
 				}
 
 				lightRecord.pdf /= lightsDenom;
+
+				let offsetDir = vertexData.normal.xyz * sign( dot( vertexData.normal.xyz, lightRecord.direction ) );
+				let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;
 
 				if ( dot( lightRecord.direction, hit.normal ) < 0.0 ) {
 

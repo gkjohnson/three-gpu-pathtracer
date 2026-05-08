@@ -112,7 +112,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 
 				// Forward sampling of area lights
-				var resultColor = input.resultColor;
+				var resultColor = vec4f( input.resultColor, 1.0 );
 				if ( input.currentBounce > 0u ) {
 
 					let lightDist = select( 1e20, hitResult.dist, didHit );
@@ -125,7 +125,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 								testLightRec.pdf /= lightsDenom;
 								let mis = ${ misHeuristicFunc }( input.lastPdf, testLightRec.pdf );
-								resultColor += vec4( input.throughputColor * testLightRec.emission * mis, 0.0 );
+								resultColor += vec4f( input.throughputColor * testLightRec.emission * mis, 0.0 );
 
 							}
 
@@ -149,9 +149,10 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue.elements[ index ].throughputColor = input.throughputColor;
 					hitQueue.elements[ index ].currentBounce = input.currentBounce;
-					hitQueue.elements[ index ].resultColor = resultColor;
+					hitQueue.elements[ index ].resultColor = resultColor.xyz;
 					hitQueue.elements[ index ].lightPdf = 0.0;
 					hitQueue.elements[ index ].hitDist = hitResult.dist;
+					hitQueue.elements[ index ].minPdf = input.minPdf;
 
 				} else {
 

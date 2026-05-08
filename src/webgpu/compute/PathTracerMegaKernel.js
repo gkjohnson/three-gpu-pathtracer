@@ -234,13 +234,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						minPdf = min( minPdf, scatterRec.pdf );
 
-						// TODO: Investigate offsetting this position to not self-intersect multiple times
-						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
-						// However that seems like a very large distance to offset
-						let offsetDir = surface.normal * sign( dot( surface.normal, scatterRec.direction ) );
+						let offsetDir = hitResult.normal * sign( dot( hitResult.normal, scatterRec.direction ) );
 						let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;
 
-						// TODO: forward sample area lights?
 						// Direct light contribution
 
 						let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
