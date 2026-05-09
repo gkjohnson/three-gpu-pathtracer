@@ -297,7 +297,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
 						if ( bounce >= 3 ) {
 							var rrProb = ${ luminanceFunc }( throughputColor * scatterRec.color / scatterRec.pdf );
-							rrProb /= ${ luminanceFunc }( throughputColor );
+							rrProb /= max( ${ luminanceFunc }( throughputColor ), 1e-4 );
 							rrProb = sqrt( rrProb );
 							rrProb = min( rrProb, 1.0 );
 							if ( ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
