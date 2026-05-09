@@ -78,7 +78,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( weights.diffuse > 0.0 && isReflection ) {
 
-					pdf += weights.diffuse * abs( ctx.NdotL ) / PI;
+					pdf += weights.diffuse * max( ctx.NdotL, 0.0 ) / PI;
 
 				}
 
@@ -259,10 +259,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.color = ${ this.bsdfEvalFunc }( ctx, surf );
 				result.color *= abs( ctx.NdotL );
 				result.pdf = ${ this.pdfEvalFunc }( ctx, weights, surf );
-
-				// if ( wo.z < 0.0 ) {
-				// 	return ${ scatterRecordStruct }( result.color, 0.0, worldWo, result.pdf );
-				// }
 
 				return result;
 
