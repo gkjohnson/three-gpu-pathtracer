@@ -2,7 +2,7 @@ import { wgslFn, uint, float } from 'three/tsl';
 import { rayStruct } from './structs.wgsl.js';
 
 export const constants = {
-	BVH_STACK_DEPTH: uint( 60 ),
+	BVH_STACK_DEPTH: uint( 30 ),
 	INFINITY: float( 1e20 ),
 };
 
