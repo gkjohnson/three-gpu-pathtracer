@@ -1,7 +1,7 @@
 import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { hitQueueStruct, rayQueueAtomicStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { misHeuristicFunc } from '../../nodes/sampling.wgsl.js';
@@ -102,6 +102,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
+				if ( input.side < 0.0 ) {
+					throughputColor *= ${ transmissionAttenuationFunc }( input.hitDist, material.attenuationColor, material.attenuationDistance );
+				}
 				var resultColor = input.resultColor + throughputColor * surface.emission;
 
 				if ( input.lightPdf != 0.0 ) {

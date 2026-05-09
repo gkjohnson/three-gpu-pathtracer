@@ -3,7 +3,7 @@ import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE, SOBOL_INDEX_LIGHT_INDEX } from '../nodes/random.wgsl.js';
-import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
@@ -222,6 +222,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							blurRoughness, textures, textureSampler
 						);
 
+						if ( hitResult.side < 0.0 ) {
+							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, material.attenuationColor, material.attenuationDistance );
+						}
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
 						let scatterRec = ${ bsdfSampleFn }( - ray.direction, surface );
