@@ -329,7 +329,7 @@ function copyToClipboard( text ) {
 	fs.mkdirSync( goldenFolder, { recursive: true } );
 
 	console.log( 'Running test page service' );
-	exec( 'npm run start' );
+	const devProcess = exec( 'npm run start' );
 
 	// Filter scenarios
 	let scenariosToRun = scenarios;
@@ -495,7 +495,10 @@ function copyToClipboard( text ) {
 	} finally {
 
 		await browser.close();
+		devProcess.kill();
 
 	}
+
+	process.exit( 0 );
 
 } )();
