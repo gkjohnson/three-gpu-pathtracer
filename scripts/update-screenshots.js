@@ -2,7 +2,6 @@ import yargs from 'yargs';
 import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
-import fetch from 'node-fetch';
 import { exec } from 'child_process';
 
 const excludeList = [
@@ -113,7 +112,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	const page = await browser.newPage();
 
-	await page.goto( `http://localhost:5173/viewerTest.html?isWebGPU=true&hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
+	await page.goto( `http://localhost:5173/viewerTest.html?isWebGPU=${argv.webgpu}&hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
 
 	try {
 

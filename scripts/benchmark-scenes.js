@@ -24,6 +24,7 @@ const argv = yargs( process.argv.slice( 2 ) )
 		describe: 'Path to local golden images directory. If not provided, downloads from Khronos repo.',
 		alias: 'g',
 		type: 'string',
+		defualt: './screenshots/golden',
 	} )
 	.option( 'scenario', {
 		describe: 'Comma-separated list of scenarios to run. If not provided, runs all.',
@@ -156,7 +157,15 @@ async function getGoldenPath( scenarioName, goldenFolder ) {
 
 			return localPath;
 
+		} else {
+
+			console.log( `${ localPath } does not exist` );
+
 		}
+
+	} else {
+
+		console.log( 'No golden-path' );
 
 	}
 
