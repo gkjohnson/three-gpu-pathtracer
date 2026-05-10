@@ -1,13 +1,13 @@
 import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { texture, sampler, uniform, globalId, textureStore, uint, localId } from 'three/tsl';
 import { sobolInit, sobolFuncs, SOBOL_INDEX_RAY_JITTER, SOBOL_INDEX_ENVIRONMENT_SAMPLE, SOBOL_INDEX_RUSSIAN_ROULETTE, SOBOL_INDEX_LIGHT_INDEX } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, sampleEnvironmentFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { inverseMat3x3Func, isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc, intersectAreaLightAtIndexFunc, isMISWeightLightFunc } from '../nodes/lights.wgsl.js';
@@ -41,6 +41,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			envMapSampler: sampler( new DataTexture() ),
 			envMapRotation: uniform( new Matrix3() ),
 			envMapIntensity: uniform( 1 ),
+			invEnvMapRotation: uniform( new Matrix3() ),
 
 			envMapMarginalWeights: texture( new DataTexture() ),
 			envMapMarginalWeightsSampler: sampler( new DataTexture() ),
@@ -66,6 +67,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			// compute variables
 			globalId: globalId,
+			localId: localId,
 		};
 
 		const lightsBuffer = proxy( 'lights.value', params );
@@ -75,12 +77,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalScatterFn = proxyFn( 'material.value.bsdfEvalScatter', params );
 
+		const threadIdNode = uint( 0 ).toVar( 'g_threadId' );
 		const shader = wgslTagFn/* wgsl */`
 
 			fn compute(
 
 				// indices and target
 				globalId: vec3u,
+				localId: vec3u,
 
 				// tiles
 				offset: vec2u,
@@ -97,6 +101,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				envMapSampler: sampler,
 				envMapRotation: mat3x3f,
 				envMapIntensity: f32,
+				invEnvMapRotation: mat3x3f,
 
 				envMapMarginalWeights: texture_2d<f32>,
 				envMapMarginalWeightsSampler: sampler,
@@ -131,7 +136,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					envMapIntensity,
 					0.0 // blur,
 				);
-				let invEnvMapRotation = ${ inverseMat3x3Func }( envMapRotation );
 
 				let backgroundInfo = EnvironmentInfo(
 					backgroundRotation,
@@ -154,6 +158,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					return;
 
 				}
+				// TODO: tie this to actual workgroup size
+				${ threadIdNode } = localId.x * 8 + localId.y;
 
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
@@ -162,6 +168,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				${ sobolInit }( pixelIndex, seed, 0 );
 
 				let lightsDenom = f32( lightCount + 1 );
+				let invLightsDenom = 1.0 / lightsDenom;
+				let envMapDims = vec2f( textureDimensions( envMap ).xy );
+				let envMapPixelCount = f32( envMapDims.x * envMapDims.y );
+				let invTotalSum = 1.0 / totalSum;
 				// scene ray
 				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
@@ -190,7 +200,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								if ( testLightRec.dist < lightDist ) {
 
-									testLightRec.pdf /= lightsDenom;
+									testLightRec.pdf *= invLightsDenom;
 									let mis = ${ misHeuristicFunc }( lastPdf, testLightRec.pdf );
 									resultColor += vec4( throughputColor * testLightRec.emission * mis, 0.0 );
 
@@ -245,7 +255,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let lightType = ${ sobolFuncs[ 1 ] }( ${ SOBOL_INDEX_LIGHT_INDEX } );
 						let lightUV = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
 						var lightRecord: ${ lightRecordStruct };
-						if ( lightType * ( f32( lightCount ) + 1.0 ) > f32( lightCount ) ) {
+						if ( lightType * lightsDenom > f32( lightCount ) ) {
 
 							let v = textureSampleLevel( envMapMarginalWeights, envMapMarginalWeightsSampler, vec2( lightUV.x, 0.0 ), 0 ).x;
 							let u = textureSampleLevel( envMapConditionalWeights, envMapConditionalWeightsSampler, vec2( lightUV.y, v ), 0 ).x;
@@ -254,8 +264,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							lightRecord.direction = normalize( ${ equirectUvToDirectionFunc }( uv ) );
 							lightRecord.emission = envInfo.intensity * textureSampleLevel( envMap, envMapSampler, uv, 0 ).xyz;
 
-							let resolution = textureDimensions( envMap ).xy;
-							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( lightRecord.emission ) / totalSum;
+							let weight = envMapPixelCount * ${ luminanceFunc }( lightRecord.emission ) * invTotalSum;
 							lightRecord.pdf = weight * ${ equirectDirectionPdfFunc }( lightRecord.direction );
 							lightRecord.kind = ${ LIGHT_TYPE_ENVIRONMENT };
 							lightRecord.dist = 1e20;
@@ -263,14 +272,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							let lightRng = lightType * ( f32( lightCount ) + 1.0 ) / f32( lightCount );
+							let lightRng = lightType * lightsDenom / f32( lightCount );
 							lightRecord = ${ sampleRandomLightFunc( lightsBuffer ) }(
 								lightRng, lightUV, lightCount, newPoint, iesProfiles, iesProfilesSampler
 							);
 
 						}
 
-						lightRecord.pdf /= lightsDenom;
+						lightRecord.pdf *= invLightsDenom;
 
 						// Light portal?
 						if ( dot( lightRecord.direction, offsetDir ) < 0.0 ) {
@@ -299,7 +308,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// russian roulette path termination
 						// https://blogs.autodesk.com/media-and-entertainment/wp-content/uploads/sites/162/physically_based_shader_design_in_arnold.pdf						uint minBounces = 3u;
 						if ( bounce >= 3 ) {
-							var rrProb = ${ luminanceFunc }( throughputColor * scatterRec.color / scatterRec.pdf );
+							let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
+							var rrProb = ${ luminanceFunc }( rrThroughput );
 							rrProb /= max( ${ luminanceFunc }( throughputColor ), 1e-4 );
 							rrProb = sqrt( rrProb );
 							rrProb = min( rrProb, 1.0 );
@@ -327,10 +337,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							let color = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
 
-							let resolution = textureDimensions( envMap ).xy;
-							let weight = f32( resolution.x * resolution.y ) * ${ luminanceFunc }( color.xyz ) / totalSum;
+							let weight = envMapPixelCount * ${ luminanceFunc }( color.xyz ) * invTotalSum;
 							var envPdf = weight * ${ equirectDirectionPdfFunc }( ray.direction );
-							envPdf /= lightsDenom;
+							envPdf *= invLightsDenom;
 
 							let mis = ${ misHeuristicFunc }( lastPdf, envPdf );
 							resultColor += mis * color * vec4f( throughputColor, 0.0 );

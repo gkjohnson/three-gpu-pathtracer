@@ -1,6 +1,6 @@
 import { DataTexture, Matrix3, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
+import { uniform, texture, sampler, storage, textureStore, globalId, localId, uint } from 'three/tsl';
 import { SOBOL_INDEX_ENVIRONMENT_SAMPLE, sobolFuncs, sobolInit } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
@@ -43,11 +43,13 @@ export class RayIntersectionKernel extends ComputeKernel {
 			backgroundBlurriness: uniform( 0 ),
 
 			globalId: globalId,
+			localId: localId,
 		};
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
 		const lightsBuffer = proxy( 'lights.value', params );
+		const threadIdNode = uint( 0 ).toVar( 'g_threadId' );
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -70,7 +72,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				lightCount: u32,
 
-				globalId: vec3u
+				globalId: vec3u,
+				localId: vec3u
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
@@ -98,6 +101,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 					return;
 
 				}
+				// TODO: tie this to actual workgroup size
+				${ threadIdNode } = localId.x;
 
 				// get the ray info
 				let input = rayQueue.elements[ rayIndex % queueCapacity ];

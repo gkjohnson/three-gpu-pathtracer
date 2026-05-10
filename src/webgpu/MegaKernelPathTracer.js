@@ -100,6 +100,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
 		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		kernel.invEnvMapRotation.setFromMatrix4( rotationMatrix ).invert();
 		kernel.envMapIntensity = envMapIntensity;
 
 		kernel.background = background;

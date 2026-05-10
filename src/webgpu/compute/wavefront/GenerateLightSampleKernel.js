@@ -1,5 +1,5 @@
 import { ComputeKernel } from '../ComputeKernel';
-import { texture, sampler, uniform, globalId, storage } from 'three/tsl';
+import { texture, sampler, uniform, globalId, storage, localId, uint } from 'three/tsl';
 import { StorageBufferAttribute, DataTexture, Matrix3 } from 'three/webgpu';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
 import { hitQueueStruct } from './structs';
@@ -45,12 +45,14 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 			totalSum: uniform( 0 ),
 
 			globalId: globalId,
+			localId: localId,
 		};
 
 		const lightsBuffer = proxy( 'lights.value', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const threadIdNode = uint( 0 ).toVar( 'g_threadId' );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -76,7 +78,8 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 
 				lightCount: u32,
 
-				globalId: vec3u
+				globalId: vec3u,
+				localId: vec3u,
 			) -> void {
 
 				let hitQueue = &${ params.hitQueue };
@@ -90,6 +93,7 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 					return;
 
 				}
+				${ threadIdNode } = localId.x;
 
 				let hit = hitQueue.elements[ hitIndex ];
 

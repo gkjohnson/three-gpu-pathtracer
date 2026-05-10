@@ -205,7 +205,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			transformShapeFn: wgslTagFn/* wgsl */`
 				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
+					${ currentMaterial } = ${ storage.transforms }[ objectIndex ].materialIndex;
 					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
+					let isTransparent = ${ storage.materials }[ ${ currentMaterial } ].transparent;
 					ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 					ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
@@ -213,11 +215,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					ray.direction /= len;
 					${ scratchRayScalar } = 1.0 / len;
 
-					let object = ${ storage.transforms }[ objectIndex ];
-					${ currentMaterial } = object.materialIndex;
-					if ( ${ storage.materials }[ ${ currentMaterial } ].transparent == 1 ) {
+					if ( isTransparent == 1 ) {
 
-						${ baseOpacityScalar } = ${ storage.materials }[ ${ currentMaterial } ].opacity * object.color.a;
+						${ baseOpacityScalar } = ${ storage.materials }[ ${ currentMaterial } ].opacity * ${ storage.transforms }[ objectIndex ].color.a;
 
 					} else {
 

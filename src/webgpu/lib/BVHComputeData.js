@@ -1,6 +1,6 @@
 import { Matrix4, Vector4 } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
-import { storage, float } from 'three/tsl';
+import { storage, float, wgsl } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wgsl.js';
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
@@ -347,14 +347,19 @@ export class BVHComputeData {
 		const resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
 		const resultArg = resultStruct ? 'result' : '';
 
-		const getFnBody = leafSnippet => {
+		const bvhStackDepth = 30;
+		const maxStackSize = bvhStackDepth * 64;
+
+		const getFnBody = ( leafSnippet, suffix ) => {
+
+			const stackName = `stack_${suffix}`;
 
 			// returns a function with a snippet inserted for the leaf intersection test
 			return wgslTagCode/* wgsl */`
 
+				let threadOffset = ${ bvhStackDepth } * g_threadId;
 				var pointer: i32 = 0;
-				var stack: array<u32, ${ BVH_STACK_DEPTH }>;
-				stack[ 0 ] = rootNodeIndex;
+				${ stackName }[ threadOffset + 0 ] = rootNodeIndex;
 
 				loop {
 
@@ -364,7 +369,7 @@ export class BVHComputeData {
 
 					}
 
-					let nodeIndex = stack[ pointer ];
+					let nodeIndex = ${ stackName }[ threadOffset + u32( pointer ) ];
 					let node = ${ storage.nodes }[ nodeIndex ];
 					pointer = pointer - 1;
 
@@ -395,10 +400,10 @@ export class BVHComputeData {
 						${ leftToRightSnippet }
 
 						pointer = pointer + 1;
-						stack[ pointer ] = c2;
+						${ stackName }[ threadOffset + u32( pointer ) ] = c2;
 
 						pointer = pointer + 1;
-						stack[ pointer ] = c1;
+						${ stackName }[ threadOffset + u32( pointer ) ] = c1;
 
 					}
 
@@ -408,7 +413,9 @@ export class BVHComputeData {
 
 		};
 
+		const stack = ( suffix ) => wgsl( /* wgsl */`var<workgroup> stack_${suffix}: array<u32, ${maxStackSize}>;` );
 		const blasFn = wgslTagFn/* wgsl */`
+			${ [ stack( 'blas' ) ] }
 			// fn
 			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, ${ resultPtrSnippet } ) -> bool {
 
@@ -417,7 +424,7 @@ export class BVHComputeData {
 
 					didHit = ${ intersectRangeFn }( shape, offset, count, ${ resultArg } ) || didHit;
 
-				` ) }
+				`, 'blas' ) }
 
 				return didHit;
 
@@ -425,6 +432,7 @@ export class BVHComputeData {
 		`;
 
 		const tlasFn = wgslTagFn/* wgsl */`
+			${ [ stack( 'tlas' ) ] }
 			// fn
 			fn ${ name }( shape: ${ shapeStruct }, ${ resultPtrSnippet } ) -> bool {
 
@@ -454,7 +462,7 @@ export class BVHComputeData {
 
 					}
 
-				` ) }
+				`, 'tlas' ) }
 
 				return didHit;
 
