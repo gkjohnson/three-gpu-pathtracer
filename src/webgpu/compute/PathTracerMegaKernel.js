@@ -73,6 +73,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const lightsBuffer = proxy( 'lights.value', params );
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastAnyHitFn = proxyFn( 'bvhData.value.fns.raycastAnyHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalScatterFn = proxyFn( 'material.value.bsdfEvalScatter', params );
@@ -293,7 +294,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							envRay.direction = lightRecord.direction;
 							envRay.origin = newPoint;
 							var envHitResult: ${ raycastOutput };
-							if ( ! ${ raycastFirstHitFn }( envRay, &envHitResult ) || envHitResult.dist > lightRecord.dist ) {
+							envHitResult.didHit = true;
+							envHitResult.dist = lightRecord.dist;
+							if ( ! ${ raycastAnyHitFn }( envRay, &envHitResult ) ) {
 
 								let bsdf = ${ bsdfEvalScatterFn }( -ray.direction, envRay.direction, surface );
 								let mis = select( 1.0, ${ misHeuristicFunc }( lightRecord.pdf, bsdf.pdf ), ${ isMISWeightLightFunc }( lightRecord.kind ));

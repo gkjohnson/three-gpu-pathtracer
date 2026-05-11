@@ -57,7 +57,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		fns.raycastFirstHit = this.getShapecastFn( {
+		const options = {
 			name: prefix + 'RaycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
@@ -127,14 +127,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						var triResult = ${ intersectsTriangle }( ray, a, b, c );
 						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
-
-
-							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							// if ( material.side != 0 && triResult.side != material.side ) {
-							//
-							// 	continue;
-							//
-							// }
 
 							let material = ${ storage.materials }[ ${ currentMaterial } ];
 
@@ -236,7 +228,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 			`,
-		} );
+		};
+
+		fns.raycastFirstHit = this.getShapecastFn( options );
+		options.name = prefix + 'RaycastAnyHit';
+		options.anyHit = true;
+		fns.raycastAnyHit = this.getShapecastFn( options );
 
 	}
 

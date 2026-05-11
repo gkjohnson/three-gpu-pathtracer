@@ -106,10 +106,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				// get the ray info
 				let input = rayQueue.elements[ rayIndex % queueCapacity ];
-				let indexUV = input.pixel;
 
-				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ sobolInit }( pixelIndex, seed, input.currentBounce );
+				${ sobolInit }( input.pixel, seed, input.currentBounce );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
@@ -149,8 +147,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].barycoord = hitResult.barycoord;
 					hitQueue.elements[ index ].normal = hitResult.normal.xyz;
 					hitQueue.elements[ index ].side = hitResult.side;
-					hitQueue.elements[ index ].pixel_x = indexUV.x;
-					hitQueue.elements[ index ].pixel_y = indexUV.y;
+					hitQueue.elements[ index ].pixel = input.pixel;
 					hitQueue.elements[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue.elements[ index ].throughputColor = input.throughputColor;
 					hitQueue.elements[ index ].currentBounce = input.currentBounce;
@@ -180,6 +177,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					}
 
 					let ACTIVE_FLAG = 0xF0000000u;
+					let indexUV = vec2u( input.pixel >> 16, input.pixel & 0xFFFF );
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );

@@ -6,6 +6,9 @@ import { rayStruct, bvhNodeStruct, bvhNodeBoundsStruct } from './wgsl/structs.wg
 import { wgslTagCode, wgslTagFn } from './nodes/WGSLTagFnNode.js';
 import { MeshBVH, SkinnedMeshBVH, GeometryBVH, ObjectBVH, SAH } from 'three-mesh-bvh';
 
+const bvhStackDepth = 30;
+const maxStackSize = bvhStackDepth * 64;
+
 // TODO: add ability to easily update a single matrix / scene rearrangement (partial update)
 // TODO: add material support w/ function to easily update material
 // 		- add a callback for writing a property for a geometry to a range
@@ -294,6 +297,8 @@ export class BVHComputeData {
 			raycastFirstHit: null,
 		};
 
+		this.stackBlas = wgsl( /* wgsl */`var<workgroup> stack_blas: array<u32, ${maxStackSize}>;` );
+
 	}
 
 	getShapecastFn( options ) {
@@ -313,6 +318,7 @@ export class BVHComputeData {
 			intersectRangeFn,
 			transformShapeFn = null,
 			transformResultFn = null,
+			anyHit = false,
 		} = options;
 
 		const { storage } = this;
@@ -344,20 +350,34 @@ export class BVHComputeData {
 
 		}
 
+		let earlyOutSnippet = '';
+		if ( anyHit ) {
+
+			earlyOutSnippet = 'return didHit;';
+
+		}
+
 		const resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
 		const resultArg = resultStruct ? 'result' : '';
 
-		const bvhStackDepth = 30;
-		const maxStackSize = bvhStackDepth * 64;
+		const getFnBody = ( leafSnippet, stackName ) => {
 
-		const getFnBody = ( leafSnippet, suffix ) => {
+			let stackSnippet = '';
+			let threadOffsetSnippet = `${ bvhStackDepth } * g_threadId;`;
+			if ( ! stackName ) {
 
-			const stackName = `stack_${suffix}`;
+				stackSnippet = 'var stack: array<u32, 30>;';
+				stackName = 'stack';
+				threadOffsetSnippet = '0u;';
+
+			}
 
 			// returns a function with a snippet inserted for the leaf intersection test
 			return wgslTagCode/* wgsl */`
 
-				let threadOffset = ${ bvhStackDepth } * g_threadId;
+				${ stackSnippet }
+
+				let threadOffset = ${ threadOffsetSnippet };
 				var pointer: i32 = 0;
 				${ stackName }[ threadOffset + 0 ] = rootNodeIndex;
 
@@ -413,18 +433,22 @@ export class BVHComputeData {
 
 		};
 
-		const stack = ( suffix ) => wgsl( /* wgsl */`var<workgroup> stack_${suffix}: array<u32, ${maxStackSize}>;` );
 		const blasFn = wgslTagFn/* wgsl */`
-			${ [ stack( 'blas' ) ] }
+			${ [ this.stackBlas ] }
 			// fn
 			fn ${ name }_blas( shape: ${ shapeStruct }, rootNodeIndex: u32, ${ resultPtrSnippet } ) -> bool {
 
 				var didHit = false;
 				${ getFnBody( wgslTagCode/* wgsl */`
 
-					didHit = ${ intersectRangeFn }( shape, offset, count, ${ resultArg } ) || didHit;
+					if ( ${ intersectRangeFn }( shape, offset, count, ${ resultArg } ) ) {
 
-				`, 'blas' ) }
+						didHit = true;
+						${ earlyOutSnippet }
+
+					}
+
+				`, 'stack_blas' ) }
 
 				return didHit;
 
@@ -432,7 +456,7 @@ export class BVHComputeData {
 		`;
 
 		const tlasFn = wgslTagFn/* wgsl */`
-			${ [ stack( 'tlas' ) ] }
+
 			// fn
 			fn ${ name }( shape: ${ shapeStruct }, ${ resultPtrSnippet } ) -> bool {
 
@@ -457,12 +481,13 @@ export class BVHComputeData {
 
 							${ transformResultSnippet }
 							didHit = true;
+							${ earlyOutSnippet }
 
 						}
 
 					}
 
-				`, 'tlas' ) }
+				` ) }
 
 				return didHit;
 

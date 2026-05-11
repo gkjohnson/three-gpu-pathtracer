@@ -81,6 +81,9 @@ export class RayGenerationKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ sobolInit }( pixelIndex, seed, 0 );
 
+				// write the active params
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
+
 				// write the ray data
 				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
@@ -88,14 +91,11 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				rayQueue.elements[ index ].origin = ray.origin;
 				rayQueue.elements[ index ].direction = ray.direction;
-				rayQueue.elements[ index ].pixel = indexUV;
+				rayQueue.elements[ index ].pixel = pixelIndex;
 				rayQueue.elements[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue.elements[ index ].currentBounce = 0;
 				rayQueue.elements[ index ].resultColor = vec3f( 0.0, 0.0, 0.0 );
 				rayQueue.elements[ index ].minPdf = 1.0;
-
-				// write the active params
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
 
 			}
 		`;

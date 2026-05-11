@@ -75,10 +75,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// get the ray info
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = hitQueue.elements[ hitIndex ];
-				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
 				let currentBounce = input.currentBounce;
-				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				let pixelIndex = input.pixel;
 				${ sobolInit }( pixelIndex, seed, currentBounce );
 
 				let object = transforms[ input.objectIndex ];
@@ -137,6 +136,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				if ( isTerminated ) {
 
 					// terminate ray, write color
+					let indexUV = vec2u( input.pixel >> 16, input.pixel & 0xFFFF );
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, vec4f( resultColor, 1.0 ), 1.0 / f32( sampleCount ) );
@@ -153,7 +153,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					rayQueue.elements[ index ].origin = newPoint;
 					rayQueue.elements[ index ].direction = scatterRec.direction;
-					rayQueue.elements[ index ].pixel = indexUV;
+					rayQueue.elements[ index ].pixel = pixelIndex;
 					rayQueue.elements[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue.elements[ index ].currentBounce = currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;

@@ -5,7 +5,7 @@ import { WGSLStructTypeNode } from '../../WGSLStructTypeNode';
 export const queuedRayStruct = new StructTypeNode( {
 
 	origin: 'vec3f',
-	_alignment0: 'uint',
+	pixel: 'uint',
 
 	direction: 'vec3f',
 	lastPdf: 'float',
@@ -13,20 +13,17 @@ export const queuedRayStruct = new StructTypeNode( {
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
 
-	pixel: 'vec2u',
-	minPdf: 'float',
-
 	resultColor: 'vec3f',
+	minPdf: 'float',
 
 }, 'QueuedRay' );
 
 export const queuedHitStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
-	pixel_x: 'uint',
+	pixel: 'uint',
 
 	barycoord: 'vec3f',
-	pixel_y: 'uint',
 
 	view: 'vec3f',
 	currentBounce: 'uint',

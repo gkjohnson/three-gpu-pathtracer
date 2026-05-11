@@ -51,7 +51,7 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 		const lightsBuffer = proxy( 'lights.value', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastAnyHitFn = proxy( 'bvhData.value.fns.raycastAnyHit', params );
 		const threadIdNode = uint( 0 ).toVar( 'g_threadId' );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -97,9 +97,8 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 
 				let hit = hitQueue.elements[ hitIndex ];
 
-				let indexUV = vec2u( hit.pixel_x, hit.pixel_y );
 				let currentBounce = hit.currentBounce;
-				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				let pixelIndex = hit.pixel;
 				${ sobolInit }( pixelIndex, seed, currentBounce );
 
 				let lightsDenom = f32( max( lightCount, 1 ) );
@@ -126,6 +125,7 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 					lightRecord.pdf = weight * ${ equirectDirectionPdfFunc }( lightRecord.direction );
 					lightRecord.kind = ${ LIGHT_TYPE_ENVIRONMENT };
 					lightRecord.direction = invEnvMapRotation * lightRecord.direction;
+					lightRecord.dist = 1e20;
 
 				} else {
 
@@ -153,7 +153,9 @@ export class GenerateLightSampleKernel extends ComputeKernel {
 					envRay.direction = lightRecord.direction;
 					envRay.origin = newPoint;
 					var envHitResult: ${ raycastOutput };
-					let occluded = ${ raycastFirstHitFn }( envRay, &envHitResult );
+					envHitResult.didHit = true;
+					envHitResult.dist = lightRecord.dist;
+					let occluded = ${ raycastAnyHitFn }( envRay, &envHitResult );
 
 					if ( occluded ) {
 
