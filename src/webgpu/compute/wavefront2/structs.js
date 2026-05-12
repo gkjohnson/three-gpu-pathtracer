@@ -36,6 +36,7 @@ export const rayDataStruct = new StructTypeNode( {
 	minPdf: 'float',
 
 	direction: 'vec3f',
+	dist: 'float',
 
 }, 'RayData' );
 

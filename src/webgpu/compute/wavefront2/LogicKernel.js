@@ -199,6 +199,7 @@ export class LogicKernel extends ComputeKernel {
 						data.indices = hitResult.indices;
 						data.objectIndex = hitResult.objectIndex;
 						data.minPdf = min( data.minPdf, scatterRec.pdf );
+						data.dist = hitResult.dist;
 
 					} else {
 

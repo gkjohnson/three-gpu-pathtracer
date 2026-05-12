@@ -5,7 +5,7 @@ import { ComputeKernel } from '../ComputeKernel';
 import { globalId, sampler, storage, texture, uniform } from 'three/tsl';
 import { DataTexture, Matrix4, Vector2 } from 'three';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
-import { getSurfaceRecordFunc } from '../../nodes/material.wgsl';
+import { getSurfaceRecordFunc, transmissionAttenuationFunc } from '../../nodes/material.wgsl';
 import { rayStruct } from '../../lib/wgsl/structs.wgsl';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { pixelQueueStruct, rayDataStruct, rayQueueStruct } from './structs';
@@ -123,6 +123,16 @@ export class MaterialKernel extends ComputeKernel {
 					material.opacity *= object.color.a;
 
 					let side = all( data.barycoord >= vec3f( 0.0 ) );
+
+					if ( !side ) {
+
+						data.attenuation = ${ transmissionAttenuationFunc }( data.dist, material.attenuationColor, material.attenuationDistance );
+
+					} else {
+
+						data.attenuation = vec3f( 1.0 );
+
+					}
 					var vertexData = ${ sampleTrianglePointFn }( abs( data.barycoord ), data.indices.xyz );
 					vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 					vertexData.position = object.matrixWorld * vertexData.position;
