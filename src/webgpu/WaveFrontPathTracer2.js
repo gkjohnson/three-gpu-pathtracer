@@ -65,14 +65,20 @@ export class WaveFrontPathTracer2 extends PathTracerBackend {
 
 		const overflowCount = Math.max( 0, width * height - MAX_RAY_DATA_COUNT );
 		const size = Math.max( PIXEL_QUEUE_HEADER_FLOATS + overflowCount, 3 );
-		if ( this.pixelQueue ) {
+		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
-			this.pixelQueue.dispose();
+			if ( this.pixelQueue ) {
+
+				this.pixelQueue.dispose();
+
+			}
+
+			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
+			this.pixelQueue.name = 'Pixel Queue';
+			this.materialKernel.pixelQueue = this.pixelQueue;
+			this.materialKernel.needsUpdate = true;
 
 		}
-
-		this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
-		this.pixelQueue.name = 'Pixel Queue';
 
 	}
 
@@ -290,7 +296,6 @@ export class WaveFrontPathTracer2 extends PathTracerBackend {
 			this.materialKernel.rayData = this.rayData;
 			this.materialKernel.rayQueue = this.rayQueue;
 			this.materialKernel.shadowRayQueue = this.shadowRayQueue;
-			this.materialKernel.pixelQueue = this.pixelQueue;
 			this.materialKernel.cameraToModelMatrix.copy( camera.matrixWorld );
 			this.materialKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 			this.materialKernel.seed = this.seed;

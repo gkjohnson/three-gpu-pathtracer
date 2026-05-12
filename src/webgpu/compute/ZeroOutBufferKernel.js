@@ -1,4 +1,4 @@
-import { IndirectStorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
@@ -13,7 +13,7 @@ export class ZeroOutBufferKernel extends ComputeKernel {
 
 		const params = {
 			globalId: globalId,
-			outputTarget: storage( new IndirectStorageBufferAttribute( 1, 1 ), type ),
+			outputTarget: storage( new StorageBufferAttribute( 1, 1 ), type ),
 		};
 
 		const fn = wgslTagFn/* wgsl */`
