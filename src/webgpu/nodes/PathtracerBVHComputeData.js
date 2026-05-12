@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
-import { storage, float, uint, sampler, texture } from 'three/tsl';
+import { storage, float, uint, sampler, texture, EPSILON } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -82,7 +82,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
 					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
 
-					let invDir = 1.0 / ray.direction;
+					let invDir = 1.0 / select(
+						min( ray.direction, vec3f( -${ EPSILON } ) ),
+						max( ray.direction, vec3f( ${ EPSILON } ) ),
+						ray.direction >= vec3f( 0.0 ),
+					);
 					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
 					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
 

@@ -43,10 +43,10 @@ export class PopulatePixelIndices extends ComputeKernel {
 
 					${ params.rayData }[ pixelIndex ].pixelIndex = pixelHash;
 					${ params.rayData }[ pixelIndex ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
+					${ params.rayData }[ pixelIndex ].pdf = 0.0;
 
 				} else {
 
-					// TODO: remove atomic here
 					${ params.pixelQueue }.elements[ pixelIndex - rayCount ] = pixelHash;
 
 				}

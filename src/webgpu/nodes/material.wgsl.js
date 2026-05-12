@@ -51,14 +51,17 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			if ( length( vertexData.tangent ) > 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
+				let cs = cross( baseNormal, tangent );
+				if ( dot( cs, cs ) > 1e-6 ) {
+					let bitangent = normalize( cs * vertexData.tangent.w );
+					let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
-				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
-				var texNormal = sampleTexel( textures, textureSampler, uvPrime.xy, material.normalMap, 0 ).xyz;
-				texNormal = texNormal * 2.0 - 1.0;
-				texNormal = texNormal * vec3f( material.normalScale, 1.0 );
-				normal = normalize( vTBN * texNormal );
+					let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
+					var texNormal = sampleTexel( textures, textureSampler, uvPrime.xy, material.normalMap, 0 ).xyz;
+					texNormal = texNormal * 2.0 - 1.0;
+					texNormal = texNormal * vec3f( material.normalScale, 1.0 );
+					normal = normalize( vTBN * texNormal );
+				}
 
 			}
 

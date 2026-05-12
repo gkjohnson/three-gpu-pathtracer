@@ -138,17 +138,17 @@ export class LogicKernel extends ComputeKernel {
 
 				if ( ! isTerminated ) {
 
-					// if ( data.shadowRayIntersectionIndex > 0 ) {
-					//
-					// 	let lightHitResult = ${ params.shadowRayIntersections }[ data.shadowRayIntersectionIndex ];
-					// 	if ( lightHitResult.objectIndex < 0 ) {
-					//
-					// 		let mis = select( 1.0, ${ misHeuristicFunc }( data.lightPdf, data.lightBsdfPdf ), data.lightPdf > 0 );
-					// 		resultColor += vec4( throughputColor * data.lightBsdf * data.lightEmission * mis / abs( data.lightPdf ), 0.0 );
-					//
-					// 	}
-					//
-					// }
+					if ( data.shadowRayIntersectionIndex > 0 ) {
+
+						let lightHitResult = ${ params.shadowRayIntersections }[ data.shadowRayIntersectionIndex ];
+						if ( lightHitResult.objectIndex < 0 ) {
+
+							let mis = select( 1.0, ${ misHeuristicFunc }( data.lightPdf, data.lightBsdfPdf ), data.lightPdf > 0 );
+							resultColor += vec4( throughputColor * data.lightBsdf * data.lightEmission * mis / abs( data.lightPdf ), 0.0 );
+
+						}
+
+					}
 
 					let hitResult = ${ params.rayIntersections }[ data.rayIntersectionIndex ];
 
@@ -217,7 +217,7 @@ export class LogicKernel extends ComputeKernel {
 							var envPdf = weight * ${ equirectDirectionPdfFunc }( data.direction );
 							envPdf /= lightsDenom;
 
-							let mis = 1.0; // ${ misHeuristicFunc }( scatterRec.pdf, envPdf );
+							let mis = ${ misHeuristicFunc }( scatterRec.pdf, envPdf );
 							resultColor += mis * color * vec4f( throughputColor, 0.0 );
 
 						} else {
