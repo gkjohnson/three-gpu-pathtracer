@@ -171,7 +171,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let lightsDenom = f32( lightCount + 1 );
 				let invLightsDenom = 1.0 / lightsDenom;
 				let envMapDims = vec2f( textureDimensions( envMap ).xy );
-				let envMapPixelCount = f32( envMapDims.x * envMapDims.y );
+				let envMapPixelCount = envMapDims.x * envMapDims.y;
 				let invTotalSum = 1.0 / totalSum;
 				// scene ray
 				var jitter = 2.0 * ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
@@ -233,7 +233,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							blurRoughness, textures, textureSampler
 						);
 
-						if ( hitResult.side < 0.0 ) {
+						if ( ! hitResult.side ) {
 							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, material.attenuationColor, material.attenuationDistance );
 						}
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );

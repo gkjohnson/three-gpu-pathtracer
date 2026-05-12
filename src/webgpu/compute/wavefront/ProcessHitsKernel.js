@@ -94,7 +94,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let blurRoughness = sqrt( clamp( 1.0 - ${ FILTER_GLOSSY } * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 				let surface = ${ getSurfaceRecordFunc }(
-					material, vertexData, input.side, input.normal,
+					material, vertexData, input.side > 0.0, input.normal,
 					blurRoughness, textures, textureSampler
 				);
 

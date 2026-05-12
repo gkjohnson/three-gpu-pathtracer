@@ -27,7 +27,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 	fn getSurfaceRecord(
 		material: Material,
 		vertexData: bvh_GeometryStruct,
-		side: f32,
+		side: bool,
 		faceNormal: vec3f,
 		blurRoughness: f32,
 		textures: texture_2d_array<f32>,
@@ -35,7 +35,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 	) -> SurfaceRecord {
 		let uv = vertexData.uv.xy;
 
-		var normal = faceNormal * side;
+		var normal = faceNormal * select( -1.0, 1.0, side );
 		if ( material.flatShading == 0 ) {
 
 			normal = vertexData.normal.xyz;
@@ -64,7 +64,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		}
 
-		normal *= side;
+		normal *= select( -1.0, 1.0, side );
 
 		var albedo = vec4( material.color, material.opacity );
 
@@ -157,7 +157,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 			}
 
 		}
-		clearcoatNormal *= side;
+		clearcoatNormal *= select( -1.0, 1.0, side );
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
@@ -251,7 +251,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
-		let frontFace = side > 0.0 || transmission == 0.0;
+		let frontFace = side || transmission == 0.0;
 		if ( frontFace ) {
 			surf.eta = 1.0 / material.ior;
 		} else {

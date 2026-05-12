@@ -146,7 +146,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].indices = hitResult.indices.xyz;
 					hitQueue.elements[ index ].barycoord = hitResult.barycoord;
 					hitQueue.elements[ index ].normal = hitResult.normal.xyz;
-					hitQueue.elements[ index ].side = hitResult.side;
+					hitQueue.elements[ index ].side = select( -1.0, 1.0, hitResult.side );
 					hitQueue.elements[ index ].pixel = input.pixel;
 					hitQueue.elements[ index ].objectIndex = hitResult.objectIndex;
 					hitQueue.elements[ index ].throughputColor = input.throughputColor;

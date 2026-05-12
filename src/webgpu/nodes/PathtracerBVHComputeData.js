@@ -182,6 +182,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							result.normal = triResult.normal;
 							result.side = triResult.side;
 							result.barycoord = triResult.barycoord;
+							result.position = triResult.position;
 							result.indices = vec4u( i0, i1, i2, ti );
 
 							didHit = true;
@@ -224,6 +225,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
 					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+					hit.position = ( ${ storage.transforms }[ objectIndex ].matrixWorld * vec4f( hit.position, 1.0 ) ).xyz;
 					hit.objectIndex = objectIndex;
 
 				}

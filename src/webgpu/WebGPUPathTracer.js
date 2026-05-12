@@ -11,6 +11,7 @@ import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getIesTextures, getLights } from '../core/utils/sceneUpdateUtils.js';
 import { lightStruct } from './nodes/structs.wgsl.js';
 import { LIGHT_TYPE_AREA_CIRC, LIGHT_TYPE_AREA_RECT, LIGHT_TYPE_DIRECTIONAL, LIGHT_TYPE_POINT, LIGHT_TYPE_SPOT } from './nodes/lights.wgsl.js';
+import { WaveFrontPathTracer2 } from './WaveFrontPathTracer2.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -45,7 +46,7 @@ export class WebGPUPathTracer {
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
-		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer2( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setTextures( this.textureArray.texture );
 		this.setCamera( this.camera );

@@ -125,8 +125,9 @@ export const intersectionResultStruct = new StructTypeNode( {
 	didHit: 'bool',
 	barycoord: 'vec3f',
 	objectIndex: 'uint',
-	side: 'float',
+	side: 'bool',
 	dist: 'float',
+	position: 'vec3f',
 }, 'IntersectionResult' );
 
 //
@@ -221,8 +222,9 @@ export const intersectsTriangle = wgslTagFn/* wgsl */ `
 		result.didHit = true;
 		result.barycoord = vec3f( w, u, v );
 		result.dist = t;
-		result.side = sign( det );
-		result.normal = result.side * normalize( n );
+		result.side = det >= 0;
+		result.normal = normalize( select( -n, n, det >= 0 ) );
+		result.position = a * w + b * u + c * v;
 
 		return result;
 
@@ -914,6 +916,7 @@ export class BVHComputeData {
 							result.normal = triResult.normal;
 							result.side = triResult.side;
 							result.barycoord = triResult.barycoord;
+							result.position = triResult.position;
 							result.indices = vec4u( i0, i1, i2, ti );
 
 							didHit = true;
@@ -944,6 +947,7 @@ export class BVHComputeData {
 
 					let toLocal = ${ storage.transforms }[ objectIndex ].inverseMatrixWorld;
 					hit.normal = normalize( ( transpose( toLocal ) * vec4f( hit.normal, 0.0 ) ).xyz );
+					hit.position = ( ${ storage.transforms }[ objectIndex ].matrixWorld * vec4f( hit.position, 1.0 ) ).xyz;
 					hit.objectIndex = objectIndex;
 
 				}
