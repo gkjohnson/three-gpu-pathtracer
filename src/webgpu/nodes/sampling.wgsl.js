@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
-import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
+import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc, disneyFresnelFunc } from './utils.wgsl.js';
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -60,7 +60,7 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	fn getLobeWeights(wo: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord) -> LobeWeights {
+	fn getLobeWeights(wo: vec3f, wi: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord) -> LobeWeights {
 
 		var weights: LobeWeights;
 		var weightLeft = 1.0;
@@ -70,7 +70,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
 		weightLeft -= weights.clearcoat;
 
-		let fEstimate = max( schlickFresnel( abs( dot( wo, wh ) ), surf.f0 ), 0.15 );
+		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		weights.specular = weightLeft * ( surf.metalness + ( 1.0 - surf.metalness ) * fEstimate );
 		weightLeft -= weights.specular;
 
@@ -83,7 +83,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ schlickFresnelFunc, iorToF0Func, evaluateFresnelFunc, lobeWeightsStruct, constants ] );
+`, [ disneyFresnelFunc, schlickFresnelFunc, iorToF0Func, evaluateFresnelFunc, lobeWeightsStruct, constants ] );
 
 const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 

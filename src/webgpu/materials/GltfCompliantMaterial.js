@@ -115,10 +115,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let specular = ${ this.specularBrdf }( ctx.NdotL, ctx.HdotL, ctx.NdotV, ctx.HdotV, ctx.NdotH, alpha );
 
 				let reflection = ${ this.diffuseBrdf }( ctx.NdotV, ctx.HdotV, ctx.NdotL, ctx.HdotL, surf );
-				let refraction = ${ this.specularBtdf }( ctx.NdotL, ctx.HdotL, ctx.NdotV, ctx.HdotV, ctx.NdotH, alpha, surf.eta, surf.ior );
+				let refraction = ${ this.specularBtdf }( ctx.NdotL, ctx.HdotL, ctx.NdotV, ctx.HdotV, ctx.NdotH, alpha, surf.eta );
 				let diffuse = mix( reflection, refraction * surf.color, surf.transmission );
 
-				let dielectricBase = ${ this.fresnelMix }( abs( ctx.HdotV ), surf.ior, diffuse, specular );
+				let dielectricBase = ${ this.fresnelMix }( abs( ctx.HdotV ), surf.eta, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, specular, abs( ctx.HdotV ), /* outsideIor */ 1.0,
@@ -185,7 +185,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// 	return ${ scatterRecordStruct }( vec3f( 1.0, 0.0, 0.0 ), 1.0, wo, 1.0 );
 				// }
 
-				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				var cdf: vec4f;
 				cdf.x = weights.diffuse;
@@ -286,7 +286,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let wh = normalize( wi + wo );
 				let whClearcoat = normalize( wiClearcoat + woClearcoat );
 
-				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, wh, ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wi, woClearcoat, wh, ${ CLEARCOAT_IOR }, surf );
 
 				var ctx: ${ bxdfContextStruct };
 				ctx.NdotV = ${ absMaxFunc }( clamp( wo.z, -1.0, 1.0 ), ${ MIN_INCIDENT_COS } );
