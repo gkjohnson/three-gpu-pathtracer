@@ -25,11 +25,13 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from '../src/webgpu/WebGPUPathTracer.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { ParallelMeshBVHWorker, GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
+import { Vector2, WebGPURenderer } from 'three/webgpu';
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -97,10 +99,13 @@ const params = {
 	transparentBackground: false,
 	checkerboardTransparency: true,
 
+	isWebGPU: true,
+	useMegakernel: true,
 	enable: true,
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
+	iterationsPerFrame: 1,
 
 	floorColor: '#111111',
 	floorOpacity: 1.0,
@@ -117,8 +122,40 @@ let controls, scene, model;
 let gradientMap;
 let loader;
 let models;
+let detailedSampleCount = null;
+let lastDetailedSample = 0;
+const detailedSampleInterval = 30;
 
 const orthoWidth = 2;
+
+async function createRenderer( isWebGPU ) {
+
+	if ( isWebGPU ) {
+
+		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+		await renderer.init();
+		renderer.toneMapping = ACESFilmicToneMapping;
+		document.body.appendChild( renderer.domElement );
+
+		pathTracer = new WebGPUPathTracer( renderer );
+		pathTracer.useMegakernel( params.useMegakernel );
+
+	} else {
+
+		renderer = new WebGLRenderer( { antialias: true } );
+		renderer.toneMapping = ACESFilmicToneMapping;
+		document.body.appendChild( renderer.domElement );
+
+		pathTracer = new WebGLPathTracer( renderer );
+		pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
+		pathTracer.physicallyCorrectLights = true;
+		pathTracer.tiles.set( params.tiles, params.tiles );
+		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+		pathTracer.transmissiveBounces = 10;
+
+	}
+
+}
 
 init();
 
@@ -144,18 +181,7 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
-	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
-	renderer.toneMapping = ACESFilmicToneMapping;
-	document.body.appendChild( renderer.domElement );
-
-	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
-	pathTracer.physicallyCorrectLights = true;
-	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.transmissiveBounces = 10;
+	await createRenderer( params.isWebGPU );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -227,11 +253,39 @@ function animate() {
 
 	}
 
+	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
+
+		const elapsed = pathTracer.getRenderTime() / 1000;
+		if ( elapsed < detailedSampleInterval ) {
+
+			detailedSampleCount = null;
+			lastDetailedSample = 0;
+
+		}
+
+		if ( elapsed - lastDetailedSample > detailedSampleInterval ) {
+
+			lastDetailedSample = Math.floor( elapsed / detailedSampleInterval ) * detailedSampleInterval;
+			pathTracer.getDetailedSampleCount().then( sampleCount => {
+
+				sampleCount.perSecond = sampleCount.avg / elapsed;
+				detailedSampleCount = sampleCount;
+
+			} );
+
+		}
+
+	}
+
 	if ( params.enable ) {
 
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
-			pathTracer.renderSample();
+			for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
+
+				pathTracer.renderSample();
+
+			}
 
 		}
 
@@ -241,7 +295,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples, pathTracer.isCompiling, detailedSampleCount );
 
 }
 
@@ -355,6 +409,41 @@ function buildGui() {
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
+	pathTracingFolder.add( params, 'isWebGPU' ).name( 'WebGPU' ).onChange( () => {
+
+		const size = renderer.getSize( new Vector2() );
+		pathTracer.dispose();
+		document.body.removeChild( renderer.domElement );
+		renderer.dispose();
+
+		createRenderer( params.isWebGPU ).then( () => {
+
+			renderer.setSize( size.x, size.y );
+			renderer.setPixelRatio( window.devicePixelRatio );
+
+			if ( scene.environment ) {
+
+				pathTracer.updateEnvironment();
+
+			}
+
+			pathTracer.setScene( scene, activeCamera );
+
+			controls.dispose();
+			controls = new OrbitControls( activeCamera, renderer.domElement );
+			controls.addEventListener( 'change', () => pathTracer.updateCamera() );
+
+			onParamsChange();
+
+		} );
+
+	} );
+	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
+
+		pathTracer.useMegakernel( params.useMegakernel );
+		pathTracer.reset();
+
+	} );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
@@ -375,6 +464,7 @@ function buildGui() {
 		pathTracer.tiles.set( v, v );
 
 	} );
+	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
