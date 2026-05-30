@@ -19,27 +19,15 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 ` );
 
 const pcgInit = wgslFn( /* wgsl */`
-	fn pcgInitialize( pixelIndex: u32, pathIndex: u32, _bounceIndex: u32 ) -> void {
+	fn pcgInitialize( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
 		let pixel = vec2( ( pixelIndex >> 16 ) & 0xFF, pixelIndex & 0xFF );
 
 		//white noise seed
-		g_state.s0 = vec4u(pixel, pathIndex, pixel.x + pixel.y);
+		g_state.s0 = vec4u( pixel | vec2( bounceIndex << 16 ), pathIndex, pixel.x + pixel.y);
 
 		//blue noise seed
 		g_state.s1 = vec4u(pathIndex, pathIndex*15843, pathIndex*31 + 4566, pathIndex*2345 + 58585);
-	}
-`, [ pcgStateStruct ] );
 
-// Unneeded?
-export const getPcgSeed = wgslFn( /* wgsl */`
-	fn pcgGetSeed() -> vec4u {
-		return g_state.s0;
-	}
-`, [ pcgStateStruct ] );
-
-export const setPcgSeed = wgslFn( /* wgsl */`
-	fn pcgSetSeed( s0: vec4u ) -> void {
-		g_state.s0 = s0;
 	}
 `, [ pcgStateStruct ] );
 
@@ -74,7 +62,7 @@ const pcgRand3 = wgslFn( /*wgsl*/`
 `, [ pcg4d, pcgStateStruct ] );
 
 const pcgRand4 = wgslFn( /*wgsl*/`
-	fn pcgRand3( _id: u32 ) -> vec4f {
+	fn pcgRand4( _id: u32 ) -> vec4f {
 		pcg4d(&g_state.s0);
 		return abs( vec4f( g_state.s0 ) / f32(0xffffffffu) );
 	}
