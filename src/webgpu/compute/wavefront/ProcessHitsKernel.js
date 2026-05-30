@@ -23,7 +23,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
-			seed: uniform( 0 ),
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
@@ -43,8 +42,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
-				seed: u32,
-
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
@@ -77,7 +74,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rng.init }( pixelIndex, seed, input.currentBounce );
+				${ rng.init }( pixelIndex, input.seed, input.currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -86,7 +83,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				material.color *= object.color.rgb;
 				material.opacity *= object.color.a;
 
-				var vertexData = ${ sampleTrianglePointFn }( input.barycoord, input.indices.xyz );
+				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
+				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
@@ -117,6 +115,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue[ index ].resultColor = resultColor;
+					rayQueue[ index ].seed = input.seed;
 
 				}
 

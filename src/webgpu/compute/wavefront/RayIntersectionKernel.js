@@ -23,8 +23,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
 
-			seed: uniform( 0 ),
-
 			// environment
 			envMap: texture( new DataTexture() ),
 			envMapSampler: sampler( new DataTexture() ),
@@ -47,8 +45,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const fn = wgslTagFn /* wgsl */`
 
 			fn compute(
-				seed: u32,
-
 				// environment
 				envMap: texture_2d<f32>,
 				envMapSampler: sampler,
@@ -95,7 +91,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let indexUV = input.pixel;
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rng.init }( pixelIndex, seed, input.currentBounce );
+				${ rng.init }( pixelIndex, input.seed, input.currentBounce );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
@@ -106,7 +102,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					let index = atomicAdd( &queueSizes[ 3 ], 1 );
 					hitQueue[ index ].view = - input.direction;
 					hitQueue[ index ].indices = hitResult.indices.xyz;
-					hitQueue[ index ].barycoord = hitResult.barycoord;
+					hitQueue[ index ].barycoord = hitResult.barycoord.xy;
 					hitQueue[ index ].normal = hitResult.normal.xyz;
 					hitQueue[ index ].side = hitResult.side;
 					hitQueue[ index ].pixel_x = indexUV.x;
@@ -115,6 +111,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue[ index ].throughputColor = input.throughputColor;
 					hitQueue[ index ].currentBounce = input.currentBounce;
 					hitQueue[ index ].resultColor = input.resultColor;
+					hitQueue[ index ].seed = input.seed;
 
 				} else {
 

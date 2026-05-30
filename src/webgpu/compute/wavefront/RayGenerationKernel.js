@@ -96,6 +96,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
 				rayQueue[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
+				rayQueue[ index ].seed = seed;
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
