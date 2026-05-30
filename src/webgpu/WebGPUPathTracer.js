@@ -233,6 +233,12 @@ export class WebGPUPathTracer {
 
 	}
 
+	updateMaterials() {
+
+		this.setScene( this.scene, this.camera );
+
+	}
+
 	setSize( x, y ) {
 
 		if ( this._size.x !== x || this._size.y !== y ) {
