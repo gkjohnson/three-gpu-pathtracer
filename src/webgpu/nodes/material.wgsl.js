@@ -1,4 +1,4 @@
-import { mat3, wgsl, wgslFn } from 'three/tsl';
+import { mat3, wgslFn } from 'three/tsl';
 import {
 	inverseMat3x3Func,
 	getBasisFromNormalFunc,
@@ -357,33 +357,27 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 `, [ schlickFresnelFunc, iorToF0Func ] );
 
-const iridConst = wgsl( /* wgsl */ `
-
-const XYZ_TO_REC709 = mat3x3(
+const XYZ_TO_REC709 = mat3(
 	3.2404542, - 0.9692660, 0.0556434,
 	- 1.5371385, 1.8760108, - 0.2040259,
-	- 0.4985314, 0.0415560, 1.0572252
+	- 0.4985314, 0.0415560, 1.0572252,
 );
 
-
-` );
-
-const evalSensitivityFunc = wgslTagFn`
+const evalSensitivityFunc = wgslTagFn/* wgsl */`
 
 	fn evalSensitivity( OPD: f32, shift: vec3f ) -> vec3f {
-		${ [ iridConst ] }
 
 		let phase = 2.0 * ${ Math.PI } * OPD * 1.0e-9;
-    const val = vec3(5.4856e-13, 4.4201e-13, 5.2481e-13);
-    const pos = vec3(1.6810e+06, 1.7953e+06, 2.2084e+06);
-    const _var = vec3(4.3278e+09, 9.3046e+09, 6.6121e+09);
+		const val = vec3(5.4856e-13, 4.4201e-13, 5.2481e-13);
+		const pos = vec3(1.6810e+06, 1.7953e+06, 2.2084e+06);
+		const _var = vec3(4.3278e+09, 9.3046e+09, 6.6121e+09);
 
-    var xyz = val * sqrt(2.0 * ${ Math.PI } * _var) * cos(pos * phase + shift) * exp(-phase * phase * _var);
-    xyz.x += 9.7470e-14 * sqrt(2.0 * ${ Math.PI } * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
-    xyz /= 1.0685e-7;
+		var xyz = val * sqrt(2.0 * ${ Math.PI } * _var) * cos(pos * phase + shift) * exp(-phase * phase * _var);
+		xyz.x += 9.7470e-14 * sqrt(2.0 * ${ Math.PI } * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
+		xyz /= 1.0685e-7;
 
-    let rgb = XYZ_TO_REC709 * xyz;
-    return rgb;
+		let rgb = ${ XYZ_TO_REC709 } * xyz;
+		return rgb;
 
 	}
 
