@@ -18,9 +18,9 @@ const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedHitStruct.getLength(
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
-	constructor( renderer ) {
+	constructor( renderer, rngData ) {
 
-		super( renderer );
+		super( renderer, rngData );
 
 		// options
 		this.tiles = new Vector2( 3, 3 );
@@ -45,10 +45,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
-		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
+		this.enqueueRaysKernel = new RayGenerationKernel( this.rngData ).setWorkgroupSize( 8, 8, 1 );
+		this.rayIntersectionKernel = new RayIntersectionKernel( this.rngData ).setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = new ProcessHitsKernel().setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel = new ProcessHitsKernel( this.rngData ).setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );

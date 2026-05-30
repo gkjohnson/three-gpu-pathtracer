@@ -4,7 +4,7 @@ import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 export class PathTracerBackend {
 
-	constructor( renderer ) {
+	constructor( renderer, rngData ) {
 
 		this.renderer = renderer;
 		this.camera = null;
@@ -37,9 +37,7 @@ export class PathTracerBackend {
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 
-	}
-
-	setRandomFunctions( randomFunctions ) {
+		this.rngData = rngData;
 
 	}
 

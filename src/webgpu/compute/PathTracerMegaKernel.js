@@ -11,11 +11,10 @@ import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( ) {
+	constructor( rngData ) {
 
 		const params = {
 			bvhData: { value: null },
-			random: { value: null },
 			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -54,11 +53,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const rng = {
-			init: proxyFn( 'random.value.init', params ),
-			nextBounce: proxyFn( 'random.value.nextBounce', params ),
-			vec2f: proxyFn( 'random.value.vec2f', params ),
-		};
+		const rng = rngData;
 
 		const shader = wgslTagFn/* wgsl */`
 

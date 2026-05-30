@@ -1,5 +1,3 @@
-// import { lambertBsdfFunc } from '../nodes/material.wgsl.js';
-import { proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
@@ -9,17 +7,9 @@ import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
  */
 export class PathtracingMaterial {
 
-	constructor() {
+	constructor( ) {
 
-		this.rng = {
-			_value: null,
-			init: proxyFn( 'rng._value.init', this ),
-			nextBounce: proxyFn( 'rng._value.nextBounce', this ),
-			f32: proxyFn( 'rng._value.f32', this ),
-			vec2f: proxyFn( 'rng._value.vec2f', this ),
-			vec3f: proxyFn( 'rng._value.vec3f', this ),
-			vec4f: proxyFn( 'rng._value.vec4f', this ),
-		};
+		this.rng = null;
 
 	}
 
@@ -61,12 +51,9 @@ export class PathtracingMaterial {
 
 	}
 
-	/**
-	 * rng: { init, nextBounce, f32, vec2f, vec3f, vec4f }
-	 */
-	setRandomFunctions( rng ) {
+	setRNGData( rngData ) {
 
-		this.rng._value = rng;
+		this.rng = rngData;
 
 	}
 

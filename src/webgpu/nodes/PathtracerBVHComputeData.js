@@ -8,7 +8,6 @@ import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/struc
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
-import { proxyFn } from '../lib/nodes/NodeProxy.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -24,7 +23,7 @@ const transformStruct = new StructTypeNode( {
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
 
-	constructor( bvh, randomFunctions, options = {} ) {
+	constructor( bvh, rngObject, options = {} ) {
 
 		// TODO: once supported we should use the appropriately-sized member sizes
 		super( bvh, {
@@ -43,19 +42,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.storage.materials = null;
 		this.materials = [];
 		this.bvhMap = new Map();
-
-		this.rng = {
-			_value: randomFunctions,
-			f32: proxyFn( 'rng._value.f32', this ),
-		};
+		this.rng = rngObject;
 
 	}
 
-	setRandomFunctions( randomFunctions ) {
-
-		this.rng._value = randomFunctions;
-
-	}
 
 	useTransparencyRaycastFn( textures ) {
 

@@ -10,11 +10,10 @@ import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( rngData ) {
 
 		const params = {
 			bvhData: { value: null },
-			random: { value: null },
 			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -39,10 +38,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const rng = {
-			init: proxyFn( 'random.value.init', params ),
-			vec2f: proxyFn( 'random.value.vec2f', params ),
-		};
+		const rng = rngData;
 
 		const fn = wgslTagFn/* wgsl */`
 

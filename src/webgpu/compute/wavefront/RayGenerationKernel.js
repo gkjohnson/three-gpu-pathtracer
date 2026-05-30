@@ -6,15 +6,12 @@ import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
-import { proxyFn } from '../../lib/nodes/NodeProxy.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( rngData ) {
 
 		const params = {
-			random: { value: null },
-
 			cameraToModelMatrix: uniform( new Matrix4() ),
 			inverseProjectionMatrix: uniform( new Matrix4() ),
 
@@ -31,10 +28,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const rng = {
-			init: proxyFn( 'random.value.init', params ),
-			vec2f: proxyFn( 'random.value.vec2f', params ),
-		};
+		const rng = rngData;
 
 		const fn = wgslTagFn /* wgsl */`
 			fn compute(
