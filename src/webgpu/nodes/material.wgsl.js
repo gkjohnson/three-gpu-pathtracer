@@ -14,7 +14,7 @@ import {
 	ggxReflectionAdjustedPDFFunc,
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
-import { pcgFunctions } from './random.wgsl.js';
+import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 // Cook-Torrance BRDF in this file expects NdotV and NdotL to be bigger than this constant
@@ -378,7 +378,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 		const INTEGRATION_SAMPLES = ( 1 << 20 );
 		let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-		${ pcgFunctions.init }( pixelIndex, 0, 0 );
+		${ rngInit }( pixelIndex, 0, 0 );
 
 		let dimensions = textureDimensions( texture ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
@@ -393,7 +393,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 		var result = 0.0;
 		for ( var i = 0; i < INTEGRATION_SAMPLES; i++ ) {
 
-			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ pcgFunctions.vec2f }() );
+			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ rand2 }(${ RNG_INDEX_SCATTER_DIRECTION }) );
 			var wi = - reflect( wo, wh );
 
 			let NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );

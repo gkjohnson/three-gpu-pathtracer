@@ -5,9 +5,9 @@ import { PathTracerBackend } from './PathTracerBackend.js';
 
 export class MegaKernelPathTracer extends PathTracerBackend {
 
-	constructor( renderer, rngData ) {
+	constructor( renderer ) {
 
-		super( renderer, rngData );
+		super( renderer );
 
 		// options
 		this.tiles = new Vector2( 2, 2 );
@@ -15,7 +15,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		this.samples = 0;
 
 		// kernels
-		this.kernel = new PathTracerMegaKernel( this.rngData ).setWorkgroupSize( 8, 8, 1 );
+		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
 
 	}
 

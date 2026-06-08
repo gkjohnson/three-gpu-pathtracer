@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/we
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
@@ -11,7 +11,7 @@ import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
-	constructor( rngData ) {
+	constructor( ) {
 
 		const params = {
 			bvhData: { value: null },
@@ -53,7 +53,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const rng = rngData;
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -124,10 +123,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rng.init }( pixelIndex, seed, 0 );
+				${ rngInit }( pixelIndex, seed, 0 );
 
 				// scene ray
-				var jitter = 2.0 * ${ rng.vec2f }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
@@ -136,7 +135,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
-					${ rng.nextBounce }();
+					${ rngNextBounce }();
 
 					var hitResult: ${ raycastOutput };
 					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
@@ -175,7 +174,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
-						let rng = ${ rng.vec2f }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
+						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 						if ( bounce > 0u ) {
 
 							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );

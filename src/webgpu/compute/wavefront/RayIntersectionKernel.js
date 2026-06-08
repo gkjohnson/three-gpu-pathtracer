@@ -1,7 +1,7 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
-import { RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy } from '../../lib/nodes/NodeProxy.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -9,7 +9,7 @@ import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
-	constructor( rngData ) {
+	constructor( ) {
 
 		const params = {
 			bvhData: { value: null },
@@ -40,7 +40,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
-		const rng = rngData;
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -91,7 +90,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let indexUV = input.pixel;
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rng.init }( pixelIndex, input.seed, input.currentBounce );
+				${ rngInit }( pixelIndex, input.seed, input.currentBounce );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );
@@ -115,7 +114,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					let rng = ${ rng.vec2f }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
+					let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 

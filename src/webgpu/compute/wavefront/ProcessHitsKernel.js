@@ -7,10 +7,11 @@ import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
+import { rngInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor( rngData ) {
+	constructor( ) {
 
 		const params = {
 			bvhData: { value: null },
@@ -37,7 +38,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const rng = rngData;
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -74,7 +74,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rng.init }( pixelIndex, input.seed, input.currentBounce );
+				${ rngInit }( pixelIndex, input.seed, input.currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];

@@ -1,4 +1,4 @@
-import { uint, float, wgsl, wgslFn, texture } from 'three/tsl';
+import { uint, float, wgsl, wgslFn } from 'three/tsl';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
 
 // Alpha test should be the last index as it is summed with triangle index
@@ -18,7 +18,7 @@ export const pcgStateStruct = wgsl( /* wgsl */`
 	var<private> g_state: PcgState;
 ` );
 
-const pcgInit = wgslFn( /* wgsl */`
+export const pcgInitFunc = wgslFn( /* wgsl */`
 	fn pcgInitialize( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
 		let pixel = vec2( ( pixelIndex >> 16 ) & 0xFF, pixelIndex & 0xFF );
 
@@ -40,42 +40,35 @@ const pcg4d = wgslFn( /* wgsl */ `
 	}
 ` );
 
-const pcgRand = wgslFn( /*wgsl*/`
+export const pcgRandFunc = wgslFn( /*wgsl*/`
 	fn pcgRand( _id: u32 ) -> f32 {
 		pcg4d(&g_state.s0);
 		return abs( f32( g_state.s0.x ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-const pcgRand2 = wgslFn( /*wgsl*/`
+export const pcgRand2Func = wgslFn( /*wgsl*/`
 	fn pcgRand2( _id: u32 ) -> vec2f {
 		pcg4d(&g_state.s0);
 		return abs( vec2f( g_state.s0.xy ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-const pcgRand3 = wgslFn( /*wgsl*/`
+export const pcgRand3Func = wgslFn( /*wgsl*/`
 	fn pcgRand3( _id: u32 ) -> vec3f {
 		pcg4d(&g_state.s0);
 		return abs( vec3f( g_state.s0.xyz ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-const pcgRand4 = wgslFn( /*wgsl*/`
+export const pcgRand4Func = wgslFn( /*wgsl*/`
 	fn pcgRand4( _id: u32 ) -> vec4f {
 		pcg4d(&g_state.s0);
 		return abs( vec4f( g_state.s0 ) / f32(0xffffffffu) );
 	}
 `, [ pcg4d, pcgStateStruct ] );
 
-export const pcgFunctions = {
-	init: pcgInit,
-	nextBounce: wgslFn( /* wgsl */ 'fn noop() -> void {}' ),
-	f32: pcgRand,
-	vec2f: pcgRand2,
-	vec3f: pcgRand3,
-	vec4f: pcgRand4,
-};
+export const pcgNextBounceFunc = wgslFn( /* wgsl */ 'fn noop() -> void {}' );
 
 // References
 // - https://jcgt.org/published/0009/04/01/
@@ -347,6 +340,11 @@ const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 
 };
 
+export const sobolRand1Func = sobolGenerator( 1 );
+export const sobolRand2Func = sobolGenerator( 2 );
+export const sobolRand3Func = sobolGenerator( 3 );
+export const sobolRand4Func = sobolGenerator( 4 );
+
 export const sobolInitFunc = wgslTagFn`
 
 	fn sobolInit( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
@@ -369,46 +367,22 @@ export const sobolNextBounceFunc = wgslTagFn`
 
 `;
 
-export const sobolFunctions = {
-	init: sobolInitFunc,
-	nextBounce: sobolNextBounceFunc,
-	f32: sobolGenerator( 1 ),
-	vec2f: sobolGenerator( 2 ),
-	vec3f: sobolGenerator( 3 ),
-	vec4f: sobolGenerator( 4 ),
-};
+// PCG definitions
+// export {
+// 	pcgInitFunc as rngInit,
+// 	pcgNextBounceFunc as rngNextBounce,
+// 	pcgRandFunc as rand1,
+// 	pcgRand2Func as rand2,
+// 	pcgRand3Func as rand3,
+// 	pcgRand4Func as rand4,
+// };
 
-export const sobolTextureFunctions = ( sobolTexture ) => {
-
-	const textureNode = texture( sobolTexture );
-	const sampleTextureFunc = wgslTagFn/* wgsl */`
-
-		fn sampleSobolPoint( id: u32 ) -> vec4f {
-
-			var index = id;
-			if ( index >= ${ SOBOL_MAX_POINTS } ) {
-
-				index = index % ${ SOBOL_MAX_POINTS };
-
-			}
-
-			let dim = textureDimensions( ${ textureNode } );
-			let y = index / dim.x;
-			let x = index - y * dim.x;
-
-			return textureLoad( ${ textureNode }, vec2( x, y ), 0 );
-
-		}
-
-	`;
-
-	return {
-		init: sobolInitFunc,
-		nextBounce: sobolNextBounceFunc,
-		f32: sobolGenerator( 1, sampleTextureFunc ),
-		vec2f: sobolGenerator( 2, sampleTextureFunc ),
-		vec3f: sobolGenerator( 3, sampleTextureFunc ),
-		vec4f: sobolGenerator( 4, sampleTextureFunc ),
-	};
-
+// Sobol definitions
+export {
+	sobolInitFunc as rngInit,
+	sobolNextBounceFunc as rngNextBounce,
+	sobolRand1Func as rand1,
+	sobolRand2Func as rand2,
+	sobolRand3Func as rand3,
+	sobolRand4Func as rand4,
 };

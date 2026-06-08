@@ -14,7 +14,7 @@ import {
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
-import { RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
+import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
@@ -146,9 +146,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				cdf.z = weights.clearcoat + cdf.y;
 				cdf.w = 0; // weights.transmission + cdf.z;
 
-				let r = ${ this.rng.f32 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.z;
+				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.z;
 
-				let directionUV = ${ this.rng.vec2f }( ${ RNG_INDEX_SCATTER_DIRECTION } );
+				let directionUV = ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } );
 				var wi: vec3f;
 				var wiClearcoat: vec3f;
 				var wh: vec3f;

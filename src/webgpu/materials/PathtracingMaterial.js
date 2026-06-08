@@ -7,12 +7,6 @@ import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
  */
 export class PathtracingMaterial {
 
-	constructor( ) {
-
-		this.rng = null;
-
-	}
-
 	/**
 	 *
 	 * Called once per material
@@ -48,12 +42,6 @@ export class PathtracingMaterial {
 			}
 
 		`;
-
-	}
-
-	setRNGData( rngData ) {
-
-		this.rng = rngData;
 
 	}
 

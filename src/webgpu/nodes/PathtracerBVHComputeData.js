@@ -6,7 +6,7 @@ import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
+import { rand1, RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 
 const _colorVec = new Vector4();
@@ -23,7 +23,7 @@ const transformStruct = new StructTypeNode( {
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
 
-	constructor( bvh, rngObject, options = {} ) {
+	constructor( bvh, options = {} ) {
 
 		// TODO: once supported we should use the appropriately-sized member sizes
 		super( bvh, {
@@ -42,7 +42,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.storage.materials = null;
 		this.materials = [];
 		this.bvhMap = new Map();
-		this.rng = rngObject;
 
 	}
 
@@ -171,7 +170,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 && opacity < ${ this.rng.f32 }( ${ RNG_INDEX_ALPHA_TEST } + ti ) ) {
+								if ( material.transparent != 0 && opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti ) ) {
 
 									continue;
 

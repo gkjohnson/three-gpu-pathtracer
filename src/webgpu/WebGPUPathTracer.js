@@ -8,17 +8,10 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
-import { pcgFunctions, sobolFunctions, sobolTextureFunctions } from './nodes/random.wgsl.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
-import { SobolNumberMapGenerator } from './SobolNumberMapGenerator.js';
-import { RNGData } from './RNGData.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
-
-export const RNG_PCG = 0;
-export const RNG_SOBOL = 1;
-export const RNG_SOBOL_TEXTURE = 2;
 
 export class WebGPUPathTracer {
 
@@ -50,7 +43,7 @@ export class WebGPUPathTracer {
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
-		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer, this.rngData ) : new WaveFrontPathTracer( this._renderer, this.rngData );
+		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setTextures( this.textureArray.texture );
 		this._pathTracer.setMaterial( this.material );
@@ -100,13 +93,8 @@ export class WebGPUPathTracer {
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
-		this._sobolMap = new SobolNumberMapGenerator( renderer, 256 );
-		this.rngData = new RNGData();
-		this.setPRNGType( RNG_SOBOL_TEXTURE );
-
 		this.material = new GltfCompliantMaterial();
-		this.material.setRNGData( this.rngData );
-		this._pathTracer = new MegaKernelPathTracer( renderer, this.rngData );
+		this._pathTracer = new MegaKernelPathTracer( renderer );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -152,7 +140,7 @@ export class WebGPUPathTracer {
 		} );
 
 		// Build TLAS and compute functions
-		const bvhData = new PathtracerBVHComputeData( scene, this.rngData );
+		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
 		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
 
@@ -173,30 +161,9 @@ export class WebGPUPathTracer {
 
 	}
 
-	setPRNGType( type ) {
-
-		switch ( type ) {
-
-			case RNG_PCG:
-				this.rngData.setFunctions( pcgFunctions );
-				break;
-
-			case RNG_SOBOL_TEXTURE:
-				this.rngData.setFunctions( sobolTextureFunctions( this._sobolMap.texture ) );
-				break;
-
-			case RNG_SOBOL:
-			default:
-				this.rngData.setFunctions( sobolFunctions );
-
-		}
-
-	}
-
 	setMaterial( material ) {
 
 		this.material = material;
-		this.material.setRNGData( this.rngData );
 		this._pathTracer.setMaterial( material );
 
 	}
@@ -299,12 +266,6 @@ export class WebGPUPathTracer {
 
 			this.material.init( renderer );
 			this.material.initialized = true;
-
-		}
-
-		if ( ! this._sobolMap.isGenerated ) {
-
-			this._sobolMap.generate();
 
 		}
 
