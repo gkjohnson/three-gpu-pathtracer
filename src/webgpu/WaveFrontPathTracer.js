@@ -58,19 +58,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setRandomFunctions( randomFunctions ) {
-
-		this.enqueueRaysKernel.random = randomFunctions;
-		this.enqueueRaysKernel.needsUpdate = true;
-
-		this.rayIntersectionKernel.random = randomFunctions;
-		this.rayIntersectionKernel.needsUpdate = true;
-
-		this.hitProcessKernel.random = randomFunctions;
-		this.hitProcessKernel.needsUpdate = true;
-
-	}
-
 	setBVHData( bvhData ) {
 
 		this.rayIntersectionKernel.bvhData = bvhData;
