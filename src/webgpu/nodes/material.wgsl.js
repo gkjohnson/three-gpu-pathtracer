@@ -1,4 +1,4 @@
-import { wgslFn } from 'three/tsl';
+import { mat3, wgslFn } from 'three/tsl';
 import {
 	inverseMat3x3Func,
 	getBasisFromNormalFunc,
@@ -6,6 +6,9 @@ import {
 	schlickFresnelFunc,
 	schlickFresnelVecFunc,
 	sampleTexelFunc,
+	iorToF0GeneralFunc,
+	fresnel0ToIorFunc,
+	iorToF0GeneralVecFunc,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
@@ -16,6 +19,7 @@ import {
 import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl.js';
 import { sampleSphereCosineFn } from './sampling.wgsl.js';
 import { pcgInit, pcgRand2 } from './random.wgsl.js';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
@@ -352,6 +356,141 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 	}
 
 `, [ schlickFresnelFunc, iorToF0Func ] );
+
+const XYZ_TO_REC709 = mat3(
+	3.2404542, - 0.9692660, 0.0556434,
+	- 1.5371385, 1.8760108, - 0.2040259,
+	- 0.4985314, 0.0415560, 1.0572252,
+);
+
+const evalSensitivityFunc = wgslTagFn/* wgsl */`
+
+	fn evalSensitivity( OPD: f32, shift: vec3f ) -> vec3f {
+
+		let phase = 2.0 * ${ Math.PI } * OPD * 1.0e-9;
+		const val = vec3(5.4856e-13, 4.4201e-13, 5.2481e-13);
+		const pos = vec3(1.6810e+06, 1.7953e+06, 2.2084e+06);
+		const _var = vec3(4.3278e+09, 9.3046e+09, 6.6121e+09);
+
+		var xyz = val * sqrt(2.0 * ${ Math.PI } * _var) * cos(pos * phase + shift) * exp(-phase * phase * _var);
+		xyz.x += 9.7470e-14 * sqrt(2.0 * ${ Math.PI } * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
+		xyz /= 1.0685e-7;
+
+		let rgb = ${ XYZ_TO_REC709 } * xyz;
+		return rgb;
+
+	}
+
+`;
+
+// Reference: Belcour/Barla, 2017
+// https://belcour.github.io/blog/research/publication/2017/05/01/brdf-thin-film.html
+// This is a simplified model that ignores light polarization and uses fresnel approximation
+export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
+
+	fn iridescentFresnel(
+		cosTheta1: f32, baseF0: vec3f, iridescenceIor: f32,
+		outsideIor: f32, iridescenceThickness: f32,
+	) -> vec3f {
+
+		let sinTheta2Sq = pow( outsideIor / iridescenceIor, 2.0 ) * ( 1.0 - pow( cosTheta1, 2.0 ) );
+		let cosTheta2Sq = 1.0 - sinTheta2Sq;
+
+		// Handle total internal reflection
+		if ( cosTheta2Sq < 0.0 ) {
+
+			return vec3( 1.0 );
+
+		}
+
+		let cosTheta2 = sqrt( cosTheta2Sq );
+
+		// First interface: air -> iridescent thin film
+		let R0 = iorToF0General( iridescenceIor, outsideIor );
+		let R12 = schlickFresnel( cosTheta1, R0 );
+		let R21 = R12;
+		let T121 = 1.0 - R12;
+		let phi12 = select( 0.0, PI, iridescenceIor < outsideIor );
+		let phi21 = PI - phi12;
+
+		// Second interface: iridescent thin film -> base material
+		let baseIor = fresnel0ToIor( baseF0 + 0.0001 ); // guard against 1.0
+		let R1 = iorToF0GeneralVec( baseIor, vec3( iridescenceIor ) );
+		let R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+		let phi23 = select( vec3( 0.0 ), vec3( PI ), baseIor < vec3( iridescenceIor ) );
+
+		// Phase shift
+		let OPD = 2.0 * iridescenceIor * iridescenceThickness * cosTheta2;
+		let phi = vec3( phi21 ) + phi23;
+
+		// Analytical integration
+		// Compound terms
+		let R123 = clamp( R12 * R23, vec3( 1e-5 ), vec3( 0.9999 ) );
+		let r123 = sqrt( R123 );
+		let Rs = T121 * T121 * R23 / ( vec3( 1.0 ) - R123 );
+
+		// Reflectance term for m = 0 (DC term amplitude)
+		let C0 = R12 + Rs;
+		var I = C0;
+
+		// Reflectance term for m > 0 (pairs of diracs)
+		var Cm = Rs - T121;
+		for (var m = 1; m <= 2; m += 1) {
+
+			Cm *= r123;
+			let Sm = 2.0 * evalSensitivity( f32( m ) * OPD, f32( m ) * phi );
+			I += Cm * Sm;
+
+		}
+
+		return max( I, vec3(0.0) );
+
+	}
+
+`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc ] );
+
+const rgbMixFunc = wgslFn( /* wgsl */ `
+
+	fn rgbMix( base: vec3f, specular: vec3f, rgbAlpha: vec3f ) -> vec3f {
+
+		let alphaMax = max( max( rgbAlpha.x, rgbAlpha.y ), rgbAlpha.z );
+		return ( 1 - alphaMax ) * base + rgbAlpha * specular;
+
+	}
+
+` );
+
+export const iridescentDielectricLayerFunc = wgslFn( /* wgsl */ `
+
+	fn iridescentDielectricLayer(
+		dielectricBase: vec3f, base: vec3f, specular: vec3f, HdotL: f32,
+		outsideIor: f32, baseIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
+	) -> vec3f {
+
+		let baseF0 = vec3( iorToF0( baseIor ) );
+
+		let iridescentF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
+
+		return mix( dielectricBase, rgbMix( base, specular, iridescentF ), strength );
+
+	}
+
+`, [ iorToF0Func, iridescentFresnelFunc, rgbMixFunc ] );
+
+export const iridescentConductorLayerFunc = wgslFn( /* wgsl */ `
+
+	fn iridescentConductorLayer(
+		metalBase: vec3f, specular: vec3f, baseF0: vec3f, HdotL: f32,
+		outsideIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
+	) -> vec3f {
+
+		let iridescenceF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
+
+		return mix( metalBase, specular * iridescenceF, strength );
+
+	}
+
+`, [ iridescentFresnelFunc ] );
 
 export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
 
