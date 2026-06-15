@@ -1,4 +1,4 @@
-import { wgslFn, float } from 'three/tsl';
+import { wgslFn, mat3 } from 'three/tsl';
 import {
 	inverseMat3x3Func,
 	getBasisFromNormalFunc,
@@ -19,9 +19,6 @@ import {
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-
-// Cook-Torrance BRDF in this file expects NdotV and NdotL to be bigger than this constant
-export const MIN_INCIDENT_COS = float( 1e-3 );
 
 export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
@@ -534,8 +531,8 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ rand2 }(${ RNG_INDEX_SCATTER_DIRECTION }) );
 			var wi = - reflect( wo, wh );
 
-			let NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
-			let NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
+			let NdotV = max( wo.z, EPSILON );
+			let NdotL = saturate( wi.z );
 			let NdotH = saturate( wh.z );
 
 			let specular = ${ specularBrdfFunc }( NdotL, NdotV, NdotH, alpha );

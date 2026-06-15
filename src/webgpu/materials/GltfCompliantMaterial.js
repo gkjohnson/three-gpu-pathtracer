@@ -13,6 +13,7 @@ const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.met
 const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
 
 const CLEARCOAT_IOR = float( 1.5 );
+const MIN_INCIDENT_COS = float( 1e-3 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
