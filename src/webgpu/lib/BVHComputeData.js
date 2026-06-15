@@ -11,21 +11,6 @@ import { MeshBVH, SkinnedMeshBVH, GeometryBVH, ObjectBVH, SAH } from 'three-mesh
 // 		- add a callback for writing a property for a geometry to a range
 // TODO: Add support for other geometry types (tris, lines, custom BVHs etc)
 
-// temporary shim so StructTypeNodes can be passed to storage functions until
-// this is fixed in three.js
-Object.defineProperty( StructTypeNode.prototype, 'layout', {
-
-	get() {
-
-		return this;
-
-	}
-
-} );
-StructTypeNode.prototype.isStruct = true;
-
-//
-
 const isVisible = object => {
 
 	let curr = object;
