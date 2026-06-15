@@ -377,7 +377,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 	) -> void {
 
 		const INTEGRATION_SAMPLES = ( 1 << 20 );
-		let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+		let pixelIndex = ( globalId.x << 16 ) | globalId.y;
 		${ rngInit }( pixelIndex, 0, 0 );
 
 		let dimensions = textureDimensions( texture ).xy;

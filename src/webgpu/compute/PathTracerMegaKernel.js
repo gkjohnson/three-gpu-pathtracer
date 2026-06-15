@@ -135,8 +135,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
-					${ rngNextBounce }();
-
 					var hitResult: ${ raycastOutput };
 					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
@@ -188,6 +186,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						break;
 
 					}
+
+					${ rngNextBounce }();
 
 				}
 

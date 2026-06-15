@@ -1,5 +1,5 @@
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
+import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 
 /**
@@ -32,7 +32,7 @@ export class PathtracingMaterial {
 				var record: ScatterRecord;
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
-				let wi = ${ diffuseDirectionFunc }( wo, ${ this.rng.vec2f }( ${ RNG_INDEX_SCATTER_DIRECTION } ) );
+				let wi = ${ diffuseDirectionFunc }( wo, ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } ) );
 				record.color = surf.color * max( wi.z, 0.0 );
 				record.pdf = max( wi.z, 0.0 ) / PI;
 				record.direction = normalize( surf.normalBasis * wi );
