@@ -70,7 +70,6 @@ function extractIncludes( args ) {
 
 // normalize args so generate can resolve them uniformly with build():
 // - callable wrappers > PropertyRefNode (emits just the function name)
-// - struct callables > StructTypeNode (emits the type name via build)
 function normalizeArgs( args ) {
 
 	return args.map( arg => {
