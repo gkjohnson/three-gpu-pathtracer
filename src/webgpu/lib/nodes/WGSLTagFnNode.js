@@ -60,16 +60,6 @@ function extractIncludes( args ) {
 
 			}
 
-		} else {
-
-			// WGSLTagCodeNodes should be inlined if found in a template so skip it here
-			if ( ! ( arg instanceof WGSLTagCodeNode ) ) {
-
-				const node = getIncludeNode( arg );
-				if ( node ) includes.push( node );
-
-			}
-
 		}
 
 	}
