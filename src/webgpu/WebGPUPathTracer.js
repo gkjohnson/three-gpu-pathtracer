@@ -6,9 +6,7 @@ import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
-import { AtlasTexture } from './AtlasTexture.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
-import { setTextureInfo } from './nodes/utils.wgsl.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 
 const _resolution = new Vector2();
@@ -37,6 +35,12 @@ export class WebGPUPathTracer {
 	get fadeState() {
 
 		return this._fadeState;
+
+	}
+
+	get textureAtlas() {
+
+		return this._bvhData.textureAtlas;
 
 	}
 
@@ -91,8 +95,6 @@ export class WebGPUPathTracer {
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
-		this.textureAtlas = new AtlasTexture();
-
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
@@ -139,12 +141,9 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn( this.textureAtlas.texture );
-
-		// TODO: FIX THIS
-		this.textureAtlas.setTextures( this._renderer, bvhData.textures );
-		setTextureInfo( this.textureAtlas.textureInfo );
-		this._pathTracer.setTextures( this.textureAtlas.texture );
+		bvhData.useTransparencyRaycastFn();
+		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
+		this._pathTracer.setTextures( bvhData.textureAtlas.texture );
 
 		this.scene = scene;
 		this._bvhData = bvhData;

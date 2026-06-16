@@ -371,7 +371,8 @@ export class AtlasTexture {
 
 	_buildTextureInfo( placements ) {
 
-		const info = [];
+		const info = this.textureInfo;
+		info.length = 0;
 		for ( let i = 0, l = placements.length; i < l; i ++ ) {
 
 			// offsetX and Y in pixels (16 bits + 16 bits)
@@ -388,7 +389,11 @@ export class AtlasTexture {
 
 		}
 
-		this.textureInfo = info;
+		if ( info.length === 0 ) {
+
+			info.push( new Vector4( 0, 0, 0, 0 ) );
+
+		}
 
 	}
 
