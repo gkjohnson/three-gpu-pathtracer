@@ -3,13 +3,13 @@ import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
-import { getPcgSeed, pcgInit, pcgRand2 } from '../../nodes/random.wgsl.js';
+import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
-	constructor() {
+	constructor( ) {
 
 		const params = {
 			cameraToModelMatrix: uniform( new Matrix4() ),
@@ -80,10 +80,11 @@ export class RayGenerationKernel extends ComputeKernel {
 				let queueCapacity = arrayLength( rayQueue );
 				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
 
-				${ pcgInit }( indexUV, seed );
+				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				${ rngInit }( pixelIndex, seed, 0 );
 
 				// write the ray data
-				var jitter = 2.0 * ${ pcgRand2 }() / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
@@ -92,8 +93,8 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue[ index ].pixel = indexUV;
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
-				rayQueue[ index ].pcgStateS0 = ${ getPcgSeed }();
 				rayQueue[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
+				rayQueue[ index ].seed = seed;
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );

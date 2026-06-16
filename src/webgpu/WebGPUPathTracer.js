@@ -8,9 +8,11 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
+import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -44,6 +46,7 @@ export class WebGPUPathTracer {
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setTextures( this.textureArray.texture );
+		this._pathTracer.setMaterial( this.material );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -53,7 +56,6 @@ export class WebGPUPathTracer {
 
 		// members
 		this._renderer = renderer;
-		this._pathTracer = new MegaKernelPathTracer( renderer );
 		this._timer = new Timer();
 
 		this._envColorTexture = new DataTexture( );
@@ -90,6 +92,9 @@ export class WebGPUPathTracer {
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
+
+		this.material = new GltfCompliantMaterial();
+		this._pathTracer = new MegaKernelPathTracer( renderer );
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -152,12 +157,13 @@ export class WebGPUPathTracer {
 
 	getMaterial() {
 
-		return this._pathTracer.getMaterial();
+		return this.material;
 
 	}
 
 	setMaterial( material ) {
 
+		this.material = material;
 		this._pathTracer.setMaterial( material );
 
 	}
@@ -253,6 +259,13 @@ export class WebGPUPathTracer {
 		if ( ! this._renderer._initialized ) {
 
 			return;
+
+		}
+
+		if ( ! this.material.initialized ) {
+
+			this.material.init( renderer );
+			this.material.initialized = true;
 
 		}
 

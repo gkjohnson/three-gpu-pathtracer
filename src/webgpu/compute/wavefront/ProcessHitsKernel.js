@@ -6,15 +6,16 @@ import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
-import { getPcgSeed, setPcgSeed } from '../../nodes/random.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
+import { rngInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
-	constructor( material ) {
+	constructor( ) {
 
 		const params = {
 			bvhData: { value: null },
+			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -36,6 +37,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 		};
 
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
+		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -71,7 +73,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let input = hitQueue[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 
-				${ setPcgSeed }( input.pcgStateS0 );
+				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				${ rngInit }( pixelIndex, input.seed, input.currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -80,13 +83,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 				material.color *= object.color.rgb;
 				material.opacity *= object.color.a;
 
-				var vertexData = ${ sampleTrianglePointFn }( input.barycoord, input.indices.xyz );
+				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
+				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
 				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
 
-				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
+				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 
@@ -110,8 +114,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue[ index ].pixel = indexUV;
 					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
 					rayQueue[ index ].currentBounce = input.currentBounce + 1;
-					rayQueue[ index ].pcgStateS0 = ${ getPcgSeed }();
 					rayQueue[ index ].resultColor = resultColor;
+					rayQueue[ index ].seed = input.seed;
 
 				}
 

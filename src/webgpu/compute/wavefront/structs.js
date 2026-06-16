@@ -3,17 +3,15 @@ import { StructTypeNode } from 'three/webgpu';
 export const queuedRayStruct = new StructTypeNode( {
 
 	origin: 'vec3f',
-	_alignment0: 'uint',
+	seed: 'uint',
 
 	direction: 'vec3f',
-	_alignment1: 'uint',
+	_alignment0: 'uint',
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
 
 	pixel: 'vec2u',
-
-	pcgStateS0: 'vec4u',
 
 	resultColor: 'vec4f',
 
@@ -22,9 +20,10 @@ export const queuedRayStruct = new StructTypeNode( {
 export const queuedHitStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
-	pixel_x: 'uint',
+	seed: 'uint',
 
-	barycoord: 'vec3f',
+	barycoord: 'vec2f',
+	pixel_x: 'uint',
 	pixel_y: 'uint',
 
 	view: 'vec3f',
@@ -35,8 +34,6 @@ export const queuedHitStruct = new StructTypeNode( {
 
 	normal: 'vec3f',
 	side: 'float',
-
-	pcgStateS0: 'vec4u',
 
 	resultColor: 'vec4f',
 

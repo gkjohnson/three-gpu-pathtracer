@@ -1,6 +1,5 @@
 import { wgslFn } from 'three/tsl';
 import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
-import { pcgRand2 } from './random.wgsl.js';
 import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
@@ -10,26 +9,6 @@ wh     : computed half vector from wo and wi
 Vectors above are assumed to be in tangent space. i.e. +z is along macronormal of the surface
 eta    : Greek character used to denote the "ratio of ior"
 */
-
-// TODO: Move to a local (s, t, n) coordinate system
-// From RayTracingGems v1.9 chapter 16.6.2 -- Its shit!
-// https://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.9.pdf
-// result.xyz = cosine-wighted vector on the hemisphere oriented to a vector
-// result.w = pdf
-export const sampleSphereCosineFn = wgslFn( /* wgsl */ `
-
-	fn sampleSphereCosine(rng: vec2f, n: vec3f) -> vec4f {
-
-		let a = (1 - 2 * rng.x) * 0.99999;
-		let b = sqrt( 1 - a * a ) * 0.99999;
-		let phi = 2 * PI * rng.y;
-		let direction = normalize( vec3f(n.x + b * cos( phi ), n.y + b * sin( phi ), n.z + a) );
-		let pdf = dot( direction, n ) / PI;
-
-		return vec4f( direction, pdf );
-	}
-
-`, [ constants ] );
 
 export const sampleSphereFunc = wgslFn( /* wgsl */ `
 
@@ -45,11 +24,13 @@ export const sampleSphereFunc = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
+// TODO: Investigate sampling directly in tagent space?
+// See 16.6.1 in https://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.9.pdf
 export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
-	fn diffuseDirection( wo: vec3f, surf: SurfaceRecord ) -> vec3f {
+	fn diffuseDirection( wo: vec3f, uv: vec2f ) -> vec3f {
 
-		var lightDirection = sampleSphere( pcgRand2() );
+		var lightDirection = sampleSphere( uv );
 		lightDirection.z += 1.0;
 		lightDirection = normalize( lightDirection );
 
@@ -57,7 +38,7 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ sampleSphereFunc, pcgRand2 ] );
+`, [ sampleSphereFunc ] );
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
