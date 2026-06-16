@@ -5,6 +5,7 @@ import {
 	QuadMesh,
 	NoBlending,
 	Color,
+	Vector4,
 } from 'three/webgpu';
 
 const DEFAULT_PAGE_SIZE = 4096;
@@ -213,8 +214,8 @@ export class AtlasTexture {
 		} );
 		this.texture.isArrayTexture = true;
 
-		// per-texture packed info ( one vec4<u32> each ): see _buildTextureInfo
-		this.textureInfo = new Uint32Array( 0 );
+		// per-texture packed info ( one Vector4 each ): see _buildTextureInfo
+		this.textureInfo = [];
 
 		// maps a texture's hash to its index into textureInfo
 		this.textureIndices = new Map();
@@ -370,7 +371,7 @@ export class AtlasTexture {
 
 	_buildTextureInfo( placements ) {
 
-		const data = new Uint32Array( placements.length * 4 );
+		const info = [];
 		for ( let i = 0, l = placements.length; i < l; i ++ ) {
 
 			// offsetX and Y in pixels (16 bits + 16 bits)
@@ -378,15 +379,16 @@ export class AtlasTexture {
 			// page + reserved (16 bits)
 			// reserved
 			const { x, y, w, h, page } = placements[ i ];
-			const o = i * 4;
-			data[ o + 0 ] = ( x & 0xFFFF ) | ( ( y & 0xFFFF ) << 16 );
-			data[ o + 1 ] = ( w & 0xFFFF ) | ( ( h & 0xFFFF ) << 16 );
-			data[ o + 2 ] = page & 0xFFFF;
-			data[ o + 3 ] = 0;
+			const v = new Vector4();
+			v.x = ( x & 0xFFFF ) | ( ( y & 0xFFFF ) << 16 );
+			v.y = ( w & 0xFFFF ) | ( ( h & 0xFFFF ) << 16 );
+			v.z = page & 0xFFFF;
+			v.w = 0;
+			info.push( v );
 
 		}
 
-		this.textureInfo = data;
+		this.textureInfo = info;
 
 	}
 

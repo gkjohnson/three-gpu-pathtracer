@@ -1,3 +1,4 @@
+import { Vector4 } from 'three/webgpu';
 import { wgslFn, uniformArray } from 'three/tsl';
 import { scatterRecordStruct } from './structs.wgsl.js';
 
@@ -15,7 +16,7 @@ export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 		adj[1][2] = - (m[0][0] * m[1][2] - m[1][0] * m[0][2]);
 		adj[2][2] =   (m[0][0] * m[1][1] - m[1][0] * m[0][1]);
 
-		let det = (  m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+		let det = ( m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
 			- m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
 			+ m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]));
 
@@ -177,23 +178,14 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 // sampleTexel is a shared singleton ( used by every kernel and the transparency
 // raycast ), so the atlas info it reads must be a shared singleton too. This is
 // global state — only one atlas / path tracer is supported at a time.
-export const textureInfoArray = uniformArray( [ { x: 0, y: 0, z: 0, w: 0 } ], 'uvec4' ).setName( 'textureInfo' );
+export const textureInfoArray = uniformArray( [ new Vector4() ], 'uvec4' ).setName( 'textureInfo' );
 
-// Update the atlas info from AtlasTexture.textureInfo ( a flat Uint32Array, 4 u32
+// Update the atlas info from AtlasTexture.textureInfo ( an array of Vector4, one
 // per texture ). Kept at a minimum length of one so the generated WGSL array is
 // never zero-length.
-export function setTextureInfo( data ) {
+export function setTextureInfo( info ) {
 
-	const count = data.length / 4;
-	const array = [];
-	for ( let i = 0; i < count; i ++ ) {
-
-		const o = i * 4;
-		array.push( { x: data[ o ], y: data[ o + 1 ], z: data[ o + 2 ], w: data[ o + 3 ] } );
-
-	}
-
-	textureInfoArray.array = array.length > 0 ? array : [ { x: 0, y: 0, z: 0, w: 0 } ];
+	textureInfoArray.array = info.length > 0 ? info : [ new Vector4() ];
 
 }
 
