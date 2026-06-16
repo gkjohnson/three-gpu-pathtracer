@@ -210,7 +210,7 @@ function animate() {
 	// show a page of the packed texture atlas instead of the render for debugging
 	if ( params.showAtlas >= 0 && params.isWebGPU ) {
 
-		pathTracer.renderAtlas( params.showAtlas );
+		pathTracer.renderTextureAtlas( params.showAtlas );
 		return;
 
 	}
