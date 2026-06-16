@@ -19,14 +19,10 @@ export class AtlasDebugMaterial extends MeshBasicNodeMaterial {
 
 		super();
 
-
-		const texNode = texture( new DataTexture() );
-		const layerUniform = uniform( 0 );
-
 		this.blending = NoBlending;
 
-		this._texNode = texNode;
-		this._layerUniform = layerUniform;
+		this._texNode = texture( new DataTexture() );
+		this._layerUniform = uniform( 0 );
 
 		// Shows one layer of the atlas array texture.
 		this.colorNode = wgslFn( /* wgsl */ `
@@ -38,7 +34,7 @@ export class AtlasDebugMaterial extends MeshBasicNodeMaterial {
 				return textureLoad( tex, texel, i32( layer ), 0 );
 
 			}
-		` )( texNode, varying( uv() ), layerUniform );
+		` )( this._texNode, varying( uv() ), this._layerUniform );
 
 	}
 

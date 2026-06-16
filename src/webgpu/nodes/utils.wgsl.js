@@ -202,17 +202,19 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wg
 			let tileTexel = clamp( vec2i( wrappedUv * size ), vec2i( 0 ), vec2i( size ) - vec2i( 1 ) );
 			return textureLoad( ${ atlas }, vec2i( offset ) + tileTexel, page, 0 );
 
+		} else {
+
+			var atlasUv = ( offset + wrappedUv * size ) / pageDim;
+
+			// clamp to half a texel inside the tile so bilinear taps never bleed into
+			// neighboring atlas tiles
+			let minUv = ( offset + vec2f( 0.5 ) ) / pageDim;
+			let maxUv = ( offset + size - vec2f( 0.5 ) ) / pageDim;
+			atlasUv = clamp( atlasUv, minUv, maxUv );
+
+			return textureSampleLevel( ${ atlas }, ${ atlasSampler }, atlasUv, page, lod );
+
 		}
-
-		var atlasUv = ( offset + wrappedUv * size ) / pageDim;
-
-		// clamp to half a texel inside the tile so bilinear taps never bleed into
-		// neighbouring atlas tiles
-		let minUv = ( offset + vec2f( 0.5 ) ) / pageDim;
-		let maxUv = ( offset + size - vec2f( 0.5 ) ) / pageDim;
-		atlasUv = clamp( atlasUv, minUv, maxUv );
-
-		return textureSampleLevel( ${ atlas }, ${ atlasSampler }, atlasUv, page, lod );
 
 	}
 `;

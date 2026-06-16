@@ -27,12 +27,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	getMaterial() {
-
-		return this.material;
-
-	}
-
 	setMaterial( material ) {
 
 		this.kernel.material = material.getData();
