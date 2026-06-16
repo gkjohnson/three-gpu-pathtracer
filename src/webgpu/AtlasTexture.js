@@ -217,9 +217,6 @@ export class AtlasTexture {
 		// per-texture packed info ( one Vector4 each ): see _buildTextureInfo
 		this.textureInfo = [ new Vector4() ];
 
-		// maps a texture's hash to its index into textureInfo
-		this.textureIndices = new Map();
-
 		this.hashes = [];
 		this.quadMesh = new QuadMesh( new MeshBasicMaterial() );
 		this.quadMesh.material.blending = NoBlending;
@@ -235,7 +232,7 @@ export class AtlasTexture {
 
 		}
 
-		const { renderTarget, textureIndices, width, height } = this;
+		const { renderTarget, width, height } = this;
 
 		// full repack of every texture
 		const { placements, pageCount } = this._packTextures( textures );
@@ -249,28 +246,15 @@ export class AtlasTexture {
 		this._renderTextures( renderer, textures, placements );
 
 		// rebuild hashes and the texture -> index lookup
-		const indices = textureIndices;
 		const hashes = new Array( textures.length );
-		indices.clear();
 		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
 			const hash = getTextureHash( textures[ i ] );
 			hashes[ i ] = hash;
-			indices.set( hash, i );
 
 		}
 
 		this.hashes = hashes;
-
-	}
-
-	// Returns the index of a texture within textureInfo, or -1 if it is not
-	// packed into the atlas.
-	getIndex( texture ) {
-
-		const { textureIndices } = this;
-		const hash = getTextureHash( texture );
-		return textureIndices.get( hash ) ?? - 1;
 
 	}
 
