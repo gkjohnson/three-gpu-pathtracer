@@ -354,17 +354,21 @@ function buildGui() {
 
 	// build the atlas page dropdown dynamically from the current atlas
 	const atlasOptions = { hide: - 1 };
-	const pageCount = pathTracer.textureArray.pageCount;
-	for ( let i = 0; i < pageCount; i ++ ) {
+	if ( params.isWebGPU ) {
 
-		atlasOptions[ `page ${ i }` ] = i;
+		const pageCount = pathTracer.textureAtlas.pageCount;
+		for ( let i = 0; i < pageCount; i ++ ) {
 
-	}
+			atlasOptions[ `page ${ i }` ] = i;
 
-	// reset the selection if the previously selected page no longer exists
-	if ( params.showAtlas >= pageCount ) {
+		}
 
-		params.showAtlas = - 1;
+		// reset the selection if the previously selected page no longer exists
+		if ( params.showAtlas >= pageCount ) {
+
+			params.showAtlas = - 1;
+
+		}
 
 	}
 

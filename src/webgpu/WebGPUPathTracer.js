@@ -45,7 +45,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
-		this._pathTracer.setTextures( this.textureArray.texture );
+		this._pathTracer.setTextures( this.textureAtlas.texture );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -91,7 +91,7 @@ export class WebGPUPathTracer {
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
-		this.textureArray = new AtlasTexture();
+		this.textureAtlas = new AtlasTexture();
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -139,12 +139,12 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
+		bvhData.useTransparencyRaycastFn( this.textureAtlas.texture );
 
 		// TODO: FIX THIS
-		this.textureArray.setTextures( this._renderer, bvhData.textures );
-		setTextureInfo( this.textureArray.textureInfo );
-		this._pathTracer.setTextures( this.textureArray.texture );
+		this.textureAtlas.setTextures( this._renderer, bvhData.textures );
+		setTextureInfo( this.textureAtlas.textureInfo );
+		this._pathTracer.setTextures( this.textureAtlas.texture );
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -362,7 +362,7 @@ export class WebGPUPathTracer {
 		}
 
 		const quad = this._atlasDebugQuad;
-		quad.material.texture = this.textureArray.texture;
+		quad.material.texture = this.textureAtlas.texture;
 		quad.material.layer = layer;
 		renderer.setRenderTarget( null );
 		quad.render( renderer );
