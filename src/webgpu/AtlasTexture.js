@@ -246,11 +246,7 @@ export class AtlasTexture {
 		this.texture.isArrayTexture = true;
 
 		this._buildTextureInfo( placements );
-		if ( textures.length > 0 ) {
-
-			this._renderTextures( renderer, textures, placements );
-
-		}
+		this._renderTextures( renderer, textures, placements );
 
 		// rebuild hashes and the texture -> index lookup
 		const indices = textureIndices;

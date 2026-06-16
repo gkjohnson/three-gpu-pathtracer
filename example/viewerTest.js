@@ -316,7 +316,6 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 
 	let webgpuOptions = null;
-	let atlasOption = null;
 	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
 
 		const size = renderer.getSize( new Vector2() );
@@ -325,7 +324,6 @@ function buildGui() {
 		renderer.dispose();
 
 		webgpuOptions.show( v );
-		atlasOption.show( v );
 
 		createRenderer( v ).then( () => {
 
@@ -374,8 +372,7 @@ function buildGui() {
 
 	}
 
-	atlasOption = pathTracingFolder.add( params, 'showAtlas', atlasOptions );
-	atlasOption.show( params.isWebGPU );
+	webgpuOptions.add( params, 'showAtlas', atlasOptions );
 
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
