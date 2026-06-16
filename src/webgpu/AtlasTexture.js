@@ -4,9 +4,11 @@ import {
 	NoToneMapping,
 	QuadMesh,
 	NoBlending,
+	Color,
 } from 'three/webgpu';
 
 const DEFAULT_PAGE_SIZE = 4096;
+const _prevClearColor = new Color();
 
 function getTextureHash( texture ) {
 
@@ -390,27 +392,37 @@ export class AtlasTexture {
 
 	_renderTextures( renderer, textures, placements ) {
 
+		const { quadMesh, renderTarget, width, height } = this;
+
 		// Save previous renderer state
 		const prevRenderTarget = renderer.getRenderTarget();
 		const prevToneMapping = renderer.toneMapping;
 		const prevAutoClear = renderer.autoClear;
 		const prevScissorTest = renderer.getScissorTest();
+		const prevClearAlpha = renderer.getClearAlpha();
+		renderer.getClearColor( _prevClearColor );
 
 		// blit each tile into its sub-rect without clearing the rest of the page
 		renderer.toneMapping = NoToneMapping;
 		renderer.autoClear = false;
 		renderer.setScissorTest( true );
+		renderer.setClearColor( 0, 0 );
 
-		const { quadMesh, renderTarget } = this;
+		// clear the pages
+		for ( let i = 0, l = renderTarget.depth; i < l; i ++ ) {
+
+			renderTarget.viewport.set( 0, 0, width, height );
+			renderTarget.scissor.set( 0, 0, width, height );
+			renderer.setRenderTarget( renderTarget, i );
+			renderer.clear();
+
+		}
+
 		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
 			const { x, y, w, h, page } = placements[ i ];
 
-			// Clone the source so we get an independent texture handle we fully
-			// own: we strip its uv transform ( applied later at sample time ) and
-			// dispose it after the blit. The clone shares the source image, and
-			// gpu resources are tracked per-texture, so neither the upload nor the
-			// dispose touch the user's original texture.
+			// Clone the source so we get an independent texture handle
 			const texture = textures[ i ].clone();
 			texture.matrixAutoUpdate = false;
 			texture.matrix.identity();
@@ -418,20 +430,21 @@ export class AtlasTexture {
 
 			quadMesh.material.map = texture;
 
-			// NOTE: source textures larger than their rect are downsampled here
-			// using the source's own filtering; verify tile orientation matches
-			// the sampling path when wiring this up.
+			// three.js uses the render target viewport / scissor
+			renderTarget.viewport.set( x, y, w, h );
+			renderTarget.scissor.set( x, y, w, h );
 			renderer.setRenderTarget( renderTarget, page );
-			renderer.setViewport( x, y, w, h );
-			renderer.setScissor( x, y, w, h );
 			quadMesh.render( renderer );
 
 			texture.dispose();
 
 		}
 
-		// Reset the renderer
+		// restore the render target's full-size viewport/scissor and the renderer
+		renderTarget.viewport.set( 0, 0, width, height );
+		renderTarget.scissor.set( 0, 0, width, height );
 		quadMesh.material.map = null;
+		renderer.setClearColor( _prevClearColor, prevClearAlpha );
 		renderer.setScissorTest( prevScissorTest );
 		renderer.autoClear = prevAutoClear;
 		renderer.setRenderTarget( prevRenderTarget );

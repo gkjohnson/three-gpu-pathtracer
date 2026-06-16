@@ -1,4 +1,4 @@
-import { wgslFn } from 'three/tsl';
+import { wgslFn, uniformArray } from 'three/tsl';
 import { scatterRecordStruct } from './structs.wgsl.js';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
@@ -169,6 +169,34 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Per-texture atlas info, one vec4<u32> each ( see AtlasTexture._buildTextureInfo ):
+//   .x = offsetX | ( offsetY << 16 )   ( atlas texels )
+//   .y = sizeX   | ( sizeY << 16 )      ( atlas texels )
+//   .z = page                           ( atlas array layer )
+//   .w = reserved
+// sampleTexel is a shared singleton ( used by every kernel and the transparency
+// raycast ), so the atlas info it reads must be a shared singleton too. This is
+// global state — only one atlas / path tracer is supported at a time.
+export const textureInfoArray = uniformArray( [ { x: 0, y: 0, z: 0, w: 0 } ], 'uvec4' ).setName( 'textureInfo' );
+
+// Update the atlas info from AtlasTexture.textureInfo ( a flat Uint32Array, 4 u32
+// per texture ). Kept at a minimum length of one so the generated WGSL array is
+// never zero-length.
+export function setTextureInfo( data ) {
+
+	const count = data.length / 4;
+	const array = [];
+	for ( let i = 0; i < count; i ++ ) {
+
+		const o = i * 4;
+		array.push( { x: data[ o ], y: data[ o + 1 ], z: data[ o + 2 ], w: data[ o + 3 ] } );
+
+	}
+
+	textureInfoArray.array = array.length > 0 ? array : [ { x: 0, y: 0, z: 0, w: 0 } ];
+
+}
+
 export const sampleTexelFunc = wgslFn( /* wgsl */ `
 
 	fn sampleTexel( textures: texture_2d_array<f32>, textureSampler: sampler, uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
@@ -178,24 +206,39 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 		let nearest  = ( packed >> 28 ) & 0x1;
 		let texIndex = packed & 0xFFFFFF;
 
+		// look up the texture's rect and page within the atlas. three wraps a
+		// uniformArray in a struct ( textureInfoStruct ) with a "value" array member.
+		let info   = textureInfo.value[ u32( texIndex ) ];
+		let offset = vec2f( vec2u( info.x & 0xFFFFu, info.x >> 16u ) );
+		let size   = vec2f( vec2u( info.y & 0xFFFFu, info.y >> 16u ) );
+		let page   = i32( info.z & 0xFFFFu );
+
+		// wrap is applied on the logical uv first, then remapped into the tile
 		let wrappedUv = vec2f(
 			applyWrap( uv.x, wrapS ),
 			applyWrap( uv.y, wrapT ),
 		);
 
+		let pageDim = vec2f( textureDimensions( textures, 0 ).xy );
+
 		if ( nearest == 1 ) {
 
-			let dims = vec2f( textureDimensions( textures, 0 ).xy );
-			let texel = vec2i( wrappedUv * dims );
-			return textureLoad( textures, texel, texIndex, 0 );
-
-		} else {
-
-			return textureSampleLevel( textures, textureSampler, wrappedUv, texIndex, lod );
+			let tileTexel = clamp( vec2i( wrappedUv * size ), vec2i( 0 ), vec2i( size ) - vec2i( 1 ) );
+			return textureLoad( textures, vec2i( offset ) + tileTexel, page, 0 );
 
 		}
 
+		var atlasUv = ( offset + wrappedUv * size ) / pageDim;
+
+		// clamp to half a texel inside the tile so bilinear taps never bleed into
+		// neighbouring atlas tiles
+		let minUv = ( offset + vec2f( 0.5 ) ) / pageDim;
+		let maxUv = ( offset + size - vec2f( 0.5 ) ) / pageDim;
+		atlasUv = clamp( atlasUv, minUv, maxUv );
+
+		return textureSampleLevel( textures, textureSampler, atlasUv, page, lod );
+
 	}
 
-`, [ applyWrapFunc ] );
+`, [ applyWrapFunc, textureInfoArray ] );
 

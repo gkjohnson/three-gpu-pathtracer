@@ -6,7 +6,9 @@ import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
-import { RenderTarget2DArray } from './RenderTarget2DArray.js';
+import { AtlasTexture } from './AtlasTexture.js';
+import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
+import { setTextureInfo } from './nodes/utils.wgsl.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 
 const _resolution = new Vector2();
@@ -89,7 +91,7 @@ export class WebGPUPathTracer {
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
-		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
+		this.textureArray = new AtlasTexture();
 
 		// initialize the scene so it doesn't fail
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -140,6 +142,7 @@ export class WebGPUPathTracer {
 		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
 
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
+		setTextureInfo( this.textureArray.textureInfo );
 		this._pathTracer.setTextures( this.textureArray.texture );
 
 		this.scene = scene;
@@ -342,6 +345,30 @@ export class WebGPUPathTracer {
 
 	}
 
+	// DEBUG: blit a layer of the texture atlas to the screen so the packed layout
+	// can be seen.
+	renderAtlas( layer = 0 ) {
+
+		const renderer = this._renderer;
+		if ( ! renderer._initialized ) {
+
+			return;
+
+		}
+
+		if ( ! this._atlasDebugQuad ) {
+
+			this._atlasDebugQuad = new FullScreenQuad( new AtlasDebugMaterial() );
+
+		}
+
+		this._atlasDebugQuad.material.texture = this.textureArray.texture;
+		this._atlasDebugQuad.material.layer = layer;
+		renderer.setRenderTarget( null );
+		this._atlasDebugQuad.render( renderer );
+
+	}
+
 	dispose() {
 
 		this._pathTracer.dispose();
@@ -349,6 +376,7 @@ export class WebGPUPathTracer {
 		this._lowResTarget.dispose();
 		this._envColorTexture.dispose();
 		this._backgroundColorTexture.dispose();
+		this._atlasDebugQuad?.dispose();
 
 	}
 

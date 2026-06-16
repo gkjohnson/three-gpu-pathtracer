@@ -37,6 +37,7 @@ const params = {
 
 	isWebGPU,
 	useMegakernel: true,
+	showAtlas: - 1,
 
 	enable: true,
 	bounces: 10,
@@ -206,6 +207,14 @@ function animate() {
 
 	}
 
+	// show a page of the packed texture atlas instead of the render for debugging
+	if ( params.showAtlas >= 0 && pathTracer.renderAtlas ) {
+
+		pathTracer.renderAtlas( params.showAtlas );
+		return;
+
+	}
+
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
@@ -307,6 +316,7 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 
 	let webgpuOptions = null;
+	let atlasOption = null;
 	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
 
 		const size = renderer.getSize( new Vector2() );
@@ -315,6 +325,7 @@ function buildGui() {
 		renderer.dispose();
 
 		webgpuOptions.show( v );
+		atlasOption.show( v );
 
 		createRenderer( v ).then( () => {
 
@@ -323,6 +334,9 @@ function buildGui() {
 			pathTracer.setScene( scene, camera );
 
 			onParamsChange();
+
+			// rebuild the gui so the atlas dropdown reflects the new renderer
+			buildGui();
 
 		} );
 
@@ -337,6 +351,25 @@ function buildGui() {
 
 	} );
 	webgpuOptions.show( params.isWebGPU );
+
+	// build the atlas page dropdown dynamically from the current atlas
+	const atlasOptions = { hide: - 1 };
+	const pageCount = pathTracer.textureArray ? pathTracer.textureArray.pageCount : 0;
+	for ( let i = 0; i < pageCount; i ++ ) {
+
+		atlasOptions[ `page ${ i }` ] = i;
+
+	}
+
+	// reset the selection if the previously selected page no longer exists
+	if ( params.showAtlas >= pageCount ) {
+
+		params.showAtlas = - 1;
+
+	}
+
+	atlasOption = pathTracingFolder.add( params, 'showAtlas', atlasOptions );
+	atlasOption.show( params.isWebGPU );
 
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
