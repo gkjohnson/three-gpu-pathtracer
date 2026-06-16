@@ -141,6 +141,7 @@ export class WebGPUPathTracer {
 		bvhData.update();
 		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
 
+		// TODO: FIX THIS
 		this.textureArray.setTextures( this._renderer, bvhData.textures );
 		setTextureInfo( this.textureArray.textureInfo );
 		this._pathTracer.setTextures( this.textureArray.texture );
@@ -345,9 +346,7 @@ export class WebGPUPathTracer {
 
 	}
 
-	// DEBUG: blit a layer of the texture atlas to the screen so the packed layout
-	// can be seen.
-	renderAtlas( layer = 0 ) {
+	renderTextureAtlas( layer = 0 ) {
 
 		const renderer = this._renderer;
 		if ( ! renderer._initialized ) {
@@ -362,10 +361,11 @@ export class WebGPUPathTracer {
 
 		}
 
-		this._atlasDebugQuad.material.texture = this.textureArray.texture;
-		this._atlasDebugQuad.material.layer = layer;
+		const quad = this._atlasDebugQuad;
+		quad.material.texture = this.textureArray.texture;
+		quad.material.layer = layer;
 		renderer.setRenderTarget( null );
-		this._atlasDebugQuad.render( renderer );
+		quad.render( renderer );
 
 	}
 
@@ -381,7 +381,6 @@ export class WebGPUPathTracer {
 	}
 
 	async getDetailedSampleCount() {
-
 
 		const sampleCountTarget = this._pathTracer.sampleCountTarget;
 		const { width, height } = sampleCountTarget;

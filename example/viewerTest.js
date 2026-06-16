@@ -208,7 +208,7 @@ function animate() {
 	}
 
 	// show a page of the packed texture atlas instead of the render for debugging
-	if ( params.showAtlas >= 0 && pathTracer.renderAtlas ) {
+	if ( params.showAtlas >= 0 && params.isWebGPU ) {
 
 		pathTracer.renderAtlas( params.showAtlas );
 		return;
@@ -354,7 +354,7 @@ function buildGui() {
 
 	// build the atlas page dropdown dynamically from the current atlas
 	const atlasOptions = { hide: - 1 };
-	const pageCount = pathTracer.textureArray ? pathTracer.textureArray.pageCount : 0;
+	const pageCount = pathTracer.textureArray.pageCount;
 	for ( let i = 0; i < pageCount; i ++ ) {
 
 		atlasOptions[ `page ${ i }` ] = i;
