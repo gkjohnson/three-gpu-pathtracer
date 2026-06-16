@@ -239,7 +239,6 @@ export class AtlasTexture {
 		const width = maxDim;
 		const height = maxDim;
 
-
 		// full repack of every texture
 		const { renderTarget } = this;
 		const { placements, pageCount } = this._packTextures( textures, width, height );
