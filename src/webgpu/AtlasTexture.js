@@ -8,7 +8,7 @@ import {
 	Vector4,
 } from 'three/webgpu';
 
-const DEFAULT_PAGE_SIZE = 4096;
+const MAX_TEXTURE_SIZE = 4096;
 const _prevClearColor = new Color();
 
 function getTextureHash( texture ) {
@@ -203,11 +203,11 @@ export class AtlasTexture {
 
 	}
 
-	constructor( width = DEFAULT_PAGE_SIZE, height = DEFAULT_PAGE_SIZE, options = {} ) {
+	constructor( options = {} ) {
 
 		// RenderTarget already defaults to RGBA8, linear filtering, clamp wrapping
 		// and no mipmaps, so we only specify the array-target-specific options here.
-		this.renderTarget = new RenderTarget( width, height, {
+		this.renderTarget = new RenderTarget( 1, 1, {
 			depthBuffer: false,
 			depth: 1,
 			...options,
@@ -232,10 +232,17 @@ export class AtlasTexture {
 
 		}
 
-		const { renderTarget, width, height } = this;
+		// calculate the maximum dimension of the atlas
+		let maxDim = textures.reduce( ( v, t ) => Math.max( v, t.width, t.height ), 1 );
+		maxDim = Math.min( MAX_TEXTURE_SIZE, maxDim );
+
+		const width = maxDim;
+		const height = maxDim;
+
 
 		// full repack of every texture
-		const { placements, pageCount } = this._packTextures( textures );
+		const { renderTarget } = this;
+		const { placements, pageCount } = this._packTextures( textures, width, height );
 
 		// RenderTarget.setSize resets isArrayTexture to "image.depth > 1" so
 		// we reset it here.
@@ -288,9 +295,7 @@ export class AtlasTexture {
 
 	}
 
-	_packTextures( textures ) {
-
-		const { width, height } = this;
+	_packTextures( textures, width, height ) {
 
 		// use each texture's native size, clamped so it can physically fit a page
 		// ( anything larger is downsampled into its rect during the blit )
