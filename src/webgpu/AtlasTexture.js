@@ -215,7 +215,7 @@ export class AtlasTexture {
 		this.texture.isArrayTexture = true;
 
 		// per-texture packed info ( one Vector4 each ): see _buildTextureInfo
-		this.textureInfo = [];
+		this.textureInfo = [ new Vector4() ];
 
 		// maps a texture's hash to its index into textureInfo
 		this.textureIndices = new Map();

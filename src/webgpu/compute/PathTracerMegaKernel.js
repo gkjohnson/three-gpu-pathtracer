@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/we
 import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { pcgRand2, pcgInit } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
@@ -14,7 +14,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const params = {
 			bvhData: { value: null },
-
 			material: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -120,10 +119,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 
-				${ pcgInit }( indexUV, seed );
+				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
+				${ rngInit }( pixelIndex, seed, 0 );
 
 				// scene ray
-				var jitter = 2.0 * ${ pcgRand2 }() / vec2f( targetDimensions.xy );
+				var jitter = 2.0 * ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
 				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 				ray.direction = normalize( ray.direction );
 
@@ -169,19 +169,22 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
+						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 						if ( bounce > 0u ) {
 
-							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, pcgRand2() ) * vec4f( throughputColor, 0.0 );
+							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );
 
 						} else {
 
-							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, pcgRand2() );
+							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
 
 						}
 
 						break;
 
 					}
+
+					${ rngNextBounce }();
 
 				}
 

@@ -342,14 +342,16 @@ function buildGui() {
 
 	} );
 
-	webgpuOptions = pathTracingFolder.add( params, 'useMegakernel' );
-	webgpuOptions.onChange( () => {
+	webgpuOptions = pathTracingFolder.addFolder( 'WebGPU Options' );
+
+	webgpuOptions.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
 		pathTracer.reset();
 		detailedSampleCount = null;
 
 	} );
+
 	webgpuOptions.show( params.isWebGPU );
 
 	// build the atlas page dropdown dynamically from the current atlas

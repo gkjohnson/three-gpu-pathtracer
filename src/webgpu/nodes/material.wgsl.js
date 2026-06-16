@@ -1,4 +1,4 @@
-import { mat3, wgslFn } from 'three/tsl';
+import { wgslFn, mat3 } from 'three/tsl';
 import {
 	inverseMat3x3Func,
 	getBasisFromNormalFunc,
@@ -15,9 +15,8 @@ import {
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
 } from './ggx.wgsl.js';
-import { constants, surfaceRecordStruct, scatterRecordStruct } from './structs.wgsl.js';
-import { sampleSphereCosineFn } from './sampling.wgsl.js';
-import { pcgInit, pcgRand2 } from './random.wgsl.js';
+import { constants, surfaceRecordStruct } from './structs.wgsl.js';
+import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 // Builds getSurfaceRecord using the given per-instance sampleTexel
@@ -273,24 +272,6 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 	constants,
 ] );
 
-export const lambertBsdfFunc = wgslFn( /* wgsl */`
-
-	fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
-
-		var record: ScatterRecord;
-
-		// Return bsdfValue / pdf, not bsdfValue and pdf separatly?
-		let res = sampleSphereCosine( pcgRand2(), surf.normal );
-		record.direction = res.xyz;
-		record.pdf = res.w;
-		record.color = surf.color * dot( record.direction, surf.normal ) / PI;
-
-		return record;
-
-	}
-
-`, [ scatterRecordStruct, sampleSphereCosineFn, pcgRand2, constants, surfaceRecordStruct ] );
-
 /*
  *
  * N 			  : Macronormal of the surface
@@ -520,7 +501,7 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
 // GGX Multibounce compensation using Turquin's method
 
-export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
+export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 	fn albedo(
 		texture: texture_storage_2d<r16float, write>,
@@ -529,7 +510,8 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 	) -> void {
 
 		const INTEGRATION_SAMPLES = ( 1 << 20 );
-		pcgInitialize( globalId.xy, 0 );
+		let pixelIndex = ( globalId.x << 16 ) | globalId.y;
+		${ rngInit }( pixelIndex, 0, 0 );
 
 		let dimensions = textureDimensions( texture ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
@@ -544,15 +526,15 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 		var result = 0.0;
 		for ( var i = 0; i < INTEGRATION_SAMPLES; i++ ) {
 
-			let wh = ggxDirection( wo, vec2( alpha ), pcgRand2() );
+			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ rand2 }(${ RNG_INDEX_SCATTER_DIRECTION }) );
 			var wi = - reflect( wo, wh );
 
 			let NdotV = max( wo.z, EPSILON );
 			let NdotL = saturate( wi.z );
 			let NdotH = saturate( wh.z );
 
-			let specular = specularBrdf( NdotL, NdotV, NdotH, alpha );
-			let pdf = ggxReflectionAdjustedPDF( NdotV, NdotH, alpha );
+			let specular = ${ specularBrdfFunc }( NdotL, NdotV, NdotH, alpha );
+			let pdf = ${ ggxReflectionAdjustedPDFFunc }( NdotV, NdotH, alpha );
 
 			var weight = 0.0;
 			if ( pdf != 0.0 ) {
@@ -569,4 +551,4 @@ export const albedoIntegralMetallic = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ pcgInit, pcgRand2, constants, specularBrdfFunc, ggxDirectionFunc, ggxReflectionAdjustedPDFFunc ] );
+`;

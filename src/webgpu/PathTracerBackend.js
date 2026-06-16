@@ -1,7 +1,6 @@
 import { ColorManagement, FloatType, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
 export class PathTracerBackend {
 
@@ -37,8 +36,6 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
-
-		this.material = new GltfCompliantMaterial();
 
 	}
 
@@ -119,13 +116,6 @@ export class PathTracerBackend {
 		if ( ! camera || ! renderer.initialized ) {
 
 			return;
-
-		}
-
-		if ( ! this.material.initialized ) {
-
-			this.material.init( renderer );
-			this.material.initialized = true;
 
 		}
 

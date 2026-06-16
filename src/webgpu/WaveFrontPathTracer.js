@@ -44,10 +44,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.enqueueRaysKernel = new RayGenerationKernel().setWorkgroupSize( 8, 8, 1 );
-		this.rayIntersectionKernel = new RayIntersectionKernel().setWorkgroupSize( 64, 1, 1 );
+		this.enqueueRaysKernel = new RayGenerationKernel( ).setWorkgroupSize( 8, 8, 1 );
+		this.rayIntersectionKernel = new RayIntersectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -72,8 +72,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setMaterial( material ) {
 
-		this.material = material;
-		this.hitProcessKernel = new ProcessHitsKernel( this.material ).setWorkgroupSize( 64, 1, 1 );
+		this.hitProcessKernel.material = material.getData();
+		this.hitProcessKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -164,6 +164,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		}
 
 		super.reset();
+
+		this.enqueueRaysKernel.seed = 0;
 
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );

@@ -6,7 +6,7 @@ import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
-import { pcgRand } from './random.wgsl.js';
+import { rand1, RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
@@ -178,7 +178,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 && opacity < ${ pcgRand }() ) {
+								if ( material.transparent != 0 && opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti ) ) {
 
 									continue;
 
