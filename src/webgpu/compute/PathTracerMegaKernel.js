@@ -84,9 +84,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
 
-				textures: texture_2d_array<f32>,
-				textureSampler: sampler
-
 			) -> void {
 
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
@@ -149,7 +146,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
-						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, textures, textureSampler );
+						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal );
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 

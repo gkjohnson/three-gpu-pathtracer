@@ -44,9 +44,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 				smoothNormals: u32,
 				bounces: u32,
 
-				textures: texture_2d_array<f32>,
-				textureSampler: sampler,
-
 				globalId: vec3u
 			) -> void {
 
@@ -84,7 +81,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, textures, textureSampler );
+				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal );
 
 				let scatterRec = ${ material.getBsdfNode() }( input.view, surface );
 

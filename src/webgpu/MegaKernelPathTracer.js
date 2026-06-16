@@ -28,13 +28,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setTextures( texture ) {
-
-		this.kernel.textures = texture;
-		this.kernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
-
-	}
-
 	getMaterial() {
 
 		return this.material;

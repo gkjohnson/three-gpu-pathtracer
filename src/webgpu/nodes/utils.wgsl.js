@@ -1,6 +1,6 @@
-import { Vector4 } from 'three/webgpu';
-import { wgslFn, uniformArray } from 'three/tsl';
+import { wgslFn } from 'three/tsl';
 import { scatterRecordStruct } from './structs.wgsl.js';
+import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
@@ -170,28 +170,12 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// Per-texture atlas info, one vec4<u32> each ( see AtlasTexture._buildTextureInfo ):
-//   .x = offsetX | ( offsetY << 16 )   ( atlas texels )
-//   .y = sizeX   | ( sizeY << 16 )      ( atlas texels )
-//   .z = page                           ( atlas array layer )
-//   .w = reserved
-// sampleTexel is a shared singleton ( used by every kernel and the transparency
-// raycast ), so the atlas info it reads must be a shared singleton too. This is
-// global state — only one atlas / path tracer is supported at a time.
-export const textureInfoArray = uniformArray( [ new Vector4() ], 'uvec4' ).setName( 'textureInfo' );
+// Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
+// array node ( must be named "textureInfo" ). Called once per scene so a single
+// sampleTexel / textureInfo binding is shared by every caller in a pipeline.
+export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wgslTagFn/* wgsl */ `
 
-// Update the atlas info from AtlasTexture.textureInfo ( an array of Vector4, one
-// per texture ). Kept at a minimum length of one so the generated WGSL array is
-// never zero-length.
-export function setTextureInfo( info ) {
-
-	textureInfoArray.array = info.length > 0 ? info : [ new Vector4() ];
-
-}
-
-export const sampleTexelFunc = wgslFn( /* wgsl */ `
-
-	fn sampleTexel( textures: texture_2d_array<f32>, textureSampler: sampler, uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
+	fn sampleTexel( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
 		let wrapS    = ( packed >> 24 ) & 0x3;
 		let wrapT    = ( packed >> 26 ) & 0x3;
@@ -200,23 +184,23 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 
 		// look up the texture's rect and page within the atlas. three wraps a
 		// uniformArray in a struct ( textureInfoStruct ) with a "value" array member.
-		let info   = textureInfo.value[ u32( texIndex ) ];
+		let info   = ${ textureInfoUniform }[ u32( texIndex ) ];
 		let offset = vec2f( vec2u( info.x & 0xFFFFu, info.x >> 16u ) );
 		let size   = vec2f( vec2u( info.y & 0xFFFFu, info.y >> 16u ) );
 		let page   = i32( info.z & 0xFFFFu );
 
 		// wrap is applied on the logical uv first, then remapped into the tile
 		let wrappedUv = vec2f(
-			applyWrap( uv.x, wrapS ),
-			applyWrap( uv.y, wrapT ),
+			${ applyWrapFunc }( uv.x, wrapS ),
+			${ applyWrapFunc }( uv.y, wrapT ),
 		);
 
-		let pageDim = vec2f( textureDimensions( textures, 0 ).xy );
+		let pageDim = vec2f( textureDimensions( ${ atlas }, 0 ).xy );
 
 		if ( nearest == 1 ) {
 
 			let tileTexel = clamp( vec2i( wrappedUv * size ), vec2i( 0 ), vec2i( size ) - vec2i( 1 ) );
-			return textureLoad( textures, vec2i( offset ) + tileTexel, page, 0 );
+			return textureLoad( ${ atlas }, vec2i( offset ) + tileTexel, page, 0 );
 
 		}
 
@@ -228,9 +212,8 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 		let maxUv = ( offset + size - vec2f( 0.5 ) ) / pageDim;
 		atlasUv = clamp( atlasUv, minUv, maxUv );
 
-		return textureSampleLevel( textures, textureSampler, atlasUv, page, lod );
+		return textureSampleLevel( ${ atlas }, ${ atlasSampler }, atlasUv, page, lod );
 
 	}
-
-`, [ applyWrapFunc, textureInfoArray ] );
+`;
 
