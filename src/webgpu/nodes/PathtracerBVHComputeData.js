@@ -111,8 +111,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		} );
 
 		fns.getUvFromChannel = wgslTagFn/* wgsl */`
-			fn bvh_getUvFromChannel( vertexData: ${ structs.attributes }, channel: u32 ) -> vec2f {
+			fn getUvFromChannel( vertexData: ${ structs.attributes }, packed: i32 ) -> vec2f {
 
+				// the uv channel is packed into bits 23-25 of the "*Map" descriptor
+				let channel = u32( ( packed >> 23 ) & 0x7 );
 				switch ( channel ) {
 
 					${ cases.join( '\n' ) }
@@ -140,7 +142,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
 		// the transparency raycast resolve to one textureInfo binding per pipeline
-		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel );
+		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel );
 
 		// raycast first hit
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
@@ -235,9 +237,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 								if ( material.map != - 1 ) {
 
 									let barycoord = triResult.barycoord;
-									let a = ${ storage.attributes }[ i0 ].uv.xy;
-									let b = ${ storage.attributes }[ i1 ].uv.xy;
-									let c = ${ storage.attributes }[ i2 ].uv.xy;
+									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
+									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
+									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
@@ -249,9 +251,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 								if ( material.alphaMap != - 1 ) {
 
 									let barycoord = triResult.barycoord;
-									let a = ${ storage.attributes }[ i0 ].uv.xy;
-									let b = ${ storage.attributes }[ i1 ].uv.xy;
-									let c = ${ storage.attributes }[ i2 ].uv.xy;
+									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
+									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
+									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
