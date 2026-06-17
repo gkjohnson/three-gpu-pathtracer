@@ -94,7 +94,7 @@ export class WebGPUPathTracer {
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
-		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
+		this.commonAttributes = [ 'normal', 'tangent', 'color' ];
 
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new MegaKernelPathTracer( renderer );

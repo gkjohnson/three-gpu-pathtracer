@@ -85,20 +85,6 @@ export function setCommonAttributes( geometry, attributes ) {
 
 	}
 
-	if ( ! geometry.attributes.uv && ( attributes && attributes.includes( 'uv' ) ) ) {
-
-		const vertCount = geometry.attributes.position.count;
-		geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( vertCount * 2 ), 2, false ) );
-
-	}
-
-	if ( ! geometry.attributes.uv2 && ( attributes && attributes.includes( 'uv2' ) ) ) {
-
-		const vertCount = geometry.attributes.position.count;
-		geometry.setAttribute( 'uv2', new BufferAttribute( new Float32Array( vertCount * 2 ), 2, false ) );
-
-	}
-
 	if ( ! geometry.attributes.tangent && ( attributes && attributes.includes( 'tangent' ) ) ) {
 
 		// compute tangents requires a uv and normal buffer
