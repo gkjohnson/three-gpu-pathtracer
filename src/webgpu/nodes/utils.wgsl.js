@@ -173,10 +173,10 @@ export const sampleTexelFunc = wgslFn( /* wgsl */ `
 
 	fn sampleTexel( textures: texture_2d_array<f32>, textureSampler: sampler, uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
-		let wrapS    = ( packed >> 24 ) & 0x3;
-		let wrapT    = ( packed >> 26 ) & 0x3;
-		let nearest  = ( packed >> 28 ) & 0x1;
-		let texIndex = packed & 0xFFFFFF;
+		let texIndex = packed & 0x7FFFFF;
+		let wrapS    = ( packed >> 26 ) & 0x3;
+		let wrapT    = ( packed >> 28 ) & 0x3;
+		let nearest  = ( packed >> 30 ) & 0x1;
 
 		let wrappedUv = vec2f(
 			applyWrap( uv.x, wrapS ),

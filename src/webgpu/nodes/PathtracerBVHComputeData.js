@@ -45,6 +45,86 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
+	updateUvAttributesFromScene() {
+
+		const { attributes, bvh } = this;
+		const keys = new Set();
+		for ( let i = 0; i < 8; i ++ ) {
+
+			const key = i === 0 ? 'uv' : 'uv' + i;
+			delete attributes[ key ];
+			keys.add( key );
+
+		}
+
+		bvh.objects.forEach( c => {
+
+			if ( c.geometry ) {
+
+				for ( const key in c.geometry.attributes ) {
+
+					if ( keys.has( key ) ) {
+
+						attributes[ key ] = 'vec4f';
+
+					}
+
+				}
+
+			}
+
+		} );
+
+	}
+
+	updateUvSampleFunction() {
+
+		const { structs, fns } = this;
+
+		// generate the switch cases for the uv channels
+		const cases = [];
+		let fallback = null;
+		structs.attributes.membersLayout.forEach( ( { name } ) => {
+
+			if ( /^uv/.test( name ) ) {
+
+				const channel = name === 'uv' ? 0 : Number( name.replace( /^uv/, '' ) );
+				cases.push( /* wgsl */`
+					case ${ channel }u: {
+
+						return vertexData.${ name }.xy;
+
+					}
+				` );
+
+				if ( fallback === null ) {
+
+					fallback = `vertexData.${ name }.xy`;
+
+				}
+
+			}
+
+		} );
+
+		fns.getUvFromChannel = wgslTagFn/* wgsl */`
+			fn bvh_getUvFromChannel( vertexData: ${ structs.attributes }, channel: u32 ) -> vec2f {
+
+				switch ( channel ) {
+
+					${ cases.join( '\n' ) }
+					default: {
+
+						return ${ fallback ?? 'vec2f( 0.0 )' };
+
+					}
+
+				}
+
+			}
+		`;
+
+	}
 
 	useTransparencyRaycastFn( textures ) {
 
@@ -241,7 +321,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	update() {
 
+		this.updateUvAttributesFromScene();
+
 		super.update();
+
+		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
+		this.updateUvSampleFunction();
 
 		// build material storage
 		const { materials, structs } = this;
@@ -292,11 +377,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 
-				const idx = textureLookUp.get( hash );
-				const wrapS = encodeTextureWrap( texture.wrapS );
-				const wrapT = encodeTextureWrap( texture.wrapT );
-				const nearest = texture.magFilter === NearestFilter ? 1 : 0;
-				return ( nearest << 28 ) | ( wrapT << 26 ) | ( wrapS << 24 ) | idx;
+				const idx = textureLookUp.get( hash );							// 23 bits
+				const channel = texture.channel & 7;							// 3 bits
+				const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
+				const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
+				const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
+				return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
 
 			} else {
 
