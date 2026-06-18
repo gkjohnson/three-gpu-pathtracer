@@ -135,7 +135,7 @@ export class WebGPUPathTracer {
 		this._backgroundColorTexture.minFilter = LinearFilter;
 		this._backgroundColorTexture.magFilter = LinearFilter;
 
-		this._resetTime = - 1;
+		this._resetTime = 0;
 		this._fadeState = 0;
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
@@ -309,6 +309,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.reset();
 		this._resetTime = 0;
 		this._fadeState = 0;
+		this._timer.update();
 
 		if ( this.stableNoise ) {
 
