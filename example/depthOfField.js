@@ -11,8 +11,8 @@ import {
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { PhysicalCamera, GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer, BlurredEnvMapGenerator } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -99,7 +99,7 @@ async function init() {
 
 	// set up environment map
 	const generator = new BlurredEnvMapGenerator( renderer );
-	const blurredTex = generator.generate( envTexture, 0.35 );
+	const blurredTex = await generator.generate( envTexture, 0.35 );
 	generator.dispose();
 	envTexture.dispose();
 
@@ -132,10 +132,7 @@ async function init() {
 	scene.updateMatrixWorld( true );
 
 	// update the scene
-	const results = await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
-	bvh = results.bvh;
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
@@ -193,7 +190,7 @@ function onMouseDown( e ) {
 function onMouseUp( e ) {
 
 	const deltaMouse = Math.abs( mouse.x - e.clientX ) + Math.abs( mouse.y - e.clientY );
-	if ( deltaMouse < 2 && bvh ) {
+	if ( deltaMouse < 2 ) {
 
 		const raycaster = new Raycaster();
 		raycaster.setFromCamera( {
@@ -203,7 +200,8 @@ function onMouseUp( e ) {
 
 		}, camera );
 
-		const hit = bvh.raycastFirst( raycaster.ray );
+		raycaster.firstHitOnly = true;
+		const hit = raycaster.intersectObject( scene )[ 0 ];
 		if ( hit ) {
 
 			focusPoint.copy( hit.point );

@@ -11,8 +11,7 @@ import {
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, BlurredEnvMapGenerator } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -92,7 +91,7 @@ async function init() {
 
 	// update env map
 	const generator = new BlurredEnvMapGenerator( renderer );
-	const blurredTex = generator.generate( envTexture, 0.1 );
+	const blurredTex = await generator.generate( envTexture, 0.1 );
 	scene.background = blurredTex;
 	scene.environment = blurredTex;
 	generator.dispose();
