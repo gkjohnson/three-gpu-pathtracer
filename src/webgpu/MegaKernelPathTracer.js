@@ -21,7 +21,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	resetSeed() {
 
-		this.material.seed = 0;
+		this.kernel.seed = 0;
 
 	}
 
