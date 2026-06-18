@@ -1,13 +1,10 @@
 import {
 	ACESFilmicToneMapping,
-	CustomBlending,
 	Scene,
 	WebGPURenderer,
 	Vector3,
 } from 'three/webgpu';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DenoiseMaterial } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -16,7 +13,7 @@ import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLigh
 
 const CREDITS = 'Material orb model courtesy of USD Working Group';
 
-let pathTracer, renderer, controls, denoiseQuad, material;
+let pathTracer, renderer, controls, material;
 let camera, scene, loader;
 
 const params = {
@@ -48,10 +45,6 @@ const params = {
 	},
 
 	multipleImportanceSampling: true,
-	denoiseEnabled: true,
-	denoiseSigma: 2.5,
-	denoiseThreshold: 0.1,
-	denoiseKSigma: 1.0,
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
 	transmissiveBounces: 20,
@@ -122,28 +115,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
-	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {
-
-		denoiseQuad.material.sigma = params.denoiseSigma;
-		denoiseQuad.material.threshold = params.denoiseThreshold;
-		denoiseQuad.material.kSigma = params.denoiseKSigma;
-		denoiseQuad.material.opacity = quad.material.opacity;
-
-		const autoClear = renderer.autoClear;
-		const finalQuad = params.denoiseEnabled ? denoiseQuad : quad;
-		renderer.autoClear = false;
-		finalQuad.material.map = target.texture;
-		finalQuad.render( renderer );
-		renderer.autoClear = autoClear;
-
-	};
-
-	// denoiser
-	denoiseQuad = new FullScreenQuad( new DenoiseMaterial( {
-		map: null,
-		blending: CustomBlending,
-		premultipliedAlpha: renderer.getContextAttributes().premultipliedAlpha,
-	} ) );
 
 	scene = new Scene();
 
@@ -190,13 +161,6 @@ async function init() {
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'transmissiveBounces', 0, 40, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
-
-	const denoiseFolder = gui.addFolder( 'Denoising' );
-	denoiseFolder.add( params, 'denoiseEnabled' );
-	denoiseFolder.add( params, 'denoiseSigma', 0.01, 12.0 );
-	denoiseFolder.add( params, 'denoiseThreshold', 0.01, 1.0 );
-	denoiseFolder.add( params, 'denoiseKSigma', 0.0, 12.0 );
-	denoiseFolder.close();
 
 	const matFolder1 = gui.addFolder( 'Material' );
 	matFolder1.addColor( params.materialProperties, 'color' ).onChange( onParamsChange );

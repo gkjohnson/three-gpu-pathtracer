@@ -9,7 +9,6 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
@@ -43,7 +42,6 @@ async function init() {
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.renderScale = renderScale;
 	pathTracer.tiles.set( tiles, tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// camera
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );

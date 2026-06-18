@@ -14,7 +14,6 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
@@ -66,7 +65,6 @@ async function init() {
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// generator
 	hdrGenerator = new HDRImageGenerator( renderer, document.querySelector( 'img' ) );

@@ -105,8 +105,6 @@ export class WebGPUPathTracer {
 
 	}
 
-	setBVHWorker() {}
-
 	updateLights() {}
 
 	updateMaterials() {}
