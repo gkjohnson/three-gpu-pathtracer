@@ -114,7 +114,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.textureSize.set( 2048, 2048 );
 
 	scene = new Scene();
 

@@ -61,7 +61,6 @@ async function init() {
 	renderer = new WebGPURenderer();
 	renderer.init();
 	renderer.shadowMap.enabled = true;
-	renderer.physicallyCorrectLights = true;
 	renderer.shadowMap.type = PCFSoftShadowMap;
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -69,7 +68,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.textureSize.set( 2048, 2048 );
 	pathTracer.filterGlossyFactor = 0.5;
 
 	// camera

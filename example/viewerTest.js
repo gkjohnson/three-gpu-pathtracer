@@ -32,7 +32,7 @@ const isWebGPU = urlParams.get( 'isWebGPU' ) === 'true';
 const params = {
 
 	isWebGPU,
-	useMegakernel: true,
+	useMegakernel: false,
 
 	enable: true,
 	bounces: 10,

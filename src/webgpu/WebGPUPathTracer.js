@@ -89,7 +89,7 @@ export class WebGPUPathTracer {
 
 	get tiles() {
 
-		return this._tiles;
+		return this._pathTracer.tiles;
 
 	}
 
@@ -169,16 +169,13 @@ export class WebGPUPathTracer {
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
 		// WebGLPathTracer compatibility stubs (see getters above)
+		// TOOD: implement these correctly
 		this._multipleImportanceSampling = true;
 		this._transmissiveBounces = 5;
 		this._filterGlossyFactor = 0;
 		this._stableNoise = false;
-		this._tiles = new Vector2( 1, 1 );
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
-		this.physicallyCorrectLights = true;
-		this.textureSize = new Vector2( 1024, 1024 );
-		this.renderToCanvasCallback = () => {};
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
