@@ -50,7 +50,9 @@ export class BlurredEnvMapGenerator {
 
 	dispose() {
 
+		// disposes the node's internal PMREMGenerator and its prefiltering render targets
 		this._pmremNode.value = null;
+		this._pmremNode.dispose();
 		this.quad.material.dispose();
 		this.renderTarget.dispose();
 

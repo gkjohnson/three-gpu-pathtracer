@@ -418,8 +418,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
 			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
 
-			console.log( m.emissiveIntensity, m.emissive )
-
 			// emission - offset 12
 			if ( 'emissive' in m ) {
 
