@@ -1,4 +1,4 @@
-import { Matrix4, Vector4 } from 'three';
+import { Matrix4, Vector4, Scene } from 'three';
 import { Mesh, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, float } from 'three/tsl';
 import { constants } from './wgsl/common.wgsl.js';
@@ -313,6 +313,7 @@ export class BVHComputeData {
 			intersectRangeFn,
 			transformShapeFn = null,
 			transformResultFn = null,
+			resetShapeFn = null,
 		} = options;
 
 		const { storage } = this;
@@ -330,6 +331,13 @@ export class BVHComputeData {
 		if ( transformShapeFn ) {
 
 			transformShapeSnippet = wgslTagCode/* wgsl */`${ transformShapeFn }( &localShape, i );`;
+
+		}
+
+		let resetShapeSnippet = '';
+		if ( resetShapeFn ) {
+
+			resetShapeSnippet = wgslTagCode/* wgsl */`${ resetShapeFn }( i );`;
 
 		}
 
@@ -451,6 +459,8 @@ export class BVHComputeData {
 							didHit = true;
 
 						}
+
+						${ resetShapeSnippet }
 
 					}
 

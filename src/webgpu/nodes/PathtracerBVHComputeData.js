@@ -235,6 +235,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 			`,
+			resetShapeFn: wgslTagFn/* wgsl */`
+				fn resetRayScalar( objectIndex: u32 ) -> void {
+
+					${ scratchRayScalar } = 1.0;
+
+				}
+			`,
 		} );
 
 	}
