@@ -133,6 +133,8 @@ export class PathTracerBackend {
 
 	}
 
+	resetSeed() {}
+
 	reset() {
 
 		const {

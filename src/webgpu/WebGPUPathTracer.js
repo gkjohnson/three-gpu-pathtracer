@@ -75,18 +75,6 @@ export class WebGPUPathTracer {
 
 	}
 
-	get stableNoise() {
-
-		return this._stableNoise;
-
-	}
-
-	set stableNoise( v ) {
-
-		this._stableNoise = v;
-
-	}
-
 	get tiles() {
 
 		return this._pathTracer.tiles;
@@ -166,6 +154,7 @@ export class WebGPUPathTracer {
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
+		this.stableNoise = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
 		// WebGLPathTracer compatibility stubs (see getters above)
@@ -173,7 +162,6 @@ export class WebGPUPathTracer {
 		this._multipleImportanceSampling = true;
 		this._transmissiveBounces = 5;
 		this._filterGlossyFactor = 0;
-		this._stableNoise = false;
 		this.enablePathTracing = true;
 		this.pausePathTracing = false;
 
@@ -321,6 +309,12 @@ export class WebGPUPathTracer {
 		this._pathTracer.reset();
 		this._resetTime = 0;
 		this._fadeState = 0;
+
+		if ( this.stableNoise ) {
+
+			this._pathTracer.resetSeed();
+
+		}
 
 	}
 
