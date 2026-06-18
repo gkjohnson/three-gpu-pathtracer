@@ -243,13 +243,6 @@ export class WebGPUPathTracer {
 
 	}
 
-	// TODO: support async generation of ObjectBVH
-	setSceneAsync( ...args ) {
-
-		this.setScene( ...args );
-
-	}
-
 	setCamera( camera ) {
 
 		this.camera = camera;

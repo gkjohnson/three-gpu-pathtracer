@@ -113,9 +113,7 @@ async function init() {
 
 	gltf.scene.position.addScaledVector( center, - 0.5 );
 
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 

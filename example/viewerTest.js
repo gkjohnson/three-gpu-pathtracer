@@ -480,13 +480,7 @@ async function updateModel() {
 	camera.updateProjectionMatrix();
 	controls.update();
 
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => {
-
-			loader.setPercentage( 0.5 + 0.5 * v );
-
-		}
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';

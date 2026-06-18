@@ -169,9 +169,7 @@ async function init() {
 	targetObject.position.z = 0.05;
 	scene.add( targetObject );
 
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	onParamsChange();

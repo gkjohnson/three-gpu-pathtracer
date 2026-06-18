@@ -634,11 +634,7 @@ async function updateModel() {
 
 	scene.add( model );
 
-	await pathTracer.setSceneAsync( scene, activeCamera, {
-
-		onProgress: v => loader.setPercentage( 0.5 + 0.5 * v ),
-
-	} );
+	pathTracer.setScene( scene, activeCamera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );

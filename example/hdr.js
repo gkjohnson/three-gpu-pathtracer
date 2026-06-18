@@ -120,9 +120,7 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
