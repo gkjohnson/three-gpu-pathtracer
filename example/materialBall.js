@@ -2,12 +2,13 @@ import {
 	ACESFilmicToneMapping,
 	CustomBlending,
 	Scene,
-	WebGLRenderer,
+	WebGPURenderer,
 	Vector3,
-} from 'three';
+} from 'three/webgpu';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { DenoiseMaterial, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { DenoiseMaterial } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
@@ -111,13 +112,14 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 0.02;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
 	pathTracer.renderToCanvasCallback = ( target, renderer, quad ) => {

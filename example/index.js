@@ -12,9 +12,9 @@ import {
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
-	WebGLRenderer,
+	WebGPURenderer,
 	EquirectangularReflectionMapping,
-} from 'three';
+} from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -24,7 +24,8 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -145,12 +146,13 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
 	pathTracer.physicallyCorrectLights = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -198,7 +200,7 @@ async function init() {
 	);
 	floorPlane.scale.setScalar( 5 );
 	floorPlane.rotation.x = - Math.PI / 2;
-	scene.add( floorPlane );
+	// scene.add( floorPlane );
 
 	stats = new Stats();
 	document.body.appendChild( stats.dom );

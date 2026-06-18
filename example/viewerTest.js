@@ -2,7 +2,7 @@ import {
 	ACESFilmicToneMapping,
 	NoToneMapping,
 	LoadingManager,
-	WebGLRenderer,
+	WebGPURenderer,
 	Scene,
 	PerspectiveCamera,
 	EquirectangularReflectionMapping,
@@ -10,17 +10,13 @@ import {
 	Group,
 	Sphere,
 	Box3,
-	Vector2,
-} from 'three';
-import { WebGPURenderer } from 'three/webgpu';
+} from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
@@ -90,7 +86,7 @@ async function init() {
 
 	}
 
-	await createRenderer( params.isWebGPU );
+	await createRenderer();
 
 	// scene
 	scene = new Scene();
@@ -116,41 +112,21 @@ async function init() {
 
 }
 
-async function createRenderer( isWebGPU ) {
+async function createRenderer() {
 
-	if ( isWebGPU ) {
+	// renderer - WebGPU version
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+	await renderer.init();
+	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.setClearAlpha( 0 );
+	containerEl.appendChild( renderer.domElement );
 
-		// renderer - WebGPU version
-		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
-		await renderer.init();
-		renderer.toneMapping = ACESFilmicToneMapping;
-		renderer.setClearAlpha( 0 );
-		containerEl.appendChild( renderer.domElement );
+	// path tracer - WebGPU version
+	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.useMegakernel( params.useMegakernel );
+	if ( params.useMegakernel ) {
 
-		// path tracer - WebGPU version
-		pathTracer = new WebGPUPathTracer( renderer );
-		pathTracer.useMegakernel( params.useMegakernel );
-		if ( params.useMegakernel ) {
-
-			pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
-
-		}
-
-	} else {
-
-		// renderer
-		renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-		renderer.physicallyCorrectLights = true;
-		renderer.toneMapping = ACESFilmicToneMapping;
-		renderer.setClearAlpha( 0 );
-		containerEl.appendChild( renderer.domElement );
-
-		// path tracer
-		pathTracer = new WebGLPathTracer( renderer );
-		pathTracer.filterGlossyFactor = 0.5;
-		pathTracer.tiles.set( params.tiles, params.tiles );
-		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+		pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
 
 	}
 
@@ -206,7 +182,7 @@ function animate() {
 
 	}
 
-	// TODO: use a delay field from WebGLPathTracer
+	// TODO: use a delay field from the path tracer
 	if ( params.enable && delaySamples === 0 ) {
 
 		pathTracer.enablePathTracing = params.enable;
@@ -306,29 +282,7 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 
-	let webgpuOptions = null;
-	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
-
-		const size = renderer.getSize( new Vector2() );
-		pathTracer.dispose();
-		containerEl.removeChild( renderer.domElement );
-		renderer.dispose();
-
-		webgpuOptions.show( v );
-
-		createRenderer( v ).then( () => {
-
-			renderer.setSize( size.x, size.y );
-			renderer.setPixelRatio( window.devicePixelRatio );
-			pathTracer.setScene( scene, camera );
-
-			onParamsChange();
-
-		} );
-
-	} );
-
-	webgpuOptions = pathTracingFolder.addFolder( 'WebGPU Options' );
+	const webgpuOptions = pathTracingFolder.addFolder( 'WebGPU Options' );
 
 	webgpuOptions.add( params, 'useMegakernel' ).onChange( () => {
 
@@ -337,8 +291,6 @@ function buildGui() {
 		detailedSampleCount = null;
 
 	} );
-
-	webgpuOptions.show( params.isWebGPU );
 
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );

@@ -6,11 +6,12 @@ import {
 	Group,
 	Mesh,
 	MeshStandardMaterial,
-	WebGLRenderer,
+	WebGPURenderer,
 	Color,
-} from 'three';
+} from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -45,12 +46,13 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
 	// camera

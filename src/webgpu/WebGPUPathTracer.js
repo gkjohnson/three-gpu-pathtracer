@@ -34,6 +34,85 @@ export class WebGPUPathTracer {
 
 	}
 
+	// --- WebGLPathTracer compatibility stubs ---
+	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
+	// They are currently no-ops on the WebGPU path tracer until the corresponding
+	// features are implemented.
+
+	get multipleImportanceSampling() {
+
+		return this._multipleImportanceSampling;
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		this._multipleImportanceSampling = v;
+
+	}
+
+	get transmissiveBounces() {
+
+		return this._transmissiveBounces;
+
+	}
+
+	set transmissiveBounces( v ) {
+
+		this._transmissiveBounces = v;
+
+	}
+
+	get filterGlossyFactor() {
+
+		return this._filterGlossyFactor;
+
+	}
+
+	set filterGlossyFactor( v ) {
+
+		this._filterGlossyFactor = v;
+
+	}
+
+	get stableNoise() {
+
+		return this._stableNoise;
+
+	}
+
+	set stableNoise( v ) {
+
+		this._stableNoise = v;
+
+	}
+
+	get tiles() {
+
+		return this._tiles;
+
+	}
+
+	get target() {
+
+		return this._pathTracer.target ?? null;
+
+	}
+
+	get isCompiling() {
+
+		return false;
+
+	}
+
+	setBVHWorker() {}
+
+	updateLights() {}
+
+	updateMaterials() {}
+
+	// --- end compatibility stubs ---
+
 	get fadeState() {
 
 		return this._fadeState;
@@ -91,12 +170,25 @@ export class WebGPUPathTracer {
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 
+		// WebGLPathTracer compatibility stubs (see getters above)
+		this._multipleImportanceSampling = true;
+		this._transmissiveBounces = 5;
+		this._filterGlossyFactor = 0;
+		this._stableNoise = false;
+		this._tiles = new Vector2( 1, 1 );
+		this.enablePathTracing = true;
+		this.pausePathTracing = false;
+		this.physicallyCorrectLights = true;
+		this.textureSize = new Vector2( 1024, 1024 );
+		this.renderToCanvasCallback = () => {};
+
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new MegaKernelPathTracer( renderer );
+		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		// initialize the scene so it doesn't fail
+		this.setMaterial( this.material );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}

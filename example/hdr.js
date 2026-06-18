@@ -1,7 +1,7 @@
 import {
 	Scene,
 	EquirectangularReflectionMapping,
-	WebGLRenderer,
+	WebGPURenderer,
 	PerspectiveCamera,
 	Mesh,
 	PlaneGeometry,
@@ -10,13 +10,13 @@ import {
 	Color,
 	ACESFilmicToneMapping,
 	NoToneMapping,
-} from 'three';
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
@@ -55,11 +55,12 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.bounces = params.bounces;
 	pathTracer.minSamples = 1;

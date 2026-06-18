@@ -7,11 +7,12 @@ import {
 	MeshStandardMaterial,
 	Mesh,
 	Raycaster,
-	WebGLRenderer,
-} from 'three';
+	WebGPURenderer,
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -48,12 +49,13 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 

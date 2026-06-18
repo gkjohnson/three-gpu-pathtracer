@@ -10,10 +10,10 @@ import {
 	MeshStandardMaterial,
 	PerspectiveCamera,
 	Scene,
-	WebGLRenderer,
-} from 'three';
+	WebGPURenderer,
+} from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -53,12 +53,13 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 

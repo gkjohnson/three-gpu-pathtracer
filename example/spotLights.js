@@ -1,5 +1,5 @@
 import {
-	WebGLRenderer,
+	WebGPURenderer,
 	ACESFilmicToneMapping,
 	PCFSoftShadowMap,
 	Scene,
@@ -10,11 +10,12 @@ import {
 	MeshStandardMaterial,
 	BoxGeometry,
 	PerspectiveCamera,
-} from 'three';
+} from 'three/webgpu';
 import { IESLoader } from 'three/examples/jsm/loaders/IESLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalSpotLight, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { PhysicalSpotLight } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
@@ -58,7 +59,8 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer();
+	renderer = new WebGPURenderer();
+	renderer.init();
 	renderer.shadowMap.enabled = true;
 	renderer.physicallyCorrectLights = true;
 	renderer.shadowMap.type = PCFSoftShadowMap;
@@ -66,7 +68,7 @@ async function init() {
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.textureSize.set( 2048, 2048 );
