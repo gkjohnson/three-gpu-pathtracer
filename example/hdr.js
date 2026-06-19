@@ -10,6 +10,7 @@ import {
 	Color,
 	ACESFilmicToneMapping,
 	NoToneMapping,
+	HalfFloatType,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -45,6 +46,7 @@ let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
 let activeImage = false;
+const img = document.querySelector( 'img' );
 
 init();
 
@@ -67,7 +69,7 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
 	// generator
-	hdrGenerator = new HDRImageGenerator( renderer, document.querySelector( 'img' ) );
+	hdrGenerator = new HDRImageGenerator( renderer );
 
 	// camera
 	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
@@ -189,7 +191,6 @@ function onResize() {
 
 function resetHdr() {
 
-	hdrGenerator.reset();
 	activeImage = false;
 
 }
@@ -210,18 +211,31 @@ function animate() {
 	) {
 
 		// NOTE: this can be called repeatedly but takes up to 200 ms
-		hdrGenerator.updateFrom( pathTracer.target );
+		hdrGenerator.generateBlob( pathTracer.target ).then( blob => {
+
+			const img = document.querySelector( 'img' );
+			if ( img.src ) {
+
+				URL.revokeObjectURL( img.src );
+
+			}
+
+			img.src = URL.createObjectURL( blob );
+			activeImage = true;
+
+		} );
+
 		activeImage = true;
 
 	}
 
-	if ( hdrGenerator.completeImage && params.hdr ) {
+	if ( activeImage && params.hdr ) {
 
-		hdrGenerator.image.classList.add( 'show' );
+		img.classList.add( 'show' );
 
 	} else {
 
-		hdrGenerator.image.classList.remove( 'show' );
+		img.classList.remove( 'show' );
 
 	}
 

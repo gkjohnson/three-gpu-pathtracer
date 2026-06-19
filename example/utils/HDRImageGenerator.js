@@ -4,33 +4,19 @@ import { FloatType, LinearSRGBColorSpace, RGBAFormat } from 'three';
 
 export class HDRImageGenerator {
 
-	get completeImage() {
-
-		return this._lastUrl !== null;
-
-	}
-
-	constructor( renderer, imageElement = new Image() ) {
+	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.image = imageElement;
-		this.encoding = false;
-		this._lastUrl = null;
-		this._encodingId = - 1;
 
 	}
 
-	async updateFrom( renderTarget ) {
+	async generateBlob( renderTarget ) {
 
-		if ( this.encoding ) {
+		return new Blob( [ await this.generateArrayBuffer( renderTarget ) ], { type: 'octet/stream' } );
 
-			throw new Error( 'HDRImageGenerator: HDR image already being encoded.' );
+	}
 
-		}
-
-		this._encodingId ++;
-		this.encoding = true;
-		const currentId = this._encodingId;
+	async generateArrayBuffer( renderTarget ) {
 
 		const renderer = this.renderer;
 		const { width, height } = renderTarget;
@@ -65,48 +51,11 @@ export class HDRImageGenerator {
 
 		};
 
-		const jpegData = await encodeHDR( imageInformation );
-
-		// TODO: remove this so we can run these in parallel, no url needed
-		if ( this._encodingId === currentId ) {
-
-			if ( this._lastUrl ) {
-
-				URL.revokeObjectURL( this._lastUrl );
-
-			}
-
-			const blob = new Blob( [ jpegData ], { type: 'octet/stream' } );
-			this._lastUrl = URL.createObjectURL( blob );
-			this.image.src = this._lastUrl;
-			this.encoding = false;
-
-		}
-
-	}
-
-	reset() {
-
-		if ( this.encoding ) {
-
-			this.encoding = false;
-			this._encodingId ++;
-
-		}
-
-		if ( this._lastUrl ) {
-
-			URL.revokeObjectURL( this._lastUrl );
-			this.image.src = '';
-			this._lastUrl = null;
-
-		}
+		return encodeHDR( imageInformation );
 
 	}
 
 }
-
-
 
 async function encodeHDR( image ) {
 
