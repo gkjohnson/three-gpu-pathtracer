@@ -726,6 +726,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				bvh.refit();
 				bvh.getBoundingBox( clonedMesh.boundingBox );
+				bvh.geometry.computeBoundingBox();
 
 			}
 

@@ -24,7 +24,7 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const CREDITS = 'Model by tipatat on Sketchfab';
 const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
-let pathTracer, renderer, controls, camera, scene, bvh;
+let pathTracer, renderer, controls, camera, scene,;
 let loader;
 const mouse = new Vector2();
 const focusPoint = new Vector3();
