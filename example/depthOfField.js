@@ -125,6 +125,9 @@ async function init() {
 			c.material.roughness = 0.05;
 			c.material.metalness = 0.05;
 
+			// tangents cannot be generated when no uv is present
+			c.material.flatShading = true;
+
 		}
 
 	} );
