@@ -85,7 +85,7 @@ export class WebGPUPathTracer {
 
 	get target() {
 
-		return this._pathTracer.target ?? null;
+		return this._pathTracer.outputTarget ?? null;
 
 	}
 
