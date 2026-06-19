@@ -128,12 +128,12 @@ async function init() {
 	loader.setPercentage( 1 );
 
 	const gui = new GUI();
-	gui.add( params, 'pause' );
 	gui.add( params, 'hdr' ).onChange( v => {
 
 		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
 
 	} );
+	gui.add( params, 'pause' );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;

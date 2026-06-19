@@ -725,6 +725,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
 
 				bvh.refit();
+				bvh.getBoundingBox( clonedMesh.boundingBox );
 
 			}
 

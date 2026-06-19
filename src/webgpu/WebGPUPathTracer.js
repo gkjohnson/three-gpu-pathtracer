@@ -156,8 +156,8 @@ export class WebGPUPathTracer {
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
-		this.stableNoise = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
+		this.stableNoise = false;
 
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
@@ -201,6 +201,7 @@ export class WebGPUPathTracer {
 				} else {
 
 					child.boundsTree.refit();
+					child.boundsTree.getBoundingBox( child.boundingBox );
 
 				}
 
