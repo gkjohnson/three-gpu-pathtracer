@@ -28,14 +28,9 @@ const DESCRIPTION = 'Rendering deformable geometry with path tracing.';
 let pathTracer, renderer, controls, camera, scene, clock;
 let mixer, mixerAction;
 let loader;
-let counter = 0;
 const params = {
 
-	bounces: 5,
-	samplesPerFrame: 1,
 	renderScale: 1 / window.devicePixelRatio,
-	tiles: 1,
-	autoPause: true,
 	pause: false,
 	continuous: false,
 	stableNoise: false,
@@ -63,8 +58,8 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.minSamples = 1;
-	pathTracer.renderDelay = 0;
-	pathTracer.fadeDuration = 0;
+	// keep a live low-res preview while the camera or animation is moving
+	pathTracer.dynamicLowRes = true;
 
 	// scene
 	scene = new Scene();
@@ -134,30 +129,14 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
-
-		pathTracer.tiles.set( value, value );
-
-	} );
-	gui.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
 		pathTracer.reset();
 
 	} );
-	gui.add( params, 'autoPause' ).listen();
-	gui.add( params, 'pause' ).onChange( v => {
-
-		params.autoPause = false;
-		setPause( v );
-
-	} ).listen();
-	gui.add( params, 'continuous' ).onChange( () => {
-
-		params.autoPause = false;
-
-	} );
+	gui.add( params, 'pause' ).name( 'pause animation' ).onChange( setPause );
+	gui.add( params, 'continuous' ).name( 'path trace animation' );
 	gui.add( params, 'stableNoise' ).onChange( v => {
 
 		pathTracer.stableNoise = v;
@@ -203,37 +182,19 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	// step the animation forward
+	// advance the animation
 	const delta = Math.min( clock.getDelta(), 30 * 0.001 );
 	mixer.update( delta );
 
-	if ( params.autoPause ) {
-
-		// auto pause the animation
-		counter += delta;
-		if ( ! params.pause && counter >= 2.5 || params.pause && counter >= 5 ) {
-
-			setPause( ! params.pause );
-			counter = 0;
-
-		}
-
-	} else {
-
-		counter = 0;
-
-	}
-
-	pathTracer.dynamicLowRes = params.continuous;
-
 	if ( ! params.pause && ! params.continuous ) {
 
+		// playing
 		renderer.render( scene, camera );
 		loader.setSamples( 0, pathTracer.isCompiling );
 
 	} else {
 
-		// if we're continuously path tracing then update the scene
+		// continuous path tracing
 		if ( ! params.pause && params.continuous ) {
 
 			regenerateScene();
