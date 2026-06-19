@@ -234,6 +234,6 @@ function animate() {
 
 	camera.updateMatrixWorld();
 	pathTracer.renderSample();
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples );
 
 }
