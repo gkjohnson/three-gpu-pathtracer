@@ -101,6 +101,11 @@ const params = {
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
+	debugBounds: false,
+	displayTLAS: true,
+	displayBLAS: true,
+	stopAtSurface: false,
+	saturationCount: 64,
 
 	floorColor: '#111111',
 	floorOpacity: 1.0,
@@ -226,7 +231,16 @@ function animate() {
 
 	}
 
-	if ( params.enable ) {
+	if ( params.debugBounds ) {
+
+		pathTracer.renderDebugBounds( {
+			displayTLAS: params.displayTLAS,
+			displayBLAS: params.displayBLAS,
+			stopAtSurface: params.stopAtSurface,
+			saturationCount: params.saturationCount,
+		} );
+
+	} else if ( params.enable ) {
 
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
@@ -380,6 +394,13 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.open();
+
+	const debugFolder = gui.addFolder( 'debug' );
+	debugFolder.add( params, 'debugBounds' ).name( 'bvh bounds heatmap' );
+	debugFolder.add( params, 'displayTLAS' ).name( 'display TLAS' );
+	debugFolder.add( params, 'displayBLAS' ).name( 'display BLAS' );
+	debugFolder.add( params, 'stopAtSurface' ).name( 'stop at surface' );
+	debugFolder.add( params, 'saturationCount', 1, 512, 1 ).name( 'saturation count' );
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
