@@ -32,11 +32,11 @@ const MAX_SAMPLES = 45;
 
 const params = {
 	pause: false,
-	sdrToneMapping: false,
+	hdr: true,
 	environmentIntensity: 15,
-	tiles: 3,
 	bounces: 5,
 	renderScale: 1,
+	downloadHDR: () => downloadImage(),
 
 	...getScaledSettings(),
 };
@@ -51,6 +51,7 @@ async function init() {
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
+
 
 	// renderer
 	// outputType HalfFloatType configures the canvas for extended-range tone mapping, so the path
@@ -127,9 +128,9 @@ async function init() {
 
 	const gui = new GUI();
 	gui.add( params, 'pause' );
-	gui.add( params, 'sdrToneMapping' ).onChange( v => {
+	gui.add( params, 'hdr' ).onChange( v => {
 
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
 
 	} );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
@@ -144,18 +145,13 @@ async function init() {
 		pathTracer.reset();
 
 	} );
-	gui.add( params, 'tiles', 1, 6, 1 ).onChange( v => {
-
-		pathTracer.tiles.setScalar( v );
-
-	} );
 	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
 
 		scene.environmentIntensity = v;
 		pathTracer.updateEnvironment();
 
 	} );
-	gui.add( { downloadHDR: downloadImage }, 'downloadHDR' ).name( 'download hdr' );
+	gui.add( params, 'downloadHDR' ).name( 'Download HDR' );
 
 	window.addEventListener( 'resize', onResize );
 
