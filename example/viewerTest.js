@@ -185,8 +185,7 @@ function animate() {
 	// TODO: use a delay field from the path tracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.enablePathTracing = params.enable;
-		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
 
 		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 

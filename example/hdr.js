@@ -214,7 +214,7 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	const doPause = params.pause && pathTracer.samples >= 1;
-	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || doPause;
+	pathTracer.pause = pathTracer.samples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
 	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );

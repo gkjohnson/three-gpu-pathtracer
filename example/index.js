@@ -254,7 +254,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples );
 
 }
 

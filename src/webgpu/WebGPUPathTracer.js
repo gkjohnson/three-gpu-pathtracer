@@ -40,43 +40,6 @@ export class WebGPUPathTracer {
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
 	// features are implemented.
-
-	get multipleImportanceSampling() {
-
-		return this._multipleImportanceSampling;
-
-	}
-
-	set multipleImportanceSampling( v ) {
-
-		this._multipleImportanceSampling = v;
-
-	}
-
-	get transmissiveBounces() {
-
-		return this._transmissiveBounces;
-
-	}
-
-	set transmissiveBounces( v ) {
-
-		this._transmissiveBounces = v;
-
-	}
-
-	get filterGlossyFactor() {
-
-		return this._filterGlossyFactor;
-
-	}
-
-	set filterGlossyFactor( v ) {
-
-		this._filterGlossyFactor = v;
-
-	}
-
 	get tiles() {
 
 		return this._pathTracer.tiles;
@@ -86,12 +49,6 @@ export class WebGPUPathTracer {
 	get target() {
 
 		return this._pathTracer.outputTarget ?? null;
-
-	}
-
-	get isCompiling() {
-
-		return false;
 
 	}
 
@@ -158,14 +115,13 @@ export class WebGPUPathTracer {
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
 		this.stableNoise = false;
+		this.pause = false;
 
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
-		this._multipleImportanceSampling = true;
-		this._transmissiveBounces = 5;
-		this._filterGlossyFactor = 0;
-		this.enablePathTracing = true;
-		this.pausePathTracing = false;
+		this.multipleImportanceSampling = true;
+		this.transmissiveBounces = 5;
+		this.filterGlossyFactor = 0;
 
 		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
 
@@ -403,7 +359,7 @@ export class WebGPUPathTracer {
 
 
 		// update the samples
-		if ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) {
+		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();

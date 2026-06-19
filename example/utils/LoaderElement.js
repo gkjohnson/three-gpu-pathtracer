@@ -142,13 +142,9 @@ export class LoaderElement {
 
 	}
 
-	setSamples( count, compiling = false, detailedSamples = null ) {
+	setSamples( count, detailedSamples = null ) {
 
-		if ( compiling ) {
-
-			this._samples.innerText = 'compiling shader...';
-
-		} else if ( detailedSamples !== null ) {
+		if ( detailedSamples !== null ) {
 
 			const {
 				min,
