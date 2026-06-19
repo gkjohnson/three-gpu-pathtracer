@@ -125,6 +125,7 @@ async function init() {
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
+	loader.setPercentage( 1 );
 
 	const gui = new GUI();
 	gui.add( params, 'pause' );

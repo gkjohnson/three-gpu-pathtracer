@@ -167,7 +167,8 @@ export class LoaderElement {
 
 		} else {
 
-			this._samples.innerText = `${ Math.floor( count ) } samples`;
+			// per-pixel sample counts vary across the image, so this is an approximate figure
+			this._samples.innerText = `~${ Math.floor( count ) } samples`;
 
 		}
 
