@@ -32,7 +32,6 @@ const MAX_SAMPLES = 45;
 
 const params = {
 	pause: false,
-	hdr: true,
 	sdrToneMapping: false,
 	environmentIntensity: 15,
 	tiles: 3,
@@ -45,8 +44,6 @@ const params = {
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
-let activeImage = false;
-const img = document.querySelector( 'img' );
 
 init();
 
@@ -56,7 +53,9 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	// outputType HalfFloatType configures the canvas for extended-range tone mapping, so the path
+	// tracer's linear values above 1.0 are displayed directly in HDR ( on a capable display ).
+	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType } );
 	renderer.init();
 	document.body.appendChild( renderer.domElement );
 
@@ -86,7 +85,6 @@ async function init() {
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
-		resetHdr();
 
 	} );
 	controls.update();
@@ -128,12 +126,7 @@ async function init() {
 	loader.setDescription( DESCRIPTION );
 
 	const gui = new GUI();
-	gui.add( params, 'pause' ).onChange( () => {
-
-		resetHdr();
-
-	} );
-	gui.add( params, 'hdr' );
+	gui.add( params, 'pause' );
 	gui.add( params, 'sdrToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
@@ -143,14 +136,12 @@ async function init() {
 
 		pathTracer.renderScale = v;
 		pathTracer.reset();
-		resetHdr();
 
 	} );
 	gui.add( params, 'bounces', 1, 10 ).onChange( v => {
 
 		pathTracer.bounces = v;
 		pathTracer.reset();
-		resetHdr();
 
 	} );
 	gui.add( params, 'tiles', 1, 6, 1 ).onChange( v => {
@@ -162,9 +153,9 @@ async function init() {
 
 		scene.environmentIntensity = v;
 		pathTracer.updateEnvironment();
-		resetHdr();
 
 	} );
+	gui.add( { downloadHDR: downloadImage }, 'downloadHDR' ).name( 'download hdr' );
 
 	window.addEventListener( 'resize', onResize );
 
@@ -185,13 +176,39 @@ function onResize() {
 	// update camera
 	pathTracer.updateCamera();
 
-	resetHdr();
-
 }
 
-function resetHdr() {
+let downloading = false;
+async function downloadImage() {
 
-	activeImage = false;
+	// readback + gainmap encode takes a moment, so guard against overlapping downloads
+	if ( downloading ) {
+
+		return;
+
+	}
+
+	downloading = true;
+
+	try {
+
+		const blob = await hdrGenerator.generateBlob( pathTracer.target );
+		const url = URL.createObjectURL( blob );
+
+		const anchor = document.createElement( 'a' );
+		anchor.href = url;
+		anchor.download = 'pathtraced.jpg';
+		document.body.appendChild( anchor );
+		anchor.click();
+		anchor.remove();
+
+		URL.revokeObjectURL( url );
+
+	} finally {
+
+		downloading = false;
+
+	}
 
 }
 
@@ -202,42 +219,6 @@ function animate() {
 	const doPause = params.pause && pathTracer.samples >= 1;
 	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
-
-	if (
-		! hdrGenerator.encoding &&
-		params.hdr &&
-		( pathTracer.samples === MAX_SAMPLES || doPause ) &&
-		! activeImage
-	) {
-
-		// NOTE: this can be called repeatedly but takes up to 200 ms
-		hdrGenerator.generateBlob( pathTracer.target ).then( blob => {
-
-			const img = document.querySelector( 'img' );
-			if ( img.src ) {
-
-				URL.revokeObjectURL( img.src );
-
-			}
-
-			img.src = URL.createObjectURL( blob );
-			activeImage = true;
-
-		} );
-
-		activeImage = true;
-
-	}
-
-	if ( activeImage && params.hdr ) {
-
-		img.classList.add( 'show' );
-
-	} else {
-
-		img.classList.remove( 'show' );
-
-	}
 
 	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 

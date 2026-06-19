@@ -351,12 +351,8 @@ export class WebGPUPathTracer {
 		const delta = 1000 * timer.getDelta();
 		this._resetTime += delta;
 
-		const originalToneMapping = renderer.toneMapping;
-		const originalExposure = renderer.toneMappingExposure;
 		const originalTarget = renderer.getRenderTarget();
 		const originalAutoClear = renderer.autoClear;
-		renderer.toneMapping = NoToneMapping;
-		renderer.toneMappingExposure = 1.0;
 
 		// handle canvas-size auto synchronization
 		if ( synchronizeRenderSize ) {
@@ -422,14 +418,10 @@ export class WebGPUPathTracer {
 		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
 		blitQuad.material.fromTexture = lowResTarget;
 		blitQuad.material.texture = pathTracer.outputTarget;
-		blitQuad.material.toneMapping = originalToneMapping;
-		blitQuad.material.toneMappingExposure = originalExposure;
 		blitQuad.render( renderer );
 
 		// reset the renderer
 		renderer.autoClear = originalAutoClear;
-		renderer.toneMapping = originalToneMapping;
-		renderer.toneMappingExposure = originalExposure;
 		renderer.setRenderTarget( originalTarget );
 
 	}

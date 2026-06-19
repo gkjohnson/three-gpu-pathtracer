@@ -1,5 +1,5 @@
-import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
-import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
+import { MeshBasicNodeMaterial, StorageTexture } from 'three/webgpu';
+import { uv, varying, texture, vec4, uniform, wgslFn } from 'three/tsl';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
@@ -31,7 +31,8 @@ const sampleTexelFn = wgslFn( /* wgsl */`
 	}
 ` );
 
-// Material to apply tone mapping _before_ applying alpha blending
+// Composites the path tracer output ( with the low-res -> full-res fade ) to the screen. Tone
+// mapping and color space conversion are left to the renderer's normal output pass.
 export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	get texture() {
@@ -58,18 +59,6 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
-	get toneMapping() {
-
-		return this._toneMapping.toneMapping;
-
-	}
-
-	set toneMapping( v ) {
-
-		this._toneMapping.setToneMapping( v );
-
-	}
-
 	get transition() {
 
 		return this._transitionUniform.value;
@@ -79,18 +68,6 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 	set transition( v ) {
 
 		this._transitionUniform.value = v;
-
-	}
-
-	get exposure() {
-
-		return this._toneMapping.exposureNode.value;
-
-	}
-
-	set exposure( v ) {
-
-		this._toneMapping.exposureNode.value = v;
 
 	}
 
@@ -132,14 +109,14 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 			}
 		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( texUV ) );
-		this._toneMapping = toneMappingNode;
+		const fadedColor = getFadedColorFn( texUV );
 
-		// apply alpha _after_ applying tone mapping
+		// premultiply alpha for compositing; tone mapping and color space conversion are applied by
+		// the renderer's normal output pass.
 		// NOTE: alpha is being multiplied twice here to accommodate some odd blending in three.js
 		// See mrdoob/three.js#33104. It's possible this should be removed or rethought once fixed.
 		this.transparent = true;
-		this.colorNode = vec4( toneMappingNode.rgb.mul( toneMappingNode.a ), toneMappingNode.a );
+		this.colorNode = vec4( fadedColor.rgb.mul( fadedColor.a ), fadedColor.a );
 
 		this.setValues( params );
 
