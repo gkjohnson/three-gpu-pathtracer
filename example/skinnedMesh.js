@@ -173,7 +173,6 @@ function onResize() {
 
 function regenerateScene() {
 
-	pathTracer.bounces = params.bounces;
 	pathTracer.setScene( scene, camera );
 
 }
