@@ -34,7 +34,6 @@ const params = {
 	pause: false,
 	hdr: true,
 	environmentIntensity: 15,
-	bounces: 5,
 	renderScale: 1,
 	downloadHDR: () => downloadImage(),
 
@@ -63,7 +62,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.bounces = params.bounces;
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -137,12 +135,6 @@ async function init() {
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
-		pathTracer.reset();
-
-	} );
-	gui.add( params, 'bounces', 1, 10 ).onChange( v => {
-
-		pathTracer.bounces = v;
 		pathTracer.reset();
 
 	} );
