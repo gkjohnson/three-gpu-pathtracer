@@ -211,7 +211,9 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		const camera = this.camera;
+		const { camera, _renderer } = this;
+		camera.coordinateSystem = _renderer.coordinateSystem;
+		camera.updateProjectionMatrix();
 		camera.updateMatrixWorld();
 
 		this._pathTracer.setCamera( camera );
