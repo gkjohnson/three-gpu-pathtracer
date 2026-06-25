@@ -54,7 +54,7 @@
     "puppeteer": "^24.42.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "three": "^0.184.0",
+    "three": "^0.185.0",
     "three-mesh-bvh": "^0.9.9",
     "typescript": "^5.9.2",
     "vite": "^6.2.2",
