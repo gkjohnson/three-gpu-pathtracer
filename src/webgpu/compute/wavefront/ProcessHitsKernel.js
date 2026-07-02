@@ -1,7 +1,6 @@
 import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { getSurfaceRecordFunc } from '../../nodes/material.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy.js';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -37,6 +36,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 		};
 
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
+		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -45,9 +45,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
-
-				textures: texture_2d_array<f32>,
-				textureSampler: sampler,
 
 				globalId: vec3u
 			) -> void {
@@ -88,7 +85,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFunc }( material, vertexData, input.side, input.normal, textures, textureSampler );
+				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal );
 
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 

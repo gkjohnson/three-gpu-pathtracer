@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
-import { storage, float, sampler, texture } from 'three/tsl';
+import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -8,6 +8,8 @@ import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/struc
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { rand1, RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
+import { getSurfaceRecordFunc } from './material.wgsl.js';
+import { AtlasTexture } from '../AtlasTexture.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -42,16 +44,22 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.storage.materials = null;
 		this.materials = [];
 		this.bvhMap = new Map();
+		this.textureAtlas = new AtlasTexture();
 
 	}
 
+	useTransparencyRaycastFn() {
 
-	useTransparencyRaycastFn( textures ) {
+		const { textureAtlas, storage, structs, fns } = this;
+		const textures = textureAtlas.texture;
+		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' );
 
-		const texturesNode = texture( textures );
-		const samplerNode = sampler( textures );
+		// build the single sampleTexel bound to this instance's textureInfo node
+		const sampleTexel = sampleTexelFunc( textureInfo, texture( textures ), sampler( textures ) );
 
-		const { prefix, storage, structs, fns } = this;
+		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
+		// the transparency raycast resolve to one textureInfo binding per pipeline
+		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel );
 
 		// raycast first hit
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
@@ -59,7 +67,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
 		fns.raycastFirstHit = this.getShapecastFn( {
-			name: prefix + 'RaycastFirstHit',
+			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
@@ -152,7 +160,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
-									opacity *= ${ sampleTexelFunc }( ${ texturesNode }, ${ samplerNode }, uvPrime.xy, material.map, 0 ).a;
+									opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
 
 								}
 
@@ -166,7 +174,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
-									opacity *= ${ sampleTexelFunc }( ${ texturesNode }, ${ samplerNode }, uvPrime.xy, material.alphaMap, 0 ).g;
+									opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
 
 								}
 
@@ -256,6 +264,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.bvhMap.clear();
 		this.materials.length = 0;
+		this.useTransparencyRaycastFn();
 
 	}
 
