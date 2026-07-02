@@ -27,12 +27,11 @@ const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
-const isWebGPU = urlParams.get( 'isWebGPU' ) === 'true';
 
 const params = {
 
-	isWebGPU,
 	useMegakernel: false,
+	showAtlas: - 1,
 
 	enable: true,
 	bounces: 10,
@@ -182,7 +181,15 @@ function animate() {
 
 	}
 
-	// TODO: use a delay field from the path tracer
+	// show a page of the packed texture atlas instead of the render for debugging
+	if ( params.showAtlas >= 0 ) {
+
+		pathTracer.renderTextureAtlas( params.showAtlas );
+		return;
+
+	}
+
+	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
 		pathTracer.pause = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
@@ -280,16 +287,31 @@ function buildGui() {
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
-
-	const webgpuOptions = pathTracingFolder.addFolder( 'WebGPU Options' );
-
-	webgpuOptions.add( params, 'useMegakernel' ).onChange( () => {
+	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
 		pathTracer.reset();
 		detailedSampleCount = null;
 
 	} );
+
+	// build the atlas page dropdown dynamically from the current atlas
+	const atlasOptions = { hide: - 1 };
+	const pageCount = pathTracer.textureAtlas.pageCount;
+	for ( let i = 0; i < pageCount; i ++ ) {
+
+		atlasOptions[ `page ${ i }` ] = i;
+
+	}
+
+	// reset the selection if the previously selected page no longer exists
+	if ( params.showAtlas >= pageCount ) {
+
+		params.showAtlas = - 1;
+
+	}
+
+	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
 
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );

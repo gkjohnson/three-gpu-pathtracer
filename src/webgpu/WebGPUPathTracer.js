@@ -8,7 +8,7 @@ import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
-import { RenderTarget2DArray } from './RenderTarget2DArray.js';
+import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
@@ -64,12 +64,17 @@ export class WebGPUPathTracer {
 
 	}
 
+	get textureAtlas() {
+
+		return this._bvhData.textureAtlas;
+
+	}
+
 	useMegakernel( value ) {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
-		this._pathTracer.setTextures( this.textureArray.texture );
 		this._pathTracer.setMaterial( this.material );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
@@ -123,8 +128,6 @@ export class WebGPUPathTracer {
 		this.transmissiveBounces = 5;
 		this.filterGlossyFactor = 0;
 
-		this.textureArray = new RenderTarget2DArray( 1024, 1024 );
-
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
@@ -176,10 +179,7 @@ export class WebGPUPathTracer {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
-		bvhData.useTransparencyRaycastFn( this.textureArray.texture );
-
-		this.textureArray.setTextures( this._renderer, bvhData.textures );
-		this._pathTracer.setTextures( this.textureArray.texture );
+		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -471,6 +471,24 @@ export class WebGPUPathTracer {
 
 	}
 
+	renderTextureAtlas( layer = 0 ) {
+
+		const renderer = this._renderer;
+
+		if ( ! this._atlasDebugQuad ) {
+
+			this._atlasDebugQuad = new FullScreenQuad( new AtlasDebugMaterial() );
+
+		}
+
+		const quad = this._atlasDebugQuad;
+		quad.material.texture = this.textureAtlas.texture;
+		quad.material.layer = layer;
+		renderer.setRenderTarget( null );
+		quad.render( renderer );
+
+	}
+
 	dispose() {
 
 		this._pathTracer.dispose();
@@ -478,6 +496,7 @@ export class WebGPUPathTracer {
 		this._lowResTarget.dispose();
 		this._envColorTexture.dispose();
 		this._backgroundColorTexture.dispose();
+		this._atlasDebugQuad?.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 
@@ -488,7 +507,6 @@ export class WebGPUPathTracer {
 	}
 
 	async getDetailedSampleCount() {
-
 
 		const sampleCountTarget = this._pathTracer.sampleCountTarget;
 		const { width, height } = sampleCountTarget;

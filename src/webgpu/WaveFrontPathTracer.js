@@ -76,13 +76,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setTextures( texture ) {
-
-		this.hitProcessKernel.textures = texture;
-		this.hitProcessKernel.kernel.computeNode.parameters.textureSampler.node.value = texture;
-
-	}
-
 	setMaterial( material ) {
 
 		this.hitProcessKernel.material = material.getData();
