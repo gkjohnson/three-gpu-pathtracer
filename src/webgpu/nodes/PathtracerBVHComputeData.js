@@ -82,9 +82,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateUvSampleFunction() {
 
-		// TODO: eventually it might be best to pack the uvs into an array in
-		// the attribute struct so they can be sampled more easily but TSL structs
-		// do not allow this so easily.
+		// TODO: eventually it may be best to pack the uvs into an array in the
+		// attribute struct so they can be sampled via array index but TSL structs
+		// make this difficult at the moment. It may break down when a uv channel
+		// unused, as well.
 		const { structs, fns } = this;
 
 		// generate the switch cases for the uv channels
