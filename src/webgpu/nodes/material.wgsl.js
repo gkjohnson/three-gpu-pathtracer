@@ -45,7 +45,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 			// resulting in NaNs and slow path tracing.
-			if ( length( vertexData.tangent ) > 0.0 ) {
+			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
@@ -139,7 +139,7 @@ export const getSurfaceRecordFunc = wgslFn( /* wgsl */ `
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
 			// resulting in NaNs and slow path tracing.
-			if ( length( vertexData.tangent ) > 0.0 ) {
+			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
 				let tangent = normalize( vertexData.tangent.xyz );
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
