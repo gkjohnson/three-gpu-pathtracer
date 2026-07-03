@@ -17,7 +17,7 @@ import {
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
-import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 
 // Builds getSurfaceRecord using the given per-instance sampleTexel
 export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
