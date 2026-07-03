@@ -122,7 +122,6 @@ async function init() {
 	// init renderer
 	renderer = new WebGLRenderer( { antialias: true } );
 	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.physicallyCorrectLights = true;
 	renderer.xr.enabled = true;
 	document.body.appendChild( renderer.domElement );
 

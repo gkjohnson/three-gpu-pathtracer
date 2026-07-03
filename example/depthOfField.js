@@ -7,24 +7,24 @@ import {
 	MeshStandardMaterial,
 	Mesh,
 	Raycaster,
-	WebGLRenderer,
-} from 'three';
+	WebGPURenderer,
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, BlurredEnvMapGenerator, GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { PhysicalCamera, GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer, BlurredEnvMapGenerator } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 
 const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb';
 const CREDITS = 'Model by tipatat on Sketchfab';
 const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
-let pathTracer, renderer, controls, camera, scene, bvh;
+let pathTracer, renderer, controls, camera, scene;
 let loader;
 const mouse = new Vector2();
 const focusPoint = new Vector3();
@@ -48,13 +48,13 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
 	// camera
@@ -99,7 +99,7 @@ async function init() {
 
 	// set up environment map
 	const generator = new BlurredEnvMapGenerator( renderer );
-	const blurredTex = generator.generate( envTexture, 0.35 );
+	const blurredTex = await generator.generate( envTexture, 0.35 );
 	generator.dispose();
 	envTexture.dispose();
 
@@ -125,6 +125,9 @@ async function init() {
 			c.material.roughness = 0.05;
 			c.material.metalness = 0.05;
 
+			// tangents cannot be generated when no uv is present
+			c.material.flatShading = true;
+
 		}
 
 	} );
@@ -132,10 +135,7 @@ async function init() {
 	scene.updateMatrixWorld( true );
 
 	// update the scene
-	const results = await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
-	bvh = results.bvh;
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
@@ -193,7 +193,7 @@ function onMouseDown( e ) {
 function onMouseUp( e ) {
 
 	const deltaMouse = Math.abs( mouse.x - e.clientX ) + Math.abs( mouse.y - e.clientY );
-	if ( deltaMouse < 2 && bvh ) {
+	if ( deltaMouse < 2 ) {
 
 		const raycaster = new Raycaster();
 		raycaster.setFromCamera( {
@@ -203,7 +203,8 @@ function onMouseUp( e ) {
 
 		}, camera );
 
-		const hit = bvh.raycastFirst( raycaster.ray );
+		raycaster.firstHitOnly = true;
+		const hit = raycaster.intersectObject( scene )[ 0 ];
 		if ( hit ) {
 
 			focusPoint.copy( hit.point );
@@ -244,6 +245,6 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples );
 
 }

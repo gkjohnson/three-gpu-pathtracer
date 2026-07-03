@@ -19,6 +19,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	resetSeed() {
+
+		this.kernel.seed = 0;
+
+	}
+
 	setBVHData( bvhData ) {
 
 		this.kernel.bvhData = bvhData;

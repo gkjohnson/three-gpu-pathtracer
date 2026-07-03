@@ -1,7 +1,9 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial } from 'three/webgpu';
+import { uv, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
+import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
@@ -33,6 +35,28 @@ export class WebGPUPathTracer {
 		return this._pathTracer.samples;
 
 	}
+
+	// --- WebGLPathTracer compatibility stubs ---
+	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
+	// They are currently no-ops on the WebGPU path tracer until the corresponding
+	// features are implemented.
+	get tiles() {
+
+		return this._pathTracer.tiles;
+
+	}
+
+	get target() {
+
+		return this._pathTracer.outputTarget ?? null;
+
+	}
+
+	updateLights() {}
+
+	updateMaterials() {}
+
+	// --- end compatibility stubs ---
 
 	get fadeState() {
 
@@ -75,7 +99,7 @@ export class WebGPUPathTracer {
 		this._backgroundColorTexture.minFilter = LinearFilter;
 		this._backgroundColorTexture.magFilter = LinearFilter;
 
-		this._resetTime = - 1;
+		this._resetTime = 0;
 		this._fadeState = 0;
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
@@ -90,16 +114,25 @@ export class WebGPUPathTracer {
 		this.renderDelay = 500;
 		this.fadeDuration = 500;
 		this.dynamicLowRes = true;
-		this.lowResScale = 0.2;
+		this.lowResScale = 0.25;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
+		this.stableNoise = false;
+		this.pause = false;
+
+		// WebGLPathTracer compatibility stubs (see getters above)
+		// TOOD: implement these correctly
+		this.multipleImportanceSampling = true;
+		this.transmissiveBounces = 5;
+		this.filterGlossyFactor = 0;
 
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new MegaKernelPathTracer( renderer );
+		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		// initialize the scene so it doesn't fail
+		this.setMaterial( this.material );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
@@ -127,6 +160,7 @@ export class WebGPUPathTracer {
 				} else {
 
 					child.boundsTree.refit();
+					child.boundsTree.getBoundingBox( child.boundingBox );
 
 				}
 
@@ -168,13 +202,6 @@ export class WebGPUPathTracer {
 
 	}
 
-	// TODO: support async generation of ObjectBVH
-	setSceneAsync( ...args ) {
-
-		this.setScene( ...args );
-
-	}
-
 	setCamera( camera ) {
 
 		this.camera = camera;
@@ -184,7 +211,9 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		const camera = this.camera;
+		const { camera, _renderer } = this;
+		camera.coordinateSystem = _renderer.coordinateSystem;
+		camera.updateProjectionMatrix();
 		camera.updateMatrixWorld();
 
 		this._pathTracer.setCamera( camera );
@@ -216,6 +245,8 @@ export class WebGPUPathTracer {
 			scene.backgroundBlurriness,
 		);
 
+		this.reset();
+
 	}
 
 	setSize( x, y ) {
@@ -234,6 +265,13 @@ export class WebGPUPathTracer {
 		this._pathTracer.reset();
 		this._resetTime = 0;
 		this._fadeState = 0;
+		this._timer.update();
+
+		if ( this.stableNoise ) {
+
+			this._pathTracer.resetSeed();
+
+		}
 
 	}
 
@@ -272,12 +310,8 @@ export class WebGPUPathTracer {
 		const delta = 1000 * timer.getDelta();
 		this._resetTime += delta;
 
-		const originalToneMapping = renderer.toneMapping;
-		const originalExposure = renderer.toneMappingExposure;
 		const originalTarget = renderer.getRenderTarget();
 		const originalAutoClear = renderer.autoClear;
-		renderer.toneMapping = NoToneMapping;
-		renderer.toneMappingExposure = 1.0;
 
 		// handle canvas-size auto synchronization
 		if ( synchronizeRenderSize ) {
@@ -327,7 +361,7 @@ export class WebGPUPathTracer {
 
 
 		// update the samples
-		if ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) {
+		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();
@@ -343,26 +377,103 @@ export class WebGPUPathTracer {
 		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
 		blitQuad.material.fromTexture = lowResTarget;
 		blitQuad.material.texture = pathTracer.outputTarget;
-		blitQuad.material.toneMapping = originalToneMapping;
-		blitQuad.material.toneMappingExposure = originalExposure;
 		blitQuad.render( renderer );
 
 		// reset the renderer
 		renderer.autoClear = originalAutoClear;
-		renderer.toneMapping = originalToneMapping;
-		renderer.toneMappingExposure = originalExposure;
 		renderer.setRenderTarget( originalTarget );
+
+	}
+
+	// Renders a full-screen heatmap of how many BVH bounding boxes each camera ray
+	// intersects. Brighter / hotter pixels traverse more nodes, which is useful for
+	// diagnosing bounding box overlap and traversal cost.
+	//
+	// options:
+	// - displayTLAS: count the top-level (object) bounding boxes
+	// - displayBLAS: count the per-object geometry bounding boxes
+	// - stopAtSurface: only count boxes in front of the nearest hit surface, so boxes
+	//     occluded by geometry don't contribute (front / backface culling and material
+	//     transparency are honored via the path tracer's own first-hit raycast)
+	// - saturationCount: node count that saturates to full heat (upper bound of the ramp)
+	renderDebugBounds( options = {} ) {
+
+		const {
+			displayTLAS = true,
+			displayBLAS = true,
+			stopAtSurface = false,
+			saturationCount = 64,
+		} = options;
+
+		const renderer = this._renderer;
+		const camera = this.camera;
+
+		if ( ! renderer._initialized ) {
+
+			return;
+
+		}
+
+		camera.updateMatrixWorld();
+
+		// (re)build the quad if it hasn't been built or the bvh data has changed
+		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData ) {
+
+			this._buildDebugBoundsQuad();
+
+		}
+
+		const uniforms = this._debugBoundsUniforms;
+		uniforms.cameraToModelMatrix.value.copy( camera.matrixWorld );
+		uniforms.inverseProjectionMatrix.value.copy( camera.projectionMatrixInverse );
+		uniforms.displayTLAS.value = displayTLAS ? 1 : 0;
+		uniforms.displayBLAS.value = displayBLAS ? 1 : 0;
+		uniforms.stopAtSurface.value = stopAtSurface ? 1 : 0;
+		uniforms.saturationCount.value = saturationCount;
+
+		const originalTarget = renderer.getRenderTarget();
+		const originalAutoClear = renderer.autoClear;
+		const originalToneMapping = renderer.toneMapping;
+
+		renderer.setRenderTarget( null );
+		renderer.autoClear = true;
+		renderer.toneMapping = NoToneMapping;
+
+		this._debugBoundsQuad.render( renderer );
+
+		renderer.setRenderTarget( originalTarget );
+		renderer.autoClear = originalAutoClear;
+		renderer.toneMapping = originalToneMapping;
+
+	}
+
+	_buildDebugBoundsQuad() {
+
+		const bvhData = this._bvhData;
+		const debugBounds = getDebugBoundsFunction( bvhData );
+
+		const material = new MeshBasicNodeMaterial();
+		material.colorNode = debugBounds( varying( uv() ) );
+
+		if ( this._debugBoundsQuad === undefined ) {
+
+			this._debugBoundsQuad = new FullScreenQuad( material );
+
+		} else {
+
+			this._debugBoundsQuad.material.dispose();
+			this._debugBoundsQuad.material = material;
+
+		}
+
+		this._debugBoundsUniforms = debugBounds.uniforms;
+		this._debugBoundsData = bvhData;
 
 	}
 
 	renderTextureAtlas( layer = 0 ) {
 
 		const renderer = this._renderer;
-		if ( ! renderer._initialized ) {
-
-			return;
-
-		}
 
 		if ( ! this._atlasDebugQuad ) {
 
@@ -386,6 +497,12 @@ export class WebGPUPathTracer {
 		this._envColorTexture.dispose();
 		this._backgroundColorTexture.dispose();
 		this._atlasDebugQuad?.dispose();
+
+		if ( this._debugBoundsQuad !== undefined ) {
+
+			this._debugBoundsQuad.dispose();
+
+		}
 
 	}
 

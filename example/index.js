@@ -12,9 +12,9 @@ import {
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
-	WebGLRenderer,
+	WebGPURenderer,
 	EquirectangularReflectionMapping,
-} from 'three';
+} from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -24,11 +24,11 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { ParallelMeshBVHWorker, GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
 const envMaps = {
@@ -101,6 +101,11 @@ const params = {
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
+	debugBounds: false,
+	displayTLAS: true,
+	displayBLAS: true,
+	stopAtSurface: false,
+	saturationCount: 64,
 
 	floorColor: '#111111',
 	floorOpacity: 1.0,
@@ -145,14 +150,13 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
-	pathTracer.physicallyCorrectLights = true;
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
@@ -227,7 +231,16 @@ function animate() {
 
 	}
 
-	if ( params.enable ) {
+	if ( params.debugBounds ) {
+
+		pathTracer.renderDebugBounds( {
+			displayTLAS: params.displayTLAS,
+			displayBLAS: params.displayBLAS,
+			stopAtSurface: params.stopAtSurface,
+			saturationCount: params.saturationCount,
+		} );
+
+	} else if ( params.enable ) {
 
 		if ( ! params.pause || pathTracer.samples < 1 ) {
 
@@ -241,7 +254,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples );
 
 }
 
@@ -381,6 +394,13 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.open();
+
+	const debugFolder = gui.addFolder( 'debug' );
+	debugFolder.add( params, 'debugBounds' ).name( 'bvh bounds heatmap' );
+	debugFolder.add( params, 'displayTLAS' ).name( 'display TLAS' );
+	debugFolder.add( params, 'displayBLAS' ).name( 'display BLAS' );
+	debugFolder.add( params, 'stopAtSurface' ).name( 'stop at surface' );
+	debugFolder.add( params, 'saturationCount', 1, 512, 1 ).name( 'saturation count' );
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
@@ -635,11 +655,7 @@ async function updateModel() {
 
 	scene.add( model );
 
-	await pathTracer.setSceneAsync( scene, activeCamera, {
-
-		onProgress: v => loader.setPercentage( 0.5 + 0.5 * v ),
-
-	} );
+	pathTracer.setScene( scene, activeCamera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
