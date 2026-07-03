@@ -58,6 +58,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	resetSeed() {
+
+		this.enqueueRaysKernel.seed = 0;
+
+	}
+
 	setBVHData( bvhData ) {
 
 		this.rayIntersectionKernel.bvhData = bvhData;
@@ -164,8 +170,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		}
 
 		super.reset();
-
-		this.enqueueRaysKernel.seed = 0;
 
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );

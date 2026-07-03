@@ -4,38 +4,46 @@ import { FloatType, LinearSRGBColorSpace, RGBAFormat } from 'three';
 
 export class HDRImageGenerator {
 
-	get completeImage() {
-
-		return this._lastUrl !== null;
-
-	}
-
-	constructor( renderer, imageElement = new Image() ) {
+	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.image = imageElement;
-		this.encoding = false;
-		this._lastUrl = null;
-		this._encodingId = - 1;
 
 	}
 
-	async updateFrom( renderTarget ) {
+	async generateBlob( renderTarget ) {
 
-		if ( this.encoding ) {
+		return new Blob( [ await this.generateArrayBuffer( renderTarget ) ], { type: 'octet/stream' } );
 
-			throw new Error( 'HDRImageGenerator: HDR image already being encoded.' );
+	}
+
+	async generateArrayBuffer( renderTarget ) {
+
+		const renderer = this.renderer;
+		const { width, height } = renderTarget;
+
+		// The path tracer output is a StorageTexture, so read it back asynchronously through a render
+		// target stub ( WebGPU has no synchronous readback ). The returned rows are padded to a 256
+		// byte alignment, so copy out the tightly packed pixels the encoder expects.
+		const stub = { textures: [ renderTarget ] };
+		const result = await renderer.readRenderTargetPixelsAsync( stub, 0, 0, width, height );
+		const padded = result instanceof Float32Array ? result : new Float32Array( result.buffer, result.byteOffset, result.byteLength / 4 );
+
+		// WebGPU strides each source row to a 256 byte alignment ( RGBA float = 16 bytes / texel ),
+		// so copy out the tightly packed pixels the encoder expects.
+		const BYTES_PER_TEXEL = 16;
+		const texelsPerRow = Math.ceil( width * BYTES_PER_TEXEL / 256 ) * 256 / BYTES_PER_TEXEL;
+		const buffer = new Float32Array( width * height * 4 );
+		for ( let y = 0; y < height; y ++ ) {
+
+			const srcOffset = y * texelsPerRow * 4;
+			buffer.set( padded.subarray( srcOffset, srcOffset + width * 4 ), y * width * 4 );
 
 		}
 
-		const renderer = this.renderer;
-		const buffer = new Float32Array( renderTarget.width * renderTarget.height * 4 );
-		renderer.readRenderTargetPixels( renderTarget, 0, 0, renderTarget.width, renderTarget.height, buffer );
-
 		const imageInformation = {
 			header: {},
-			width: renderTarget.width,
-			height: renderTarget.height,
+			width,
+			height,
 			data: buffer,
 			format: RGBAFormat,
 			colorSpace: LinearSRGBColorSpace,
@@ -43,52 +51,11 @@ export class HDRImageGenerator {
 
 		};
 
-
-		this._encodingId ++;
-		this.encoding = true;
-
-		const currentId = this._encodingId;
-		const jpegData = await encodeHDR( imageInformation );
-
-		if ( this._encodingId === currentId ) {
-
-			if ( this._lastUrl ) {
-
-				URL.revokeObjectURL( this._lastUrl );
-
-			}
-
-			const blob = new Blob( [ jpegData ], { type: 'octet/stream' } );
-			this._lastUrl = URL.createObjectURL( blob );
-			this.image.src = this._lastUrl;
-			this.encoding = false;
-
-		}
-
-	}
-
-	reset() {
-
-		if ( this.encoding ) {
-
-			this.encoding = false;
-			this._encodingId ++;
-
-		}
-
-		if ( this._lastUrl ) {
-
-			URL.revokeObjectURL( this._lastUrl );
-			this.image.src = '';
-			this._lastUrl = null;
-
-		}
+		return encodeHDR( imageInformation );
 
 	}
 
 }
-
-
 
 async function encodeHDR( image ) {
 
