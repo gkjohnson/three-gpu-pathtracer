@@ -1,11 +1,9 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectionResultStruct, intersectsTriangle } from '../lib/BVHComputeData.js';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
-import { bvhNodeBoundsStruct, bvhNodeStruct, rayStruct } from '../lib/wgsl/structs.wgsl.js';
-import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { rand1, RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
@@ -133,7 +131,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ storage.attributes }[ i1 ].position.xyz;
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
-						var triResult = ${ intersectsTriangle }( ray, a, b, c );
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 1e-5 );
 						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 

@@ -1,6 +1,6 @@
 import { texture, textureStore, globalId, float } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
-import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode';
+import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 import { PathtracingMaterial } from './PathtracingMaterial';
 import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
