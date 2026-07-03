@@ -1,7 +1,7 @@
 import { StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { textureStore, globalId } from 'three/tsl';
-import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 
 export class ZeroOutKernel extends ComputeKernel {
 

@@ -3,7 +3,7 @@ import { IndirectStorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { queuedRayStruct } from './structs.js';
-import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
 
 export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 

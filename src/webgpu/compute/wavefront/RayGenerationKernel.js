@@ -5,7 +5,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
-import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 

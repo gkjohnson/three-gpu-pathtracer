@@ -1,5 +1,5 @@
 import { wgslFn, uint, float } from 'three/tsl';
-import { rayStruct } from './structs.wgsl.js';
+import { rayStruct } from '../three-mesh-bvh/index.js';
 
 export const constants = {
 	BVH_STACK_DEPTH: uint( 60 ),

@@ -1,6 +1,6 @@
 import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
 import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
-import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
+import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
 // requested and available on the renderer which we don't have access to immediately. It's possible this
