@@ -1,5 +1,6 @@
-import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGLRenderer } from 'three';
-import { WebGLPathTracer, GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
+import { GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 
 // init scene, renderer, camera, controls, etc
@@ -51,12 +52,13 @@ const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGLRenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true } );
+renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 
 const settings = getScaledSettings();
-const pathTracer = new WebGLPathTracer( renderer );
+const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.renderScale = settings.renderScale;
 pathTracer.tiles.setScalar( settings.tiles );
 pathTracer.setScene( scene, camera );

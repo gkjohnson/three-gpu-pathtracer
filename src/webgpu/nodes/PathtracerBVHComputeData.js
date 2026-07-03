@@ -241,6 +241,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 			`,
+			resetShapeFn: wgslTagFn/* wgsl */`
+				fn resetRayScalar( objectIndex: u32 ) -> void {
+
+					${ scratchRayScalar } = 1.0;
+
+				}
+			`,
 		} );
 
 	}
@@ -725,6 +732,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
 
 				bvh.refit();
+				bvh.getBoundingBox( clonedMesh.boundingBox );
+				bvh.geometry.computeBoundingBox();
 
 			}
 

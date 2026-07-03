@@ -2,7 +2,7 @@ import {
 	ACESFilmicToneMapping,
 	NoToneMapping,
 	LoadingManager,
-	WebGLRenderer,
+	WebGPURenderer,
 	Scene,
 	PerspectiveCamera,
 	EquirectangularReflectionMapping,
@@ -10,17 +10,13 @@ import {
 	Group,
 	Sphere,
 	Box3,
-	Vector2,
-} from 'three';
-import { WebGPURenderer } from 'three/webgpu';
+} from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
@@ -31,12 +27,10 @@ const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
-const isWebGPU = urlParams.get( 'isWebGPU' ) === 'true';
 
 const params = {
 
-	isWebGPU,
-	useMegakernel: true,
+	useMegakernel: false,
 	showAtlas: - 1,
 
 	enable: true,
@@ -91,7 +85,7 @@ async function init() {
 
 	}
 
-	await createRenderer( params.isWebGPU );
+	await createRenderer();
 
 	// scene
 	scene = new Scene();
@@ -117,41 +111,21 @@ async function init() {
 
 }
 
-async function createRenderer( isWebGPU ) {
+async function createRenderer() {
 
-	if ( isWebGPU ) {
+	// renderer - WebGPU version
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+	await renderer.init();
+	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.setClearAlpha( 0 );
+	containerEl.appendChild( renderer.domElement );
 
-		// renderer - WebGPU version
-		renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
-		await renderer.init();
-		renderer.toneMapping = ACESFilmicToneMapping;
-		renderer.setClearAlpha( 0 );
-		containerEl.appendChild( renderer.domElement );
+	// path tracer - WebGPU version
+	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.useMegakernel( params.useMegakernel );
+	if ( params.useMegakernel ) {
 
-		// path tracer - WebGPU version
-		pathTracer = new WebGPUPathTracer( renderer );
-		pathTracer.useMegakernel( params.useMegakernel );
-		if ( params.useMegakernel ) {
-
-			pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
-
-		}
-
-	} else {
-
-		// renderer
-		renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-		renderer.physicallyCorrectLights = true;
-		renderer.toneMapping = ACESFilmicToneMapping;
-		renderer.setClearAlpha( 0 );
-		containerEl.appendChild( renderer.domElement );
-
-		// path tracer
-		pathTracer = new WebGLPathTracer( renderer );
-		pathTracer.filterGlossyFactor = 0.5;
-		pathTracer.tiles.set( params.tiles, params.tiles );
-		pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-		pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+		pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
 
 	}
 
@@ -208,7 +182,7 @@ function animate() {
 	}
 
 	// show a page of the packed texture atlas instead of the render for debugging
-	if ( params.showAtlas >= 0 && params.isWebGPU ) {
+	if ( params.showAtlas >= 0 ) {
 
 		pathTracer.renderTextureAtlas( params.showAtlas );
 		return;
@@ -218,8 +192,7 @@ function animate() {
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.enablePathTracing = params.enable;
-		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
 
 		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
@@ -241,7 +214,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling, detailedSampleCount );
+	loader.setSamples( pathTracer.samples, detailedSampleCount );
 
 }
 
@@ -314,35 +287,7 @@ function buildGui() {
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
-
-	let webgpuOptions = null;
-	pathTracingFolder.add( params, 'isWebGPU' ).onChange( v => {
-
-		const size = renderer.getSize( new Vector2() );
-		pathTracer.dispose();
-		containerEl.removeChild( renderer.domElement );
-		renderer.dispose();
-
-		webgpuOptions.show( v );
-
-		createRenderer( v ).then( () => {
-
-			renderer.setSize( size.x, size.y );
-			renderer.setPixelRatio( window.devicePixelRatio );
-			pathTracer.setScene( scene, camera );
-
-			onParamsChange();
-
-			// rebuild the gui so the atlas dropdown reflects the new renderer
-			buildGui();
-
-		} );
-
-	} );
-
-	webgpuOptions = pathTracingFolder.addFolder( 'WebGPU Options' );
-
-	webgpuOptions.add( params, 'useMegakernel' ).onChange( () => {
+	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
 		pathTracer.reset();
@@ -350,29 +295,23 @@ function buildGui() {
 
 	} );
 
-	webgpuOptions.show( params.isWebGPU );
-
 	// build the atlas page dropdown dynamically from the current atlas
 	const atlasOptions = { hide: - 1 };
-	if ( params.isWebGPU ) {
+	const pageCount = pathTracer.textureAtlas.pageCount;
+	for ( let i = 0; i < pageCount; i ++ ) {
 
-		const pageCount = pathTracer.textureAtlas.pageCount;
-		for ( let i = 0; i < pageCount; i ++ ) {
-
-			atlasOptions[ `page ${ i }` ] = i;
-
-		}
-
-		// reset the selection if the previously selected page no longer exists
-		if ( params.showAtlas >= pageCount ) {
-
-			params.showAtlas = - 1;
-
-		}
+		atlasOptions[ `page ${ i }` ] = i;
 
 	}
 
-	webgpuOptions.add( params, 'showAtlas', atlasOptions );
+	// reset the selection if the previously selected page no longer exists
+	if ( params.showAtlas >= pageCount ) {
+
+		params.showAtlas = - 1;
+
+	}
+
+	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
 
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
@@ -562,13 +501,7 @@ async function updateModel() {
 	camera.updateProjectionMatrix();
 	controls.update();
 
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => {
-
-			loader.setPercentage( 0.5 + 0.5 * v );
-
-		}
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';

@@ -2,10 +2,10 @@ import {
 	AgXToneMapping,
 	Scene,
 	Vector3,
-	WebGLRenderer,
-} from 'three';
+	WebGPURenderer,
+} from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
@@ -40,16 +40,16 @@ async function init() {
 	imgEl = document.getElementById( 'materialImage' );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = AgXToneMapping;
 	renderer.toneMappingExposure = 0.02;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.textureSize.set( 2048, 2048 );
 	pathTracer.filterGlossyFactor = 0.5;
 
 	// scene
@@ -198,6 +198,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 	pathTracer.renderSample();
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples );
 
 }

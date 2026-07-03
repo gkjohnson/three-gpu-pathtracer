@@ -142,13 +142,9 @@ export class LoaderElement {
 
 	}
 
-	setSamples( count, compiling = false, detailedSamples = null ) {
+	setSamples( count, detailedSamples = null ) {
 
-		if ( compiling ) {
-
-			this._samples.innerText = 'compiling shader...';
-
-		} else if ( detailedSamples !== null ) {
+		if ( detailedSamples !== null ) {
 
 			const {
 				min,
@@ -167,7 +163,8 @@ export class LoaderElement {
 
 		} else {
 
-			this._samples.innerText = `${ Math.floor( count ) } samples`;
+			// per-pixel sample counts vary across the image, so this is an approximate figure
+			this._samples.innerText = `~${ Math.floor( count ) } samples`;
 
 		}
 

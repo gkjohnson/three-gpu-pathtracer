@@ -2,13 +2,13 @@ import {
 	ACESFilmicToneMapping,
 	Scene,
 	EquirectangularReflectionMapping,
-	WebGLRenderer,
+	WebGPURenderer,
 	PerspectiveCamera,
 	Box3,
 	Vector3,
 	Group,
 	LoadingManager,
-} from 'three';
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
@@ -16,7 +16,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr';
 
@@ -37,13 +37,14 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 0.5;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.renderScale = renderScale;
 	pathTracer.tiles.set( tiles, tiles );
@@ -226,7 +227,7 @@ function animate() {
 
 		pathTracer.renderSample();
 
-		loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+		loader.setSamples( pathTracer.samples );
 
 	}
 
