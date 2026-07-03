@@ -1,10 +1,9 @@
 import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
-import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { ndcToCameraRay, proxy, proxyFn, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
