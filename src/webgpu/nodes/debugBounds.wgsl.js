@@ -5,9 +5,7 @@ import { ndcToCameraRay } from '../lib/wgsl/common.wgsl.js';
 import { rayStruct, bvhNodeBoundsStruct, bvhNodeStruct } from '../lib/wgsl/structs.wgsl.js';
 import { intersectsTriangle } from '../lib/BVHComputeData.js';
 
-// accumulator threaded through the shapecast traversal: a running tally of the TLAS and BLAS
-// bounding boxes the ray crosses, plus the nearest surface hit so far ( used to prune boxes that
-// sit behind it, exactly like the path tracer's first-hit raycast ).
+// Result struct holding a running tally of the TLAS and BLAS bounding boxes the ray crosses
 const debugBoundsResultStruct = new StructTypeNode( {
 	tlasCount: 'uint',
 	blasCount: 'uint',
@@ -15,24 +13,26 @@ const debugBoundsResultStruct = new StructTypeNode( {
 	dist: 'float',
 }, 'DebugBoundsResult' );
 
-// Builds the full-screen "bvh bounds heatmap" fragment function for the given bvh data. The
-// returned value is the TSL function node ( signature: ( vUv: vec2f ) -> vec4f ) that counts how
-// many bvh bounding boxes each camera ray crosses and tints the pixel by that count. The uniforms
-// driving it are attached as `.uniforms` so the caller can update them each frame:
-// - cameraToModelMatrix / inverseProjectionMatrix: camera transforms used to build the ray
-// - displayTLAS / displayBLAS: 1 / 0 flags toggling which bvh levels contribute to the count
-// - stopAtSurface: 1 / 0 flag, stop counting boxes past the nearest hit surface
-// - saturationCount: node count that saturates to full heat
+// Builds the full-screen "bvh bounds heatmap" fragment function for the given bvh data. The uniforms
+// driving it are attached as `.uniforms` so the caller can update them each frame.
 export function getDebugBoundsFunction( bvhData ) {
 
 	const { transforms, index, attributes, materials } = bvhData.storage;
 
 	// uniforms
+
+	// camera transforms used to build the ray
 	const cameraToModelMatrix = uniform( new Matrix4() );
 	const inverseProjectionMatrix = uniform( new Matrix4() );
+
+	// 1 / 0 flags toggling which bvh levels contribute to the count
 	const displayTLAS = uniform( 1 );
 	const displayBLAS = uniform( 1 );
+
+	// 1 / 0 flag, stop counting boxes past the nearest hit surface
 	const stopAtSurface = uniform( 0 );
+
+	// node count that saturates to full heat
 	const saturationCount = uniform( 64 );
 
 	// shared traversal state, mirroring the path tracer's raycast:
@@ -52,7 +52,7 @@ export function getDebugBoundsFunction( bvhData ) {
 		}
 	`;
 
-	// bounds hook: tally the box ( into the level's counter ) and keep descending, unless it sits
+	// bounds hook: tally the box (into the level's counter) and keep descending, unless it sits
 	// entirely behind the nearest hit surface found so far
 	const intersectsBounds = wgslTagFn/* wgsl */`
 		fn debugIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ debugBoundsResultStruct }> ) -> u32 {
@@ -96,9 +96,7 @@ export function getDebugBoundsFunction( bvhData ) {
 		}
 	`;
 
-	// range hook: intersect the leaf triangles to track the nearest surface ( honoring the
-	// material's front / backface culling ), so boxes behind it can be pruned. Skipped entirely
-	// unless we are stopping at the surface.
+	// range hook: intersect the leaf triangles to track the nearest surface
 	const intersectRange = wgslTagFn/* wgsl */`
 		fn debugIntersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ debugBoundsResultStruct }> ) -> bool {
 
@@ -205,13 +203,7 @@ export function getDebugBoundsFunction( bvhData ) {
 			ray.direction = normalize( ray.direction );
 
 			// count the boxes the ray crosses, pruning those behind the nearest hit surface
-			${ level } = 0u;
-			${ rayScalar } = 1.0;
 			var result: ${ debugBoundsResultStruct };
-			result.tlasCount = 0u;
-			result.blasCount = 0u;
-			result.didHit = false;
-			result.dist = 0.0;
 			${ countBounds }( ray, &result );
 
 			let tlas = select( 0u, result.tlasCount, ${ displayTLAS } > 0.5 );
