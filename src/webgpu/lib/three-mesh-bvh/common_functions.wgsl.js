@@ -1,5 +1,6 @@
 /** @import { BVHComputeData } from './BVHComputeData.js' */
 import { wgslFn, wgsl } from 'three/tsl';
+import { rayStruct, bvhNodeBoundsStruct } from './tsl/structs.js';
 
 /** @deprecated Use {@link BVHComputeData} instead. */
 export const constants = wgsl( /* wgsl */`
@@ -9,31 +10,6 @@ export const constants = wgsl( /* wgsl */`
 	const TRI_INTERSECT_EPSILON = 1e-5;
 
 ` );
-
-/** @deprecated Use {@link BVHComputeData} instead. */
-export const rayStruct = wgsl( /* wgsl */`
-	struct Ray {
-		origin: vec3f,
-		direction: vec3f,
-	};
-` );
-
-/** @deprecated Use {@link BVHComputeData} instead. */
-export const bvhNodeBoundsStruct = wgsl( /* wgsl */`
-	struct BVHBoundingBox {
-		min: array<f32, 3>,
-		max: array<f32, 3>,
-	}
-` );
-
-/** @deprecated Use {@link BVHComputeData} instead. */
-export const bvhNodeStruct = wgsl( /* wgsl */`
-	struct BVHNode {
-		bounds: BVHBoundingBox,
-		rightChildOrTriangleOffset: u32,
-		splitAxisOrTriangleCount: u32,
-	};
-`, [ bvhNodeBoundsStruct ] );
 
 /** @deprecated Use {@link BVHComputeData} instead. */
 export const intersectionResultStruct = wgsl( /* wgsl */`
