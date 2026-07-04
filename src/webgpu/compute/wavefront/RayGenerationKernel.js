@@ -1,18 +1,17 @@
-import { Vector2, Matrix4 } from 'three';
+import { Vector2 } from 'three';
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
-import { ndcToCameraRay, wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
+import { proxyFn, wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
 	constructor( ) {
 
 		const params = {
-			cameraToModelMatrix: uniform( new Matrix4() ),
-			inverseProjectionMatrix: uniform( new Matrix4() ),
+			bvhData: { value: null },
 
 			seed: uniform( 0 ),
 
@@ -27,11 +26,10 @@ export class RayGenerationKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
+		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
+
 		const fn = wgslTagFn /* wgsl */`
 			fn compute(
-				cameraToModelMatrix: mat4x4f,
-				inverseProjectionMatrix: mat4x4f,
-
 				seed: u32,
 				tileSize: vec2u,
 
@@ -61,7 +59,6 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				// calculate the screen uv
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-				let ndc = uv * 2.0 - vec2f( 1.0 );
 
 				// check whether ray is already active (added on the queue) and skip it if it is
 				let ACTIVE_FLAG = 0xF0000000u;
@@ -82,9 +79,9 @@ export class RayGenerationKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ rngInit }( pixelIndex, seed, 0 );
 
-				// write the ray data
-				var jitter = 2.0 * ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions.xy );
-				var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
+				// write the ray data - the camera supplies its own uv -> ray function ( bvhData.fns.getCameraRay )
+				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+				var ray = ${ getCameraRayFn }( jitteredUv );
 				ray.direction = normalize( ray.direction );
 
 				rayQueue[ index ].origin = ray.origin;

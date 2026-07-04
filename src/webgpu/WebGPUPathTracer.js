@@ -1,6 +1,7 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial } from 'three/webgpu';
-import { uv, varying } from 'three/tsl';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4 } from 'three/webgpu';
+import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
+import { ndcToCameraRay, rayStruct, wgslTagFn } from './lib/three-mesh-bvh/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
@@ -131,6 +132,19 @@ export class WebGPUPathTracer {
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
+		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
+		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
+		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
+		this._invViewProjectionMatrix = uniform( new Matrix4() );
+		this._cameraRayFn = wgslTagFn/* wgsl */`
+			fn getCameraRay( uv: vec2f ) -> ${ rayStruct } {
+
+				let ndc = uv * 2.0 - vec2f( 1.0 );
+				return ${ ndcToCameraRay }( ndc, ${ this._invViewProjectionMatrix } );
+
+			}
+		`;
+
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -205,6 +219,7 @@ export class WebGPUPathTracer {
 	setCamera( camera ) {
 
 		this.camera = camera;
+		this._bvhData.fns.getCameraRay = this._cameraRayFn;
 		this.updateCamera();
 
 	}
@@ -272,6 +287,11 @@ export class WebGPUPathTracer {
 			this._pathTracer.resetSeed();
 
 		}
+
+		// update camera matrix
+		const { camera, _invViewProjectionMatrix } = this;
+		_invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+
 
 	}
 

@@ -66,6 +66,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setBVHData( bvhData ) {
 
+		this.enqueueRaysKernel.bvhData = bvhData;
+		this.enqueueRaysKernel.needsUpdate = true;
+
 		this.rayIntersectionKernel.bvhData = bvhData;
 		this.rayIntersectionKernel.needsUpdate = true;
 
@@ -257,8 +260,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// set up the ray generation kernel
 				enqueueRaysKernel.seed ++;
-				enqueueRaysKernel.cameraToModelMatrix.copy( camera.matrixWorld );
-				enqueueRaysKernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
 				enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
 				enqueueRaysKernel.tileSize.copy( tileSize );
 				enqueueRaysKernel.rayQueue = rayQueue;

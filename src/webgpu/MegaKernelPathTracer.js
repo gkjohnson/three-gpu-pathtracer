@@ -108,8 +108,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.sampleCountTarget = sampleCountTarget;
 
 		kernel.bounces = bounces;
-		kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
-		kernel.cameraToModelMatrix.copy( camera.matrixWorld );
 
 		while ( true ) {
 
