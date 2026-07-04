@@ -82,8 +82,8 @@ export function getShapecastFn( bvhData, options ) {
 	const resultArg = resultStruct ? 'result' : '';
 	const stackSnippet = wgslTagCode/* wgsl */`
 		var<private> pointer: i32 = 0;
-		// var<workgroup> stack: array<u32, 64 * ${ BVH_STACK_DEPTH }>;
-		var<private> stack: array<u32, ${ BVH_STACK_DEPTH }>;
+		var<workgroup> stack: array<u32, 64 * ${ BVH_STACK_DEPTH }>;
+		// var<private> stack: array<u32, ${ BVH_STACK_DEPTH }>;
 	`;
 
 	const getFnBody = leafSnippet => {
@@ -91,7 +91,7 @@ export function getShapecastFn( bvhData, options ) {
 		// returns a function with a snippet inserted for the leaf intersection test
 		return wgslTagCode/* wgsl */`
 
-			var offset = 0; //i32( threadId * ${ BVH_STACK_DEPTH } );
+			var offset = i32( threadId * ${ BVH_STACK_DEPTH } );
 			var reset = pointer + 1;
 			pointer = pointer + 1;
 			stack[ offset + pointer ] = rootNodeIndex;
