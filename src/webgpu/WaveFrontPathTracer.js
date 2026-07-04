@@ -202,7 +202,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		const {
 			renderer,
-			camera,
 			bounces,
 
 			tiles,
@@ -223,8 +222,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			lowResMode
 		} = this;
-
-		camera.updateMatrixWorld();
 
 		primeRayGenerationDispatchKernel.tileOffset = 0;
 

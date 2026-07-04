@@ -7,7 +7,6 @@ export class PathTracerBackend {
 	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.camera = null;
 		this.samples = 0;
 		this.bounces = 7;
 		this.lowResMode = false;
@@ -36,13 +35,6 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
-
-	}
-
-	setCamera( camera ) {
-
-		this.camera = camera;
-		this.reset();
 
 	}
 
@@ -112,8 +104,8 @@ export class PathTracerBackend {
 
 	update() {
 
-		const { camera, renderer } = this;
-		if ( ! camera || ! renderer.initialized ) {
+		const { renderer } = this;
+		if ( ! renderer.initialized ) {
 
 			return;
 
