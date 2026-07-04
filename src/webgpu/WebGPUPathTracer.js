@@ -228,10 +228,15 @@ export class WebGPUPathTracer {
 
 		const { camera, _renderer, _invViewProjectionMatrix } = this;
 		camera.coordinateSystem = _renderer.coordinateSystem;
-		camera.updateProjectionMatrix();
 		camera.updateMatrixWorld();
 
-		_invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+		// "projectionMatrix" is not present on every camera
+		if ( camera.isOrthographicCamera || camera.isPerspectiveCamera ) {
+
+			camera.updateProjectionMatrix();
+			_invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+
+		}
 
 		this.reset();
 
