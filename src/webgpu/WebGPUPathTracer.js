@@ -137,7 +137,7 @@ export class WebGPUPathTracer {
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
 		this._invViewProjectionMatrix = uniform( new Matrix4() );
 		this._cameraRayFn = wgslTagFn/* wgsl */`
-			fn getCameraRay( uv: vec2f ) -> ${ rayStruct } {
+			fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
 
 				let ndc = uv * 2.0 - vec2f( 1.0 );
 				return ${ ndcToCameraRay }( ndc, ${ this._invViewProjectionMatrix } );
