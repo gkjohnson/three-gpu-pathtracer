@@ -1,4 +1,4 @@
-import { Camera } from 'three';
+import { Camera, Matrix4 } from 'three';
 import { uniform } from 'three/tsl';
 import { wgslTagFn, rayStruct } from '../../../three-mesh-bvh/src/webgpu/index.js';
 
@@ -14,9 +14,8 @@ export class EquirectCamera extends Camera {
 
 	getCameraRayFn() {
 
-		const cameraToWorld = uniform( this.matrixWorld );
-
-		return wgslTagFn/* wgsl */`
+		const cameraToWorld = uniform( new Matrix4() );
+		const fn = wgslTagFn/* wgsl */`
 			fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
 
 				let PI = 3.141592653589793;
@@ -35,6 +34,14 @@ export class EquirectCamera extends Camera {
 
 			}
 		`;
+
+		const update = () => {
+
+			cameraToWorld.value.copy( this.matrixWorld );
+
+		};
+
+		return { fn, update };
 
 	}
 

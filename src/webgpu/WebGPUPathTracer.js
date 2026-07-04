@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4 } from 'three/webgpu';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from './lib/three-mesh-bvh/index.js';
@@ -136,14 +136,7 @@ export class WebGPUPathTracer {
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
 		this._invViewProjectionMatrix = uniform( new Matrix4() );
-		this._cameraRayFn = wgslTagFn/* wgsl */`
-			fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
-
-				let ndc = uv * 2.0 - vec2f( 1.0 );
-				return ${ ndcToCameraRay }( ndc, ${ this._invViewProjectionMatrix } );
-
-			}
-		`;
+		this._cameraRayFnHandle = null;
 
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
@@ -222,32 +215,48 @@ export class WebGPUPathTracer {
 
 		if ( camera.getCameraRayFn ) {
 
-			this._bvhData.fns.getCameraRay = camera.getCameraRayFn();
+			this._cameraRayFnHandle = camera.getCameraRayFn();
 
 		} else {
 
-			this._bvhData.fns.getCameraRay = this._cameraRayFn;
+			// add a default camera ray getter. the update function is called when the camera is
+			// updated to trigger any necessary uniform updates.
+			const invViewProjectionMatrix = uniform( new Matrix4() );
+			this._cameraRayFnHandle = {
+				update: () => {
+
+					camera.coordinateSystem = WebGPUCoordinateSystem;
+					camera.updateMatrixWorld();
+
+					if ( camera.isOrthographicCamera || camera.isPerspectiveCamera ) {
+
+						camera.updateProjectionMatrix();
+
+					}
+
+					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+
+				},
+				fn: wgslTagFn/* wgsl */`
+					fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+
+						let ndc = uv * 2.0 - vec2f( 1.0 );
+						return ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+
+					}
+				`,
+			};
 
 		}
 
+		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this.updateCamera();
 
 	}
 
 	updateCamera() {
 
-		const { camera, _renderer, _invViewProjectionMatrix } = this;
-		camera.coordinateSystem = _renderer.coordinateSystem;
-		camera.updateMatrixWorld();
-
-		// "projectionMatrix" is not present on every camera
-		if ( camera.isOrthographicCamera || camera.isPerspectiveCamera ) {
-
-			camera.updateProjectionMatrix();
-			_invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
-
-		}
-
+		this._cameraRayFnHandle.update();
 		this.reset();
 
 	}
