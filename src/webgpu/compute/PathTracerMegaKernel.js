@@ -1,9 +1,9 @@
 import { DataTexture, Matrix3, Matrix4, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { texture, sampler, uniform, globalId, textureStore, localId, vec3 } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { ndcToCameraRay, proxy, proxyFn, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { ndcToCameraRay, proxy, proxyFn, wgslTagFn, wgslTagCode } from '../lib/three-mesh-bvh/index.js';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -44,6 +44,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			// compute variables
 			globalId: globalId,
+			localId: localId,
 		};
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
@@ -51,13 +52,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
+		const threadIdVarSnippet = wgslTagCode/* wgsl */`var<private> threadId: u32;`;
 
 		const shader = wgslTagFn/* wgsl */`
+
+			${ [ threadIdVarSnippet ] }
 
 			fn compute(
 
 				// indices and target
 				globalId: vec3u,
+				localId: vec3u,
 
 				// tiles
 				offset: vec2u,
@@ -82,6 +87,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundBlurriness: f32,
 
 			) -> void {
+
+				threadId = localId.y * 8 + localId.x;
 
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };

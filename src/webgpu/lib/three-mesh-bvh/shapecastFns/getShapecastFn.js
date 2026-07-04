@@ -80,25 +80,31 @@ export function getShapecastFn( bvhData, options ) {
 
 	const resultPtrSnippet = resultStruct ? wgslTagCode/* wgsl */`result: ptr<function, ${ resultStruct }>` : '';
 	const resultArg = resultStruct ? 'result' : '';
+	const stackSnippet = wgslTagCode/* wgsl */`
+		var<private> pointer: i32 = 0;
+		// var<workgroup> stack: array<u32, 64 * ${ BVH_STACK_DEPTH }>;
+		var<private> stack: array<u32, ${ BVH_STACK_DEPTH }>;
+	`;
 
 	const getFnBody = leafSnippet => {
 
 		// returns a function with a snippet inserted for the leaf intersection test
 		return wgslTagCode/* wgsl */`
 
-			var pointer: i32 = 0;
-			var stack: array<u32, ${ BVH_STACK_DEPTH }>;
-			stack[ 0 ] = rootNodeIndex;
+			var offset = 0; //i32( threadId * ${ BVH_STACK_DEPTH } );
+			var reset = pointer + 1;
+			pointer = pointer + 1;
+			stack[ offset + pointer ] = rootNodeIndex;
 
 			loop {
 
-				if ( pointer < 0 || pointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
+				if ( pointer < reset || pointer >= i32( ${ BVH_STACK_DEPTH } ) ) {
 
 					break;
 
 				}
 
-				let nodeIndex = stack[ pointer ];
+				let nodeIndex = stack[ offset + pointer ];
 				let node = ${ nodes }[ nodeIndex ];
 				pointer = pointer - 1;
 
@@ -129,10 +135,10 @@ export function getShapecastFn( bvhData, options ) {
 					${ leftToRightSnippet }
 
 					pointer = pointer + 1;
-					stack[ pointer ] = c2;
+					stack[ offset + pointer ] = c2;
 
 					pointer = pointer + 1;
-					stack[ pointer ] = c1;
+					stack[ offset + pointer ] = c1;
 
 				}
 
@@ -159,8 +165,12 @@ export function getShapecastFn( bvhData, options ) {
 	`;
 
 	const tlasFn = wgslTagFn/* wgsl */`
+		${ [ stackSnippet ] }
+
 		// fn
 		fn ${ name }( shape: ${ shapeStruct }, ${ resultPtrSnippet } ) -> bool {
+
+			pointer = 0;
 
 			const rootNodeIndex = 0u;
 			var didHit = false;

@@ -1,9 +1,9 @@
 import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
+import { uniform, texture, sampler, storage, textureStore, globalId, localId, vec3 } from 'three/tsl';
 import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
-import { proxy, wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
+import { proxy, wgslTagFn, wgslTagCode } from '../../lib/three-mesh-bvh/index.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
@@ -35,12 +35,16 @@ export class RayIntersectionKernel extends ComputeKernel {
 			backgroundBlurriness: uniform( 0 ),
 
 			globalId: globalId,
+			localId: localId,
 		};
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const threadIdVarSnippet = wgslTagCode/* wgsl */`var<private> threadId: u32;`;
 
 		const fn = wgslTagFn /* wgsl */`
+
+			${ [ threadIdVarSnippet ] }
 
 			fn compute(
 				// environment
@@ -55,8 +59,11 @@ export class RayIntersectionKernel extends ComputeKernel {
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
 
-				globalId: vec3u
+				globalId: vec3u,
+				localId: vec3u,
 			) -> void {
+
+				threadId = localId.x;
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
