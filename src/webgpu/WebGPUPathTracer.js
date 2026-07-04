@@ -219,7 +219,17 @@ export class WebGPUPathTracer {
 	setCamera( camera ) {
 
 		this.camera = camera;
-		this._bvhData.fns.getCameraRay = this._cameraRayFn;
+
+		if ( camera.getCameraRayFn ) {
+
+			this._bvhData.fns.getCameraRay = camera.getCameraRayFn();
+
+		} else {
+
+			this._bvhData.fns.getCameraRay = this._cameraRayFn;
+
+		}
+
 		this.updateCamera();
 
 	}
