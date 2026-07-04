@@ -226,12 +226,13 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		const { camera, _renderer } = this;
+		const { camera, _renderer, _invViewProjectionMatrix } = this;
 		camera.coordinateSystem = _renderer.coordinateSystem;
 		camera.updateProjectionMatrix();
 		camera.updateMatrixWorld();
 
-		this._pathTracer.setCamera( camera );
+		_invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+
 		this.reset();
 
 	}
@@ -287,11 +288,6 @@ export class WebGPUPathTracer {
 			this._pathTracer.resetSeed();
 
 		}
-
-		// update camera matrix
-		const { camera, _invViewProjectionMatrix } = this;
-		_invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
-
 
 	}
 
