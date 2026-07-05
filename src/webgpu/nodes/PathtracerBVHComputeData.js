@@ -605,57 +605,64 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intArray[ index ++ ] = Number( m.transparent );
 			intArray[ index ++ ] = 0;
 
-			// anisotropy, anisotropyRotation
+			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
 			floatArray[ index ++ ] = getField( m, 'anisotropy', 0.0 );
 			floatArray[ index ++ ] = getField( m, 'anisotropyRotation', 0.0 );
+			intArray[ index ++ ] = getTexture( m, 'anisotropyMap' );
+			index ++; // padding for mat3 alignment
+			index ++;
+			index ++;
 
-			// map transform - offset 68
+			// map transform - offset 72
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
 
-			// metalnessMap transform - offset 80
+			// metalnessMap transform - offset 84
 			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
 
-			// roughnessMap transform - offset 92
+			// roughnessMap transform - offset 96
 			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
 
-			// transmissionMap transform - offset 104
+			// transmissionMap transform - offset 108
 			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
 
-			// emissiveMap transform - offset 116
+			// emissiveMap transform - offset 120
 			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
 
-			// normalMap transform - offset 128
+			// normalMap transform - offset 132
 			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
 
-			// clearcoatMap transform - offset 140
+			// clearcoatMap transform - offset 144
 			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
 
-			// clearcoatNormalMap transform - offset 152
+			// clearcoatNormalMap transform - offset 156
 			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
 
-			// clearcoatRoughnessMap transform - offset 164
+			// clearcoatRoughnessMap transform - offset 168
 			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
 
-			// sheenColorMap transform - offset 176
+			// sheenColorMap transform - offset 180
 			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
 
-			// sheenRoughnessMap transform - offset 188
+			// sheenRoughnessMap transform - offset 192
 			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
 
-			// iridescenceMap transform - offset 200
+			// iridescenceMap transform - offset 204
 			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
 
-			// iridescenceThicknessMap transform - offset 212
+			// iridescenceThicknessMap transform - offset 216
 			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
 
-			// specularColorMap transform - offset 224
+			// specularColorMap transform - offset 228
 			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
 
-			// specularIntensityMap transform - offset 236
+			// specularIntensityMap transform - offset 240
 			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
 
-			// alphaMap transform - offset 248
+			// alphaMap transform - offset 252
 			index += writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
+
+			// anisotropyMap transform - offset 264
+			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
 		}
 
