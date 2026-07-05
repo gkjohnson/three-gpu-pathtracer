@@ -73,7 +73,7 @@ pathTracer.setScene( scene, camera );
 const controls = new OrbitControls( camera, renderer.domElement );
 controls.addEventListener( 'change', () => {
 
-	pathTracer.reset();
+	pathTracer.updateCamera();
 
 } );
 
