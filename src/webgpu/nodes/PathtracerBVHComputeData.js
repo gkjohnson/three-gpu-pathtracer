@@ -604,8 +604,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			// transparent, fogVolume - offset 64
 			intArray[ index ++ ] = Number( m.transparent );
 			intArray[ index ++ ] = 0;
-			index ++;
-			index ++;
+
+			// anisotropy, anisotropyRotation
+			floatArray[ index ++ ] = getField( m, 'anisotropy', 0.0 );
+			floatArray[ index ++ ] = getField( m, 'anisotropyRotation', 0.0 );
 
 			// map transform - offset 68
 			index += writeTextureMatrixToArray( m, 'map', floatArray, index );

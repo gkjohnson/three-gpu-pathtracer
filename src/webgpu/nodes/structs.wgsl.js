@@ -106,6 +106,9 @@ export const materialStruct = new StructTypeNode( {
 	// offset 64 floats
 	transparent: 'int',
 	fogVolume: 'int',
+	// offset 66 floats
+	anisotropy: 'float',
+	anisotropyRotation: 'float',
 
 	// offset 68 floats
 	mapTransform: 'mat3',
@@ -160,6 +163,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	// material
 	roughness: 'f32',
 	metalness: 'f32',
+	anisotropy: 'f32',
 	color: 'vec3f',
 	emission: 'vec3f',
 
