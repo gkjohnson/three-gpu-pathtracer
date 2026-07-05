@@ -1,5 +1,5 @@
 import { Matrix4 } from 'three';
-import { uniform } from 'three/tsl';
+import { uniform, PI } from 'three/tsl';
 import { wgslTagFn, rayStruct } from '../lib/three-mesh-bvh/index.js';
 import { EquirectCamera } from '../../objects/EquirectCamera.js';
 
@@ -9,11 +9,9 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const fn = wgslTagFn/* wgsl */`
 		fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
 
-			let PI = 3.141592653589793;
-
 			// screen uv to spherical direction, matching three.js' equirect orientation
-			let theta = ( uv.x - 0.5 ) * 2.0 * PI;
-			let phi = ( 1.0 - uv.y ) * PI;
+			let theta = ( uv.x - 0.5 ) * 2.0 * ${ PI };
+			let phi = ( 1.0 - uv.y ) * ${ PI };
 			let sinPhi = sin( phi );
 			let direction = vec3f( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
 

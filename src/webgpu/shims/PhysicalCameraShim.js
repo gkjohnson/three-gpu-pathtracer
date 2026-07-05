@@ -1,15 +1,14 @@
 import { Matrix4, WebGPUCoordinateSystem } from 'three';
-import { uniform } from 'three/tsl';
+import { uniform, PI } from 'three/tsl';
 import { wgslTagFn, rayStruct, ndcToCameraRay } from '../lib/three-mesh-bvh/index.js';
 import { rand3, RNG_INDEX_APERTURE_SAMPLE } from '../nodes/random.wgsl.js';
 import { PhysicalCamera } from '../../objects/PhysicalCamera.js';
 
-// aperture sampling helpers, ported from the WebGL path tracer's shape / camera utilities
+// aperture sampling helpers
 const sampleCircle = wgslTagFn/* wgsl */`
 	fn sampleCircle( uv: vec2f ) -> vec2f {
 
-		let PI = 3.141592653589793;
-		let angle = 2.0 * PI * uv.x;
+		let angle = 2.0 * ${ PI } * uv.x;
 		let radius = sqrt( uv.y );
 		return vec2f( cos( angle ), sin( angle ) ) * radius;
 
@@ -37,9 +36,8 @@ const sampleTriangle = wgslTagFn/* wgsl */`
 const sampleRegularPolygon = wgslTagFn/* wgsl */`
 	fn sampleRegularPolygon( sidesIn: i32, uvw: vec3f ) -> vec2f {
 
-		let PI = 3.141592653589793;
 		let sides = max( sidesIn, 3 );
-		let anglePerSegment = 2.0 * PI / f32( sides );
+		let anglePerSegment = 2.0 * ${ PI } / f32( sides );
 		let segment = floor( f32( sides ) * uvw.x );
 
 		let angle1 = anglePerSegment * segment;
@@ -61,9 +59,11 @@ const sampleAperture = wgslTagFn/* wgsl */`
 
 			return ${ sampleCircle }( uvw.xy );
 
-		}
+		} else {
 
-		return ${ sampleRegularPolygon }( blades, uvw );
+			return ${ sampleRegularPolygon }( blades, uvw );
+
+		}
 
 	}
 `;
@@ -80,10 +80,11 @@ const rotateVector = wgslTagFn/* wgsl */`
 
 PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
-	// premultiplied inverse view-projection ( world * inverseProjection ) for the base perspective ray,
-	// plus the world matrix to orient the aperture offset. the remaining fields drive the bokeh shape.
+	// camera transform fields
 	const invViewProjectionMatrix = uniform( new Matrix4() );
 	const cameraWorldMatrix = uniform( new Matrix4() );
+
+	// bokeh shape fields
 	const focusDistance = uniform( 0 );
 	const bokehSize = uniform( 0 );
 	const apertureBlades = uniform( 0, 'int' );
@@ -93,21 +94,21 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const fn = wgslTagFn/* wgsl */`
 		fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
 
-			// base perspective ray from the premultiplied inverse view-projection matrix
+			// base ray
 			let ndc = uv * 2.0 - vec2f( 1.0 );
 			var ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 
-			// depth of field - offset the origin across the aperture and re-aim at the focal point
+			// depth of field
 			let focalPoint = ray.origin + normalize( ray.direction ) * ${ focusDistance };
 
-			// sample the aperture shape ( blades == 0 is treated as a circle )
-			// bokehSize is in millimeters, so scale to world units ( radius = diameter * 0.5 )
+			// sample the aperture shape
 			let shapeUVW = ${ rand3 }( ${ RNG_INDEX_APERTURE_SAMPLE } );
 			var apertureSample = ${ sampleAperture }( ${ apertureBlades }, shapeUVW );
 			apertureSample *= ${ bokehSize } * 0.5 * 1e-3;
 
 			// rotate + squash the sample for anamorphic apertures
-			apertureSample = ${ rotateVector }( apertureSample, ${ apertureRotation } )
+			apertureSample =
+				${ rotateVector }( apertureSample, ${ apertureRotation } )
 				* clamp( vec2f( ${ anamorphicRatio }, 1.0 / ${ anamorphicRatio } ), vec2f( 0.0 ), vec2f( 1.0 ) );
 
 			ray.origin += ( ${ cameraWorldMatrix } * vec4f( apertureSample, 0.0, 0.0 ) ).xyz;
