@@ -79,7 +79,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ rngInit }( pixelIndex, seed, 0 );
 
-				// write the ray data - the camera supplies its own uv -> ray function ( bvhData.fns.getCameraRay )
+				// write the ray data
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
 				ray.direction = normalize( ray.direction );

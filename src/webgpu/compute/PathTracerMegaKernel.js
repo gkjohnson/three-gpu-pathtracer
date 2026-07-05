@@ -114,7 +114,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
 				${ rngInit }( pixelIndex, seed, 0 );
 
-				// scene ray - the camera supplies its own uv -> ray function ( bvhData.fns.getCameraRay )
+				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
 				ray.direction = normalize( ray.direction );
