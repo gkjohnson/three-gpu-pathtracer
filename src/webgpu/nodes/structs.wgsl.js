@@ -210,6 +210,11 @@ export const lobeWeightsStruct = new StructTypeNode( {
 }, 'LobeWeights' );
 
 export const bxdfContextStruct = new StructTypeNode( {
+
+	V: 'vec3f', // view dir
+	L: 'vec3f', // light dir
+	H: 'vec3f', // half dir
+
 	NdotV: 'float',
 	NdotL: 'float',
 	NdotH: 'float',

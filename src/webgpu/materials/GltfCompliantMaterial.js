@@ -192,6 +192,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				}
 
 				var ctx: ${ bxdfContextStruct };
+				ctx.V = wo;
+				ctx.L = wi;
+				ctx.H = wh;
+
 				ctx.NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
 				ctx.NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
 				ctx.NdotH = saturate( wh.z );
