@@ -85,7 +85,8 @@ export const ggxLambdaFunc = wgslFn( /* wgsl */ `
 		let alphaT = alpha.x;
 		let alphaB = alpha.y;
 
-		let cos2 = V.z * V.z;
+		let NdotV = max( V.z, MIN_INCIDENT_COS );
+		let cos2 = NdotV * NdotV;
 		let t = ( alphaT * alphaT * V.x * V.x + alphaB * alphaB * V.y * V.y ) / cos2;
 		let numerator = - 1.0 + sqrt( 1.0 + t );
 		return numerator / 2.0;
@@ -114,8 +115,8 @@ export const ggxSmithVisibilityFunc = wgslFn( /* wgsl */ `
 		let alphaT = alpha.x;
 		let alphaB = alpha.y;
 
-		let NdotV = V.z;
-		let NdotL = L.z;
+		let NdotV = max( V.z, MIN_INCIDENT_COS );
+		let NdotL = max( L.z, MIN_INCIDENT_COS );
 
 		let TdotV = V.x;
 		let TdotL = L.x;
@@ -163,7 +164,7 @@ export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 
 	fn ggxReflectionAdjustedPDF( V: vec3f, H: vec3f, alpha: vec2f ) -> f32 {
 
-		let NdotV = V.z;
+		let NdotV = max( V.z, MIN_INCIDENT_COS );
 		let D = ggxDistribution( H, alpha );
 		let G1 = ggxShadowMaskG1( V, alpha );
 
