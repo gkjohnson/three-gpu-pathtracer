@@ -3,7 +3,10 @@ import { constants } from './structs.wgsl.js';
 
 // See sampling.wgsl for vector shorthand explanations
 // The GGX functions provide sampling and distribution information for normals as output so
-// in order to get probability of scatter direction the half vector must be computed and provided.
+// in order to get probability of scatter direction the half vector must be computed and
+// provided. Anisotropic surfaces are represented with a 2-dimensional alpha storing the
+// roughness along the tangent (x) and bitangent (y) in the TBN frame.
+
 // [0] https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf
 // [1] https://hal.archives-ouvertes.fr/hal-01509746/document
 // [2] http://jcgt.org/published/0007/04/01/
@@ -68,13 +71,6 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 	}
 
 `, [ constants ] );
-
-// PDF and related functions for use in a Monte Carlo path tracer.
-// The GGX terms are anisotropic ( Filament's D / V ); isotropic callers pass the same alpha for
-// both alphaT and alphaB, which reduces these to the isotropic GGX exactly. Direction vectors are
-// in the surface frame ( x = tangent, y = bitangent, z = normal ), so the tangent / bitangent dots
-// are just their .xy components.
-// D / V: https://google.github.io/filament/Filament.md.html#materialsystem/anisotropicmodel/anisotropicspecularbrdf
 
 // Smith masking lambda for a single direction, used to build the G1 term for the pdf
 // See equation (34) from [0] and equation (43) from [7]
