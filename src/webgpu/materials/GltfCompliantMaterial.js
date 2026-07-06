@@ -90,8 +90,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 				let alpha = vec2( alphaT, alphaB );
 
+				let NdotV = ctx.V.z;
+				let NdotVc = ctx.Vc.z;
+				let NdotL = ctx.L.z;
+
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-				let diffuse = ${ this.diffuseBrdf }( ctx.V.z, ctx.L.z, ctx.VdotH, surf );
+				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
@@ -100,7 +104,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				);
 
 				// TODO: this only handles non-anisotropic surfaces
-				let metallicBase = ${ this.conductorFresnel }( ctx.V.z, ctx.VdotH, surf.color, specular, alpha.y );
+				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular, alpha.y );
 
 				let metallic = ${ this.iridescentConductorLayer }(
 					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
@@ -112,7 +116,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 				let clearcoat = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) );
 
-				let coatedMaterial = ${ this.fresnelCoat }( max( ctx.Vc.z, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
+				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
 
 				return coatedMaterial;
 
