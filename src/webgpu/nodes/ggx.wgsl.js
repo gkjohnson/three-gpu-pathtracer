@@ -9,6 +9,9 @@ import { constants } from './structs.wgsl.js';
 // [2] http://jcgt.org/published/0007/04/01/
 // [4] http://jcgt.org/published/0003/02/03/
 // [5] https://seblagarde.wordpress.com/wp-content/uploads/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+// [6] https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_anisotropy/README.md
+// [7] https://google.github.io/filament/Filament.md.html#materialsystem/anisotropicmodel/anisotropicspecularbrdf
+
 // trowbridge-reitz === GGX === GTR
 export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
@@ -21,9 +24,13 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 		// orthonormal basis
 		var T1: vec3f;
 		if ( V.z < 0.9999 ) {
+
 			T1 = normalize( cross( V, vec3( 0.0, 0.0, 1.0 ) ) );
+
 		} else {
+
 			T1 = vec3( 1.0, 0.0, 0.0 );
+
 		}
 
 		let T2 = cross( T1, V );
@@ -33,14 +40,21 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 		let r = sqrt( uv.x );
 		var phi: f32;
 		if ( uv.y < a ) {
+
 			phi = uv.y / a * PI;
+
 		} else {
+
 			phi = PI + ( uv.y - a ) / ( 1.0 - a ) * PI;
+
 		}
+
 		let P1 = r * cos( phi );
 		var P2 = r * sin( phi );
 		if ( uv.y >= a ) {
+
 			P2 *= V.z;
+
 		}
 
 		// compute normal
@@ -55,82 +69,103 @@ export const ggxDirectionFunc = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
-// Below are PDF and related functions for use in a Monte Carlo path tracer
-// as specified in Appendix B of the following paper
-// See equation (34) from reference [0]
-export const ggxLamdaFunc = wgslFn( /* wgsl */ `
+// PDF and related functions for use in a Monte Carlo path tracer.
+// The GGX terms are anisotropic ( Filament's D / V ); isotropic callers pass the same alpha for
+// both alphaT and alphaB, which reduces these to the isotropic GGX exactly. Direction vectors are
+// in the surface frame ( x = tangent, y = bitangent, z = normal ), so the tangent / bitangent dots
+// are just their .xy components.
+// D / V: https://google.github.io/filament/Filament.md.html#materialsystem/anisotropicmodel/anisotropicspecularbrdf
 
-	fn ggxLamda( theta: f32, alpha: f32 ) -> f32 {
+// Smith masking lambda for a single direction, used to build the G1 term for the pdf
+// See equation (34) from [0] and equation (43) from [7]
+export const ggxLambdaFunc = wgslFn( /* wgsl */ `
 
-		let tanTheta = tan( theta );
-		let tanTheta2 = tanTheta * tanTheta;
-		let alpha2 = alpha * alpha;
+	fn ggxLambda( V: vec3f, alpha: vec2f ) -> f32 {
 
-		let numerator = - 1.0 + sqrt( 1.0 + alpha2 * tanTheta2 );
+		let alphaT = alpha.x;
+		let alphaB = alpha.y;
+
+		let cos2 = V.z * V.z;
+		let t = ( alphaT * alphaT * V.x * V.x + alphaB * alphaB * V.y * V.y ) / cos2;
+		let numerator = - 1.0 + sqrt( 1.0 + t );
 		return numerator / 2.0;
 
 	}
 
 ` );
 
-// Based on equation (34) from reference [0]
+// Based on equation (2) from reference [1]
 export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
 
-	fn ggxShadowMaskG1( cosTheta: f32, alpha: f32 ) -> f32 {
+	fn ggxShadowMaskG1( V: vec3f, alpha: vec2f ) -> f32 {
 
-		let a2 = alpha * alpha;
-		let cosTheta2 = cosTheta * cosTheta;
-		let denom = cosTheta + sqrt( cosTheta2 * ( 1 - a2 ) + a2 );
-		return 2.0 * cosTheta / denom;
+		return 1.0 / ( 1.0 + ggxLambda( V, alpha ) );
 
 	}
 
-`, [ ggxLamdaFunc ] );
+`, [ ggxLambdaFunc ] );
 
-// See listing 2 from reference [5]
+// Smith height-correlated visibility term = G / ( 4 * NdotV * NdotL )
+// See (listing 16) in [7] and from [6]
 export const ggxSmithVisibilityFunc = wgslFn( /* wgsl */ `
 
-	fn ggxSmithVisibility( NdotV: f32, NdotL: f32, alpha: f32 ) -> f32 {
+	fn ggxSmithVisibility( V: vec3f, L: vec3f, alpha: vec2f ) -> f32 {
 
-		// Original formulation of G_SmithGGX Correlated
-		// lambda_v = ( -1 + sqrt ( alphaG2 * (1 - NdotL2 ) / NdotL2 + 1)) * 0.5 f;
-		// lambda_l = ( -1 + sqrt ( alphaG2 * (1 - NdotV2 ) / NdotV2 + 1)) * 0.5 f;
-		// G_SmithGGXCorrelated = 1 / (1 + lambda_v + lambda_l );
-		// V_SmithGGXCorrelated = G_SmithGGXCorrelated / (4.0 f * NdotL * NdotV );
+		let alphaT = alpha.x;
+		let alphaB = alpha.y;
 
-		// This is an optimized version
-		let alpha2 = alpha * alpha;
-		// Caution: the "NdotL *" and "NdotV *" are explicitely inversed , this is not a mistake.
-		let Lambda_GGXV = NdotL * sqrt (( - NdotV * alpha2 + NdotV ) * NdotV + alpha2 );
-		let Lambda_GGXL = NdotV * sqrt (( - NdotL * alpha2 + NdotL ) * NdotL + alpha2 );
+		let NdotV = V.z;
+		let NdotL = L.z;
 
-		return 0.5 / ( Lambda_GGXV + Lambda_GGXL );
+		let TdotV = V.x;
+		let TdotL = L.x;
+
+		let BdotV = V.y;
+		let BdotL = L.y;
+
+		let GGXV = NdotL * length( vec3f( alphaT * TdotV, alphaB * BdotV, NdotV ) );
+		let GGXL = NdotV * length( vec3f( alphaT * TdotL, alphaB * BdotL, NdotL ) );
+
+		return 0.5 / ( GGXV + GGXL );
 
 	}
 
-`, [ ggxLamdaFunc ] );
+` );
 
-
-// See listing 2 from reference [5]
+// Trowbridge-Reitz ( GGX ) normal distribution
+// See (listing 15) in [7]
 export const ggxDistributionFunc = wgslFn( /* wgsl */ `
-	fn ggxDistribution( NdotH: f32, alpha: f32 ) -> f32 {
 
-		let a2 = max( alpha * alpha, EPSILON );
-		let denom = NdotH * NdotH * ( a2 - 1 ) + 1;
+	fn ggxDistribution( H: vec3f, alpha: vec2f ) -> f32 {
 
-		return ( a2 / ( PI * denom * denom ) );
+		let alphaT = alpha.x;
+		let alphaB = alpha.y;
+
+		let NdotH = H.z;
+		let TdotH = H.x;
+		let BdotH = H.y;
+
+		let a2 = alphaT * alphaB;
+		let v = vec3f( alphaB * TdotH, alphaT * BdotH, a2 * NdotH );
+		let v2 = dot( v, v );
+		let w2 = a2 / v2;
+
+		return a2 * w2 * w2 / PI;
 
 	}
-`, );
+
+` );
 
 // ggxPDF, divided by the Jacobian of reflection operation
-// See equation (17) from [2]
+// PDF: See equation (17) from reference [2]
 // Note: HdotV cancel out bc its guaranteed to be > 0
 export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
-	fn ggxReflectionAdjustedPDF( NdotV: f32, NdotH: f32, alpha: f32 ) -> f32 {
 
-		let D = ggxDistribution( NdotH, alpha );
-		let G1 = ggxShadowMaskG1( NdotV, alpha );
+	fn ggxReflectionAdjustedPDF( V: vec3f, H: vec3f, alpha: vec2f ) -> f32 {
+
+		let NdotV = V.z;
+		let D = ggxDistribution( H, alpha );
+		let G1 = ggxShadowMaskG1( V, alpha );
 
 		return D * G1 / ( 4 * NdotV );
 

@@ -221,13 +221,10 @@ export const bxdfContextStruct = new StructTypeNode( {
 	L: 'vec3f', // light dir
 	H: 'vec3f', // half dir
 
-	NdotV: 'float',
-	NdotL: 'float',
-	NdotH: 'float',
-	VdotH: 'float',
+	Vc: 'vec3f', // clearcoat view dir
+	Lc: 'vec3f', // clearcoat light dir
+	Hc: 'vec3f', // clearcoat half dir
 
-	VdotNc: 'float',
-	LdotNc: 'float',
-	HdotNc: 'float',
+	VdotH: 'float',
 
 }, 'BxDFContext' );
