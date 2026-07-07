@@ -99,7 +99,11 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			var ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 
 			// depth of field
-			let focalPoint = ray.origin + normalize( ray.direction ) * ${ focusDistance };
+			// measure focus distance along the optical axis so the focal surface is a flat
+			// plane perpendicular to the camera forward vector rather than a sphere.
+			let rayDir = normalize( ray.direction );
+			let forward = normalize( ( ${ cameraWorldMatrix } * vec4f( 0.0, 0.0, - 1.0, 0.0 ) ).xyz );
+			let focalPoint = ray.origin + rayDir * ( ${ focusDistance } / dot( rayDir, forward ) );
 
 			// sample the aperture shape
 			let shapeUVW = ${ rand3 }( ${ RNG_INDEX_APERTURE_SAMPLE } );
@@ -109,7 +113,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			// rotate + squash the sample for anamorphic apertures
 			apertureSample =
 				${ rotateVector }( apertureSample, ${ apertureRotation } )
-				* clamp( vec2f( ${ anamorphicRatio }, 1.0 / ${ anamorphicRatio } ), vec2f( 0.0 ), vec2f( 1.0 ) );
+				* vec2f( ${ anamorphicRatio }, 1.0 / ${ anamorphicRatio } );
 
 			ray.origin += ( ${ cameraWorldMatrix } * vec4f( apertureSample, 0.0, 0.0 ) ).xyz;
 			ray.direction = focalPoint - ray.origin;
