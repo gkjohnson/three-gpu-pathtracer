@@ -1,4 +1,4 @@
-import { ndcToCameraRay } from 'three-mesh-bvh/webgpu';
+import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode';
 import { SOBOL_INDEX_RAY_JITTER, sobolFuncs, sobolInit } from '../../nodes/random.wgsl';
 import { ComputeKernel } from '../ComputeKernel';
@@ -6,7 +6,6 @@ import { globalId, sampler, storage, texture, uniform } from 'three/tsl';
 import { DataTexture, Matrix4, Vector2 } from 'three';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
 import { getSurfaceRecordFunc, transmissionAttenuationFunc } from '../../nodes/material.wgsl';
-import { rayStruct } from '../../lib/wgsl/structs.wgsl';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { pixelQueueStruct, rayDataStruct, rayQueueStruct } from './structs';
 
@@ -97,7 +96,10 @@ export class MaterialKernel extends ComputeKernel {
 					var ray = ${ ndcToCameraRay }( ndc + jitter, cameraToModelMatrix * inverseProjectionMatrix );
 					ray.direction = normalize( ray.direction );
 					let rayIndex = atomicAdd( &${ params.rayQueue }.length, 1 );
-					${ params.rayQueue }.elements[ rayIndex ] = ray;
+					${ params.rayQueue }.elements[ rayIndex ].origin = ray.origin;
+					${ params.rayQueue }.elements[ rayIndex ].direction = ray.direction;
+					${ params.rayQueue }.elements[ rayIndex ].pixelIndex = pixelIndex;
+					${ params.rayQueue }.elements[ rayIndex ].currentBounce = 0u;
 
 					data.throughputColor = vec3f( 1.0 );
 					data.resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
@@ -159,7 +161,10 @@ export class MaterialKernel extends ComputeKernel {
 					let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;
 
 					let rayIndex = atomicAdd( &${ params.rayQueue }.length, 1 );
-					${ params.rayQueue }.elements[ rayIndex ] = ${ rayStruct }( newPoint, scatterRec.direction );
+					${ params.rayQueue }.elements[ rayIndex ].origin = newPoint;
+					${ params.rayQueue }.elements[ rayIndex ].direction = scatterRec.direction;
+					${ params.rayQueue }.elements[ rayIndex ].pixelIndex = data.pixelIndex;
+					${ params.rayQueue }.elements[ rayIndex ].currentBounce = data.currentBounce;
 					data.rayIntersectionIndex = i32( rayIndex );
 
 					let lightScatterRec = ${ bsdfEvalScatterFn }( - incidentDirection, data.lightDirection, surface );
@@ -167,7 +172,10 @@ export class MaterialKernel extends ComputeKernel {
 					data.lightBsdfPdf = lightScatterRec.pdf;
 
 					let shadowRayIndex = atomicAdd( &${ params.shadowRayQueue }.length, 1 );
-					${ params.shadowRayQueue }.elements[ shadowRayIndex ] = ${ rayStruct }( newPoint, data.lightDirection );
+					${ params.shadowRayQueue }.elements[ shadowRayIndex ].origin = newPoint;
+					${ params.shadowRayQueue }.elements[ shadowRayIndex ].direction = data.lightDirection;
+					${ params.shadowRayQueue }.elements[ shadowRayIndex ].pixelIndex = data.pixelIndex;
+					${ params.shadowRayQueue }.elements[ shadowRayIndex ].currentBounce = data.currentBounce - 1u;
 					data.shadowRayIntersectionIndex = i32( shadowRayIndex );
 
 				}

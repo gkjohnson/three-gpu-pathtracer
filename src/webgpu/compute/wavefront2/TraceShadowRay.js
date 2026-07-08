@@ -1,9 +1,11 @@
-import { globalId, localId, storage, uint } from 'three/tsl';
+import { globalId, localId, storage, uint, uniform } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { intersectionResultStruct, rayQueueStruct } from './structs';
 import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
+import { sobolInit } from '../../nodes/random.wgsl.js';
+import { rayStruct } from '../../lib/wgsl/structs.wgsl';
 
 export class TraceShadowRayKernel extends ComputeKernel {
 
@@ -14,6 +16,8 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 			shadowRayQueue: storage( new StorageBufferAttribute(), rayQueueStruct ),
 			shadowRayIntersectionQueue: storage( new StorageBufferAttribute(), intersectionResultStruct ),
+
+			seed: uniform( 0 ),
 
 			localId: localId,
 			globalId: globalId,
@@ -26,7 +30,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 		const fn = wgslTagFn/* wgsl */`
 
-			fn traceRay( localId: vec3u, globalId: vec3u ) -> void {
+			fn traceRay( localId: vec3u, globalId: vec3u, seed: u32 ) -> void {
 
 				let index = globalId.x;
 				let queueSize = atomicLoad( &${ params.shadowRayQueue }.length );
@@ -37,8 +41,12 @@ export class TraceShadowRayKernel extends ComputeKernel {
 				}
 				${ threadIdNode } = localId.x;
 
+				let queuedRay = ${ params.shadowRayQueue }.elements[ index ];
+				${ sobolInit }( queuedRay.pixelIndex, seed, queuedRay.currentBounce );
+
 				var hitResult: ${ raycastOutput };
-				let didHit = ${ raycastAnyHitFn }( ${ params.shadowRayQueue }.elements[ index ], &hitResult );
+				let ray = ${ rayStruct }( queuedRay.origin, queuedRay.direction );
+				let didHit = ${ raycastAnyHitFn }( ray, &hitResult );
 
 				let result = &${ params.shadowRayIntersectionQueue }[ index ];
 				if ( didHit ) {

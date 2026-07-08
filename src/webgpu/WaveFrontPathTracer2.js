@@ -11,8 +11,7 @@ import { TraceShadowRayKernel } from './compute/wavefront2/TraceShadowRay.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront2/QueueLengthToDispatchKernel.js';
 import { lightStruct } from './nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, rayQueueStruct } from './compute/wavefront2/structs.js';
-import { rayStruct } from './lib/wgsl/structs.wgsl.js';
+import { rayDataStruct, intersectionResultStruct, rayQueueStruct, traceQueuedRayStruct } from './compute/wavefront2/structs.js';
 
 const MAX_BUFFER_SIZE = 128 * 1024 * 1024;
 const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
@@ -31,7 +30,7 @@ export class WaveFrontPathTracer2 extends PathTracerBackend {
 		this.rayData = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, rayDataStruct.getLength() );
 		this.rayData.name = 'Ray Data';
 
-		const queueSize = RAY_QUEUE_HEADER_FLOATS + MAX_RAY_DATA_COUNT * rayStruct.getLength();
+		const queueSize = RAY_QUEUE_HEADER_FLOATS + MAX_RAY_DATA_COUNT * traceQueuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
 		this.rayQueue.name = 'Ray Queue';
 
@@ -308,6 +307,7 @@ export class WaveFrontPathTracer2 extends PathTracerBackend {
 
 			this.traceRayKernel.rayQueue = this.rayQueue;
 			this.traceRayKernel.rayIntersectionQueue = this.rayIntersections;
+			this.traceRayKernel.seed = this.seed;
 			renderer.compute( this.traceRayKernel.kernel, this.rayDispatchConverter.outputDispatch );
 
 			this.shadowDispatchConverter.queue = this.shadowRayQueue;
@@ -315,6 +315,7 @@ export class WaveFrontPathTracer2 extends PathTracerBackend {
 
 			this.traceShadowRayKernel.shadowRayQueue = this.shadowRayQueue;
 			this.traceShadowRayKernel.shadowRayIntersectionQueue = this.shadowRayIntersections;
+			this.traceShadowRayKernel.seed = this.seed;
 			renderer.compute( this.traceShadowRayKernel.kernel, this.shadowDispatchConverter.outputDispatch );
 
 			this.samples ++;

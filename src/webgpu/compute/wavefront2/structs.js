@@ -1,8 +1,6 @@
 import { StructTypeNode } from 'three/webgpu';
 import { WGSLStructTypeNode } from '../../WGSLStructTypeNode';
 import { wgsl } from 'three/tsl';
-import { wgslTagCode } from '../../lib/nodes/WGSLTagFnNode';
-import { rayStruct } from '../../lib/wgsl/structs.wgsl';
 
 export const rayDataStruct = new StructTypeNode( {
 
@@ -52,16 +50,23 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 } );
 
-export const rayQueueStruct = new WGSLStructTypeNode( 'RayQueue', wgslTagCode/* wgsl */`
+export const traceQueuedRayStruct = new StructTypeNode( {
+	origin: 'vec3f',
+	pixelIndex: 'uint',
+	direction: 'vec3f',
+	currentBounce: 'uint',
+}, 'TraceQueuedRay' );
+
+export const rayQueueStruct = new WGSLStructTypeNode( 'RayQueue', wgsl( /* wgsl */`
 
 	struct RayQueue {
 
 		length: atomic< u32 >,
-		elements: array< ${ rayStruct } >,
+		elements: array< ${ traceQueuedRayStruct.name } >,
 
 	}
 
-` );
+`, [ traceQueuedRayStruct ] ) );
 
 export const pixelQueueStruct = new WGSLStructTypeNode( 'PixelQueue', wgsl( /* wgsl */ `
 
