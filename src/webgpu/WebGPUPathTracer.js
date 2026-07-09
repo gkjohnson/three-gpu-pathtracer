@@ -118,7 +118,7 @@ export class WebGPUPathTracer {
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
-		this.commonAttributes = [ 'normal', 'uv', 'tangent', 'color' ];
+		this.commonAttributes = [ 'normal', 'tangent', 'color' ];
 		this.stableNoise = false;
 		this.pause = false;
 
