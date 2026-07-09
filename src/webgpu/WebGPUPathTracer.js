@@ -246,7 +246,9 @@ export class WebGPUPathTracer {
 			environment,
 			scene.environmentIntensity,
 			scene.environmentRotation,
+		);
 
+		_pathTracer.setBackground(
 			background,
 			scene.backgroundIntensity,
 			scene.backgroundRotation,

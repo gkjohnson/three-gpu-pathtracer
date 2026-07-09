@@ -88,39 +88,39 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		envMap,
 		envMapIntensity,
 		envMapRotation,
+	) {
 
+		const { rayIntersectionKernel, envInfo } = this;
+		envInfo.updateFrom( envMap );
+		rayIntersectionKernel.envMap = envInfo.map;
+		rayIntersectionKernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
+		rayIntersectionKernel.envMapRotation.setFromMatrix4( rotationMatrix );
+		rayIntersectionKernel.envMapIntensity = envMapIntensity;
+
+	}
+
+	setBackground(
 		background,
 		backgroundIntensity,
 		backgroundRotation,
 		backgroundBlurriness,
 	) {
 
-		const kernel = this.rayIntersectionKernel;
+		const { rayIntersectionKernel } = this;
+		if ( rayIntersectionKernel.background.isTexture ) {
 
-		if ( kernel.background.isTexture ) {
-
-			kernel.background.dispose();
-
-		}
-
-		if ( envMap !== null ) {
-
-			this.envInfo.updateFrom( envMap );
-			kernel.envMap = this.envInfo.map;
-			kernel.kernel.computeNode.parameters.envMapSampler.node.value = this.envInfo.map;
+			rayIntersectionKernel.background.dispose();
 
 		}
 
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		kernel.envMapIntensity = envMapIntensity;
-
-		kernel.background = background;
-		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
-		rotationMatrix.makeRotationFromEuler( backgroundRotation ).invert();
-		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		kernel.backgroundIntensity = backgroundIntensity;
-		kernel.backgroundBlurriness = backgroundBlurriness;
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
+		rayIntersectionKernel.background = background;
+		rayIntersectionKernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		rayIntersectionKernel.backgroundRotation.setFromMatrix4( rotationMatrix );
+		rayIntersectionKernel.backgroundIntensity = backgroundIntensity;
+		rayIntersectionKernel.backgroundBlurriness = backgroundBlurriness;
 
 	}
 

@@ -62,7 +62,11 @@ export class PathTracerBackend {
 		envMap,
 		envMapIntensity,
 		envMapRotation,
+	) {
 
+	}
+
+	setBackground(
 		background,
 		backgroundIntensity,
 		backgroundRotation,
