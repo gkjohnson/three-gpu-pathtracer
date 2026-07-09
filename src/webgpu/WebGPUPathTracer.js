@@ -664,37 +664,3 @@ export class WebGPUPathTracer {
 	}
 
 }
-
-function convertToTexture( renderer, value, colorTexture ) {
-
-	if ( ! value ) {
-
-		const clearAlpha = renderer.getClearAlpha();
-		renderer.getClearColor( _color );
-
-		colorTexture.image.data[ 0 ] = _color.r * 255;
-		colorTexture.image.data[ 1 ] = _color.g * 255;
-		colorTexture.image.data[ 2 ] = _color.b * 255;
-		colorTexture.image.data[ 3 ] = clearAlpha * 255;
-
-		colorTexture.needsUpdate = true;
-		value = colorTexture;
-
-	} else if ( value.isColor ) {
-
-		colorTexture.image.data[ 0 ] = value.r * 255;
-		colorTexture.image.data[ 1 ] = value.g * 255;
-		colorTexture.image.data[ 2 ] = value.b * 255;
-		colorTexture.image.data[ 3 ] = 255;
-		colorTexture.needsUpdate = true;
-		value = colorTexture;
-
-	} else if ( value?.isCubeTexture ) {
-
-		value = new CubeToEquirectGenerator( renderer ).generate( value );
-
-	}
-
-	return value;
-
-}
