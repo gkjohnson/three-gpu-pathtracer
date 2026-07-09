@@ -54,8 +54,6 @@ export class WebGPUPathTracer {
 
 	updateLights() {}
 
-	updateMaterials() {}
-
 	// --- end compatibility stubs ---
 
 	get fadeState() {
@@ -189,6 +187,7 @@ export class WebGPUPathTracer {
 
 	}
 
+	// TODO: consider renaming these functions or removing them
 	getMaterial() {
 
 		return this.material;

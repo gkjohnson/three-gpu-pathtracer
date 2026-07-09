@@ -369,12 +369,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		let attr = materialsStorage.value;
 		if ( attr.count < count ) {
 
-			if ( attr ) {
-
-				attr.dispose();
-
-			}
-
+			attr.dispose();
 			attr = new StorageBufferAttribute( materialData, structs.material.getLength() );
 
 		}
