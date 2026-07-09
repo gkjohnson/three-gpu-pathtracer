@@ -84,29 +84,25 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setEnvironment(
-		envMap,
-		envMapIntensity,
-		envMapRotation,
-	) {
+	setEnvironment( envMap ) {
 
 		const { rayIntersectionKernel, envInfo } = this;
 		envInfo.updateFrom( envMap );
 		rayIntersectionKernel.envMap = envInfo.map;
 		rayIntersectionKernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
 
+	}
+
+	setEnvironmentParams( envMapIntensity, envMapRotation ) {
+
+		const { rayIntersectionKernel } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
 		rayIntersectionKernel.envMapRotation.setFromMatrix4( rotationMatrix );
 		rayIntersectionKernel.envMapIntensity = envMapIntensity;
 
 	}
 
-	setBackground(
-		background,
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
+	setBackground( background ) {
 
 		const { rayIntersectionKernel } = this;
 		if ( rayIntersectionKernel.background.isTexture ) {
@@ -115,9 +111,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		}
 
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
 		rayIntersectionKernel.background = background;
 		rayIntersectionKernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+
+	}
+
+	setBackgroundParams(
+		backgroundIntensity,
+		backgroundRotation,
+		backgroundBlurriness,
+	) {
+
+		const { rayIntersectionKernel } = this;
+		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
 		rayIntersectionKernel.backgroundRotation.setFromMatrix4( rotationMatrix );
 		rayIntersectionKernel.backgroundIntensity = backgroundIntensity;
 		rayIntersectionKernel.backgroundBlurriness = backgroundBlurriness;

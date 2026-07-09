@@ -15,6 +15,98 @@ import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 const _resolution = new Vector2();
 const _color = new Color();
 
+class TextureCache {
+
+	constructor( renderer, key ) {
+
+		this.key = key;
+		this.renderer = renderer;
+		this.texture = null;
+		this.hash = null;
+
+		const colorTex = new DataTexture( new Uint8Array( [ 255, 255, 255, 255 ] ), 1, 1 );
+		colorTex.minFilter = LinearFilter;
+		colorTex.magFilter = LinearFilter;
+		this.colorTex = colorTex;
+
+	}
+
+	dispose() {
+
+		this.colorTex.dispose();
+		this.texture?.dispose();
+
+	}
+
+	setFromScene( scene ) {
+
+		const { renderer, key, colorTex } = this;
+		let value = scene[ key ];
+		let hash = '';
+
+		if ( ! value ) {
+
+			const clearAlpha = renderer.getClearAlpha();
+			renderer.getClearColor( _color );
+
+			colorTex.image.data[ 0 ] = _color.r * 255;
+			colorTex.image.data[ 1 ] = _color.g * 255;
+			colorTex.image.data[ 2 ] = _color.b * 255;
+			colorTex.image.data[ 3 ] = clearAlpha * 255;
+
+			value = colorTex;
+			hash = colorTex.image.data.join();
+			colorTex.needsUpdate = hash !== this.hash;
+
+		} else if ( value.isColor ) {
+
+			colorTex.image.data[ 0 ] = value.r * 255;
+			colorTex.image.data[ 1 ] = value.g * 255;
+			colorTex.image.data[ 2 ] = value.b * 255;
+			colorTex.image.data[ 3 ] = 255;
+
+			value = colorTex;
+			hash = colorTex.image.data.join();
+			colorTex.needsUpdate = hash !== this.hash;
+
+		} else if ( value.isCubeTexture ) {
+
+			hash = null;
+			value = new CubeToEquirectGenerator( renderer ).generate( value );
+
+		} else {
+
+			value = value.clone();
+			hash = value.uuid + '_' + value.version;
+
+		}
+
+		if ( hash === null ) {
+
+			this.texture?.dispose();
+
+			this.texture = value;
+			this.hash = null;
+			return true;
+
+		} else {
+
+			const needsUpdate = hash !== this.hash;
+			if ( needsUpdate ) {
+
+				this.texture?.dispose();
+				this.texture = value;
+
+			}
+
+			return needsUpdate;
+
+		}
+
+	}
+
+}
+
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -85,17 +177,8 @@ export class WebGPUPathTracer {
 		this._renderer = renderer;
 		this._timer = new Timer();
 
-		this._envColorTexture = new DataTexture( );
-		this._envColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
-		this._envColorTexture.needsUpdate = true;
-		this._envColorTexture.minFilter = LinearFilter;
-		this._envColorTexture.magFilter = LinearFilter;
-
-		this._backgroundColorTexture = new DataTexture( );
-		this._backgroundColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
-		this._backgroundColorTexture.needsUpdate = true;
-		this._backgroundColorTexture.minFilter = LinearFilter;
-		this._backgroundColorTexture.magFilter = LinearFilter;
+		this._environmentCache = new TextureCache( renderer, 'environment' );
+		this._backgroundCache = new TextureCache( renderer, 'background' );
 
 		this._resetTime = 0;
 		this._fadeState = 0;
@@ -232,24 +315,33 @@ export class WebGPUPathTracer {
 	updateEnvironment() {
 
 		const {
-			_renderer,
 			_pathTracer,
 			scene,
-			_envColorTexture,
-			_backgroundColorTexture,
+
+			_environmentCache,
+			_backgroundCache,
 		} = this;
 
-		const environment = convertToTexture( _renderer, scene.environment || _color.set( 0 ), _envColorTexture );
-		const background = convertToTexture( _renderer, scene.background, _backgroundColorTexture );
+		// update the texture if they've changed
+		if ( _environmentCache.setFromScene( scene ) ) {
 
-		_pathTracer.setEnvironment(
-			environment,
+			_pathTracer.setEnvironment( _environmentCache.texture );
+
+		}
+
+		if ( _backgroundCache.setFromScene( scene ) ) {
+
+			_pathTracer.setBackground( _backgroundCache.texture );
+
+		}
+
+		// update the params always since they're cheap
+		_pathTracer.setEnvironmentParams(
 			scene.environmentIntensity,
 			scene.environmentRotation,
 		);
 
-		_pathTracer.setBackground(
-			background,
+		_pathTracer.setBackgroundParams(
 			scene.backgroundIntensity,
 			scene.backgroundRotation,
 			scene.backgroundBlurriness,
