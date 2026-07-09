@@ -50,11 +50,13 @@ export class MaterialOrbSceneLoader {
 				camera.fov *= 2.0;
 				camera.updateProjectionMatrix();
 
-				// some objects in the scene use 16 bit float vertex colors so we disable them here
+				// some objects in the scene use 16 bit float vertex colors and specify so
+				// emissive colors we disable them here.
 				scene.traverse( c => {
 
 					if ( c.material ) {
 
+						c.material.emissive.set( 0, 0, 0 );
 						c.material.vertexColors = false;
 
 					}

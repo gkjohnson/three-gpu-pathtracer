@@ -2,10 +2,9 @@ import { Vector2, Matrix4 } from 'three';
 import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { ndcToCameraRay } from '../../lib/wgsl/common.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
-import { wgslTagFn } from '../../lib/nodes/WGSLTagFnNode.js';
+import { ndcToCameraRay, wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 

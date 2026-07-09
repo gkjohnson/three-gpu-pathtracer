@@ -1,7 +1,7 @@
 import {
 	Scene,
 	EquirectangularReflectionMapping,
-	WebGLRenderer,
+	WebGPURenderer,
 	PerspectiveCamera,
 	Mesh,
 	PlaneGeometry,
@@ -10,13 +10,13 @@ import {
 	Color,
 	ACESFilmicToneMapping,
 	NoToneMapping,
-} from 'three';
+	HalfFloatType,
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './utils/LoaderElement.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
@@ -33,11 +33,9 @@ const MAX_SAMPLES = 45;
 const params = {
 	pause: false,
 	hdr: true,
-	sdrToneMapping: false,
 	environmentIntensity: 15,
-	tiles: 3,
-	bounces: 5,
 	renderScale: 1,
+	downloadHDR: () => downloadImage(),
 
 	...getScaledSettings(),
 };
@@ -45,7 +43,6 @@ const params = {
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
-let activeImage = false;
 
 init();
 
@@ -54,21 +51,23 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
+
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	// outputType HalfFloatType configures the canvas for extended-range tone mapping, so the path
+	// tracer's linear values above 1.0 are displayed directly in HDR ( on a capable display ).
+	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType } );
+	renderer.init();
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.bounces = params.bounces;
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// generator
-	hdrGenerator = new HDRImageGenerator( renderer, document.querySelector( 'img' ) );
+	hdrGenerator = new HDRImageGenerator( renderer );
 
 	// camera
 	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
@@ -85,7 +84,6 @@ async function init() {
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
-		resetHdr();
 
 	} );
 	controls.update();
@@ -121,51 +119,32 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
+	loader.setPercentage( 1 );
 
 	const gui = new GUI();
-	gui.add( params, 'pause' ).onChange( () => {
+	gui.add( params, 'hdr' ).onChange( v => {
 
-		resetHdr();
-
-	} );
-	gui.add( params, 'hdr' );
-	gui.add( params, 'sdrToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
 
 	} );
+	gui.add( params, 'pause' );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
 		pathTracer.reset();
-		resetHdr();
-
-	} );
-	gui.add( params, 'bounces', 1, 10 ).onChange( v => {
-
-		pathTracer.bounces = v;
-		pathTracer.reset();
-		resetHdr();
-
-	} );
-	gui.add( params, 'tiles', 1, 6, 1 ).onChange( v => {
-
-		pathTracer.tiles.setScalar( v );
 
 	} );
 	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
 
 		scene.environmentIntensity = v;
 		pathTracer.updateEnvironment();
-		resetHdr();
 
 	} );
+	gui.add( params, 'downloadHDR' ).name( 'Download HDR' );
 
 	window.addEventListener( 'resize', onResize );
 
@@ -186,14 +165,39 @@ function onResize() {
 	// update camera
 	pathTracer.updateCamera();
 
-	resetHdr();
-
 }
 
-function resetHdr() {
+let downloading = false;
+async function downloadImage() {
 
-	hdrGenerator.reset();
-	activeImage = false;
+	// readback + gainmap encode takes a moment, so guard against overlapping downloads
+	if ( downloading ) {
+
+		return;
+
+	}
+
+	downloading = true;
+
+	try {
+
+		const blob = await hdrGenerator.generateBlob( pathTracer.target );
+		const url = URL.createObjectURL( blob );
+
+		const anchor = document.createElement( 'a' );
+		anchor.href = url;
+		anchor.download = 'pathtraced.jpg';
+		document.body.appendChild( anchor );
+		anchor.click();
+		anchor.remove();
+
+		URL.revokeObjectURL( url );
+
+	} finally {
+
+		downloading = false;
+
+	}
 
 }
 
@@ -202,32 +206,9 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	const doPause = params.pause && pathTracer.samples >= 1;
-	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || doPause;
+	pathTracer.pause = pathTracer.samples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
-	if (
-		! hdrGenerator.encoding &&
-		params.hdr &&
-		( pathTracer.samples === MAX_SAMPLES || doPause ) &&
-		! activeImage
-	) {
-
-		// NOTE: this can be called repeatedly but takes up to 200 ms
-		hdrGenerator.updateFrom( pathTracer.target );
-		activeImage = true;
-
-	}
-
-	if ( hdrGenerator.completeImage && params.hdr ) {
-
-		hdrGenerator.image.classList.add( 'show' );
-
-	} else {
-
-		hdrGenerator.image.classList.remove( 'show' );
-
-	}
-
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( pathTracer.samples );
 
 }
