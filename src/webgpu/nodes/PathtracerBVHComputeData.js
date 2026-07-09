@@ -349,19 +349,45 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.updateUvSampleFunction();
 
 		// build material storage
-		const { materials, structs } = this;
-
-		const { materialData, textures } = this.writeMaterialsBuffer( materials );
-
-		this.textures = textures;
-
-		const materialAttribute = new StorageBufferAttribute( materialData, structs.material.getLength() );
-		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( 'bvh_materials' );
-		this.storage.materials = materialStorage;
+		const { structs } = this;
+		const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
+		this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
+		this.updateMaterials();
 
 		this.bvhMap.clear();
-		this.materials.length = 0;
 		this.useTransparencyRaycastFn();
+
+	}
+
+	updateMaterials() {
+
+		const { materials, storage, structs } = this;
+		const { materialData, textures } = this.writeMaterialsBuffer( materials );
+
+		const materialsStorage = storage.materials.proxyNode;
+		const count = materialData.length / structs.material.getLength();
+		let attr = materialsStorage.value;
+		if ( attr.count < count ) {
+
+			if ( attr ) {
+
+				attr.dispose();
+
+			}
+
+			attr = new StorageBufferAttribute( materialData, structs.material.getLength() );
+
+		}
+
+		// copy the content
+		attr.array.set( materialData );
+		attr.needsUpdate = true;
+
+		// update the storage buffer
+		materialsStorage.value = attr;
+
+		// save the textures
+		this.textures = textures;
 
 	}
 
@@ -750,7 +776,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		}
 
-		return { materialData: floatArray, textures };
+		return { materialData: intArray, textures };
 
 	}
 

@@ -209,6 +209,15 @@ export class WebGPUPathTracer {
 
 	}
 
+	updateMaterials() {
+
+		const { _bvhData, _renderer } = this;
+		_bvhData.updateMaterials();
+		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+		this.reset();
+
+	}
+
 	updateCamera() {
 
 		const { camera, _renderer } = this;
