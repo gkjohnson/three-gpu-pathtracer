@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
-import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
+import { storage, float, sampler, texture, uniformArray, materialMetalness } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -40,6 +40,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.structs.transform = transformStruct;
 		this.structs.material = materialStruct;
 		this.storage.materials = null;
+		this.materialsMap = new Map();
 		this.materials = [];
 		this.bvhMap = new Map();
 		this.textureAtlas = new AtlasTexture();
@@ -342,6 +343,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	update() {
 
 		this.updateUvAttributesFromScene();
+		this.updateMaterialsMap();
 
 		super.update();
 
@@ -356,6 +358,54 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.bvhMap.clear();
 		this.useTransparencyRaycastFn();
+
+	}
+
+	updateMaterialsMap() {
+
+		const { bvh, materials, materialsMap } = this;
+		materialsMap.clear();
+		materials.length = 0;
+		bvh.objects.forEach( o => {
+
+			if ( o.material ) {
+
+				if ( Array.isArray( o.material ) ) {
+
+					o.material.forEach( m => add( m ) );
+
+				} else {
+
+					add( o.material );
+
+				}
+
+			}
+
+		} );
+
+		materials
+			.sort( ( a, b ) => {
+
+				return a.uuid < b.uuid ? 1 : - 1;
+
+			} )
+			.forEach( ( m, i ) => {
+
+				materialsMap.set( m, i );
+
+			} );
+
+		function add( mat ) {
+
+			if ( ! materialsMap.has( mat ) ) {
+
+				materials.push( mat );
+				materialsMap.set( mat, - 1 );
+
+			}
+
+		}
 
 	}
 
@@ -780,7 +830,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
 
 		// write material data to the transforms
-		const { materials } = this;
+		const { materialsMap } = this;
 		const { object, instanceId, root } = info;
 
 		// get the material associated with the bvh group
@@ -793,14 +843,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		}
 
 		// save the index
-		let index = materials.indexOf( material );
-		if ( index === - 1 ) {
-
-			index = materials.length;
-			materials.push( material );
-
-		}
-
+		const index = materialsMap.get( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
 
