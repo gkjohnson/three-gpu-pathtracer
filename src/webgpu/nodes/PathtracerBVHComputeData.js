@@ -49,7 +49,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	updateUvAttributesFromScene() {
 
 		const { attributes, bvh } = this;
-		const keys = new Set();
+		const keys = new Set( [ 'color' ] );
 		for ( let i = 0; i < 8; i ++ ) {
 
 			const key = i === 0 ? 'uv' : 'uv' + i;
@@ -133,6 +133,36 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
+	updateColorSampleFn() {
+
+		// create a function for retrieving the color from the vertex data instance. If the struct does not include
+		// color then return white.
+		const { structs, fns } = this;
+		const hasColor = Boolean( structs.attributes.membersLayout.find( ( { name } ) => name === 'color' ) );
+		if ( hasColor ) {
+
+			fns.getColor = wgslTagFn/* wgsl */`
+				fn getColor( vertexData: ${ structs.attributes } ) -> vec4f {
+
+					return vertexData.color;
+
+				}
+			`;
+
+		} else {
+
+			fns.getColor = wgslTagFn/* wgsl */`
+				fn getColor( vertexData: ${ structs.attributes } ) -> vec4f {
+
+					return vec4f( 1.0 );
+
+				}
+			`;
+
+		}
+
+	}
+
 	useTransparencyRaycastFn() {
 
 		const { textureAtlas, storage, structs, fns } = this;
@@ -144,7 +174,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
 		// the transparency raycast resolve to one textureInfo binding per pipeline
-		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel );
+		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
 		// raycast first hit
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
@@ -234,6 +264,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 								var opacity = ${ baseOpacityScalar };
+
+								// add support for vertex color opacity
+								if ( material.vertexColors == 1 ) {
+
+									let barycoord = triResult.barycoord;
+									let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
+									let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
+									let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+									let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+
+									opacity *= col.a;
+
+								}
 
 								// account for alpha component of albedo map
 								if ( material.map != - 1 ) {
@@ -347,6 +390,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
+		this.updateColorSampleFn();
 
 		// build material storage
 		const { materials, structs } = this;

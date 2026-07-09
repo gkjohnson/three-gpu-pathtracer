@@ -20,7 +20,7 @@ import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
 
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
-export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel ) => wgslFn( /* wgsl */ `
+export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
 		material: Material,
@@ -64,7 +64,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel ) => wgslFn(
 
 		if ( material.vertexColors == 1 ) {
 
-			let vertexColor = vertexData.color.xyz;
+			let vertexColor = getColor( vertexData ).xyz;
 			albedo *= vec4f( vertexColor, 1.0 );
 
 		}
@@ -268,6 +268,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel ) => wgslFn(
 	getBasisFromNormalFunc,
 	sampleTexel,
 	getUvFromChannel,
+	getColor,
 	surfaceRecordStruct,
 	constants,
 ] );
