@@ -46,6 +46,123 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
+	updateUvAttributesFromScene() {
+
+		const { attributes, bvh } = this;
+		const keys = new Set( [ 'color' ] );
+		for ( let i = 0; i < 8; i ++ ) {
+
+			const key = i === 0 ? 'uv' : 'uv' + i;
+			delete attributes[ key ];
+			keys.add( key );
+
+		}
+
+		bvh.objects.forEach( c => {
+
+			if ( c.geometry ) {
+
+				for ( const key in c.geometry.attributes ) {
+
+					if ( keys.has( key ) ) {
+
+						attributes[ key ] = 'vec4f';
+
+					}
+
+				}
+
+			}
+
+		} );
+
+	}
+
+	updateUvSampleFunction() {
+
+		// TODO: eventually it may be best to pack the uvs into an array in the
+		// attribute struct so they can be sampled via array index but TSL structs
+		// make this difficult at the moment. It may break down when a uv channel
+		// unused, as well.
+		const { structs, fns } = this;
+
+		// generate the switch cases for the uv channels
+		const cases = [];
+		let fallback = null;
+		structs.attributes.membersLayout.forEach( ( { name } ) => {
+
+			if ( /^uv/.test( name ) ) {
+
+				const channel = name === 'uv' ? 0 : Number( name.replace( /^uv/, '' ) );
+				cases.push( /* wgsl */`
+					case ${ channel }u: {
+
+						return vertexData.${ name }.xy;
+
+					}
+				` );
+
+				if ( fallback === null ) {
+
+					fallback = `vertexData.${ name }.xy`;
+
+				}
+
+			}
+
+		} );
+
+		fns.getUvFromChannel = wgslTagFn/* wgsl */`
+			fn getUvFromChannel( vertexData: ${ structs.attributes }, packed: i32 ) -> vec2f {
+
+				// the uv channel is packed into bits 23-25 of the "*Map" descriptor
+				let channel = u32( ( packed >> 23 ) & 0x7 );
+				switch ( channel ) {
+
+					${ cases.join( '\n' ) }
+					default: {
+
+						return ${ fallback ?? 'vec2f( 0.0 )' };
+
+					}
+
+				}
+
+			}
+		`;
+
+	}
+
+	updateColorSampleFn() {
+
+		// create a function for retrieving the color from the vertex data instance. If the struct does not include
+		// color then return white.
+		const { structs, fns } = this;
+		const hasColor = Boolean( structs.attributes.membersLayout.find( ( { name } ) => name === 'color' ) );
+		if ( hasColor ) {
+
+			fns.getColor = wgslTagFn/* wgsl */`
+				fn getColor( vertexData: ${ structs.attributes } ) -> vec4f {
+
+					return vertexData.color;
+
+				}
+			`;
+
+		} else {
+
+			fns.getColor = wgslTagFn/* wgsl */`
+				fn getColor( vertexData: ${ structs.attributes } ) -> vec4f {
+
+					return vec4f( 1.0 );
+
+				}
+			`;
+
+		}
+
+	}
+
 	useTransparencyRaycastFn() {
 
 		const { textureAtlas, storage, structs, fns } = this;
@@ -57,7 +174,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
 		// the transparency raycast resolve to one textureInfo binding per pipeline
-		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel );
+		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
 		// raycast first hit
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
@@ -148,13 +265,26 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								var opacity = ${ baseOpacityScalar };
 
+								// add support for vertex color opacity
+								if ( material.vertexColors == 1 ) {
+
+									let barycoord = triResult.barycoord;
+									let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
+									let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
+									let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+									let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+
+									opacity *= col.a;
+
+								}
+
 								// account for alpha component of albedo map
 								if ( material.map != - 1 ) {
 
 									let barycoord = triResult.barycoord;
-									let a = ${ storage.attributes }[ i0 ].uv.xy;
-									let b = ${ storage.attributes }[ i1 ].uv.xy;
-									let c = ${ storage.attributes }[ i2 ].uv.xy;
+									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
+									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
+									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
@@ -166,9 +296,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 								if ( material.alphaMap != - 1 ) {
 
 									let barycoord = triResult.barycoord;
-									let a = ${ storage.attributes }[ i0 ].uv.xy;
-									let b = ${ storage.attributes }[ i1 ].uv.xy;
-									let c = ${ storage.attributes }[ i2 ].uv.xy;
+									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
+									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
+									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
@@ -254,7 +384,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	update() {
 
+		this.updateUvAttributesFromScene();
+
 		super.update();
+
+		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
+		this.updateUvSampleFunction();
+		this.updateColorSampleFn();
 
 		// build material storage
 		const { materials, structs } = this;
@@ -306,11 +442,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 
-				const idx = textureLookUp.get( hash );
-				const wrapS = encodeTextureWrap( texture.wrapS );
-				const wrapT = encodeTextureWrap( texture.wrapT );
-				const nearest = texture.magFilter === NearestFilter ? 1 : 0;
-				return ( nearest << 28 ) | ( wrapT << 26 ) | ( wrapS << 24 ) | idx;
+				const idx = textureLookUp.get( hash );							// 23 bits
+				const channel = texture.channel & 7;							// 3 bits
+				const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
+				const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
+				const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
+				return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
 
 			} else {
 
