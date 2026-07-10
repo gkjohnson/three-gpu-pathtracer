@@ -15,6 +15,98 @@ import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 const _resolution = new Vector2();
 const _color = new Color();
 
+class TextureCache {
+
+	constructor( renderer, key ) {
+
+		this.key = key;
+		this.renderer = renderer;
+		this.texture = null;
+		this.hash = null;
+
+		const colorTex = new DataTexture( new Uint8Array( [ 255, 255, 255, 255 ] ), 1, 1 );
+		colorTex.minFilter = LinearFilter;
+		colorTex.magFilter = LinearFilter;
+		this.colorTex = colorTex;
+
+	}
+
+	dispose() {
+
+		this.colorTex.dispose();
+		this.texture?.dispose();
+
+	}
+
+	setFromScene( scene ) {
+
+		const { renderer, key, colorTex } = this;
+		let value = scene[ key ];
+		let hash = '';
+
+		if ( ! value ) {
+
+			const clearAlpha = renderer.getClearAlpha();
+			renderer.getClearColor( _color );
+
+			colorTex.image.data[ 0 ] = _color.r * 255;
+			colorTex.image.data[ 1 ] = _color.g * 255;
+			colorTex.image.data[ 2 ] = _color.b * 255;
+			colorTex.image.data[ 3 ] = clearAlpha * 255;
+
+			value = colorTex;
+			hash = colorTex.image.data.join();
+			colorTex.needsUpdate = hash !== this.hash;
+
+		} else if ( value.isColor ) {
+
+			colorTex.image.data[ 0 ] = value.r * 255;
+			colorTex.image.data[ 1 ] = value.g * 255;
+			colorTex.image.data[ 2 ] = value.b * 255;
+			colorTex.image.data[ 3 ] = 255;
+
+			value = colorTex;
+			hash = colorTex.image.data.join();
+			colorTex.needsUpdate = hash !== this.hash;
+
+		} else if ( value.isCubeTexture ) {
+
+			hash = null;
+			value = new CubeToEquirectGenerator( renderer ).generate( value );
+
+		} else {
+
+			value = value.clone();
+			hash = value.uuid + '_' + value.version;
+
+		}
+
+		if ( hash === null ) {
+
+			this.texture?.dispose();
+
+			this.texture = value;
+			this.hash = null;
+			return true;
+
+		} else {
+
+			const needsUpdate = hash !== this.hash;
+			if ( needsUpdate ) {
+
+				this.texture?.dispose();
+				this.texture = value;
+
+			}
+
+			return needsUpdate;
+
+		}
+
+	}
+
+}
+
 export class WebGPUPathTracer {
 
 	get bounces() {
@@ -54,8 +146,6 @@ export class WebGPUPathTracer {
 
 	updateLights() {}
 
-	updateMaterials() {}
-
 	// --- end compatibility stubs ---
 
 	get fadeState() {
@@ -87,17 +177,8 @@ export class WebGPUPathTracer {
 		this._renderer = renderer;
 		this._timer = new Timer();
 
-		this._envColorTexture = new DataTexture( );
-		this._envColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
-		this._envColorTexture.needsUpdate = true;
-		this._envColorTexture.minFilter = LinearFilter;
-		this._envColorTexture.magFilter = LinearFilter;
-
-		this._backgroundColorTexture = new DataTexture( );
-		this._backgroundColorTexture.image.data = new Uint8Array( [ 255, 255, 255, 255 ] );
-		this._backgroundColorTexture.needsUpdate = true;
-		this._backgroundColorTexture.minFilter = LinearFilter;
-		this._backgroundColorTexture.magFilter = LinearFilter;
+		this._environmentCache = new TextureCache( renderer, 'environment' );
+		this._backgroundCache = new TextureCache( renderer, 'background' );
 
 		this._resetTime = 0;
 		this._fadeState = 0;
@@ -155,7 +236,7 @@ export class WebGPUPathTracer {
 
 				if ( ! child.boundsTree ) {
 
-					child.boundsTree = new SkinnedMeshBVH( child, { strategy: SAH, maxLeafSize: 5, indirect: true } );
+					child.boundsTree = new SkinnedMeshBVH( child, { strategy: SAH, targetLeafSize: 5, indirect: true } );
 
 				} else {
 
@@ -168,7 +249,7 @@ export class WebGPUPathTracer {
 
 				if ( ! child.geometry.boundsTree ) {
 
-					child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, maxLeafSize: 5 } );
+					child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, targetLeafSize: 5 } );
 
 				}
 
@@ -189,6 +270,7 @@ export class WebGPUPathTracer {
 
 	}
 
+	// TODO: consider renaming these functions or removing them
 	getMaterial() {
 
 		return this.material;
@@ -209,6 +291,15 @@ export class WebGPUPathTracer {
 
 	}
 
+	updateMaterials() {
+
+		const { _bvhData, _renderer } = this;
+		_bvhData.updateMaterials();
+		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+		this.reset();
+
+	}
+
 	updateCamera() {
 
 		const { camera, _renderer } = this;
@@ -224,22 +315,33 @@ export class WebGPUPathTracer {
 	updateEnvironment() {
 
 		const {
-			_renderer,
 			_pathTracer,
 			scene,
-			_envColorTexture,
-			_backgroundColorTexture,
+
+			_environmentCache,
+			_backgroundCache,
 		} = this;
 
-		const environment = convertToTexture( _renderer, scene.environment || _color.set( 0 ), _envColorTexture );
-		const background = convertToTexture( _renderer, scene.background, _backgroundColorTexture );
+		// update the texture if they've changed
+		if ( _environmentCache.setFromScene( scene ) ) {
 
-		_pathTracer.setEnvironment(
-			environment,
+			_pathTracer.setEnvironment( _environmentCache.texture );
+
+		}
+
+		if ( _backgroundCache.setFromScene( scene ) ) {
+
+			_pathTracer.setBackground( _backgroundCache.texture );
+
+		}
+
+		// update the params always since they're cheap
+		_pathTracer.setEnvironmentParams(
 			scene.environmentIntensity,
 			scene.environmentRotation,
+		);
 
-			background,
+		_pathTracer.setBackgroundParams(
 			scene.backgroundIntensity,
 			scene.backgroundRotation,
 			scene.backgroundBlurriness,
@@ -560,39 +662,5 @@ export class WebGPUPathTracer {
 		return this._resetTime;
 
 	}
-
-}
-
-function convertToTexture( renderer, value, colorTexture ) {
-
-	if ( ! value ) {
-
-		const clearAlpha = renderer.getClearAlpha();
-		renderer.getClearColor( _color );
-
-		colorTexture.image.data[ 0 ] = _color.r * 255;
-		colorTexture.image.data[ 1 ] = _color.g * 255;
-		colorTexture.image.data[ 2 ] = _color.b * 255;
-		colorTexture.image.data[ 3 ] = clearAlpha * 255;
-
-		colorTexture.needsUpdate = true;
-		value = colorTexture;
-
-	} else if ( value.isColor ) {
-
-		colorTexture.image.data[ 0 ] = value.r * 255;
-		colorTexture.image.data[ 1 ] = value.g * 255;
-		colorTexture.image.data[ 2 ] = value.b * 255;
-		colorTexture.image.data[ 3 ] = 255;
-		colorTexture.needsUpdate = true;
-		value = colorTexture;
-
-	} else if ( value?.isCubeTexture ) {
-
-		value = new CubeToEquirectGenerator( renderer ).generate( value );
-
-	}
-
-	return value;
 
 }

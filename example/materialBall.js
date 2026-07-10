@@ -144,6 +144,7 @@ async function init() {
 	loader.setCredits( CREDITS );
 
 	onParamsChange();
+	pathTracer.setScene( scene, camera );
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
@@ -237,7 +238,6 @@ function onParamsChange() {
 	material.castShadow = materialProperties.castShadow;
 
 	pathTracer.updateMaterials();
-	pathTracer.setScene( scene, camera );
 
 }
 
