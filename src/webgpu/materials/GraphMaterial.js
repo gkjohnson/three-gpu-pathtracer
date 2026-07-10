@@ -2,7 +2,6 @@ import { Color, SRGBColorSpace, Vector2 } from 'three';
 import { MeshBasicNodeMaterial, StorageBufferAttribute } from 'three/webgpu';
 import { globalId, storage, uniform, uv, varying, wgslFn } from 'three/tsl';
 import { wgslTagFn, wgslTagCode } from 'three-mesh-bvh/webgpu';
-import { ComputeKernel } from '../compute/ComputeKernel.js';
 
 // pastel palette evenly spaced along the color wheel, looped when there are more graphs
 const GRAPH_COLOR_COUNT = 10;
@@ -191,7 +190,7 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 		this._graphs = [ ...graphs ];
 
 		// unroll one evaluation block per graph, accumulated into a single code chunk
-		let graphBody = wgslTagCode`// per-graph evaluation`;
+		let graphBody = '';
 		graphs.forEach( ( graph, i ) => {
 
 			const color = getGraphColor( i );
@@ -286,7 +285,7 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 		const valuesAttribute = new StorageBufferAttribute( new Float32Array( Math.max( count, 2 ) ), 1 );
 		const valuesStorage = storage( valuesAttribute, 'float' );
 
-		let valuesBody = wgslTagCode`// per-graph values`;
+		let valuesBody = '';
 		graphs.forEach( ( graph, i ) => {
 
 			valuesBody = wgslTagCode/* wgsl */`
@@ -306,7 +305,7 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 		`;
 
 		this._valuesAttribute = valuesAttribute;
-		this._valuesKernel = new ComputeKernel( valuesFn( { globalId } ), { workgroupSize: [ 1, 1, 1 ] } );
+		this._valuesKernel = valuesFn( { globalId } ).computeKernel( [ 1, 1, 1 ] );
 
 	}
 
@@ -315,13 +314,7 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 	async readGraphValues( renderer ) {
 
 		const count = this._graphs.length;
-		if ( count === 0 ) {
-
-			return new Float32Array( 0 );
-
-		}
-
-		renderer.compute( this._valuesKernel.kernel, [ 1, 1, 1 ] );
+		renderer.compute( this._valuesKernel, [ 1, 1, 1 ] );
 
 		const buffer = await renderer.getArrayBufferAsync( this._valuesAttribute );
 		return new Float32Array( buffer ).slice( 0, count );
