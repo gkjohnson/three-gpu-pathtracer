@@ -7,7 +7,7 @@ export const RNG_INDEX_ENVIRONMENT_SAMPLE = 1;
 export const RNG_INDEX_SCATTER_TYPE = 2;
 export const RNG_INDEX_SCATTER_DIRECTION = 3;
 export const RNG_INDEX_APERTURE_SAMPLE = 4;
-export const RNG_INDEX_ALPHA_TEST = 5;
+export const RNG_INDEX_ALPHA_TEST = 1000;
 
 export const pcgStateStruct = wgsl( /* wgsl */`
 
