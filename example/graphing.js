@@ -78,7 +78,16 @@ async function init() {
 
 	// readout for the graph values at the cursor position
 	valuesEl = document.createElement( 'div' );
-	valuesEl.style.cssText = 'position:absolute;bottom:10px;left:10px;font-family:monospace;white-space:pre;color:#ccc;pointer-events:none;visibility:hidden;';
+	valuesEl.style.cssText = `
+		position: absolute;
+		bottom: 10px;
+		left: 10px;
+		font-family: monospace;
+		white-space: pre;
+		color: #ccc;
+		pointer-events: none;
+		visibility: hidden;
+	`;
 	document.body.appendChild( valuesEl );
 
 	// renderer init
