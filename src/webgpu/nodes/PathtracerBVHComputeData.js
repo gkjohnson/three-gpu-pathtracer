@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
-import { storage, float, sampler, texture, uniformArray, materialMetalness } from 'three/tsl';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -13,10 +13,10 @@ const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
-	nodeOffset: 'uint',
 	visible: 'uint',
 	materialIndex: 'uint',
 	_alignment0: 'uint',
+	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -49,7 +49,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateUvAttributesFromScene() {
 
-		const { attributes, bvh } = this;
+		const { attributes } = this;
 		const keys = new Set( [ 'color' ] );
 		for ( let i = 0; i < 8; i ++ ) {
 
@@ -59,7 +59,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		}
 
-		bvh.objects.forEach( c => {
+		this.getRootObject().traverse( c => {
 
 			if ( c.geometry ) {
 
@@ -407,10 +407,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateMaterialsMap() {
 
-		const { bvh, materials, materialsMap } = this;
+		const { materials, materialsMap } = this;
 		materialsMap.clear();
 		materials.length = 0;
-		bvh.objects.forEach( o => {
+		this.getRootObject().traverse( o => {
 
 			if ( o.material ) {
 
@@ -893,7 +893,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// save the index
 		const index = materialsMap.get( material );
 		const transformBufferU32 = new Uint32Array( targetBuffer );
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
