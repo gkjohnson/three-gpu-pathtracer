@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { scatterRecordStruct } from './structs.wgsl.js';
-import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
@@ -177,10 +177,10 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wg
 
 	fn sampleTexel( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
-		let wrapS    = ( packed >> 24 ) & 0x3;
-		let wrapT    = ( packed >> 26 ) & 0x3;
-		let nearest  = ( packed >> 28 ) & 0x1;
-		let texIndex = packed & 0xFFFFFF;
+		let texIndex = packed & 0x7FFFFF;
+		let wrapS    = ( packed >> 26 ) & 0x3;
+		let wrapT    = ( packed >> 28 ) & 0x3;
+		let nearest  = ( packed >> 30 ) & 0x1;
 
 		// look up the texture's rect and page within the atlas. three wraps a
 		// uniformArray in a struct ( textureInfoStruct ) with a "value" array member.

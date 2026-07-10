@@ -98,6 +98,7 @@ const params = {
 	checkerboardTransparency: true,
 
 	enable: true,
+	useMegakernel: false,
 	bounces: 5,
 	filterGlossyFactor: 0.5,
 	pause: false,
@@ -160,6 +161,7 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.transmissiveBounces = 10;
+	pathTracer.useMegakernel( params.useMegakernel );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -370,6 +372,13 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
+
+		pathTracer.useMegakernel( params.useMegakernel );
+		pathTracer.setScene( scene, activeCamera );
+		pathTracer.reset();
+
+	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 

@@ -4,7 +4,7 @@ import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct } from './structs.js';
-import { proxyFn, wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
+import { proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
 

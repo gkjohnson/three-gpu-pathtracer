@@ -1,5 +1,5 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
@@ -13,10 +13,10 @@ const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
-	nodeOffset: 'uint',
 	visible: 'uint',
 	materialIndex: 'uint',
 	_alignment0: 'uint',
+	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -40,9 +40,127 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.structs.transform = transformStruct;
 		this.structs.material = materialStruct;
 		this.storage.materials = null;
+		this.materialsMap = new Map();
 		this.materials = [];
 		this.bvhMap = new Map();
 		this.textureAtlas = new AtlasTexture();
+
+	}
+
+	updateUvAttributesFromScene() {
+
+		const { attributes } = this;
+		const keys = new Set( [ 'color' ] );
+		for ( let i = 0; i < 8; i ++ ) {
+
+			const key = i === 0 ? 'uv' : 'uv' + i;
+			delete attributes[ key ];
+			keys.add( key );
+
+		}
+
+		this.getRootObject().traverse( c => {
+
+			if ( c.geometry ) {
+
+				for ( const key in c.geometry.attributes ) {
+
+					if ( keys.has( key ) ) {
+
+						attributes[ key ] = 'vec4f';
+
+					}
+
+				}
+
+			}
+
+		} );
+
+	}
+
+	updateUvSampleFunction() {
+
+		// TODO: eventually it may be best to pack the uvs into an array in the
+		// attribute struct so they can be sampled via array index but TSL structs
+		// make this difficult at the moment. It may break down when a uv channel
+		// unused, as well.
+		const { structs, fns } = this;
+
+		// generate the switch cases for the uv channels
+		const cases = [];
+		let fallback = null;
+		structs.attributes.membersLayout.forEach( ( { name } ) => {
+
+			if ( /^uv/.test( name ) ) {
+
+				const channel = name === 'uv' ? 0 : Number( name.replace( /^uv/, '' ) );
+				cases.push( /* wgsl */`
+					case ${ channel }u: {
+
+						return vertexData.${ name }.xy;
+
+					}
+				` );
+
+				if ( fallback === null ) {
+
+					fallback = `vertexData.${ name }.xy`;
+
+				}
+
+			}
+
+		} );
+
+		fns.getUvFromChannel = wgslTagFn/* wgsl */`
+			fn getUvFromChannel( vertexData: ${ structs.attributes }, packed: i32 ) -> vec2f {
+
+				// the uv channel is packed into bits 23-25 of the "*Map" descriptor
+				let channel = u32( ( packed >> 23 ) & 0x7 );
+				switch ( channel ) {
+
+					${ cases.join( '\n' ) }
+					default: {
+
+						return ${ fallback ?? 'vec2f( 0.0 )' };
+
+					}
+
+				}
+
+			}
+		`;
+
+	}
+
+	updateColorSampleFn() {
+
+		// create a function for retrieving the color from the vertex data instance. If the struct does not include
+		// color then return white.
+		const { structs, fns } = this;
+		const hasColor = Boolean( structs.attributes.membersLayout.find( ( { name } ) => name === 'color' ) );
+		if ( hasColor ) {
+
+			fns.getColor = wgslTagFn/* wgsl */`
+				fn getColor( vertexData: ${ structs.attributes } ) -> vec4f {
+
+					return vertexData.color;
+
+				}
+			`;
+
+		} else {
+
+			fns.getColor = wgslTagFn/* wgsl */`
+				fn getColor( vertexData: ${ structs.attributes } ) -> vec4f {
+
+					return vec4f( 1.0 );
+
+				}
+			`;
+
+		}
 
 	}
 
@@ -57,7 +175,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
 		// the transparency raycast resolve to one textureInfo binding per pipeline
-		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel );
+		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
 		// raycast first hit
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
@@ -148,13 +266,26 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								var opacity = ${ baseOpacityScalar };
 
+								// add support for vertex color opacity
+								if ( material.vertexColors == 1 ) {
+
+									let barycoord = triResult.barycoord;
+									let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
+									let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
+									let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+									let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+
+									opacity *= col.a;
+
+								}
+
 								// account for alpha component of albedo map
 								if ( material.map != - 1 ) {
 
 									let barycoord = triResult.barycoord;
-									let a = ${ storage.attributes }[ i0 ].uv.xy;
-									let b = ${ storage.attributes }[ i1 ].uv.xy;
-									let c = ${ storage.attributes }[ i2 ].uv.xy;
+									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
+									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
+									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
@@ -166,9 +297,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 								if ( material.alphaMap != - 1 ) {
 
 									let barycoord = triResult.barycoord;
-									let a = ${ storage.attributes }[ i0 ].uv.xy;
-									let b = ${ storage.attributes }[ i1 ].uv.xy;
-									let c = ${ storage.attributes }[ i2 ].uv.xy;
+									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
+									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
+									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
 									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
@@ -254,22 +385,105 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	update() {
 
+		const { structs } = this;
+		const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
+		this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
+
+		this.updateUvAttributesFromScene();
+
 		super.update();
 
+		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
+		this.updateUvSampleFunction();
+		this.updateColorSampleFn();
+
 		// build material storage
-		const { materials, structs } = this;
-
-		const { materialData, textures } = this.writeMaterialsBuffer( materials );
-
-		this.textures = textures;
-
-		const materialAttribute = new StorageBufferAttribute( materialData, structs.material.getLength() );
-		const materialStorage = storage( materialAttribute, structs.material ).toReadOnly().setName( 'bvh_materials' );
-		this.storage.materials = materialStorage;
+		this.updateMaterials();
 
 		this.bvhMap.clear();
-		this.materials.length = 0;
 		this.useTransparencyRaycastFn();
+
+	}
+
+	updateMaterialsMap() {
+
+		const { materials, materialsMap } = this;
+		materialsMap.clear();
+		materials.length = 0;
+		this.getRootObject().traverse( o => {
+
+			if ( o.material ) {
+
+				if ( Array.isArray( o.material ) ) {
+
+					o.material.forEach( m => add( m ) );
+
+				} else {
+
+					add( o.material );
+
+				}
+
+			}
+
+		} );
+
+		materials
+			.sort( ( a, b ) => {
+
+				return a.uuid < b.uuid ? 1 : - 1;
+
+			} )
+			.forEach( ( m, i ) => {
+
+				materialsMap.set( m, i );
+
+			} );
+
+		function add( mat ) {
+
+			if ( ! materialsMap.has( mat ) ) {
+
+				materials.push( mat );
+				materialsMap.set( mat, - 1 );
+
+			}
+
+		}
+
+	}
+
+	updateMaterials() {
+
+		this.updateMaterialsMap();
+
+		const { materials, storage, structs, bvh } = this;
+		const { materialData, textures } = this.writeMaterialsBuffer( materials );
+
+		const materialsStorage = storage.materials.proxyNode;
+		const transformsStorage = storage.transforms.proxyNode;
+		const count = materialData.length / structs.material.getLength();
+		if ( materialsStorage.value.count < count ) {
+
+			materialsStorage.value.dispose();
+			materialsStorage.value = new StorageBufferAttribute( materialData, structs.material.getLength() );
+
+		}
+
+		// copy the material buffer content
+		materialsStorage.value.array.set( materialData );
+		materialsStorage.value.needsUpdate = true;
+
+		// update the transform content
+		this._getTransformMap( bvh ).forEach( info => {
+
+			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
+
+		} );
+		transformsStorage.value.needsUpdate = true;
+
+		// save the textures
+		this.textures = textures;
 
 	}
 
@@ -306,11 +520,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 
-				const idx = textureLookUp.get( hash );
-				const wrapS = encodeTextureWrap( texture.wrapS );
-				const wrapT = encodeTextureWrap( texture.wrapT );
-				const nearest = texture.magFilter === NearestFilter ? 1 : 0;
-				return ( nearest << 28 ) | ( wrapT << 26 ) | ( wrapS << 24 ) | idx;
+				const idx = textureLookUp.get( hash );							// 23 bits
+				const channel = texture.channel & 7;							// 3 bits
+				const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
+				const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
+				const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
+				return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
 
 			} else {
 
@@ -657,16 +872,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		}
 
-		return { materialData: floatArray, textures };
+		return { materialData: intArray, textures };
 
 	}
 
-	writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer ) {
-
-		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
+	writeMaterialData( info, writeOffset, targetBuffer ) {
 
 		// write material data to the transforms
-		const { materials } = this;
+		const { materialsMap } = this;
 		const { object, instanceId, root } = info;
 
 		// get the material associated with the bvh group
@@ -679,16 +892,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		}
 
 		// save the index
-		let index = materials.indexOf( material );
-		if ( index === - 1 ) {
-
-			index = materials.length;
-			materials.push( material );
-
-		}
-
+		const index = materialsMap.get( material ) || 0;
 		const transformBufferU32 = new Uint32Array( targetBuffer );
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 34 ] = index;
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
@@ -710,6 +916,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const transformBufferF32 = new Float32Array( targetBuffer );
 		_colorVec.toArray( transformBufferF32, writeOffset * transformStruct.getLength() + 36 );
+
+	}
+
+	writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer ) {
+
+		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
+		this.writeMaterialData( info, writeOffset, targetBuffer );
 
 	}
 
@@ -775,11 +988,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					.copy( sourceMesh.matrixWorld )
 					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
 
-				newBVH = new SkinnedMeshBVH( clonedMesh, { strategy: SAH, maxLeafSize: 5 } );
+				newBVH = new SkinnedMeshBVH( clonedMesh, { strategy: SAH, targetLeafSize: 5 } );
 
 			} else {
 
-				newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, maxLeafSize: 5 } );
+				newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, targetLeafSize: 5 } );
 
 			}
 
@@ -789,6 +1002,18 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		} else {
 
 			return bvh;
+
+		}
+
+	}
+
+	dispose() {
+
+		// TODO: This belongs in three-mesh-bvh
+		const { storage } = this;
+		for ( const key in storage ) {
+
+			storage[ key ].value?.dispose();
 
 		}
 

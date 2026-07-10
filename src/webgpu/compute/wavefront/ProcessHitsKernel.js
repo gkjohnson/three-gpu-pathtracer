@@ -2,7 +2,7 @@ import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'thr
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
-import { proxy, proxyFn, wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
+import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit } from '../../nodes/random.wgsl.js';

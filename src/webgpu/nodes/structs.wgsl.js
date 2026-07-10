@@ -18,11 +18,11 @@ export const scatterRecordStruct = new StructTypeNode( {
 }, 'ScatterRecord' );
 
 // NOTE: all "*Map" fields are bit-packed integers of texture index & settings:
-// bits 0-23: texture index
-// bits 24-25: wrapS setting
-// bits 26-27: wrapT setting
-// bit 28: filter setting
-// bits 29-30: unused
+// bits 0-22: texture index
+// bits 23-25: uv channel
+// bits 26-27: wrapS setting
+// bits 28-29: wrapT setting
+// bit 30: filter setting
 // bit 31: negative bit used for indicating unused texture
 export const materialStruct = new StructTypeNode( {
 	// offset 0
