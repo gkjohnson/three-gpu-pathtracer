@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { scatterRecordStruct } from './structs.wgsl.js';
-import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 

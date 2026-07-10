@@ -1,6 +1,6 @@
 import { Matrix4, StructTypeNode } from 'three/webgpu';
 import { uniform, uint, float } from 'three/tsl';
-import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectsTriangle } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectsTriangle } from 'three-mesh-bvh/webgpu';
 
 // Result struct holding a running tally of the TLAS and BLAS bounding boxes the ray crosses
 const debugBoundsResultStruct = new StructTypeNode( {
