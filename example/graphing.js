@@ -49,7 +49,8 @@ const graphs = [
 let camera, scene, renderer, plane;
 let cameraCenter;
 let zoom = 10;
-let dataEl, dataContainerEl;
+let dataEl, dataContainerEl, valuesEl;
+let readingValues = false;
 const params = {
 	aspect: 1,
 	displayX: true,
@@ -74,6 +75,11 @@ async function init() {
 
 	dataContainerEl = document.getElementById( 'dataContainer' );
 	dataEl = document.getElementById( 'data' );
+
+	// readout for the graph values at the cursor position
+	valuesEl = document.createElement( 'div' );
+	valuesEl.style.cssText = 'position:absolute;bottom:10px;left:10px;font-family:monospace;white-space:pre;color:#ccc;pointer-events:none;visibility:hidden;';
+	document.body.appendChild( valuesEl );
 
 	// renderer init
 	renderer = new THREE.WebGPURenderer( { antialias: true } );
@@ -114,10 +120,11 @@ async function init() {
 	gui.add( params, 'reset' );
 
 	const graphFolder = gui.addFolder( 'graphs' );
-	graphFolder.add( params, 'displayX' ).name( 'display graph 1' );
-	graphFolder.add( params, 'displayY' ).name( 'display graph 2' );
-	graphFolder.add( params, 'displayZ' ).name( 'display graph 3' );
-	graphFolder.add( params, 'displayW' ).name( 'display graph 4' );
+	const graphNames = plane.material.graphNames;
+	graphFolder.add( params, 'displayX' ).name( graphNames[ 0 ] );
+	graphFolder.add( params, 'displayY' ).name( graphNames[ 1 ] );
+	graphFolder.add( params, 'displayZ' ).name( graphNames[ 2 ] );
+	graphFolder.add( params, 'displayW' ).name( graphNames[ 3 ] );
 
 	let clicked = false;
 	let prevX = - 1;
@@ -125,6 +132,7 @@ async function init() {
 	renderer.domElement.addEventListener( 'pointerleave', () =>{
 
 		dataContainerEl.style.visibility = 'hidden';
+		valuesEl.style.visibility = 'hidden';
 
 		// move the marker line and circles off screen
 		plane.material.mousePoint.set( 1e10, 1e10 );
@@ -134,6 +142,7 @@ async function init() {
 	renderer.domElement.addEventListener( 'pointerenter', () =>{
 
 		dataContainerEl.style.visibility = 'visible';
+		valuesEl.style.visibility = 'visible';
 
 	} );
 
@@ -174,6 +183,8 @@ async function init() {
 		dataEl.innerText = `x: ${ data.x.toFixed( 3 ) }\ny: ${ data.y.toFixed( 3 ) }`;
 
 		plane.material.mousePoint.set( data.x, data.y );
+
+		updateGraphValues();
 
 	} );
 
@@ -252,6 +263,34 @@ function animation() {
 function getAspect() {
 
 	return params.aspect * window.innerHeight / window.innerWidth;
+
+}
+
+// evaluates the graphs at the cursor x on the gpu and displays the results
+async function updateGraphValues() {
+
+	if ( readingValues ) {
+
+		return;
+
+	}
+
+	readingValues = true;
+
+	const x = plane.material.mousePoint.x;
+	const values = await plane.material.readGraphValues( renderer );
+
+	readingValues = false;
+
+	const graphNames = plane.material.graphNames;
+	const lines = [ `x: ${ x.toFixed( 3 ) }` ];
+	values.forEach( ( v, i ) => {
+
+		lines.push( `<span style="color:${ plane.material.getGraphColor( i ).getStyle() }">${ graphNames[ i ] }: ${ v.toFixed( 5 ) }</span>` );
+
+	} );
+
+	valuesEl.innerHTML = lines.join( '\n' );
 
 }
 

@@ -7,7 +7,7 @@ import { ComputeKernel } from '../compute/ComputeKernel.js';
 // pastel palette evenly spaced along the color wheel, looped when there are more graphs
 const GRAPH_COLOR_COUNT = 10;
 
-export function getGraphColor( i ) {
+function getGraphColor( i ) {
 
 	const hue = ( i % GRAPH_COLOR_COUNT ) / GRAPH_COLOR_COUNT;
 	return new Color().setHSL( hue, 0.65, 0.7, SRGBColorSpace );
@@ -112,6 +112,17 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 
 	}
 
+	// the display names of the plotted graphs, in slot order
+	get graphNames() {
+
+		return this._graphs.map( entry => {
+
+			return entry.code.match( /fn ([^(]+)/ )[ 1 ];
+
+		} );
+
+	}
+
 	// the mouse position in graph space - set to a distant point to hide the markers
 	get mousePoint() {
 
@@ -162,6 +173,12 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 	getGraphVisible( index ) {
 
 		return ( ( this._displayMask.value >> index ) & 1 ) === 1;
+
+	}
+
+	getGraphColor( index ) {
+
+		return getGraphColor( index );
 
 	}
 
