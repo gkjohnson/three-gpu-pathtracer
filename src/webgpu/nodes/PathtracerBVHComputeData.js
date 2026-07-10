@@ -475,6 +475,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// update the storage buffer
 		materialsStorage.value = attr;
 
+		this._getTransformMap( this.bvh ).forEach( info => {
+
+			this.writeMaterialData( info, info.slot, this.storage.transforms.proxyNode.value );
+
+		} );
+
 		// save the textures
 		this.textures = textures;
 
@@ -869,9 +875,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer ) {
-
-		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
+	writeMaterialData( info, writeOffset, targetBuffer ) {
 
 		// write material data to the transforms
 		const { materialsMap } = this;
@@ -911,6 +915,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const transformBufferF32 = new Float32Array( targetBuffer );
 		_colorVec.toArray( transformBufferF32, writeOffset * transformStruct.getLength() + 36 );
+
+	}
+
+	writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer ) {
+
+		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
+		this.writeMaterialData( info, writeOffset, targetBuffer );
 
 	}
 
@@ -976,11 +987,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					.copy( sourceMesh.matrixWorld )
 					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
 
-				newBVH = new SkinnedMeshBVH( clonedMesh, { strategy: SAH, maxLeafSize: 5 } );
+				newBVH = new SkinnedMeshBVH( clonedMesh, { strategy: SAH, targetLeafSize: 5 } );
 
 			} else {
 
-				newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, maxLeafSize: 5 } );
+				newBVH = new MeshBVH( proxyGeometry, { strategy: SAH, targetLeafSize: 5 } );
 
 			}
 
