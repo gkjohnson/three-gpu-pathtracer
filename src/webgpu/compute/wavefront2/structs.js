@@ -2,6 +2,8 @@ import { StructTypeNode } from 'three/webgpu';
 import { WGSLStructTypeNode } from '../../WGSLStructTypeNode';
 import { wgsl } from 'three/tsl';
 
+export const RAY_FLAG_FULLY_TRANSMISSIVE = 1 << 0;
+
 export const rayDataStruct = new StructTypeNode( {
 
 	throughputColor: 'vec3f',
@@ -35,6 +37,8 @@ export const rayDataStruct = new StructTypeNode( {
 
 	direction: 'vec3f',
 	dist: 'float',
+
+	flags: 'uint',
 
 }, 'RayData' );
 

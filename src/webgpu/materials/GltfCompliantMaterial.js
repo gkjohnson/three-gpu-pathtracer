@@ -9,7 +9,7 @@ import {
 } from '../nodes/material.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, lobeWeightsStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, lobeWeightsStruct, SCATTER_RECORD_FLAG_TRANSMISSIVE, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { SOBOL_INDEX_SCATTER_DIRECTION, SOBOL_INDEX_SCATTER_TYPE, sobolFuncs } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel';
 import { absMaxFunc } from '../nodes/utils.wgsl.js';
@@ -200,6 +200,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var wiClearcoat: vec3f;
 				var wh: vec3f;
 				var whClearcoat: vec3f;
+				var isTransmissive = false;
 
 				if ( r <= cdf.x ) { // diffuse
 
@@ -229,6 +230,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), directionUv );
 					wi = refract( - wo, wh, surf.eta );
+					isTransmissive = true;
 
 					// Total internal reflection case
 					// TODO: handle better
@@ -259,6 +261,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.color = ${ this.bsdfEvalFunc }( ctx, surf );
 				result.color *= abs( ctx.NdotL );
 				result.pdf = ${ this.pdfEvalFunc }( ctx, weights, surf );
+				if ( isTransmissive ) {
+					result.flags = result.flags | ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u;
+				}
 
 				return result;
 

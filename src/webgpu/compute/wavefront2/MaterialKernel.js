@@ -7,7 +7,8 @@ import { DataTexture, Matrix4, Vector2 } from 'three';
 import { proxy, proxyFn } from '../../lib/nodes/NodeProxy';
 import { getSurfaceRecordFunc, transmissionAttenuationFunc } from '../../nodes/material.wgsl';
 import { StorageBufferAttribute } from 'three/webgpu';
-import { pixelQueueStruct, rayDataStruct, rayQueueStruct } from './structs';
+import { pixelQueueStruct, RAY_FLAG_FULLY_TRANSMISSIVE, rayDataStruct, rayQueueStruct } from './structs';
+import { SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../../nodes/structs.wgsl.js';
 
 const FILTER_GLOSSY = 1.0;
 
@@ -113,6 +114,9 @@ export class MaterialKernel extends ComputeKernel {
 					data.rayIntersectionIndex = i32( rayIndex );
 					data.minPdf = 1.0;
 					data.pdf = 1.0;
+					var flags = 0u;
+					flags |= ${RAY_FLAG_FULLY_TRANSMISSIVE}u;
+					data.flags = flags;
 
 				} else {
 
@@ -142,7 +146,7 @@ export class MaterialKernel extends ComputeKernel {
 					let blurRoughness = sqrt( clamp( 1.0 - ${ FILTER_GLOSSY } * data.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 					let surface = ${ getSurfaceRecordFunc }(
-						material, vertexData, side, vertexData.normal.xyz, // Replace normal w/ geometric normal
+						material, vertexData, side, vertexData.normal.xyz, // TODO: Replace normal w/ geometric normal
 						blurRoughness, textures, textureSampler
 					);
 
@@ -156,6 +160,12 @@ export class MaterialKernel extends ComputeKernel {
 					data.pdf = scatterRec.pdf;
 					data.direction = scatterRec.direction;
 					data.emission = surface.emission;
+					let flags = data.flags;
+					data.flags = select(
+						flags & ( ~ ${ RAY_FLAG_FULLY_TRANSMISSIVE }u ),
+						flags,
+						( scatterRec.flags & ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u ) > 0
+					);
 
 					let offsetDir = vertexData.normal.xyz * sign( dot( vertexData.normal.xyz, scatterRec.direction ) );
 					let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;

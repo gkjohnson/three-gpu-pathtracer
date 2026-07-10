@@ -8,7 +8,7 @@ import { equirectDirectionPdfFunc, equirectUvToDirectionFunc, misHeuristicFunc, 
 import { isMISWeightLightFunc, LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc } from '../../nodes/lights.wgsl';
 import { proxy } from '../../lib/nodes/NodeProxy';
 import { DataTexture, Matrix3, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
-import { intersectionResultStruct, rayDataStruct } from './structs';
+import { intersectionResultStruct, RAY_FLAG_FULLY_TRANSMISSIVE, rayDataStruct } from './structs';
 
 export class LogicKernel extends ComputeKernel {
 
@@ -111,7 +111,7 @@ export class LogicKernel extends ComputeKernel {
 				let currentBounce = data.currentBounce;
 				${ sobolInit }( data.pixelIndex, seed, currentBounce );
 
-				let scatterRec = ${ scatterRecordStruct }( data.bsdf, 0.0, vec3f(0.0), data.pdf );
+				let scatterRec = ${ scatterRecordStruct }( data.bsdf, 0u, vec3f(0.0), data.pdf );
 
 				var throughputColor = data.throughputColor;
 				var resultColor = data.resultColor;
@@ -204,7 +204,7 @@ export class LogicKernel extends ComputeKernel {
 					} else {
 
 						let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
-						if ( currentBounce > 0u ) {
+						if ( currentBounce > 0u && ( ( data.flags & ${RAY_FLAG_FULLY_TRANSMISSIVE} ) == 0 ) ) {
 
 							let envInfo = EnvironmentInfo(
 								envMapRotation,

@@ -9,7 +9,7 @@ import { proxy, proxyFn } from '../lib/nodes/NodeProxy.js';
 import { wgslTagFn } from '../lib/nodes/WGSLTagFnNode.js';
 import { isTerminatingScatterFunc, luminanceFunc, weightedAlphaBlendFn } from '../nodes/utils.wgsl.js';
 import { rayStruct } from '../lib/wgsl/structs.wgsl.js';
-import { lightRecordStruct } from '../nodes/structs.wgsl.js';
+import { lightRecordStruct, SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../nodes/structs.wgsl.js';
 import { LIGHT_TYPE_ENVIRONMENT, sampleRandomLightFunc, intersectAreaLightAtIndexFunc, isMISWeightLightFunc } from '../nodes/lights.wgsl.js';
 
 const FILTER_GLOSSY = 1.0;
@@ -182,6 +182,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var throughputColor = vec3f( 1.0 );
 				var lastPdf = 0.0;
 				var minPdf = 1.0;
+				var isFullyTransmissive = true;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -247,6 +248,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						minPdf = min( minPdf, scatterRec.pdf );
+
+						isFullyTransmissive = isFullyTransmissive && ( ( scatterRec.flags & ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u )  > 0 );
 
 						let offsetDir = hitResult.normal * sign( dot( hitResult.normal, scatterRec.direction ) );
 						let newPoint = vertexData.position.xyz + 1e-3 * offsetDir;
@@ -336,7 +339,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					} else {
 
 						let rng = ${ sobolFuncs[ 2 ] }( ${ SOBOL_INDEX_ENVIRONMENT_SAMPLE } );
-						if ( bounce > 0u ) {
+						if ( bounce > 0u && !isFullyTransmissive ) {
 
 							let color = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
 

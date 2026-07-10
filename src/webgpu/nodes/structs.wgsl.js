@@ -10,9 +10,11 @@ export const constants = wgsl( /* wgsl */ `
 
 ` );
 
+export const SCATTER_RECORD_FLAG_TRANSMISSIVE = 1 << 0;
+
 export const scatterRecordStruct = new StructTypeNode( {
 	color: 'vec3f',
-	specularPdf: 'float',
+	flags: 'uint',
 	direction: 'vec3f',
 	pdf: 'float',
 }, 'ScatterRecord' );
