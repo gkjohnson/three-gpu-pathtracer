@@ -73,7 +73,7 @@ pathTracer.setScene( scene, camera );
 const controls = new OrbitControls( camera, renderer.domElement );
 controls.addEventListener( 'change', () => {
 
-	pathTracer.reset();
+	pathTracer.updateCamera();
 
 } );
 
@@ -125,5 +125,7 @@ function onResize() {
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
+
+	pathTracer.updateCamera();
 
 }

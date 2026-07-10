@@ -97,7 +97,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		const {
 			renderer,
-			camera,
 			kernel,
 			bounces,
 
@@ -107,15 +106,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			lowResMode,
 		} = this;
 
-		camera.updateMatrixWorld();
-
 		// init parameters
 		kernel.outputTarget = outputTarget;
 		kernel.sampleCountTarget = sampleCountTarget;
 
 		kernel.bounces = bounces;
-		kernel.inverseProjectionMatrix.copy( camera.projectionMatrixInverse );
-		kernel.cameraToModelMatrix.copy( camera.matrixWorld );
 
 		while ( true ) {
 

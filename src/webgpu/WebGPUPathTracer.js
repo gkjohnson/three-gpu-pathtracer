@@ -1,6 +1,7 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial } from 'three/webgpu';
-import { uv, varying } from 'three/tsl';
+import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
+import { ndcToCameraRay, rayStruct, wgslTagFn } from './lib/three-mesh-bvh/index.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
@@ -212,6 +213,12 @@ export class WebGPUPathTracer {
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
+		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
+		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
+		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
+		this._invViewProjectionMatrix = uniform( new Matrix4() );
+		this._cameraRayFnHandle = null;
+
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
 		this.setScene( new Scene(), new PerspectiveCamera() );
@@ -287,6 +294,44 @@ export class WebGPUPathTracer {
 	setCamera( camera ) {
 
 		this.camera = camera;
+
+		if ( camera.getCameraRayFn ) {
+
+			this._cameraRayFnHandle = camera.getCameraRayFn();
+
+		} else {
+
+			// add a default camera ray getter. the update function is called when the camera is
+			// updated to trigger any necessary uniform updates.
+			const invViewProjectionMatrix = uniform( new Matrix4() );
+			this._cameraRayFnHandle = {
+				update: () => {
+
+					camera.coordinateSystem = WebGPUCoordinateSystem;
+					camera.updateMatrixWorld();
+
+					if ( camera.isOrthographicCamera || camera.isPerspectiveCamera ) {
+
+						camera.updateProjectionMatrix();
+
+					}
+
+					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+
+				},
+				fn: wgslTagFn/* wgsl */`
+					fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+
+						let ndc = uv * 2.0 - vec2f( 1.0 );
+						return ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+
+					}
+				`,
+			};
+
+		}
+
+		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this.updateCamera();
 
 	}
@@ -302,12 +347,7 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		const { camera, _renderer } = this;
-		camera.coordinateSystem = _renderer.coordinateSystem;
-		camera.updateProjectionMatrix();
-		camera.updateMatrixWorld();
-
-		this._pathTracer.setCamera( camera );
+		this._cameraRayFnHandle.update();
 		this.reset();
 
 	}
