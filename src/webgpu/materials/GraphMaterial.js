@@ -117,7 +117,7 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 
 		return this._graphs.map( entry => {
 
-			return entry.code.match( /fn ([^(]+)/ )[ 1 ];
+			return entry.name || entry.code.match( /fn ([^(]+)/ )[ 1 ];
 
 		} );
 
