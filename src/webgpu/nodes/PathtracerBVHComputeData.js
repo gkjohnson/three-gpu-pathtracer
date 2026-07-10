@@ -385,8 +385,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	update() {
 
+		const { structs } = this;
+		const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
+		this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
+
 		this.updateUvAttributesFromScene();
-		this.updateMaterialsMap();
 
 		super.update();
 
@@ -395,9 +398,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.updateColorSampleFn();
 
 		// build material storage
-		const { structs } = this;
-		const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
-		this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
 		this.updateMaterials();
 
 		this.bvhMap.clear();
@@ -455,31 +455,32 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateMaterials() {
 
-		const { materials, storage, structs } = this;
+		this.updateMaterialsMap();
+
+		const { materials, storage, structs, bvh } = this;
 		const { materialData, textures } = this.writeMaterialsBuffer( materials );
 
 		const materialsStorage = storage.materials.proxyNode;
+		const transformsStorage = storage.transforms.proxyNode;
 		const count = materialData.length / structs.material.getLength();
-		let attr = materialsStorage.value;
-		if ( attr.count < count ) {
+		if ( materialsStorage.value.count < count ) {
 
-			attr.dispose();
-			attr = new StorageBufferAttribute( materialData, structs.material.getLength() );
+			materialsStorage.value.dispose();
+			materialsStorage.value = new StorageBufferAttribute( materialData, structs.material.getLength() );
 
 		}
 
-		// copy the content
-		attr.array.set( materialData );
-		attr.needsUpdate = true;
+		// copy the material buffer content
+		materialsStorage.value.array.set( materialData );
+		materialsStorage.value.needsUpdate = true;
 
-		// update the storage buffer
-		materialsStorage.value = attr;
+		// update the transform content
+		this._getTransformMap( bvh ).forEach( info => {
 
-		this._getTransformMap( this.bvh ).forEach( info => {
-
-			this.writeMaterialData( info, info.slot, this.storage.transforms.proxyNode.value );
+			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
 
 		} );
+		transformsStorage.value.needsUpdate = true;
 
 		// save the textures
 		this.textures = textures;
@@ -891,7 +892,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		}
 
 		// save the index
-		const index = materialsMap.get( material );
+		const index = materialsMap.get( material ) || 0;
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
@@ -1001,6 +1002,18 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		} else {
 
 			return bvh;
+
+		}
+
+	}
+
+	dispose() {
+
+		// TODO: This belongs in three-mesh-bvh
+		const { storage } = this;
+		for ( const key in storage ) {
+
+			storage[ key ].value?.dispose();
 
 		}
 
