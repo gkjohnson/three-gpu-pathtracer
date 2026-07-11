@@ -53,10 +53,7 @@ let dataEl, dataContainerEl, valuesEl;
 let readingValues = false;
 const params = {
 	aspect: 1,
-	displayX: true,
-	displayY: true,
-	displayZ: true,
-	displayW: true,
+	display: [],
 	reset() {
 
 		zoom = 10;
@@ -129,11 +126,12 @@ async function init() {
 	gui.add( params, 'reset' );
 
 	const graphFolder = gui.addFolder( 'graphs' );
-	const graphNames = plane.material.graphNames;
-	graphFolder.add( params, 'displayX' ).name( graphNames[ 0 ] );
-	graphFolder.add( params, 'displayY' ).name( graphNames[ 1 ] );
-	graphFolder.add( params, 'displayZ' ).name( graphNames[ 2 ] );
-	graphFolder.add( params, 'displayW' ).name( graphNames[ 3 ] );
+	plane.material.graphNames.forEach( ( name, i ) => {
+
+		params.display[ i ] = true;
+		graphFolder.add( params.display, i ).name( name );
+
+	} );
 
 	let clicked = false;
 	let prevX = - 1;
@@ -260,10 +258,11 @@ function animation() {
 		cameraCenter.y + 0.5 * yWidth * zoom,
 	);
 
-	mat.setGraphVisible( 0, params.displayX );
-	mat.setGraphVisible( 1, params.displayY );
-	mat.setGraphVisible( 2, params.displayZ );
-	mat.setGraphVisible( 3, params.displayW );
+	params.display.forEach( ( visible, i ) => {
+
+		mat.setGraphVisible( i, visible );
+
+	} );
 
 	renderer.render( scene, camera );
 

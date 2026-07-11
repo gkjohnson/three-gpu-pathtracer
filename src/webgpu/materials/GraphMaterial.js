@@ -198,24 +198,23 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 				${ graphBody }
 
 				{
-
-					let delta = ${ graph }( point.x ) - point.y;
-					var halfDdf = fwidth( delta ) * 0.5;
-					if ( pointYWidth > yWidth * 0.5 ) {
-
-						halfDdf = 0.0;
-
-					}
-
-					var graph = smoothstep( - halfDdf, halfDdf, abs( delta ) - ${ _thickness } * halfDdf );
-					if ( dimmed ) {
-
-						graph = mix( 1.0, graph, 0.1 );
-
-					}
-
 					let visible = ( ( displayMask >> ${ i }u ) & 1u ) == 1u;
 					if ( visible && ( sectionCount < 1.5 || section == ${ i } ) ) {
+
+						let delta = ${ graph }( point.x ) - point.y;
+						var halfDdf = fwidth( delta ) * 0.5;
+						if ( pointYWidth > yWidth * 0.5 ) {
+
+							halfDdf = 0.0;
+
+						}
+
+						var graph = smoothstep( - halfDdf, halfDdf, abs( delta ) - ${ _thickness } * halfDdf );
+						if ( dimmed ) {
+
+							graph = mix( 1.0, graph, 0.1 );
+
+						}
 
 						color = mix( vec3f( ${ color.r }, ${ color.g }, ${ color.b } ), color, graph );
 
