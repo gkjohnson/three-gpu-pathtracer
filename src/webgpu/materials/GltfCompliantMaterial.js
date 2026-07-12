@@ -85,10 +85,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
-				let alpha = surf.roughness * surf.roughness;
+				// anisotropic roughness along tangent, bitangent
+				let alphaB = surf.roughness * surf.roughness;
+				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+				let alpha = vec2( alphaT, alphaB );
 
-				let specular = ${ this.specularBrdf }( ctx.NdotL, ctx.NdotV, ctx.NdotH, alpha );
-				let diffuse = ${ this.diffuseBrdf }( ctx.NdotV, ctx.NdotL, ctx.VdotH, surf );
+				let NdotV = ctx.V.z;
+				let NdotVc = ctx.Vc.z;
+				let NdotL = ctx.L.z;
+
+				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
@@ -96,7 +103,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
-				let metallicBase = ${ this.conductorFresnel }( ctx.NdotV, ctx.VdotH, surf.color, specular, alpha );
+				// TODO: this only handles non-anisotropic surfaces
+				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular, alpha.y );
 
 				let metallic = ${ this.iridescentConductorLayer }(
 					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
@@ -106,9 +114,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let material = mix( dielectric, metallic, surf.metalness );
 
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-				let clearcoat = ${ this.specularBrdf }( ctx.LdotNc, ctx.VdotNc, ctx.HdotNc, clearcoatAlpha );
+				let clearcoat = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) );
 
-				let coatedMaterial = ${ this.fresnelCoat }( ctx.VdotNc, ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
+				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
 
 				return coatedMaterial;
 
@@ -123,7 +131,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var result: ${ scatterRecordStruct };
 				result.pdf = 0.0;
 
-				let alpha = surf.roughness * surf.roughness;
+				// anisotropic roughness along tangent, bitangent
+				let alphaB = surf.roughness * surf.roughness;
+				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+				let alpha = vec2( alphaT, alphaB );
+
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 
 				let normalBasis = surf.normalBasis;
@@ -171,7 +183,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				} else if ( r <= cdf.y ) { // specular
 
-					wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), directionUV );
+					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 					wi = - normalize( reflect( wo, wh ) );
 
 					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
@@ -192,14 +204,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				}
 
 				var ctx: ${ bxdfContextStruct };
-				ctx.NdotV = max( wo.z, ${ MIN_INCIDENT_COS } );
-				ctx.NdotL = max( wi.z, ${ MIN_INCIDENT_COS } );
-				ctx.NdotH = saturate( wh.z );
+				ctx.V = wo;
+				ctx.L = wi;
+				ctx.H = wh;
+
 				ctx.VdotH = saturate( dot( wo, wh ) );
 
-				ctx.VdotNc = max( woClearcoat.z, ${ MIN_INCIDENT_COS } );
-				ctx.LdotNc = max( wiClearcoat.z, ${ MIN_INCIDENT_COS } );
-				ctx.HdotNc = saturate( whClearcoat.z );
+				ctx.Vc = woClearcoat;
+				ctx.Lc = wiClearcoat;
+				ctx.Hc = whClearcoat;
 
 				if ( weights.diffuse > 0.0 ) {
 
@@ -209,13 +222,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
 
-					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( ctx.NdotV, ctx.NdotH, alpha );
+					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
 
 				}
 
 				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
 
-					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( ctx.VdotNc, ctx.HdotNc, clearcoatAlpha );
+					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
 
 				}
 

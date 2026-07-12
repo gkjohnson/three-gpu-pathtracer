@@ -44,6 +44,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			// resulting in NaNs and slow path tracing.
 			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
+				// TODO: consider re-orthonormalizing against the normal here since attribute
+				// interpolation could result in drift.
 				let tangent = normalize( vertexData.tangent.xyz );
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
@@ -138,6 +140,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			// resulting in NaNs and slow path tracing.
 			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
+				// TODO: consider re-orthonormalizing against the normal here since attribute
+				// interpolation could result in drift.
 				let tangent = normalize( vertexData.tangent.xyz );
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
@@ -212,6 +216,48 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		}
 
+		// extract the anisotropy magnitude vector in tangent space
+		var anisotropyDirVec = material.anisotropy * vec2f( cos( material.anisotropyRotation ), sin( material.anisotropyRotation ) );
+		if ( material.anisotropyMap != -1 ) {
+
+			let uvPrime = material.anisotropyMapTransform * vec3f( uv, 1.0 );
+			let aniTex = sampleTexel( uvPrime.xy, material.anisotropyMap, 0 );
+
+			// map rg encode the direction ([-1,1]), b the strength; rotate + scale by the material anisotropy.
+			let mapDir = aniTex.rg * 2.0 - vec2f( 1.0 );
+			let mapStr = aniTex.b;
+			let mapLen = length( mapDir );
+			if ( mapLen > EPSILON ) {
+
+				anisotropyDirVec = mat2x2f(
+					anisotropyDirVec.x, anisotropyDirVec.y,
+					- anisotropyDirVec.y, anisotropyDirVec.x
+				) * mapStr * mapDir / mapLen;
+
+			}
+
+		}
+
+		// adjust the surface basis to be oriented along the anisotropic vector
+		let anisotropyStrength = length( anisotropyDirVec );
+		var surfaceBasis = getBasisFromNormal( normal );
+		if ( anisotropyStrength > 0.0 && length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
+
+			let anisotropyDir = anisotropyDirVec / anisotropyStrength;
+
+			// re-orthonormalize the tangent against the shading normal so the frame stays orthonormal -
+			// normal map adjustments will cause the normal and tangent to become non-orthonormal.
+			let tangent = normalize( vertexData.tangent.xyz - normal * dot( normal, vertexData.tangent.xyz ) );
+			let bitangent = cross( normal, tangent ) * vertexData.tangent.w;
+
+			surfaceBasis = mat3x3f(
+				tangent * anisotropyDir.x + bitangent * anisotropyDir.y,
+				bitangent * anisotropyDir.x - tangent * anisotropyDir.y,
+				normal
+			);
+
+		}
+
 		var surf: SurfaceRecord;
 
 		surf.volumeParticle = false;
@@ -241,19 +287,24 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
 		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
 		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
+		surf.anisotropy = saturate( anisotropyStrength );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
 		surf.frontFace = side == 1.0 || transmission == 0.0;
 		if ( material.thinFilm == 1 || surf.frontFace ) {
+
 			surf.eta = 1.0 / material.ior;
+
 		} else {
+
 			surf.eta = material.ior;
+
 		}
 		surf.f0 = iorToF0( surf.eta );
 
 		// get the normal frames
-		surf.normalBasis = getBasisFromNormal( surf.normal );
+		surf.normalBasis = surfaceBasis;
 		surf.normalInvBasis = inverse( surf.normalBasis );
 
 		surf.clearcoatBasis = getBasisFromNormal( surf.clearcoatNormal );
@@ -313,10 +364,13 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
-	fn specularBrdf( NdotL: f32, NdotV: f32, NdotH: f32, alpha: f32 ) -> vec3f {
+	fn specularBrdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f ) -> vec3f {
 
-		let Vis = ggxSmithVisibility( NdotV, NdotL, alpha );
-		let D = ggxDistribution( NdotH, alpha );
+		let alphaT = alpha.x;
+		let alphaB = alpha.y;
+
+		let Vis = ggxSmithVisibility( V, L, alpha );
+		let D = ggxDistribution( H, alpha );
 
 		return vec3f( D * Vis );
 
@@ -530,12 +584,10 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ rand2 }(${ RNG_INDEX_SCATTER_DIRECTION }) );
 			var wi = - reflect( wo, wh );
 
-			let NdotV = max( wo.z, EPSILON );
-			let NdotL = saturate( wi.z );
-			let NdotH = saturate( wh.z );
+			let NdotL = wi.z;
 
-			let specular = ${ specularBrdfFunc }( NdotL, NdotV, NdotH, alpha );
-			let pdf = ${ ggxReflectionAdjustedPDFFunc }( NdotV, NdotH, alpha );
+			let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
+			let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
 
 			var weight = 0.0;
 			if ( pdf != 0.0 ) {

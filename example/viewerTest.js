@@ -26,7 +26,7 @@ const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
-const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
+const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
 
 const params = {
 
@@ -286,15 +286,6 @@ function buildGui() {
 
 	} );
 
-	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
-	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
-
-		pathTracer.useMegakernel( params.useMegakernel );
-		pathTracer.reset();
-		detailedSampleCount = null;
-
-	} );
-
 	// build the atlas page dropdown dynamically from the current atlas
 	const atlasOptions = { hide: - 1 };
 	const pageCount = pathTracer.textureAtlas.pageCount;
@@ -311,10 +302,17 @@ function buildGui() {
 
 	}
 
-	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
-
+	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
+
+		pathTracer.useMegakernel( params.useMegakernel );
+		pathTracer.reset();
+		detailedSampleCount = null;
+
+	} );
+	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
 	pathTracingFolder.add( params, 'scale', 0.1, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {

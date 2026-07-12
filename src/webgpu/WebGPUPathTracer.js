@@ -181,7 +181,7 @@ export class WebGPUPathTracer {
 		this._environmentCache = new TextureCache( renderer, 'environment' );
 		this._backgroundCache = new TextureCache( renderer, 'background' );
 
-		this._resetTime = 0;
+		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
@@ -405,7 +405,7 @@ export class WebGPUPathTracer {
 	reset() {
 
 		this._pathTracer.reset();
-		this._resetTime = 0;
+		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._timer.update();
 
@@ -449,7 +449,14 @@ export class WebGPUPathTracer {
 
 		}
 
-		const delta = 1000 * timer.getDelta();
+		let delta = 1000 * timer.getDelta();
+		if ( this._resetTime === - 1 ) {
+
+			this._resetTime = 0;
+			delta = 0.0;
+
+		}
+
 		this._resetTime += delta;
 
 		const originalTarget = renderer.getRenderTarget();
