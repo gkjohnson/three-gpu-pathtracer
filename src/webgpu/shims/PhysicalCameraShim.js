@@ -1,6 +1,6 @@
 import { Matrix4, WebGPUCoordinateSystem } from 'three';
 import { uniform, PI } from 'three/tsl';
-import { wgslTagFn, rayStruct, ndcToCameraRay } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn, rayStruct, ndcToCameraRay } from 'three-mesh-bvh/webgpu';
 import { rand3, RNG_INDEX_APERTURE_SAMPLE } from '../nodes/random.wgsl.js';
 import { PhysicalCamera } from '../../objects/PhysicalCamera.js';
 

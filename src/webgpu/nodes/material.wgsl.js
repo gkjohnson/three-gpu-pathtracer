@@ -220,7 +220,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var anisotropyDirVec = material.anisotropy * vec2f( cos( material.anisotropyRotation ), sin( material.anisotropyRotation ) );
 		if ( material.anisotropyMap != -1 ) {
 
-			let uvPrime = material.anisotropyMapTransform * vec3f( uv, 1.0 );
+			let uvPrime = material.anisotropyMapTransform * vec3f( getUvFromChannel( vertexData, material.anisotropyMap ), 1.0 );
 			let aniTex = sampleTexel( uvPrime.xy, material.anisotropyMap, 0 );
 
 			// map rg encode the direction ([-1,1]), b the strength; rotate + scale by the material anisotropy.

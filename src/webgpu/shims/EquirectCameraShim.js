@@ -1,6 +1,6 @@
 import { Matrix4 } from 'three';
 import { uniform, PI } from 'three/tsl';
-import { wgslTagFn, rayStruct } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { EquirectCamera } from '../../objects/EquirectCamera.js';
 
 EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
