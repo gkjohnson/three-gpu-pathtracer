@@ -96,6 +96,7 @@ export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
 
 	fn ggxShadowMaskG1( V: vec3f, alpha: vec2f ) -> f32 {
 
+		// TODO: this could be collapsed to a simpler form as an optimization
 		return 1.0 / ( 1.0 + ggxLambda( V, alpha ) );
 
 	}
