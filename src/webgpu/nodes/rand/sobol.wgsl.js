@@ -91,32 +91,27 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 	const type = dim > 1 ? `vec${dim}u` : 'u32';
 
 	const sobolReverseBitsFunc = wgslFn( /* wgsl */ `
+		fn sobolReverseBits_${type}( in: ${type} ) -> ${type} {
 
-			fn sobolReverseBits_${type}( in: ${type} ) -> ${type} {
+			var x = in;
+			x = ( ( ( x & ${type}( 0xaaaaaaaau ) ) >> ${type}( 1 ) ) | ( ( x & ${type}( 0x55555555u ) ) << ${type}( 1 ) ) );
+			x = ( ( ( x & ${type}( 0xccccccccu ) ) >> ${type}( 2 ) ) | ( ( x & ${type}( 0x33333333u ) ) << ${type}( 2 ) ) );
+			x = ( ( ( x & ${type}( 0xf0f0f0f0u ) ) >> ${type}( 4 ) ) | ( ( x & ${type}( 0x0f0f0f0fu ) ) << ${type}( 4 ) ) );
+			x = ( ( ( x & ${type}( 0xff00ff00u ) ) >> ${type}( 8 ) ) | ( ( x & ${type}( 0x00ff00ffu ) ) << ${type}( 8 ) ) );
+			return ( ( x >> ${type}( 16 ) ) | ( x << ${type}( 16 ) ) );
 
-				var x = in;
-				x = ( ( ( x & ${type}( 0xaaaaaaaau ) ) >> ${type}( 1 ) ) | ( ( x & ${type}( 0x55555555u ) ) << ${type}( 1 ) ) );
-				x = ( ( ( x & ${type}( 0xccccccccu ) ) >> ${type}( 2 ) ) | ( ( x & ${type}( 0x33333333u ) ) << ${type}( 2 ) ) );
-				x = ( ( ( x & ${type}( 0xf0f0f0f0u ) ) >> ${type}( 4 ) ) | ( ( x & ${type}( 0x0f0f0f0fu ) ) << ${type}( 4 ) ) );
-				x = ( ( ( x & ${type}( 0xff00ff00u ) ) >> ${type}( 8 ) ) | ( ( x & ${type}( 0x00ff00ffu ) ) << ${type}( 8 ) ) );
-				return ( ( x >> ${type}( 16 ) ) | ( x << ${type}( 16 ) ) );
-
-			}
-
+		}
 	` );
 
 	const sobolHashCombineFunc = wgslFn( /* wgsl */ `
-
 		fn sobolHashCombine_${type}( seed: u32, v: ${type} ) -> ${type} {
 
 			return ${type}( seed ) ^ ( v + ${ type }( ( seed << 6 ) + ( seed >> 2 ) ) );
 
 		}
-
 	` );
 
 	const sobolLaineKarrasPermutationFunc = wgslFn( /* wgsl */ `
-
 		fn sobolLaineKarrasPermutation_${type}( in: ${type}, seed: ${type} ) -> ${type} {
 
 			var x = in;
@@ -128,11 +123,9 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 			return x;
 
 		}
-
 	` );
 
 	const nestedUniformScrambleBase2Func = wgslTagFn/* wgsl */ `
-
 		fn nestedUniformScrambleBase2_${type}( x: ${type}, seed: ${type} ) -> ${type} {
 
 			var res = ${ sobolLaineKarrasPermutationFunc }( x, seed );
@@ -140,7 +133,6 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 			return res;
 
 		}
-
 	`;
 
 	return {
@@ -157,9 +149,8 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 // 1-dimensional vector = f32
 const sobolNodes = Array.from( { length: 5 }, ( _, i ) => sobolScrambleNodesGenerator( i ) );
 
-const generateSobolPointFunc = wgslTagFn`
-  ${ [ sobolConstants ] }
-
+const generateSobolPointFunc = wgslTagFn/* wgsl */`
+  	${ [ sobolConstants ] }
 	fn generateSobolPoint( id: u32 ) -> vec4f {
 
 		var index = id;
@@ -180,11 +171,9 @@ const generateSobolPointFunc = wgslTagFn`
 		return vec4( f32( x ), f32( y ), f32( z ), f32( w ) ) * ${ SOBOL_FACTOR };
 
 	}
-
 `;
 
 const sobolHashFunc = wgslFn( /* wgsl */ `
-
 	fn sobolHash( in: u32 ) -> u32 {
 
 		var x = in;
@@ -197,11 +186,9 @@ const sobolHashFunc = wgslFn( /* wgsl */ `
 		return x;
 
 	}
-
 ` );
 
 const sobolGetSeedFunc = wgslTagFn/* wgsl */`
-
 	fn sobolGetSeed( effect: u32 ) -> u32 {
 
 		return ${ sobolHashFunc }(
@@ -215,7 +202,6 @@ const sobolGetSeedFunc = wgslTagFn/* wgsl */`
 		);
 
 	}
-
 `;
 
 const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
@@ -249,7 +235,6 @@ const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 	}
 
 	return wgslTagFn/* wgsl */`
-
 		fn sobol${ dim }( effect: u32 ) -> ${ ftype } {
 
 			let seed = ${ sobolGetSeedFunc }( effect );
@@ -266,7 +251,6 @@ const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 			return ${ SOBOL_FACTOR } * ${ ftype }( result >> ${utype}( 8 ) );
 
 		}
-
 	`;
 
 };
@@ -277,7 +261,6 @@ const sobolRand3Func = sobolGenerator( 3 );
 const sobolRand4Func = sobolGenerator( 4 );
 
 const sobolInitFunc = wgslTagFn/* wgsl */`
-
 	fn sobolInit( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
 
 		${ sobolPixelIndex } = pixelIndex;
@@ -285,17 +268,14 @@ const sobolInitFunc = wgslTagFn/* wgsl */`
 		${ sobolBounceIndex } = bounceIndex;
 
 	}
-
 `;
 
 const sobolNextBounceFunc = wgslTagFn/* wgsl */`
-
 	fn sobolNextBounce() -> void {
 
 		${ sobolBounceIndex }++;
 
 	}
-
 `;
 
 // Sobol definitions
