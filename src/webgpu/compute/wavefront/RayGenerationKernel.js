@@ -75,7 +75,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				// get the ray index
 				let queueCapacity = arrayLength( rayQueue );
 				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
-				${ rngInit }( indexUV.xy, seed, 0 );
+				${ rngInit }( indexUV.xy, seed + samples, 0 );
 
 				// write the ray data
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
@@ -88,7 +88,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue[ index ].currentBounce = 0;
 				rayQueue[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
-				rayQueue[ index ].seed = seed;
+				rayQueue[ index ].seed = seed + samples;
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
