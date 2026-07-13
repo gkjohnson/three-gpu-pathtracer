@@ -3,6 +3,13 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand4, rngInit, rngNextBounce } from './sobol.wgsl.js';
 import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
 
+// Based in part on the "stratified" random sample implement from the WebGLPathTracer which
+// is in turn based on "hoverinc/ray-tracing-renderer" sampling strategy.
+// This random sampling strategy uses the exact sample stratified sobol sequence for every
+// pixel on screen, with a fractional blue-noise offset applied. This means that pixels
+// along the blue noise stride sample the same directions leading to a blue noise pattern
+// emerging in screen space.
+
 // construct the blue noise texture
 const STBN_SIZE = 64;
 const bnTex = new BlueNoiseTexture( STBN_SIZE, 1 );
