@@ -6,4 +6,6 @@ export const RNG_INDEX_SCATTER_DIRECTION = 3;
 export const RNG_INDEX_APERTURE_SAMPLE = 4;
 export const RNG_INDEX_ALPHA_TEST = 1000;
 
-export * from './rand/sobol.wgsl.js';
+// export * from './rand/pcg.wgsl.js';
+// export * from './rand/sobol.wgsl.js';
+export * from './rand/stbn.wgsl.js';
