@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
+import { storage, float, sampler, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -181,7 +181,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
+		const effect = uint( 0 ).toVar( 'bvh_effect' );
 
+		// TODO: we should reset the effect at the start of the traversal
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,
@@ -307,11 +309,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 && opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti ) ) {
+								if ( material.transparent != 0 && opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ${ effect } ) ) {
 
+									${ effect } += 1u;
 									continue;
 
 								}
+
+								${ effect } += 1u;
 
 								if ( opacity < material.alphaTest ) {
 

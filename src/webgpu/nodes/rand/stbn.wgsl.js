@@ -128,16 +128,22 @@ const stbnRand4Func = wgslTagFn/* wgsl */`
 
 		if (
 			${ pathIndex } > ${ STBN_DEPTH } ||
-			// effect > 10 ||
+			// effect > 15 ||
 			${ _blueNoiseEnabled } != 1u ) {
 
 			return ${ rand4 }( effect );
 
 		} else {
 
-			// TODO: offset these with a toroidal offset
-			// TODO: adjust our
-			let slot = ${ pixelIndex } + ( ( 10 * ${ bounceIndex } + effect ) % vec2u( ${ STBN_SIZE }u ) );
+			// TODO: adjust our max effect depths
+			// TODO: sample the appropriate types
+			let dimension = ( 15 * ${ bounceIndex } + effect );
+
+			// offset the pixel with nearest golden ratio primes relative
+			// to the texture resolution
+			let slot = ${ pixelIndex } + vec2u( 79, 41 ) * dimension;
+
+			// let slot = ${ pixelIndex } + ( dimension % vec2u( ${ STBN_SIZE }u ) );
 			return ${ readSTBNFunc }( slot, ${ pathIndex }, 4u );
 
 		}
