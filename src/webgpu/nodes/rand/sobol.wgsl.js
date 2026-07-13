@@ -62,7 +62,6 @@ const sobolPathIndex = uint( 0 ).toVar( 'sobolPathIndex' );
 const sobolBounceIndex = uint( 0 ).toVar( 'sobolBounceIndex' );
 
 const getMaskedSobolFunc = wgslFn( /* wgsl */ `
-
 	fn getMaskedSobol( index: u32, directions: array<u32, 32> ) -> u32 {
 
 		var X = 0u;
@@ -75,7 +74,6 @@ const getMaskedSobolFunc = wgslFn( /* wgsl */ `
 		return X;
 
 	}
-
 ` );
 
 // functions to generate multi-dimensions variables of the same functions
@@ -261,9 +259,9 @@ const sobolRand3Func = sobolGenerator( 3 );
 const sobolRand4Func = sobolGenerator( 4 );
 
 const sobolInitFunc = wgslTagFn/* wgsl */`
-	fn sobolInit( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
+	fn sobolInit( pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
 
-		${ sobolPixelIndex } = pixelIndex;
+		${ sobolPixelIndex } = ( pixel.x << 16 ) | pixel.y;
 		${ sobolPathIndex } = pathIndex;
 		${ sobolBounceIndex } = bounceIndex;
 

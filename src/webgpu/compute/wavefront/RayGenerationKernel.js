@@ -75,9 +75,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				// get the ray index
 				let queueCapacity = arrayLength( rayQueue );
 				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
-
-				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rngInit }( pixelIndex, seed, 0 );
+				${ rngInit }( indexUV.xy, seed, 0 );
 
 				// write the ray data
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
