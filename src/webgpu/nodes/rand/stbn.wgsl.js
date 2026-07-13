@@ -17,7 +17,6 @@ function createMaskTexture( format ) {
 
 }
 
-
 // hard code dimensions of the texture
 export const STBN_SIZE = 128;
 export const STBN_DEPTH = 64;
