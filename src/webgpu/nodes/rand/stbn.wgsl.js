@@ -3,6 +3,14 @@ import { DataArrayTexture, RedFormat, RGFormat, RGBAFormat, UnsignedByteType, Ne
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand1, rand2, rand3, rand4, rngInit, rngNextBounce } from './sobol.wgsl.js';
 
+// Random sampling strategy using spatiotemporal blue noise textures from "NVIDIA-RTX/STBN". The implementation is not
+// tuned or complete but samples a vec1, 2, 3, or 3 + 1 texture to return a random vector of the appropriate dimension
+// from the current spatiotemporal time slice. Different random dimensions sample from a different blue noise pixel.
+// Subsequent paths then sample from the sequential, temporally-decorrelated blue noise texture slices.
+//
+// Once the sampled path is beyond the temporal list or samples are requested beyond the dimensions allocated for a
+// ray the functions fall back to scrambled sobol.
+
 // initialize the textures
 function createMaskTexture( format ) {
 
