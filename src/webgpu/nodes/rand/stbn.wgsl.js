@@ -61,18 +61,16 @@ try {
 
 
 // runtime toggle shared by every kernel
-const _blueNoiseEnabled = uniform( 1 );
+const _blueNoiseEnabled = uniform( 1, 'uint' );
 export function setBlueNoiseEnabled( enabled ) {
 
 	_blueNoiseEnabled.value = enabled ? 1 : 0;
 
 }
 
-
-
-const pixelIndex = uvec2( 0 ).toVar( 'sobolPixelIndex' );
-const pathIndex = uint( 0 ).toVar( 'sobolPathIndex' );
-const bounceIndex = uint( 0 ).toVar( 'sobolBounceIndex' );
+const pixelIndex = uvec2( 0 ).toVar( 'stbnPixelIndex' );
+const pathIndex = uint( 0 ).toVar( 'stbnPathIndex' );
+const bounceIndex = uint( 0 ).toVar( 'stbnBounceIndex' );
 
 const stbnInitFunc = wgslTagFn/* wgsl */`
 	fn stbnInitialize( pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
@@ -95,8 +93,8 @@ const stbnNextBounceFunc = wgslTagFn/* wgsl */`
 	}
 `;
 
-const loadSTBNFunc = wgslTagFn/* wgsl */`
-	fn loadSTBN( pixel: vec2u, slice: u32, dim: u32 ) -> vec4f {
+const readSTBNFunc = wgslTagFn/* wgsl */`
+	fn readSTBN( pixel: vec2u, slice: u32, dim: u32 ) -> vec4f {
 
 		let coord = vec2i( pixel % vec2u( ${ STBN_SIZE }u ) );
 		let sliceMod = i32( slice % ${ STBN_DEPTH }u );
@@ -128,16 +126,21 @@ const loadSTBNFunc = wgslTagFn/* wgsl */`
 const stbnRand4Func = wgslTagFn/* wgsl */`
 	fn stbnRand4( effect: u32 ) -> vec4f {
 
-		if ( ${ pathIndex } > ${ STBN_DEPTH } ) {
+		if (
+			${ pathIndex } > ${ STBN_DEPTH } ||
+			// effect > 10 ||
+			${ _blueNoiseEnabled } != 1u ) {
 
 			return ${ rand4 }( effect );
 
 		} else {
 
-			return ${ loadSTBNFunc }( ${ pixelIndex }, ${ pathIndex }, 0u );
+			// TODO: offset these with a toroidal offset
+			// TODO: adjust our
+			let slot = ${ pixelIndex } + ( ( 10 * ${ bounceIndex } + effect ) % vec2u( ${ STBN_SIZE }u ) );
+			return ${ readSTBNFunc }( slot, ${ pathIndex }, 4u );
 
 		}
-		return vec4f( 0.0 );
 
 	}
 `;
