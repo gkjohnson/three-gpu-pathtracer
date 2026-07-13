@@ -181,10 +181,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
-		const effect = uint( 0 ).toVar( 'bvh_effect' );
+		const discardDimensionOffset = uint( 0 ).toVar( 'bvh_effect' );
 
-		// TODO: we should reset the effect at the start / end of the traversal
-		fns.raycastFirstHit = this.getShapecastFn( {
+		const raycastFirstHit = this.getShapecastFn( {
 			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
@@ -309,14 +308,18 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 && opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ${ effect } ) ) {
+								if ( material.transparent != 0 ) {
 
-									${ effect } += 1u;
-									continue;
+									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ${ discardDimensionOffset } );
+									${ discardDimensionOffset } += 1u;
+
+									if ( doDiscard ) {
+
+										continue;
+
+									}
 
 								}
-
-								${ effect } += 1u;
 
 								if ( opacity < material.alphaTest ) {
 
@@ -385,6 +388,21 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				}
 			`,
 		} );
+
+		// Wrap the raycastFirstHit function so we can reset the random dimension offset that is incremented as
+		// we hit faces and test for transparency.
+		// TODO: three-mesh-bvh should support improved an "initialize" or some kind of optional "warming" step for
+		// cases like this.
+		fns.raycastFirstHit = wgslTagFn/* wgsl */`
+			fn raycastFirstHit_wrapper( shape: ${ rayStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
+
+				${ discardDimensionOffset } = 0u;
+				return ${ raycastFirstHit }( shape, result );
+
+			}
+		`;
+
+		fns.raycastFirstHit.proxyNode.outputType = intersectionResultStruct;
 
 	}
 
