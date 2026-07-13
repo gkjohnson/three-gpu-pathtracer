@@ -183,7 +183,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 		const effect = uint( 0 ).toVar( 'bvh_effect' );
 
-		// TODO: we should reset the effect at the start of the traversal
+		// TODO: we should reset the effect at the start / end of the traversal
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,

@@ -123,11 +123,13 @@ const readSTBNFunc = wgslTagFn/* wgsl */`
 	}
 `
 
+// TODO: we should use the appropriate STBN texture types for sampling
+// TODO: we need to adjust things so that this will work with "stable" noise seed
 const stbnRand4Func = wgslTagFn/* wgsl */`
 	fn stbnRand4( effect: u32 ) -> vec4f {
 
 		if (
-			${ pathIndex } > ${ STBN_DEPTH } ||
+			${ pathIndex } >= ${ STBN_DEPTH } ||
 			// effect > 15 ||
 			${ _blueNoiseEnabled } != 1u ) {
 
@@ -136,11 +138,11 @@ const stbnRand4Func = wgslTagFn/* wgsl */`
 		} else {
 
 			// TODO: adjust our max effect depths
-			// TODO: sample the appropriate types
 			let dimension = ( 15 * ${ bounceIndex } + effect );
 
-			// offset the pixel with nearest golden ratio primes relative
-			// to the texture resolution
+			// shift the read location per dimension so each dimension gets its own
+			// noise value. The offsets are odd so they never repeat over the 128
+			// texel tile - the first 128 dimensions all read different texels.
 			let slot = ${ pixelIndex } + vec2u( 79, 41 ) * dimension;
 
 			// let slot = ${ pixelIndex } + ( dimension % vec2u( ${ STBN_SIZE }u ) );
