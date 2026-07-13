@@ -157,7 +157,7 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 // 1-dimensional vector = f32
 const sobolNodes = Array.from( { length: 5 }, ( _, i ) => sobolScrambleNodesGenerator( i ) );
 
-export const generateSobolPointFunc = wgslTagFn`
+const generateSobolPointFunc = wgslTagFn`
   ${ [ sobolConstants ] }
 
 	fn generateSobolPoint( id: u32 ) -> vec4f {
@@ -271,12 +271,12 @@ const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 
 };
 
-export const sobolRand1Func = sobolGenerator( 1 );
-export const sobolRand2Func = sobolGenerator( 2 );
-export const sobolRand3Func = sobolGenerator( 3 );
-export const sobolRand4Func = sobolGenerator( 4 );
+const sobolRand1Func = sobolGenerator( 1 );
+const sobolRand2Func = sobolGenerator( 2 );
+const sobolRand3Func = sobolGenerator( 3 );
+const sobolRand4Func = sobolGenerator( 4 );
 
-export const sobolInitFunc = wgslTagFn/* wgsl */`
+const sobolInitFunc = wgslTagFn/* wgsl */`
 
 	fn sobolInit( pixelIndex: u32, pathIndex: u32, bounceIndex: u32 ) -> void {
 
@@ -288,7 +288,7 @@ export const sobolInitFunc = wgslTagFn/* wgsl */`
 
 `;
 
-export const sobolNextBounceFunc = wgslTagFn/* wgsl */`
+const sobolNextBounceFunc = wgslTagFn/* wgsl */`
 
 	fn sobolNextBounce() -> void {
 
