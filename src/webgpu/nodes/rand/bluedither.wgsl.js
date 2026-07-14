@@ -1,4 +1,4 @@
-import { float, texture } from 'three/tsl';
+import { float, texture, vec4 } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand4, rngInit, rngNextBounce } from './sobol.wgsl.js';
 import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
@@ -15,18 +15,18 @@ import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
 //   https://www.arnoldrenderer.com/research/dither_abstract.pdf
 
 // construct the blue noise texture
-const STBN_SIZE = 64;
-const bnTex = new BlueNoiseTexture( STBN_SIZE, 1 );
+const BN_SIZE = 64;
+const bnTex = new BlueNoiseTexture( BN_SIZE, 1 );
 const texNode = texture( bnTex );
-const pixelSeed = float( 0 ).toVar( 'blueDitherSeed' );
+const pixelSeed = vec4( 0 ).toVar( 'blueDitherSeed' );
 
 // When dithering, the sobol sampler is seeded with a constant pixel so every pixel
 // uses the same sequence, which is modified with the per-pixel blue noise sample.
 const blueDitherInitFunc = wgslTagFn/* wgsl */`
 	fn blueDitherInitialize( pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
 
-		let coord = vec2i( pixel % vec2u( ${ STBN_SIZE }u ) );
-		${ pixelSeed } = textureLoad( ${ texNode }, coord, 0 ).r;
+		let coord = vec2i( pixel % vec2u( ${ BN_SIZE }u ) );
+		${ pixelSeed } = textureLoad( ${ texNode }, coord, 0 );
 		${ rngInit }( vec2u( 0 ), pathIndex, bounceIndex );
 
 	}
@@ -36,7 +36,7 @@ const blueDitherRand4Func = wgslTagFn/* wgsl */`
 	fn blueDitherRand4( effect: u32 ) -> vec4f {
 
 		let stratifiedSample = ${ rand4 }( effect );
-		return fract( stratifiedSample + ${ pixelSeed } );
+		return fract( stratifiedSample + ${ pixelSeed }.r );
 
 	}
 `;
