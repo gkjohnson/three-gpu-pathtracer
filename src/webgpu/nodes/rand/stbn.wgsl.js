@@ -1,7 +1,7 @@
 import { texture, uniform, uvec2, uint } from 'three/tsl';
 import { DataArrayTexture, RedFormat, RGFormat, RGBAFormat, UnsignedByteType, NearestFilter, RepeatWrapping } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rand1, rand2, rand3, rand4, rngInit, rngNextBounce } from './sobol.wgsl.js';
+import { rand4, rngInit, rngNextBounce } from './sobol.wgsl.js';
 
 // Random sampling strategy using spatiotemporal blue noise textures from "NVIDIA-RTX/STBN". The implementation is not
 // tuned or complete but samples a vec1, 2, 3, or 3 + 1 texture to return a random vector of the appropriate dimension

@@ -9,6 +9,10 @@ import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
 // pixel on screen, with a fractional blue-noise offset applied. This means that pixels
 // along the blue noise stride sample the same directions leading to a blue noise pattern
 // emerging in screen space.
+//
+// References
+// - "Blue-Noise Dithered Sampling", Georgiev & Fajardo, SIGGRAPH 2016 Talks
+//   https://www.arnoldrenderer.com/research/dither_abstract.pdf
 
 // construct the blue noise texture
 const STBN_SIZE = 64;
