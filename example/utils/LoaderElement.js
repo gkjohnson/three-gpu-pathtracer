@@ -104,6 +104,11 @@ export class LoaderElement {
 		this._credits = creditsEl;
 		this._samples = samplesEl;
 		this._container = container;
+		this._lastSampleUpdateTime = - Infinity;
+
+		// Keep path tracing independent from DOM updates. This can be tuned by hosts
+		// that need a more or less responsive progress display.
+		this.sampleUpdateInterval = 100;
 
 		this.setPercentage( 0 );
 
@@ -144,6 +149,15 @@ export class LoaderElement {
 
 	setSamples( count, detailedSamples = null ) {
 
+		const now = performance.now();
+
+		// Rendering can run every animation frame, but updating text at that rate
+		if ( now - this._lastSampleUpdateTime < this.sampleUpdateInterval ) {
+
+			return;
+
+		}
+
 		if ( detailedSamples !== null ) {
 
 			const {
@@ -167,6 +181,8 @@ export class LoaderElement {
 			this._samples.innerText = `~${ Math.floor( count ) } samples`;
 
 		}
+
+		this._lastSampleUpdateTime = now;
 
 	}
 
