@@ -1,4 +1,4 @@
-import { texture, uint, vec4 } from 'three/tsl';
+import { texture, vec4 } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand4, rngInit, rngNextBounce } from './sobol.wgsl.js';
 import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
