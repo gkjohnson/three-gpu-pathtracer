@@ -362,6 +362,17 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ constants, schlickFresnelFunc, surfaceRecordStruct ] );
 
+// Lambertian diffuse BRDF with cosine distribution
+export const lambertBrdfFunc = wgslFn( /* wgsl */ `
+
+	fn lambertBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
+
+		return surf.color / PI;
+
+	}
+
+`, [ constants, surfaceRecordStruct ] );
+
 export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn specularBrdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f ) -> vec3f {
@@ -383,9 +394,8 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 	fn fresnelMix( VdotH: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
 		let f0 = iorToF0( ior );
-  	let F = schlickFresnel( abs( VdotH ), f0 );
-
-  	return base + F * layer;
+	  	let F = schlickFresnel( abs( VdotH ), f0 );
+  		return mix( base, layer, F );
 
 	}
 
