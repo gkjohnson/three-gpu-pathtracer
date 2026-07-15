@@ -13,20 +13,17 @@ import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
 // References
 // - "Blue-Noise Dithered Sampling", Georgiev & Fajardo, SIGGRAPH 2016 Talks
 //   https://www.arnoldrenderer.com/research/dither_abstract.pdf
-// - Golden-ratio rotation of blue noise via Cranley-Patterson rotation:
+// - Blue noise discussion:
 //   https://developer.nvidia.com/blog/rendering-in-real-time-with-spatiotemporal-blue-noise-textures-part-2/
 
 // constants
 // a maximum number of 100 effects is assumed per ray
 const BN_SIZE = 64;
-const EFFECTS_PER_BOUNCE = 100;
-const GOLDEN_RATIO_FRACT = 0.61803398875;
 
 // construct nodes
 const blueNoiseTex = new BlueNoiseTexture( BN_SIZE, 1 );
 const blueNoiseTexNode = texture( blueNoiseTex );
 const pixelSeed = vec4( 0 ).toVar( 'blueDitherSeed' );
-const bounceIndex = uint( 0 ).toVar( 'blueDitherBounceIndex' );
 
 // When dithering, the sobol sampler is seeded with a constant pixel so every pixel
 // uses the same sequence, which is modified with the per-pixel blue noise sample.
@@ -35,7 +32,6 @@ const blueDitherInitFunc = wgslTagFn/* wgsl */`
 
 		let coord = vec2i( pixel % vec2u( ${ BN_SIZE }u ) );
 		${ pixelSeed } = textureLoad( ${ blueNoiseTexNode }, coord, 0 );
-		${ bounceIndex } = bounceIndex;
 		${ rngInit }( vec2u( 0 ), pathIndex, bounceIndex );
 
 	}
@@ -44,7 +40,6 @@ const blueDitherInitFunc = wgslTagFn/* wgsl */`
 const blueDitherNextBounceFunc = wgslTagFn/* wgsl */`
 	fn blueDitherNextBounce() -> void {
 
-		${ bounceIndex }++;
 		${ rngNextBounce }();
 
 	}
@@ -55,18 +50,11 @@ const blueDitherNextBounceFunc = wgslTagFn/* wgsl */`
 const blueDitherRand4Func = wgslTagFn/* wgsl */`
 	fn blueDitherRand4( effect: u32 ) -> vec4f {
 
-		// Get the dimension index of the current sample, rand rotate each element by a
-		// golden ratio Cranley-Patterson rotation value. Each sample is 4 floats so we
-		// apply a multiple of 4 so each element is unique.
-		let dimension = f32( ${ bounceIndex } * ${ EFFECTS_PER_BOUNCE }u + effect );
-		let dimensionVector = 4.0 * dimension + vec4f( 0.0, 1.0, 2.0, 3.0 );
-		let rotationVector = dimensionVector * ${ GOLDEN_RATIO_FRACT };
-
 		// Get the scrambled sobol stratified sample
 		let stratifiedSample = ${ rand4 }( effect );
 
 		// offset it by the blue noise seed and dimension rotation
-		return fract( stratifiedSample + ${ pixelSeed }.r + rotationVector );
+		return fract( stratifiedSample + ${ pixelSeed }.r );
 
 	}
 `;
