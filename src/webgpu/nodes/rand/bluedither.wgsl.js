@@ -58,7 +58,7 @@ const blueDitherRand4Func = wgslTagFn/* wgsl */`
 		// Get the dimension index of the current sample, rand rotate each element by a
 		// golden ratio Cranley-Patterson rotation value. Each sample is 4 floats so we
 		// apply a multiple of 4 so each element is unique.
-		let dimension = f32( ( ${ bounceIndex } * ${ EFFECTS_PER_BOUNCE }u + effect ) );
+		let dimension = f32( ${ bounceIndex } * ${ EFFECTS_PER_BOUNCE }u + effect );
 		let dimensionVector = 4.0 * dimension + vec4f( 0.0, 1.0, 2.0, 3.0 );
 		let rotationVector = dimensionVector * ${ GOLDEN_RATIO_FRACT };
 
