@@ -121,5 +121,6 @@ function onResize() {
 	const aspect = w / h;
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
+	pathTracer.updateCamera();
 
 }
