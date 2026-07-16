@@ -98,6 +98,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotL = ctx.L.z;
 
 				// account for multi scatter energy loss for specular
+				// TODO: why sqrt here?
 				let energySs = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotV, sqrt( alpha.y ) ), 0 ).r, 1e-5 );
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) / energySs;
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
