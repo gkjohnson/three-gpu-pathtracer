@@ -536,20 +536,15 @@ export const iridescentConductorLayerFunc = wgslFn( /* wgsl */ `
 
 `, [ iridescentFresnelFunc ] );
 
-export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
+export const conductorFresnelFunc = wgslFn( /* wgsl */ `
 
-	fn conductorFresnel( NdotV: f32, VdotH: f32, f0: vec3f, bsdf: vec3f, alpha: f32 ) -> vec3f {
+	fn conductorFresnel( VdotH: f32, f0: vec3f, specular: vec3f ) -> vec3f {
 
-		let ss = bsdf * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
-
-		let uv = vec2( NdotV, sqrt( alpha ) );
-		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5 );
-
-		return ss * ( 1.0 + f0 * ( 1.0 - energySs ) / energySs );
+		return specular * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
 
 	}
 
-`, [ schlickFresnelVecFunc, turquinTexture ] );
+`, [ schlickFresnelVecFunc ] );
 
 export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 

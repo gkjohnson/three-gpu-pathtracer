@@ -56,7 +56,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.specularBrdf = specularBrdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
-		this.conductorFresnel = conductorFresnel( turquinNode );
+		this.conductorFresnel = conductorFresnel;
 		this.fresnelCoat = fresnelCoat;
 		this.iridescentDielectricLayer = iridescentDielectricLayer;
 		this.iridescentConductorLayer = iridescentConductorLayer;
@@ -105,22 +105,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				// Turquin multiscatter energy compensation term: 1 + f0 * ( 1 - E ) / E
 				let dielectricComp = 1.0 / energySs;
-				let metallicComp = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
-
-				// dielectric: renormalize the white specular lobe to unit albedo
 				let dielectricSpecular = specular * dielectricComp;
-				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
+				let dielectricBase = dielectricSpecular;
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, dielectricSpecular, ctx.VdotH, /* outsideIor */ 1.0,
 					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
-				// TODO: this only handles non-anisotropic surfaces
-				// TODO: the energy ss is being multiplied back in because the internal fresnel is handling energy
-				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular * energySs, alpha.y );
+				// metal: Fresnel-weighted specular with the multiscatter comp
+				let metallicComp = 1.0 + surf.color * ( 1.0 - energySs ) / energySs;
+				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, specular ) * metallicComp;
 				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, specular * energySs, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
+					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
