@@ -1,41 +1,59 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import { wgslFn } from 'three/tsl';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { GraphMaterial } from '../src/materials/debug/GraphMaterial.js';
-import * as BSDFGLSL from '../src/shader/bsdf/index.js';
-import * as CommonGLSL from '../src/shader/common/index.js';
+import { GraphMaterial } from '../src/webgpu/materials/GraphMaterial.js';
+import { ggxDistributionFunc, ggxShadowMaskG1Func, ggxLamdaFunc, ggxReflectionAdjustedPDFFunc } from '../src/webgpu/nodes/ggx.wgsl.js';
+import { constants } from '../src/webgpu/nodes/structs.wgsl.js';
 
-const graphFunctionSnippet = /* glsl */`
-	#include <common>
-	${ CommonGLSL.math_functions }
-	${ CommonGLSL.util_functions }
-	${ BSDFGLSL.ggx_functions }
+// Graph the ggx functions against roughness ( x ) for a fixed incident angle, mirroring the
+// GLSL variant of this example: wi = normalize( vec3( 1 ) ), half vector = +Z.
+const COS_THETA = 1 / Math.sqrt( 3 );
 
-	vec4 graphFunction( float x ) {
+// each graph slot is a wgsl function of the form "fn( x: f32 ) -> f32"
+const graphs = [
 
-		vec3 wi = normalize( vec3( 1.0, 1.0, 1.0 ) );
-		vec3 halfVec = vec3( 0.0, 0.0, 1.0 );
-		float theta = dot( wi, halfVec );
+	wgslFn( /* wgsl */`
+		fn graphGgxPdf( x: f32 ) -> f32 {
 
-		return vec4(
-			ggxPDF( wi, halfVec, x ),
-			ggxDistribution( halfVec, x ),
-			ggxShadowMaskG1( theta, x ),
-			ggxLamda( theta, x )
-		);
+			return ggxReflectionAdjustedPDF( ${ COS_THETA }, 1.0, x );
 
-	}
-`;
+		}
+	`, [ ggxReflectionAdjustedPDFFunc, constants ] ),
+
+	wgslFn( /* wgsl */`
+		fn graphGgxDistribution( x: f32 ) -> f32 {
+
+			return ggxDistribution( 1.0, x );
+
+		}
+	`, [ ggxDistributionFunc, constants ] ),
+
+	wgslFn( /* wgsl */`
+		fn graphGgxShadowMaskG1( x: f32 ) -> f32 {
+
+			return ggxShadowMaskG1( ${ COS_THETA }, x );
+
+		}
+	`, [ ggxShadowMaskG1Func ] ),
+
+	wgslFn( /* wgsl */`
+		fn graphGgxLamda( x: f32 ) -> f32 {
+
+			return ggxLamda( ${ COS_THETA }, x );
+
+		}
+	`, [ ggxLamdaFunc ] ),
+
+];
 
 let camera, scene, renderer, plane;
 let cameraCenter;
 let zoom = 10;
-let dataEl, dataContainerEl;
+let dataEl, dataContainerEl, valuesEl;
+let readingValues = false;
 const params = {
 	aspect: 1,
-	displayX: true,
-	displayY: true,
-	displayZ: true,
-	displayW: true,
+	display: [],
 	reset() {
 
 		zoom = 10;
@@ -55,8 +73,23 @@ async function init() {
 	dataContainerEl = document.getElementById( 'dataContainer' );
 	dataEl = document.getElementById( 'data' );
 
+	// readout for the graph values at the cursor position
+	valuesEl = document.createElement( 'div' );
+	valuesEl.style.cssText = `
+		position: absolute;
+		bottom: 10px;
+		left: 10px;
+		font-family: monospace;
+		white-space: pre;
+		color: #ccc;
+		pointer-events: none;
+		visibility: hidden;
+	`;
+	document.body.appendChild( valuesEl );
+
 	// renderer init
-	renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer = new THREE.WebGPURenderer( { antialias: true } );
+	await renderer.init();
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.setClearColor( 0x11161C );
 	renderer.setPixelRatio( window.devicePixelRatio );
@@ -76,8 +109,7 @@ async function init() {
 		new THREE.PlaneGeometry(),
 		new GraphMaterial( {
 			side: THREE.DoubleSide,
-			thickness: 1,
-			graphFunctionSnippet,
+			graphs,
 		} )
 	);
 	plane.scale.setScalar( 2.0 );
@@ -90,15 +122,16 @@ async function init() {
 
 	const gui = new GUI();
 	gui.add( plane.material, 'dim' );
-	gui.add( plane.material, 'thickness', 0.5, 10.0 );
 	gui.add( params, 'aspect', 0.1, 2 );
 	gui.add( params, 'reset' );
 
 	const graphFolder = gui.addFolder( 'graphs' );
-	graphFolder.add( params, 'displayX' ).name( 'display graph 1' );
-	graphFolder.add( params, 'displayY' ).name( 'display graph 2' );
-	graphFolder.add( params, 'displayZ' ).name( 'display graph 3' );
-	graphFolder.add( params, 'displayW' ).name( 'display graph 4' );
+	plane.material.graphNames.forEach( ( name, i ) => {
+
+		params.display[ i ] = true;
+		graphFolder.add( params.display, i ).name( name );
+
+	} );
 
 	let clicked = false;
 	let prevX = - 1;
@@ -106,12 +139,17 @@ async function init() {
 	renderer.domElement.addEventListener( 'pointerleave', () =>{
 
 		dataContainerEl.style.visibility = 'hidden';
+		valuesEl.style.visibility = 'hidden';
+
+		// move the marker line and circles off screen
+		plane.material.mousePoint.set( 1e10, 1e10 );
 
 	} );
 
 	renderer.domElement.addEventListener( 'pointerenter', () =>{
 
 		dataContainerEl.style.visibility = 'visible';
+		valuesEl.style.visibility = 'visible';
 
 	} );
 
@@ -150,6 +188,10 @@ async function init() {
 
 		const data = mouseToGraphValue( e.clientX, e.clientY );
 		dataEl.innerText = `x: ${ data.x.toFixed( 3 ) }\ny: ${ data.y.toFixed( 3 ) }`;
+
+		plane.material.mousePoint.set( data.x, data.y );
+
+		updateGraphValues();
 
 	} );
 
@@ -216,12 +258,11 @@ function animation() {
 		cameraCenter.y + 0.5 * yWidth * zoom,
 	);
 
-	mat.graphDisplay.set(
-		Number( params.displayX ),
-		Number( params.displayY ),
-		Number( params.displayZ ),
-		Number( params.displayW ),
-	);
+	params.display.forEach( ( visible, i ) => {
+
+		mat.setGraphVisible( i, visible );
+
+	} );
 
 	renderer.render( scene, camera );
 
@@ -230,6 +271,34 @@ function animation() {
 function getAspect() {
 
 	return params.aspect * window.innerHeight / window.innerWidth;
+
+}
+
+// evaluates the graphs at the cursor x on the gpu and displays the results
+async function updateGraphValues() {
+
+	if ( readingValues ) {
+
+		return;
+
+	}
+
+	readingValues = true;
+
+	const x = plane.material.mousePoint.x;
+	const values = await plane.material.readGraphValues( renderer );
+
+	readingValues = false;
+
+	const graphNames = plane.material.graphNames;
+	const lines = [ `x: ${ x.toFixed( 3 ) }` ];
+	values.forEach( ( v, i ) => {
+
+		lines.push( `<span style="color:${ plane.material.getGraphColor( i ).getStyle() }">${ graphNames[ i ] }: ${ v.toFixed( 5 ) }</span>` );
+
+	} );
+
+	valuesEl.innerHTML = lines.join( '\n' );
 
 }
 

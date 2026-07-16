@@ -1,12 +1,13 @@
 import { uint, float, wgsl, wgslFn } from 'three/tsl';
-import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 // Alpha test should be the last index as it is summed with triangle index
 export const RNG_INDEX_RAY_JITTER = 0;
 export const RNG_INDEX_ENVIRONMENT_SAMPLE = 1;
 export const RNG_INDEX_SCATTER_TYPE = 2;
 export const RNG_INDEX_SCATTER_DIRECTION = 3;
-export const RNG_INDEX_ALPHA_TEST = 4;
+export const RNG_INDEX_APERTURE_SAMPLE = 4;
+export const RNG_INDEX_ALPHA_TEST = 1000;
 
 export const pcgStateStruct = wgsl( /* wgsl */`
 

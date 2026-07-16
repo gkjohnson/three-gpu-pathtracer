@@ -7,6 +7,7 @@ export const constants = wgsl( /* wgsl */ `
 	const PI: f32 = 3.141592653589793;
 	const EPSILON: f32 = 1e-5;
 	const MIN_ROUGHNESS: f32 = 1e-3;
+	const MIN_INCIDENT_COS: f32 = 1e-3;
 
 ` );
 
@@ -18,11 +19,11 @@ export const scatterRecordStruct = new StructTypeNode( {
 }, 'ScatterRecord' );
 
 // NOTE: all "*Map" fields are bit-packed integers of texture index & settings:
-// bits 0-23: texture index
-// bits 24-25: wrapS setting
-// bits 26-27: wrapT setting
-// bit 28: filter setting
-// bits 29-30: unused
+// bits 0-22: texture index
+// bits 23-25: uv channel
+// bits 26-27: wrapS setting
+// bits 28-29: wrapT setting
+// bit 30: filter setting
 // bit 31: negative bit used for indicating unused texture
 export const materialStruct = new StructTypeNode( {
 	// offset 0
@@ -106,40 +107,48 @@ export const materialStruct = new StructTypeNode( {
 	// offset 64 floats
 	transparent: 'int',
 	fogVolume: 'int',
-
+	// offset 66 floats
+	anisotropy: 'float',
+	anisotropyRotation: 'float',
 	// offset 68 floats
+	anisotropyMap: 'int',
+
+	// offset 72 floats
 	mapTransform: 'mat3',
-	// offset 80 floats
+	// offset 84 floats
 	metalnessMapTransform: 'mat3',
-	// offset 92 floats
+	// offset 96 floats
 	roughnessMapTransform: 'mat3',
-	// offset 104 floats
+	// offset 108 floats
 	transmissionMapTransform: 'mat3',
-	// offset 116 floats
+	// offset 120 floats
 	emissiveMapTransform: 'mat3',
-	// offset 128 floats
+	// offset 132 floats
 	normalMapTransform: 'mat3',
-	// offset 140 floats
+	// offset 144 floats
 	clearcoatMapTransform: 'mat3',
-	// offset 152 floats
+	// offset 156 floats
 	clearcoatNormalMapTransform: 'mat3',
-	// offset 164 floats
+	// offset 168 floats
 	clearcoatRoughnessMapTransform: 'mat3',
-	// offset 176 floats
+	// offset 180 floats
 	sheenColorMapTransform: 'mat3',
-	// offset 188 floats
+	// offset 192 floats
 	sheenRoughnessMapTransform: 'mat3',
-	// offset 200 floats
+	// offset 204 floats
 	iridescenceMapTransform: 'mat3',
-	// offset 212 floats
+	// offset 216 floats
 	iridescenceThicknessMapTransform: 'mat3',
-	// offset 224 floats
+	// offset 228 floats
 	specularColorMapTransform: 'mat3',
-	// offset 236 floats
+	// offset 240 floats
 	specularIntensityMapTransform: 'mat3',
-	// offset 248 floats
+	// offset 252 floats
 	alphaMapTransform: 'mat3',
-	// total size = 260
+
+	// offset 264 floats
+	anisotropyMapTransform: 'mat3',
+	// total size = 276
 }, 'Material' );
 
 export const surfaceRecordStruct = new StructTypeNode( {
@@ -160,6 +169,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	// material
 	roughness: 'f32',
 	metalness: 'f32',
+	anisotropy: 'f32',
 	color: 'vec3f',
 	emission: 'vec3f',
 
@@ -206,13 +216,15 @@ export const lobeWeightsStruct = new StructTypeNode( {
 }, 'LobeWeights' );
 
 export const bxdfContextStruct = new StructTypeNode( {
-	NdotV: 'float',
-	NdotL: 'float',
-	NdotH: 'float',
-	VdotH: 'float',
 
-	VdotNc: 'float',
-	LdotNc: 'float',
-	HdotNc: 'float',
+	V: 'vec3f', // view dir
+	L: 'vec3f', // light dir
+	H: 'vec3f', // half dir
+
+	Vc: 'vec3f', // clearcoat view dir
+	Lc: 'vec3f', // clearcoat light dir
+	Hc: 'vec3f', // clearcoat half dir
+
+	VdotH: 'float',
 
 }, 'BxDFContext' );

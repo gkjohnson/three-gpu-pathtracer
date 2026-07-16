@@ -1,7 +1,7 @@
 import { IndirectStorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { wgslTagFn } from '../../lib/three-mesh-bvh/index.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class UpdateRayQueueParamsKernel extends ComputeKernel {
 

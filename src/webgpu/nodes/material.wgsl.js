@@ -17,10 +17,10 @@ import {
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
-import { wgslTagFn } from '../lib/three-mesh-bvh/index.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
-// Builds getSurfaceRecord using the given per-instance sampleTexel
-export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
+// Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
+export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
 		material: Material,
@@ -28,7 +28,6 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		side: f32,
 		faceNormal: vec3f,
 	) -> SurfaceRecord {
-		let uv = vertexData.uv.xy;
 
 		var normal = faceNormal * side;
 		if ( material.flatShading == 0 ) {
@@ -45,11 +44,13 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 			// resulting in NaNs and slow path tracing.
 			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
+				// TODO: consider re-orthonormalizing against the normal here since attribute
+				// interpolation could result in drift.
 				let tangent = normalize( vertexData.tangent.xyz );
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
-				let uvPrime = material.normalMapTransform * vec3( uv, 1.0 );
+				let uvPrime = material.normalMapTransform * vec3( getUvFromChannel( vertexData, material.normalMap ), 1.0 );
 				var texNormal = sampleTexel( uvPrime.xy, material.normalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.normalScale, 1.0 );
@@ -65,14 +66,14 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 
 		if ( material.vertexColors == 1 ) {
 
-			let vertexColor = vertexData.color.xyz;
+			let vertexColor = getColor( vertexData ).xyz;
 			albedo *= vec4f( vertexColor, 1.0 );
 
 		}
 
 		if ( material.map != -1 ) {
 
-			let uvPrime = material.mapTransform * vec3f( uv, 1 );
+			let uvPrime = material.mapTransform * vec3f( getUvFromChannel( vertexData, material.map ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.map, 0 );
 			albedo *= vec4f( texColor.rgb, 1.0 );
 
@@ -81,7 +82,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var roughness = material.roughness;
 		if ( material.roughnessMap != -1 ) {
 
-			let uvPrime = material.roughnessMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.roughnessMapTransform * vec3f( getUvFromChannel( vertexData, material.roughnessMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.roughnessMap, 0 );
 			roughness *= texColor.g;
 
@@ -90,7 +91,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var metalness = material.metalness;
 		if ( material.metalnessMap != -1 ) {
 
-			let uvPrime = material.metalnessMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.metalnessMapTransform * vec3f( getUvFromChannel( vertexData, material.metalnessMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.metalnessMap, 0 );
 			metalness *= texColor.b;
 
@@ -99,7 +100,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var emission = material.emissiveIntensity * material.emissive;
 		if ( material.emissiveMap != -1 ) {
 
-			let uvPrime = material.emissiveMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.emissiveMapTransform * vec3f( getUvFromChannel( vertexData, material.emissiveMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.emissiveMap, 0 );
 			emission *= texColor.rgb;
 
@@ -108,7 +109,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var transmission = material.transmission;
 		if ( material.transmissionMap != -1 ) {
 
-			let uvPrime = material.transmissionMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.transmissionMapTransform * vec3f( getUvFromChannel( vertexData, material.transmissionMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.transmissionMap, 0 );
 			transmission *= texColor.r;
 
@@ -117,7 +118,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var clearcoat = material.clearcoat;
 		if ( material.clearcoatMap != -1 ) {
 
-			let uvPrime = material.clearcoatMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.clearcoatMapTransform * vec3f( getUvFromChannel( vertexData, material.clearcoatMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.clearcoatMap, 0 );
 			clearcoat *= texColor.r;
 
@@ -126,7 +127,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var clearcoatRoughness = material.clearcoatRoughness;
 		if ( material.clearcoatRoughnessMap != -1 ) {
 
-			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( getUvFromChannel( vertexData, material.clearcoatRoughnessMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.clearcoatRoughnessMap, 0 );
 			clearcoatRoughness *= texColor.g;
 
@@ -139,11 +140,13 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 			// resulting in NaNs and slow path tracing.
 			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
+				// TODO: consider re-orthonormalizing against the normal here since attribute
+				// interpolation could result in drift.
 				let tangent = normalize( vertexData.tangent.xyz );
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
-				let uvPrime = material.clearcoatNormalMapTransform * vec3( uv, 1.0 );
+				let uvPrime = material.clearcoatNormalMapTransform * vec3( getUvFromChannel( vertexData, material.clearcoatNormalMap ), 1.0 );
 				var texNormal = sampleTexel( uvPrime.xy, material.clearcoatNormalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
@@ -157,7 +160,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
 
-			let uvPrime = material.sheenColorMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.sheenColorMapTransform * vec3f( getUvFromChannel( vertexData, material.sheenColorMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.sheenColorMap, 0 );
 			sheenColor *= texColor.rgb;
 
@@ -166,7 +169,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var sheenRoughness = material.sheenRoughness;
 		if ( material.sheenRoughnessMap != -1 ) {
 
-			let uvPrime = material.sheenRoughnessMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.sheenRoughnessMapTransform * vec3f( getUvFromChannel( vertexData, material.sheenRoughnessMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.sheenRoughnessMap, 0 );
 			sheenRoughness *= texColor.r;
 
@@ -175,7 +178,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var iridescence = material.iridescence;
 		if ( material.iridescenceMap != -1 ) {
 
-			let uvPrime = material.iridescenceMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.iridescenceMapTransform * vec3f( getUvFromChannel( vertexData, material.iridescenceMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.iridescenceMap, 0 );
 			iridescence *= texColor.r;
 
@@ -184,7 +187,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var iridescenceThickness = material.iridescenceThicknessMaximum;
 		if ( material.iridescenceThicknessMap != -1 ) {
 
-			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( getUvFromChannel( vertexData, material.iridescenceThicknessMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.iridescenceThicknessMap, 0 );
 
 			iridescenceThickness = mix(
@@ -198,7 +201,7 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var specularColor = material.specularColor;
 		if ( material.specularColorMap != -1 ) {
 
-			let uvPrime = material.specularColorMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.specularColorMapTransform * vec3f( getUvFromChannel( vertexData, material.specularColorMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.specularColorMap, 0 );
 			specularColor *= texColor.rgb;
 
@@ -207,9 +210,51 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		var specularIntensity = material.specularIntensity;
 		if ( material.specularIntensityMap != -1 ) {
 
-			let uvPrime = material.specularIntensityMapTransform * vec3f( uv, 1 );
+			let uvPrime = material.specularIntensityMapTransform * vec3f( getUvFromChannel( vertexData, material.specularIntensityMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.specularIntensityMap, 0 );
 			specularIntensity *= texColor.r;
+
+		}
+
+		// extract the anisotropy magnitude vector in tangent space
+		var anisotropyDirVec = material.anisotropy * vec2f( cos( material.anisotropyRotation ), sin( material.anisotropyRotation ) );
+		if ( material.anisotropyMap != -1 ) {
+
+			let uvPrime = material.anisotropyMapTransform * vec3f( getUvFromChannel( vertexData, material.anisotropyMap ), 1.0 );
+			let aniTex = sampleTexel( uvPrime.xy, material.anisotropyMap, 0 );
+
+			// map rg encode the direction ([-1,1]), b the strength; rotate + scale by the material anisotropy.
+			let mapDir = aniTex.rg * 2.0 - vec2f( 1.0 );
+			let mapStr = aniTex.b;
+			let mapLen = length( mapDir );
+			if ( mapLen > EPSILON ) {
+
+				anisotropyDirVec = mat2x2f(
+					anisotropyDirVec.x, anisotropyDirVec.y,
+					- anisotropyDirVec.y, anisotropyDirVec.x
+				) * mapStr * mapDir / mapLen;
+
+			}
+
+		}
+
+		// adjust the surface basis to be oriented along the anisotropic vector
+		let anisotropyStrength = length( anisotropyDirVec );
+		var surfaceBasis = getBasisFromNormal( normal );
+		if ( anisotropyStrength > 0.0 && length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
+
+			let anisotropyDir = anisotropyDirVec / anisotropyStrength;
+
+			// re-orthonormalize the tangent against the shading normal so the frame stays orthonormal -
+			// normal map adjustments will cause the normal and tangent to become non-orthonormal.
+			let tangent = normalize( vertexData.tangent.xyz - normal * dot( normal, vertexData.tangent.xyz ) );
+			let bitangent = cross( normal, tangent ) * vertexData.tangent.w;
+
+			surfaceBasis = mat3x3f(
+				tangent * anisotropyDir.x + bitangent * anisotropyDir.y,
+				bitangent * anisotropyDir.x - tangent * anisotropyDir.y,
+				normal
+			);
 
 		}
 
@@ -242,19 +287,24 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
 		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
 		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
+		surf.anisotropy = saturate( anisotropyStrength );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
 		surf.frontFace = side == 1.0 || transmission == 0.0;
 		if ( material.thinFilm == 1 || surf.frontFace ) {
+
 			surf.eta = 1.0 / material.ior;
+
 		} else {
+
 			surf.eta = material.ior;
+
 		}
 		surf.f0 = iorToF0( surf.eta );
 
 		// get the normal frames
-		surf.normalBasis = getBasisFromNormal( surf.normal );
+		surf.normalBasis = surfaceBasis;
 		surf.normalInvBasis = inverse( surf.normalBasis );
 
 		surf.clearcoatBasis = getBasisFromNormal( surf.clearcoatNormal );
@@ -268,6 +318,8 @@ export const getSurfaceRecordFunc = sampleTexel => wgslFn( /* wgsl */ `
 	iorToF0Func,
 	getBasisFromNormalFunc,
 	sampleTexel,
+	getUvFromChannel,
+	getColor,
 	surfaceRecordStruct,
 	constants,
 ] );
@@ -312,10 +364,13 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
-	fn specularBrdf( NdotL: f32, NdotV: f32, NdotH: f32, alpha: f32 ) -> vec3f {
+	fn specularBrdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f ) -> vec3f {
 
-		let Vis = ggxSmithVisibility( NdotV, NdotL, alpha );
-		let D = ggxDistribution( NdotH, alpha );
+		let alphaT = alpha.x;
+		let alphaB = alpha.y;
+
+		let Vis = ggxSmithVisibility( V, L, alpha );
+		let D = ggxDistribution( H, alpha );
 
 		return vec3f( D * Vis );
 
@@ -529,12 +584,10 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ rand2 }(${ RNG_INDEX_SCATTER_DIRECTION }) );
 			var wi = - reflect( wo, wh );
 
-			let NdotV = max( wo.z, EPSILON );
-			let NdotL = saturate( wi.z );
-			let NdotH = saturate( wh.z );
+			let NdotL = wi.z;
 
-			let specular = ${ specularBrdfFunc }( NdotL, NdotV, NdotH, alpha );
-			let pdf = ${ ggxReflectionAdjustedPDFFunc }( NdotV, NdotH, alpha );
+			let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
+			let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
 
 			var weight = 0.0;
 			if ( pdf != 0.0 ) {
