@@ -106,7 +106,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// Turquin multiscatter energy compensation term: 1 + f0 * ( 1 - E ) / E
 				let dielectricComp = 1.0 / energySs;
 				let dielectricSpecular = specular * dielectricComp;
-				let dielectricBase = dielectricSpecular;
+				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, dielectricSpecular, ctx.VdotH, /* outsideIor */ 1.0,
@@ -115,9 +115,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				// metal: Fresnel-weighted specular with the multiscatter comp
 				let metallicComp = 1.0 + surf.color * ( 1.0 - energySs ) / energySs;
-				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, specular ) * metallicComp;
+				let metallicSpecular = specular * metallicComp;
+				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
 				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
+					metallicBase, metallicSpecular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
@@ -126,9 +127,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 				let clearcoatEnergySS = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotVc, sqrt( clearcoatAlpha ) ), 0 ).r, 1e-5 );
 				let clearcoatComp = 1.0 / clearcoatEnergySS;
-				let clearcoat = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatComp;
+				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatComp;
 
-				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
+				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoatSpecular, surf.clearcoat );
 
 				return coatedMaterial;
 
