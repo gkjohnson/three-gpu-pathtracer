@@ -42,7 +42,7 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	fn getLobeWeights(wo: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord) -> LobeWeights {
+	fn getLobeWeights( wo: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord ) -> LobeWeights {
 
 		// TODO: experiment with this; I don't see any usage of normal?
 		let metalness = surf.metalness;
@@ -65,9 +65,12 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 		let totalWeight = weights.diffuse + weights.specular;
 		if ( totalWeight > 0 ) {
+
 			weights.diffuse = ( weights.diffuse / totalWeight ) * ( 1 - weights.clearcoat );
 			weights.specular = ( weights.specular / totalWeight ) * ( 1 - weights.clearcoat );
+
 		}
+
 		// weights.transmission /= totalWeight;
 
 		return weights;

@@ -100,12 +100,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// account for multi scatter energy loss for specular
 				// TODO: why sqrt here?
 				let energySs = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotV, sqrt( alpha.y ) ), 0 ).r, 1e-5 );
-				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) / energySs;
+				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
+
+				// Turquin multiscatter energy compensation term: 1 + f0 * ( 1 - E ) / E
+				let dielectricComp = 1.0 / energySs;
+				let metallicComp = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
+
+				// dielectric: renormalize the white specular lobe to unit albedo
+				let dielectricSpecular = specular * dielectricComp;
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
+					dielectricBase, diffuse, dielectricSpecular, ctx.VdotH, /* outsideIor */ 1.0,
 					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
@@ -120,7 +127,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let material = mix( dielectric, metallic, surf.metalness );
 
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-				let clearcoat = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) );
+				let clearcoatEnergySS = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotVc, sqrt( clearcoatAlpha ) ), 0 ).r, 1e-5 );
+				let clearcoatComp = 1.0 / clearcoatEnergySS;
+				let clearcoat = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatComp;
 
 				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
 
