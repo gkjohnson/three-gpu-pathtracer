@@ -1,4 +1,4 @@
-import { texture, textureStore, globalId, float } from 'three/tsl';
+import { texture, textureStore, globalId, float, sampler } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
@@ -50,6 +50,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const turquinNode = texture( this.turquinTexture ).setName( 'turquinTexture' );
 
+		this.turquinNode = turquinNode;
+		this.turquinSampler = sampler( this.turquinTexture );
+
 		this.specularBrdf = specularBrdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
@@ -94,7 +97,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
-				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+				// account for multi scatter energy loss for specular
+				let energySs = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotV, sqrt( alpha.y ) ), 0 ).r, 1e-5 );
+				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) / energySs;
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
 
@@ -104,10 +109,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				);
 
 				// TODO: this only handles non-anisotropic surfaces
-				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular, alpha.y );
-
+				// TODO: the energy ss is being multiplied back in because the internal fresnel is handling energy
+				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular * energySs, alpha.y );
 				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
+					metallicBase, specular * energySs, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
