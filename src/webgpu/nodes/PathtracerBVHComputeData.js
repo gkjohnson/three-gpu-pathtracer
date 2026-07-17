@@ -1,6 +1,6 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, StructNode, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, sampler, texture, uniformArray } from 'three/tsl';
+import { uint, storage, float, sampler, texture, uniformArray } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -166,7 +166,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	useTransparencyRaycastFn() {
 
-		const { textureAtlas, storage, structs, fns } = this;
+		const { textureAtlas, storage, fns } = this;
 		const textures = textureAtlas.texture;
 		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' );
 
@@ -178,7 +178,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
 		// raycast first hit
-		const currentMaterial = new StructNode( structs.material ).toVar( 'bvh_material' );
+		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
@@ -253,7 +253,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
-							let material = ${ currentMaterial };
+							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
 							if ( material.side != 0 && triResult.side != material.side ) {
@@ -350,10 +350,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					${ scratchRayScalar } = 1.0 / len;
 
 					let object = ${ storage.transforms }[ objectIndex ];
-					${ currentMaterial } = ${ storage.materials }[ object.materialIndex ];
-					if ( ${ currentMaterial }.transparent == 1 ) {
+					${ currentMaterialIndex } = object.materialIndex;
 
-						${ baseOpacityScalar } = ${ currentMaterial }.opacity * object.color.a;
+					let material = ${ storage.materials }[ object.materialIndex ];
+					if ( material.transparent == 1 ) {
+
+						${ baseOpacityScalar } = material.opacity * object.color.a;
 
 					} else {
 
