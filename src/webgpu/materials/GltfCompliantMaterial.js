@@ -104,9 +104,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 
 				// Turquin multiscatter energy compensation term: 1 + f0 * ( 1 - E ) / E
+				// This simplifies to 1.0 / E for dielectric (f0 = 1.0)
 				let dielectricComp = 1.0 / energySs;
 				let dielectricSpecular = specular * dielectricComp;
-				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, specular );
+				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, dielectricSpecular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, dielectricSpecular, ctx.VdotH, /* outsideIor */ 1.0,
