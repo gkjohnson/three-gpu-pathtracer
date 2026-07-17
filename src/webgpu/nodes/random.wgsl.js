@@ -9,5 +9,5 @@ export const RNG_INDEX_ALPHA_TEST = 50;
 // Re-exports used to adjust the random-sampling strategy to use
 
 // export * from './rand/pcg.wgsl.js';
-// export * from './rand/sobol.wgsl.js';
-export * from './rand/bluedither.wgsl.js';
+export * from './rand/sobol.wgsl.js';
+// export * from './rand/bluedither.wgsl.js';
