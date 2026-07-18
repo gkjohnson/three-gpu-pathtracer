@@ -167,6 +167,7 @@ export class WebGPUPathTracer {
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
+		this._pathTracer.setRandomFunctions( this.random );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -210,6 +211,7 @@ export class WebGPUPathTracer {
 		this.transmissiveBounces = 5;
 		this.filterGlossyFactor = 0;
 
+		this.random = null;
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
@@ -221,6 +223,7 @@ export class WebGPUPathTracer {
 
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
+		this.setRandom( this.random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
@@ -288,6 +291,15 @@ export class WebGPUPathTracer {
 
 		this.material = material;
 		this._pathTracer.setMaterial( material );
+		this.reset();
+
+	}
+
+	setRandom( random ) {
+
+		this.random = random;
+		this._pathTracer.setRandomFunctions( random );
+		this.reset();
 
 	}
 
