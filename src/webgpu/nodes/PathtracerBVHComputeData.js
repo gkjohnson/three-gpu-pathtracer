@@ -191,6 +191,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			prefixFn: wgslTagFn/* wgsl */`
 				fn prefixFn() -> void {
 
+					// Reset the random dimension offset that is incremented as
+					// we hit faces and test for transparency.
 					${ discardDimensionOffset } = 0u;
 
 				}
