@@ -167,7 +167,7 @@ export class WebGPUPathTracer {
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
-		this._pathTracer.setRandomFunctions( this.random );
+		this._pathTracer.setRandom( this.random );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -298,7 +298,7 @@ export class WebGPUPathTracer {
 	setRandom( random ) {
 
 		this.random = random;
-		this._pathTracer.setRandomFunctions( random );
+		this._pathTracer.setRandom( random );
 		this.reset();
 
 	}

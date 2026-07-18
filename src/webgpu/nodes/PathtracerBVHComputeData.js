@@ -183,11 +183,18 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 		const discardDimensionOffset = uint( 0 ).toVar( 'bvh_effect' );
 
-		const raycastFirstHit = this.getShapecastFn( {
+		fns.raycastFirstHit = this.getShapecastFn( {
 			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
+			prefixFn: wgslTagFn/* wgsl */`
+				fn prefixFn() -> void {
+
+					${ discardDimensionOffset } = 0u;
+
+				}
+			`,
 			boundsOrderFn: wgslTagFn/* wgsl */`
 				fn getBoundsOrder( ray: ${ rayStruct }, splitAxis: u32, node: ${ bvhNodeStruct } ) -> bool {
 
@@ -390,21 +397,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				}
 			`,
 		} );
-
-		// Wrap the raycastFirstHit function so we can reset the random dimension offset that is incremented as
-		// we hit faces and test for transparency.
-		// TODO: three-mesh-bvh should support improved an "initialize" or some kind of optional "warming" step for
-		// cases like this.
-		fns.raycastFirstHit = wgslTagFn/* wgsl */`
-			fn raycastFirstHit_wrapper( shape: ${ rayStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
-
-				${ discardDimensionOffset } = 0u;
-				return ${ raycastFirstHit }( shape, result );
-
-			}
-		`;
-
-		fns.raycastFirstHit.proxyNode.outputType = intersectionResultStruct;
 
 	}
 
