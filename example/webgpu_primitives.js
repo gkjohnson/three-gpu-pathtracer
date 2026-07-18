@@ -3,8 +3,6 @@ import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import * as pcg from '../src/webgpu/nodes/rand/pcg.wgsl.js';
-import * as sobol from '../src/webgpu/nodes/rand/sobol.wgsl.js';
 
 const randomOptions = {
 	PCG: RANDOM_PCG,

@@ -8,6 +8,8 @@ export const RNG_INDEX_ALPHA_TEST = 50;
 import { contextProxyFn } from 'three-mesh-bvh/webgpu';
 import * as sobol from './rand/sobol.wgsl.js';
 
+// Wrap random functions in context-proxies that will retrieve the functions from
+// the build context if present otherwise fallback to sobol.
 export const rngInit = contextProxyFn( 'random.rngInit', sobol.rngInit );
 export const rngNextBounce = contextProxyFn( 'random.rngNextBounce', sobol.rngNextBounce );
 export const rand1 = contextProxyFn( 'random.rand1', sobol.rand1 );
