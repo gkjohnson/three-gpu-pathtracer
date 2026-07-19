@@ -82,7 +82,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal );
+				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view );
 
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 

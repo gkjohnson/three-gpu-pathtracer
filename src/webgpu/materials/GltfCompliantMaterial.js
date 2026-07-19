@@ -153,7 +153,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// Also, this will be an invalid condition when transmission is implemented
 				if ( wo.z < 0.0 || woClearcoat.z < 0.0 ) {
 
-					return result;
+					// return result;
 
 				}
 

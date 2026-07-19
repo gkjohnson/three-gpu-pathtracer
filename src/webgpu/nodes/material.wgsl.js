@@ -19,25 +19,48 @@ import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
+const bendNormalFn = wgslTagFn/* wgsl */`
+
+	fn bendNormal( normal: vec3f, geoNormal: vec3f, view: vec3f ) -> vec3f {
+
+		let nDot = dot( normal, view );
+		let gDot = dot( geoNormal, view );
+		if ( nDot < 0.0 ) {
+
+			let t = saturate( gDot / ( gDot - nDot ) );
+			let N_c = mix( geoNormal, normal, t );
+			return normalize( N_c );
+
+		}
+
+		return normal;
+
+	}
+
+`;
+
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
 export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
-		material: Material,
+		_material: Material,
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
+		view: vec3f,
 	) -> SurfaceRecord {
 
-		var normal = faceNormal * side;
+		var material = _material;
+
+		let geoNormal = normalize( faceNormal * side );
+		var normal = geoNormal;
 		if ( material.flatShading == 0 ) {
 
-			normal = vertexData.normal.xyz;
+			normal = normalize( vertexData.normal.xyz ) * side;
 
 		}
-		normal = normalize( normal );
-		let baseNormal = normal;
 
+		var baseNormal = normal;
 		if ( material.normalMap != -1 ) {
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
@@ -54,16 +77,15 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 				var texNormal = sampleTexel( uvPrime.xy, material.normalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.normalScale, 1.0 );
-				normal = normalize( vTBN * texNormal );
+				normal = normalize( vTBN * texNormal ) * side;
 
 			}
 
 		}
 
-		normal *= side;
+		normal = bendNormal( normal, geoNormal, view );
 
 		var albedo = vec4( material.color, material.opacity );
-
 		if ( material.vertexColors == 1 ) {
 
 			let vertexColor = getColor( vertexData ).xyz;
@@ -150,12 +172,13 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 				var texNormal = sampleTexel( uvPrime.xy, material.clearcoatNormalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
-				clearcoatNormal = normalize( vTBN * texNormal );
+				clearcoatNormal = normalize( vTBN * texNormal ) * side;
 
 			}
 
 		}
-		clearcoatNormal *= side;
+
+		clearcoatNormal = bendNormal( clearcoatNormal, geoNormal, view );
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
@@ -322,6 +345,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	getColor,
 	surfaceRecordStruct,
 	constants,
+	bendNormalFn,
 ] );
 
 /*
