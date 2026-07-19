@@ -83,6 +83,47 @@ const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
 
 `;
 
+// Adjusts the shading normal such that the provided view normal is guaranteed to be in
+// positive hemisphere by rotating it towards the view direction just enough so view is
+// just glancing the surface as a small epsilon if needed.
+const ensureValidViewNormal = wgslTagFn/* wgsl */`
+
+	fn ensureValidViewNormal( n: vec3f, ng: vec3f, view: vec3f ) -> vec3f {
+
+		// ensure the view is at least slightly above the surface normal hemisphere
+		const MIN_VIEW_COS = 1e-6;
+
+		// if we're positive already then early out
+		let c = dot( n, view );
+		if ( c > MIN_VIEW_COS ) {
+
+			return n;
+
+		}
+
+		// perpendicular vector to normal and view
+		var perp = n - c * view;
+		let perpLen = length( perp );
+
+		// if we reach here that means that he view is nearly the opposite direction and
+		// we can't derive plan to rotate on towards the view, so just use the geometry
+		// normal. This could likely only really happen with a severe normal map application.
+		if ( perpLen <= 1e-6 ) {
+
+			return ng;
+
+		}
+
+		perp = perp / perpLen;
+
+		// rotate the normal to be at larger than the above threshold - pythagorean
+		// theorem for generating normal with threshold*view component
+		return MIN_VIEW_COS * view + sqrt( 1.0 - MIN_VIEW_COS * MIN_VIEW_COS ) * perp;
+
+	}
+
+`;
+
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
 export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
@@ -124,6 +165,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
+		normal = ensureValidViewNormal( normal, faceNormal, view );
 
 		normal = ensureValidReflectionNormal( normal, faceNormal, view );
 
@@ -219,6 +262,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
+		clearcoatNormal = ensureValidViewNormal( clearcoatNormal, faceNormal, view );
 
 		clearcoatNormal = ensureValidReflectionNormal( clearcoatNormal, faceNormal, view );
 
@@ -388,6 +433,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	surfaceRecordStruct,
 	constants,
 	ensureValidReflectionNormal,
+	ensureValidViewNormal,
 ] );
 
 /*
