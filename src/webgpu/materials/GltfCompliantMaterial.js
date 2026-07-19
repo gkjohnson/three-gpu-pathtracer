@@ -241,7 +241,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let geomDotDir = dot( result.direction, surf.faceNormal );
 				if ( geomDotDir < 0.0 ) {
 
-					result.direction = normalize( result.direction - 2.0 * NgDotDir * surf.faceNormal );
+					result.direction = normalize( result.direction - 2.0 * geomDotDir * surf.faceNormal );
 
 				}
 
