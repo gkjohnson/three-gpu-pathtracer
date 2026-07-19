@@ -102,8 +102,8 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true, preserveDrawingBuffer: true } );
-	renderer.init();
+	renderer = new WebGPURenderer( { antialias: true } );
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
