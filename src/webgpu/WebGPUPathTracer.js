@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -248,9 +248,16 @@ export class WebGPUPathTracer {
 				} else {
 
 					child.boundsTree.refit();
-					child.boundsTree.getBoundingBox( child.boundingBox );
 
 				}
+
+				if ( child.boundingBox === null ) {
+
+					child.boundingBox = new Box3();
+
+				}
+
+				child.boundsTree.getBoundingBox( child.boundingBox );
 
 			} else if ( child.isMesh ) {
 
@@ -504,7 +511,7 @@ export class WebGPUPathTracer {
 		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
 
 			this._fadeState += delta / this.fadeDuration;
-			this._fadeState = Math.min( 1.0, this._fadeState );
+			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
 
 		}
 
