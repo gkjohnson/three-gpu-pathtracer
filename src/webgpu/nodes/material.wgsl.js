@@ -19,21 +19,65 @@ import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
-const bendNormalFn = wgslTagFn/* wgsl */`
+// Correct the shading normal to prevent scattering rays below the geometry surface by bending
+// the normal towards the geometry normal such that the perfect reflection ray is just above the
+// geometry surface. Ported verbatim from Blender Cycles "ensure_valid_specular_reflection"
+// (src/kernel/closure/bsdf_util.h), which is derived from from the Iray paper (Keller et al. 2017, A.3).
+//
+// This only guarantees perfect reflection rays are above surface - other diffuse rays, for example,
+// flipped when sampling.
+const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
 
-	fn bendNormal( normal: vec3f, geoNormal: vec3f, view: vec3f ) -> vec3f {
+	fn ensureValidReflectionNormal( n: vec3f, ng: vec3f, i: vec3f ) -> vec3f {
 
-		let nDot = dot( normal, view );
-		let gDot = dot( geoNormal, view );
-		if ( nDot < 0.0 ) {
+		// reflected ray
+		let R = 2.0 * dot( n, i ) * n - i;
 
-			let t = saturate( gDot / ( gDot - nDot ) );
-			let N_c = mix( geoNormal, normal, t );
-			return normalize( N_c );
+		let Iz = dot( i, ng );
+
+		// reflection rays may always be at least as shallow as the incoming ray
+		let threshold = min( 0.9 * Iz, 0.01 );
+		if ( dot( ng, R ) >= threshold ) {
+
+			return n;
 
 		}
 
-		return normal;
+		// Form coordinate system with Ng as the Z axis and N inside the X-Z-plane.
+   		// The X axis is found by normalizing the component of N that's orthogonal to Ng.
+   		// The Y axis isn't actually needed.
+		let orthoN = n - dot( n, ng ) * ng;
+		let orthoLen = length( orthoN );
+		let X = select( n, orthoN / orthoLen, orthoLen != 0.0 );
+
+		// Calculate N.z and N.x in the local coordinate system.
+		//
+		// The goal of this computation is to find a N' that is rotated towards Ng just enough
+   		// to lift R' above the threshold (here called t), therefore dot(R', Ng) = t.
+		//
+		// Se the Blender implementation for a full description of the solution.
+		let Ix = dot( i, X );
+
+		let a = Ix * Ix + Iz * Iz;
+		let b = 2.0 * ( a + Iz * threshold );
+		let c = ( threshold + Iz ) * ( threshold + Iz );
+
+		// only one root is valid; the sign of Ix selects it
+		var Nz2: f32;
+		if ( Ix < 0.0 ) {
+
+			Nz2 = 0.25 * ( b + sqrt( max( b * b - 4.0 * a * c, 0.0 ) ) ) / a;
+
+		} else {
+
+			Nz2 = 0.25 * ( b - sqrt( max( b * b - 4.0 * a * c, 0.0 ) ) ) / a;
+
+		}
+
+		let Nx = sqrt( max( 1.0 - Nz2, 0.0 ) );
+		let Nz = sqrt( max( Nz2, 0.0 ) );
+
+		return Nx * X + Nz * ng;
 
 	}
 
@@ -51,9 +95,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	) -> SurfaceRecord {
 
 		var material = _material;
-
-		let geoNormal = normalize( faceNormal * side );
-		var normal = geoNormal;
+		var normal = faceNormal;
 		if ( material.flatShading == 0 ) {
 
 			normal = normalize( vertexData.normal.xyz ) * side;
@@ -77,13 +119,13 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 				var texNormal = sampleTexel( uvPrime.xy, material.normalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.normalScale, 1.0 );
-				normal = normalize( vTBN * texNormal ) * side;
+				normal = normalize( vTBN * texNormal );
 
 			}
 
 		}
 
-		normal = bendNormal( normal, geoNormal, view );
+		normal = ensureValidReflectionNormal( normal, faceNormal, view );
 
 		var albedo = vec4( material.color, material.opacity );
 		if ( material.vertexColors == 1 ) {
@@ -172,13 +214,13 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 				var texNormal = sampleTexel( uvPrime.xy, material.clearcoatNormalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
-				clearcoatNormal = normalize( vTBN * texNormal ) * side;
+				clearcoatNormal = normalize( vTBN * texNormal );
 
 			}
 
 		}
 
-		clearcoatNormal = bendNormal( clearcoatNormal, geoNormal, view );
+		clearcoatNormal = ensureValidReflectionNormal( clearcoatNormal, faceNormal, view );
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
@@ -345,7 +387,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	getColor,
 	surfaceRecordStruct,
 	constants,
-	bendNormalFn,
+	ensureValidReflectionNormal,
 ] );
 
 /*
