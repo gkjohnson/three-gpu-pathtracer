@@ -225,7 +225,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.direction = normalize( normalBasis * wi );
 
 				// TODO: This will need to be removed or changed to support transmission
-				// Flip the reflected vector if it was scattered below the geometry normal
+				// Flip the reflected vector if it was scattered below the geometry normal with glossy
+				// reflections
 				let geomDotDir = dot( result.direction, surf.faceNormal );
 				if ( geomDotDir < 0.0 ) {
 

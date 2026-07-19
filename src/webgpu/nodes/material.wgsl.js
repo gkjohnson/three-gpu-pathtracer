@@ -128,14 +128,13 @@ const ensureValidViewNormal = wgslTagFn/* wgsl */`
 export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
-		_material: Material,
+		material: Material,
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
 		view: vec3f,
 	) -> SurfaceRecord {
 
-		var material = _material;
 		var normal = faceNormal;
 		if ( material.flatShading == 0 ) {
 
