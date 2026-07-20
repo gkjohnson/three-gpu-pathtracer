@@ -231,6 +231,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		primeRayGenerationDispatchKernel.tileOffset = 0;
 
+		// advance the sequence once per task so each render pass starts from fresh
+		// noise unless "stableNoise" has reset it
+		enqueueRaysKernel.seed ++;
+
 		const tileSize = new Vector2();
 		const samplesPerIteration = RAYS_TO_PROCESS / ( sampleCountTarget.width * sampleCountTarget.height * bounces );
 		const iter = lowResMode ? 5 : 1;
@@ -262,7 +266,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
 
 				// set up the ray generation kernel
-				enqueueRaysKernel.seed ++;
 				enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
 				enqueueRaysKernel.tileSize.copy( tileSize );
 				enqueueRaysKernel.rayQueue = rayQueue;
