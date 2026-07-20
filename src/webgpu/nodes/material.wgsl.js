@@ -55,7 +55,7 @@ const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
 		// The goal of this computation is to find a N' that is rotated towards Ng just enough
    		// to lift R' above the threshold (here called t), therefore dot(R', Ng) = t.
 		//
-		// Se the Blender implementation for a full description of the solution.
+		// See the Blender implementation for a full description of the solution.
 		let Ix = dot( i, X );
 
 		let a = Ix * Ix + Iz * Iz;
