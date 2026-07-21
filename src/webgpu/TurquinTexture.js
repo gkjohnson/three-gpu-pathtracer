@@ -83,10 +83,13 @@ export class TurquinTexture extends Storage3DTexture {
 		const samplerNode = sampler( this ).setName( 'turquinSampler' );
 
 		// conductor fetch fn
+		const layerDepth = 1.0 / ( 1 + dielectricLayerCount );
 		this._sampleConductorFn = wgslTagFn/* wgsl */`
 			fn sampleConductor( cosTheta0: f32, roughness: f32 ) -> f32 {
 
-				return textureSampleLevel( ${ textureNode }, ${ samplerNode }, vec3f( cosTheta0, roughness, 0.5 ), 0 ).r;
+				let layer = 0.5;
+				let uvw = vec3f( cosTheta0, roughness, layer * ${ layerDepth } );
+				return textureSampleLevel( ${ textureNode }, ${ samplerNode }, uvw, 0 ).r;
 
 			}
 		`;
@@ -101,7 +104,8 @@ export class TurquinTexture extends Storage3DTexture {
 					1.5, f32( ${ dielectricLayerCount } ) + 1.5,
 				);
 
-				return textureSampleLevel( ${ textureNode }, ${ samplerNode }, vec3f( cosTheta0, roughness, layer ), 0 ).r;
+				let uvw = vec3f( cosTheta0, roughness, layer * ${ layerDepth } );
+				return textureSampleLevel( ${ textureNode }, ${ samplerNode }, uvw, 0 ).r;
 
 			}
 		`;
