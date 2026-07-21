@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { uint, storage, float, sampler, texture, uniformArray } from 'three/tsl';
+import { storage, float, sampler, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -181,12 +181,22 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
+		const discardDimensionOffset = uint( 0 ).toVar( 'bvh_effect' );
 
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
+			prefixFn: wgslTagFn/* wgsl */`
+				fn prefixFn() -> void {
+
+					// Reset the random dimension offset that is incremented as
+					// we hit faces and test for transparency.
+					${ discardDimensionOffset } = 0u;
+
+				}
+			`,
 			boundsOrderFn: wgslTagFn/* wgsl */`
 				fn getBoundsOrder( ray: ${ rayStruct }, splitAxis: u32, node: ${ bvhNodeStruct } ) -> bool {
 
@@ -307,9 +317,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 && opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti ) ) {
+								if ( material.transparent != 0 ) {
 
-									continue;
+									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ${ discardDimensionOffset } );
+									${ discardDimensionOffset } += 1u;
+
+									if ( doDiscard ) {
+
+										continue;
+
+									}
 
 								}
 
