@@ -562,8 +562,11 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 	fn albedo(
-		texture: texture_storage_2d<r16float, write>,
+		ior: f32,
+		includeFresnel: bool,
+		outputTarget: texture_storage_3d<r16float, write>,
 		globalId: vec3u,
+		layer: u32,
 	) -> void {
 
 		// sample the brdf directions in a grid pattern
@@ -572,7 +575,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 		// TODO: this sampling means that energy at 0.0 & 1.0 roughness (and 0 and 90deg cos) are never
 		// written to the texture due to the half texel inset, resulting in small, though possibly noticeable,
 		// error in common cases.
-		let dimensions = textureDimensions( texture ).xy;
+		let dimensions = textureDimensions( outputTarget ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
 
 		let cosThetaO = uv.x;
@@ -618,7 +621,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 		result /= f32( GRID_SIZE * GRID_SIZE );
 
-		textureStore( texture, globalId.xy, vec4( result ) );
+		textureStore( outputTarget, vec3( globalId.xy, layer ), vec4( result ) );
 
 	}
 

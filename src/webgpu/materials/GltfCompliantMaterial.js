@@ -1,16 +1,12 @@
-import { texture, textureStore, globalId, float, sampler } from 'three/tsl';
-import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
+import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
-import { ComputeKernel } from '../compute/ComputeKernel';
-
-const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
-const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
+import { TurquinTexture } from '../TurquinTexture.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
 const MIN_INCIDENT_COS = float( 1e-3 );
@@ -29,30 +25,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fresnelCoat = fresnelCoatFunc,
 			iridescentDielectricLayer = iridescentDielectricLayerFunc,
 			iridescentConductorLayer = iridescentConductorLayerFunc,
-			calculateTurquinTexture = false,
 		} = options;
 
-		if ( calculateTurquinTexture ) {
-
-			this.turquinTexture = new StorageTexture( 32, 32 );
-			this.turquinTexture.type = HalfFloatType;
-
-		} else {
-
-			this.turquinTexture = TURQUIN_METAL_TEXTURE;
-			this.turquinTexture.flipY = false;
-
-		}
-
-		this.turquinTexture.format = RedFormat;
-		this.turquinTexture.minFilter = LinearFilter;
-		this.turquinTexture.magFilter = LinearFilter;
-
-		const turquinNode = texture( this.turquinTexture ).setName( 'turquinTexture' );
-
-		this.turquinNode = turquinNode;
-		this.turquinSampler = sampler( this.turquinTexture );
-
+		this.turquinTexture = new TurquinTexture();
 		this.specularBrdf = specularBrdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
@@ -60,25 +35,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.fresnelCoat = fresnelCoat;
 		this.iridescentDielectricLayer = iridescentDielectricLayer;
 		this.iridescentConductorLayer = iridescentConductorLayer;
-		this.calculateTurquinTexture = calculateTurquinTexture;
 
 	}
 
 	init( renderer ) {
 
-		if ( ! this.calculateTurquinTexture ) {
-
-			return;
-
-		}
-
-		const turquinParams = {
-			texture: textureStore( this.turquinTexture ).toWriteOnly(),
-			globalId,
-		};
-		const turquinKernel = new ComputeKernel( albedoIntegralMetallic( turquinParams ), { workgroupSize: [ 16, 16, 1 ] } );
-
-		renderer.compute( turquinKernel.kernel, [ 2, 2, 1 ] );
+		this.turquinTexture.generate( renderer );
 
 	}
 
@@ -98,7 +60,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotL = ctx.L.z;
 
 				// account for multi scatter energy loss for specular
-				let energySs = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotV, surf.roughness ), 0 ).r, 1e-5 );
+				let energySs =  max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 
@@ -125,7 +87,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let material = mix( dielectric, metallic, surf.metalness );
 
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-				let clearcoatEnergySS = max( textureSampleLevel( ${ this.turquinNode }, ${ this.turquinSampler }, vec2f( NdotVc, surf.clearcoatRoughness ), 0 ).r, 1e-5 );
+				let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
 				let clearcoatComp = 1.0 / clearcoatEnergySS;
 				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatComp;
 
