@@ -125,7 +125,7 @@ export class WebGPUPathTracer {
 
 	get samples() {
 
-		return this._pathTracer.samples;
+		return this._pathTracer.lowResMode ? 0 : this._pathTracer.samples;
 
 	}
 
@@ -481,7 +481,7 @@ export class WebGPUPathTracer {
 
 		// check if we should be in low res mode and calculate the target size
 		let { width, height } = size;
-		const lowResMode = this._resetTime < renderDelay;
+		const lowResMode = this._resetTime <= renderDelay;
 		if ( lowResMode ) {
 
 			width = Math.ceil( lowResScale * width );

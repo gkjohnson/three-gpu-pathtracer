@@ -24,7 +24,6 @@ import { LoaderElement } from './utils/LoaderElement.js';
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb';
 const CREDITS = 'Model by DailyArt on Sketchfab';
-const PREVIEW_RENDER_DELAY = 100;
 
 // CCapture seems to replace the requestAnimationFrame callback which breaks the ability to render and
 // use CanvasCapture.
@@ -80,7 +79,6 @@ const params = {
 	stop: () => {
 
 		CanvasCapture.stopRecord();
-		pathTracer.renderDelay = PREVIEW_RENDER_DELAY;
 		pathTracer.reset();
 		recordedFrames = 0;
 		rebuildGUI();
@@ -111,9 +109,8 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.renderDelay = PREVIEW_RENDER_DELAY;
+	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
-	pathTracer.fadeDuration = 0;
 
 	// scene
 	scene = new Scene();
@@ -273,7 +270,18 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		pathTracer.renderSample();
+		for ( let i = 0; i < params.samplesPerFrame; i ++ ) {
+
+			pathTracer.renderSample();
+
+			// Break when reaching the target sample count to avoid extra samples
+			if ( isRecording && pathTracer.samples >= params.samples ) {
+
+				break;
+
+			}
+
+		}
 
 		// if we're recording and we hit the target samples then record the frame step the animation forward
 		if ( isRecording && pathTracer.samples >= params.samples ) {
@@ -285,7 +293,6 @@ function animate() {
 			if ( recordedFrames >= params.frameRate * params.duration ) {
 
 				CanvasCapture.stopRecord();
-				pathTracer.renderDelay = PREVIEW_RENDER_DELAY;
 
 				recordedFrames = 0;
 				rebuildGUI();
