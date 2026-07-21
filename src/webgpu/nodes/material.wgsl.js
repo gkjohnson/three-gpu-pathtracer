@@ -605,6 +605,12 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 				let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
 				let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
+				var f = 1.0;
+				if ( includeFresnel ) {
+
+					f = ${ schlickFresnelFunc }( dot( wo, wh ), ${ iorToF0Func }( ior ) );
+
+				}
 
 				var weight = 0.0;
 				if ( pdf != 0.0 ) {
@@ -613,7 +619,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 				}
 
-				result += specular.x * NdotL * weight;
+				result += specular.x * NdotL * weight * f;
 
 			}
 

@@ -59,7 +59,6 @@ export class TurquinTexture extends Storage3DTexture {
 		// dielectric
 		for ( let i = 0; i < dielectricLayerCount; i ++ ) {
 
-			// TODO: ensure fresnel and ior are accounted for in layer generation
 			params.layer.value ++;
 			params.ior.value = MathUtils.mapLinear( i, 0, dielectricLayerCount, minIoR, maxIoR );
 			params.includeFresnel.value = 1;
