@@ -47,7 +47,7 @@ export class TurquinTexture extends Storage3DTexture {
 			includeFresnel: uniform( 0 ),
 		};
 
-		const dispatch = [ RESOLUTION / WORKGROUP_SIZE, RESOLUTION / WORKGROUP_SIZE, TurquinTexture.DEPTH ];
+		const dispatch = [ RESOLUTION / WORKGROUP_SIZE, RESOLUTION / WORKGROUP_SIZE, 1 ];
 		const kernel = new ComputeKernel( albedoIntegralMetallic( params ), { workgroupSize: [ WORKGROUP_SIZE, WORKGROUP_SIZE, 1 ] } );
 
 		// metallic
@@ -100,7 +100,7 @@ export class TurquinTexture extends Storage3DTexture {
 
 				let layer = ${ mapLinearClampedFn }(
 					ior,
-					minIoR, maxIoR,
+					f32( ${ minIoR } ), f32( ${ maxIoR } ),
 					1.5, f32( ${ dielectricLayerCount } ) + 1.5,
 				);
 
