@@ -582,7 +582,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 			for ( var y = 0u; y < GRID_SIZE; y++ ) {
 
 				// calculate the incident vector to sample
-				let gridPoint = vec2f( x, y ) + vec2f( 0.5 );
+				let gridPoint = vec2f( vec2u( x, y ) ) + vec2f( 0.5 );
 				let sampleUv = gridPoint / f32( GRID_SIZE );
 				let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), sampleUv );
 				var wi = - reflect( wo, wh );
