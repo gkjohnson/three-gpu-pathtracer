@@ -20,6 +20,7 @@ export class TurquinTexture extends Storage3DTexture {
 		this.minFilter = LinearFilter;
 		this.magFilter = LinearFilter;
 
+		// TODO: turquin paper suggests 32 layers for dielectric
 		this.dielectricLayerCount = 10;
 		this.minIoR = 1;
 		this.maxIoR = 2.5;
