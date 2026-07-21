@@ -71,7 +71,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, dielectricSpecular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, dielectricSpecular, ctx.VdotH, /* outsideIor */ 1.0,
+					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
 					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
