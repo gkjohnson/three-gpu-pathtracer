@@ -284,6 +284,9 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
+		surf.sheen = material.sheen;
+		surf.sheenColor = sheenColor;
+
 		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
 		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
 		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
