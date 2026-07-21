@@ -381,18 +381,24 @@ export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
 
+// Dielectric layer fresnel operator that supports custom f0 color, specular weight.
+// Based on the specular color specification:
+// https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_specular
 export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
-	fn fresnelMix( VdotH: f32, ior: f32, base: vec3f, layer: vec3f ) -> vec3f {
+	fn fresnelMix( VdotH: f32, f0Color: vec3f, ior: f32, weight: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
-		let f0 = iorToF0( ior );
-  	let F = schlickFresnel( abs( VdotH ), f0 );
+		var f0 = iorToF0( ior ) * f0Color;
+		f0 = min( f0, vec3f( 1.0 ) );
 
-  	return base + F * layer;
+		let fr = schlickFresnelVec( abs( VdotH ), f0, vec3f( 1.0 ) );
+		let maxFr = max( max( fr.r, fr.g ), fr.b );
+
+		return ( 1.0 - weight * maxFr ) * base + weight * fr * layer;
 
 	}
 
-`, [ schlickFresnelFunc, iorToF0Func ] );
+`, [ schlickFresnelVecFunc, iorToF0Func ] );
 
 const XYZ_TO_REC709 = mat3(
 	3.2404542, - 0.9692660, 0.0556434,
