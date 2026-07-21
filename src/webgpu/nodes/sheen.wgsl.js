@@ -1,5 +1,5 @@
-import { wgslFn } from 'three/tsl';
-import { constants, surfaceRecordStruct } from './structs.wgsl.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { surfaceRecordStruct } from './structs.wgsl.js';
 
 // TODO: LTC sheen (Zeltner et al. 2022, "Practical Multiple-Scattering Sheen Using Linearly
 // Transformed Cosines") is likely a better model and is what OpenPBR / Blender Cycles use to
@@ -9,7 +9,7 @@ import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 // http://www.aconty.com/pdf/s2017_pbs_imageworks_sheen.pdf
 
 // See equation (2)
-const velvetDFunc = wgslFn( /* wgsl */ `
+const velvetDFunc = wgslTagFn/* wgsl */`
 
 	fn velvetD( cosThetaH: f32, roughness: f32 ) -> f32 {
 
@@ -24,9 +24,9 @@ const velvetDFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ constants ] );
+`;
 
-const velvetParamsInterpolateFunc = wgslFn( /* wgsl */ `
+const velvetParamsInterpolateFunc = wgslTagFn/* wgsl */`
 
 	fn velvetParamsInterpolate( i: i32, oneMinusAlphaSquared: f32 ) -> f32 {
 
@@ -37,62 +37,62 @@ const velvetParamsInterpolateFunc = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`;
 
-const velvetLFunc = wgslFn( /* wgsl */ `
+const velvetLFunc = wgslTagFn/* wgsl */`
 
 	fn velvetL( x: f32, alpha: f32 ) -> f32 {
 
 		let oneMinusAlpha = 1.0 - alpha;
 		let oneMinusAlphaSquared = oneMinusAlpha * oneMinusAlpha;
 
-		let a = velvetParamsInterpolate( 0, oneMinusAlphaSquared );
-		let b = velvetParamsInterpolate( 1, oneMinusAlphaSquared );
-		let c = velvetParamsInterpolate( 2, oneMinusAlphaSquared );
-		let d = velvetParamsInterpolate( 3, oneMinusAlphaSquared );
-		let e = velvetParamsInterpolate( 4, oneMinusAlphaSquared );
+		let a = ${ velvetParamsInterpolateFunc }( 0, oneMinusAlphaSquared );
+		let b = ${ velvetParamsInterpolateFunc }( 1, oneMinusAlphaSquared );
+		let c = ${ velvetParamsInterpolateFunc }( 2, oneMinusAlphaSquared );
+		let d = ${ velvetParamsInterpolateFunc }( 3, oneMinusAlphaSquared );
+		let e = ${ velvetParamsInterpolateFunc }( 4, oneMinusAlphaSquared );
 
 		return a / ( 1.0 + b * pow( abs( x ), c ) ) + d * x + e;
 
 	}
 
-`, [ velvetParamsInterpolateFunc ] );
+`;
 
 // See equation (3)
-const velvetLambdaFunc = wgslFn( /* wgsl */ `
+const velvetLambdaFunc = wgslTagFn/* wgsl */`
 
 	fn velvetLambda( cosTheta: f32, alpha: f32 ) -> f32 {
 
 		if ( abs( cosTheta ) < 0.5 ) {
 
-			return exp( velvetL( cosTheta, alpha ) );
+			return exp( ${ velvetLFunc }( cosTheta, alpha ) );
 
 		} else {
 
-			return exp( 2.0 * velvetL( 0.5, alpha ) - velvetL( 1.0 - cosTheta, alpha ) );
+			return exp( 2.0 * ${ velvetLFunc }( 0.5, alpha ) - ${ velvetLFunc }( 1.0 - cosTheta, alpha ) );
 
 		}
 
 	}
 
-`, [ velvetLFunc ] );
+`;
 
 // See Section 3, Shadowing Term
-const velvetGFunc = wgslFn( /* wgsl */ `
+const velvetGFunc = wgslTagFn/* wgsl */`
 
 	fn velvetG( cosThetaO: f32, cosThetaI: f32, roughness: f32 ) -> f32 {
 
 		var alpha = max( roughness, 0.07 );
 		alpha = alpha * alpha;
 
-		return 1.0 / ( 1.0 + velvetLambda( cosThetaO, alpha ) + velvetLambda( cosThetaI, alpha ) );
+		return 1.0 / ( 1.0 + ${ velvetLambdaFunc }( cosThetaO, alpha ) + ${ velvetLambdaFunc }( cosThetaI, alpha ) );
 
 	}
 
-`, [ velvetLambdaFunc ] );
+`;
 
 // analytic directional albedo fit, used for energy compensation when layering ( Section 5 )
-const directionalAlbedoSheenFunc = wgslFn( /* wgsl */ `
+const directionalAlbedoSheenFunc = wgslTagFn/* wgsl */`
 
 	fn directionalAlbedoSheen( cosThetaIn: f32, alpha: f32 ) -> f32 {
 
@@ -104,38 +104,38 @@ const directionalAlbedoSheenFunc = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`;
 
 // See Section 5, Layering - the factor the base lobes are attenuated by so the sheen layer
 // does not add energy on top of a fully reflective base
-export const sheenAlbedoScalingFunc = wgslFn( /* wgsl */ `
+export const sheenAlbedoScalingFunc = wgslTagFn/* wgsl */`
 
-	fn sheenAlbedoScaling( wo: vec3f, wi: vec3f, surf: SurfaceRecord ) -> f32 {
+	fn sheenAlbedoScaling( wo: vec3f, wi: vec3f, surf: ${ surfaceRecordStruct } ) -> f32 {
 
 		var alpha = max( surf.sheenRoughness, 0.07 );
 		alpha = alpha * alpha;
 
 		let maxSheenColor = max( max( surf.sheenColor.r, surf.sheenColor.g ), surf.sheenColor.b );
 
-		let eWo = directionalAlbedoSheen( clamp( wo.z, 0.001, 1.0 ), alpha );
-		let eWi = directionalAlbedoSheen( clamp( wi.z, 0.001, 1.0 ), alpha );
+		let eWo = ${ directionalAlbedoSheenFunc }( clamp( wo.z, 0.001, 1.0 ), alpha );
+		let eWi = ${ directionalAlbedoSheenFunc }( clamp( wi.z, 0.001, 1.0 ), alpha );
 
 		return min( 1.0 - maxSheenColor * eWo, 1.0 - maxSheenColor * eWi );
 
 	}
 
-`, [ directionalAlbedoSheenFunc, surfaceRecordStruct ] );
+`;
 
-export const sheenColorFunc = wgslFn( /* wgsl */ `
+export const sheenColorFunc = wgslTagFn/* wgsl */`
 
-	fn sheenColor( wo: vec3f, wi: vec3f, wh: vec3f, surf: SurfaceRecord ) -> vec3f {
+	fn sheenColor( wo: vec3f, wi: vec3f, wh: vec3f, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
 		let cosThetaO = clamp( wo.z, 0.001, 1.0 );
 		let cosThetaI = clamp( wi.z, 0.001, 1.0 );
 		let cosThetaH = wh.z;
 
-		let D = velvetD( cosThetaH, surf.sheenRoughness );
-		let G = velvetG( cosThetaO, cosThetaI, surf.sheenRoughness );
+		let D = ${ velvetDFunc }( cosThetaH, surf.sheenRoughness );
+		let G = ${ velvetGFunc }( cosThetaO, cosThetaI, surf.sheenRoughness );
 
 		// See equation (1) in http://www.aconty.com/pdf/s2017_pbs_imageworks_sheen.pdf
 		var color = surf.sheenColor;
@@ -145,4 +145,4 @@ export const sheenColorFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ velvetDFunc, velvetGFunc, surfaceRecordStruct ] );
+`;
