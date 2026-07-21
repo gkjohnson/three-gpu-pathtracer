@@ -565,8 +565,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 	) -> void {
 
 		const INTEGRATION_SAMPLES = ( 1 << 20 );
-		let pixelIndex = ( globalId.x << 16 ) | globalId.y;
-		${ rngInit }( pixelIndex, 0, 0 );
+		${ rngInit }( globalId.xy, 0, 0 );
 
 		let dimensions = textureDimensions( texture ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
