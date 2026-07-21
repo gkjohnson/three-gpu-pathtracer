@@ -212,7 +212,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 			let uvPrime = material.specularIntensityMapTransform * vec3f( getUvFromChannel( vertexData, material.specularIntensityMap ), 1 );
 			let texColor = sampleTexel( uvPrime.xy, material.specularIntensityMap, 0 );
-			specularIntensity *= texColor.r;
+			specularIntensity *= texColor.a;
 
 		}
 
