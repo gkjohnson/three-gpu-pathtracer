@@ -87,9 +87,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let ACTIVE_FLAG = 0xF0000000u;
 				let input = rayQueue[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
-
-				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rngInit }( pixelIndex, input.seed, input.currentBounce );
+				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
 				// run intersection
 				let ray = Ray( input.origin, input.direction );

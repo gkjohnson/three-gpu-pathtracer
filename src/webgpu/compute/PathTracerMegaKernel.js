@@ -110,9 +110,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-
-				let pixelIndex = ( indexUV.x << 16 ) | indexUV.y;
-				${ rngInit }( pixelIndex, seed, 0 );
+				${ rngInit }( indexUV.xy, seed, 0 );
 
 				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
