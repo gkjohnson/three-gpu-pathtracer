@@ -76,7 +76,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				);
 
 				// metal: Fresnel-weighted specular with the multiscatter comp
-				let metallicComp = 1.0 + surf.color * ( 1.0 - energySs ) / energySs;
+				let metallicEnergySs = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+				let metallicComp = 1.0 + surf.color * ( 1.0 - metallicEnergySs ) / metallicEnergySs;
 				let metallicSpecular = specular * metallicComp;
 				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
 				let metallic = ${ this.iridescentConductorLayer }(
