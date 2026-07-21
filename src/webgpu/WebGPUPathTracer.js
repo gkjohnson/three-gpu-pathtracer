@@ -457,7 +457,8 @@ export class WebGPUPathTracer {
 		}
 
 		let delta = 1000 * timer.getDelta();
-		if ( this._resetTime === - 1 ) {
+		const firstFrame = this._resetTime === - 1;
+		if ( firstFrame ) {
 
 			this._resetTime = 0;
 			delta = 0.0;
@@ -481,7 +482,7 @@ export class WebGPUPathTracer {
 
 		// check if we should be in low res mode and calculate the target size
 		let { width, height } = size;
-		const lowResMode = this._resetTime <= renderDelay;
+		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
 			width = Math.ceil( lowResScale * width );
