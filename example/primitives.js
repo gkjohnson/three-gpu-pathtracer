@@ -1,12 +1,19 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+
+const randomOptions = {
+	PCG: RANDOM_PCG,
+	SOBOL: RANDOM_SOBOL,
+	BLUE_DITHER: RANDOM_BLUE_DITHER,
+};
 
 const options = {
 	enable: true,
 	useMegakernel: true,
+	random: randomOptions.SOBOL,
 };
 
 // init scene, renderer, camera, controls, etc
@@ -83,7 +90,11 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
 	pathTracer.setScene( scene, camera );
-	pathTracer.reset();
+
+} );
+gui.add( options, 'random', randomOptions ).onChange( v => {
+
+	pathTracer.setRandom( v );
 
 } );
 
