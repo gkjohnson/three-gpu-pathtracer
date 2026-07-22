@@ -110,7 +110,7 @@ async function init() {
 	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderDelay = 0;
-	pathTracer.minSamples = 1;
+	pathTracer.minSamples = 0;
 
 	// scene
 	scene = new Scene();
