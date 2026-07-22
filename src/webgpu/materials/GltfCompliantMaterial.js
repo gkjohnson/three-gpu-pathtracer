@@ -59,16 +59,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
-				// account for multi scatter energy loss for specular
-				let energySs =  max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+				// Sample the single scatter energy, including fresnel, for the specular layer
+				let energySs = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 );
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 
-				// Turquin multiscatter energy compensation term: 1 + f0 * ( 1 - E ) / E
-				// This simplifies to 1.0 / E for dielectric (f0 = 1.0)
-				let dielectricComp = 1.0 / energySs;
-				let dielectricSpecular = specular * dielectricComp;
-				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.ior, diffuse, dielectricSpecular );
+				// Attenuate the energy allocated for diffuse by the remaining energy from specular single scatter
+				let dielectricDiffuse = ( 1.0 - energySs ) * diffuse;
+				let dielectricSpecular = ${ this.fresnelMix }( ctx.VdotH, surf.ior, vec3f( 0.0 ), specular );
+				let dielectricBase = dielectricDiffuse + dielectricSpecular;
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
