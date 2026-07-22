@@ -70,7 +70,7 @@ const params = {
 		} );
 
 		// reinitialize recording variables
-		pathTracer.renderDelay = 0;
+		pathTracer.minSamples = 0;
 		recordedFrames = 0;
 		regenerateScene();
 		rebuildGUI();
@@ -79,6 +79,7 @@ const params = {
 	stop: () => {
 
 		CanvasCapture.stopRecord();
+		pathTracer.minSamples = 1;
 		pathTracer.reset();
 		recordedFrames = 0;
 		rebuildGUI();
@@ -110,7 +111,7 @@ async function init() {
 	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderDelay = 0;
-	pathTracer.minSamples = 0;
+	pathTracer.minSamples = 1;
 
 	// scene
 	scene = new Scene();
@@ -293,6 +294,7 @@ function animate() {
 			if ( recordedFrames >= params.frameRate * params.duration ) {
 
 				CanvasCapture.stopRecord();
+				pathTracer.minSamples = 1;
 
 				recordedFrames = 0;
 				rebuildGUI();

@@ -509,19 +509,18 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
-
-			this._fadeState += delta / this.fadeDuration;
-			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
-
-		}
-
-
 		// update the samples
 		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();
+
+		}
+
+		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
+
+			this._fadeState += delta / this.fadeDuration;
+			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
 
 		}
 
