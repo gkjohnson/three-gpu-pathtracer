@@ -79,6 +79,21 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setRandom( random ) {
+
+		this.enqueueRaysKernel.context.random = random;
+		this.enqueueRaysKernel.needsUpdate = true;
+
+		this.rayIntersectionKernel.context.random = random;
+		this.rayIntersectionKernel.needsUpdate = true;
+
+		this.hitProcessKernel.context.random = random;
+		this.hitProcessKernel.needsUpdate = true;
+
+		this.reset();
+
+	}
+
 	setMaterial( material ) {
 
 		this.hitProcessKernel.material = material.getData();

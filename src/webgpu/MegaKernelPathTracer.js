@@ -33,6 +33,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setRandom( random ) {
+
+		this.kernel.context.random = random;
+		this.kernel.needsUpdate = true;
+		this.reset();
+
+	}
+
 	setMaterial( material ) {
 
 		this.kernel.material = material.getData();
