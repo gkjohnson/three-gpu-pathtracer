@@ -16,7 +16,6 @@ import {
 	ggxReflectionAdjustedPDFFunc,
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
-import { rngInit, rand2, RNG_INDEX_SCATTER_DIRECTION } from './random.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
@@ -555,49 +554,64 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 `, [ iorToF0Func, schlickFresnelFunc ] );
 
 // GGX Multibounce compensation using Turquin's method
-
 export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 	fn albedo(
 		texture: texture_storage_2d<r16float, write>,
-
 		globalId: vec3u,
 	) -> void {
 
-		const INTEGRATION_SAMPLES = ( 1 << 20 );
-		${ rngInit }( globalId.xy, 0, 0 );
+		// sample the brdf directions in a grid pattern
+		const GRID_SIZE = 64u;
 
+		// TODO: this sampling means that energy at 0.0 & 1.0 roughness (and 0 and 90deg cos) are never
+		// written to the texture due to the half texel inset, resulting in small, though possibly noticeable,
+		// error in common cases.
 		let dimensions = textureDimensions( texture ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
 
 		let cosThetaO = uv.x;
 		let roughness = uv.y;
-
 		let alpha = roughness * roughness;
 
 		let wo = vec3( sqrt( 1 - cosThetaO * cosThetaO ), 0 , cosThetaO );
 
 		var result = 0.0;
-		for ( var i = 0; i < INTEGRATION_SAMPLES; i++ ) {
+		for ( var x = 0u; x < GRID_SIZE; x++ ) {
 
-			let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), ${ rand2 }(${ RNG_INDEX_SCATTER_DIRECTION }) );
-			var wi = - reflect( wo, wh );
+			for ( var y = 0u; y < GRID_SIZE; y++ ) {
 
-			let NdotL = wi.z;
+				// calculate the incident vector to sample
+				let gridPoint = vec2f( vec2u( x, y ) ) + vec2f( 0.5 );
+				let sampleUv = gridPoint / f32( GRID_SIZE );
+				let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), sampleUv );
+				var wi = - reflect( wo, wh );
 
-			let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
-			let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
+				// if the incident vector is below the surface then skip it
+				let NdotL = wi.z;
+				if ( NdotL <= 0.0 ) {
 
-			var weight = 0.0;
-			if ( pdf != 0.0 ) {
-				weight = 1 / pdf;
+					continue;
+
+				}
+
+				let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
+				let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
+
+				var weight = 0.0;
+				if ( pdf != 0.0 ) {
+
+					weight = 1 / pdf;
+
+				}
+
+				result += specular.x * NdotL * weight;
+
 			}
-
-			result += specular.x * NdotL * weight;
 
 		}
 
-		result /= f32( INTEGRATION_SAMPLES );
+		result /= f32( GRID_SIZE * GRID_SIZE );
 
 		textureStore( texture, globalId.xy, vec4( result ) );
 
