@@ -70,6 +70,7 @@ const params = {
 		} );
 
 		// reinitialize recording variables
+		pathTracer.minSamples = 0;
 		recordedFrames = 0;
 		regenerateScene();
 		rebuildGUI();
@@ -78,6 +79,8 @@ const params = {
 	stop: () => {
 
 		CanvasCapture.stopRecord();
+		pathTracer.minSamples = 1;
+		pathTracer.reset();
 		recordedFrames = 0;
 		rebuildGUI();
 
@@ -98,8 +101,8 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true, preserveDrawingBuffer: true } );
-	renderer.init();
+	renderer = new WebGPURenderer( { antialias: true } );
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -109,7 +112,6 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
-	pathTracer.fadeDuration = 0;
 
 	// scene
 	scene = new Scene();
@@ -269,6 +271,19 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
+		for ( let i = 0; i < params.samplesPerFrame; i ++ ) {
+
+			pathTracer.renderSample();
+
+			// Break when reaching the target sample count to avoid extra samples
+			if ( isRecording && pathTracer.samples >= params.samples ) {
+
+				break;
+
+			}
+
+		}
+
 		// if we're recording and we hit the target samples then record the frame step the animation forward
 		if ( isRecording && pathTracer.samples >= params.samples ) {
 
@@ -279,6 +294,7 @@ function animate() {
 			if ( recordedFrames >= params.frameRate * params.duration ) {
 
 				CanvasCapture.stopRecord();
+				pathTracer.minSamples = 1;
 
 				recordedFrames = 0;
 				rebuildGUI();
@@ -297,8 +313,6 @@ function animate() {
 			regenerateScene();
 
 		}
-
-		pathTracer.renderSample();
 
 	}
 
