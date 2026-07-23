@@ -38,11 +38,8 @@ import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawCondit
  *
  */
 const DEVICE_LIMITS_REQUESTED = [
-
-	GPUDeviceLimits.maxBufferSize,
-
-	GPUDeviceLimits.maxStorageBufferBindingSize,
-
+	'maxBufferSize',
+	'maxStorageBufferBindingSize',
 ];
 
 const envMaps = {
@@ -203,7 +200,7 @@ async function init() {
 
 	// adapter limits
 	const adapter = await navigator.gpu?.requestAdapter();
-	const requiredLimits = getMaxDeviceLimits( adapter );
+	const requiredLimits = getRequiredDeviceLimits( adapter );
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
