@@ -14,7 +14,6 @@ import {
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { deinterleaveGeometry } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -454,21 +453,8 @@ async function updateModel() {
 
 	model = gltf.scene;
 
-	const geometries = new Set();
 	const targetsToDisconnect = [];
-
 	model.traverse( c => {
-
-		// WebGPURenderer expands packed integer vertex attributes during upload. If normalized
-		// and non-normalized attributes share an interleaved buffer then expanding one changes
-		// the format of the other, so separate them before the raster and path tracing renderers
-		// access the geometry.
-		if ( c.geometry && ! geometries.has( c.geometry ) ) {
-
-			geometries.add( c.geometry );
-			deinterleaveGeometry( c.geometry );
-
-		}
 
 		if ( c.isLight && c.target ) {
 
