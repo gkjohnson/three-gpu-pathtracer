@@ -7,7 +7,7 @@ import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgs
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
-import { iorToF0Func } from '../nodes/utils.wgsl.js';
+import { iorToF0Func, schlickFresnelFunc } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
 const MIN_INCIDENT_COS = float( 1e-3 );
@@ -74,7 +74,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// diffuse by the remaining energy from specular single scatter.
 				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 ) * dielectricBoost;
 				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
-				let dielectricSpecular = ${ this.fresnelMix }( ctx.VdotH, 1.5, vec3f( 0.0 ), boostedSpecular );
+				let dielectricSpecular = boostedSpecular * ${ schlickFresnelFunc }( ctx.VdotH, ${ iorToF0Func }( 1.5 ) );
 				let dielectricBase = dielectricDiffuse + dielectricSpecular;
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
@@ -102,7 +102,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
 				let clearcoatBase = ( 1.0 - clearcoatFresnelEnergySS ) * material;
-				let coatedMaterial = clearcoatBase + ${ this.fresnelMix }( dot( ctx.Vc, ctx.Hc ), 1.5, vec3f( 0.0 ), clearcoatSpecular );
+				let coatedMaterial = clearcoatBase + clearcoatSpecular * ${ schlickFresnelFunc }( abs( dot( ctx.Vc, ctx.Hc ) ), ${ iorToF0Func }( 1.5 ) );
 
 				return mix( material, coatedMaterial, surf.clearcoat );
 
