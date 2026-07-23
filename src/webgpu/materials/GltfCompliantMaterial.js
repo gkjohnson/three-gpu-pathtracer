@@ -93,14 +93,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let material = mix( dielectric, metallic, surf.metalness );
 
+				// clearcoat
+				// reuse the same pattern for energy conservation used in the dielectric layer
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 				let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
-				let clearcoatComp = 1.0 / clearcoatEnergySS;
-				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatComp;
+				let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
+				let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
 
-				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoatSpecular, surf.clearcoat );
+				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
+				let clearcoatBase = ( 1.0 - clearcoatFresnelEnergySS ) * material;
+				let coatedMaterial = clearcoatBase + ${ this.fresnelMix }( dot( ctx.Vc, ctx.Hc ), 1.5, vec3f( 0.0 ), clearcoatSpecular );
 
-				return coatedMaterial;
+				return mix( material, coatedMaterial, surf.clearcoat );
 
 			}
 
