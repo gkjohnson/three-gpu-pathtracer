@@ -65,7 +65,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let specularEnergyBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - specularEnergySS ) / specularEnergySS;
 
 				// specular and diffuse components
-				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) * specularEnergyBoost;
+				let specularRaw = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+				let specular = specularRaw * specularEnergyBoost;
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 
 				// Sample the single scatter energy, including fresnel, for the specular layer, boosting by the
@@ -83,7 +84,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				// Fresnel-weighted specular with the multiscatter comp
 				let metallicEnergyBoost = 1.0 + surf.color * ( 1.0 - specularEnergySS ) / specularEnergySS;
-				let metallicSpecular = specular * metallicEnergyBoost;
+				let metallicSpecular = specularRaw * metallicEnergyBoost;
 				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
 				let metallic = ${ this.iridescentConductorLayer }(
 					metallicBase, metallicSpecular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
