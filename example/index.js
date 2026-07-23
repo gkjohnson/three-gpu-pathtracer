@@ -30,7 +30,20 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
-import { getMaxDeviceLimits } from '../src/webgpu/index.js';
+
+/**
+ * Limits requested by this application.
+ *
+ * Add required limits here.
+ *
+ */
+const DEVICE_LIMITS_REQUESTED = [
+
+	GPUDeviceLimits.maxBufferSize,
+
+	GPUDeviceLimits.maxStorageBufferBindingSize,
+
+];
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -132,6 +145,43 @@ init();
 async function waitFrame() {
 
 	return new Promise( resolve => requestAnimationFrame( resolve ) );
+
+}
+
+/**
+ * Returns required GPU limits according to DEVICE_LIMITS_REQUESTED.
+ *
+ * Only limits explicitly listed in DEVICE_LIMITS_REQUESTED will be requested.
+ * This avoids requesting all adapter limits and improves compatibility.
+ *
+ * @param {GPUAdapter} adapter
+ * @returns {Record<string, number>}
+ */
+function getRequiredDeviceLimits( adapter ) {
+
+	if ( ! adapter || ! adapter.limits ) {
+
+		throw new TypeError(
+			'getRequiredDeviceLimits: A valid GPUAdapter is required.'
+		);
+
+	}
+
+	const limits = {};
+
+	for ( const limit of DEVICE_LIMITS_REQUESTED ) {
+
+		const value = adapter.limits[ limit ];
+
+		if ( typeof value === 'number' && Number.isFinite( value ) ) {
+
+			limits[ limit ] = value;
+
+		}
+
+	}
+
+	return limits;
 
 }
 
