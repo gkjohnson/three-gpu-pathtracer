@@ -10,7 +10,6 @@ import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
-const MIN_INCIDENT_COS = float( 1e-3 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
