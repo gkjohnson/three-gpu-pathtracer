@@ -21,7 +21,6 @@ import {
 	BufferTarget,
 	CanvasSource,
 	Output,
-	QUALITY_HIGH,
 	WebMOutputFormat,
 } from 'mediabunny';
 import { getScaledSettings } from './utils/getScaledSettings.js';
@@ -37,8 +36,8 @@ let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
 let loader;
-let videoOutput, videoSource, videoTarget;
-let frameWritePromise = null;
+let videoOutput, videoSource;
+let isWritingFrame = false;
 let recordingState = 'idle';
 const UP_AXIS = new Vector3( 0, 1, 0 );
 
@@ -224,13 +223,8 @@ function regenerateScene() {
 
 async function startRecording() {
 
-	if ( recordingState !== 'idle' ) {
+	if ( recordingState !== 'idle' ) return;
 
-		return;
-
-	}
-
-	recordingState = 'starting';
 	params.displayVideo = false;
 	URL.revokeObjectURL( videoUrl );
 	videoUrl = '';
@@ -238,15 +232,17 @@ async function startRecording() {
 
 	try {
 
-		videoTarget = new BufferTarget();
 		videoOutput = new Output( {
 			format: new WebMOutputFormat(),
-			target: videoTarget,
+			target: new BufferTarget(),
 		} );
+
 		videoSource = new CanvasSource( renderer.domElement, {
 			codec: 'vp9',
-			bitrate: QUALITY_HIGH,
+			bitrate: 20_000_000, // high bitrate (20 Mbps)
+			bitrateMode: 'constant',
 		} );
+
 		videoOutput.addVideoTrack( videoSource, { frameRate: params.frameRate } );
 		await videoOutput.start();
 
@@ -268,21 +264,17 @@ async function startRecording() {
 
 async function finishRecording() {
 
-	if ( recordingState !== 'recording' ) {
+	if ( recordingState !== 'recording' ) return;
 
-		return;
-
-	}
-
-	recordingState = 'stopping';
 	rebuildGUI();
 
 	try {
 
-		await frameWritePromise;
+		// Explicitly close the source for optimized finalization
+		await videoSource.close();
 		await videoOutput.finalize();
 
-		const blob = new Blob( [ videoTarget.buffer ], { type: 'video/webm' } );
+		const blob = new Blob( [ videoOutput.target.buffer ], { type: 'video/webm' } );
 		videoUrl = URL.createObjectURL( blob );
 		videoEl.src = videoUrl;
 		videoEl.play();
@@ -297,8 +289,7 @@ async function finishRecording() {
 		recordingState = 'idle';
 		videoOutput = null;
 		videoSource = null;
-		videoTarget = null;
-		frameWritePromise = null;
+		isWritingFrame = false;
 
 		pathTracer.minSamples = 1;
 		pathTracer.reset();
@@ -322,46 +313,40 @@ function advanceAnimation() {
 
 }
 
-function writeVideoFrame() {
+async function writeVideoFrame() {
 
+	isWritingFrame = true;
 	const frameDuration = 1 / params.frameRate;
-	const timestamp = recordedFrames * frameDuration;
-	const keyFrame = recordedFrames % params.frameRate === 0;
 
-	frameWritePromise = videoSource
-		.add( timestamp, frameDuration, { keyFrame } )
-		.then( () => {
+	try {
 
-			recordedFrames ++;
-			if ( recordingState !== 'recording' ) {
+		// Mediabunny automatically aligns timestamps given the current frame offset and duration
+		await videoSource.add( recordedFrames * frameDuration, frameDuration );
+		recordedFrames ++;
 
-				return;
+		if ( recordingState !== 'recording' ) return;
 
-			}
+		const totalFrames = Math.ceil( params.frameRate * params.duration );
+		if ( recordedFrames >= totalFrames ) {
 
-			const totalFrames = Math.ceil( params.frameRate * params.duration );
-			if ( recordedFrames >= totalFrames ) {
+			await finishRecording();
 
-				finishRecording();
+		} else {
 
-			} else {
+			advanceAnimation();
 
-				advanceAnimation();
+		}
 
-			}
+	} catch ( error ) {
 
-		} )
-		.catch( error => {
+		console.error( error );
+		await finishRecording();
 
-			console.error( error );
-			finishRecording();
+	} finally {
 
-		} )
-		.finally( () => {
+		isWritingFrame = false;
 
-			frameWritePromise = null;
-
-		} );
+	}
 
 }
 
@@ -382,7 +367,7 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; frameWritePromise === null && i < params.samplesPerFrame; i ++ ) {
+		for ( let i = 0; ! isWritingFrame && i < params.samplesPerFrame; i ++ ) {
 
 			pathTracer.renderSample();
 
@@ -395,8 +380,8 @@ function animate() {
 
 		}
 
-		// if we're recording and we hit the target samples then record the frame step the animation forward
-		if ( isRecording && frameWritePromise === null && pathTracer.samples >= params.samples ) {
+		// If recording and target samples are reached, write the video frame and advance the animation
+		if ( isRecording && ! isWritingFrame && pathTracer.samples >= params.samples ) {
 
 			writeVideoFrame();
 
