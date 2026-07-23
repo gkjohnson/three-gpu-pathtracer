@@ -61,30 +61,30 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let alpha = vec2( alphaT, alphaB );
 
 				// Sample the single scatter energy for specular at the given roughness.
-				let specularEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-				let specularEnergyBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - specularEnergySS ) / specularEnergySS;
+				let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+				let dielectricBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - energySS ) / energySS;
 
 				// specular and diffuse components
-				let specularRaw = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-				let specular = specularRaw * specularEnergyBoost;
+				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+				let boostedSpecular = specular * dielectricBoost;
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 
 				// Sample the single scatter energy, including fresnel, for the specular layer, boosting by the
 				// compensation formula above to account for multi scatter. Attenuate the energy allocated for
 				// diffuse by the remaining energy from specular single scatter.
-				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 ) * specularEnergyBoost;
+				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 ) * dielectricBoost;
 				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
-				let dielectricSpecular = ${ this.fresnelMix }( ctx.VdotH, 1.5, vec3f( 0.0 ), specular );
+				let dielectricSpecular = ${ this.fresnelMix }( ctx.VdotH, 1.5, vec3f( 0.0 ), boostedSpecular );
 				let dielectricBase = dielectricDiffuse + dielectricSpecular;
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
+					dielectricBase, diffuse, boostedSpecular, ctx.VdotH, /* outsideIor */ 1.0,
 					1.5, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
 				// Fresnel-weighted specular with the multiscatter comp
-				let metallicEnergyBoost = 1.0 + surf.color * ( 1.0 - specularEnergySS ) / specularEnergySS;
-				let metallicSpecular = specularRaw * metallicEnergyBoost;
+				let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
+				let metallicSpecular = specular * metallicBoost;
 				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
 				let metallic = ${ this.iridescentConductorLayer }(
 					metallicBase, metallicSpecular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
