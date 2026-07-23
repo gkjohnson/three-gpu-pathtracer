@@ -17,7 +17,13 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import CanvasCapture from 'canvas-capture';
+import {
+	BufferTarget,
+	CanvasSource,
+	Output,
+	QUALITY_HIGH,
+	WebMOutputFormat,
+} from 'mediabunny';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 
@@ -25,16 +31,15 @@ const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb';
 const CREDITS = 'Model by DailyArt on Sketchfab';
 
-// CCapture seems to replace the requestAnimationFrame callback which breaks the ability to render and
-// use CanvasCapture.
-const requestAnimationFrame = window.requestAnimationFrame;
-
 let pathTracer, renderer, controls, camera, scene, gui, mixer;
 let videoEl;
 let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
 let loader;
+let videoOutput, videoSource, videoTarget;
+let frameWritePromise = null;
+let recordingState = 'idle';
 const UP_AXIS = new Vector3( 0, 1, 0 );
 
 const params = {
@@ -46,45 +51,8 @@ const params = {
 	duration: 0,
 	frameRate: 12,
 	samples: 20,
-	record: () => {
-
-		// hide the video and revoke any existing blob on record stat
-		params.displayVideo = false;
-		URL.revokeObjectURL( videoUrl );
-
-		// begin recording
-		CanvasCapture.init( renderer.domElement );
-		CanvasCapture.beginVideoRecord( {
-			format: CanvasCapture.WEBM,
-			fps: params.frameRate,
-			onExport: blob => {
-
-				videoUrl = URL.createObjectURL( blob );
-				videoEl.src = videoUrl;
-				videoEl.play();
-
-				params.displayVideo = true;
-				rebuildGUI();
-
-			}
-		} );
-
-		// reinitialize recording variables
-		pathTracer.minSamples = 0;
-		recordedFrames = 0;
-		regenerateScene();
-		rebuildGUI();
-
-	},
-	stop: () => {
-
-		CanvasCapture.stopRecord();
-		pathTracer.minSamples = 1;
-		pathTracer.reset();
-		recordedFrames = 0;
-		rebuildGUI();
-
-	},
+	record: startRecording,
+	stop: finishRecording,
 
 	bounces: 5,
 	samplesPerFrame: 1,
@@ -207,12 +175,12 @@ function rebuildGUI() {
 
 	// animation folder with parameters that are locked during animation
 	const animationFolder = gui.addFolder( 'animation' );
-	const recording = CanvasCapture.isRecording();
+	const recording = recordingState !== 'idle';
 	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
 	animationFolder.add( params, 'renderScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
-	animationFolder.add( params, recording ? 'stop' : 'record' );
+	animationFolder.add( params, recording ? 'stop' : 'record' ).disable( recordingState !== 'idle' && recordingState !== 'recording' );
 
 	// dynamic parameters
 	const renderFolder = gui.addFolder( 'rendering' );
@@ -254,11 +222,154 @@ function regenerateScene() {
 
 }
 
+async function startRecording() {
+
+	if ( recordingState !== 'idle' ) {
+
+		return;
+
+	}
+
+	recordingState = 'starting';
+	params.displayVideo = false;
+	URL.revokeObjectURL( videoUrl );
+	videoUrl = '';
+	rebuildGUI();
+
+	try {
+
+		videoTarget = new BufferTarget();
+		videoOutput = new Output( {
+			format: new WebMOutputFormat(),
+			target: videoTarget,
+		} );
+		videoSource = new CanvasSource( renderer.domElement, {
+			codec: 'vp9',
+			bitrate: QUALITY_HIGH,
+		} );
+		videoOutput.addVideoTrack( videoSource, { frameRate: params.frameRate } );
+		await videoOutput.start();
+
+		recordingState = 'recording';
+		pathTracer.minSamples = 0;
+		recordedFrames = 0;
+		regenerateScene();
+
+	} catch ( error ) {
+
+		recordingState = 'idle';
+		console.error( error );
+
+	}
+
+	rebuildGUI();
+
+}
+
+async function finishRecording() {
+
+	if ( recordingState !== 'recording' ) {
+
+		return;
+
+	}
+
+	recordingState = 'stopping';
+	rebuildGUI();
+
+	try {
+
+		await frameWritePromise;
+		await videoOutput.finalize();
+
+		const blob = new Blob( [ videoTarget.buffer ], { type: 'video/webm' } );
+		videoUrl = URL.createObjectURL( blob );
+		videoEl.src = videoUrl;
+		videoEl.play();
+		params.displayVideo = true;
+
+	} catch ( error ) {
+
+		console.error( error );
+
+	} finally {
+
+		recordingState = 'idle';
+		videoOutput = null;
+		videoSource = null;
+		videoTarget = null;
+		frameWritePromise = null;
+
+		pathTracer.minSamples = 1;
+		pathTracer.reset();
+		recordedFrames = 0;
+		rebuildGUI();
+
+	}
+
+}
+
+function advanceAnimation() {
+
+	const totalFrames = Math.ceil( params.frameRate * params.duration );
+	const angle = params.rotation / totalFrames;
+	camera.position.applyAxisAngle( UP_AXIS, angle );
+	controls.update();
+	camera.updateMatrixWorld();
+
+	mixer.update( 1 / params.frameRate );
+	regenerateScene();
+
+}
+
+function writeVideoFrame() {
+
+	const frameDuration = 1 / params.frameRate;
+	const timestamp = recordedFrames * frameDuration;
+	const keyFrame = recordedFrames % params.frameRate === 0;
+
+	frameWritePromise = videoSource
+		.add( timestamp, frameDuration, { keyFrame } )
+		.then( () => {
+
+			recordedFrames ++;
+			if ( recordingState !== 'recording' ) {
+
+				return;
+
+			}
+
+			const totalFrames = Math.ceil( params.frameRate * params.duration );
+			if ( recordedFrames >= totalFrames ) {
+
+				finishRecording();
+
+			} else {
+
+				advanceAnimation();
+
+			}
+
+		} )
+		.catch( error => {
+
+			console.error( error );
+			finishRecording();
+
+		} )
+		.finally( () => {
+
+			frameWritePromise = null;
+
+		} );
+
+}
+
 function animate() {
 
 	requestAnimationFrame( animate );
 
-	const isRecording = CanvasCapture.isRecording();
+	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
 
@@ -267,11 +378,11 @@ function animate() {
 	} else {
 
 		videoEl.style.display = 'none';
-		controls.enabled = ! isRecording;
+		controls.enabled = recordingState === 'idle';
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; i < params.samplesPerFrame; i ++ ) {
+		for ( let i = 0; frameWritePromise === null && i < params.samplesPerFrame; i ++ ) {
 
 			pathTracer.renderSample();
 
@@ -285,32 +396,9 @@ function animate() {
 		}
 
 		// if we're recording and we hit the target samples then record the frame step the animation forward
-		if ( isRecording && pathTracer.samples >= params.samples ) {
+		if ( isRecording && frameWritePromise === null && pathTracer.samples >= params.samples ) {
 
-			CanvasCapture.recordFrame();
-			recordedFrames ++;
-
-			//  stop recording if we've hit enough frames
-			if ( recordedFrames >= params.frameRate * params.duration ) {
-
-				CanvasCapture.stopRecord();
-				pathTracer.minSamples = 1;
-
-				recordedFrames = 0;
-				rebuildGUI();
-
-			}
-
-			// update the camera transform and update the geometry
-			const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
-			camera.position.applyAxisAngle( UP_AXIS, angle );
-			controls.update();
-			camera.updateMatrixWorld();
-
-			const delta = 1 / params.frameRate;
-			mixer.update( delta );
-
-			regenerateScene();
+			writeVideoFrame();
 
 		}
 
