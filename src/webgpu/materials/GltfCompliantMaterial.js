@@ -7,6 +7,7 @@ import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgs
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
+import { iorToF0Func } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
 const MIN_INCIDENT_COS = float( 1e-3 );
@@ -50,34 +51,39 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
+				let NdotV = ctx.V.z;
+				let NdotVc = ctx.Vc.z;
+				let NdotL = ctx.L.z;
+
 				// anisotropic roughness along tangent, bitangent
 				let alphaB = surf.roughness * surf.roughness;
 				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 				let alpha = vec2( alphaT, alphaB );
 
-				let NdotV = ctx.V.z;
-				let NdotVc = ctx.Vc.z;
-				let NdotL = ctx.L.z;
+				// Sample the single scatter energy for specular at the given roughness.
+				let specularEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+				let specularEnergyBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - specularEnergySS ) / specularEnergySS;
 
-				// Sample the single scatter energy, including fresnel, for the specular layer
-				let energySs = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 );
-				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+				// specular and diffuse components
+				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) * specularEnergyBoost;
 				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 
-				// Attenuate the energy allocated for diffuse by the remaining energy from specular single scatter
-				let dielectricDiffuse = ( 1.0 - energySs ) * diffuse;
-				let dielectricSpecular = ${ this.fresnelMix }( ctx.VdotH, surf.ior, vec3f( 0.0 ), specular );
+				// Sample the single scatter energy, including fresnel, for the specular layer, boosting by the
+				// compensation formula above to account for multi scatter. Attenuate the energy allocated for
+				// diffuse by the remaining energy from specular single scatter.
+				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 ) * specularEnergyBoost;
+				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
+				let dielectricSpecular = ${ this.fresnelMix }( ctx.VdotH, 1.5, vec3f( 0.0 ), specular );
 				let dielectricBase = dielectricDiffuse + dielectricSpecular;
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
-					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
+					1.5, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
-				// metal: Fresnel-weighted specular with the multiscatter comp
-				let metallicEnergySs = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-				let metallicComp = 1.0 + surf.color * ( 1.0 - metallicEnergySs ) / metallicEnergySs;
-				let metallicSpecular = specular * metallicComp;
+				// Fresnel-weighted specular with the multiscatter comp
+				let metallicEnergyBoost = 1.0 + surf.color * ( 1.0 - specularEnergySS ) / specularEnergySS;
+				let metallicSpecular = specular * metallicEnergyBoost;
 				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
 				let metallic = ${ this.iridescentConductorLayer }(
 					metallicBase, metallicSpecular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
