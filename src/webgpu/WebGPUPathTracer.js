@@ -1,4 +1,4 @@
-import { DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -125,7 +125,7 @@ export class WebGPUPathTracer {
 
 	get samples() {
 
-		return this._pathTracer.samples;
+		return this._pathTracer.lowResMode ? 0 : this._pathTracer.samples;
 
 	}
 
@@ -167,6 +167,7 @@ export class WebGPUPathTracer {
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
+		this._pathTracer.setRandom( this.random );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -210,6 +211,7 @@ export class WebGPUPathTracer {
 		this.transmissiveBounces = 5;
 		this.filterGlossyFactor = 0;
 
+		this.random = null;
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
@@ -221,6 +223,7 @@ export class WebGPUPathTracer {
 
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
+		this.setRandom( this.random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
@@ -248,9 +251,16 @@ export class WebGPUPathTracer {
 				} else {
 
 					child.boundsTree.refit();
-					child.boundsTree.getBoundingBox( child.boundingBox );
 
 				}
+
+				if ( child.boundingBox === null ) {
+
+					child.boundingBox = new Box3();
+
+				}
+
+				child.boundsTree.getBoundingBox( child.boundingBox );
 
 			} else if ( child.isMesh ) {
 
@@ -288,6 +298,15 @@ export class WebGPUPathTracer {
 
 		this.material = material;
 		this._pathTracer.setMaterial( material );
+		this.reset();
+
+	}
+
+	setRandom( random ) {
+
+		this.random = random;
+		this._pathTracer.setRandom( random );
+		this.reset();
 
 	}
 
@@ -450,7 +469,8 @@ export class WebGPUPathTracer {
 		}
 
 		let delta = 1000 * timer.getDelta();
-		if ( this._resetTime === - 1 ) {
+		const firstFrame = this._resetTime === - 1;
+		if ( firstFrame ) {
 
 			this._resetTime = 0;
 			delta = 0.0;
@@ -474,7 +494,7 @@ export class WebGPUPathTracer {
 
 		// check if we should be in low res mode and calculate the target size
 		let { width, height } = size;
-		const lowResMode = this._resetTime < renderDelay;
+		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
 			width = Math.ceil( lowResScale * width );
@@ -501,19 +521,18 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
-
-			this._fadeState += delta / this.fadeDuration;
-			this._fadeState = Math.min( 1.0, this._fadeState );
-
-		}
-
-
 		// update the samples
 		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();
+
+		}
+
+		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
+
+			this._fadeState += delta / this.fadeDuration;
+			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
 
 		}
 

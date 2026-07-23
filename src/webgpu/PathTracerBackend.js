@@ -38,6 +38,10 @@ export class PathTracerBackend {
 
 	}
 
+	setRandom( random ) {
+
+	}
+
 	setBVHData( data ) {
 
 	}

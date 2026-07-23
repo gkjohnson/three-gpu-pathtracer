@@ -23,11 +23,13 @@ export class ComputeKernel {
 
 		const {
 			workgroupSize = [ 64 ],
+			context = {},
 		} = options;
 
 		// this.workgroupSize = [ ...workgroupSize ];
 		this._fn = fn;
 		this.kernel = null;
+		this.context = context;
 
 		this.setWorkgroupSize( ...workgroupSize );
 
@@ -67,7 +69,11 @@ export class ComputeKernel {
 
 	setWorkgroupSize( x = 64, y = 1, z = 1 ) {
 
-		this.kernel = this._fn.computeKernel( [ x, y, z ] );
+		const node = this._fn.context( this.context );
+
+		// forward the call parameters so they remain accessible via "computeNode.parameters"
+		node.parameters = this._fn.parameters;
+		this.kernel = node.computeKernel( [ x, y, z ] );
 		return this;
 
 	}

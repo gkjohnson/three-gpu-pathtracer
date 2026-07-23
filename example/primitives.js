@@ -1,7 +1,20 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { getScaledSettings } from './utils/getScaledSettings.js';
+import { WebGPUPathTracer, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+
+const randomOptions = {
+	PCG: RANDOM_PCG,
+	SOBOL: RANDOM_SOBOL,
+	BLUE_DITHER: RANDOM_BLUE_DITHER,
+};
+
+const options = {
+	enable: true,
+	useMegakernel: true,
+	random: randomOptions.SOBOL,
+};
 
 // init scene, renderer, camera, controls, etc
 const scene = new Scene();
@@ -32,7 +45,7 @@ const ball3 = new Mesh(
 );
 const ground = new Mesh(
 	new BoxGeometry( 3.5, 0.1, 1.5 ),
-	new MeshStandardMaterial(),
+	new MeshStandardMaterial( { color: '#f0f0f0' } ),
 );
 
 ball1.position.x = - 1;
@@ -52,30 +65,62 @@ const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGPURenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
 renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
+renderer.setSize( innerWidth, innerHeight );
+renderer.setPixelRatio( devicePixelRatio );
+renderer.setAnimationLoop( animate );
 
-const settings = getScaledSettings();
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.renderScale = settings.renderScale;
-pathTracer.tiles.setScalar( settings.tiles );
+pathTracer.useMegakernel( options.useMegakernel );
 pathTracer.setScene( scene, camera );
 
-onResize();
+const controls = new OrbitControls( camera, renderer.domElement );
+controls.addEventListener( 'change', () => {
 
-animate();
+	pathTracer.updateCamera();
+
+} );
+
+const gui = new GUI();
+gui.add( options, 'enable' );
+gui.add( options, 'useMegakernel' ).onChange( () => {
+
+	pathTracer.useMegakernel( options.useMegakernel );
+	pathTracer.setScene( scene, camera );
+
+} );
+gui.add( options, 'random', randomOptions ).onChange( v => {
+
+	pathTracer.setRandom( v );
+
+} );
+
+
+onResize();
 
 window.addEventListener( 'resize', onResize );
 
 function animate() {
 
-	// if the camera position changes call "ptRenderer.reset()"
-	requestAnimationFrame( animate );
-
 	// update the camera and render one sample
-	pathTracer.renderSample();
+	if ( options.enable ) {
+
+		if ( ! pathTracer.dynamicLowRes && pathTracer.fadeState !== 1 ) {
+
+			renderer.render( scene, camera );
+
+		}
+
+		pathTracer.renderSample();
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }
 
@@ -92,6 +137,6 @@ function onResize() {
 	camera.aspect = aspect;
 	camera.updateProjectionMatrix();
 
-	pathTracer.setScene( scene, camera );
+	pathTracer.updateCamera();
 
 }
