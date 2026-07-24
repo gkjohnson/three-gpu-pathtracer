@@ -3,7 +3,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleEquirectFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -136,31 +136,24 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let worldWo = - ray.direction;
 
 						// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
-						// skipped when disabled or when there is no env cdf, leaving pure bsdf sampling below.
 						if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 							let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
-							// TODO: match the WebGL path - also reject samples below the GEOMETRIC surface
-							// ( dot( surf.faceNormal, worldEnvDir ) < 0 ) plus an isDirectionValid check, to avoid
-							// light-leaking through normal-mapped surfaces at grazing angles. Right now only the
-							// shading-normal hemisphere is guarded ( wi.z <= 0 inside bsdfEvalPdf ).
+							// TODO: do we need to guard against other forms of invalid rays? Eg below the surface?
 							let evalRec = ${ bsdfEvalPdfFn }( worldWo, envSample.direction, surface );
-
 							if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
 
-								// opaque shadow test - the env is at infinity so any hit occludes
-								let ng = normalize( vertexData.normal.xyz );
-								let offsetSign = select( - 1.0, 1.0, dot( ng, envSample.direction ) > 0.0 );
-								var shadowRay = ray;
+								// TODO: is an offset needed here?
+								var shadowRay: ${ rayStruct };
 								shadowRay.origin = vertexData.position.xyz;
 								shadowRay.direction = envSample.direction;
 
 								var shadowHit: ${ raycastOutput };
 								if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
 
-									let misW = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
-									resultColor += vec4f( throughputColor * envSample.color * evalRec.color * misW / envSample.pdf, 0.0 );
+									let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
+									resultColor += vec4f( throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
 
 								}
 
@@ -169,7 +162,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						let scatterRec = ${ bsdfSampleFn }( worldWo, surface );
-
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
@@ -191,16 +183,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 						if ( bounce > 0u ) {
 
-							var misW = 1.0;
+							var misWeight = 1.0;
 							if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
-								// a bsdf ray escaped to the environment - MIS-weight so the NEE contribution isn't double counted
 								let envPdf = ${ getEnvDirPdf }( ray.direction );
-								misW = ${ misHeuristicFn }( bsdfPdf, envPdf );
+								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 							}
 
-							resultColor += ${ sampleEnvColor }( ray.direction, rng ) * vec4f( throughputColor * misW, 0.0 );
+							resultColor += ${ sampleEnvColor }( ray.direction, rng ) * vec4f( throughputColor * misWeight, 0.0 );
 
 						} else {
 

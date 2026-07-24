@@ -137,7 +137,9 @@ export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 	fn isTerminatingScatter( scatterRec: ScatterRecord ) -> bool {
+
 		return scatterRec.pdf <= 0;
+
 	}
 
 `, [ scatterRecordStruct ] );
