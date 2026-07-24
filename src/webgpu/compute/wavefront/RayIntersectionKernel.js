@@ -4,7 +4,8 @@ import { uniform, texture, sampler, storage, textureStore, globalId } from 'thre
 import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn, envMapDirectionPdfFn, misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { environmentInfoStruct } from '../../nodes/structs.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -22,11 +23,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
 
-			// environment
-			envMap: texture( new DataTexture() ),
-			envMapSampler: sampler( new DataTexture() ),
-			envMapRotation: uniform( new Matrix3() ),
-			envMapIntensity: uniform( 1 ),
+			// environment ( map / scalars pulled from the envInfo provider via proxies )
+			envInfo: { value: null },
+			misEnabled: uniform( 1, 'uint' ),
 
 			background: texture( new DataTexture() ),
 			backgroundSampler: sampler( new DataTexture() ),
@@ -40,14 +39,19 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
 
+		// environment resources pulled off the envInfo provider ( for escape-to-env MIS )
+		const envMapNode = proxy( 'envInfo.value.mapNode', params );
+		const envMapSamplerNode = proxy( 'envInfo.value.mapSampler', params );
+		const envRotationNode = proxy( 'envInfo.value.rotationNode', params );
+		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
+		const envBlurNode = proxy( 'envInfo.value.blurNode', params );
+		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+
 		const fn = wgslTagFn /* wgsl */`
 
 			fn compute(
 				// environment
-				envMap: texture_2d<f32>,
-				envMapSampler: sampler,
-				envMapRotation: mat3x3f,
-				envMapIntensity: f32,
+				misEnabled: u32,
 
 				background: texture_2d<f32>,
 				backgroundSampler: sampler,
@@ -62,14 +66,14 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let hitQueue = &${ params.hitQueue };
 				let queueSizes = &${ params.queueSizes };
 
-				let envInfo = EnvironmentInfo(
-					envMapRotation,
-					envMapIntensity,
-					0.0, // blur
-					0.0, // totalSum ( wavefront has no env importance sampling yet )
+				let envInfo = ${ environmentInfoStruct }(
+					${ envRotationNode },
+					${ envIntensityNode },
+					${ envBlurNode },
+					${ envTotalSumNode },
 				);
 
-				let backgroundInfo = EnvironmentInfo(
+				let backgroundInfo = ${ environmentInfoStruct }(
 					backgroundRotation,
 					backgroundIntensity,
 					backgroundBlurriness,
@@ -117,7 +121,17 @@ export class RayIntersectionKernel extends ComputeKernel {
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
-						resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng ) * vec4f( input.throughputColor, 0.0 );
+						// escape-to-env MIS: weight against env sampling so the NEE contribution isn't double counted
+						var misW = 1.0;
+						if ( misEnabled != 0u && envInfo.totalSum > 0.0 ) {
+
+							let envSpaceDir = envInfo.rotation * input.direction;
+							let envPdf = ${ envMapDirectionPdfFn }( ${ envMapNode }, ${ envMapSamplerNode }, envInfo.totalSum, envSpaceDir );
+							misW = ${ misHeuristicFn }( input.bsdfPdf, envPdf );
+
+						}
+
+						resultColor += ${ sampleEnvironmentFn }( ${ envMapNode }, ${ envMapSamplerNode }, envInfo, input.direction, rng ) * vec4f( input.throughputColor * misW, 0.0 );
 
 					} else {
 

@@ -12,6 +12,8 @@ export const queuedRayStruct = new StructTypeNode( {
 	currentBounce: 'uint',
 
 	pixel: 'vec2u',
+	bsdfPdf: 'float', // pdf of the scatter that produced this ray, for escape-to-env MIS
+	_alignment1: 'uint',
 
 	resultColor: 'vec4f',
 

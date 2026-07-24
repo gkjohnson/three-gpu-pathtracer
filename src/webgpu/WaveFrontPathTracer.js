@@ -5,7 +5,7 @@ import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -24,7 +24,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// options
 		this.tiles = new Vector2( 3, 3 );
-		this.envInfo = new EquirectHdrInfoUniform();
+		this.envInfo = new EquirectHdrInfoNode();
 
 		// queues
 		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
@@ -48,6 +48,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionKernel = new RayIntersectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
+
+		// bind the shared env provider so the kernels' proxies resolve even before an environment is set
+		this.rayIntersectionKernel.envInfo = this.envInfo;
+		this.hitProcessKernel.envInfo = this.envInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -104,19 +108,30 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setEnvironment( envMap ) {
 
-		const { rayIntersectionKernel, envInfo } = this;
+		const { rayIntersectionKernel, hitProcessKernel, envInfo } = this;
 		envInfo.updateFrom( envMap );
-		rayIntersectionKernel.envMap = envInfo.map;
-		rayIntersectionKernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+
+		// both kernels pull env resources off the shared provider via proxies ( one assignment each )
+		rayIntersectionKernel.envInfo = envInfo;
+		hitProcessKernel.envInfo = envInfo;
 
 	}
 
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
-		const { rayIntersectionKernel } = this;
+		const { envInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		rayIntersectionKernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		rayIntersectionKernel.envMapIntensity = envMapIntensity;
+		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
+		envInfo.intensityNode.value = envMapIntensity;
+
+	}
+
+	setMultipleImportanceSampling( enabled ) {
+
+		const value = enabled ? 1 : 0;
+		this.rayIntersectionKernel.misEnabled = value;
+		this.hitProcessKernel.misEnabled = value;
+		this.reset();
 
 	}
 

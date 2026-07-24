@@ -5,6 +5,7 @@ import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONM
 import { sampleEnvironmentFn, sampleEquirectProbabilityFn, envMapDirectionPdfFn, misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
+import { environmentInfoStruct } from '../nodes/structs.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -89,14 +90,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 
-				let envInfo = EnvironmentInfo(
+				let envInfo = ${ environmentInfoStruct }(
 					${ envRotationNode },
 					${ envIntensityNode },
 					${ envBlurNode },
 					${ envTotalSumNode },
 				);
 
-				let backgroundInfo = EnvironmentInfo(
+				let backgroundInfo = ${ environmentInfoStruct }(
 					backgroundRotation,
 					backgroundIntensity,
 					backgroundBlurriness,
@@ -162,6 +163,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							// the sampled direction is in env-map space; rotate back to world
 							let worldEnvDir = transpose( envInfo.rotation ) * envSample.direction;
+
+							// TODO: match the WebGL path - also reject samples below the GEOMETRIC surface
+							// ( dot( surf.faceNormal, worldEnvDir ) < 0 ) plus an isDirectionValid check, to avoid
+							// light-leaking through normal-mapped surfaces at grazing angles. Right now only the
+							// shading-normal hemisphere is guarded ( wi.z <= 0 inside bsdfEvalPdf ).
 							let evalRec = ${ bsdfEvalPdfFn }( worldWo, worldEnvDir, surface );
 
 							if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
