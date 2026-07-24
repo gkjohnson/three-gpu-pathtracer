@@ -2,12 +2,13 @@ import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
 import { specularBrdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
+import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
-import { iorToF0Func, schlickFresnelFunc } from '../nodes/utils.wgsl.js';
+import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
 
@@ -73,7 +74,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// diffuse by the remaining energy from specular single scatter.
 				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 ) * dielectricBoost;
 				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
-				let dielectricSpecular = boostedSpecular * ${ schlickFresnelFunc }( ctx.VdotH, ${ iorToF0Func }( 1.5 ) );
+
+				// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
+				let dielectricF0 = min( ${ iorToF0Func }( 1.5 ) * surf.specularColor, vec3f( 1.0 ) );
+				let dielectricSpecular = boostedSpecular * surf.specularIntensity * ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
 				let dielectricBase = dielectricDiffuse + dielectricSpecular;
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
@@ -90,7 +94,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
-				let material = mix( dielectric, metallic, surf.metalness );
+				let baseMaterial = mix( dielectric, metallic, surf.metalness );
+
+				// sheen
+				let sheenScale = mix( 1.0, ${ sheenAlbedoScalingFunc }( ctx.V, ctx.L, surf ), surf.sheen );
+				let material = baseMaterial * sheenScale + ${ sheenColorFunc }( ctx.V, ctx.L, ctx.H, surf ) * surf.sheen;
 
 				// clearcoat
 				// reuse the same pattern for energy conservation used in the dielectric layer
