@@ -1,6 +1,7 @@
 import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 export class MegaKernelPathTracer extends PathTracerBackend {
@@ -17,6 +18,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
 		this.kernel.envInfo = this.envInfo;
+
+		this.backgroundInfo = new EquirectBackgroundInfo();
+		this.kernel.backgroundInfo = this.backgroundInfo;
 
 	}
 
@@ -74,15 +78,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setBackground( background ) {
 
-		const { kernel } = this;
-		if ( kernel.background.isTexture ) {
-
-			kernel.background.dispose();
-
-		}
-
-		kernel.background = background;
-		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		const { backgroundInfo } = this;
+		backgroundInfo.dispose();
+		backgroundInfo.map = background;
 
 	}
 
@@ -92,11 +90,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		backgroundBlurriness,
 	) {
 
-		const { kernel } = this;
+		const { backgroundInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		kernel.backgroundIntensity = backgroundIntensity;
-		kernel.backgroundBlurriness = backgroundBlurriness;
+		backgroundInfo.rotationNode.value.copy( rotationMatrix );
+		backgroundInfo.intensity = backgroundIntensity;
+		backgroundInfo.blur = backgroundBlurriness;
 
 	}
 

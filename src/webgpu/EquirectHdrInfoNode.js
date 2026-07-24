@@ -3,7 +3,7 @@ import { texture, sampler, uniform } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
-import { equirectDirectionPdfFn, equirectUvToDirectionFn, luminanceFn } from './nodes/sampling.wgsl.js';
+import { equirectDirectionPdfFn, equirectDirectionToUvFn, equirectUvToDirectionFn, luminanceFn, sampleHemisphereFn } from './nodes/sampling.wgsl.js';
 
 // WebGPU node wrapper around EquirectHdrInfoUniform. Exposes the environment map, its
 // importance-sampling CDF, and the scalar parameters as TSL nodes so a compute kernel can
@@ -77,9 +77,10 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		this.sampleColor = wgslTagFn/* wgsl */`
 			fn sampleEnv( direction: vec3f, uv: vec2f ) -> vec4f {
 
-				let offsetDir = sampleHemisphere( direction, uv ) * 0.5;
+				let offsetDir = ${ sampleHemisphereFn }( direction, uv ) * 0.5;
 				let sampleDir = normalize( ${ rotationNode } * direction + offsetDir );
-				let col = sampleEquirectColor( ${ mapNode }, ${ mapSampler }, sampleDir );
+				let mapUv = ${ equirectDirectionToUvFn }( sampleDir );
+				let col = textureSampleLevel( ${ mapNode }, ${ mapSampler }, mapUv, 0 );
 
 				return vec4f( ${ intensityNode } * col.rgb, col.a );
 
@@ -131,12 +132,13 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				}
 
 				let rotatedDir = ${ rotationNode } * direction;
-				let color = sampleEquirectColor( ${ mapNode }, ${ mapSampler }, rotatedDir ).rgb;
-				let lum = luminance( color );
+				let mapUv = ${ equirectDirectionToUvFn }( rotatedDir );
+				let color = textureSampleLevel( ${ mapNode }, ${ mapSampler }, mapUv, 0 ).rgb;
+				let lum = ${ luminanceFn }( color );
 				let resolution = textureDimensions( ${ mapNode } );
 				let pdf = lum / ${ totalSumNode };
 
-				return f32( resolution.x * resolution.y ) * pdf * equirectDirectionPdf( rotatedDir );
+				return f32( resolution.x * resolution.y ) * pdf * ${ equirectDirectionPdfFn }( rotatedDir );
 
 			}
 		`;

@@ -1,8 +1,8 @@
-import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn, sampleEquirectFn } from '../nodes/sampling.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
@@ -29,11 +29,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			bounces: uniform( 5 ),
 			misEnabled: uniform( 1, 'uint' ),
 
-			background: texture( new DataTexture() ),
-			backgroundSampler: sampler( new DataTexture() ),
-			backgroundRotation: uniform( new Matrix3() ),
-			backgroundIntensity: uniform( 1 ),
-			backgroundBlurriness: uniform( 0 ),
+			backgroundInfo: { value: null },
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -55,6 +51,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
+		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -74,11 +71,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// environment ( map / cdf / scalars are pulled from the envInfo provider via proxies )
 				misEnabled: u32,
 
-				background: texture_2d<f32>,
-				backgroundSampler: sampler,
-				backgroundRotation: mat3x3f,
-				backgroundIntensity: f32,
-				backgroundBlurriness: f32,
 
 			) -> void {
 
@@ -195,13 +187,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							resultColor = backgroundIntensity * ${ sampleEquirectFn }(
-								background,
-								backgroundSampler,
-								backgroundBlurriness,
-								backgroundRotation * ray.direction,
-								rng,
-							);
+							resultColor = ${ sampleBackground }( ray.direction, rng );
 
 						}
 
