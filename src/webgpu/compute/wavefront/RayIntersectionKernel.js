@@ -45,7 +45,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const envMapSamplerNode = proxy( 'envInfo.value.mapSampler', params );
 		const envRotationNode = proxy( 'envInfo.value.rotationNode', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
-		const envBlurNode = proxy( 'envInfo.value.blurNode', params );
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 
 		const fn = wgslTagFn /* wgsl */`
@@ -70,7 +69,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let envInfo = ${ environmentInfoStruct }(
 					${ envRotationNode },
 					${ envIntensityNode },
-					${ envBlurNode },
+					0.0,
 					${ envTotalSumNode },
 				);
 

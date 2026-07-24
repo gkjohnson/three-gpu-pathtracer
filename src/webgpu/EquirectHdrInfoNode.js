@@ -29,7 +29,6 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		// scalar parameters that assemble into the EnvironmentInfo struct in the shader
 		this.rotationNode = uniform( new Matrix3() );
 		this.intensityNode = uniform( 1 );
-		this.blurNode = uniform( 0 );
 		this.totalSumNode = uniform( this.totalSum );
 
 		this._initFns();
@@ -71,7 +70,6 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 			conditionalNode,
 			conditionalSampler,
 			totalSumNode,
-			blurNode,
 			rotationNode,
 			intensityNode,
 		} = this;
@@ -79,7 +77,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		this.sampleColor = wgslTagFn/* wgsl */`
 			fn sampleEnv( direction: vec3f, uv: vec2f ) -> vec4f {
 
-				let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * ${ blurNode };
+				let offsetDir = sampleHemisphere( direction, uv ) * 0.5;
 				let sampleDir = normalize( ${ rotationNode } * direction + offsetDir );
 				let col = sampleEquirectColor( ${ mapNode }, ${ mapSampler }, sampleDir );
 
