@@ -206,7 +206,16 @@ export const environmentInfoStruct = new StructTypeNode( {
 	rotation: 'mat3x3f',
 	intensity: 'float',
 	blur: 'float',
+	totalSum: 'float',
 }, 'EnvironmentInfo' );
+
+// Result of importance-sampling the environment map: a world-space direction,
+// its radiance, and the pdf ( in solid-angle measure ) of having sampled it.
+export const environmentSampleStruct = new StructTypeNode( {
+	color: 'vec3f',
+	direction: 'vec3f',
+	pdf: 'float',
+}, 'EnvironmentSample' );
 
 export const lobeWeightsStruct = new StructTypeNode( {
 	diffuse: 'float',

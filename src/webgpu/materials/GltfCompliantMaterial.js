@@ -82,7 +82,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	getBsdfNode() {
 
-		const bsdfEvalFunc = wgslTagFn/* wgsl */`
+		const bsdfEvalFunc = this._bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
@@ -246,6 +246,103 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			}
 
 		`;
+
+	}
+
+	// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
+	// Used by next event estimation to weight a chosen light/environment direction. Shares the same
+	// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
+	getBsdfEvalPdfNode() {
+
+		if ( ! this._bsdfEvalFunc ) {
+
+			this.getBsdfNode();
+
+		}
+
+		const bsdfEvalFunc = this._bsdfEvalFunc;
+
+		return wgslTagFn/* wgsl */`
+
+			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+
+				var result: ${ scatterRecordStruct };
+				result.pdf = 0.0;
+				result.color = vec3f( 0.0 );
+				result.direction = worldWi;
+
+				// anisotropic roughness along tangent, bitangent
+				let alphaB = surf.roughness * surf.roughness;
+				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+				let alpha = vec2( alphaT, alphaB );
+				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+
+				let invBasis = surf.normalInvBasis;
+				let invClearcoatBasis = surf.clearcoatInvBasis;
+
+				let wo = normalize( invBasis * worldWo );
+				let wi = normalize( invBasis * worldWi );
+				let woClearcoat = normalize( invClearcoatBasis * worldWo );
+				let wiClearcoat = normalize( invClearcoatBasis * worldWi );
+
+				// reject directions on the far side of the surface
+				if ( wo.z < 0.0 || woClearcoat.z < 0.0 || wi.z <= 0.0 ) {
+
+					return result;
+
+				}
+
+				let wh = normalize( wo + wi );
+				let whClearcoat = normalize( woClearcoat + wiClearcoat );
+
+				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+
+				// pdf of having sampled this direction - must match the lobe mixture in bsdfSample
+				if ( weights.diffuse > 0.0 ) {
+
+					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
+
+				}
+
+				if ( weights.specular > 0.0 ) {
+
+					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
+
+				}
+
+				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
+
+					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+
+				}
+
+				var ctx: ${ bxdfContextStruct };
+				ctx.V = wo;
+				ctx.L = wi;
+				ctx.H = wh;
+				ctx.VdotH = saturate( dot( wo, wh ) );
+				ctx.Vc = woClearcoat;
+				ctx.Lc = wiClearcoat;
+				ctx.Hc = whClearcoat;
+
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * max( 0.0, wi.z );
+
+				return result;
+
+			}
+
+		`;
+
+	}
+
+	getData() {
+
+		return {
+
+			bsdfSample: this.getBsdfNode(),
+			bsdfEvalPdf: this.getBsdfEvalPdfNode(),
+
+		};
 
 	}
 

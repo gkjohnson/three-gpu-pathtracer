@@ -1,6 +1,6 @@
 import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 export class MegaKernelPathTracer extends PathTracerBackend {
@@ -11,11 +11,15 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// options
 		this.tiles = new Vector2( 2, 2 );
-		this.envInfo = new EquirectHdrInfoUniform();
+		this.envInfo = new EquirectHdrInfoNode();
 		this.samples = 0;
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
+
+		// bind the env provider up front so the proxies always resolve to valid ( default ) nodes,
+		// even before an environment is set. setEnvironment reuses this same instance.
+		this.kernel.envInfo = this.envInfo;
 
 	}
 
@@ -53,17 +57,26 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		const { kernel, envInfo } = this;
 		envInfo.updateFrom( envMap );
-		kernel.envMap = envInfo.map;
-		kernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+
+		// the kernel pulls the map, CDF, and scalars straight off envInfo via proxies,
+		// so a single assignment wires everything ( node identity is stable, no rebuild )
+		kernel.envInfo = envInfo;
+
+	}
+
+	setMultipleImportanceSampling( enabled ) {
+
+		this.kernel.misEnabled = enabled ? 1 : 0;
+		this.reset();
 
 	}
 
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
-		const { kernel } = this;
+		const { envInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		kernel.envMapIntensity = envMapIntensity;
+		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
+		envInfo.intensityNode.value = envMapIntensity;
 
 	}
 

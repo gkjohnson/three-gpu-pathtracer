@@ -65,13 +65,15 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
 					envMapIntensity,
-					0.0 // blur,
+					0.0, // blur
+					0.0, // totalSum ( wavefront has no env importance sampling yet )
 				);
 
 				let backgroundInfo = EnvironmentInfo(
 					backgroundRotation,
 					backgroundIntensity,
 					backgroundBlurriness,
+					0.0, // totalSum ( unused for background )
 				);
 
 				// skip any rays invocations beyond the ray count
