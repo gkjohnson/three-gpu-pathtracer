@@ -20,12 +20,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
+			// tiles
 			offset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
-			seed: uniform( 0 ),
-			bounces: uniform( 5 ),
 
 			// settings
+			seed: uniform( 0 ),
+			bounces: uniform( 5 ),
 			misEnabled: uniform( 1, 'uint' ),
 
 			background: texture( new DataTexture() ),

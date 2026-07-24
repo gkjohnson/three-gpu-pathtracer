@@ -17,6 +17,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			material: { value: null },
 			envInfo: { value: null },
 
+			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
