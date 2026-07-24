@@ -239,7 +239,7 @@ async function startRecording() {
 
 		videoSource = new CanvasSource( renderer.domElement, {
 			codec: 'vp9',
-			bitrate: 2e7, // high bitrate
+			bitrate: 1e7, // high bitrate
 			bitrateMode: 'constant',
 		} );
 
