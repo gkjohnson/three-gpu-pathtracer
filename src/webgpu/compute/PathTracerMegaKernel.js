@@ -2,10 +2,9 @@ import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../nodes/random.wgsl.js';
-import { sampleEnvironmentFn, misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn, sampleEquirectFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
-import { environmentInfoStruct } from '../nodes/structs.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -51,12 +50,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
 		// environment resources pulled straight off the envInfo provider ( EquirectHdrInfoNode )
-		const envRotationNode = proxy( 'envInfo.value.rotationNode', params );
-		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
-		const envBlurNode = proxy( 'envInfo.value.blurNode', params );
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
-
-
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
@@ -89,20 +83,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
-
-				let envInfo = ${ environmentInfoStruct }(
-					${ envRotationNode },
-					${ envIntensityNode },
-					${ envBlurNode },
-					${ envTotalSumNode },
-				);
-
-				let backgroundInfo = ${ environmentInfoStruct }(
-					backgroundRotation,
-					backgroundIntensity,
-					backgroundBlurriness,
-					0.0,
-				);
 
 				// make sure we don't bleed over the edge of our tile
 				if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -137,18 +117,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var hitResult: ${ raycastOutput };
 					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
-						let object = transforms[ hitResult.objectIndex ];
-						var material = materials[ object.materialIndex ];
+						let objectInfo = transforms[ hitResult.objectIndex ];
+						var materialInfo = materials[ objectInfo.materialIndex ];
 
 						// apply per-object colors
-						material.color *= object.color.rgb;
-						material.opacity *= object.color.a;
+						materialInfo.color *= objectInfo.color.rgb;
+						materialInfo.opacity *= objectInfo.color.a;
 
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
-						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
-						vertexData.position = object.matrixWorld * vertexData.position;
+						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+						vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
-						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal );
+						let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal );
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
@@ -156,7 +136,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
 						// skipped when disabled or when there is no env cdf, leaving pure bsdf sampling below.
-						if ( misEnabled != 0u && envInfo.totalSum > 0.0 ) {
+						if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 							let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
@@ -179,7 +159,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
 
 									let misW = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
-									resultColor += vec4f( throughputColor * envInfo.intensity * envSample.color * evalRec.color * misW / envSample.pdf, 0.0 );
+									resultColor += vec4f( throughputColor * envSample.color * evalRec.color * misW / envSample.pdf, 0.0 );
 
 								}
 
@@ -211,7 +191,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( bounce > 0u ) {
 
 							var misW = 1.0;
-							if ( misEnabled != 0u && envInfo.totalSum > 0.0 ) {
+							if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 								// a bsdf ray escaped to the environment - MIS-weight so the NEE contribution isn't double counted
 								let envPdf = ${ getEnvDirPdf }( ray.direction );
@@ -223,7 +203,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
+							resultColor = backgroundIntensity * ${ sampleEquirectFn }(
+								background,
+								backgroundSampler,
+								backgroundBlurriness,
+								backgroundRotation * ray.direction,
+								rng,
+							);
 
 						}
 

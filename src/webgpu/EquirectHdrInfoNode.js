@@ -2,7 +2,7 @@ import { Matrix3 } from 'three/webgpu';
 import { texture, sampler, uniform } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { constants, environmentSampleStruct } from './nodes/structs.wgsl.js';
+import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionPdfFn, equirectUvToDirectionFn, luminanceFn } from './nodes/sampling.wgsl.js';
 
 // WebGPU node wrapper around EquirectHdrInfoUniform. Exposes the environment map, its
@@ -88,7 +88,6 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 			}
 		`;
 
-		// TODO: inverse rotation must be applied here
 		this.sampleDir = wgslTagFn/* wgsl */`
 			fn sampleEnvDir( r: vec2f ) -> ${ environmentSampleStruct } {
 
@@ -104,7 +103,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				let color = textureSampleLevel( ${ mapNode }, ${ mapSampler }, uv, 0 ).rgb;
 
 				result.direction = transpose( ${ rotationNode } ) * direction;
-				result.color = color;
+				result.color = color * ${ intensityNode };
 
 				if ( totalSum != 0.0 ) {
 

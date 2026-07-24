@@ -145,6 +145,26 @@ export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 
 `, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
 
+export const sampleEquirectFn = wgslFn( /* wgsl */ `
+
+	fn sampleEquirect(
+		envMap: texture_2d<f32>,
+		envMapSampler: sampler,
+		blur: f32,
+		direction: vec3f,
+		uv: vec2f,
+	) -> vec4f {
+
+		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * blur;
+		let sampleDir = normalize( direction + offsetDir );
+		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
+
+		return vec4f( col.rgb, col.a );
+
+	}
+
+`, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
+
 // power heuristic for multiple importance sampling
 export const misHeuristicFn = wgslFn( /* wgsl */ `
 
@@ -158,7 +178,7 @@ export const misHeuristicFn = wgslFn( /* wgsl */ `
 
 ` );
 
-const luminanceFn = wgslFn( /* wgsl */ `
+export const luminanceFn = wgslFn( /* wgsl */ `
 
 	fn luminance( color: vec3f ) -> f32 {
 
@@ -169,7 +189,7 @@ const luminanceFn = wgslFn( /* wgsl */ `
 ` );
 
 // inverse of equirectDirectionToUv: map an equirect uv back to a direction
-const equirectUvToDirectionFn = wgslFn( /* wgsl */ `
+export const equirectUvToDirectionFn = wgslFn( /* wgsl */ `
 
 	fn equirectUvToDirection( uvIn: vec2f ) -> vec3f {
 
@@ -189,7 +209,7 @@ const equirectUvToDirectionFn = wgslFn( /* wgsl */ `
 `, [ constants ] );
 
 // solid-angle pdf factor for the equirect parameterization ( accounts for pole compression )
-const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
+export const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
 
 	fn equirectDirectionPdf( direction: vec3f ) -> f32 {
 
