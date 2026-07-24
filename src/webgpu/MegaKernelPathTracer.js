@@ -16,9 +16,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
-
-		// bind the env provider up front so the proxies always resolve to valid ( default ) nodes,
-		// even before an environment is set. setEnvironment reuses this same instance.
 		this.kernel.envInfo = this.envInfo;
 
 	}

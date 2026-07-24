@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../nodes/random.wgsl.js';
-import { sampleEnvironmentFn, sampleEquirectProbabilityFn, envMapDirectionPdfFn, misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn, misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 import { environmentInfoStruct } from '../nodes/structs.wgsl.js';
@@ -51,16 +51,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
 		// environment resources pulled straight off the envInfo provider ( EquirectHdrInfoNode )
-		const envMapNode = proxy( 'envInfo.value.mapNode', params );
-		const envMapSamplerNode = proxy( 'envInfo.value.mapSampler', params );
-		const envMarginalNode = proxy( 'envInfo.value.marginalNode', params );
-		const envMarginalSamplerNode = proxy( 'envInfo.value.marginalSampler', params );
-		const envConditionalNode = proxy( 'envInfo.value.conditionalNode', params );
-		const envConditionalSamplerNode = proxy( 'envInfo.value.conditionalSampler', params );
 		const envRotationNode = proxy( 'envInfo.value.rotationNode', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const envBlurNode = proxy( 'envInfo.value.blurNode', params );
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+
+
+		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
+		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
+		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -132,7 +131,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 				var bsdfPdf = 0.0; // pdf of the scatter that made the current ray; MIS-weights the env on escape
-				const SHADOW_RAY_EPSILON = 1.0e-4; // shadow-ray self-intersection offset ( TODO: scene-scale dependent )
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -160,25 +158,22 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// skipped when disabled or when there is no env cdf, leaving pure bsdf sampling below.
 						if ( misEnabled != 0u && envInfo.totalSum > 0.0 ) {
 
-							let envSample = ${ sampleEquirectProbabilityFn }( ${ envMarginalNode }, ${ envMarginalSamplerNode }, ${ envConditionalNode }, ${ envConditionalSamplerNode }, ${ envMapNode }, ${ envMapSamplerNode }, envInfo.totalSum, ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-
-							// the sampled direction is in env-map space; rotate back to world
-							let worldEnvDir = transpose( envInfo.rotation ) * envSample.direction;
+							let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
 							// TODO: match the WebGL path - also reject samples below the GEOMETRIC surface
 							// ( dot( surf.faceNormal, worldEnvDir ) < 0 ) plus an isDirectionValid check, to avoid
 							// light-leaking through normal-mapped surfaces at grazing angles. Right now only the
 							// shading-normal hemisphere is guarded ( wi.z <= 0 inside bsdfEvalPdf ).
-							let evalRec = ${ bsdfEvalPdfFn }( worldWo, worldEnvDir, surface );
+							let evalRec = ${ bsdfEvalPdfFn }( worldWo, envSample.direction, surface );
 
 							if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
 
 								// opaque shadow test - the env is at infinity so any hit occludes
 								let ng = normalize( vertexData.normal.xyz );
-								let offsetSign = select( - 1.0, 1.0, dot( ng, worldEnvDir ) > 0.0 );
+								let offsetSign = select( - 1.0, 1.0, dot( ng, envSample.direction ) > 0.0 );
 								var shadowRay = ray;
-								shadowRay.origin = vertexData.position.xyz + ng * offsetSign * SHADOW_RAY_EPSILON;
-								shadowRay.direction = worldEnvDir;
+								shadowRay.origin = vertexData.position.xyz;
+								shadowRay.direction = envSample.direction;
 
 								var shadowHit: ${ raycastOutput };
 								if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
@@ -219,13 +214,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( misEnabled != 0u && envInfo.totalSum > 0.0 ) {
 
 								// a bsdf ray escaped to the environment - MIS-weight so the NEE contribution isn't double counted
-								let envSpaceDir = envInfo.rotation * ray.direction;
-								let envPdf = ${ envMapDirectionPdfFn }( ${ envMapNode }, ${ envMapSamplerNode }, envInfo.totalSum, envSpaceDir );
+								let envPdf = ${ getEnvDirPdf }( ray.direction );
 								misW = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 							}
 
-							resultColor += ${ sampleEnvironmentFn }( ${ envMapNode }, ${ envMapSamplerNode }, envInfo, ray.direction, rng ) * vec4f( throughputColor * misW, 0.0 );
+							resultColor += ${ sampleEnvColor }( ray.direction, rng ) * vec4f( throughputColor * misW, 0.0 );
 
 						} else {
 
