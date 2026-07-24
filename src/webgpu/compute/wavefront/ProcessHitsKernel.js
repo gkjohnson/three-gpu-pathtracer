@@ -2,7 +2,7 @@ import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'thr
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
-import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn, misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
@@ -44,9 +44,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 
-		// environment resources pulled off the envInfo provider ( same pattern as the megakernel )
-																		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
-			const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
+		// environment resources pulled straight off the envInfo provider ( EquirectHdrInfoNode )
+		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -99,26 +99,25 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				var resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 
-				// next event estimation: importance-sample the environment with an inline shadow test.
-				// added into the carried resultColor so it survives to the terminating write.
-				const SHADOW_RAY_EPSILON = 1.0e-4;
+				// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
 				if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-					let worldEnvDir = envSample.direction;
-					let evalRec = ${ bsdfEvalPdfFn }( input.view, worldEnvDir, surface );
 
+					// TODO: do we need to guard against other forms of invalid rays? Eg below the surface?
+					let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
 					if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
 
-						let ng = normalize( vertexData.normal.xyz );
-						let offsetSign = select( - 1.0, 1.0, dot( ng, worldEnvDir ) > 0.0 );
-						let shadowRay = Ray( vertexData.position.xyz + ng * offsetSign * SHADOW_RAY_EPSILON, worldEnvDir );
+						// TODO: is an offset needed here?
+						var shadowRay: ${ rayStruct };
+						shadowRay.origin = vertexData.position.xyz;
+						shadowRay.direction = envSample.direction;
 
 						var shadowHit: ${ raycastOutput };
 						if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
 
-							let misW = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
-							resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misW / envSample.pdf, 0.0 );
+							let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
+							resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
 
 						}
 

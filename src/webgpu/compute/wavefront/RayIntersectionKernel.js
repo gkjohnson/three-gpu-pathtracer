@@ -94,16 +94,15 @@ export class RayIntersectionKernel extends ComputeKernel {
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
-						// escape-to-env MIS: weight against env sampling so the NEE contribution isn't double counted
-						var misW = 1.0;
+						var misWeight = 1.0;
 						if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 							let envPdf = ${ getEnvDirPdf }( input.direction );
-							misW = ${ misHeuristicFn }( input.bsdfPdf, envPdf );
+							misWeight = ${ misHeuristicFn }( input.bsdfPdf, envPdf );
 
 						}
 
-						resultColor += ${ sampleEnvColor }( input.direction, rng ) * vec4f( input.throughputColor * misW, 0.0 );
+						resultColor += ${ sampleEnvColor }( input.direction, rng ) * vec4f( input.throughputColor * misWeight, 0.0 );
 
 					} else {
 
