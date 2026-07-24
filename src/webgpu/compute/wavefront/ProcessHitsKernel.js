@@ -3,10 +3,9 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn, sampleEquirectProbabilityFn, misHeuristicFn } from '../../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn, misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
-import { environmentInfoStruct } from '../../nodes/structs.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -46,15 +45,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 
 		// environment resources pulled off the envInfo provider ( same pattern as the megakernel )
-		const envMapNode = proxy( 'envInfo.value.mapNode', params );
-		const envMapSamplerNode = proxy( 'envInfo.value.mapSampler', params );
-		const envMarginalNode = proxy( 'envInfo.value.marginalNode', params );
-		const envMarginalSamplerNode = proxy( 'envInfo.value.marginalSampler', params );
-		const envConditionalNode = proxy( 'envInfo.value.conditionalNode', params );
-		const envConditionalSamplerNode = proxy( 'envInfo.value.conditionalSampler', params );
-		const envRotationNode = proxy( 'envInfo.value.rotationNode', params );
-		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
-		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+																		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+			const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -66,13 +58,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				globalId: vec3u
 			) -> void {
-
-				let envInfo = ${ environmentInfoStruct }(
-					${ envRotationNode },
-					${ envIntensityNode },
-					0.0,
-					${ envTotalSumNode },
-				);
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
@@ -96,19 +81,19 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
-				let object = transforms[ input.objectIndex ];
-				var material = materials[ object.materialIndex ];
+				let objectInfo = transforms[ input.objectIndex ];
+				var materialInfo = materials[ objectInfo.materialIndex ];
 
 				// apply per-object colors
-				material.color *= object.color.rgb;
-				material.opacity *= object.color.a;
+				materialInfo.color *= objectInfo.color.rgb;
+				materialInfo.opacity *= objectInfo.color.a;
 
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
-				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
-				vertexData.position = object.matrixWorld * vertexData.position;
+				vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal );
+				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal );
 
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
@@ -117,10 +102,10 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// next event estimation: importance-sample the environment with an inline shadow test.
 				// added into the carried resultColor so it survives to the terminating write.
 				const SHADOW_RAY_EPSILON = 1.0e-4;
-				if ( misEnabled != 0u && envInfo.totalSum > 0.0 ) {
+				if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
-					let envSample = ${ sampleEquirectProbabilityFn }( ${ envMarginalNode }, ${ envMarginalSamplerNode }, ${ envConditionalNode }, ${ envConditionalSamplerNode }, ${ envMapNode }, ${ envMapSamplerNode }, envInfo.totalSum, ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-					let worldEnvDir = transpose( envInfo.rotation ) * envSample.direction;
+					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+					let worldEnvDir = envSample.direction;
 					let evalRec = ${ bsdfEvalPdfFn }( input.view, worldEnvDir, surface );
 
 					if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
@@ -133,7 +118,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 						if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
 
 							let misW = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
-							resultColor += vec4f( input.throughputColor * envInfo.intensity * envSample.color * evalRec.color * misW / envSample.pdf, 0.0 );
+							resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misW / envSample.pdf, 0.0 );
 
 						}
 

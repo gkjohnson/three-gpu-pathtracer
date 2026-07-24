@@ -6,6 +6,7 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -25,6 +26,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// options
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoNode();
+		this.backgroundInfo = new EquirectBackgroundInfo();
 
 		// queues
 		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
@@ -52,6 +54,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// bind the shared env provider so the kernels' proxies resolve even before an environment is set
 		this.rayIntersectionKernel.envInfo = this.envInfo;
 		this.hitProcessKernel.envInfo = this.envInfo;
+		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -132,15 +135,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setBackground( background ) {
 
-		const { rayIntersectionKernel } = this;
-		if ( rayIntersectionKernel.background.isTexture ) {
-
-			rayIntersectionKernel.background.dispose();
-
-		}
-
-		rayIntersectionKernel.background = background;
-		rayIntersectionKernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		const { backgroundInfo } = this;
+		backgroundInfo.dispose();
+		backgroundInfo.map = background;
 
 	}
 
@@ -150,11 +147,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		backgroundBlurriness,
 	) {
 
-		const { rayIntersectionKernel } = this;
+		const { backgroundInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		rayIntersectionKernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		rayIntersectionKernel.backgroundIntensity = backgroundIntensity;
-		rayIntersectionKernel.backgroundBlurriness = backgroundBlurriness;
+		backgroundInfo.rotationNode.value.copy( rotationMatrix );
+		backgroundInfo.intensity = backgroundIntensity;
+		backgroundInfo.blur = backgroundBlurriness;
 
 	}
 
