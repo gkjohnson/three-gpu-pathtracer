@@ -55,12 +55,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setEnvironment( envMap ) {
 
-		const { kernel, envInfo } = this;
-		envInfo.updateFrom( envMap );
-
-		// the kernel pulls the map, CDF, and scalars straight off envInfo via proxies,
-		// so a single assignment wires everything ( node identity is stable, no rebuild )
-		kernel.envInfo = envInfo;
+		this.envInfo.updateFrom( envMap );
 
 	}
 

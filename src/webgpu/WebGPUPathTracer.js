@@ -213,7 +213,7 @@ export class WebGPUPathTracer {
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new WaveFrontPathTracer( renderer );
+		this._pathTracer = new MegaKernelPathTracer( renderer );
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection

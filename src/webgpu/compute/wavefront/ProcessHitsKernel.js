@@ -15,6 +15,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const params = {
 			bvhData: { value: null },
 			material: { value: null },
+			envInfo: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -24,9 +25,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
 			misEnabled: uniform( 1, 'uint' ),
-
-			// environment provider ( EquirectHdrInfoNode ), pulled via proxies for NEE
-			envInfo: { value: null },
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),

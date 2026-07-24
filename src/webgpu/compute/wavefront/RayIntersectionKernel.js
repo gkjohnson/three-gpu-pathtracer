@@ -13,7 +13,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const params = {
 			bvhData: { value: null },
+			envInfo: { value: null },
 
+			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -23,8 +25,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
 			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
 
-			// environment ( map / scalars pulled from the envInfo provider via proxies )
-			envInfo: { value: null },
+			// settings
 			misEnabled: uniform( 1, 'uint' ),
 
 			background: texture( new DataTexture() ),

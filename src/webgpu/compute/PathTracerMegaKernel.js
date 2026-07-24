@@ -14,7 +14,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const params = {
 			bvhData: { value: null },
 			material: { value: null },
+			envInfo: { value: null },
 
+			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -24,8 +26,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
 
-			// environment: map, importance-sampling CDF, and scalar params are pulled from envInfo
-			envInfo: { value: null },
+			// settings
 			misEnabled: uniform( 1, 'uint' ),
 
 			background: texture( new DataTexture() ),
@@ -201,7 +202,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
-							bsdfPdf = scatterRec.pdf;
+						bsdfPdf = scatterRec.pdf;
 
 						// TODO: Investigate offsetting this position to not self-intersect multiple times
 						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies

@@ -108,12 +108,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setEnvironment( envMap ) {
 
-		const { rayIntersectionKernel, hitProcessKernel, envInfo } = this;
-		envInfo.updateFrom( envMap );
-
-		// both kernels pull env resources off the shared provider via proxies ( one assignment each )
-		rayIntersectionKernel.envInfo = envInfo;
-		hitProcessKernel.envInfo = envInfo;
+		this.envInfo.updateFrom( envMap );
 
 	}
 
