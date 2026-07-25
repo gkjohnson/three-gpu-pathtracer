@@ -210,7 +210,7 @@ export const environmentInfoStruct = new StructTypeNode( {
 }, 'EnvironmentInfo' );
 
 // Result of importance-sampling the environment map: a world-space direction,
-// its radiance, and the pdf ( in solid-angle measure ) of having sampled it.
+// its radiance, and the pdf (in solid-angle measure) of having sampled it.
 export const environmentSampleStruct = new StructTypeNode( {
 	color: 'vec3f',
 	direction: 'vec3f',
