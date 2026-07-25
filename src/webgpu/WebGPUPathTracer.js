@@ -11,6 +11,7 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
+import { getLights, getIesTextures } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 
 const _resolution = new Vector2();
@@ -145,8 +146,6 @@ export class WebGPUPathTracer {
 
 	}
 
-	updateLights() {}
-
 	// --- end compatibility stubs ---
 
 	get fadeState() {
@@ -170,6 +169,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setRandom( this.random );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -213,7 +213,7 @@ export class WebGPUPathTracer {
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new WaveFrontPathTracer( renderer );
+		this._pathTracer = new MegaKernelPathTracer( renderer );
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
@@ -284,6 +284,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -406,6 +407,17 @@ export class WebGPUPathTracer {
 			scene.backgroundBlurriness,
 		);
 
+		this.reset();
+
+	}
+
+	updateLights() {
+
+		const { _pathTracer, scene } = this;
+
+		const lights = getLights( scene );
+		const iesTextures = getIesTextures( lights );
+		_pathTracer.setLights( lights, iesTextures );
 		this.reset();
 
 	}

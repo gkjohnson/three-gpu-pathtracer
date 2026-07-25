@@ -210,12 +210,39 @@ export const environmentInfoStruct = new StructTypeNode( {
 }, 'EnvironmentInfo' );
 
 // Result of importance-sampling the environment map: a world-space direction,
-// its radiance, and the pdf ( in solid-angle measure ) of having sampled it.
+// its radiance, and the pdf (in solid-angle measure) of having sampled it.
 export const environmentSampleStruct = new StructTypeNode( {
 	color: 'vec3f',
 	direction: 'vec3f',
 	pdf: 'float',
 }, 'EnvironmentSample' );
+
+// A single scene light unpacked from the lights data texture ( see LightsInfoUniformStruct ).
+export const lightStruct = new StructTypeNode( {
+	position: 'vec3f',
+	lightType: 'i32',
+	color: 'vec3f',
+	intensity: 'f32',
+	u: 'vec3f',
+	v: 'vec3f',
+	area: 'f32',
+	radius: 'f32',
+	decay: 'f32',
+	distance: 'f32',
+	coneCos: 'f32',
+	penumbraCos: 'f32',
+	iesProfile: 'i32',
+}, 'Light' );
+
+// Result of sampling ( or intersecting ) a light: a world-space direction toward the light,
+// the distance to it, its emitted radiance, and the pdf ( solid-angle measure ) of the sample.
+export const lightRecordStruct = new StructTypeNode( {
+	dist: 'f32',
+	direction: 'vec3f',
+	pdf: 'f32',
+	emission: 'vec3f',
+	lightType: 'i32',
+}, 'LightRecord' );
 
 export const lobeWeightsStruct = new StructTypeNode( {
 	diffuse: 'float',

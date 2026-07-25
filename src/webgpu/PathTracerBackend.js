@@ -62,6 +62,10 @@ export class PathTracerBackend {
 
 	}
 
+	setLights( lights, iesTextures ) {
+
+	}
+
 	setBackground(
 		background,
 		backgroundIntensity,
