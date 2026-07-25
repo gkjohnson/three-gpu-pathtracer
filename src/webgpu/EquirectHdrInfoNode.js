@@ -5,13 +5,6 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionPdfFn, equirectDirectionToUvFn, equirectUvToDirectionFn, luminanceFn, sampleHemisphereFn } from './nodes/sampling.wgsl.js';
 
-// WebGPU node wrapper around EquirectHdrInfoUniform. Exposes the environment map, its
-// importance-sampling CDF, and the scalar parameters as TSL nodes so a compute kernel can
-// pull them through proxies ( kernel.envInfo.value.mapNode, ...envInfo.value.totalSumNode, etc )
-// instead of copying each field onto the kernel by hand.
-//
-// Node identity is kept stable across updateFrom / parameter changes - only the node values
-// are mutated - so swapping the environment does not force a shader rebuild.
 export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 	constructor() {
