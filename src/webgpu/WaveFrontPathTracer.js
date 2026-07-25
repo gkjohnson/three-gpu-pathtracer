@@ -8,6 +8,7 @@ import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { LightConnectionKernel } from './compute/wavefront/LightConnectionKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
 import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -28,6 +29,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoNode();
 		this.backgroundInfo = new EquirectBackgroundInfo();
+		this.lightsInfo = new LightsInfoNode();
 
 		// queues
 		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
@@ -53,10 +55,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.lightConnectionKernel = new LightConnectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 
-		// bind the shared env provider so the kernels' proxies resolve even before an environment is set
+		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
 		this.rayIntersectionKernel.envInfo = this.envInfo;
 		this.lightConnectionKernel.envInfo = this.envInfo;
 		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
+		this.rayIntersectionKernel.lightsInfo = this.lightsInfo;
+		this.lightConnectionKernel.lightsInfo = this.lightsInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -125,6 +129,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setLights( lights, iesTextures ) {
+
+		this.lightsInfo.updateFrom( lights, iesTextures );
+		this.reset();
+
+	}
+
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
 		const { envInfo } = this;
@@ -185,6 +196,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
+		this.lightsInfo.dispose();
 
 	}
 

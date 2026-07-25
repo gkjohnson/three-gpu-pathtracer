@@ -4,7 +4,8 @@ import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
 import { queuedHitStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
-import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
+import { SPOT_LIGHT_TYPE, DIR_LIGHT_TYPE, POINT_LIGHT_TYPE } from '../../nodes/lights.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
 
@@ -14,6 +15,7 @@ export class LightConnectionKernel extends ComputeKernel {
 			bvhData: { value: null },
 			material: { value: null },
 			envInfo: { value: null },
+			lightsInfo: { value: null },
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
@@ -38,6 +40,10 @@ export class LightConnectionKernel extends ComputeKernel {
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 
+		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
+		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
+		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -61,8 +67,20 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-				// nothing to do without an importance-sampleable environment
-				if ( misEnabled == 0u || ${ envTotalSumNode } <= 0.0 ) {
+				// one-sample next event estimation selects between the analytic lights and the
+				// environment. lightsDenom normalizes that selection: the light count, plus one
+				// for the environment when it is active.
+				let envActive = ${ envTotalSumNode } > 0.0;
+				let lightsCount = ${ lightsCountNode };
+				var lightsDenom = f32( lightsCount );
+				if ( envActive ) {
+
+					lightsDenom += 1.0;
+
+				}
+
+				// nothing to do without any lights or an importance-sampleable environment
+				if ( misEnabled == 0u || lightsDenom <= 0.0 ) {
 
 					return;
 
@@ -86,25 +104,82 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal );
 
-				// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
-				let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+				// next event estimation: draw one sample among the analytic lights and the
+				// environment, MIS-weighted against the bsdf pdf.
+				let selectRand = ${ rand1 }( ${ RNG_INDEX_DIRECT_LIGHT_SELECTION } );
+				if ( selectRand < f32( lightsCount ) / lightsDenom ) {
 
-				// TODO: do we need to guard against other forms of invalid rays? Eg below the surface?
-				let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
-				if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
+					// sample one of the analytic lights
+					let lightRec = ${ randomLightSampleFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
-					// TODO: is an offset needed here?
-					var shadowRay: ${ rayStruct };
-					shadowRay.origin = vertexData.position.xyz;
-					shadowRay.direction = envSample.direction;
+					// reject samples that fall below the geometric surface
+					var lightPdf = lightRec.pdf;
+					if ( dot( surface.faceNormal, lightRec.direction ) < 0.0 ) {
 
-					var shadowHit: ${ raycastOutput };
-					if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
+						lightPdf = 0.0;
 
-						let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
+					}
 
-						// deposit the contribution in place; ProcessHits reads this augmented resultColor
-						hitQueue[ hitIndex ].resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
+					if ( lightPdf > 0.0 ) {
+
+						let evalRec = ${ bsdfEvalPdfFn }( input.view, lightRec.direction, surface );
+						if ( evalRec.pdf > 0.0 ) {
+
+							// TODO: is an offset needed here?
+							var shadowRay: ${ rayStruct };
+							shadowRay.origin = vertexData.position.xyz;
+							shadowRay.direction = lightRec.direction;
+
+							// opaque occlusion up to the light distance ( transmissive shadows not yet handled )
+							var shadowHit: ${ raycastOutput };
+							let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - EPSILON;
+							if ( ! occluded ) {
+
+								lightPdf /= lightsDenom;
+
+								// delta lights ( spot / point / directional ) cannot be bsdf-sampled, so they take full weight
+								let isPunctual = lightRec.lightType == ${ SPOT_LIGHT_TYPE } || lightRec.lightType == ${ DIR_LIGHT_TYPE } || lightRec.lightType == ${ POINT_LIGHT_TYPE };
+								let misWeight = select( ${ misHeuristicFn }( lightPdf, evalRec.pdf ), 1.0, isPunctual );
+
+								// deposit the contribution in place; ProcessHits reads this augmented resultColor
+								hitQueue[ hitIndex ].resultColor += vec4f( input.throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
+
+							}
+
+						}
+
+					}
+
+				} else if ( envActive ) {
+
+					// sample the environment
+					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_ENV_SAMPLE } ) );
+
+					var envPdf = envSample.pdf;
+					if ( dot( surface.faceNormal, envSample.direction ) < 0.0 ) {
+
+						envPdf = 0.0;
+
+					}
+
+					let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
+					if ( envPdf > 0.0 && evalRec.pdf > 0.0 ) {
+
+						// TODO: is an offset needed here?
+						var shadowRay: ${ rayStruct };
+						shadowRay.origin = vertexData.position.xyz;
+						shadowRay.direction = envSample.direction;
+
+						var shadowHit: ${ raycastOutput };
+						if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
+
+							envPdf /= lightsDenom;
+							let misWeight = ${ misHeuristicFn }( envPdf, evalRec.pdf );
+
+							// deposit the contribution in place; ProcessHits reads this augmented resultColor
+							hitQueue[ hitIndex ].resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misWeight / envPdf, 0.0 );
+
+						}
 
 					}
 
