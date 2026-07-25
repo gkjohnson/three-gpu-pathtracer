@@ -1,18 +1,14 @@
-import { wgsl, wgslFn } from 'three/tsl';
+import { wgslFn } from 'three/tsl';
 import { constants, lightStruct, lightRecordStruct } from './structs.wgsl.js';
 
-export const lightConstants = wgsl( /* wgsl */ `
-
-	const RECT_AREA_LIGHT_TYPE: i32 = 0;
-	const CIRC_AREA_LIGHT_TYPE: i32 = 1;
-	const SPOT_LIGHT_TYPE: i32 = 2;
-	const DIR_LIGHT_TYPE: i32 = 3;
-	const POINT_LIGHT_TYPE: i32 = 4;
-
-	// stand-in for an infinitely distant hit
-	const LIGHT_FAR_DISTANCE: f32 = 1e20;
-
-` );
+// Light type tags ( matching LightsInfoUniformStruct's packing ) and a stand-in "infinite" hit
+// distance. Plain JS constants interpolated straight into the WGSL templates - no const block.
+export const RECT_AREA_LIGHT_TYPE = 0;
+export const CIRC_AREA_LIGHT_TYPE = 1;
+export const SPOT_LIGHT_TYPE = 2;
+export const DIR_LIGHT_TYPE = 3;
+export const POINT_LIGHT_TYPE = 4;
+export const LIGHT_FAR_DISTANCE = 1e30;
 
 export const getSpotAttenuationFn = wgslFn( /* wgsl */ `
 
@@ -110,11 +106,11 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 	fn randomAreaLightSample( light: Light, rayOrigin: vec3f, ruv: vec2f ) -> LightRecord {
 
 		var randomPos = vec3f( 0.0 );
-		if ( light.lightType == RECT_AREA_LIGHT_TYPE ) {
+		if ( light.lightType == ${ RECT_AREA_LIGHT_TYPE } ) {
 
 			randomPos = light.position + light.u * ( ruv.x - 0.5 ) + light.v * ( ruv.y - 0.5 );
 
-		} else if ( light.lightType == CIRC_AREA_LIGHT_TYPE ) {
+		} else if ( light.lightType == ${ CIRC_AREA_LIGHT_TYPE } ) {
 
 			let r = 0.5 * sqrt( ruv.x );
 			let theta = ruv.y * 2.0 * PI;
@@ -141,7 +137,7 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ lightStruct, lightRecordStruct, constants, lightConstants ] );
+`, [ lightStruct, lightRecordStruct, constants ] );
 
 // Samples the disc of a spot light, applying cone and distance falloff. IES profiles are not
 // yet ported so the analytic cone attenuation is always used.

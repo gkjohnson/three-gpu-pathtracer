@@ -217,7 +217,7 @@ export const environmentSampleStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'EnvironmentSample' );
 
-// A single scene light unpacked from the lights data texture ( see LightsInfoUniformStruct ).
+// A single scene light unpacked from the lights data texture.
 export const lightStruct = new StructTypeNode( {
 	position: 'vec3f',
 	lightType: 'i32',
@@ -234,7 +234,7 @@ export const lightStruct = new StructTypeNode( {
 	iesProfile: 'i32',
 }, 'Light' );
 
-// Result of sampling ( or intersecting ) a light: a world-space direction toward the light,
+// Result of sampling (or intersecting) a light: a world-space direction toward the light,
 // the distance to it, its emitted radiance, and the pdf ( solid-angle measure ) of the sample.
 export const lightRecordStruct = new StructTypeNode( {
 	dist: 'f32',

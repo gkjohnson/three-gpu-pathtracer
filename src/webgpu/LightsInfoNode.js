@@ -3,7 +3,12 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
 import {
-	lightConstants,
+	RECT_AREA_LIGHT_TYPE,
+	CIRC_AREA_LIGHT_TYPE,
+	SPOT_LIGHT_TYPE,
+	DIR_LIGHT_TYPE,
+	POINT_LIGHT_TYPE,
+	LIGHT_FAR_DISTANCE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
 	randomAreaLightSampleFn,
@@ -42,7 +47,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const readLightInfo = wgslTagFn/* wgsl */`
 			fn readLightInfo( index: u32 ) -> ${ lightStruct } {
 
-				${ [ lightConstants ] }
 				let width = textureDimensions( ${ texNode } ).x;
 				let base = index * 6u;
 
@@ -60,7 +64,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				l.v = s3.rgb;
 				l.area = s3.a;
 
-				if ( l.lightType == SPOT_LIGHT_TYPE || l.lightType == POINT_LIGHT_TYPE ) {
+				if ( l.lightType == ${ SPOT_LIGHT_TYPE } || l.lightType == ${ POINT_LIGHT_TYPE } ) {
 
 					let s4 = textureLoad( ${ texNode }, vec2u( ( base + 4u ) % width, ( base + 4u ) / width ), 0 );
 					let s5 = textureLoad( ${ texNode }, vec2u( ( base + 5u ) % width, ( base + 5u ) / width ), 0 );
@@ -91,17 +95,16 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.randomLightSample = wgslTagFn/* wgsl */`
 			fn randomLightSample( rayOrigin: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
 
-				${ [ lightConstants ] }
 				let count = ${ countNode };
 				let l = min( u32( ruv.x * f32( count ) ), count - 1u );
 				let light = ${ readLightInfo }( l );
 
 				var result: ${ lightRecordStruct };
-				if ( light.lightType == SPOT_LIGHT_TYPE ) {
+				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
 
 					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv.yz );
 
-				} else if ( light.lightType == POINT_LIGHT_TYPE ) {
+				} else if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
 
 					// the point light's world position is packed into the u slot
 					let lightRay = light.u - rayOrigin;
@@ -121,10 +124,10 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 					result.emission = light.color * light.intensity * distanceFalloff;
 					result.lightType = light.lightType;
 
-				} else if ( light.lightType == DIR_LIGHT_TYPE ) {
+				} else if ( light.lightType == ${ DIR_LIGHT_TYPE } ) {
 
 					// the directional light's direction is packed into the u slot
-					result.dist = LIGHT_FAR_DISTANCE;
+					result.dist = ${ LIGHT_FAR_DISTANCE };
 					result.direction = light.u;
 					result.pdf = 1.0;
 					result.emission = light.color * light.intensity;
@@ -146,7 +149,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.intersectLightAtIndex = wgslTagFn/* wgsl */`
 			fn intersectLightAtIndex( rayOrigin: vec3f, rayDirection: vec3f, index: u32, lightRec: ptr<function, ${ lightRecordStruct }> ) -> bool {
 
-				${ [ lightConstants ] }
 				let light = ${ readLightInfo }( index );
 
 				var u = light.u;
@@ -160,11 +162,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 					v *= 1.0 / dot( v, v );
 
 					var dist = - 1.0;
-					if ( light.lightType == RECT_AREA_LIGHT_TYPE ) {
+					if ( light.lightType == ${ RECT_AREA_LIGHT_TYPE } ) {
 
 						dist = ${ intersectsRectangleFn }( light.position, normal, u, v, rayOrigin, rayDirection );
 
-					} else if ( light.lightType == CIRC_AREA_LIGHT_TYPE ) {
+					} else if ( light.lightType == ${ CIRC_AREA_LIGHT_TYPE } ) {
 
 						dist = ${ intersectsCircleFn }( light.position, normal, u, v, rayOrigin, rayDirection );
 
