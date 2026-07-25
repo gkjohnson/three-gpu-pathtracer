@@ -45,11 +45,42 @@ export class PathtracingMaterial {
 
 	}
 
+	/**
+	 *
+	 * Must return a bsdf evaluation function node with signature
+	 * ( worldView: vec3f, worldLight: vec3f, surface: Surface ) -> ScatterRecord
+	 * returning the bsdf value and sampling pdf for a given light direction.
+	 * Used by next event estimation to weight a chosen light direction.
+	 *
+	 */
+	getBsdfEvalPdfNode() {
+
+		return wgslTagFn`
+
+			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
+
+				var record: ScatterRecord;
+				record.direction = worldWi;
+
+				let wo = normalize( surf.normalInvBasis * worldWo );
+				let wi = normalize( surf.normalInvBasis * worldWi );
+				record.color = surf.color * max( wi.z, 0.0 );
+				record.pdf = max( wi.z, 0.0 ) / PI;
+
+				return record;
+
+			}
+
+		`;
+
+	}
+
 	getData() {
 
 		return {
 
 			bsdfSample: this.getBsdfNode(),
+			bsdfEvalPdf: this.getBsdfEvalPdfNode(),
 
 		};
 

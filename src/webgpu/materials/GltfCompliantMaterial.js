@@ -335,15 +335,4 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	}
 
-	getData() {
-
-		return {
-
-			bsdfSample: this.getBsdfNode(),
-			bsdfEvalPdf: this.getBsdfEvalPdfNode(),
-
-		};
-
-	}
-
 }
