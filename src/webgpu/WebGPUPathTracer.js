@@ -168,6 +168,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -225,6 +226,13 @@ export class WebGPUPathTracer {
 		this.setMaterial( this.material );
 		this.setRandom( this.random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
+
+	}
+
+	setMultipleImportanceSampling( value ) {
+
+		this.multipleImportanceSampling = value;
+		this._pathTracer.setMultipleImportanceSampling( value );
 
 	}
 
