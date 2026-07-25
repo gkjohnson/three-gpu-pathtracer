@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { environmentInfoStruct, environmentSampleStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
+import { constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
@@ -76,7 +76,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 `, [ schlickFresnelFunc, iorToF0Func, evaluateFresnelFunc, lobeWeightsStruct, constants ] );
 
-const equirectDirectionToUvFn = wgslFn( /* wgsl */`
+export const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
 
@@ -93,17 +93,7 @@ const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 ` );
 
-const sampleEquirectColorFn = wgslFn( /* wgsl */ `
-
-	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
-
-		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 );
-
-	}
-
-`, [ equirectDirectionToUvFn ] );
-
-const sampleHemisphereFn = wgslFn( /* wgsl */ `
+export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 	fn sampleHemisphere( n: vec3f, uv: vec2f ) -> vec3f {
 
@@ -124,46 +114,6 @@ const sampleHemisphereFn = wgslFn( /* wgsl */ `
 	}
 
 `, [ constants ] );
-
-export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
-
-	fn sampleEnvironment(
-		envMap: texture_2d<f32>,
-		envMapSampler: sampler,
-		env: EnvironmentInfo,
-		direction: vec3f,
-		uv: vec2f,
-	) -> vec4f {
-
-		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * env.blur;
-		let sampleDir = normalize( env.rotation * direction + offsetDir );
-		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
-
-		return vec4f( env.intensity * col.rgb, col.a );
-
-	}
-
-`, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
-
-export const sampleEquirectFn = wgslFn( /* wgsl */ `
-
-	fn sampleEquirect(
-		envMap: texture_2d<f32>,
-		envMapSampler: sampler,
-		blur: f32,
-		direction: vec3f,
-		uv: vec2f,
-	) -> vec4f {
-
-		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * blur;
-		let sampleDir = normalize( direction + offsetDir );
-		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
-
-		return vec4f( col.rgb, col.a );
-
-	}
-
-`, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
 
 // power heuristic for multiple importance sampling
 export const misHeuristicFn = wgslFn( /* wgsl */ `
@@ -227,72 +177,6 @@ export const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
 	}
 
 `, [ constants, equirectDirectionToUvFn ] );
-
-// pdf ( solid angle ) of importance-sampling the given env-map-space direction from the
-// luminance distribution. Used to MIS-weight BSDF rays that escape to the environment.
-export const envMapDirectionPdfFn = wgslFn( /* wgsl */ `
-
-	fn envMapDirectionPdf( envMap: texture_2d<f32>, envMapSampler: sampler, totalSum: f32, direction: vec3f ) -> f32 {
-
-		if ( totalSum == 0.0 ) {
-
-			return 0.0;
-
-		}
-
-		let color = sampleEquirectColor( envMap, envMapSampler, direction ).rgb;
-		let lum = luminance( color );
-		let resolution = textureDimensions( envMap );
-		let pdf = lum / totalSum;
-
-		return f32( resolution.x * resolution.y ) * pdf * equirectDirectionPdf( direction );
-
-	}
-
-`, [ sampleEquirectColorFn, luminanceFn, equirectDirectionPdfFn ] );
-
-// importance-sample the environment map through its marginal/conditional CDF textures.
-// returns radiance, an env-map-space direction, and the solid-angle pdf.
-export const sampleEquirectProbabilityFn = wgslFn( /* wgsl */ `
-
-	fn sampleEquirectProbability(
-		marginal: texture_2d<f32>, marginalSampler: sampler,
-		conditional: texture_2d<f32>, conditionalSampler: sampler,
-		envMap: texture_2d<f32>, envMapSampler: sampler,
-		totalSum: f32,
-		r: vec2f,
-	) -> EnvironmentSample {
-
-		var result: EnvironmentSample;
-
-		// walk the CDF: marginal picks the row ( v ), conditional picks the column ( u )
-		let v = textureSampleLevel( marginal, marginalSampler, vec2f( r.x, 0.0 ), 0 ).x;
-		let u = textureSampleLevel( conditional, conditionalSampler, vec2f( r.y, v ), 0 ).x;
-		let uv = vec2f( u, v );
-
-		let direction = equirectUvToDirection( uv );
-		let color = textureSampleLevel( envMap, envMapSampler, uv, 0 ).rgb;
-
-		result.direction = direction;
-		result.color = color;
-
-		if ( totalSum == 0.0 ) {
-
-			result.pdf = 0.0;
-			return result;
-
-		}
-
-		let lum = luminance( color );
-		let resolution = textureDimensions( envMap );
-		let pdf = lum / totalSum;
-		result.pdf = f32( resolution.x * resolution.y ) * pdf * equirectDirectionPdf( direction );
-
-		return result;
-
-	}
-
-`, [ environmentSampleStruct, equirectUvToDirectionFn, luminanceFn, equirectDirectionPdfFn ] );
 
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 
