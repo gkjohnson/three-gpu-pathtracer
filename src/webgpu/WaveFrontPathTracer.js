@@ -5,6 +5,7 @@ import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
+import { LightConnectionKernel } from './compute/wavefront/LightConnectionKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
@@ -50,10 +51,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionKernel = new RayIntersectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.lightConnectionKernel = new LightConnectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 
 		// bind the shared env provider so the kernels' proxies resolve even before an environment is set
 		this.rayIntersectionKernel.envInfo = this.envInfo;
-		this.hitProcessKernel.envInfo = this.envInfo;
+		this.lightConnectionKernel.envInfo = this.envInfo;
 		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
 
 		// clear kernels
@@ -61,7 +63,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// later
 		this.volumeKernel = null;
-		this.lightConnectionKernel = null;
 
 	}
 
@@ -82,6 +83,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitProcessKernel.bvhData = bvhData;
 		this.hitProcessKernel.needsUpdate = true;
 
+		this.lightConnectionKernel.bvhData = bvhData;
+		this.lightConnectionKernel.needsUpdate = true;
+
 		this.reset();
 
 	}
@@ -97,6 +101,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitProcessKernel.context.random = random;
 		this.hitProcessKernel.needsUpdate = true;
 
+		this.lightConnectionKernel.context.random = random;
+		this.lightConnectionKernel.needsUpdate = true;
+
 		this.reset();
 
 	}
@@ -105,6 +112,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.hitProcessKernel.material = material.getData();
 		this.hitProcessKernel.needsUpdate = true;
+
+		this.lightConnectionKernel.material = material.getData();
+		this.lightConnectionKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -128,7 +138,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		const value = enabled ? 1 : 0;
 		this.rayIntersectionKernel.misEnabled = value;
-		this.hitProcessKernel.misEnabled = value;
+		this.lightConnectionKernel.misEnabled = value;
 		this.reset();
 
 	}
@@ -247,6 +257,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			rayIntersectionKernel,
 			updateRayQueueParamsKernel,
 			hitProcessKernel,
+			lightConnectionKernel,
 
 			lowResMode
 		} = this;
@@ -318,9 +329,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				updateRayQueueParamsKernel.queueSizes = queueSizes;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
+				// Step 3: next event estimation - deposit the direct-light contribution into
+				// hitQueue.resultColor before ProcessHits consumes it
+				lightConnectionKernel.queueSizes = queueSizes;
+				lightConnectionKernel.hitQueue = hitQueue;
+				renderer.compute( lightConnectionKernel.kernel, lightConnectionKernel.getDispatchSize( processed, 1, 1 ) );
+
 				// TODO: we should use an indirect dispatch here to only kick off the number of threads
 				// as needed to iterate over all the fields
-				// Step 3: attenuate ray color, scatter, run russian roulette
+				// Step 4: attenuate ray color, scatter, run russian roulette
 				hitProcessKernel.sampleCountTarget = sampleCountTarget;
 				hitProcessKernel.bounces = bounces;
 				hitProcessKernel.rayQueue = rayQueue;
@@ -328,9 +345,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				hitProcessKernel.hitQueue = hitQueue;
 				renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
 				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel
-
-				// Step 4: connect to lights
-				// TODO
 
 				// Future
 				// - track variance to skip rays

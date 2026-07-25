@@ -2,10 +2,10 @@ import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'thr
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { queuedRayStruct, queuedHitStruct } from './structs.js';
-import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn, misHeuristicFn } from '../../nodes/sampling.wgsl.js';
+import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -14,7 +14,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const params = {
 			bvhData: { value: null },
 			material: { value: null },
-			envInfo: { value: null },
 
 			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -24,7 +23,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
-			misEnabled: uniform( 1, 'uint' ),
 
 			// rays
 			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
@@ -40,13 +38,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
-
-		// environment resources pulled straight off the envInfo provider ( EquirectHdrInfoNode )
-		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
-		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -54,7 +45,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
-				misEnabled: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -98,32 +88,6 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
-
-				// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
-				if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
-
-					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-
-					// TODO: do we need to guard against other forms of invalid rays? Eg below the surface?
-					let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
-					if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
-
-						// TODO: is an offset needed here?
-						var shadowRay: ${ rayStruct };
-						shadowRay.origin = vertexData.position.xyz;
-						shadowRay.direction = envSample.direction;
-
-						var shadowHit: ${ raycastOutput };
-						if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
-
-							let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
-							resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
-
-						}
-
-					}
-
-				}
 
 				let isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
