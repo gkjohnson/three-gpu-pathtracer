@@ -319,7 +319,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								if ( material.transparent != 0 ) {
 
-									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti );
+									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ${ discardDimensionOffset } );
 									${ discardDimensionOffset } += 1u;
 
 									if ( doDiscard ) {

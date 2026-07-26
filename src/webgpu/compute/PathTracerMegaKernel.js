@@ -49,7 +49,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
-		// environment resources pulled straight off the envInfo provider ( EquirectHdrInfoNode )
+		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
@@ -75,10 +75,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
-
-				// environment ( map / cdf / scalars are pulled from the envInfo provider via proxies )
 				misEnabled: u32,
-
 
 			) -> void {
 
@@ -111,7 +108,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
-				var bsdfPdf = 0.0; // pdf of the scatter that made the current ray; MIS-weights the env on escape
+				var bsdfPdf = 0.0;
 
 
 				// one-sample next event estimation selects between the analytic lights and the
@@ -170,9 +167,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let worldWo = - ray.direction;
 
-						// next event estimation: draw one sample among the analytic lights and the
-						// environment, MIS-weighted against the bsdf pdf.
-						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
+						// next event estimation
+						// importance-sample the environment, MIS-weighted against the bsdf pdf.
+						if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 							let selectRand = ${ rand1 }( ${ RNG_INDEX_DIRECT_LIGHT_SELECTION } );
 							if ( selectRand < f32( lightsCount ) / lightsDenom ) {
