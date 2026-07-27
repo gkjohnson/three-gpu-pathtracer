@@ -25,7 +25,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, RANDOM_BLUE_DITHER, RANDOM_PCG, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
@@ -85,6 +85,7 @@ const envMaps = {
 const params = {
 
 	multipleImportanceSampling: true,
+	random: RANDOM_SOBOL,
 	acesToneMapping: true,
 	renderScale: 1 / window.devicePixelRatio,
 	tiles: 2,
@@ -206,7 +207,8 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
+	pathTracer.setRandom( params.random );
 	pathTracer.transmissiveBounces = 10;
 	pathTracer.useMegakernel( params.useMegakernel );
 
@@ -309,7 +311,6 @@ function animate() {
 
 function onParamsChange() {
 
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.renderScale = params.renderScale;
@@ -350,6 +351,8 @@ function onParamsChange() {
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
+	pathTracer.setRandom( params.random );
 
 }
 
@@ -444,6 +447,7 @@ function buildGui() {
 		pathTracer.tiles.set( v, v );
 
 	} );
+	pathTracingFolder.add( params, 'random', { RANDOM_SOBOL, RANDOM_BLUE_DITHER, RANDOM_PCG } ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
