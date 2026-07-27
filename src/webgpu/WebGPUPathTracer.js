@@ -331,7 +331,7 @@ export class WebGPUPathTracer {
 
 			// add a default camera ray getter. the update function is called when the camera is
 			// updated to trigger any necessary uniform updates.
-			const invViewProjectionMatrix = uniform( new Matrix4() );
+			const invViewProjectionMatrix = this._invViewProjectionMatrix;
 			this._cameraRayFnHandle = {
 				update: () => {
 
