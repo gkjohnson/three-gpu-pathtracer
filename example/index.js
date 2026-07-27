@@ -151,18 +151,13 @@ async function waitFrame() {
  * Only limits explicitly listed in DEVICE_LIMITS_REQUESTED will be requested.
  * This avoids requesting all adapter limits and improves compatibility.
  *
+ * Note: Limits should be set based on the specific requirements of the application.
+ * ensuring broader device compatibility and optimal resource usage.
+ *
  * @param {GPUAdapter} adapter
  * @returns {Record<string, number>}
  */
 function getRequiredDeviceLimits( adapter ) {
-
-	if ( ! adapter || ! adapter.limits ) {
-
-		throw new TypeError(
-			'getRequiredDeviceLimits: A valid GPUAdapter is required.'
-		);
-
-	}
 
 	const limits = {};
 
