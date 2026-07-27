@@ -1,4 +1,4 @@
-import { texture, textureStore, globalId, float } from 'three/tsl';
+import { texture, textureStore, globalId, float, vec2 } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
@@ -49,7 +49,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.turquinTexture.minFilter = LinearFilter;
 		this.turquinTexture.magFilter = LinearFilter;
 
-		const turquinNode = texture( this.turquinTexture ).setName( 'turquinTexture' );
+		const turquinNode = texture( this.turquinTexture, vec2( 0.0 ) ).setName( 'turquinTexture' );
 
 		this.specularBrdf = specularBrdf;
 		this.diffuseBrdf = diffuseBrdf;
