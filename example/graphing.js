@@ -3,26 +3,23 @@ import { wgslFn } from 'three/tsl';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GraphMaterial } from '../src/webgpu/materials/GraphMaterial.js';
 import { ggxDistributionFunc, ggxShadowMaskG1Func, ggxLambdaFunc, ggxReflectionAdjustedPDFFunc } from '../src/webgpu/nodes/ggx.wgsl.js';
-import { constants } from '../src/webgpu/nodes/structs.wgsl.js';
 
-// Graph the ggx functions against roughness ( x ) for a fixed incident angle, mirroring the
-// GLSL variant of this example: wi = normalize( vec3( 1 ) ), half vector = +Z.
+// Graph the GGX functions against isotropic alpha ( x ) for a fixed view direction and +Z half vector.
 const COS_THETA = 1 / Math.sqrt( 3 );
-const SIN_THETA = Math.sqrt( 1 - COS_THETA * COS_THETA );
 
 // each graph slot is a wgsl function of the form "fn( x: f32 ) -> f32"
 const graphs = [
 
 	wgslFn( /* wgsl */`
-		fn graphGgxPdf( x: f32 ) -> f32 {
+		fn graphGgxReflectionAdjustedPDF( x: f32 ) -> f32 {
 
-			let V = vec3f( ${ SIN_THETA }, 0.0, ${ COS_THETA } );
+			let V = vec3f( ${ COS_THETA } );
 			let H = vec3f( 0.0, 0.0, 1.0 );
 			let alpha = vec2f( x );
 			return ggxReflectionAdjustedPDF( V, H, alpha );
 
 		}
-	`, [ ggxReflectionAdjustedPDFFunc, constants ] ),
+	`, [ ggxReflectionAdjustedPDFFunc ] ),
 
 	wgslFn( /* wgsl */`
 		fn graphGgxDistribution( x: f32 ) -> f32 {
@@ -31,12 +28,12 @@ const graphs = [
 			return ggxDistribution( H, vec2f( x ) );
 
 		}
-	`, [ ggxDistributionFunc, constants ] ),
+	`, [ ggxDistributionFunc ] ),
 
 	wgslFn( /* wgsl */`
 		fn graphGgxShadowMaskG1( x: f32 ) -> f32 {
 
-			let V = vec3f( ${ SIN_THETA }, 0.0, ${ COS_THETA } );
+			let V = vec3f( ${ COS_THETA } );
 			return ggxShadowMaskG1( V, vec2f( x ) );
 
 		}
@@ -45,7 +42,7 @@ const graphs = [
 	wgslFn( /* wgsl */`
 		fn graphGgxLambda( x: f32 ) -> f32 {
 
-			let V = vec3f( ${ SIN_THETA }, 0.0, ${ COS_THETA } );
+			let V = vec3f( ${ COS_THETA } );
 			return ggxLambda( V, vec2f( x ) );
 
 		}
