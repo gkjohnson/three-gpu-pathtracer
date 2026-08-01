@@ -89,7 +89,7 @@ export const ggxLambdaFunc = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`, [ constants ] );
 
 // Based on equation (2) from reference [1]
 export const ggxShadowMaskG1Func = wgslFn( /* wgsl */ `
@@ -128,7 +128,7 @@ export const ggxSmithVisibilityFunc = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`, [ constants ] );
 
 // Trowbridge-Reitz ( GGX ) normal distribution
 // See (listing 15) in [7]
@@ -152,7 +152,7 @@ export const ggxDistributionFunc = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`, [ constants ] );
 
 // ggxPDF, divided by the Jacobian of reflection operation
 // PDF: See equation (17) from reference [2]
