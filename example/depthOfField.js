@@ -137,6 +137,7 @@ async function init() {
 	// update the scene
 	pathTracer.setScene( scene, camera );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 	onParamsChange();
