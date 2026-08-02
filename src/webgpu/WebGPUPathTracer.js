@@ -279,6 +279,13 @@ export class WebGPUPathTracer {
 		bvhData.update();
 		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
 
+		if ( this._bvhData ) {
+
+			this._bvhData.dispose();
+			this._bvhData.textureAtlas.dispose();
+
+		}
+
 		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
@@ -360,6 +367,14 @@ export class WebGPUPathTracer {
 		const { _bvhData, _renderer } = this;
 		_bvhData.updateMaterials();
 		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+		this.reset();
+
+	}
+
+	updateTransforms() {
+
+		this.scene.updateMatrixWorld( true );
+		this._bvhData.updateTransforms();
 		this.reset();
 
 	}
@@ -660,10 +675,12 @@ export class WebGPUPathTracer {
 	dispose() {
 
 		this._pathTracer.dispose();
+		this._bvhData.dispose();
+		this._bvhData.textureAtlas.dispose();
+		this._environmentCache.dispose();
+		this._backgroundCache.dispose();
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
-		this._envColorTexture.dispose();
-		this._backgroundColorTexture.dispose();
 		this._atlasDebugQuad?.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {

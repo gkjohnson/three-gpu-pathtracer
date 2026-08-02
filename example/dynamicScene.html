@@ -4,21 +4,10 @@
 		<title>Dynamic Scene Editing Example</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<style>
-			body { margin: 0; overflow: hidden; background: #222; font: 13px sans-serif; }
-			#ui { position: fixed; z-index: 1; margin: 10px; padding: 10px; color: white; background: #222c; }
-			label { display: block; margin: 6px 0; }
-			button, select, input { vertical-align: middle; }
+			body { margin: 0; overflow: hidden; background: #222; }
 		</style>
 	</head>
 	<body>
-		<div id="ui">
-			<button id="add">Add</button> <button id="remove">Delete</button>
-			<select id="shape"><option>Box</option><option>Sphere</option></select>
-			<label>Color <input id="color" type="color" value="#44aaff"></label>
-			<label>Roughness <input id="roughness" type="range" min="0" max="1" step="0.01" value="0.25"></label>
-			<label>Metalness <input id="metalness" type="range" min="0" max="1" step="0.01" value="0"></label>
-			<div>Drag a model to move it</div>
-		</div>
 		<script src="./dynamicScene.js" type="module"></script>
 	</body>
 </html>

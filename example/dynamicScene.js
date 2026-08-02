@@ -1,13 +1,16 @@
 import {
 	ACESFilmicToneMapping, BoxGeometry, Mesh, MeshStandardMaterial, PerspectiveCamera,
-	PlaneGeometry, Scene, SphereGeometry, WebGPURenderer,
+	PlaneGeometry, Raycaster, Scene, SphereGeometry, Vector2, WebGPURenderer,
 } from 'three/webgpu';
+
+import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DragControls } from 'three/addons/controls/DragControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 
 const scene = new Scene();
+const transformScene = new Scene();
 const camera = new PerspectiveCamera( 50, 1, 0.1, 100 );
 camera.position.set( 5, 4, 7 );
 
@@ -32,60 +35,114 @@ floor.rotation.x = - Math.PI / 2;
 scene.add( floor );
 
 const objects = [];
-let selected, dragging = false;
+let selected;
 const orbit = new OrbitControls( camera, renderer.domElement );
 orbit.target.y = 0.5;
 orbit.addEventListener( 'change', () => pathTracer.updateCamera() );
 orbit.update();
 
-const drag = new DragControls( objects, camera, renderer.domElement );
-drag.addEventListener( 'dragstart', e => {
+const transformControls = new TransformControls( camera, renderer.domElement );
+transformScene.add( transformControls.getHelper() );
+transformControls.addEventListener( 'mouseDown', () => orbit.enabled = false );
+transformControls.addEventListener( 'change', () => pathTracer.updateTransforms() );
+transformControls.addEventListener( 'mouseUp', () => {
 
-	select( e.object );
-	dragging = true;
-	orbit.enabled = false;
-
-} );
-drag.addEventListener( 'dragend', () => {
-
-	dragging = false;
 	orbit.enabled = true;
-	pathTracer.setScene( scene, camera );
+	pathTracer.updateTransforms();
 
 } );
 
-const ui = Object.fromEntries( [ 'add', 'remove', 'shape', 'color', 'roughness', 'metalness' ].map( id => [ id, document.getElementById( id ) ] ) );
-ui.add.onclick = add;
-ui.remove.onclick = () => {
-
-	if ( ! selected ) return;
-	scene.remove( selected );
-	objects.splice( objects.indexOf( selected ), 1 );
-	selected.geometry.dispose();
-	selected.material.dispose();
-	selected = objects.at( - 1 );
-	if ( selected ) select( selected );
-	pathTracer.setScene( scene, camera );
-
+const transformModes = {
+	KeyT: 'translate',
+	KeyR: 'rotate',
+	KeyS: 'scale',
 };
 
-for ( const key of [ 'color', 'roughness', 'metalness' ] ) {
+window.addEventListener( 'keydown', event => {
 
-	ui[ key ].oninput = () => {
+	if ( event.target?.closest?.( 'input, select, textarea' ) || event.target?.isContentEditable ) return;
 
-		if ( ! selected ) return;
-		if ( key === 'color' ) selected.material.color.set( ui[ key ].value );
-		else selected.material[ key ] = Number( ui[ key ].value );
-		pathTracer.updateMaterials();
+	const mode = transformModes[ event.code ];
+	if ( mode !== undefined ) {
 
-	};
+		transformControls.setMode( mode );
+		event.preventDefault();
+
+	}
+
+} );
+
+const raycaster = new Raycaster();
+const pointer = new Vector2();
+const pointerStart = new Vector2();
+const pointerEnd = new Vector2();
+
+const params = {
+	add,
+	remove,
+	shape: 'Box',
+	color: '#44aaff',
+	roughness: 0.25,
+	metalness: 0,
+};
+
+const gui = new GUI();
+gui.add( params, 'add' ).name( 'Add' );
+gui.add( params, 'remove' ).name( 'Delete' );
+gui.add( params, 'shape', [ 'Box', 'Sphere' ] );
+const colorController = gui.addColor( params, 'color' ).onChange( updateMaterial );
+const roughnessController = gui.add( params, 'roughness', 0, 1, 0.01 ).onChange( updateMaterial );
+const metalnessController = gui.add( params, 'metalness', 0, 1, 0.01 ).onChange( updateMaterial );
+
+renderer.domElement.addEventListener( 'pointerdown', event => pointerStart.set( event.clientX, event.clientY ) );
+renderer.domElement.addEventListener( 'pointerup', event => {
+
+	pointerEnd.set( event.clientX, event.clientY );
+	if ( transformControls.dragging || pointerStart.distanceTo( pointerEnd ) > 4 ) return;
+
+	const rect = renderer.domElement.getBoundingClientRect();
+	pointer.set(
+		( ( event.clientX - rect.left ) / rect.width ) * 2 - 1,
+		- ( ( event.clientY - rect.top ) / rect.height ) * 2 + 1,
+	);
+	raycaster.setFromCamera( pointer, camera );
+	select( raycaster.intersectObjects( objects )[ 0 ]?.object || null );
+
+} );
+
+function remove() {
+
+	if ( ! selected ) return;
+	const object = selected;
+	transformControls.detach();
+	scene.remove( object );
+	objects.splice( objects.indexOf( object ), 1 );
+	object.geometry.dispose();
+	object.material.dispose();
+	selected = objects.at( - 1 );
+	select( selected );
+	pathTracer.setScene( scene, camera );
+
+}
+
+function updateMaterial() {
+
+	if ( ! selected ) return;
+	selected.material.color.set( params.color );
+	selected.material.roughness = params.roughness;
+	selected.material.metalness = params.metalness;
+	pathTracer.updateMaterials();
 
 }
 
 function add() {
 
-	const geometry = ui.shape.value === 'Box' ? new BoxGeometry() : new SphereGeometry( 0.6, 32, 16 );
-	const object = new Mesh( geometry, new MeshStandardMaterial( { color: ui.color.value, roughness: 0.25 } ) );
+	const geometry = params.shape === 'Box' ? new BoxGeometry() : new SphereGeometry( 0.6, 32, 16 );
+	const object = new Mesh( geometry, new MeshStandardMaterial( {
+		color: params.color,
+		roughness: params.roughness,
+		metalness: params.metalness,
+	} ) );
 	object.position.set( ( objects.length % 4 ) - 1.5, 0.6, 0 );
 	objects.push( object );
 	scene.add( object );
@@ -97,16 +154,38 @@ function add() {
 function select( object ) {
 
 	selected = object;
-	ui.color.value = `#${ object.material.color.getHexString() }`;
-	ui.roughness.value = object.material.roughness;
-	ui.metalness.value = object.material.metalness;
+	if ( object ) {
+
+		transformControls.attach( object );
+		params.color = `#${ object.material.color.getHexString() }`;
+		params.roughness = object.material.roughness;
+		params.metalness = object.material.metalness;
+
+	} else {
+
+		transformControls.detach();
+
+	}
+
+	colorController.updateDisplay();
+	roughnessController.updateDisplay();
+	metalnessController.updateDisplay();
 
 }
 
 function animate() {
 
-	if ( dragging ) renderer.render( scene, camera );
-	else pathTracer.renderSample();
+	pathTracer.renderSample();
+
+	if ( selected ) {
+
+		const originalAutoClear = renderer.autoClear;
+		renderer.autoClear = false;
+		renderer.clearDepth();
+		renderer.render( transformScene, camera );
+		renderer.autoClear = originalAutoClear;
+
+	}
 
 }
 
