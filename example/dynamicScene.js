@@ -36,6 +36,10 @@ scene.add( floor );
 
 const objects = [];
 let selected;
+
+let transformNeedsUpdate = false;
+let materialNeedsUpdate = false;
+
 const orbit = new OrbitControls( camera, renderer.domElement );
 orbit.target.y = 0.5;
 orbit.addEventListener( 'change', () => pathTracer.updateCamera() );
@@ -44,11 +48,11 @@ orbit.update();
 const transformControls = new TransformControls( camera, renderer.domElement );
 transformScene.add( transformControls.getHelper() );
 transformControls.addEventListener( 'mouseDown', () => orbit.enabled = false );
-transformControls.addEventListener( 'change', () => pathTracer.updateTransforms() );
+transformControls.addEventListener( 'change', () => transformNeedsUpdate = true );
 transformControls.addEventListener( 'mouseUp', () => {
 
 	orbit.enabled = true;
-	pathTracer.updateTransforms();
+	transformNeedsUpdate = true;
 
 } );
 
@@ -131,7 +135,7 @@ function updateMaterial() {
 	selected.material.color.set( params.color );
 	selected.material.roughness = params.roughness;
 	selected.material.metalness = params.metalness;
-	pathTracer.updateMaterials();
+	materialNeedsUpdate = true;
 
 }
 
@@ -174,6 +178,20 @@ function select( object ) {
 }
 
 function animate() {
+
+	if ( transformNeedsUpdate ) {
+
+		transformNeedsUpdate = false;
+		pathTracer.updateTransforms();
+
+	}
+
+	if ( materialNeedsUpdate ) {
+
+		materialNeedsUpdate = false;
+		pathTracer.updateMaterials();
+
+	}
 
 	pathTracer.renderSample();
 
