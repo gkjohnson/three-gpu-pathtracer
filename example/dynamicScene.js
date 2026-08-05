@@ -209,15 +209,14 @@ function animate() {
 
 function resize() {
 
-	renderer.setSize( innerWidth, innerHeight );
-	renderer.setPixelRatio( devicePixelRatio );
-	camera.aspect = innerWidth / innerHeight;
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 	pathTracer.updateCamera();
 
 }
 
-add();
 add();
 resize();
 window.addEventListener( 'resize', resize );
