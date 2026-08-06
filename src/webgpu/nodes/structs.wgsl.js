@@ -220,28 +220,28 @@ export const environmentSampleStruct = new StructTypeNode( {
 // A single scene light unpacked from the lights data texture.
 export const lightStruct = new StructTypeNode( {
 	position: 'vec3f',
-	lightType: 'i32',
+	lightType: 'int',
 	color: 'vec3f',
-	intensity: 'f32',
+	intensity: 'float',
 	u: 'vec3f',
 	v: 'vec3f',
-	area: 'f32',
-	radius: 'f32',
-	decay: 'f32',
-	distance: 'f32',
-	coneCos: 'f32',
-	penumbraCos: 'f32',
-	iesProfile: 'i32',
+	area: 'float',
+	radius: 'float',
+	decay: 'float',
+	distance: 'float',
+	coneCos: 'float',
+	penumbraCos: 'float',
+	iesProfile: 'int',
 }, 'Light' );
 
 // Result of sampling (or intersecting) a light: a world-space direction toward the light,
 // the distance to it, its emitted radiance, and the pdf ( solid-angle measure ) of the sample.
 export const lightRecordStruct = new StructTypeNode( {
-	dist: 'f32',
+	dist: 'float',
 	direction: 'vec3f',
-	pdf: 'f32',
+	pdf: 'float',
 	emission: 'vec3f',
-	lightType: 'i32',
+	lightType: 'int',
 }, 'LightRecord' );
 
 export const lobeWeightsStruct = new StructTypeNode( {

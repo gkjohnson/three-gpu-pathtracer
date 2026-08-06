@@ -1,4 +1,5 @@
-import { texture, uniform } from 'three/tsl';
+import { storage, uniform } from 'three/tsl';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
@@ -21,10 +22,20 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		super();
 
-		this.texNode = texture( this.tex );
+		// lights packed into a storage buffer of Light structs, read directly as lights[ i ]. The buffer
+		// is resized in place to the exact light count on update; the binding node stays stable so no
+		// pipeline rebuild is needed.
 		this.countNode = uniform( this.count, 'uint' );
-
+		this._resizeBuffer( 2 );
 		this._initFns();
+
+	}
+
+	_resizeBuffer( lightCapacity ) {
+
+		const stride = lightStruct.getLength();
+		this.buffer = new StorageBufferAttribute( new Float32Array( lightCapacity * stride ), stride );
+		this.bufferNode = storage( this.buffer, lightStruct ).toReadOnly().setName( 'lights' );
 
 	}
 
@@ -32,7 +43,35 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		const changed = super.updateFrom( lights, iesTextures );
 
-		this.texNode.value = this.tex;
+		const stride = lightStruct.getLength();
+		const count = this.count;
+		const capacity = Math.max( count, 2 );
+
+		// resize the buffer in place to the exact light count. Storage arrays are runtime-sized in WGSL
+		// and the loop bound comes from countNode, so this needs no pipeline rebuild — just a buffer
+		// reallocation + re-upload, keeping the same binding node.
+		if ( this.buffer.array.length !== capacity * stride ) {
+
+			this.buffer.array = new Float32Array( capacity * stride );
+
+		}
+
+		// the texture's packed float layout already matches lightStruct's std layout, so copy it in
+		const src = this.tex.image.data;
+		this.buffer.array.set( src.subarray( 0, count * stride ) );
+
+		// lightType ( float offset 3 ) and iesProfile ( offset 21 ) are stored as float values in the
+		// texture; rewrite them as i32 bits to match lightStruct's int fields
+		const intView = new Int32Array( this.buffer.array.buffer );
+		for ( let i = 0; i < count; i ++ ) {
+
+			const base = i * stride;
+			intView[ base + 3 ] = Math.round( src[ base + 3 ] );
+			intView[ base + 21 ] = Math.round( src[ base + 21 ] );
+
+		}
+
+		this.buffer.needsUpdate = true;
 		this.countNode.value = this.count;
 
 		return changed;
@@ -41,52 +80,14 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { texNode, countNode } = this;
+		const { bufferNode, countNode } = this;
 
-		// unpack a single light from the data texture
+		// read a single light directly from the storage buffer as a Light struct
 		const readLightInfo = wgslTagFn/* wgsl */`
 			fn readLightInfo( index: u32 ) -> ${ lightStruct } {
 
-				let width = textureDimensions( ${ texNode } ).x;
-				let base = index * 6u;
-
-				let s0 = textureLoad( ${ texNode }, vec2u( ( base + 0u ) % width, ( base + 0u ) / width ), 0 );
-				let s1 = textureLoad( ${ texNode }, vec2u( ( base + 1u ) % width, ( base + 1u ) / width ), 0 );
-				let s2 = textureLoad( ${ texNode }, vec2u( ( base + 2u ) % width, ( base + 2u ) / width ), 0 );
-				let s3 = textureLoad( ${ texNode }, vec2u( ( base + 3u ) % width, ( base + 3u ) / width ), 0 );
-
-				var l: ${ lightStruct };
-				l.position = s0.rgb;
-				l.lightType = i32( round( s0.a ) );
-				l.color = s1.rgb;
-				l.intensity = s1.a;
-				l.u = s2.rgb;
-				l.v = s3.rgb;
-				l.area = s3.a;
-
-				if ( l.lightType == ${ SPOT_LIGHT_TYPE } || l.lightType == ${ POINT_LIGHT_TYPE } ) {
-
-					let s4 = textureLoad( ${ texNode }, vec2u( ( base + 4u ) % width, ( base + 4u ) / width ), 0 );
-					let s5 = textureLoad( ${ texNode }, vec2u( ( base + 5u ) % width, ( base + 5u ) / width ), 0 );
-					l.radius = s4.r;
-					l.decay = s4.g;
-					l.distance = s4.b;
-					l.coneCos = s4.a;
-					l.penumbraCos = s5.r;
-					l.iesProfile = i32( round( s5.g ) );
-
-				} else {
-
-					l.radius = 0.0;
-					l.decay = 0.0;
-					l.distance = 0.0;
-					l.coneCos = 0.0;
-					l.penumbraCos = 0.0;
-					l.iesProfile = - 1;
-
-				}
-
-				return l;
+				let lights = &${ bufferNode };
+				return lights[ index ];
 
 			}
 		`;

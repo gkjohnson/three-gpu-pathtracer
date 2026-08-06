@@ -3,12 +3,26 @@ import { constants, lightStruct, lightRecordStruct } from './structs.wgsl.js';
 
 // Light type tags ( matching LightsInfoUniformStruct's packing ) and a stand-in "infinite" hit
 // distance. Plain JS constants interpolated straight into the WGSL templates - no const block.
+// The environment is treated as an additional light kind so env + analytic lights share one NEE path.
 export const RECT_AREA_LIGHT_TYPE = 0;
 export const CIRC_AREA_LIGHT_TYPE = 1;
 export const SPOT_LIGHT_TYPE = 2;
 export const DIR_LIGHT_TYPE = 3;
 export const POINT_LIGHT_TYPE = 4;
+export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const LIGHT_FAR_DISTANCE = 1e30;
+
+// which light kinds can also be bsdf-sampled, so their NEE contribution must be MIS-weighted. Punctual
+// lights ( spot / point / directional ) can't be hit by a bsdf ray, so they take full weight.
+export const isMISWeightLightFn = wgslFn( /* wgsl */ `
+
+	fn isMISWeightLight( lightType: i32 ) -> bool {
+
+		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } || lightType == ${ CIRC_AREA_LIGHT_TYPE } || lightType == ${ RECT_AREA_LIGHT_TYPE };
+
+	}
+
+` );
 
 export const getSpotAttenuationFn = wgslFn( /* wgsl */ `
 

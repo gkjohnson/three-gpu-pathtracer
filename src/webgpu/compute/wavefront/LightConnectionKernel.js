@@ -5,7 +5,8 @@ import { queuedHitStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
-import { SPOT_LIGHT_TYPE, DIR_LIGHT_TYPE, POINT_LIGHT_TYPE } from '../../nodes/lights.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
 
@@ -107,10 +108,22 @@ export class LightConnectionKernel extends ComputeKernel {
 				// next event estimation: draw one sample among the analytic lights and the
 				// environment, MIS-weighted against the bsdf pdf.
 				let selectRand = ${ rand1 }( ${ RNG_INDEX_DIRECT_LIGHT_SELECTION } );
-				if ( selectRand < f32( lightsCount ) / lightsDenom ) {
+				var lightRec: ${ lightRecordStruct };
+				if ( envActive && selectRand >= f32( lightsCount ) / lightsDenom ) {
 
-					// sample one of the analytic lights
-					let lightRec = ${ randomLightSampleFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_ENV_SAMPLE } ) );
+					lightRec.direction = envSample.direction;
+					lightRec.emission = envSample.color;
+					lightRec.pdf = envSample.pdf;
+					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+				} else {
+
+					lightRec = ${ randomLightSampleFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+
+				}
 
 					// reject samples that fall below the geometric surface
 					var lightPdf = lightRec.pdf;
@@ -137,9 +150,8 @@ export class LightConnectionKernel extends ComputeKernel {
 
 								lightPdf /= lightsDenom;
 
-								// delta lights ( spot / point / directional ) cannot be bsdf-sampled, so they take full weight
-								let isPunctual = lightRec.lightType == ${ SPOT_LIGHT_TYPE } || lightRec.lightType == ${ DIR_LIGHT_TYPE } || lightRec.lightType == ${ POINT_LIGHT_TYPE };
-								let misWeight = select( ${ misHeuristicFn }( lightPdf, evalRec.pdf ), 1.0, isPunctual );
+								// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
+								let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 
 								// deposit the contribution in place; ProcessHits reads this augmented resultColor
 								hitQueue[ hitIndex ].resultColor += vec4f( input.throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
@@ -149,41 +161,6 @@ export class LightConnectionKernel extends ComputeKernel {
 						}
 
 					}
-
-				} else if ( envActive ) {
-
-					// sample the environment
-					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_ENV_SAMPLE } ) );
-
-					var envPdf = envSample.pdf;
-					if ( dot( surface.faceNormal, envSample.direction ) < 0.0 ) {
-
-						envPdf = 0.0;
-
-					}
-
-					let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
-					if ( envPdf > 0.0 && evalRec.pdf > 0.0 ) {
-
-						// TODO: is an offset needed here?
-						var shadowRay: ${ rayStruct };
-						shadowRay.origin = vertexData.position.xyz;
-						shadowRay.direction = envSample.direction;
-
-						var shadowHit: ${ raycastOutput };
-						if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
-
-							envPdf /= lightsDenom;
-							let misWeight = ${ misHeuristicFn }( envPdf, evalRec.pdf );
-
-							// deposit the contribution in place; ProcessHits reads this augmented resultColor
-							hitQueue[ hitIndex ].resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misWeight / envPdf, 0.0 );
-
-						}
-
-					}
-
-				}
 
 			}`;
 
