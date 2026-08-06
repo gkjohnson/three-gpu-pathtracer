@@ -1,9 +1,9 @@
 import { Vector2 } from 'three';
-import { IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { IndirectStorageBufferAttribute, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct } from './structs.js';
+import { rayQueueAtomicStruct } from './structs.js';
 import { proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
@@ -18,8 +18,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 			tileSize: uniform( new Vector2() ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 
 			sampleCountTarget: textureStore( new StorageTexture() ).toReadWrite(),
 
@@ -37,7 +36,6 @@ export class RayGenerationKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let queueSizes = &${ params.queueSizes };
 				let tileIndexBuffer = &${ params.tileIndexBuffer };
 
 				// don't overstep the edge of the tile
@@ -73,8 +71,8 @@ export class RayGenerationKernel extends ComputeKernel {
 				}
 
 				// get the ray index
-				let queueCapacity = arrayLength( rayQueue );
-				let index = atomicAdd( &queueSizes[ 1 ], 1 ) % queueCapacity;
+				let queueCapacity = arrayLength( &rayQueue.elements );
+				let index = atomicAdd( &rayQueue.end, 1 ) % queueCapacity;
 				${ rngInit }( indexUV.xy, seed + samples, 0 );
 
 				// write the ray data
@@ -82,13 +80,13 @@ export class RayGenerationKernel extends ComputeKernel {
 				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
 				ray.direction = normalize( ray.direction );
 
-				rayQueue[ index ].origin = ray.origin;
-				rayQueue[ index ].direction = ray.direction;
-				rayQueue[ index ].pixel = indexUV;
-				rayQueue[ index ].throughputColor = vec3f( 1.0 );
-				rayQueue[ index ].currentBounce = 0;
-				rayQueue[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
-				rayQueue[ index ].seed = seed + samples;
+				rayQueue.elements[ index ].origin = ray.origin;
+				rayQueue.elements[ index ].direction = ray.direction;
+				rayQueue.elements[ index ].pixel = indexUV;
+				rayQueue.elements[ index ].throughputColor = vec3f( 1.0 );
+				rayQueue.elements[ index ].currentBounce = 0;
+				rayQueue.elements[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
+				rayQueue.elements[ index ].seed = seed + samples;
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
