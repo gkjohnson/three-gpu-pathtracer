@@ -115,6 +115,7 @@ async function init() {
 
 	pathTracer.setScene( scene, camera );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
 	onResize();

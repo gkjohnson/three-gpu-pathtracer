@@ -1,7 +1,8 @@
-import { IndirectStorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { rayQueueStruct } from './structs.js';
 
 export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
@@ -9,21 +10,21 @@ export class UpdateRayQueueParamsKernel extends ComputeKernel {
 
 		const params = {
 			processed: uniform( 0 ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
 		};
 
 		const fn = wgslTagFn/* wgsl */`
 			fn compute( processed: u32 ) -> void {
 
-				let queueSizes = &${ params.queueSizes };
-			    var queueSize = queueSizes[ 1 ] - queueSizes[ 0 ];
+				let rayQueue = &${ params.rayQueue };
+			    var queueSize = rayQueue.end - rayQueue.start;
 				if ( processed > queueSize ) {
 
-					queueSizes[ 0 ] = queueSizes[ 1 ];
+					rayQueue.start = rayQueue.end;
 
 				} else {
 
-					queueSizes[ 0 ] = queueSizes[ 0 ] + processed;
+					rayQueue.start = rayQueue.start + processed;
 
 				}
 

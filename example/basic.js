@@ -97,6 +97,7 @@ async function init() {
 	// initialize the path tracer
 	pathTracer.setScene( scene, camera );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 

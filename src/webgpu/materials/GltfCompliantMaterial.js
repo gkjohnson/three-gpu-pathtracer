@@ -1,17 +1,17 @@
 import { texture, textureStore, globalId, float, vec2 } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { PathtracingMaterial } from './PathtracingMaterial';
+import { PathtracingMaterial } from './PathtracingMaterial.js';
 import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
-import { ComputeKernel } from '../compute/ComputeKernel';
+import { ComputeKernel } from '../compute/ComputeKernel.js';
 
 const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
-const TURQUIN_METAL_TEXTURE = await new TextureLoader().loadAsync( TURQUIN_METAL_URL );
+const TURQUIN_METAL_TEXTURE = new TextureLoader().load( TURQUIN_METAL_URL );
 
 const CLEARCOAT_IOR = float( 1.5 );
 const MIN_INCIDENT_COS = float( 1e-3 );

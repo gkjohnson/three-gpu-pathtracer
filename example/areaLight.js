@@ -133,6 +133,7 @@ async function init() {
 	// initialize scene
 	pathTracer.setScene( scene, camera );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
 	// gui
