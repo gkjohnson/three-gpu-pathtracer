@@ -1,4 +1,4 @@
-import { Matrix4, IndirectStorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { Matrix4, IndirectStorageBufferAttribute, StorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
 import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
 import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
@@ -13,8 +13,10 @@ import { PathTracerBackend } from './PathTracerBackend.js';
 // TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
 const MAX_BUFFER_SIZE = 134217728;
-const MAX_RAY_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedRayStruct.getLength() * 4 ) );
-const MAX_HIT_COUNT = Math.floor( MAX_BUFFER_SIZE / ( queuedHitStruct.getLength() * 4 ) );
+
+// subtract 16 bytes for the queue's start/end cursor header that precedes the elements
+const MAX_RAY_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedRayStruct.getLength() * 4 ) );
+const MAX_HIT_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedHitStruct.getLength() * 4 ) );
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -26,16 +28,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoUniform();
 
-		// queues
-		this.rayQueue = new IndirectStorageBufferAttribute( MAX_RAY_COUNT, queuedRayStruct.getLength() );
+		const rayQueueSize = 4 + MAX_RAY_COUNT * queuedRayStruct.getLength();
+		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
 		this.rayQueue.name = 'Ray Queue';
 
-		this.hitQueue = new IndirectStorageBufferAttribute( MAX_HIT_COUNT, queuedHitStruct.getLength() );
+		const hitQueueSize = 4 + MAX_HIT_COUNT * queuedHitStruct.getLength();
+		this.hitQueue = new StorageBufferAttribute( new Float32Array( hitQueueSize ), hitQueueSize );
 		this.hitQueue.name = 'Hit Queue';
-
-		// [0] ray head, [1] ray count, [2] hit head, [3] hit count
-		this.queueSizes = new IndirectStorageBufferAttribute( 4, 1 );
-		this.queueSizes.name = 'Queue Sizes';
 
 		// dispatches
 		this.tileIndexBuffer = new IndirectStorageBufferAttribute( 2, 1 );
@@ -183,7 +182,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			hitProcessDispatch,
 			rayGenerationDispatch,
-			queueSizes,
+			rayQueue,
+			hitQueue,
 			tileIndexBuffer,
 		} = this;
 
@@ -202,10 +202,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		// clear queues
-		// TODO: why do we need to se the work group size here?
-		zeroDispatchKernel.target = queueSizes;
-		renderer.compute( zeroDispatchKernel.kernel, [ queueSizes.count ] );
+		// clear queue cursors — only the 2-cursor header at the head of each queue buffer needs zeroing
+		zeroDispatchKernel.target = hitQueue;
+		renderer.compute( zeroDispatchKernel.kernel, [ 2 ] );
+
+		zeroDispatchKernel.target = rayQueue;
+		renderer.compute( zeroDispatchKernel.kernel, [ 2 ] );
 
 		// clear dispatch sizes
 		zeroDispatchKernel.target = hitProcessDispatch;
@@ -230,7 +232,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			rayQueue,
 			hitQueue,
-			queueSizes,
 			rayGenerationDispatch,
 			// hitProcessDispatch,
 			tileIndexBuffer,
@@ -276,7 +277,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				primeRayGenerationDispatchKernel.tileCount.copy( tiles );
 				primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
 				primeRayGenerationDispatchKernel.rayQueue = rayQueue;
-				primeRayGenerationDispatchKernel.queueSizes = queueSizes;
+				primeRayGenerationDispatchKernel.hitQueue = hitQueue;
 				primeRayGenerationDispatchKernel.outputTileIndex = tileIndexBuffer;
 				primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
 
@@ -284,7 +285,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
 				enqueueRaysKernel.tileSize.copy( tileSize );
 				enqueueRaysKernel.rayQueue = rayQueue;
-				enqueueRaysKernel.queueSizes = queueSizes;
 				enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
 
 				for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
@@ -301,14 +301,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
 				rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 				rayIntersectionKernel.rayQueue = rayQueue;
-				rayIntersectionKernel.queueSizes = queueSizes;
 				rayIntersectionKernel.hitQueue = hitQueue;
 				renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
 
 				// mark the rays as consumed
 				const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
 				updateRayQueueParamsKernel.processed = processed;
-				updateRayQueueParamsKernel.queueSizes = queueSizes;
+				updateRayQueueParamsKernel.rayQueue = rayQueue;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
 				// TODO: we should use an indirect dispatch here to only kick off the number of threads
@@ -317,7 +316,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				hitProcessKernel.sampleCountTarget = sampleCountTarget;
 				hitProcessKernel.bounces = bounces;
 				hitProcessKernel.rayQueue = rayQueue;
-				hitProcessKernel.queueSizes = queueSizes;
 				hitProcessKernel.hitQueue = hitQueue;
 				renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
 				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel

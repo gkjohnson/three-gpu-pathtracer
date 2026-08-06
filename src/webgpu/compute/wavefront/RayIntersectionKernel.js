@@ -1,8 +1,8 @@
-import { DataTexture, Matrix3, IndirectStorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { DataTexture, Matrix3, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
 import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
-import { queuedRayStruct, queuedHitStruct } from './structs.js';
+import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
@@ -18,9 +18,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueAtomicStruct ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -60,7 +59,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
-				let queueSizes = &${ params.queueSizes };
 
 				let envInfo = EnvironmentInfo(
 					envMapRotation,
@@ -75,9 +73,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 				);
 
 				// skip any rays invocations beyond the ray count
-				let queueCapacity = arrayLength( rayQueue );
-				let rayIndex = ( globalId.x + atomicLoad( &queueSizes[ 0 ] ) );
-				if ( rayIndex >= atomicLoad( &queueSizes[ 1 ] ) ) {
+				let queueCapacity = arrayLength( &rayQueue.elements );
+				let rayIndex = ( globalId.x + rayQueue.start );
+				if ( rayIndex >= rayQueue.end ) {
 
 					return;
 
@@ -85,7 +83,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				// get the ray info
 				let ACTIVE_FLAG = 0xF0000000u;
-				let input = rayQueue[ rayIndex % queueCapacity ];
+				let input = rayQueue.elements[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
@@ -95,19 +93,19 @@ export class RayIntersectionKernel extends ComputeKernel {
 				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
 					// TODO: we process all of these materials immediately to push to the ray queue
-					let index = atomicAdd( &queueSizes[ 3 ], 1 );
-					hitQueue[ index ].view = - input.direction;
-					hitQueue[ index ].indices = hitResult.indices.xyz;
-					hitQueue[ index ].barycoord = hitResult.barycoord.xy;
-					hitQueue[ index ].normal = hitResult.normal.xyz;
-					hitQueue[ index ].side = hitResult.side;
-					hitQueue[ index ].pixel_x = indexUV.x;
-					hitQueue[ index ].pixel_y = indexUV.y;
-					hitQueue[ index ].objectIndex = hitResult.objectIndex;
-					hitQueue[ index ].throughputColor = input.throughputColor;
-					hitQueue[ index ].currentBounce = input.currentBounce;
-					hitQueue[ index ].resultColor = input.resultColor;
-					hitQueue[ index ].seed = input.seed;
+					let index = atomicAdd( &hitQueue.end, 1 );
+					hitQueue.elements[ index ].view = - input.direction;
+					hitQueue.elements[ index ].indices = hitResult.indices.xyz;
+					hitQueue.elements[ index ].barycoord = hitResult.barycoord.xy;
+					hitQueue.elements[ index ].normal = hitResult.normal.xyz;
+					hitQueue.elements[ index ].side = hitResult.side;
+					hitQueue.elements[ index ].pixel_x = indexUV.x;
+					hitQueue.elements[ index ].pixel_y = indexUV.y;
+					hitQueue.elements[ index ].objectIndex = hitResult.objectIndex;
+					hitQueue.elements[ index ].throughputColor = input.throughputColor;
+					hitQueue.elements[ index ].currentBounce = input.currentBounce;
+					hitQueue.elements[ index ].resultColor = input.resultColor;
+					hitQueue.elements[ index ].seed = input.seed;
 
 				} else {
 
