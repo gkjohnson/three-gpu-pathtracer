@@ -1,7 +1,7 @@
-import { IndirectStorageBufferAttribute, DataTexture } from 'three/webgpu';
+import { StorageBufferAttribute, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
-import { queuedHitStruct } from './structs.js';
+import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
@@ -22,8 +22,7 @@ export class LightConnectionKernel extends ComputeKernel {
 			misEnabled: uniform( 1, 'uint' ),
 
 			// rays
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -55,14 +54,13 @@ export class LightConnectionKernel extends ComputeKernel {
 			) -> void {
 
 				let hitQueue = &${ params.hitQueue };
-				let queueSizes = &${ params.queueSizes };
 
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				// skip any invocations beyond the hit count
-				let hitIndex = ( globalId.x + atomicLoad( &queueSizes[ 2 ] ) );
-				if ( hitIndex >= atomicLoad( &queueSizes[ 3 ] ) ) {
+				let hitIndex = ( globalId.x + hitQueue.start );
+				if ( hitIndex >= hitQueue.end ) {
 
 					return;
 
@@ -87,7 +85,7 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-				let input = hitQueue[ hitIndex ];
+				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
@@ -154,7 +152,7 @@ export class LightConnectionKernel extends ComputeKernel {
 								let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 
 								// deposit the contribution in place; ProcessHits reads this augmented resultColor
-								hitQueue[ hitIndex ].resultColor += vec4f( input.throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
+								hitQueue.elements[ hitIndex ].resultColor += vec4f( input.throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
 
 							}
 

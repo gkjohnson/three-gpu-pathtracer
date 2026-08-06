@@ -53,7 +53,7 @@ async function init() {
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true } );
-	renderer.init();
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -120,6 +120,7 @@ async function init() {
 	// initialize scene
 	pathTracer.setScene( scene, camera );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
 	// gui
