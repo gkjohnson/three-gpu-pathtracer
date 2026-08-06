@@ -1,6 +1,30 @@
-import { wgsl } from 'three/tsl';
 import { StructTypeNode } from 'three/webgpu';
-import { WGSLStructTypeNode } from '../../WGSLStructTypeNode.js';
+
+// StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
+// a type string, so we build each dependency first, which registers its definition ahead of this struct.
+// TODO: remove this once TSL resolves struct dependencies from string member types itself.
+class DependentStructTypeNode extends StructTypeNode {
+
+	constructor( members, name, dependencies = [] ) {
+
+		super( members, name );
+		this.dependencies = dependencies;
+
+	}
+
+	setup( builder ) {
+
+		for ( const dep of this.dependencies ) {
+
+			dep.build( builder );
+
+		}
+
+		super.setup( builder );
+
+	}
+
+}
 
 export const queuedRayStruct = new StructTypeNode( {
 
@@ -41,53 +65,34 @@ export const queuedHitStruct = new StructTypeNode( {
 
 }, 'QueuedHit' );
 
-// Queue wrapper structs: the read ( start ) and write ( end ) cursors live in a header on the queue's
-// own storage buffer, ahead of the runtime-sized element array. This replaces the separate queueSizes
-// buffer. Each queue has a plain and an atomic variant ( same buffer, reinterpreted per kernel ): the
-// atomic variant is bound where cursors are advanced with atomicAdd, the plain one where they are only
-// read or reset.
-export const rayQueueStruct = new WGSLStructTypeNode( 'RayQueue', wgsl( /* wgsl */`
+// Queue wrappers that keep the read/write cursors (start/end) in a header ahead of the elements,
+// avoiding a separate queueSizes buffer.
+export const rayQueueStruct = new DependentStructTypeNode( {
+	start: 'uint',
+	end: 'uint',
+	elements: `array<${ queuedRayStruct.name }>`,
+}, 'RayQueue', [ queuedRayStruct ] );
+rayQueueStruct.getLength = () => 4;
 
-	struct RayQueue {
-		start: u32,
-		end: u32,
+export const rayQueueAtomicStruct = new DependentStructTypeNode( {
+	start: { type: 'uint', atomic: true },
+	end: { type: 'uint', atomic: true },
+	elements: `array<${ queuedRayStruct.name }>`,
+}, 'RayQueue', [ queuedRayStruct ] );
+rayQueueAtomicStruct.getLength = () => 4;
 
-		elements: array< ${ queuedRayStruct.name } >,
-	}
+export const hitQueueStruct = new DependentStructTypeNode( {
+	start: 'uint',
+	end: 'uint',
+	_padding: 'array<u32, 2>',
+	elements: `array<${ queuedHitStruct.name }>`,
+}, 'HitQueue', [ queuedHitStruct ] );
+hitQueueStruct.getLength = () => 4;
 
-`, [ queuedRayStruct ] ) );
-
-export const rayQueueAtomicStruct = new WGSLStructTypeNode( 'RayQueue', wgsl( /* wgsl */`
-
-	struct RayQueue {
-		start: atomic< u32 >,
-		end: atomic< u32 >,
-
-		elements: array< ${ queuedRayStruct.name } >,
-	}
-
-`, [ queuedRayStruct ] ) );
-
-export const hitQueueStruct = new WGSLStructTypeNode( 'HitQueue', wgsl( /* wgsl */`
-
-	struct HitQueue {
-		start: u32,
-		end: u32,
-		_padding: array< u32, 2 >,
-
-		elements: array< ${ queuedHitStruct.name } >,
-	}
-
-`, [ queuedHitStruct ] ) );
-
-export const hitQueueAtomicStruct = new WGSLStructTypeNode( 'HitQueue', wgsl( /* wgsl */`
-
-	struct HitQueue {
-		start: atomic< u32 >,
-		end: atomic< u32 >,
-		_padding: array< u32, 2 >,
-
-		elements: array< ${ queuedHitStruct.name } >,
-	}
-
-`, [ queuedHitStruct ] ) );
+export const hitQueueAtomicStruct = new DependentStructTypeNode( {
+	start: { type: 'uint', atomic: true },
+	end: { type: 'uint', atomic: true },
+	_padding: 'array<u32, 2>',
+	elements: `array<${ queuedHitStruct.name }>`,
+}, 'HitQueue', [ queuedHitStruct ] );
+hitQueueAtomicStruct.getLength = () => 4;
