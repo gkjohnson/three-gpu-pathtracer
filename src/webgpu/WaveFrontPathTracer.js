@@ -13,6 +13,8 @@ import { PathTracerBackend } from './PathTracerBackend.js';
 // TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
 const MAX_BUFFER_SIZE = 134217728;
+
+// subtract 16 bytes for the queue's start/end cursor header that precedes the elements
 const MAX_RAY_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedRayStruct.getLength() * 4 ) );
 const MAX_HIT_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedHitStruct.getLength() * 4 ) );
 
@@ -26,8 +28,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoUniform();
 
-		// queues — a 4-float ( 16 byte ) header holds the start / end cursors ahead of the element array, so
-		// the cursors live in the same storage buffer as the elements instead of a separate queueSizes buffer
 		const rayQueueSize = 4 + MAX_RAY_COUNT * queuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
 		this.rayQueue.name = 'Ray Queue';
