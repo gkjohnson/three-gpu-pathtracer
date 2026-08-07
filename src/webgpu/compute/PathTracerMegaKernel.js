@@ -1,8 +1,8 @@
 import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../nodes/random.wgsl.js';
-import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { sampleEnvironmentFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 
@@ -148,8 +148,29 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						if ( bounce >= 3u ) {
+
+							let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
+							let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
+							if ( ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+
+								break;
+
+							}
+
+							// perform sample clamping here to avoid bright pixels
+							throughputColor *= min( 1.0 / rrProb, 20.0 );
+
+						}
+
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
+
+						if ( all( throughputColor == vec3f( 0.0 ) ) ) {
+
+							break;
+
+						}
 
 						// TODO: Investigate offsetting this position to not self-intersect multiple times
 						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
