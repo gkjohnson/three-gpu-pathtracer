@@ -128,9 +128,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setLights( lights, iesTextures ) {
+	setLights( lights, iesTextures, iesTexture ) {
 
 		this.lightsInfo.updateFrom( lights, iesTextures );
+		this.lightsInfo.setIesProfiles( iesTexture );
 		this.reset();
 
 	}

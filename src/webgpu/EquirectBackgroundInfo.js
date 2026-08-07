@@ -14,7 +14,6 @@ export class EquirectBackgroundInfo {
 	set map( v ) {
 
 		this.mapNode.value = v;
-		this.mapSampler.value = v;
 
 	}
 
@@ -59,7 +58,7 @@ export class EquirectBackgroundInfo {
 		defaultMap.needsUpdate = true;
 
 		this.mapNode = texture( defaultMap );
-		this.mapSampler = sampler( defaultMap );
+		this.mapSampler = sampler( this.mapNode );
 		this.blurNode = uniform( 0.0 );
 		this.rotationNode = uniform( new Matrix4() );
 		this.intensityNode = uniform( 1.0 );

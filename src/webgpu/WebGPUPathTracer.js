@@ -1,4 +1,5 @@
-import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { RenderTarget2DArray } from './RenderTarget2DArray.js';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -216,6 +217,8 @@ export class WebGPUPathTracer {
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
+		this.iesProfiles = new RenderTarget2DArray( 360, 180, { type: HalfFloatType } );
+
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
@@ -425,7 +428,8 @@ export class WebGPUPathTracer {
 
 		const lights = getLights( scene );
 		const iesTextures = getIesTextures( lights );
-		_pathTracer.setLights( lights, iesTextures );
+		this.iesProfiles.setTextures( this._renderer, iesTextures );
+		_pathTracer.setLights( lights, iesTextures, this.iesProfiles.texture );
 		this.reset();
 
 	}
@@ -682,6 +686,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.dispose();
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
+		this.iesProfiles.dispose();
 		this._envColorTexture.dispose();
 		this._backgroundColorTexture.dispose();
 		this._atlasDebugQuad?.dispose();

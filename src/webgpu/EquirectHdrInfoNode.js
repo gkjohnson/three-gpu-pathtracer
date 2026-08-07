@@ -13,11 +13,11 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 		// environment map + importance-sampling CDF textures, each with a sampler
 		this.mapNode = texture( this.map );
-		this.mapSampler = sampler( this.map );
+		this.mapSampler = sampler( this.mapNode );
 		this.marginalNode = texture( this.marginalWeights );
-		this.marginalSampler = sampler( this.marginalWeights );
+		this.marginalSampler = sampler( this.marginalNode );
 		this.conditionalNode = texture( this.conditionalWeights );
-		this.conditionalSampler = sampler( this.conditionalWeights );
+		this.conditionalSampler = sampler( this.conditionalNode );
 
 		// scalar parameters that assemble into the EnvironmentInfo struct in the shader
 		this.rotationNode = uniform( new Matrix3() );
@@ -34,21 +34,15 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 		const {
 			mapNode,
-			mapSampler,
 			marginalNode,
-			marginalSampler,
 			conditionalNode,
-			conditionalSampler,
 			totalSumNode,
 		} = this;
 
 		// refresh values in place on the existing nodes so no rebuild is required
 		mapNode.value = this.map;
-		mapSampler.value = this.map;
 		marginalNode.value = this.marginalWeights;
-		marginalSampler.value = this.marginalWeights;
 		conditionalNode.value = this.conditionalWeights;
-		conditionalSampler.value = this.conditionalWeights;
 		totalSumNode.value = this.totalSum;
 
 	}

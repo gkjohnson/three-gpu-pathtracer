@@ -62,7 +62,7 @@ export class PathTracerBackend {
 
 	}
 
-	setLights( lights, iesTextures ) {
+	setLights( lights, iesTextures, iesTexture ) {
 
 	}
 

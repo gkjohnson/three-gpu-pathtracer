@@ -1,5 +1,5 @@
-import { storage, uniform } from 'three/tsl';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { storage, uniform, texture, sampler } from 'three/tsl';
+import { StorageBufferAttribute, DataArrayTexture } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
@@ -14,6 +14,7 @@ import {
 	intersectsCircleFn,
 	randomAreaLightSampleFn,
 	randomSpotLightSampleFn,
+	getSpotAttenuationFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -26,6 +27,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		// is resized in place to the exact light count on update; the binding node stays stable so no
 		// pipeline rebuild is needed.
 		this.countNode = uniform( this.count, 'uint' );
+
+		this.iesProfilesTexture = new DataArrayTexture( new Uint8Array( 4 ), 1, 1, 1 );
+		this.iesProfilesNode = texture( this.iesProfilesTexture );
+		this.iesSamplerNode = sampler( this.iesProfilesNode );
+
 		this._resizeBuffer( 2 );
 		this._initFns();
 
@@ -78,9 +84,19 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	}
 
+	setIesProfiles( tex ) {
+
+		if ( ! tex ) return;
+
+		this.iesProfilesTexture = tex;
+		this.iesProfilesNode.value = tex;
+		console.log( this.iesSamplerNode.node.value = tex )
+
+	}
+
 	_initFns() {
 
-		const { bufferNode, countNode } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesSamplerNode } = this;
 
 		// read a single light directly from the storage buffer as a Light struct
 		const readLightInfo = wgslTagFn/* wgsl */`
@@ -104,6 +120,22 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
 
 					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv.yz );
+
+					let spotNormal = normalize( cross( light.u, light.v ) );
+					let cosTheta = dot( result.direction, spotNormal );
+					var spotAttenuation: f32;
+					if ( light.iesProfile >= 0 ) {
+
+						let iesAngle = acos( cosTheta ) / PI;
+						spotAttenuation = textureSampleLevel( ${ iesProfilesNode }, ${ iesSamplerNode }, vec2f( iesAngle, 0.0 ), light.iesProfile, 0.0 ).r;
+
+					} else {
+
+						spotAttenuation = ${ getSpotAttenuationFn }( light.coneCos, light.penumbraCos, cosTheta );
+
+					}
+
+					result.emission *= spotAttenuation;
 
 				} else if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
 
