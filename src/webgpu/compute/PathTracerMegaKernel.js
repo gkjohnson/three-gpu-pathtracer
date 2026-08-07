@@ -4,7 +4,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
-import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -134,9 +134,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let evalRec = ${ bsdfEvalPdfFn }( worldWo, envSample.direction, surface );
 							if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
 
-								// TODO: is an offset needed here?
 								var shadowRay: ${ rayStruct };
-								shadowRay.origin = vertexData.position.xyz;
+								shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, envSample.direction, hitResult.normal );
 								shadowRay.direction = envSample.direction;
 
 								var shadowHit: ${ raycastOutput };
@@ -162,10 +161,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						throughputColor /= scatterRec.pdf;
 						bsdfPdf = scatterRec.pdf;
 
-						// TODO: Investigate offsetting this position to not self-intersect multiple times
-						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
-						// However that seems like a very large distance to offset
-						ray.origin = vertexData.position.xyz;
+						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
 
 					} else {

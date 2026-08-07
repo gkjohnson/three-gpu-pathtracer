@@ -4,6 +4,7 @@ import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
 import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
+import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
@@ -91,9 +92,8 @@ export class LightConnectionKernel extends ComputeKernel {
 				let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
 				if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
 
-					// TODO: is an offset needed here?
 					var shadowRay: ${ rayStruct };
-					shadowRay.origin = vertexData.position.xyz;
+					shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, envSample.direction, input.normal );
 					shadowRay.direction = envSample.direction;
 
 					var shadowHit: ${ raycastOutput };

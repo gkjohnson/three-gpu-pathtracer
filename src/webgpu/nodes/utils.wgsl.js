@@ -172,6 +172,26 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Bit-level origin offset from Ray Tracing Gems, also used by Cycles. It keeps
+// secondary and shadow rays off the source triangle without a scene-scale bias.
+export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
+
+	fn offsetRayOrigin( point: vec3f, direction: vec3f, geometricNormal: vec3f ) -> vec3f {
+
+		let normal = normalize( select( -geometricNormal, geometricNormal, dot( direction, geometricNormal ) >= 0.0 ) );
+		let intScale = 256.0;
+		let integerOffset = vec3i( intScale * normal );
+		let pointBits = bitcast<vec3i>( point );
+		let signedOffset = select( integerOffset, -integerOffset, point < vec3f( 0.0 ) );
+		let offsetPoint = bitcast<vec3f>( pointBits + signedOffset );
+		let origin = 1.0 / 32.0;
+		let floatScale = 1.0 / 65536.0;
+		return select( offsetPoint, point + floatScale * normal, abs( point ) < vec3f( origin ) );
+
+	}
+
+` );
+
 // Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
 // array node ( must be named "textureInfo" ). Called once per scene so a single
 // sampleTexel / textureInfo binding is shared by every caller in a pipeline.

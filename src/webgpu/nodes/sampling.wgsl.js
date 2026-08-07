@@ -166,7 +166,7 @@ export const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
 		let uv = equirectDirectionToUv( direction );
 		let theta = uv.y * PI;
 		let sinTheta = sin( theta );
-		if ( sinTheta == 0.0 ) {
+		if ( sinTheta <= EPSILON ) {
 
 			return 0.0;
 

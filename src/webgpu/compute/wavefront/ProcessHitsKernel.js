@@ -4,7 +4,7 @@ import { uniform, storage, textureStore, globalId, texture, sampler } from 'thre
 import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
-import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
@@ -102,7 +102,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 					let rayQueueCapacity = arrayLength( &rayQueue.elements );
 					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
-					rayQueue.elements[ index ].origin = vertexData.position.xyz;
+					rayQueue.elements[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 					rayQueue.elements[ index ].direction = scatterRec.direction;
 					rayQueue.elements[ index ].pixel = indexUV;
 					rayQueue.elements[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
