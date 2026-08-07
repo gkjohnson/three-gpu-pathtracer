@@ -208,7 +208,6 @@ export class WebGPUPathTracer {
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
 		this.multipleImportanceSampling = true;
-		this.transmissiveBounces = 5;
 		this.filterGlossyFactor = 0;
 
 		this.random = null;
