@@ -201,6 +201,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
 			this.pixelQueue.name = 'Pixel Queue';
 
+			// the queue buffer object changed, so kernels bound to it must rebuild
+			this.materialKernel.pixelQueue = this.pixelQueue;
+			this.materialKernel.needsUpdate = true;
+			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
+			this.populatePixelIndicesKernel.needsUpdate = true;
+
 		}
 
 	}
