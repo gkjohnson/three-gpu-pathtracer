@@ -138,7 +138,7 @@ export class WebGPUPathTracer {
 	set filterGlossyFactor( v ) {
 
 		this._filterGlossyFactor = v;
-		this._pathTracer?.setFilterGlossy( v );
+		this._pathTracer.setFilterGlossy( v );
 
 	}
 
@@ -206,6 +206,8 @@ export class WebGPUPathTracer {
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
+		this._pathTracer = new WaveFrontPathTracer( renderer );
+
 		// options
 		this.minSamples = 1;
 		this.renderDelay = 500;
@@ -228,7 +230,6 @@ export class WebGPUPathTracer {
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
