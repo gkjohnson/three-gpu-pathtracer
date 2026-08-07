@@ -26,6 +26,9 @@ class DependentStructTypeNode extends StructTypeNode {
 
 }
 
+// set while a ray has only passed through transmissive surfaces so misses show the background
+export const RAY_FLAG_FULLY_TRANSMISSIVE = 1 << 0;
+
 export const queuedRayStruct = new StructTypeNode( {
 
 	origin: 'vec3f',
@@ -38,6 +41,8 @@ export const queuedRayStruct = new StructTypeNode( {
 	currentBounce: 'uint',
 
 	pixel: 'vec2u',
+	flags: 'uint',
+	_alignment1: 'uint',
 
 	resultColor: 'vec4f',
 
@@ -60,6 +65,11 @@ export const queuedHitStruct = new StructTypeNode( {
 
 	normal: 'vec3f',
 	side: 'float',
+
+	dist: 'float',
+	flags: 'uint',
+	_alignment0: 'uint',
+	_alignment1: 'uint',
 
 	resultColor: 'vec4f',
 

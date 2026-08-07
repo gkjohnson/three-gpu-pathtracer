@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, StorageBufferAttribute, StorageTexture } from 'th
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
 import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
-import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
+import { rayQueueStruct, hitQueueAtomicStruct, RAY_FLAG_FULLY_TRANSMISSIVE } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 
@@ -106,17 +106,21 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].currentBounce = input.currentBounce;
 					hitQueue.elements[ index ].resultColor = input.resultColor;
 					hitQueue.elements[ index ].seed = input.seed;
+					hitQueue.elements[ index ].dist = hitResult.dist;
+					hitQueue.elements[ index ].flags = input.flags;
 
 				} else {
 
 					let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 					var resultColor = input.resultColor;
-					if ( input.currentBounce > 0u ) {
+					if ( input.currentBounce > 0u && ( input.flags & ${ RAY_FLAG_FULLY_TRANSMISSIVE }u ) == 0u ) {
 
 						resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng ) * vec4f( input.throughputColor, 0.0 );
 
 					} else {
 
+						// camera rays and rays that have only passed through transmissive surfaces
+						// show the background so it appears through glass
 						resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, rng );
 
 					}

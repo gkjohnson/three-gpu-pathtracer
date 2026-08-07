@@ -134,6 +134,54 @@ export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 `, [ totalInternalReflectionFunc ] );
 
+export const dielectricFresnelFunc = wgslFn( /* wgsl */ `
+
+	fn dielectricFresnel( cosThetaI: f32, eta: f32 ) -> f32 {
+
+		// https://schuttejoe.github.io/post/disneybsdf/
+		let ni = eta;
+		let nt = 1.0;
+
+		// Check for total internal reflection
+		let sinThetaISq = 1.0 - cosThetaI * cosThetaI;
+		let sinThetaTSq = eta * eta * sinThetaISq;
+		if ( sinThetaTSq >= 1.0 ) {
+
+			return 1.0;
+
+		}
+
+		let sinThetaT = sqrt( sinThetaTSq );
+		let cosThetaT = sqrt( max( 0.0, 1.0 - sinThetaT * sinThetaT ) );
+		let rParallel = ( ( nt * cosThetaI ) - ( ni * cosThetaT ) ) / ( ( nt * cosThetaI ) + ( ni * cosThetaT ) );
+		let rPerpendicular = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
+		return ( rParallel * rParallel + rPerpendicular * rPerpendicular ) / 2.0;
+
+	}
+
+` );
+
+export const disneyFresnelFunc = wgslFn( /* wgsl */ `
+
+	fn disneyFresnel( wo: vec3f, wi: vec3f, wh: vec3f, f0: f32, eta: f32, metalness: f32 ) -> f32 {
+
+		let dotHV = dot( wo, wh );
+		if ( totalInternalReflection( dotHV, eta ) ) {
+
+			return 1.0;
+
+		}
+
+		let dotHL = dot( wi, wh );
+		let dielectricF = dielectricFresnel( abs( dotHV ), eta );
+		let metallicF = schlickFresnel( dotHL, f0 );
+
+		return mix( dielectricF, metallicF, metalness );
+
+	}
+
+`, [ totalInternalReflectionFunc, dielectricFresnelFunc, schlickFresnelFunc ] );
+
 export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 	fn isTerminatingScatter( scatterRec: ScatterRecord ) -> bool {

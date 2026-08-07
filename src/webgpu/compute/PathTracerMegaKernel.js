@@ -5,6 +5,8 @@ import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_E
 import { sampleEnvironmentFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
+import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../nodes/structs.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -119,6 +121,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
+				var isFullyTransmissive = true;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -138,6 +141,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal );
 
+						// attenuate the light transmitted through the volume when exiting a backface
+						if ( hitResult.side < 0.0 ) {
+
+							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, material.attenuationColor, material.attenuationDistance );
+
+						}
+
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
 						let scatterRec = ${ bsdfSampleFn }( - ray.direction, surface );
@@ -147,6 +157,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							break;
 
 						}
+
+						isFullyTransmissive = isFullyTransmissive && ( ( scatterRec.flags & ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u ) > 0 );
 
 						// russian roulette early out
 						if ( bounce >= 3u ) {
@@ -183,12 +195,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					} else {
 
 						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
-						if ( bounce > 0u ) {
+						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );
 
 						} else {
 
+							// camera rays and rays that have only passed through transmissive surfaces
+							// show the background so it appears through glass
 							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
 
 						}

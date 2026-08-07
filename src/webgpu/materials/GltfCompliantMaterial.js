@@ -2,11 +2,11 @@ import { texture, textureStore, globalId, float, vec2 } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial.js';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
-import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
+import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct, SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel.js';
 
@@ -24,6 +24,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const {
 			specularBrdf = specularBrdfFunc,
+			specularBtdf = specularBtdfFunc,
 			diffuseBrdf = diffuseBrdfFunc,
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
@@ -52,6 +53,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		const turquinNode = texture( this.turquinTexture, vec2( 0.0 ) ).setName( 'turquinTexture' );
 
 		this.specularBrdf = specularBrdf;
+		this.specularBtdf = specularBtdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
 		this.conductorFresnel = conductorFresnel( turquinNode );
@@ -95,8 +97,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
+				// transmitted directions only gather the refracted lobe — the reflection lobes are
+				// gated to the upper hemisphere, matching the WebGL implementation
+				if ( NdotL < 0.0 ) {
+
+					let refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta );
+					return ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
+
+				}
+
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
+				let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
+				let diffuse = ( 1.0 - surf.transmission ) * reflection;
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.specularIntensity, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
@@ -151,32 +163,22 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let wo = normalize( invBasis * worldWo );
 				let woClearcoat = normalize( invClearcoatBasis * worldWo );
 
-				// TODO: handle such intersections better;
-				// Sometimes .z < 0.0 on a pretty round surface e.g. sphere
-				// Disabling this condition leads to more fireflies on ClearCoatCarPaint example
-				// This could also be fixed by offsetting rays by 1e-1
-				// Also, this will be an invalid condition when transmission is implemented
-				if ( wo.z < 0.0 || woClearcoat.z < 0.0 ) {
-
-					return result;
-
-				}
-
-				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				var cdf: vec4f;
 				cdf.x = weights.diffuse;
 				cdf.y = weights.specular + cdf.x;
 				cdf.z = weights.clearcoat + cdf.y;
-				cdf.w = 0; // weights.transmission + cdf.z;
+				cdf.w = weights.transmission + cdf.z;
 
-				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.z;
+				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.w;
 
 				let directionUV = ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } );
 				var wi: vec3f;
 				var wiClearcoat: vec3f;
 				var wh: vec3f;
 				var whClearcoat: vec3f;
+				var isTransmissive = false;
 
 				if ( r <= cdf.x ) { // diffuse
 
@@ -204,7 +206,28 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				} else if ( r <= cdf.w ) { // transmission / refraction
 
-					// NOT IMPLEMENTED
+					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
+					wi = refract( - wo, wh, surf.eta );
+					isTransmissive = true;
+
+					// Total internal reflection case
+					// TODO: handle better
+					if ( wi.x == 0.0 && wi.y == 0.0 && wi.z == 0.0 ) {
+
+						return result;
+
+					}
+
+					// thin film surfaces refract the ray back out of the flat backside so the
+					// direction continues straight through the shell
+					if ( surf.thinFilm ) {
+
+						wi = - refract( normalize( - wi ), - vec3f( 0.0, 0.0, 1.0 ), 1.0 / surf.eta );
+
+					}
+
+					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
+					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
 
 				}
 
@@ -237,9 +260,21 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
+				if ( weights.transmission > 0.0 && wi.z < 0.0 ) {
+
+					result.pdf += weights.transmission * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+
+				}
+
 				result.color = ${ bsdfEvalFunc }( ctx, surf );
-				result.color *= max( 0.0, wi.z );
+				result.color *= select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
 				result.direction = normalize( normalBasis * wi );
+
+				if ( isTransmissive ) {
+
+					result.flags = result.flags | ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u;
+
+				}
 
 				return result;
 

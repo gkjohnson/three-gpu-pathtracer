@@ -3,7 +3,7 @@ import { IndirectStorageBufferAttribute, StorageBufferAttribute, StorageTexture 
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
-import { rayQueueAtomicStruct } from './structs.js';
+import { rayQueueAtomicStruct, RAY_FLAG_FULLY_TRANSMISSIVE } from './structs.js';
 import { proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
@@ -87,6 +87,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].currentBounce = 0;
 				rayQueue.elements[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
 				rayQueue.elements[ index ].seed = seed + samples;
+				rayQueue.elements[ index ].flags = ${ RAY_FLAG_FULLY_TRANSMISSIVE }u;
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );

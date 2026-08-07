@@ -8,12 +8,14 @@ import {
 	iorToF0GeneralFunc,
 	fresnel0ToIorFunc,
 	iorToF0GeneralVecFunc,
+	dielectricFresnelFunc,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
 	ggxDistributionFunc,
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
+	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -379,6 +381,51 @@ export const specularBrdfFunc = wgslFn( /* wgsl */ `
 	}
 
 `, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
+
+export const specularBtdfFunc = wgslFn( /* wgsl */`
+
+	fn specularBtdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f, eta: f32 ) -> vec3f {
+
+		let NdotV = V.z;
+		let NdotL = L.z;
+		let HdotV = dot( V, H );
+		let HdotL = dot( L, H );
+
+		// Heaviside function for G term
+		if ( NdotV * HdotV < 0.0 || NdotL * HdotL < 0.0 || HdotV * HdotL > 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		let G1_i = ggxShadowMaskG1( V, alpha );
+		let G1_o = ggxShadowMaskG1( L, alpha );
+
+		// separable G2 product, no height correlation
+		let denom = eta * HdotV + HdotL;
+		let Vis = G1_i * G1_o * abs( HdotV ) * abs( HdotL ) /
+							( abs( NdotV ) * abs( NdotL ) * denom * denom );
+
+		let F = dielectricFresnel( abs( HdotV ), eta );
+
+		let D = ggxDistribution( H, alpha );
+
+		return vec3f( ( 1 - F ) * D * Vis );
+
+	}
+
+`, [ ggxShadowMaskG1Func, ggxDistributionFunc, dielectricFresnelFunc ] );
+
+// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
+export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
+
+	fn transmissionAttenuation( dist: f32, attColor: vec3f, attDist: f32 ) -> vec3f {
+
+		return pow( attColor, vec3f( dist / attDist ) );
+
+	}
+
+` );
 
 // Dielectric layer fresnel operator that supports custom f0 color, specular weight.
 // Based on the specular color specification:
