@@ -109,7 +109,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 				let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 				let diffuse = ( 1.0 - surf.transmission ) * reflection;
-				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.specularIntensity, diffuse, specular );
+				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.eta, surf.specularIntensity, diffuse, specular );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
 					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
@@ -210,18 +210,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wi = refract( - wo, wh, surf.eta );
 					isTransmissive = true;
 
-					// Total internal reflection case
-					// TODO: handle better
-					if ( wi.x == 0.0 && wi.y == 0.0 && wi.z == 0.0 ) {
+					if ( all( wi == vec3f( 0.0 ) ) ) {
 
-						return result;
+						// total internal reflection - refract returns a zero vector, so bounce the
+						// ray off the inside of the surface instead of terminating it
+						wi = - normalize( reflect( wo, wh ) );
 
-					}
+					} else if ( surf.thinFilm ) {
 
-					// thin film surfaces refract the ray back out of the flat backside so the
-					// direction continues straight through the shell
-					if ( surf.thinFilm ) {
-
+						// thin film surfaces refract the ray back out of the flat backside so the
+						// direction continues straight through the shell
 						wi = - refract( normalize( - wi ), - vec3f( 0.0, 0.0, 1.0 ), 1.0 / surf.eta );
 
 					}
