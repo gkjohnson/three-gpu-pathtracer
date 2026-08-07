@@ -3,9 +3,9 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -86,7 +86,30 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 
-				let isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var throughputColor = input.throughputColor;
+				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+
+				// russian roulette early out
+				if ( ! isTerminated && input.currentBounce >= 3u ) {
+
+					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
+					let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
+					isTerminated = ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+
+					// perform sample clamping here to avoid bright pixels
+					throughputColor *= min( 1.0 / rrProb, 20.0 );
+
+				}
+
+				if ( ! isTerminated ) {
+
+					// only divide by the pdf if this ray is valid
+					throughputColor *= scatterRec.color / scatterRec.pdf;
+
+					// exit if our throughput is 0.0
+					isTerminated = all( throughputColor == vec3f( 0.0 ) );
+
+				}
 
 				if ( isTerminated ) {
 
@@ -104,7 +127,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].origin = vertexData.position.xyz;
 					rayQueue.elements[ index ].direction = scatterRec.direction;
 					rayQueue.elements[ index ].pixel = indexUV;
-					rayQueue.elements[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
+					rayQueue.elements[ index ].throughputColor = throughputColor;
 					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].seed = input.seed;
