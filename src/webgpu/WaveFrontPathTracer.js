@@ -6,6 +6,7 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -97,6 +98,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.hitProcessKernel.material = material.getData();
 		this.hitProcessKernel.needsUpdate = true;
+		this.reset();
+
+	}
+
+	setFilterGlossy( value ) {
+
+		// the kernel takes the inverted threshold, mirroring Cycles
+		this.hitProcessKernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
 		this.reset();
 
 	}

@@ -22,6 +22,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
+			filterGlossy: uniform( 1 ),
 
 			// rays
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
@@ -43,6 +44,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
+				filterGlossy: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -80,7 +82,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal );
+				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
+
+				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, blurRoughness );
 
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
@@ -131,6 +135,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].seed = input.seed;
+					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 
 				}
 

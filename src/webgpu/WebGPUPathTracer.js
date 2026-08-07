@@ -129,6 +129,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	get filterGlossyFactor() {
+
+		return this._filterGlossyFactor;
+
+	}
+
+	set filterGlossyFactor( v ) {
+
+		this._filterGlossyFactor = v;
+		this._pathTracer?.setFilterGlossy( v );
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -168,6 +181,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -205,11 +219,12 @@ export class WebGPUPathTracer {
 		this.stableNoise = false;
 		this.pause = false;
 
+		this.filterGlossyFactor = 1;
+
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
 		this.multipleImportanceSampling = true;
 		this.transmissiveBounces = 5;
-		this.filterGlossyFactor = 0;
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();

@@ -22,6 +22,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
+			filterGlossy: uniform( 1 ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -63,6 +64,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
+				filterGlossy: f32,
 
 				// environment
 				envMap: texture_2d<f32>,
@@ -119,6 +121,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
+				var minPdf = 1.0;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -136,7 +139,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
-						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal );
+						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
+
+						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, blurRoughness );
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
@@ -147,6 +152,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							break;
 
 						}
+
+						minPdf = min( minPdf, scatterRec.pdf );
 
 						// russian roulette early out
 						if ( bounce >= 3u ) {
