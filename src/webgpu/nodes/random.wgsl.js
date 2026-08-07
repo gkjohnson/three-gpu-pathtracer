@@ -7,6 +7,7 @@ export const RNG_INDEX_APERTURE_SAMPLE = 4;
 export const RNG_INDEX_DIRECT_LIGHT_SELECTION = 5;
 export const RNG_INDEX_DIRECT_LIGHT_SAMPLE = 6;
 export const RNG_INDEX_DIRECT_ENV_SAMPLE = 7;
+export const RNG_INDEX_RUSSIAN_ROULETTE = 8;
 export const RNG_INDEX_ALPHA_TEST = 50;
 import { contextProxyFn } from 'three-mesh-bvh/webgpu';
 import * as sobol from './rand/sobol.wgsl.js';
