@@ -16,7 +16,9 @@ export class QueueLengthToDispatchKernel extends ComputeKernel {
 			fn compute() -> void {
 
 				let queueLength = ${ params.queue }.end - ${ params.queue }.start;
-				${ params.outputDispatch }[ 0 ] = ( queueLength + 63u ) / 64u;
+
+				// assumes the consuming kernel runs 64 threads per workgroup
+				${ params.outputDispatch }[ 0 ] = u32( ceil( f32( queueLength ) / 64.0 ) );
 				${ params.outputDispatch }[ 1 ] = 1u;
 				${ params.outputDispatch }[ 2 ] = 1u;
 
