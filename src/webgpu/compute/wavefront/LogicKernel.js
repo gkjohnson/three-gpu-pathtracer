@@ -124,7 +124,7 @@ export class LogicKernel extends ComputeKernel {
 				scatterRec.color = input.bsdf;
 				scatterRec.pdf = input.pdf;
 
-				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
 				// russian roulette after a few bounces, boosting survivors ( clamped to avoid fireflies )
 				if ( ! isTerminated && input.currentBounce >= 3u ) {
