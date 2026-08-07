@@ -95,6 +95,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setTransmissiveBackground( value ) {
+
+		this.kernel.transmissiveBackground = value;
+		this.reset();
+
+	}
+
 	setTiles( tiles ) {
 
 		this.tiles.copy( tiles );

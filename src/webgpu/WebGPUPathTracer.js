@@ -12,6 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -129,6 +130,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	get transmissiveBackground() {
+
+		return this._transmissiveBackground;
+
+	}
+
+	set transmissiveBackground( v ) {
+
+		this._transmissiveBackground = v;
+		this._pathTracer.setTransmissiveBackground( v );
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -168,6 +182,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -213,6 +228,7 @@ export class WebGPUPathTracer {
 		this.random = null;
 		this.material = new GltfCompliantMaterial();
 		this._pathTracer = new WaveFrontPathTracer( renderer );
+		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection

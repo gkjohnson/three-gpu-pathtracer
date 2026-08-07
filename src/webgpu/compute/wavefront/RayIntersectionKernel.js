@@ -5,6 +5,7 @@ import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random
 import { rayQueueStruct, hitQueueAtomicStruct, RAY_FLAG_FULLY_TRANSMISSIVE } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -33,6 +34,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			backgroundIntensity: uniform( 1 ),
 			backgroundBlurriness: uniform( 0 ),
 
+			transmissiveBackground: uniform( 1 ),
+
 			globalId: globalId,
 		};
 
@@ -53,6 +56,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 				backgroundRotation: mat3x3f,
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
+
+				transmissiveBackground: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -119,9 +124,39 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 					} else {
 
-						// camera rays and rays that have only passed through transmissive surfaces
-						// show the background so it appears through glass
-						resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, rng );
+						// camera rays show the background directly while rays that have only passed
+						// through transmissive surfaces handle it based on the transmissive background
+						// mode: ENVIRONMENT displays the environment through the glass, TRANSPARENT
+						// lets a transparent background composite through by the average transmitted
+						// throughput, and OVERLAY does both so the glass keeps a tint matching the
+						// rest of the model.
+						let bg = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, rng );
+						if ( input.currentBounce == 0u ) {
+
+							resultColor = vec4f( bg.a * bg.rgb, bg.a );
+
+						} else {
+
+							let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng );
+							var light = mix( env.rgb, bg.rgb, bg.a );
+							var transparency = ( 1.0 - bg.a ) * dot( input.throughputColor, vec3f( 1.0 / 3.0 ) );
+							if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
+
+								light = env.rgb;
+								transparency = 0.0;
+
+							} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
+
+								light = bg.a * bg.rgb;
+
+							}
+
+							resultColor = vec4f(
+								resultColor.rgb + light * input.throughputColor,
+								1.0 - transparency,
+							);
+
+						}
 
 					}
 

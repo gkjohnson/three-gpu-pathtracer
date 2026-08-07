@@ -7,6 +7,7 @@ import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../nodes/structs.wgsl.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -36,6 +37,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundRotation: uniform( new Matrix3() ),
 			backgroundIntensity: uniform( 1 ),
 			backgroundBlurriness: uniform( 0 ),
+
+			transmissiveBackground: uniform( 1 ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -77,6 +80,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundRotation: mat3x3f,
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
+
+				transmissiveBackground: u32,
 
 			) -> void {
 
@@ -201,9 +206,39 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							// camera rays and rays that have only passed through transmissive surfaces
-							// show the background so it appears through glass
-							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
+							// camera rays show the background directly while rays that have only passed
+							// through transmissive surfaces handle it based on the transmissive background
+							// mode: ENVIRONMENT displays the environment through the glass, TRANSPARENT
+							// lets a transparent background composite through by the average transmitted
+							// throughput, and OVERLAY does both so the glass keeps a tint matching the
+							// rest of the model.
+							let bg = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
+							if ( bounce == 0u ) {
+
+								resultColor = vec4f( bg.a * bg.rgb, bg.a );
+
+							} else {
+
+								let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
+								var light = mix( env.rgb, bg.rgb, bg.a );
+								var transparency = ( 1.0 - bg.a ) * dot( throughputColor, vec3f( 1.0 / 3.0 ) );
+								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
+
+									light = env.rgb;
+									transparency = 0.0;
+
+								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
+
+									light = bg.a * bg.rgb;
+
+								}
+
+								resultColor = vec4f(
+									resultColor.rgb + light * throughputColor,
+									1.0 - transparency,
+								);
+
+							}
 
 						}
 

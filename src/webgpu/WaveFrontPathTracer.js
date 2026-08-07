@@ -147,6 +147,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setTransmissiveBackground( value ) {
+
+		this.rayIntersectionKernel.transmissiveBackground = value;
+		this.reset();
+
+	}
+
 	setTiles( tiles ) {
 
 		this.tiles.copy( tiles );
