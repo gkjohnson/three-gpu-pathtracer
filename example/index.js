@@ -111,7 +111,7 @@ const params = {
 	enable: true,
 	useMegakernel: false,
 	bounces: 5,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	pause: false,
 	debugBounds: false,
 	displayTLAS: true,
@@ -433,7 +433,7 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onParamsChange();
