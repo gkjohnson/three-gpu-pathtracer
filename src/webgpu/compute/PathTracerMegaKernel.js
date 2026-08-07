@@ -148,6 +148,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						// russian roulette early out
 						if ( bounce >= 3u ) {
 
 							let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
@@ -166,6 +167,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
 
+						// exit if our throughput is 0.0
 						if ( all( throughputColor == vec3f( 0.0 ) ) ) {
 
 							break;

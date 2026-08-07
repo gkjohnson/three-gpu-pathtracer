@@ -87,22 +87,27 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
 
 				var throughputColor = input.throughputColor;
-				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
+				// russian roulette early out
 				if ( ! isTerminated && input.currentBounce >= 3u ) {
 
 					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
 					let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
-					if ( ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+					isTerminated = ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
 
-						isTerminated = true;
+					// perform sample clamping here to avoid bright pixels
+					throughputColor *= min( 1.0 / rrProb, 20.0 );
 
-					} else {
+				}
 
-						// perform sample clamping here to avoid bright pixels
-						throughputColor *= min( 1.0 / rrProb, 20.0 );
+				if ( ! isTerminated ) {
 
-					}
+					// only divide by the pdf if this ray is valid
+					throughputColor *= scatterRec.color / scatterRec.pdf;
+
+					// exit if our throughput is 0.0
+					isTerminated = all( throughputColor == vec3f( 0.0 ) );
 
 				}
 
@@ -122,7 +127,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].origin = vertexData.position.xyz;
 					rayQueue.elements[ index ].direction = scatterRec.direction;
 					rayQueue.elements[ index ].pixel = indexUV;
-					rayQueue.elements[ index ].throughputColor = throughputColor * scatterRec.color / scatterRec.pdf;
+					rayQueue.elements[ index ].throughputColor = throughputColor;
 					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].seed = input.seed;
