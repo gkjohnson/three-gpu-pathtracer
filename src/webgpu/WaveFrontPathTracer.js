@@ -271,6 +271,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		} = this;
 
 		const targetDimensions = new Vector2();
+		let samples = this.samples;
 
 		while ( true ) {
 
@@ -329,7 +330,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				renderer.compute( traceShadowRayKernel.kernel, shadowDispatchConverter.outputDispatch );
 
 				this.seed ++;
-				this.samples ++;
+				samples += rayCount / ( targetDimensions.x * targetDimensions.y * this.bounces );
+				this.samples = Math.floor( samples );
 
 			}
 
