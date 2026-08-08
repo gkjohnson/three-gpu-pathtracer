@@ -18,6 +18,111 @@ import {
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
+// Correct the shading normal to prevent scattering rays below the geometry surface by bending
+// the normal towards the geometry normal such that the perfect reflection ray is just above the
+// geometry surface. Ported verbatim from Blender Cycles "ensure_valid_specular_reflection"
+// (src/kernel/closure/bsdf_util.h), which is derived from from the Iray paper (Keller et al. 2017, A.3).
+//
+// This only guarantees perfect reflection rays are above surface - other diffuse rays, for example,
+// flipped when sampling.
+const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
+
+	fn ensureValidReflectionNormal( n: vec3f, ng: vec3f, i: vec3f ) -> vec3f {
+
+		// reflected ray
+		let R = 2.0 * dot( n, i ) * n - i;
+
+		let Iz = dot( i, ng );
+
+		// reflection rays may always be at least as shallow as the incoming ray
+		let threshold = min( 0.9 * Iz, 0.01 );
+		if ( dot( ng, R ) >= threshold ) {
+
+			return n;
+
+		}
+
+		// Form coordinate system with Ng as the Z axis and N inside the X-Z-plane.
+   		// The X axis is found by normalizing the component of N that's orthogonal to Ng.
+   		// The Y axis isn't actually needed.
+		let orthoN = n - dot( n, ng ) * ng;
+		let orthoLen = length( orthoN );
+		let X = select( n, orthoN / orthoLen, orthoLen != 0.0 );
+
+		// Calculate N.z and N.x in the local coordinate system.
+		//
+		// The goal of this computation is to find a N' that is rotated towards Ng just enough
+   		// to lift R' above the threshold (here called t), therefore dot(R', Ng) = t.
+		//
+		// See the Blender implementation for a full description of the solution.
+		let Ix = dot( i, X );
+
+		let a = Ix * Ix + Iz * Iz;
+		let b = 2.0 * ( a + Iz * threshold );
+		let c = ( threshold + Iz ) * ( threshold + Iz );
+
+		// only one root is valid; the sign of Ix selects it
+		var Nz2: f32;
+		if ( Ix < 0.0 ) {
+
+			Nz2 = 0.25 * ( b + sqrt( max( b * b - 4.0 * a * c, 0.0 ) ) ) / a;
+
+		} else {
+
+			Nz2 = 0.25 * ( b - sqrt( max( b * b - 4.0 * a * c, 0.0 ) ) ) / a;
+
+		}
+
+		let Nx = sqrt( max( 1.0 - Nz2, 0.0 ) );
+		let Nz = sqrt( max( Nz2, 0.0 ) );
+
+		return Nx * X + Nz * ng;
+
+	}
+
+`;
+
+// Adjusts the shading normal such that the provided view normal is guaranteed to be in
+// positive hemisphere by rotating it towards the view direction just enough so view is
+// just glancing the surface as a small epsilon if needed.
+const ensureValidViewNormal = wgslTagFn/* wgsl */`
+
+	fn ensureValidViewNormal( n: vec3f, ng: vec3f, view: vec3f ) -> vec3f {
+
+		// ensure the view is at least slightly above the surface normal hemisphere
+		const MIN_VIEW_COS = 1e-6;
+
+		// if we're positive already then early out
+		let c = dot( n, view );
+		if ( c > MIN_VIEW_COS ) {
+
+			return n;
+
+		}
+
+		// perpendicular vector to normal and view
+		var perp = n - c * view;
+		let perpLen = length( perp );
+
+		// if we reach here that means that he view is nearly the opposite direction and
+		// we can't derive plan to rotate on towards the view, so just use the geometry
+		// normal. This could likely only really happen with a severe normal map application.
+		if ( perpLen <= 1e-6 ) {
+
+			return ng;
+
+		}
+
+		perp = perp / perpLen;
+
+		// rotate the normal to be at larger than the above threshold - pythagorean
+		// theorem for generating normal with threshold*view component
+		return MIN_VIEW_COS * view + sqrt( 1.0 - MIN_VIEW_COS * MIN_VIEW_COS ) * perp;
+
+	}
+
+`;
+
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
 export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
@@ -26,17 +131,17 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
+		view: vec3f,
 	) -> SurfaceRecord {
 
-		var normal = faceNormal * side;
+		var normal = faceNormal;
 		if ( material.flatShading == 0 ) {
 
-			normal = vertexData.normal.xyz;
+			normal = normalize( vertexData.normal.xyz ) * side;
 
 		}
-		normal = normalize( normal );
-		let baseNormal = normal;
 
+		var baseNormal = normal;
 		if ( material.normalMap != -1 ) {
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
@@ -59,10 +164,11 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		}
 
-		normal *= side;
+		normal = ensureValidViewNormal( normal, faceNormal, view );
+
+		normal = ensureValidReflectionNormal( normal, faceNormal, view );
 
 		var albedo = vec4( material.color, material.opacity );
-
 		if ( material.vertexColors == 1 ) {
 
 			let vertexColor = getColor( vertexData ).xyz;
@@ -154,7 +260,10 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
-		clearcoatNormal *= side;
+
+		clearcoatNormal = ensureValidViewNormal( clearcoatNormal, faceNormal, view );
+
+		clearcoatNormal = ensureValidReflectionNormal( clearcoatNormal, faceNormal, view );
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
@@ -324,6 +433,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	getColor,
 	surfaceRecordStruct,
 	constants,
+	ensureValidReflectionNormal,
+	ensureValidViewNormal,
 ] );
 
 /*
