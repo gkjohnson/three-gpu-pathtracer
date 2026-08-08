@@ -5,9 +5,10 @@ import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
+import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
-import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
+import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)
@@ -48,6 +49,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionKernel = new RayIntersectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.rayDispatchConverter = new QueueLengthToDispatchKernel( rayQueueStruct ).setWorkgroupSize( 1, 1, 1 );
+		this.hitDispatchConverter = new QueueLengthToDispatchKernel( hitQueueStruct ).setWorkgroupSize( 1, 1, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -250,6 +253,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			rayIntersectionKernel,
 			updateRayQueueParamsKernel,
 			hitProcessKernel,
+			rayDispatchConverter,
+			hitDispatchConverter,
 
 			lowResMode
 		} = this;
@@ -305,28 +310,29 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				}
 
-				// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
-				// TODO: setting dispatch size to 10000 is causing failures / missed rays
-				const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
+				// Step 2: run intersections over exactly the number of queued rays, add color for
+				// terminated rays, add material handling to a dedicated queue
+				rayDispatchConverter.queue = rayQueue;
+				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
+
 				rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 				rayIntersectionKernel.rayQueue = rayQueue;
 				rayIntersectionKernel.hitQueue = hitQueue;
-				renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
+				renderer.compute( rayIntersectionKernel.kernel, rayDispatchConverter.outputDispatch );
 
 				// mark the rays as consumed
-				const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
-				updateRayQueueParamsKernel.processed = processed;
 				updateRayQueueParamsKernel.rayQueue = rayQueue;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
-				// TODO: we should use an indirect dispatch here to only kick off the number of threads
-				// as needed to iterate over all the fields
-				// Step 3: attenuate ray color, scatter, run russian roulette
+				// Step 3: attenuate ray color, scatter, run russian roulette over exactly the queued hits
+				hitDispatchConverter.queue = hitQueue;
+				renderer.compute( hitDispatchConverter.kernel, [ 1, 1, 1 ] );
+
 				hitProcessKernel.sampleCountTarget = sampleCountTarget;
 				hitProcessKernel.bounces = bounces;
 				hitProcessKernel.rayQueue = rayQueue;
 				hitProcessKernel.hitQueue = hitQueue;
-				renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
+				renderer.compute( hitProcessKernel.kernel, hitDispatchConverter.outputDispatch );
 				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel
 
 				// Step 4: connect to lights
