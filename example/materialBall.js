@@ -48,7 +48,7 @@ const params = {
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
 	transmissiveBounces: 20,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	tiles: 3,
 };
 
@@ -157,7 +157,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'transmissiveBounces', 0, 40, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );

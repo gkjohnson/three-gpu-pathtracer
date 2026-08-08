@@ -106,6 +106,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].currentBounce = input.currentBounce;
 					hitQueue.elements[ index ].resultColor = input.resultColor;
 					hitQueue.elements[ index ].seed = input.seed;
+					hitQueue.elements[ index ].minPdf = input.minPdf;
 
 				} else {
 

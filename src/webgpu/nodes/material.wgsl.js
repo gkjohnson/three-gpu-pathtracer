@@ -124,6 +124,10 @@ const ensureValidViewNormal = wgslTagFn/* wgsl */`
 `;
 
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
+// Sentinel for a disabled glossy filter ( FLT_MAX, mirroring Cycles ): the blur term
+// clamps to zero for any path pdf when the inverted filter value is this large.
+export const FILTER_GLOSSY_DISABLED = 3.402823466e38;
+
 export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
@@ -132,6 +136,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		side: f32,
 		faceNormal: vec3f,
 		view: vec3f,
+		blurRoughness: f32,
 	) -> SurfaceRecord {
 
 		var normal = faceNormal;
@@ -395,9 +400,10 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.sheen = material.sheen;
 		surf.sheenColor = sheenColor;
 
-		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
-		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
-		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
+		let minRoughness = max( MIN_ROUGHNESS, blurRoughness );
+		surf.roughness = clamp( roughness, minRoughness, 1.0 );
+		surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
+		surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
 		surf.anisotropy = saturate( anisotropyStrength );
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
