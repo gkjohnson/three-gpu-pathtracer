@@ -81,7 +81,8 @@ export const ggxLambdaFunc = wgslFn( /* wgsl */ `
 		let alphaT = alpha.x;
 		let alphaB = alpha.y;
 
-		let NdotV = max( V.z, MIN_INCIDENT_COS );
+		// abs v.z to support transmitted rays
+		let NdotV = max( abs( V.z ), MIN_INCIDENT_COS );
 		let cos2 = NdotV * NdotV;
 		let t = ( alphaT * alphaT * V.x * V.x + alphaB * alphaB * V.y * V.y ) / cos2;
 		let numerator = - 1.0 + sqrt( 1.0 + t );
