@@ -8,3 +8,4 @@ export * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 // extend the cameras to avoid adding WebGPU imports to the WebGLPathTracer
 import './shims/EquirectCameraShim.js';
 import './shims/PhysicalCameraShim.js';
+import './shims/ArrayCameraShim.js';

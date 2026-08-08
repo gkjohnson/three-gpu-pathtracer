@@ -1,37 +1,61 @@
 import {
 	ACESFilmicToneMapping,
+	ArrayCamera,
 	Box3,
-	LoadingManager,
-	Sphere,
 	DoubleSide,
-	Mesh,
-	MeshStandardMaterial,
-	PlaneGeometry,
-	Group,
-	MeshPhysicalMaterial,
-	WebGLRenderer,
-	Scene,
-	MeshBasicMaterial,
-	CustomBlending,
 	EquirectangularReflectionMapping,
+	Group,
+	LoadingManager,
 	MathUtils,
-	Vector4
-} from 'three';
+	Matrix4,
+	Mesh,
+	MeshPhysicalMaterial,
+	MeshStandardMaterial,
+	PerspectiveCamera,
+	PlaneGeometry,
+	Scene,
+	Sphere,
+	Vector2,
+	Vector4,
+	WebGPUCoordinateSystem,
+	WebGPURenderer,
+} from 'three/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
+import { LDrawConditionalLineMaterial } from 'three/examples/jsm/materials/LDrawConditionalLineNodeMaterial.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { PathTracingSceneGenerator } from '../src/core/PathTracingSceneGenerator.js';
-import { PhysicalCamera } from 'three-gpu-pathtracer';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { QuiltPreviewMaterial } from './materials/QuiltPreviewMaterial.js';
-import { QuiltPathTracingRenderer } from '../src/core/QuiltPathTracingRenderer.js';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { QuiltPreviewNodeMaterial } from './materials/QuiltPreviewNodeMaterial.js';
 
-import { LookingGlassWebXRPolyfill, LookingGlassConfig } from '@lookingglass/webxr';
-import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+function normalizePackedFileNames( text ) {
+
+	// Match embedded MPD file names to LDrawLoader's normalized subobject paths.
+	return text.replace( /^0 FILE (.+)$/gm, ( _, name ) => {
+
+		name = name.replace( /\\/g, '/' );
+		name = name.startsWith( 's/' ) ? `parts/${ name }` : name.startsWith( '48/' ) ? `p/${ name }` : name;
+		return `0 FILE ${ name }`;
+
+	} );
+
+}
+
+class PackedLDrawLoader extends LDrawLoader {
+
+	constructor( manager ) {
+
+		super( manager );
+		const parseCache = this.partsCache.parseCache;
+		const parse = parseCache.parse.bind( parseCache );
+		parseCache.parse = ( text, fileName ) => parse( normalizePackedFileNames( text ), fileName );
+
+	}
+
+}
 
 // lkg display constants
 const LKG_WIDTH = 420;
@@ -77,7 +101,7 @@ const params = {
 
 	enable: true,
 	model: modelName in MODELS ? modelName : 'Voltron - Voltron',
-	renderScale: 1,
+	renderScale: 0.25,
 	tiles: 1,
 
 	samplesPerFrame: 1,
@@ -92,23 +116,42 @@ const params = {
 	viewCone: 35,
 	viewerDistance: VIEWER_DISTANCE,
 
-	saveQuilt: () => {
-
-		saveQuilt();
-
-	},
+	saveQuilt,
 
 };
 
 let loadingEl, samplesEl, distEl;
-let gui, stats;
-let renderer, camera;
-let ptRenderer, fsQuad, previewQuad, controls, scene;
-let saveButton;
-const _viewport = new Vector4();
+let renderer, camera, quiltCamera;
+let pathTracer, previewQuad, controls, scene;
+const _translation = new Matrix4();
+const _size = new Vector2();
 
 // initialize lkg parameters
 let lkgParams = getLkgParams( params.numViews );
+
+const DEVICE_LIMITS_REQUESTED = [
+	'maxBufferSize',
+	'maxStorageBufferBindingSize',
+];
+function getRequiredDeviceLimits( adapter ) {
+
+	const limits = {};
+
+	for ( const limit of DEVICE_LIMITS_REQUESTED ) {
+
+		const value = adapter.limits[ limit ];
+
+		if ( typeof value === 'number' && Number.isFinite( value ) ) {
+
+			limits[ limit ] = value;
+
+		}
+
+	}
+
+	return limits;
+
+}
 
 init();
 
@@ -119,59 +162,53 @@ async function init() {
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 
+	const adapter = await navigator.gpu?.requestAdapter();
+	const requiredLimits = getRequiredDeviceLimits( adapter );
 	// init renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, preserveDrawingBuffer: true, requiredLimits } );
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.xr.enabled = true;
 	document.body.appendChild( renderer.domElement );
 
 	scene = new Scene();
 
 	// initialize the camera
 	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PhysicalCamera( 60, aspect, 0.025, 500 );
+	camera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
 	camera.position.set( 0.43, 0.06, - 0.2 ).normalize().multiplyScalar( 0.48 );
-	camera.bokehSize = 0;
+	quiltCamera = new ArrayCamera();
 
-	// initialize the quilt renderer
-	ptRenderer = new QuiltPathTracingRenderer( renderer );
-	ptRenderer.tiles.set( params.tiles, params.tiles );
-	ptRenderer.camera = camera;
-
-	camera.fov = ptRenderer.viewFoV * MathUtils.RAD2DEG;
-	camera.updateProjectionMatrix();
+	// initialize the path tracer. The quilt has its own fixed resolution, independent
+	// of the preview canvas, so automatic and low-resolution resizing must be disabled.
+	pathTracer = new WebGPUPathTracer( renderer );
+	// Avoid the large fixed ray queues used by the wavefront backend.
+	pathTracer.useMegakernel( true );
+	pathTracer.synchronizeRenderSize = false;
+	pathTracer.dynamicLowRes = false;
+	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.bounces = params.bounces;
+	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 
 	// initialize quads
-	fsQuad = new FullScreenQuad( new MeshBasicMaterial( {
-		map: ptRenderer.target.texture,
-		blending: CustomBlending,
-	} ) );
-
-	previewQuad = new FullScreenQuad( new QuiltPreviewMaterial( {
-		quiltMap: ptRenderer.target.texture,
-		quiltDimensions: ptRenderer.quiltDimensions,
-		aspectRatio: ptRenderer.displayAspect,
+	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
+		quiltMap: pathTracer.target,
+		quiltDimensions: new Vector2(),
+		aspectRatio: DISPLAY_WIDTH / DISPLAY_HEIGHT,
 	} ) );
 
 	// init controls
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.addEventListener( 'change', () => {
 
-		ptRenderer.reset();
+		updateQuiltCamera();
+		pathTracer.updateCamera();
 
 	} );
 
-	// load the environment map
-	new HDRLoader()
-		.load( ENVMAP_URL, texture => {
-
-			texture.mapping = EquirectangularReflectionMapping;
-			scene.environment = texture;
-			scene.background = texture;
-			ptRenderer.material.envMapInfo.updateFrom( texture );
-			ptRenderer.reset();
-
-		} );
+	onResize();
+	onLkgParamsChange();
+	buildGui();
+	window.addEventListener( 'resize', onResize );
 
 	// load the lego model
 	let failed = false;
@@ -189,230 +226,159 @@ async function init() {
 
 	};
 
-	// Load the lego model
-	let generator;
-	const loader = new LDrawLoader( manager );
-	await loader.preloadMaterials( MATERIALS_URL );
-	loader
-		.setPartsLibraryPath( PARTS_PATH )
-		.loadAsync( MODELS[ params.model ] )
-		.then( result => {
+	try {
 
-			// get a merged version of the model
-			const model = LDrawUtils.mergeObject( result );
-			model.rotation.set( Math.PI, 0, 0 );
+		const envPromise = new HDRLoader().loadAsync( ENVMAP_URL );
+		const loader = new PackedLDrawLoader( manager );
+		loader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
+		await loader.preloadMaterials( MATERIALS_URL );
+		const result = await loader
+			.setPartsLibraryPath( PARTS_PATH )
+			.loadAsync( MODELS[ params.model ] );
 
-			// remove the non mesh components
-			const toRemove = [];
-			model.traverse( c => {
+		// get a merged version of the model
+		const model = LDrawUtils.mergeObject( result );
+		model.rotation.set( Math.PI, 0, 0 );
 
-				if ( c.isLineSegments ) {
+		// remove the non mesh components
+		const toRemove = [];
+		model.traverse( c => {
 
-					toRemove.push( c );
+			if ( c.isLineSegments ) {
 
-				}
-
-				if ( c.isMesh ) {
-
-					c.material.roughness *= 0.25;
-
-				}
-
-			} );
-
-			toRemove.forEach( c => {
-
-				c.parent.remove( c );
-
-			} );
-
-			// conver materials
-			convertOpacityToTransmission( model, 1.4 );
-
-			// generate the floor
-			const floorTex = generateRadialFloorTexture( 2048 );
-			const floorPlane = new Mesh(
-				new PlaneGeometry(),
-				new MeshStandardMaterial( {
-					map: floorTex,
-					transparent: true,
-					color: 0x111111,
-					roughness: 0.2,
-					metalness: 0.2,
-					side: DoubleSide,
-				} )
-			);
-			floorPlane.scale.setScalar( 5 );
-			floorPlane.rotation.x = - Math.PI / 2;
-
-			// center the model
-			const box = new Box3();
-			box.setFromObject( model );
-			model.position
-				.addScaledVector( box.min, - 0.5 )
-				.addScaledVector( box.max, - 0.5 );
-
-			const sphere = new Sphere();
-			box.getBoundingSphere( sphere );
-
-			const boxRadius2d = Math.sqrt( box.min.x ** 2 + box.min.z ** 2 );
-			const widthRadiusScale = 0.06 / Math.min( boxRadius2d, sphere.radius );
-			const heightRadiusScale = 0.14 / ( box.max.y - box.min.y );
-			const scaleRadius = Math.min( widthRadiusScale, heightRadiusScale );
-
-			// scale the model to 0.06 m so it fits within the LKG view volume
-			model.scale.setScalar( scaleRadius );
-			model.position.multiplyScalar( scaleRadius );
-			model.updateMatrixWorld();
-			box.setFromObject( model );
-
-			// generate the view group
-			const group = new Group();
-			floorPlane.position.y = box.min.y;
-			group.add( model, floorPlane );
-			group.updateMatrixWorld( true );
-
-			generator = new PathTracingSceneGenerator();
-			return generator.generate( group, { onProgress: v => {
-
-				const percent = Math.floor( 100 * v );
-				loadingEl.innerText = `Building BVH : ${ percent }%`;
-
-			} } );
-
-		} )
-		.then( result => {
-
-			scene.add( result.scene );
-
-			const { bvh, textures, materials, geometry } = result;
-			const material = ptRenderer.material;
-
-			material.bvh.updateFrom( bvh );
-			material.attributesArray.updateFrom(
-				geometry.attributes.normal,
-				geometry.attributes.tangent,
-				geometry.attributes.uv,
-				geometry.attributes.color,
-			);
-			material.materialIndexAttribute.updateFrom( geometry.attributes.materialIndex );
-			material.textures.setTextures( renderer, textures, 2048, 2048 );
-			material.materials.updateFrom( materials, textures );
-
-			generator.dispose();
-
-			loadingEl.style.visibility = 'hidden';
-			renderer.domElement.style.visibility = 'visible';
-			ptRenderer.reset();
-
-			// initialize LKG XR
-			new LookingGlassWebXRPolyfill();
-			document.body.append( VRButton.createButton( renderer ) );
-
-			// start render loop
-			renderer.setAnimationLoop( animate );
-
-		} )
-		.catch( err => {
-
-			failed = true;
-			loadingEl.innerText = 'Failed to load model. ' + err.message;
-
-		} );
-
-	stats = new Stats();
-	document.body.appendChild( stats.dom );
-
-	// initialize lkg config and xr button
-	LookingGlassConfig.tileHeight = LKG_HEIGHT;
-	LookingGlassConfig.numViews = params.numViews;
-	LookingGlassConfig.inlineView = 2;
-
-	onResize();
-	onLkgParamsChange();
-	buildGui();
-
-	window.addEventListener( 'resize', onResize );
-
-}
-
-function animate() {
-
-	// skip rendering if we still haven't loaded the env map
-	if ( ! scene.environment ) {
-
-		return;
-
-	}
-
-	// disable the xr component so three.js doesn't hijack the camera. But we need it enabled otherwise so
-	// we can start an xr session.
-	renderer.xr.enabled = false;
-	stats.update();
-
-	if ( ptRenderer.samples < 1.0 || ! params.enable ) {
-
-		renderer.render( scene, camera );
-
-	}
-
-	if ( params.enable ) {
-
-		// set path tracer variables
-		ptRenderer.material.filterGlossyFactor = params.filterGlossyFactor;
-		ptRenderer.material.bounces = params.bounces;
-		ptRenderer.material.physicalCamera.updateFrom( camera );
-		camera.updateMatrixWorld();
-
-		if ( ! params.pause || ptRenderer.samples < 1 ) {
-
-			for ( let i = 0, l = params.samplesPerFrame; i < l; i ++ ) {
-
-				ptRenderer.update();
+				toRemove.push( c );
 
 			}
 
-		}
+			if ( c.isMesh ) {
 
-		renderer.autoClear = false;
+				c.material.roughness *= 0.25;
 
-		if ( ptRenderer.samples > 1 && params.tiltingPreview && ! renderer.xr.isPresenting ) {
+			}
 
-			// render the animated tilting preview
-			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * ptRenderer.viewCount;
-			previewQuad.material.displayIndex = Math.floor( displayIndex );
-			previewQuad.material.aspectRatio = ptRenderer.displayAspect * window.innerHeight / window.innerWidth;
-			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
-			previewQuad.render( renderer );
+		} );
 
-		} else if ( renderer.xr.isPresenting ) {
+		toRemove.forEach( c => {
 
-			// only display the first view if we haven't rendered the full number of views yet
-			LookingGlassConfig.numViews = ptRenderer.samples < 1.0 ? 1 : params.numViews;
+			c.parent.remove( c );
 
-			renderer.getViewport( _viewport );
-			renderer.setViewport( 0, 0, lkgParams.quiltWidth, lkgParams.quiltHeight );
-			fsQuad.render( renderer );
-			renderer.setViewport( _viewport );
+		} );
 
-		} else {
+		// convert materials
+		convertOpacityToTransmission( model, 1.4 );
 
-			// render the full quilt
-			fsQuad.render( renderer );
+		// generate the floor
+		const floorTex = generateRadialFloorTexture( 2048 );
+		const floorPlane = new Mesh(
+			new PlaneGeometry(),
+			new MeshStandardMaterial( {
+				map: floorTex,
+				transparent: true,
+				color: 0x111111,
+				roughness: 0.2,
+				metalness: 0.2,
+				side: DoubleSide,
+			} )
+		);
+		floorPlane.scale.setScalar( 5 );
+		floorPlane.rotation.x = - Math.PI / 2;
 
-		}
+		// center the model
+		const box = new Box3();
+		box.setFromObject( model );
+		model.position
+			.addScaledVector( box.min, - 0.5 )
+			.addScaledVector( box.max, - 0.5 );
 
-		renderer.autoClear = true;
+		const sphere = new Sphere();
+		box.getBoundingSphere( sphere );
+
+		const boxRadius2d = Math.sqrt( box.min.x ** 2 + box.min.z ** 2 );
+		const widthRadiusScale = 0.06 / Math.min( boxRadius2d, sphere.radius );
+		const heightRadiusScale = 0.14 / ( box.max.y - box.min.y );
+		const scaleRadius = Math.min( widthRadiusScale, heightRadiusScale );
+
+		// scale the model to 0.06 m so it fits within the LKG view volume
+		model.scale.setScalar( scaleRadius );
+		model.position.multiplyScalar( scaleRadius );
+		model.updateMatrixWorld();
+		box.setFromObject( model );
+
+		// generate the view group
+		const group = new Group();
+		floorPlane.position.y = box.min.y;
+		group.add( model, floorPlane );
+		scene.add( group );
+
+		loadingEl.innerText = 'Building scene';
+		const envTexture = await envPromise;
+		envTexture.mapping = EquirectangularReflectionMapping;
+		scene.environment = envTexture;
+		scene.background = envTexture;
+
+		pathTracer.setScene( scene, quiltCamera );
+
+		loadingEl.style.visibility = 'hidden';
+		renderer.domElement.style.visibility = 'visible';
+		requestAnimationFrame( animate );
+
+	} catch ( err ) {
+
+		failed = true;
+		loadingEl.innerText = 'Failed to load model. ' + err.message;
 
 	}
 
-	// toggle save button
-	saveButton.disable( renderer.xr.isPresenting );
+}
 
-	// re enable the xr manager
-	renderer.xr.enabled = true;
-	samplesEl.innerText = `Samples: ${ Math.floor( ptRenderer.samples ) }`;
+async function animate() {
+
+	if ( ! params.enable ) {
+
+		renderer.render( scene, camera );
+
+	} else {
+
+		// set path tracer variables
+		pathTracer.pause = params.pause;
+		const samplesPerFrame = params.pause ? 1 : params.samplesPerFrame;
+		for ( let i = 0; i < samplesPerFrame; i ++ ) {
+
+			pathTracer.renderSample();
+
+		}
+
+		if ( pathTracer.samples > 1 && params.tiltingPreview ) {
+
+			// render the animated tilting preview
+			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
+			previewQuad.material.displayIndex = Math.min( params.numViews - 1, Math.floor( displayIndex ) );
+			previewQuad.material.aspectRatio = DISPLAY_WIDTH / DISPLAY_HEIGHT * window.innerHeight / window.innerWidth;
+			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
+
+		} else {
+
+			previewQuad.material.displayIndex = - 1;
+
+		}
+
+		previewQuad.material.quiltMap = pathTracer.target;
+		previewQuad.render( renderer );
+
+	}
+
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
+
+	const queue = renderer.backend?.device?.queue;
+	if ( queue?.onSubmittedWorkDone ) {
+
+		// Keep CPU-side progress in step with completed GPU work.
+		await queue.onSubmittedWorkDone();
+
+	}
+
+	requestAnimationFrame( animate );
 
 }
 
@@ -431,8 +397,6 @@ function getLkgParams( numViews ) {
 
 	return {
 		numViews,
-		numPixels,
-		bufferWidth,
 		quiltTilesX,
 		quiltTilesY,
 		quiltWidth,
@@ -444,16 +408,98 @@ function getLkgParams( numViews ) {
 // callback when a parameter impacting the LKG rendering changes
 function onLkgParamsChange() {
 
-	const { renderScale, viewCone, viewerDistance } = params;
+	const { renderScale } = params;
 
 	lkgParams = getLkgParams( params.numViews );
+	const previousCameraCount = quiltCamera.cameras.length;
+	updateQuiltCamera();
 
-	LookingGlassConfig.numViews = lkgParams.numViews;
-	ptRenderer.viewCount = lkgParams.numViews;
-	ptRenderer.viewCone = viewCone * MathUtils.DEG2RAD;
-	ptRenderer.setFromDisplayView( viewerDistance, DISPLAY_WIDTH, DISPLAY_HEIGHT );
-	ptRenderer.setSize( renderScale * lkgParams.quiltWidth, renderScale * lkgParams.quiltHeight );
-	ptRenderer.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
+	const width = Math.max( 1, Math.floor( renderScale * lkgParams.quiltWidth ) );
+	const height = Math.max( 1, Math.floor( renderScale * lkgParams.quiltHeight ) );
+	pathTracer.setSize( width, height );
+	previewQuad.material.quiltMap = pathTracer.target;
+	previewQuad.material.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
+
+	if ( previousCameraCount !== quiltCamera.cameras.length ) {
+
+		pathTracer.setCamera( quiltCamera );
+
+	} else {
+
+		pathTracer.updateCamera();
+
+	}
+
+}
+
+// Rebuild the off-axis cameras and their quilt viewports. Extra cells in the
+// final row repeat the last view so every output pixel belongs to a camera.
+function updateQuiltCamera() {
+
+	const {
+		numViews,
+		quiltTilesX,
+		quiltTilesY,
+		quiltWidth,
+		quiltHeight,
+	} = lkgParams;
+	const { renderScale, viewCone, viewerDistance } = params;
+	const width = Math.max( 1, Math.floor( renderScale * quiltWidth ) );
+	const height = Math.max( 1, Math.floor( renderScale * quiltHeight ) );
+	const cameraCount = quiltTilesX * quiltTilesY;
+
+	const displayHalfHeight = DISPLAY_HEIGHT * 0.5;
+	const displayHalfWidth = DISPLAY_WIDTH * 0.5;
+	const halfViewWidth = Math.tan( viewCone * MathUtils.DEG2RAD * 0.5 ) * viewerDistance;
+	const nearScale = camera.near / viewerDistance;
+
+	camera.fov = 2 * Math.atan( displayHalfHeight / viewerDistance ) * MathUtils.RAD2DEG;
+	camera.updateProjectionMatrix();
+	camera.updateMatrixWorld();
+
+	while ( quiltCamera.cameras.length < cameraCount ) {
+
+		const subCamera = new PerspectiveCamera();
+		subCamera.coordinateSystem = WebGPUCoordinateSystem;
+		subCamera.viewport = new Vector4();
+		quiltCamera.cameras.push( subCamera );
+
+	}
+
+	quiltCamera.cameras.length = cameraCount;
+	for ( let i = 0; i < cameraCount; i ++ ) {
+
+		const viewIndex = Math.min( i, numViews - 1 );
+		const viewAlpha = numViews === 1 ? 0.5 : viewIndex / ( numViews - 1 );
+		const offset = MathUtils.lerp( - halfViewWidth, halfViewWidth, viewAlpha );
+		const subCamera = quiltCamera.cameras[ i ];
+
+		_translation.makeTranslation( offset, 0, 0 );
+		subCamera.matrix.multiplyMatrices( camera.matrixWorld, _translation );
+		subCamera.matrix.decompose( subCamera.position, subCamera.quaternion, subCamera.scale );
+
+		subCamera.near = camera.near;
+		subCamera.far = camera.far;
+		subCamera.projectionMatrix.makePerspective(
+			nearScale * ( - displayHalfWidth - offset ),
+			nearScale * ( displayHalfWidth - offset ),
+			nearScale * displayHalfHeight,
+			nearScale * - displayHalfHeight,
+			camera.near,
+			camera.far,
+			WebGPUCoordinateSystem,
+		);
+		subCamera.projectionMatrixInverse.copy( subCamera.projectionMatrix ).invert();
+
+		const tileX = i % quiltTilesX;
+		const tileY = Math.floor( i / quiltTilesX );
+		const x0 = Math.floor( tileX * width / quiltTilesX );
+		const x1 = Math.floor( ( tileX + 1 ) * width / quiltTilesX );
+		const y0 = Math.floor( tileY * height / quiltTilesY );
+		const y1 = Math.floor( ( tileY + 1 ) * height / quiltTilesY );
+		subCamera.viewport.set( x0, y0, x1 - x0, y1 - y0 );
+
+	}
 
 }
 
@@ -465,8 +511,7 @@ function onResize() {
 	renderer.setSize( w, h );
 	renderer.setPixelRatio( window.devicePixelRatio );
 
-	const aspect = w / h;
-	camera.aspect = aspect;
+	camera.aspect = w / h;
 	camera.updateProjectionMatrix();
 
 }
@@ -474,16 +519,28 @@ function onResize() {
 // save the canvas
 function saveQuilt() {
 
-	renderer.setSize( ptRenderer.target.width, ptRenderer.target.height );
-	fsQuad.render( renderer );
+	const target = pathTracer.target;
+	renderer.getSize( _size );
+	const pixelRatio = renderer.getPixelRatio();
+	const displayIndex = previewQuad.material.displayIndex;
+
+	renderer.setPixelRatio( 1 );
+	renderer.setSize( target.width, target.height, false );
+	renderer.setViewport( 0, 0, target.width, target.height );
+	previewQuad.material.quiltMap = target;
+	previewQuad.material.displayIndex = - 1;
+	previewQuad.render( renderer );
 
 	const imageURL = renderer.domElement.toDataURL( 'image/png' );
 	const anchor = document.createElement( 'a' );
 	anchor.href = imageURL;
-	anchor.download = 'preview.png';
+	anchor.download = 'quilt.png';
 	anchor.click();
 	anchor.remove();
 
+	previewQuad.material.displayIndex = displayIndex;
+	renderer.setPixelRatio( pixelRatio );
+	renderer.setSize( _size.x, _size.y );
 	onResize();
 
 }
@@ -491,7 +548,7 @@ function saveQuilt() {
 // build the gui
 function buildGui() {
 
-	gui = new GUI();
+	const gui = new GUI();
 
 	gui.add( params, 'model', Object.keys( MODELS ) ).onChange( v => {
 
@@ -500,52 +557,32 @@ function buildGui() {
 
 	} );
 	gui.add( params, 'enable' );
-	gui.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onLkgParamsChange();
-		ptRenderer.reset();
-
-	} );
-	saveButton = gui.add( params, 'saveQuilt' );
+	gui.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onLkgParamsChange );
+	gui.add( params, 'saveQuilt' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
 	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		pathTracer.bounces = params.bounces;
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
 
-		ptRenderer.reset();
+		pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'tiles', 1, 3, 1 ).onChange( v => {
 
-		ptRenderer.tiles.setScalar( v );
+		pathTracer.tiles.setScalar( v );
 
 	} );
 
 	const lkgFolder = gui.addFolder( 'Looking Glass Views' );
-	lkgFolder.add( params, 'numViews', 1, 100, 1 ).onChange( () => {
-
-		onLkgParamsChange();
-		ptRenderer.reset();
-
-	} );
-	lkgFolder.add( params, 'viewCone', 10, 70, 0.1 ).onChange( () => {
-
-		onLkgParamsChange();
-		ptRenderer.reset();
-
-	} );
-	lkgFolder.add( params, 'viewerDistance', 0.2, 2, 0.1 ).onChange( () => {
-
-		onLkgParamsChange();
-		ptRenderer.reset();
-
-	} );
+	lkgFolder.add( params, 'numViews', 1, 100, 1 ).onChange( onLkgParamsChange );
+	lkgFolder.add( params, 'viewCone', 10, 70, 0.1 ).onChange( onLkgParamsChange );
+	lkgFolder.add( params, 'viewerDistance', 0.2, 2, 0.1 ).onChange( onLkgParamsChange );
 
 	const quiltPreviewFolder = gui.addFolder( 'Preview' );
 	quiltPreviewFolder.add( params, 'tiltingPreview' );
@@ -566,27 +603,25 @@ function convertOpacityToTransmission( model, ior ) {
 				const newMaterial = new MeshPhysicalMaterial();
 				for ( const key in material ) {
 
-					if ( key in material ) {
+					const value = material[ key ];
+					const targetValue = newMaterial[ key ];
+					if ( value === null ) {
 
-						if ( material[ key ] === null ) {
+						continue;
 
-							continue;
+					}
 
-						}
+					if ( value.isTexture ) {
 
-						if ( material[ key ].isTexture ) {
+						newMaterial[ key ] = value;
 
-							newMaterial[ key ] = material[ key ];
+					} else if ( value.copy && targetValue?.constructor === value.constructor ) {
 
-						} else if ( material[ key ].copy && material[ key ].constructor === newMaterial[ key ].constructor ) {
+						targetValue.copy( value );
 
-							newMaterial[ key ].copy( material[ key ] );
+					} else if ( typeof value === 'number' ) {
 
-						} else if ( ( typeof material[ key ] ) === 'number' ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						}
+						newMaterial[ key ] = value;
 
 					}
 
