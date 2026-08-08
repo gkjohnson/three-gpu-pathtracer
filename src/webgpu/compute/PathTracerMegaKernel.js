@@ -221,7 +221,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
 								var light = mix( env.rgb, bg.rgb, bg.a );
-								var transparency = ( 1.0 - bg.a ) * dot( throughputColor, vec3f( 1.0 / 3.0 ) );
+								var transparency = ( 1.0 - bg.a ) * saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 									light = env.rgb;
