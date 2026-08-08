@@ -137,8 +137,12 @@ export class WebGPUPathTracer {
 
 	set filterGlossyFactor( v ) {
 
-		this._filterGlossyFactor = v;
-		this._pathTracer.setFilterGlossy( v );
+		if ( this._filterGlossyFactor !== v ) {
+
+			this._filterGlossyFactor = v;
+			this._pathTracer.setFilterGlossy( v );
+
+		}
 
 	}
 
