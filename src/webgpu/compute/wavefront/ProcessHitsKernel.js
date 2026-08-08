@@ -82,6 +82,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
+				// blur glossy surfaces after low-probability bounces to suppress fireflies,
+				// from the Cycles "filter glossy" approach in integrator/surface_shader.h
+				// The smallest pdf seen along the path for the glossy filter is tracked below
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
