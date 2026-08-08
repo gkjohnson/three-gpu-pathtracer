@@ -150,18 +150,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let wo = normalize( invBasis * worldWo );
 				let woClearcoat = normalize( invClearcoatBasis * worldWo );
-
-				// TODO: handle such intersections better;
-				// Sometimes .z < 0.0 on a pretty round surface e.g. sphere
-				// Disabling this condition leads to more fireflies on ClearCoatCarPaint example
-				// This could also be fixed by offsetting rays by 1e-1
-				// Also, this will be an invalid condition when transmission is implemented
-				if ( wo.z < 0.0 || woClearcoat.z < 0.0 ) {
-
-					return result;
-
-				}
-
 				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				var cdf: vec4f;
@@ -240,6 +228,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.color = ${ bsdfEvalFunc }( ctx, surf );
 				result.color *= max( 0.0, wi.z );
 				result.direction = normalize( normalBasis * wi );
+
+				// TODO: This will need to be removed or changed to support transmission
+				// Flip the reflected vector if it was scattered below the geometry normal with glossy
+				// reflections
+				let geomDotDir = dot( result.direction, surf.faceNormal );
+				if ( geomDotDir < 0.0 ) {
+
+					result.direction = normalize( result.direction - 2.0 * geomDotDir * surf.faceNormal );
+
+				}
 
 				return result;
 

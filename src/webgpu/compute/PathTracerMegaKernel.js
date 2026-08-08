@@ -135,17 +135,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						material.color *= object.color.rgb;
 						material.opacity *= object.color.a;
 
+						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, blurRoughness );
+						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
-						let scatterRec = ${ bsdfSampleFn }( - ray.direction, surface );
+						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 

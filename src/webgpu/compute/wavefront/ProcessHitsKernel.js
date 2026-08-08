@@ -84,7 +84,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, blurRoughness );
+				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
 
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
