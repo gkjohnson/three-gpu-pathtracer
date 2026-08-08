@@ -182,7 +182,6 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
-		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
@@ -308,7 +307,6 @@ export class WebGPUPathTracer {
 
 		this.scene = scene;
 		this._bvhData = bvhData;
-		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
 
@@ -378,6 +376,7 @@ export class WebGPUPathTracer {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
+		this._pathTracer.setBVHData( this._bvhData );
 		this.updateCamera();
 
 	}
