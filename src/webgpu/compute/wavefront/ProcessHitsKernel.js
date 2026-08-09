@@ -1,13 +1,12 @@
 import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { rayQueueAtomicStruct, hitQueueStruct, RAY_FLAG_FULLY_TRANSMISSIVE } from './structs.js';
+import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
-import { SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../../nodes/structs.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -148,11 +147,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].seed = input.seed;
-					rayQueue.elements[ index ].flags = select(
-						input.flags & ~${ RAY_FLAG_FULLY_TRANSMISSIVE }u,
-						input.flags,
-						( scatterRec.flags & ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u ) > 0
-					);
+					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 
 				}

@@ -6,7 +6,7 @@ import { specularBrdfFunc, specularBtdfFunc, diffuseBrdfFunc, fresnelMixFunc, co
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct, SCATTER_RECORD_FLAG_TRANSMISSIVE } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel.js';
 
@@ -267,12 +267,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.color = ${ bsdfEvalFunc }( ctx, surf );
 				result.color *= select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
 				result.direction = normalize( normalBasis * wi );
+				result.isTransmissive = isTransmissive;
 
-				if ( isTransmissive ) {
-
-					result.flags = result.flags | ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u;
-
-				} else {
+				if ( ! isTransmissive ) {
 
 					// Flip the reflected vector if it was scattered below the geometry normal with glossy
 					// reflections. Transmitted rays intentionally pass below the surface and are skipped.
