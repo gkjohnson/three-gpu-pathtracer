@@ -386,7 +386,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
-		surf.thinFilm = material.thinFilm == 1;
+		surf.thinWall = material.thinWall == 1;
 		surf.attenuationColor = material.attenuationColor;
 		surf.attenuationDistance = material.attenuationDistance;
 
@@ -412,7 +412,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
 		surf.frontFace = side == 1.0 || transmission == 0.0;
-		if ( material.thinFilm == 1 || surf.frontFace ) {
+		if ( material.thinWall == 1 || surf.frontFace ) {
 
 			surf.eta = 1.0 / material.ior;
 
@@ -533,6 +533,20 @@ export const specularBtdfFunc = wgslFn( /* wgsl */`
 	}
 
 `, [ ggxShadowMaskG1Func, ggxDistributionFunc, dielectricFresnelFunc ] );
+
+// Effective roughness for thin walled transmission, from page 40 (note the slides' 3.7 is a typo for 3.4) -
+// referenced from Blender Cycles:
+// https://blog.selfshadow.com/publications/s2017-shading-course/imageworks/s2017_pbs_imageworks_slides_v2.pdf
+export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
+
+	fn thinWallTransmissionRoughness( alpha: f32, eta: f32 ) -> f32 {
+
+		let t = 3.4 * ( eta - 1.0 ) * ( eta - 0.5 ) * ( eta - 0.5 ) / ( eta * eta * eta );
+		return saturate( alpha * sqrt( max( t, 0.0 ) ) );
+
+	}
+
+` );
 
 // https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
 export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `

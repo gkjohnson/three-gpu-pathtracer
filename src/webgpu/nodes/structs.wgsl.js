@@ -76,7 +76,7 @@ export const materialStruct = new StructTypeNode( {
 	// offset 40 floats
 	specularIntensity: 'float',
 	specularIntensityMap: 'int',
-	thinFilm: 'int', // actually a boolean
+	thinWall: 'int', // actually a boolean
 
 	// offset 44 floats
 	attenuationColor: 'vec3',
@@ -176,7 +176,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	// transmission
 	ior: 'f32',
 	transmission: 'f32',
-	thinFilm: 'bool',
+	thinWall: 'bool',
 	attenuationColor: 'vec3f',
 	attenuationDistance: ' f32',
 

@@ -2,7 +2,8 @@ import { texture, textureStore, globalId, float, vec2 } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial.js';
-import { specularBrdfFunc, specularBtdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
@@ -101,7 +102,21 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// gated to the upper hemisphere, matching the WebGL implementation
 				if ( NdotL < 0.0 ) {
 
-					let refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta );
+					var refraction: vec3f;
+					if ( surf.thinWall ) {
+
+						// evaluate the flipped reflection
+						let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
+						refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha );
+
+					} else {
+
+						refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta );
+
+					}
+
 					return ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
 
 				}
@@ -206,21 +221,28 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				} else if ( r <= cdf.w ) { // transmission / refraction
 
-					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
-					wi = refract( - wo, wh, surf.eta );
 					isTransmissive = true;
 
-					if ( all( wi == vec3f( 0.0 ) ) ) {
+					if ( surf.thinWall ) {
 
-						// total internal reflection - refract returns a zero vector, so bounce the
-						// ray off the inside of the surface instead of terminating it
+						// model the double refraction as a single reflection flipped through the surface
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						wh = ${ ggxDirectionFunc }( wo, thinWallAlpha, directionUV );
 						wi = - normalize( reflect( wo, wh ) );
+						wi = vec3f( wi.xy, - wi.z );
 
-					} else if ( surf.thinFilm ) {
+					} else {
 
-						// thin film surfaces refract the ray back out of the flat backside so the
-						// direction continues straight through the shell
-						wi = - refract( normalize( - wi ), - vec3f( 0.0, 0.0, 1.0 ), 1.0 / surf.eta );
+						wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
+						wi = refract( - wo, wh, surf.eta );
+
+						if ( all( wi == vec3f( 0.0 ) ) ) {
+
+							// total internal reflection - refract returns a zero vector, so bounce the
+							// ray off the inside of the surface instead of terminating it
+							wi = - normalize( reflect( wo, wh ) );
+
+						}
 
 					}
 
@@ -260,7 +282,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( weights.transmission > 0.0 && wi.z < 0.0 ) {
 
-					result.pdf += weights.transmission * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+					if ( surf.thinWall ) {
+
+						// the flipped reflection shares the reflection pdf
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						result.pdf += weights.transmission * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
+
+					} else {
+
+						result.pdf += weights.transmission * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+
+					}
 
 				}
 
