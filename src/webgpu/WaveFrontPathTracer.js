@@ -17,7 +17,7 @@ const RAYS_TO_PROCESS = 250000;
 
 // Both queues use the same element count so the hit queue can never overflow - every intersected
 // ray produces at most one hit, so hits are bounded by the ray queue capacity.
-const MAX_QUEUE_COUNT = RAYS_TO_PROCESS * 2;
+const MAX_QUEUE_COUNT = RAYS_TO_PROCESS * 5;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
