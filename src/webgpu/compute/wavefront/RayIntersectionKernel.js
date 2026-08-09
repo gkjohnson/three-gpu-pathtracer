@@ -5,7 +5,7 @@ import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random
 import { rayQueueStruct, hitQueueAtomicStruct, RAY_FLAG_FULLY_TRANSMISSIVE } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
-import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -34,7 +34,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 			backgroundIntensity: uniform( 1 ),
 			backgroundBlurriness: uniform( 0 ),
 
-			transmissiveBackground: uniform( 1 ),
+			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
 			globalId: globalId,
 		};

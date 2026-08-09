@@ -138,8 +138,12 @@ export class WebGPUPathTracer {
 
 	set transmissiveBackground( v ) {
 
-		this._transmissiveBackground = v;
-		this._pathTracer.setTransmissiveBackground( v );
+		if ( this._transmissiveBackground !== v ) {
+
+			this._transmissiveBackground = v;
+			this._pathTracer.setTransmissiveBackground( v );
+
+		}
 
 	}
 
