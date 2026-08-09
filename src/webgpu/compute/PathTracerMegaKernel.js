@@ -154,17 +154,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						// attenuate the light transmitted through the volume when exiting a backface
-						if ( hitResult.side < 0.0 ) {
+						if ( hitResult.side < 0.0 && material.transmission > 0.0 ) {
 
 							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, material.attenuationColor, material.attenuationDistance );
 
 						}
 
+						// emission
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
-
-						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 

@@ -90,18 +90,18 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
+				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
 
 				// attenuate the light transmitted through the volume when exiting a backface
-				if ( input.side < 0.0 ) {
+				if ( input.side < 0.0 && material.transmission > 0.0 ) {
 
 					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, material.attenuationColor, material.attenuationDistance );
 
 				}
 
-				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
-
+				// emission
 				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
 
 				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
