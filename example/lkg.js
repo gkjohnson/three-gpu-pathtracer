@@ -123,6 +123,8 @@ const params = {
 let loadingEl, samplesEl, distEl;
 let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, controls, scene;
+let interacting = false;
+let cameraChanged = false;
 const _translation = new Matrix4();
 const _size = new Vector2();
 
@@ -198,10 +200,15 @@ async function init() {
 
 	// init controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.addEventListener( 'change', () => {
+	controls.addEventListener( 'start', () => {
 
-		updateQuiltCamera();
-		pathTracer.updateCamera();
+		interacting = true;
+
+	} );
+	controls.addEventListener( 'end', () => {
+
+		interacting = false;
+		cameraChanged = true;
 
 	} );
 
@@ -333,7 +340,15 @@ async function init() {
 
 async function animate() {
 
-	if ( ! params.enable ) {
+	if ( cameraChanged && ! interacting ) {
+
+		updateQuiltCamera();
+		pathTracer.updateCamera();
+		cameraChanged = false;
+
+	}
+
+	if ( ! params.enable || interacting ) {
 
 		renderer.render( scene, camera );
 
