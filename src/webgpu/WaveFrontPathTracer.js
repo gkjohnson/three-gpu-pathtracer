@@ -14,11 +14,10 @@ import { PathTracerBackend } from './PathTracerBackend.js';
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
-const MAX_BUFFER_SIZE = 134217728;
 
-// subtract 16 bytes for the queue's start/end cursor header that precedes the elements
-const MAX_RAY_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedRayStruct.getLength() * 4 ) );
-const MAX_HIT_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedHitStruct.getLength() * 4 ) );
+// Both queues use the same element count so the hit queue can never overflow - every intersected
+// ray produces at most one hit, so hits are bounded by the ray queue capacity.
+const MAX_QUEUE_COUNT = RAYS_TO_PROCESS * 2;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -30,11 +29,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoUniform();
 
-		const rayQueueSize = 4 + MAX_RAY_COUNT * queuedRayStruct.getLength();
+		const rayQueueSize = 4 + MAX_QUEUE_COUNT * queuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
 		this.rayQueue.name = 'Ray Queue';
 
-		const hitQueueSize = 4 + MAX_HIT_COUNT * queuedHitStruct.getLength();
+		const hitQueueSize = 4 + MAX_QUEUE_COUNT * queuedHitStruct.getLength();
 		this.hitQueue = new StorageBufferAttribute( new Float32Array( hitQueueSize ), hitQueueSize );
 		this.hitQueue.name = 'Hit Queue';
 
@@ -317,9 +316,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				}
 
-				// Step 2: run intersections over exactly the number of queued rays, add color for
+				// Step 2: run intersections over a subset of the queued rays, add color for
 				// terminated rays, add material handling to a dedicated queue
 				rayDispatchConverter.queue = rayQueue;
+				rayDispatchConverter.maxCount = RAYS_TO_PROCESS;
 				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
 
 				rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
@@ -329,6 +329,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// mark the rays as consumed
 				updateRayQueueParamsKernel.rayQueue = rayQueue;
+				updateRayQueueParamsKernel.maxCount = RAYS_TO_PROCESS;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
 				// Step 3: attenuate ray color, scatter, run russian roulette over exactly the queued hits
