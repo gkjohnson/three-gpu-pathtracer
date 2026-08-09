@@ -217,37 +217,47 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							// camera rays show the background directly while rays that have only passed
-							// through transmissive surfaces handle it based on the transmissive background
-							// mode: ENVIRONMENT displays the environment through the glass, TRANSPARENT
-							// lets a transparent background composite through by the average transmitted
-							// throughput, and OVERLAY does both so the glass keeps a tint matching the
-							// rest of the model.
+							// hit the background
+							// support multiple transparent background blending techniques
 							let bg = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
 							if ( bounce == 0u ) {
 
+								// sample the background directly if this is the primary ray
 								resultColor = vec4f( bg.a * bg.rgb, bg.a );
 
 							} else {
 
+								// transmissive ray handling
 								let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
-								var light = mix( env.rgb, bg.rgb, bg.a );
-								var transparency = ( 1.0 - bg.a ) * saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
+								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
+								let transparency = ( 1.0 - bg.a ) * avg;
+
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
-									light = env.rgb;
-									transparency = 0.0;
+									// display the env map through transmissive surfaces
+									resultColor = vec4f(
+										resultColor.rgb + env.rgb * throughputColor,
+										1.0,
+									);
 
 								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
-									light = bg.a * bg.rgb;
+									// fade the background by the throughput color average
+									resultColor = vec4f(
+										resultColor.rgb + bg.a * bg.rgb * throughputColor,
+										1.0 - transparency,
+									);
+
+								} else {
+
+									// fade the background by the throughput color average, mixing in env lighting
+									var light = mix( env.rgb, bg.rgb, bg.a );
+									resultColor = vec4f(
+										resultColor.rgb + light * throughputColor,
+										1.0 - transparency,
+									);
 
 								}
-
-								resultColor = vec4f(
-									resultColor.rgb + light * throughputColor,
-									1.0 - transparency,
-								);
 
 							}
 
