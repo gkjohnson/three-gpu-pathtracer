@@ -113,6 +113,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].seed = input.seed;
 					hitQueue.elements[ index ].dist = hitResult.dist;
 					hitQueue.elements[ index ].flags = input.flags;
+					hitQueue.elements[ index ].minPdf = input.minPdf;
 
 				} else {
 

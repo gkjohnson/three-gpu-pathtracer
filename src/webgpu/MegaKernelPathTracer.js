@@ -1,5 +1,6 @@
 import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
+import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -45,6 +46,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.kernel.material = material.getData();
 		this.kernel.needsUpdate = true;
+		this.reset();
+
+	}
+
+	setFilterGlossy( value ) {
+
+		// the kernel takes the inverted threshold, mirroring Cycles
+		this.kernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
 		this.reset();
 
 	}

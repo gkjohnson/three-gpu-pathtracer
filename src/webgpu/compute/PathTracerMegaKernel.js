@@ -25,6 +25,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
+			filterGlossy: uniform( 1 ),
 
 			// environment
 			envMap: texture( new DataTexture() ),
@@ -68,6 +69,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
+				filterGlossy: f32,
 
 				// environment
 				envMap: texture_2d<f32>,
@@ -127,6 +129,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 				var isFullyTransmissive = true;
+				var minPdf = 1.0;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
 
@@ -140,11 +143,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						material.color *= object.color.rgb;
 						material.opacity *= object.color.a;
 
+						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
-						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal );
+						// blur glossy surfaces after low-probability bounces to suppress fireflies,
+						// from the Cycles "filter glossy" approach in integrator/surface_shader.h
+						// The smallest pdf seen along the path for the glossy filter is tracked below
+						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
+
+						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						// attenuate the light transmitted through the volume when exiting a backface
 						if ( hitResult.side < 0.0 ) {
@@ -155,7 +164,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
-						let scatterRec = ${ bsdfSampleFn }( - ray.direction, surface );
+						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
@@ -164,6 +173,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						isFullyTransmissive = isFullyTransmissive && ( ( scatterRec.flags & ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u ) > 0 );
+
+						// track the smallest pdf seen along the path for the glossy filter
+						minPdf = min( minPdf, scatterRec.pdf );
 
 						// russian roulette early out
 						if ( bounce >= 3u ) {

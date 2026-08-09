@@ -272,6 +272,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					result.flags = result.flags | ${ SCATTER_RECORD_FLAG_TRANSMISSIVE }u;
 
+				} else {
+
+					// Flip the reflected vector if it was scattered below the geometry normal with glossy
+					// reflections. Transmitted rays intentionally pass below the surface and are skipped.
+					let geomDotDir = dot( result.direction, surf.faceNormal );
+					if ( geomDotDir < 0.0 ) {
+
+						result.direction = normalize( result.direction - 2.0 * geomDotDir * surf.faceNormal );
+
+					}
+
 				}
 
 				return result;
