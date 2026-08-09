@@ -14,10 +14,17 @@ import { PathTracerBackend } from './PathTracerBackend.js';
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
 const RAYS_TO_PROCESS = 250000;
+const MAX_BUFFER_SIZE = 134217728;
 
 // Both queues use the same element count so the hit queue can never overflow - every intersected
 // ray produces at most one hit, so hits are bounded by the ray queue capacity.
-const MAX_QUEUE_COUNT = RAYS_TO_PROCESS * 5;
+// subtract 16 bytes for the queue's start/end cursor header that precedes the elements
+const MAX_RAY_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedRayStruct.getLength() * 4 ) );
+const MAX_HIT_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedHitStruct.getLength() * 4 ) );
+
+// Make the buffer size as big as possible so the tile of rays can fit.
+// TODO: This should be adjusted so it can be smaller and arbitrary tile size cannot cause problems
+const MAX_QUEUE_COUNT = Math.min( MAX_RAY_COUNT, MAX_HIT_COUNT );
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
