@@ -142,10 +142,11 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		blurRoughness: f32,
 	) -> SurfaceRecord {
 
-		var normal = faceNormal;
+		// "faceNormal" is provided on the hit side so flip it back to the geometric side
+		var normal = faceNormal * side;
 		if ( material.flatShading == 0 ) {
 
-			normal = normalize( vertexData.normal.xyz ) * side;
+			normal = normalize( vertexData.normal.xyz );
 
 		}
 
@@ -171,6 +172,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
+		normal *= side;
 
 		normal = ensureValidViewNormal( normal, faceNormal, view );
 
@@ -268,6 +271,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
+		clearcoatNormal *= side;
 
 		clearcoatNormal = ensureValidViewNormal( clearcoatNormal, faceNormal, view );
 
