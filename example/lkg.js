@@ -101,7 +101,7 @@ const params = {
 
 	enable: true,
 	model: modelName in MODELS ? modelName : 'Voltron - Voltron',
-	renderScale: 0.25,
+	renderScale: 1,
 	tiles: 1,
 
 	samplesPerFrame: 1,
@@ -167,7 +167,7 @@ async function init() {
 	const adapter = await navigator.gpu?.requestAdapter();
 	const requiredLimits = getRequiredDeviceLimits( adapter );
 	// init renderer
-	renderer = new WebGPURenderer( { antialias: true, preserveDrawingBuffer: true, requiredLimits } );
+	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -348,11 +348,14 @@ async function animate() {
 
 	}
 
+	let pathTracingFrame = false;
 	if ( ! params.enable || interacting ) {
 
 		renderer.render( scene, camera );
 
 	} else {
+
+		pathTracingFrame = true;
 
 		// set path tracer variables
 		pathTracer.pause = params.pause;
@@ -386,7 +389,7 @@ async function animate() {
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 	const queue = renderer.backend?.device?.queue;
-	if ( queue?.onSubmittedWorkDone ) {
+	if ( pathTracingFrame && queue?.onSubmittedWorkDone ) {
 
 		// Keep CPU-side progress in step with completed GPU work.
 		await queue.onSubmittedWorkDone();
@@ -426,7 +429,6 @@ function onLkgParamsChange() {
 	const { renderScale } = params;
 
 	lkgParams = getLkgParams( params.numViews );
-	const previousCameraCount = quiltCamera.cameras.length;
 	updateQuiltCamera();
 
 	const width = Math.max( 1, Math.floor( renderScale * lkgParams.quiltWidth ) );
@@ -435,20 +437,11 @@ function onLkgParamsChange() {
 	previewQuad.material.quiltMap = pathTracer.target;
 	previewQuad.material.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
-	if ( previousCameraCount !== quiltCamera.cameras.length ) {
-
-		pathTracer.setCamera( quiltCamera );
-
-	} else {
-
-		pathTracer.updateCamera();
-
-	}
+	pathTracer.updateCamera();
 
 }
 
-// Rebuild the off-axis cameras and their quilt viewports. Extra cells in the
-// final row repeat the last view so every output pixel belongs to a camera.
+// Rebuild the off-axis cameras and their quilt viewports.
 function updateQuiltCamera() {
 
 	const {
@@ -461,7 +454,6 @@ function updateQuiltCamera() {
 	const { renderScale, viewCone, viewerDistance } = params;
 	const width = Math.max( 1, Math.floor( renderScale * quiltWidth ) );
 	const height = Math.max( 1, Math.floor( renderScale * quiltHeight ) );
-	const cameraCount = quiltTilesX * quiltTilesY;
 
 	const displayHalfHeight = DISPLAY_HEIGHT * 0.5;
 	const displayHalfWidth = DISPLAY_WIDTH * 0.5;
@@ -472,7 +464,7 @@ function updateQuiltCamera() {
 	camera.updateProjectionMatrix();
 	camera.updateMatrixWorld();
 
-	while ( quiltCamera.cameras.length < cameraCount ) {
+	while ( quiltCamera.cameras.length < numViews ) {
 
 		const subCamera = new PerspectiveCamera();
 		subCamera.coordinateSystem = WebGPUCoordinateSystem;
@@ -481,11 +473,10 @@ function updateQuiltCamera() {
 
 	}
 
-	quiltCamera.cameras.length = cameraCount;
-	for ( let i = 0; i < cameraCount; i ++ ) {
+	quiltCamera.cameras.length = numViews;
+	for ( let i = 0; i < numViews; i ++ ) {
 
-		const viewIndex = Math.min( i, numViews - 1 );
-		const viewAlpha = numViews === 1 ? 0.5 : viewIndex / ( numViews - 1 );
+		const viewAlpha = numViews === 1 ? 0.5 : i / ( numViews - 1 );
 		const offset = MathUtils.lerp( - halfViewWidth, halfViewWidth, viewAlpha );
 		const subCamera = quiltCamera.cameras[ i ];
 
