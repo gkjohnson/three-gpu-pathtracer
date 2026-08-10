@@ -102,6 +102,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// gated to the upper hemisphere, matching the WebGL implementation
 				if ( NdotL < 0.0 ) {
 
+					// TODO: transmitted light also crosses the thin film so it should be weighted by
+					// the film-aware fresnel complement (1 - filmF) rather than the plain dielectric
+					// fresnel, tinting transmission with the film's complementary color. Deferred until
+					// the material is generalized into a layer stack that owns the fresnel per interface.
 					var refraction: vec3f;
 					if ( surf.thinWall ) {
 
@@ -126,16 +130,21 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let diffuse = ( 1.0 - surf.transmission ) * reflection;
 				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.eta, surf.specularIntensity, diffuse, specular );
 
+				// the media on either side of the film - air outside and the volume interior
+				// as the base on front faces, swapped on back faces so TIR can take effect
+				let outsideIor = select( surf.ior, 1.0, surf.frontFace );
+				let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
+
 				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
-					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
+					dielectricBase, diffuse, specular, ctx.VdotH, outsideIor,
+					filmBaseIor, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
 				// TODO: this only handles non-anisotropic surfaces
 				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular, alpha.y );
 
 				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
+					metallicBase, specular, surf.color, ctx.VdotH, outsideIor,
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 

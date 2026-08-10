@@ -10,6 +10,7 @@ import {
 	iorToF0GeneralVecFunc,
 	dielectricFresnelFunc,
 	totalInternalReflectionFunc,
+	totalInternalReflectionVecFunc,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
@@ -647,9 +648,13 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 		let phi21 = PI - phi12;
 
 		// Second interface: iridescent thin film -> base material
-		let baseIor = fresnel0ToIor( baseF0 + 0.0001 ); // guard against 1.0
+		let baseIor = fresnel0ToIor( clamp( baseF0, vec3( 0.0 ), vec3( 0.9999 ) ) ); // guard against 1.0
 		let R1 = iorToF0GeneralVec( baseIor, vec3( iridescenceIor ) );
-		let R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+		var R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+
+		// Handle total internal reflection at the film -> base interface
+		// NOTE: Added separately from the original implementation. Is this correct?
+		R23 = select( R23, vec3( 1.0 ), totalInternalReflectionVec( cosTheta2, vec3( iridescenceIor ) / baseIor ) );
 		let phi23 = select( vec3( 0.0 ), vec3( PI ), baseIor < vec3( iridescenceIor ) );
 
 		// Phase shift
@@ -680,7 +685,7 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc ] );
+`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
 
 const rgbMixFunc = wgslFn( /* wgsl */ `
 

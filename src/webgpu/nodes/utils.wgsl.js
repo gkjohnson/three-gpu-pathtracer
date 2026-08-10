@@ -119,6 +119,17 @@ export const totalInternalReflectionFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+export const totalInternalReflectionVecFunc = wgslFn( /* wgsl */ `
+
+	fn totalInternalReflectionVec( cosTheta: f32, eta: vec3f ) -> vec3<bool> {
+
+		let sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		return eta * sinTheta > vec3f( 1.0 );
+
+	}
+
+` );
+
 export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 	fn evaluateFresnel( cosine: f32, eta: f32, f0: vec3f, f90: vec3f ) -> vec3f {
