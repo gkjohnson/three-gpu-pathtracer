@@ -181,7 +181,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							resultColor += ${ sampleEnvColor }( ray.direction, rng ) * vec4f( throughputColor * misWeight, 0.0 );
+							resultColor += ${ sampleEnvColor }( ray.direction ) * vec4f( throughputColor * misWeight, 0.0 );
 
 						} else {
 

@@ -100,7 +100,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 						}
 
-						resultColor += ${ sampleEnvColor }( input.direction, rng ) * vec4f( input.throughputColor * misWeight, 0.0 );
+						resultColor += ${ sampleEnvColor }( input.direction ) * vec4f( input.throughputColor * misWeight, 0.0 );
 
 					} else {
 

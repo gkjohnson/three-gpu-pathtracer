@@ -178,6 +178,12 @@ export class EquirectHdrInfoUniform {
 
 	}
 
+	getPixelWeight( r, g, b ) {
+
+		return colorToLuminance( r, g, b );
+
+	}
+
 	dispose() {
 
 		this.marginalWeights.dispose();
@@ -218,10 +224,7 @@ export class EquirectHdrInfoUniform {
 				const g = DataUtils.fromHalfFloat( data[ 4 * i + 1 ] );
 				const b = DataUtils.fromHalfFloat( data[ 4 * i + 2 ] );
 
-				// the probability of the pixel being selected in this row is the
-				// scale of the luminance relative to the rest of the pixels.
-				// TODO: this should also account for the solid angle of the pixel when sampling
-				const weight = colorToLuminance( r, g, b );
+				const weight = this.getPixelWeight( r, g, b, y, height );
 				cumulativeRowWeight += weight;
 				totalSumValue += weight;
 
