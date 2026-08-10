@@ -301,16 +301,14 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.direction = normalize( normalBasis * wi );
 				result.isTransmissive = isTransmissive;
 
-				if ( ! isTransmissive ) {
+				// Flip the scattered ray through the surface if it lands on the wrong side of the
+				// geometry due to the shading normal - reflected rays must leave above the surface
+				// and transmitted rays below it
+				let scatterNormal = surf.faceNormal * select( 1.0, - 1.0, isTransmissive );
+				let geomDotDir = dot( result.direction, scatterNormal );
+				if ( geomDotDir < 0.0 ) {
 
-					// Flip the reflected vector if it was scattered below the geometry normal with glossy
-					// reflections. Transmitted rays intentionally pass below the surface and are skipped.
-					let geomDotDir = dot( result.direction, surf.faceNormal );
-					if ( geomDotDir < 0.0 ) {
-
-						result.direction = normalize( result.direction - 2.0 * geomDotDir * surf.faceNormal );
-
-					}
+					result.direction = normalize( result.direction - 2.0 * geomDotDir * scatterNormal );
 
 				}
 
