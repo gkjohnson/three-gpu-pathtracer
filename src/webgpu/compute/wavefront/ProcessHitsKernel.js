@@ -81,6 +81,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
 				// blur glossy surfaces after low-probability bounces to suppress fireflies,

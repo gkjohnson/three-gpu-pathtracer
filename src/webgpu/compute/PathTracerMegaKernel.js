@@ -145,6 +145,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+						vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
 						// blur glossy surfaces after low-probability bounces to suppress fireflies,
