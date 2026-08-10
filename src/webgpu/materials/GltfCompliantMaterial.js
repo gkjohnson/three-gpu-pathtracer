@@ -296,8 +296,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				result.color = ${ bsdfEvalFunc }( ctx, surf );
-				result.color *= select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
 				result.direction = normalize( normalBasis * wi );
 				result.isTransmissive = isTransmissive;
 

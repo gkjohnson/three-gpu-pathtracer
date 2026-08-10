@@ -522,7 +522,7 @@ export const specularBtdfFunc = wgslFn( /* wgsl */`
 		// separable G2 product, no height correlation
 		let denom = eta * HdotV + HdotL;
 		let Vis = G1_i * G1_o * abs( HdotV ) * abs( HdotL ) /
-							( abs( NdotV ) * abs( NdotL ) * denom * denom );
+			( abs( NdotV ) * abs( NdotL ) * denom * denom );
 
 		let F = dielectricFresnel( abs( HdotV ), eta );
 
@@ -569,8 +569,7 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 		var f0 = iorToF0( ior ) * f0Color;
 		f0 = min( f0, vec3f( 1.0 ) );
 
-		// reflect all light on total internal reflection, matching the WebGL
-		// evaluateFresnel function
+		// reflect all light on total internal reflection, matching the WebGL evaluateFresnel function
 		var fr = vec3f( 1.0 );
 		if ( ! totalInternalReflection( abs( VdotH ), eta ) ) {
 

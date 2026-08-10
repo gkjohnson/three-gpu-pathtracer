@@ -42,24 +42,24 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	fn getLobeWeights(wo: vec3f, wi: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord) -> LobeWeights {
+	fn getLobeWeights( wo: vec3f, wi: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord ) -> LobeWeights {
 
 		var weights: LobeWeights;
-		var weightLeft = 1.0;
+		var remaining = 1.0;
 
 		let clearcoatF0 = iorToF0( clearcoatIor );
 		let clearcoatFresnel = schlickFresnel( saturate( woClearcoat.z ), clearcoatF0 );
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
-		weightLeft -= weights.clearcoat;
+		remaining -= weights.clearcoat;
 
 		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
-		weights.specular = weightLeft * ( surf.metalness + ( 1.0 - surf.metalness ) * fEstimate );
-		weightLeft -= weights.specular;
+		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * fEstimate );
+		remaining -= weights.specular;
 
-		weights.transmission = weightLeft * select( 0.0, surf.transmission, surf.transmission > 0.1 );
-		weightLeft -= weights.transmission;
+		weights.transmission = remaining * surf.transmission;
+		remaining -= weights.transmission;
 
-		weights.diffuse = weightLeft;
+		weights.diffuse = remaining;
 
 		return weights;
 
