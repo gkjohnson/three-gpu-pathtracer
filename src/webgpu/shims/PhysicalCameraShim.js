@@ -92,7 +92,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const anamorphicRatio = uniform( 1 );
 
 	const fn = wgslTagFn/* wgsl */`
-		fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+		fn getCameraRay( uv: vec2f, resolution: vec2f, rayOut: ptr<function, ${ rayStruct }> ) -> bool {
 
 			// base ray
 			let ndc = uv * 2.0 - vec2f( 1.0 );
@@ -118,7 +118,9 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			ray.origin += ( ${ cameraWorldMatrix } * vec4f( apertureSample, 0.0, 0.0 ) ).xyz;
 			ray.direction = focalPoint - ray.origin;
 
-			return ray;
+			rayOut.origin = ray.origin;
+			rayOut.direction = ray.direction;
+			return true;
 
 		}
 	`;

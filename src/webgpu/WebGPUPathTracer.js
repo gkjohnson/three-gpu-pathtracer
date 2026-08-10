@@ -364,10 +364,13 @@ export class WebGPUPathTracer {
 
 				},
 				fn: wgslTagFn/* wgsl */`
-					fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						return ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						let cameraRay = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						ray.origin = cameraRay.origin;
+						ray.direction = cameraRay.direction;
+						return true;
 
 					}
 				`,
@@ -400,7 +403,15 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
+		const cameraRayFn = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		if ( cameraRayFn !== this._cameraRayFnHandle.fn ) {
+
+			this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
+			this._pathTracer.setBVHData( this._bvhData );
+
+		}
+
 		this.reset();
 
 	}
