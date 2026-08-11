@@ -1,11 +1,12 @@
-import { IndirectStorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
-import { queuedRayStruct, queuedHitStruct } from './structs.js';
+import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
+import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -22,11 +23,11 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
+			filterGlossy: uniform( 1 ),
 
 			// rays
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ),
-			hitQueue: storage( new IndirectStorageBufferAttribute( 1, queuedHitStruct.getLength() ), queuedHitStruct ),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ).toAtomic(),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -44,21 +45,21 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
+				filterGlossy: f32,
 
 				globalId: vec3u
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
-				let queueSizes = &${ params.queueSizes };
 
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				// skip any rays invocations beyond the ray count
-				let hitQueueCapacity = arrayLength( hitQueue );
-				let hitIndex = ( globalId.x + atomicLoad( &queueSizes[ 2 ] ) );
-				if ( hitIndex >= atomicLoad( &queueSizes[ 3 ] ) ) {
+				let hitQueueCapacity = arrayLength( &hitQueue.elements );
+				let hitIndex = ( globalId.x + hitQueue.start );
+				if ( hitIndex >= hitQueue.end ) {
 
 					return;
 
@@ -66,7 +67,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// get the ray info
 				let ACTIVE_FLAG = 0xF0000000u;
-				let input = hitQueue[ hitIndex ];
+				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
@@ -80,15 +81,52 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal );
+				// blur glossy surfaces after low-probability bounces to suppress fireflies,
+				// from the Cycles "filter glossy" approach in integrator/surface_shader.h
+				// The smallest pdf seen along the path for the glossy filter is tracked below
+				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
+				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
-				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
+				var throughputColor = input.throughputColor;
 
-				let isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				// attenuate the light transmitted through the volume when exiting a backface
+				if ( input.side < 0.0 && material.transmission > 0.0 ) {
+
+					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, material.attenuationColor, material.attenuationDistance );
+
+				}
+
+				// emission
+				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+
+				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+
+				// russian roulette early out
+				if ( ! isTerminated && input.currentBounce >= 3u ) {
+
+					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
+					let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
+					isTerminated = ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+
+					// perform sample clamping here to avoid bright pixels
+					throughputColor *= min( 1.0 / rrProb, 20.0 );
+
+				}
+
+				if ( ! isTerminated ) {
+
+					// only divide by the pdf if this ray is valid
+					throughputColor *= scatterRec.color / scatterRec.pdf;
+
+					// exit if our throughput is 0.0
+					isTerminated = all( throughputColor == vec3f( 0.0 ) );
+
+				}
 
 				if ( isTerminated ) {
 
@@ -101,15 +139,17 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				} else {
 
-					let rayQueueCapacity = arrayLength( rayQueue );
-					let index = atomicAdd( &queueSizes[ 1 ], 1 ) % rayQueueCapacity;
-					rayQueue[ index ].origin = vertexData.position.xyz;
-					rayQueue[ index ].direction = scatterRec.direction;
-					rayQueue[ index ].pixel = indexUV;
-					rayQueue[ index ].throughputColor = input.throughputColor * scatterRec.color / scatterRec.pdf;
-					rayQueue[ index ].currentBounce = input.currentBounce + 1;
-					rayQueue[ index ].resultColor = resultColor;
-					rayQueue[ index ].seed = input.seed;
+					let rayQueueCapacity = arrayLength( &rayQueue.elements );
+					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
+					rayQueue.elements[ index ].origin = vertexData.position.xyz;
+					rayQueue.elements[ index ].direction = scatterRec.direction;
+					rayQueue.elements[ index ].pixel = indexUV;
+					rayQueue.elements[ index ].throughputColor = throughputColor;
+					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
+					rayQueue.elements[ index ].resultColor = resultColor;
+					rayQueue.elements[ index ].seed = input.seed;
+					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
+					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 
 				}
 

@@ -34,7 +34,7 @@ const params = {
 	// path tracer settings
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	tiles: 1,
 	multipleImportanceSampling: true,
 
@@ -53,7 +53,7 @@ async function init() {
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true } );
-	renderer.init();
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -120,6 +120,7 @@ async function init() {
 	// initialize scene
 	pathTracer.setScene( scene, camera );
 
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
 	// gui
@@ -130,7 +131,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );

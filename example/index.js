@@ -31,6 +31,17 @@ import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
+/**
+ * Limits requested by this application.
+ *
+ * Add required limits here.
+ *
+ */
+const DEVICE_LIMITS_REQUESTED = [
+	'maxBufferSize',
+	'maxStorageBufferBindingSize',
+];
+
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
 	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/moonless_golf_1k.hdr',
@@ -100,7 +111,7 @@ const params = {
 	enable: true,
 	useMegakernel: false,
 	bounces: 5,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	pause: false,
 	debugBounds: false,
 	displayTLAS: true,
@@ -134,6 +145,38 @@ async function waitFrame() {
 
 }
 
+/**
+ * Returns required GPU limits according to DEVICE_LIMITS_REQUESTED.
+ *
+ * Only limits explicitly listed in DEVICE_LIMITS_REQUESTED will be requested.
+ * This avoids requesting all adapter limits and improves compatibility.
+ *
+ * Note: Limits should be set based on the specific requirements of the application.
+ * ensuring broader device compatibility and optimal resource usage.
+ *
+ * @param {GPUAdapter} adapter
+ * @returns {Record<string, number>}
+ */
+function getRequiredDeviceLimits( adapter ) {
+
+	const limits = {};
+
+	for ( const limit of DEVICE_LIMITS_REQUESTED ) {
+
+		const value = adapter.limits[ limit ];
+
+		if ( typeof value === 'number' && Number.isFinite( value ) ) {
+
+			limits[ limit ] = value;
+
+		}
+
+	}
+
+	return limits;
+
+}
+
 async function init() {
 
 	// Wait for the models list to be available since vite doesn't guarantee execution order
@@ -150,8 +193,12 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
+	// adapter limits
+	const adapter = await navigator.gpu?.requestAdapter();
+	const requiredLimits = getRequiredDeviceLimits( adapter );
+
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -160,7 +207,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.transmissiveBounces = 10;
 	pathTracer.useMegakernel( params.useMegakernel );
 
 	// camera
@@ -386,7 +432,7 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onParamsChange();

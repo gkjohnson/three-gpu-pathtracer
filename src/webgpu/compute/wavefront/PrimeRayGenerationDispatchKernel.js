@@ -1,8 +1,8 @@
 import { Vector2, Vector3 } from 'three';
-import { IndirectStorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { queuedRayStruct } from './structs.js';
+import { rayQueueStruct, hitQueueStruct } from './structs.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
@@ -16,11 +16,11 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			tileCount: uniform( new Vector2() ),
 			tileOffset: uniform( 1 ),
 
-			rayQueue: storage( new IndirectStorageBufferAttribute( 1, queuedRayStruct.getLength() ), queuedRayStruct ).toReadOnly(),
-			queueSizes: storage( new IndirectStorageBufferAttribute( 4, 1 ), 'u32' ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
 
-			outputTileIndex: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
-			outputDispatch: storage( new IndirectStorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
+			outputTileIndex: storage( new StorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
+			outputDispatch: storage( new StorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
 		};
 
 		const fn = wgslTagFn/* wgsl */`
@@ -33,28 +33,28 @@ export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
 			) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let queueSizes = &${ params.queueSizes };
+				let hitQueue = &${ params.hitQueue };
 
 				let outputTileIndex = &${ params.outputTileIndex };
 				let outputDispatch = &${ params.outputDispatch };
 
 				// reset hit queue size from previous iteration
-				queueSizes[ 2 ] = 0u;
-				queueSizes[ 3 ] = 0u;
+				hitQueue.start = 0u;
+				hitQueue.end = 0u;
 
 				// keep the queue index small
-			    let queueCapacity = arrayLength( rayQueue );
-				if ( queueSizes[ 0 ] >= queueCapacity ) {
+			    let queueCapacity = arrayLength( &rayQueue.elements );
+				if ( rayQueue.start >= queueCapacity ) {
 
 					// uint division results in a floored value
-					let offset = queueSizes[ 0 ] / queueCapacity;
-					queueSizes[ 0 ] = queueSizes[ 0 ] - queueCapacity * offset;
-					queueSizes[ 1 ] = queueSizes[ 1 ] - queueCapacity * offset;
+					let offset = rayQueue.start / queueCapacity;
+					rayQueue.start = rayQueue.start - queueCapacity * offset;
+					rayQueue.end = rayQueue.end - queueCapacity * offset;
 
 				}
 
 				// calculate the amount of elements in the queue
-			    var queueSize = queueSizes[ 1 ] - queueSizes[ 0 ];
+			    var queueSize = rayQueue.end - rayQueue.start;
 
 				// calculate the overhead of space in the queue and how much space we need to run a new tile
 				let overhead = queueCapacity - queueSize;
