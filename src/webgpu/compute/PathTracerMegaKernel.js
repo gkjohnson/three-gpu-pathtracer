@@ -5,6 +5,8 @@ import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_E
 import { sampleEnvironmentFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
+import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -35,6 +37,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundRotation: uniform( new Matrix3() ),
 			backgroundIntensity: uniform( 1 ),
 			backgroundBlurriness: uniform( 0 ),
+
+			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -77,6 +81,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				backgroundRotation: mat3x3f,
 				backgroundIntensity: f32,
 				backgroundBlurriness: f32,
+
+				transmissiveBackground: u32,
 
 			) -> void {
 
@@ -121,6 +127,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
+				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 
 				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
@@ -138,6 +145,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
 						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+						vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 						vertexData.position = object.matrixWorld * vertexData.position;
 
 						// blur glossy surfaces after low-probability bounces to suppress fireflies,
@@ -146,10 +154,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
-
-						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
-
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
+
+						// attenuate the light transmitted through the volume when exiting a backface
+						if ( hitResult.side < 0.0 && material.transmission > 0.0 ) {
+
+							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, material.attenuationColor, material.attenuationDistance );
+
+						}
+
+						// emission
+						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
 
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
@@ -157,6 +172,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						isFullyTransmissive = isFullyTransmissive && scatterRec.isTransmissive;
+
+						// track the smallest pdf seen along the path for the glossy filter
 						minPdf = min( minPdf, scatterRec.pdf );
 
 						// russian roulette early out
@@ -194,13 +212,55 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					} else {
 
 						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
-						if ( bounce > 0u ) {
+						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );
 
 						} else {
 
-							resultColor = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
+							// hit the background
+							// support multiple transparent background blending techniques
+							let bg = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
+							if ( bounce == 0u ) {
+
+								// sample the background directly if this is the primary ray
+								resultColor = vec4f( bg.a * bg.rgb, bg.a );
+
+							} else {
+
+								// transmissive ray handling
+								let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
+								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
+								let transparency = ( 1.0 - bg.a ) * avg;
+
+								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
+
+									// display the env map through transmissive surfaces
+									resultColor = vec4f(
+										resultColor.rgb + env.rgb * throughputColor,
+										1.0,
+									);
+
+								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
+
+									// fade the background by the throughput color average
+									resultColor = vec4f(
+										resultColor.rgb + bg.a * bg.rgb * throughputColor,
+										1.0 - transparency,
+									);
+
+								} else {
+
+									// fade the background by the throughput color average, mixing in env lighting
+									var light = mix( env.rgb, bg.rgb, bg.a );
+									resultColor = vec4f(
+										resultColor.rgb + light * throughputColor,
+										1.0 - transparency,
+									);
+
+								}
+
+							}
 
 						}
 

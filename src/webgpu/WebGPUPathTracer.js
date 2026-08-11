@@ -12,6 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -129,6 +130,23 @@ export class WebGPUPathTracer {
 
 	}
 
+	get transmissiveBackground() {
+
+		return this._transmissiveBackground;
+
+	}
+
+	set transmissiveBackground( v ) {
+
+		if ( this._transmissiveBackground !== v ) {
+
+			this._transmissiveBackground = v;
+			this._pathTracer.setTransmissiveBackground( v );
+
+		}
+
+	}
+
 	get filterGlossyFactor() {
 
 		return this._filterGlossyFactor;
@@ -185,6 +203,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
@@ -230,7 +249,7 @@ export class WebGPUPathTracer {
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
 		this.multipleImportanceSampling = true;
-		this.transmissiveBounces = 5;
+		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();

@@ -35,7 +35,6 @@ const params = {
 
 	enable: true,
 	bounces: 10,
-	transmissiveBounces: 10,
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
@@ -256,7 +255,6 @@ function onParamsChange() {
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
-	pathTracer.transmissiveBounces = params.transmissiveBounces;
 	pathTracer.renderScale = params.scale;
 
 	const model = modelDatabase[ params.model ];
@@ -331,7 +329,6 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 

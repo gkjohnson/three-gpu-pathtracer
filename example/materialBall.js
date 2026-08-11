@@ -26,7 +26,7 @@ const params = {
 		metalness: 1,
 		ior: 1.495,
 		transmission: 0.0,
-		thinFilm: false,
+		thinWall: false,
 		attenuationColor: '#ffffff',
 		attenuationDistance: 0.5,
 		opacity: 1.0,
@@ -47,7 +47,6 @@ const params = {
 	multipleImportanceSampling: true,
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
-	transmissiveBounces: 20,
 	filterGlossyFactor: 1,
 	tiles: 3,
 };
@@ -159,7 +158,6 @@ async function init() {
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'transmissiveBounces', 0, 40, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const matFolder1 = gui.addFolder( 'Material' );
@@ -170,7 +168,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'metalness', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'opacity', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'transmission', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.materialProperties, 'thinFilm', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'thinWall', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.05, 2.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'attenuationColor' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'ior', 0.9, 3.0 ).onChange( onParamsChange );
@@ -211,7 +209,7 @@ function onParamsChange() {
 	material.metalness = materialProperties.metalness;
 	material.roughness = materialProperties.roughness;
 	material.transmission = materialProperties.transmission;
-	material.attenuationDistance = materialProperties.thinFilm ? Infinity : materialProperties.attenuationDistance;
+	material.attenuationDistance = materialProperties.thinWall ? Infinity : materialProperties.attenuationDistance;
 	material.attenuationColor.set( materialProperties.attenuationColor );
 	material.ior = materialProperties.ior;
 	material.opacity = materialProperties.opacity;
@@ -227,7 +225,6 @@ function onParamsChange() {
 	material.transparent = material.opacity < 1;
 	material.flatShading = materialProperties.flatShading;
 
-	pathTracer.transmissiveBounces = params.transmissiveBounces;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;

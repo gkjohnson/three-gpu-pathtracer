@@ -8,12 +8,16 @@ import {
 	iorToF0GeneralFunc,
 	fresnel0ToIorFunc,
 	iorToF0GeneralVecFunc,
+	dielectricFresnelFunc,
+	totalInternalReflectionFunc,
+	totalInternalReflectionVecFunc,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
 	ggxDistributionFunc,
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
+	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -139,10 +143,11 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		blurRoughness: f32,
 	) -> SurfaceRecord {
 
-		var normal = faceNormal;
+		// "faceNormal" is provided on the hit side so flip it back to the geometric side
+		var normal = faceNormal * side;
 		if ( material.flatShading == 0 ) {
 
-			normal = normalize( vertexData.normal.xyz ) * side;
+			normal = normalize( vertexData.normal.xyz );
 
 		}
 
@@ -168,6 +173,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
+		normal *= side;
 
 		normal = ensureValidViewNormal( normal, faceNormal, view );
 
@@ -265,6 +272,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
+		clearcoatNormal *= side;
 
 		clearcoatNormal = ensureValidViewNormal( clearcoatNormal, faceNormal, view );
 
@@ -383,7 +392,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
-		surf.thinFilm = material.thinFilm == 1;
+		surf.thinWall = material.thinWall == 1;
 		surf.attenuationColor = material.attenuationColor;
 		surf.attenuationDistance = material.attenuationDistance;
 
@@ -409,7 +418,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
 		surf.frontFace = side == 1.0 || transmission == 0.0;
-		if ( material.thinFilm == 1 || surf.frontFace ) {
+		if ( material.thinWall == 1 || surf.frontFace ) {
 
 			surf.eta = 1.0 / material.ior;
 
@@ -497,24 +506,90 @@ export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
 
+export const specularBtdfFunc = wgslFn( /* wgsl */`
+
+	fn specularBtdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f, eta: f32 ) -> vec3f {
+
+		let NdotV = V.z;
+		let NdotL = L.z;
+		let HdotV = dot( V, H );
+		let HdotL = dot( L, H );
+
+		// Heaviside function for G term
+		if ( NdotV * HdotV < 0.0 || NdotL * HdotL < 0.0 || HdotV * HdotL > 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		let G1_i = ggxShadowMaskG1( V, alpha );
+		let G1_o = ggxShadowMaskG1( L, alpha );
+
+		// separable G2 product, no height correlation
+		let denom = eta * HdotV + HdotL;
+		let Vis = G1_i * G1_o * abs( HdotV ) * abs( HdotL ) /
+			( abs( NdotV ) * abs( NdotL ) * denom * denom );
+
+		let F = dielectricFresnel( abs( HdotV ), eta );
+
+		let D = ggxDistribution( H, alpha );
+
+		return vec3f( ( 1 - F ) * D * Vis );
+
+	}
+
+`, [ ggxShadowMaskG1Func, ggxDistributionFunc, dielectricFresnelFunc ] );
+
+// Effective roughness for thin walled transmission, from page 40 (note the slides' 3.7 is a typo for 3.4) -
+// referenced from Blender Cycles:
+// https://blog.selfshadow.com/publications/s2017-shading-course/imageworks/s2017_pbs_imageworks_slides_v2.pdf
+export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
+
+	fn thinWallTransmissionRoughness( alpha: f32, eta: f32 ) -> f32 {
+
+		let t = 3.4 * ( eta - 1.0 ) * ( eta - 0.5 ) * ( eta - 0.5 ) / ( eta * eta * eta );
+		return saturate( alpha * sqrt( max( t, 0.0 ) ) );
+
+	}
+
+` );
+
+// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
+export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
+
+	fn transmissionAttenuation( dist: f32, attColor: vec3f, attDist: f32 ) -> vec3f {
+
+		return pow( attColor, vec3f( dist / attDist ) );
+
+	}
+
+` );
+
 // Dielectric layer fresnel operator that supports custom f0 color, specular weight.
 // Based on the specular color specification:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_specular
 export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
-	fn fresnelMix( VdotH: f32, f0Color: vec3f, ior: f32, weight: f32, base: vec3f, layer: vec3f ) -> vec3f {
+	fn fresnelMix( VdotH: f32, f0Color: vec3f, ior: f32, eta: f32, weight: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
 		var f0 = iorToF0( ior ) * f0Color;
 		f0 = min( f0, vec3f( 1.0 ) );
 
-		let fr = schlickFresnelVec( abs( VdotH ), f0, vec3f( 1.0 ) );
+		// reflect all light on total internal reflection, matching the WebGL evaluateFresnel function
+		var fr = vec3f( 1.0 );
+		if ( ! totalInternalReflection( abs( VdotH ), eta ) ) {
+
+			fr = schlickFresnelVec( abs( VdotH ), f0, vec3f( 1.0 ) );
+
+		}
+
 		let maxFr = max( max( fr.r, fr.g ), fr.b );
 
 		return ( 1.0 - weight * maxFr ) * base + weight * fr * layer;
 
 	}
 
-`, [ schlickFresnelVecFunc, iorToF0Func ] );
+`, [ schlickFresnelVecFunc, iorToF0Func, totalInternalReflectionFunc ] );
 
 const XYZ_TO_REC709 = mat3(
 	3.2404542, - 0.9692660, 0.0556434,
@@ -573,9 +648,13 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 		let phi21 = PI - phi12;
 
 		// Second interface: iridescent thin film -> base material
-		let baseIor = fresnel0ToIor( baseF0 + 0.0001 ); // guard against 1.0
+		let baseIor = fresnel0ToIor( clamp( baseF0, vec3( 0.0 ), vec3( 0.9999 ) ) ); // guard against 1.0
 		let R1 = iorToF0GeneralVec( baseIor, vec3( iridescenceIor ) );
-		let R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+		var R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+
+		// Handle total internal reflection at the film -> base interface
+		// NOTE: Added separately from the original implementation. Is this correct?
+		R23 = select( R23, vec3( 1.0 ), totalInternalReflectionVec( cosTheta2, vec3( iridescenceIor ) / baseIor ) );
 		let phi23 = select( vec3( 0.0 ), vec3( PI ), baseIor < vec3( iridescenceIor ) );
 
 		// Phase shift
@@ -606,7 +685,7 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc ] );
+`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
 
 const rgbMixFunc = wgslFn( /* wgsl */ `
 

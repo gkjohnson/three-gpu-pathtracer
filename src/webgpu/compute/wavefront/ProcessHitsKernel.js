@@ -6,6 +6,7 @@ import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
+import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -80,6 +81,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 				vertexData.position = object.matrixWorld * vertexData.position;
 
 				// blur glossy surfaces after low-probability bounces to suppress fireflies,
@@ -88,12 +90,20 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
-
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
-				let resultColor = input.resultColor + vec4f( input.throughputColor * surface.emission, 0.0 );
-
 				var throughputColor = input.throughputColor;
+
+				// attenuate the light transmitted through the volume when exiting a backface
+				if ( input.side < 0.0 && material.transmission > 0.0 ) {
+
+					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, material.attenuationColor, material.attenuationDistance );
+
+				}
+
+				// emission
+				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+
 				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
 				// russian roulette early out
@@ -138,6 +148,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].seed = input.seed;
+					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 
 				}
