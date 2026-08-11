@@ -8,7 +8,7 @@ import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPD
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
-import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc, totalInternalReflectionFunc } from '../nodes/utils.wgsl.js';
+import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
 
@@ -108,13 +108,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 				let dielectricF0 = min( ${ iorToF0Func }( 1.5 ) * surf.specularColor, vec3f( 1.0 ) );
 
-				// reflect all light on total internal reflection, matching the fresnelMix behavior
-				// TODO: replace the schlick + TIR override with the exact dielectric fresnel so the
-				// reflectance rises continuously to 1 at the critical angle instead of jumping
-				var dielectricFr = vec3f( 1.0 );
-				if ( ! ${ totalInternalReflectionFunc }( abs( ctx.VdotH ), surf.eta ) ) {
+				// front faces use schlick so the KHR_materials_specular tinted f0 applies - interior
+				// hits use the exact dielectric fresnel since schlick cannot represent TIR
+				// TODO: see if we can clean this up and make these branches more consistent
+				var dielectricFr: vec3f;
+				if ( surf.frontFace ) {
 
 					dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
+
+				} else {
+
+					dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
 
 				}
 
