@@ -165,6 +165,22 @@ export class WebGPUPathTracer {
 
 	}
 
+	get multipleImportanceSampling() {
+
+		return this._multipleImportanceSampling;
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		if ( this._multipleImportanceSampling !== v ) {
+
+			this.setMultipleImportanceSampling( v );
+
+		}
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -246,9 +262,6 @@ export class WebGPUPathTracer {
 		this.pause = false;
 
 		this.filterGlossyFactor = 1;
-
-		// WebGLPathTracer compatibility stubs (see getters above)
-		// TOOD: implement these correctly
 		this.multipleImportanceSampling = true;
 		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
@@ -270,7 +283,7 @@ export class WebGPUPathTracer {
 
 	setMultipleImportanceSampling( value ) {
 
-		this.multipleImportanceSampling = value;
+		this._multipleImportanceSampling = value;
 		this._pathTracer.setMultipleImportanceSampling( value );
 
 	}
