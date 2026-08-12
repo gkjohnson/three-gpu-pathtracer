@@ -64,7 +64,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				// Sample the single scatter energy for specular at the given roughness.
 				let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-				let dielectricBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - energySS ) / energySS;
+				let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
 
 				// transmitted directions only gather the refracted lobe — the reflection lobes are
 				// gated to the upper hemisphere, matching the WebGL implementation
@@ -102,11 +102,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// Sample the single scatter energy, including fresnel, for the specular layer, boosting by the
 				// compensation formula above to account for multi scatter. Attenuate the energy allocated for
 				// diffuse by the remaining energy from specular single scatter.
-				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, 1.5 ) * dielectricBoost;
+				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
 				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
 
 				// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
-				let dielectricF0 = min( ${ iorToF0Func }( 1.5 ) * surf.specularColor, vec3f( 1.0 ) );
+				let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
 
 				// front faces use schlick so the KHR_materials_specular tinted f0 applies - interior
 				// hits use the exact dielectric fresnel since schlick cannot represent TIR
