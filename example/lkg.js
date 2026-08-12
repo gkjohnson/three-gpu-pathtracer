@@ -27,7 +27,6 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { QuiltPreviewNodeMaterial } from './materials/QuiltPreviewNodeMaterial.js';
 
@@ -115,9 +114,7 @@ const params = {
 
 let loadingEl, samplesEl, distEl;
 let renderer, camera, quiltCamera;
-let pathTracer, previewQuad, controls, scene;
-let interacting = false;
-let cameraChanged = false;
+let pathTracer, previewQuad, scene;
 const _translation = new Matrix4();
 const _size = new Vector2();
 
@@ -162,20 +159,6 @@ async function init() {
 		quiltDimensions: new Vector2(),
 		aspectRatio: DISPLAY_WIDTH / DISPLAY_HEIGHT,
 	} ) );
-
-	// init controls
-	controls = new OrbitControls( camera, renderer.domElement );
-	controls.addEventListener( 'start', () => {
-
-		interacting = true;
-
-	} );
-	controls.addEventListener( 'end', () => {
-
-		interacting = false;
-		cameraChanged = true;
-
-	} );
 
 	onResize();
 	onLkgParamsChange();
@@ -292,7 +275,7 @@ async function init() {
 
 		loadingEl.style.visibility = 'hidden';
 		renderer.domElement.style.visibility = 'visible';
-		requestAnimationFrame( animate );
+		renderer.setAnimationLoop( animate );
 
 	} catch ( err ) {
 
@@ -305,22 +288,11 @@ async function init() {
 
 async function animate() {
 
-	if ( cameraChanged && ! interacting ) {
-
-		updateQuiltCamera();
-		pathTracer.updateCamera();
-		cameraChanged = false;
-
-	}
-
-	let pathTracingFrame = false;
-	if ( ! params.enable || interacting ) {
+	if ( ! params.enable ) {
 
 		renderer.render( scene, camera );
 
 	} else {
-
-		pathTracingFrame = true;
 
 		// set path tracer variables
 		pathTracer.pause = params.pause;
@@ -354,14 +326,12 @@ async function animate() {
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 	const queue = renderer.backend?.device?.queue;
-	if ( pathTracingFrame && queue?.onSubmittedWorkDone ) {
+	if ( params.enable && queue?.onSubmittedWorkDone ) {
 
 		// Keep CPU-side progress in step with completed GPU work.
 		await queue.onSubmittedWorkDone();
 
 	}
-
-	requestAnimationFrame( animate );
 
 }
 
