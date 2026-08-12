@@ -1,9 +1,20 @@
 import { Matrix3 } from 'three/webgpu';
-import { texture, sampler, uniform } from 'three/tsl';
+import { texture, sampler, uniform, wgslFn } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { environmentSampleStruct } from './nodes/structs.wgsl.js';
-import { equirectLuminancePdfFn, equirectDirectionToUvFn, equirectUvToDirectionFn, luminanceFn } from './nodes/sampling.wgsl.js';
+import { constants, environmentSampleStruct } from './nodes/structs.wgsl.js';
+import { equirectDirectionToUvFn, equirectUvToDirectionFn, luminanceFn } from './nodes/sampling.wgsl.js';
+
+// totalWeight includes sin( theta ), which cancels in the solid-angle conversion.
+const equirectLuminancePdfFn = wgslFn( /* wgsl */ `
+
+	fn equirectLuminancePdf( luminance: f32, totalWeight: f32, resolution: vec2u ) -> f32 {
+
+		return f32( resolution.x * resolution.y ) * luminance / ( 2.0 * PI * PI * totalWeight );
+
+	}
+
+`, [ constants ] );
 
 export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
@@ -30,6 +41,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 	getPixelWeight( r, g, b, row, height ) {
 
+		// weight the pixel contribution by its spherical solid angle.
 		const theta = Math.PI * ( row + 0.5 ) / height;
 		return super.getPixelWeight( r, g, b ) * Math.sin( theta );
 

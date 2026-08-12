@@ -178,17 +178,6 @@ export const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
 
 `, [ constants, equirectDirectionToUvFn ] );
 
-// solid-angle pdf for an equirect CDF weighted by luminance * sin( theta )
-export const equirectLuminancePdfFn = wgslFn( /* wgsl */ `
-
-	fn equirectLuminancePdf( luminance: f32, totalWeight: f32, resolution: vec2u ) -> f32 {
-
-		return f32( resolution.x * resolution.y ) * luminance / ( 2.0 * PI * PI * totalWeight );
-
-	}
-
-`, [ constants ] );
-
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 
 	fn weightedAlphaBlend( prevColor: vec4f, newColor: vec4f, weight: f32 ) -> vec4f {
