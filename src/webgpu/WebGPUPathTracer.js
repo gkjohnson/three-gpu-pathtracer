@@ -12,6 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -129,6 +130,40 @@ export class WebGPUPathTracer {
 
 	}
 
+	get transmissiveBackground() {
+
+		return this._transmissiveBackground;
+
+	}
+
+	set transmissiveBackground( v ) {
+
+		if ( this._transmissiveBackground !== v ) {
+
+			this._transmissiveBackground = v;
+			this._pathTracer.setTransmissiveBackground( v );
+
+		}
+
+	}
+
+	get filterGlossyFactor() {
+
+		return this._filterGlossyFactor;
+
+	}
+
+	set filterGlossyFactor( v ) {
+
+		if ( this._filterGlossyFactor !== v ) {
+
+			this._filterGlossyFactor = v;
+			this._pathTracer.setFilterGlossy( v );
+
+		}
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -169,6 +204,8 @@ export class WebGPUPathTracer {
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
+		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
+		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -193,6 +230,8 @@ export class WebGPUPathTracer {
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
+		this._pathTracer = new WaveFrontPathTracer( renderer );
+
 		// options
 		this.minSamples = 1;
 		this.renderDelay = 500;
@@ -206,15 +245,15 @@ export class WebGPUPathTracer {
 		this.stableNoise = false;
 		this.pause = false;
 
+		this.filterGlossyFactor = 1;
+
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
 		this.multipleImportanceSampling = true;
-		this.transmissiveBounces = 5;
-		this.filterGlossyFactor = 0;
+		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
@@ -286,6 +325,13 @@ export class WebGPUPathTracer {
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
 		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
+
+		if ( this._bvhData ) {
+
+			this._bvhData.dispose();
+			this._bvhData.textureAtlas.dispose();
+
+		}
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -368,6 +414,14 @@ export class WebGPUPathTracer {
 		const { _bvhData, _renderer } = this;
 		_bvhData.updateMaterials();
 		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+		this.reset();
+
+	}
+
+	updateTransforms() {
+
+		this.scene.updateMatrixWorld( true );
+		this._bvhData.updateTransforms();
 		this.reset();
 
 	}
@@ -668,10 +722,12 @@ export class WebGPUPathTracer {
 	dispose() {
 
 		this._pathTracer.dispose();
+		this._bvhData.dispose();
+		this._bvhData.textureAtlas.dispose();
+		this._environmentCache.dispose();
+		this._backgroundCache.dispose();
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
-		this._envColorTexture.dispose();
-		this._backgroundColorTexture.dispose();
 		this._atlasDebugQuad?.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {

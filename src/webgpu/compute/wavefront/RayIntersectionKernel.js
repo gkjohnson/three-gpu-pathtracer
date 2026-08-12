@@ -5,6 +5,7 @@ import { rngInit, rand2, RNG_INDEX_BACKGROUND_SAMPLE } from '../../nodes/random.
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -27,6 +28,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
 
+			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
+
 			globalId: globalId,
 		};
 
@@ -44,6 +47,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			fn compute(
 				// settings
 				misEnabled: u32,
+
+				transmissiveBackground: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -85,11 +90,14 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].currentBounce = input.currentBounce;
 					hitQueue.elements[ index ].resultColor = input.resultColor;
 					hitQueue.elements[ index ].seed = input.seed;
+					hitQueue.elements[ index ].dist = hitResult.dist;
+					hitQueue.elements[ index ].transmissiveRay = input.transmissiveRay;
+					hitQueue.elements[ index ].minPdf = input.minPdf;
 
 				} else {
 
 					var resultColor = input.resultColor;
-					if ( input.currentBounce > 0u ) {
+					if ( input.currentBounce > 0u && input.transmissiveRay == 0u ) {
 
 						var misWeight = 1.0;
 						if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
@@ -103,8 +111,50 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 					} else {
 
+						// hit the background
+						// support multiple transparent background blending techniques
 						let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
-						resultColor = ${ sampleBackground }( input.direction, rng );
+						let bg = ${ sampleBackground }( input.direction, rng );
+						if ( input.currentBounce == 0u ) {
+
+							// sample the background directly if this is the primary ray
+							resultColor = vec4f( bg.a * bg.rgb, bg.a );
+
+						} else {
+
+							// transmissive ray handling
+							let env = ${ sampleEnvColor }( input.direction );
+							let avg = saturate( dot( input.throughputColor, vec3f( 1.0 / 3.0 ) ) );
+							let transparency = ( 1.0 - bg.a ) * avg;
+
+							if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
+
+								// display the env map through transmissive surfaces
+								resultColor = vec4f(
+									resultColor.rgb + env.rgb * input.throughputColor,
+									1.0,
+								);
+
+							} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
+
+								// fade the background by the throughput color average
+								resultColor = vec4f(
+									resultColor.rgb + bg.a * bg.rgb * input.throughputColor,
+									1.0 - transparency,
+								);
+
+							} else {
+
+								// fade the background by the throughput color average, mixing in env lighting
+								var light = mix( env.rgb, bg.rgb, bg.a );
+								resultColor = vec4f(
+									resultColor.rgb + light * input.throughputColor,
+									1.0 - transparency,
+								);
+
+							}
+
+						}
 
 					}
 

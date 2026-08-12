@@ -2,6 +2,7 @@ import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
+import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 export class MegaKernelPathTracer extends PathTracerBackend {
@@ -54,6 +55,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setFilterGlossy( value ) {
+
+		// the kernel takes the inverted threshold, mirroring Cycles
+		this.kernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
+		this.reset();
+
+	}
+
 	setEnvironment( envMap ) {
 
 		this.envInfo.updateFrom( envMap );
@@ -95,6 +104,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		backgroundInfo.rotationNode.value.copy( rotationMatrix );
 		backgroundInfo.intensity = backgroundIntensity;
 		backgroundInfo.blur = backgroundBlurriness;
+
+	}
+
+	setTransmissiveBackground( value ) {
+
+		this.kernel.transmissiveBackground = value;
+		this.reset();
 
 	}
 

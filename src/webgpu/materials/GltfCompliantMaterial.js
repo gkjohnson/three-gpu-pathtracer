@@ -2,10 +2,11 @@ import { texture, textureStore, globalId, float, vec2 } from 'three/tsl';
 import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial.js';
-import { specularBrdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
-import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
+import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { ComputeKernel } from '../compute/ComputeKernel.js';
@@ -24,6 +25,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const {
 			specularBrdf = specularBrdfFunc,
+			specularBtdf = specularBtdfFunc,
 			diffuseBrdf = diffuseBrdfFunc,
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
@@ -52,6 +54,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		const turquinNode = texture( this.turquinTexture, vec2( 0.0 ) ).setName( 'turquinTexture' );
 
 		this.specularBrdf = specularBrdf;
+		this.specularBtdf = specularBtdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
 		this.conductorFresnel = conductorFresnel( turquinNode );
@@ -95,20 +98,53 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
+				// transmitted directions only gather the refracted lobe — the reflection lobes are
+				// gated to the upper hemisphere, matching the WebGL implementation
+				if ( NdotL < 0.0 ) {
+
+					// TODO: transmitted light also crosses the thin film so it should be weighted by
+					// the film-aware fresnel complement (1 - filmF) rather than the plain dielectric
+					// fresnel, tinting transmission with the film's complementary color. Deferred until
+					// the material is generalized into a layer stack that owns the fresnel per interface.
+					var refraction: vec3f;
+					if ( surf.thinWall ) {
+
+						// evaluate the flipped reflection
+						let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
+						refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha );
+
+					} else {
+
+						refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta );
+
+					}
+
+					return ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
+
+				}
+
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-				let diffuse = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
-				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.specularIntensity, diffuse, specular );
+				let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
+				let diffuse = ( 1.0 - surf.transmission ) * reflection;
+				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.eta, surf.specularIntensity, diffuse, specular );
+
+				// the media on either side of the film - air outside and the volume interior
+				// as the base on front faces, swapped on back faces so TIR can take effect
+				let outsideIor = select( surf.ior, 1.0, surf.frontFace );
+				let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, specular, ctx.VdotH, /* outsideIor */ 1.0,
-					surf.ior, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
+					dielectricBase, diffuse, specular, ctx.VdotH, outsideIor,
+					filmBaseIor, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
 				// TODO: this only handles non-anisotropic surfaces
 				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular, alpha.y );
 
 				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, specular, surf.color, ctx.VdotH, /* outsideIor */ 1.0,
+					metallicBase, specular, surf.color, ctx.VdotH, outsideIor,
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
@@ -151,32 +187,22 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let wo = normalize( invBasis * worldWo );
 				let woClearcoat = normalize( invClearcoatBasis * worldWo );
 
-				// TODO: handle such intersections better;
-				// Sometimes .z < 0.0 on a pretty round surface e.g. sphere
-				// Disabling this condition leads to more fireflies on ClearCoatCarPaint example
-				// This could also be fixed by offsetting rays by 1e-1
-				// Also, this will be an invalid condition when transmission is implemented
-				if ( wo.z < 0.0 || woClearcoat.z < 0.0 ) {
-
-					return result;
-
-				}
-
-				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				var cdf: vec4f;
 				cdf.x = weights.diffuse;
 				cdf.y = weights.specular + cdf.x;
 				cdf.z = weights.clearcoat + cdf.y;
-				cdf.w = 0; // weights.transmission + cdf.z;
+				cdf.w = weights.transmission + cdf.z;
 
-				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.z;
+				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.w;
 
 				let directionUV = ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } );
 				var wi: vec3f;
 				var wiClearcoat: vec3f;
 				var wh: vec3f;
 				var whClearcoat: vec3f;
+				var isTransmissive = false;
 
 				if ( r <= cdf.x ) { // diffuse
 
@@ -204,7 +230,33 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				} else if ( r <= cdf.w ) { // transmission / refraction
 
-					// NOT IMPLEMENTED
+					isTransmissive = true;
+
+					if ( surf.thinWall ) {
+
+						// model the double refraction as a single reflection flipped through the surface
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						wh = ${ ggxDirectionFunc }( wo, thinWallAlpha, directionUV );
+						wi = - normalize( reflect( wo, wh ) );
+						wi = vec3f( wi.xy, - wi.z );
+
+					} else {
+
+						wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
+						wi = refract( - wo, wh, surf.eta );
+
+						if ( all( wi == vec3f( 0.0 ) ) ) {
+
+							// total internal reflection - refract returns a zero vector, so bounce the
+							// ray off the inside of the surface instead of terminating it
+							wi = - normalize( reflect( wo, wh ) );
+
+						}
+
+					}
+
+					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
+					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
 
 				}
 
@@ -237,9 +289,36 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				result.color = ${ bsdfEvalFunc }( ctx, surf );
-				result.color *= max( 0.0, wi.z );
+				if ( weights.transmission > 0.0 && wi.z < 0.0 ) {
+
+					if ( surf.thinWall ) {
+
+						// the flipped reflection shares the reflection pdf
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						result.pdf += weights.transmission * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
+
+					} else {
+
+						result.pdf += weights.transmission * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+
+					}
+
+				}
+
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
 				result.direction = normalize( normalBasis * wi );
+				result.isTransmissive = isTransmissive;
+
+				// Flip the scattered ray through the surface if it lands on the wrong side of the
+				// geometry due to the shading normal - reflected rays must leave above the surface
+				// and transmitted rays below it
+				let scatterNormal = surf.faceNormal * select( 1.0, - 1.0, isTransmissive );
+				let geomDotDir = dot( result.direction, scatterNormal );
+				if ( geomDotDir < 0.0 ) {
+
+					result.direction = normalize( result.direction - 2.0 * geomDotDir * scatterNormal );
+
+				}
 
 				return result;
 
@@ -295,7 +374,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let wh = normalize( wo + wi );
 				let whClearcoat = normalize( woClearcoat + wiClearcoat );
 
-				let weights = ${ getLobeWeightsFunc }( wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				// pdf of having sampled this direction - must match the lobe mixture in bsdfSample
 				if ( weights.diffuse > 0.0 ) {

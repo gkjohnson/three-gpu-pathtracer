@@ -756,9 +756,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
 			intArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
 
-			// isThinFilm
-			const isThinFilm = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			intArray[ index ++ ] = Number( isThinFilm );
+			// isThinWall
+			const isThinWall = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
+			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
 			// attenuation - offset 44
@@ -785,7 +785,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = m.alphaTest;
 
 			// side & matte - offset 52
-			if ( ! isThinFilm && m.transmission > 0.0 ) {
+			if ( ! isThinWall && m.transmission > 0.0 ) {
 
 				floatArray[ index ++ ] = 0;
 
