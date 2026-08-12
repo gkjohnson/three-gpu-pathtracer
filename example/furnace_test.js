@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 // material properties that can be assigned to a grid axis
-const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'iridescence', 'clearcoat', 'transmission', 'opacity', 'none' ];
+const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
 
 const options = {
 	enable: true,
@@ -181,9 +181,15 @@ function buildGrid() {
 			material.clearcoat = 1.0;
 			material.clearcoatRoughness = val;
 
-		} else if ( field === 'transmission' ) {
+		} else if ( field === 'thin wall transmission' ) {
 
 			material.transmission = val;
+
+		} else if ( field === 'volume transmission' ) {
+
+			// any non zero thickness marks the material as a solid volume in the path tracer
+			material.transmission = val;
+			material.thickness = 1.0;
 
 		} else if ( field === 'opacity' ) {
 
