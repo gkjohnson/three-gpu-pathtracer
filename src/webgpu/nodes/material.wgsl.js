@@ -814,9 +814,9 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 				var f = 1.0;
 				if ( includeFresnel ) {
 
-					// TODO: this should be using a proper dielectric fresnel function that accounts
-					// for total internal reflection
-					f = ${ schlickFresnelFunc }( dot( wo, wh ), ${ iorToF0Func }( ior ) );
+					// use the exact dielectric fresnel so the table agrees with the fresnel used
+					// for lobe sampling
+					f = ${ dielectricFresnelFunc }( dot( wo, wh ), 1.0 / ior );
 
 				}
 
