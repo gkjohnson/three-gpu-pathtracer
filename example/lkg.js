@@ -17,7 +17,6 @@ import {
 	Sphere,
 	Vector2,
 	Vector4,
-	WebGPUCoordinateSystem,
 	WebGPURenderer,
 } from 'three/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
@@ -29,32 +28,6 @@ import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.j
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { QuiltPreviewNodeMaterial } from './materials/QuiltPreviewNodeMaterial.js';
-
-function normalizePackedFileNames( text ) {
-
-	// Match embedded MPD file names to LDrawLoader's normalized subobject paths.
-	return text.replace( /^0 FILE (.+)$/gm, ( _, name ) => {
-
-		name = name.replace( /\\/g, '/' );
-		name = name.startsWith( 's/' ) ? `parts/${ name }` : name.startsWith( '48/' ) ? `p/${ name }` : name;
-		return `0 FILE ${ name }`;
-
-	} );
-
-}
-
-class PackedLDrawLoader extends LDrawLoader {
-
-	constructor( manager ) {
-
-		super( manager );
-		const parseCache = this.partsCache.parseCache;
-		const parse = parseCache.parse.bind( parseCache );
-		parseCache.parse = ( text, fileName ) => parse( normalizePackedFileNames( text ), fileName );
-
-	}
-
-}
 
 // lkg display constants
 const LKG_WIDTH = 420;
@@ -185,7 +158,7 @@ async function init() {
 	try {
 
 		const envPromise = new HDRLoader().loadAsync( ENVMAP_URL );
-		const loader = new PackedLDrawLoader( manager );
+		const loader = new LDrawLoader( manager );
 		loader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
 		await loader.preloadMaterials( MATERIALS_URL );
 		const result = await loader
@@ -287,7 +260,7 @@ async function init() {
 
 }
 
-async function animate() {
+function animate() {
 
 	if ( ! params.enable ) {
 
@@ -325,14 +298,6 @@ async function animate() {
 
 	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
-
-	const queue = renderer.backend?.device?.queue;
-	if ( params.enable && queue?.onSubmittedWorkDone ) {
-
-		// Keep CPU-side progress in step with completed GPU work.
-		await queue.onSubmittedWorkDone();
-
-	}
 
 }
 
@@ -401,7 +366,6 @@ function updateQuiltCamera() {
 	while ( quiltCamera.cameras.length < numViews ) {
 
 		const subCamera = new PerspectiveCamera();
-		subCamera.coordinateSystem = WebGPUCoordinateSystem;
 		subCamera.viewport = new Vector4();
 		quiltCamera.cameras.push( subCamera );
 
