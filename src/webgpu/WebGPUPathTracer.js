@@ -404,9 +404,7 @@ export class WebGPUPathTracer {
 	updateCamera() {
 
 		const { _bvhData, _cameraRayFnHandle, _pathTracer } = this;
-		const cameraRayFn = _bvhData.fns.getCameraRay;
-		const needsRebuild = _cameraRayFnHandle.update();
-		if ( cameraRayFn !== _cameraRayFnHandle.fn || needsRebuild ) {
+		if ( _cameraRayFnHandle.update() ) {
 
 			_bvhData.fns.getCameraRay = _cameraRayFnHandle.fn;
 			_pathTracer.rebuild();
