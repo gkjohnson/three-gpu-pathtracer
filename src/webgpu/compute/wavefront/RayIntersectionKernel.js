@@ -1,7 +1,7 @@
 import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
-import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand2, RNG_INDEX_BACKGROUND_SAMPLE } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -88,7 +88,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u ) {
 
@@ -100,10 +99,11 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 						}
 
-						resultColor += ${ sampleEnvColor }( input.direction, rng ) * vec4f( input.throughputColor * misWeight, 0.0 );
+						resultColor += ${ sampleEnvColor }( input.direction ) * vec4f( input.throughputColor * misWeight, 0.0 );
 
 					} else {
 
+						let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
 						resultColor = ${ sampleBackground }( input.direction, rng );
 
 					}
