@@ -224,6 +224,8 @@ export class EquirectHdrInfoUniform {
 				const g = DataUtils.fromHalfFloat( data[ 4 * i + 1 ] );
 				const b = DataUtils.fromHalfFloat( data[ 4 * i + 2 ] );
 
+				// the probability of the pixel being selected in its row is proportional
+				// to its luminance relative to the other pixels.
 				const weight = this.getPixelWeight( r, g, b, y, height );
 				cumulativeRowWeight += weight;
 				totalSumValue += weight;
