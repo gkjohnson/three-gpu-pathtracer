@@ -182,6 +182,7 @@ export class WebGPUPathTracer {
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
@@ -307,6 +308,7 @@ export class WebGPUPathTracer {
 
 		this.scene = scene;
 		this._bvhData = bvhData;
+		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
 
@@ -361,15 +363,14 @@ export class WebGPUPathTracer {
 					}
 
 					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+					return false;
 
 				},
 				fn: wgslTagFn/* wgsl */`
 					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						let cameraRay = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
-						ray.origin = cameraRay.origin;
-						ray.direction = cameraRay.direction;
+						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 						return true;
 
 					}
@@ -379,7 +380,6 @@ export class WebGPUPathTracer {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this._pathTracer.setBVHData( this._bvhData );
 		this.updateCamera();
 
 	}
@@ -403,12 +403,13 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		const cameraRayFn = this._cameraRayFnHandle.fn;
-		this._cameraRayFnHandle.update();
-		if ( cameraRayFn !== this._cameraRayFnHandle.fn ) {
+		const { _bvhData, _cameraRayFnHandle, _pathTracer } = this;
+		const cameraRayFn = _bvhData.fns.getCameraRay;
+		const needsRebuild = _cameraRayFnHandle.update();
+		if ( cameraRayFn !== _cameraRayFnHandle.fn || needsRebuild ) {
 
-			this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-			this._pathTracer.setBVHData( this._bvhData );
+			_bvhData.fns.getCameraRay = _cameraRayFnHandle.fn;
+			_pathTracer.rebuild();
 
 		}
 
