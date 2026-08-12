@@ -380,7 +380,9 @@ export class WebGPUPathTracer {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this.updateCamera();
+		this._cameraRayFnHandle.update();
+		this._pathTracer.rebuild();
+		this.reset();
 
 	}
 
@@ -403,10 +405,9 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		const { _bvhData, _cameraRayFnHandle, _pathTracer } = this;
+		const { _cameraRayFnHandle, _pathTracer } = this;
 		if ( _cameraRayFnHandle.update() ) {
 
-			_bvhData.fns.getCameraRay = _cameraRayFnHandle.fn;
 			_pathTracer.rebuild();
 
 		}

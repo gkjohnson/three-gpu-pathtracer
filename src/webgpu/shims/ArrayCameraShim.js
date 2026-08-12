@@ -69,8 +69,6 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	};
 
-	result.update();
-
 	return result;
 
 };
