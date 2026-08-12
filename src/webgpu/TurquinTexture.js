@@ -61,7 +61,7 @@ export class TurquinTexture extends Storage3DTexture {
 		for ( let i = 0; i < dielectricLayerCount; i ++ ) {
 
 			params.layer.value ++;
-			params.ior.value = MathUtils.mapLinear( i, 0, dielectricLayerCount, minIoR, maxIoR );
+			params.ior.value = MathUtils.mapLinear( i, 0, dielectricLayerCount - 1, minIoR, maxIoR );
 			params.includeFresnel.value = 1;
 			renderer.compute( kernel.kernel, dispatch );
 
@@ -98,11 +98,12 @@ export class TurquinTexture extends Storage3DTexture {
 		this._sampleDielectricFn = wgslTagFn/* wgsl */`
 			fn sampleDielectric( cosTheta0: f32, roughness: f32, ior: f32 ) -> f32 {
 
+				let blockStart = 1.0;
 				let layer = ${ mapLinearClampedFn }(
 					ior,
 					f32( ${ minIoR } ), f32( ${ maxIoR } ),
-					1.5, f32( ${ dielectricLayerCount } ) + 1.5,
-				);
+					0.5, f32( ${ dielectricLayerCount } ) - 0.5,
+				) + blockStart;
 
 				let uvw = vec3f( cosTheta0, roughness, layer * ${ layerDepth } );
 				return textureSampleLevel( ${ textureNode }, ${ samplerNode }, uvw, 0 ).r;
