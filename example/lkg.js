@@ -142,6 +142,7 @@ async function init() {
 	const aspect = window.innerWidth / window.innerHeight;
 	camera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
 	camera.position.set( 0.43, 0.06, - 0.2 ).normalize().multiplyScalar( 0.48 );
+	camera.lookAt( 0, 0, 0 );
 	quiltCamera = new ArrayCamera();
 
 	// initialize the path tracer. The quilt has its own fixed resolution, independent
