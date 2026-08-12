@@ -1,4 +1,4 @@
-import { ArrayCamera, Matrix4, Vector4 } from 'three';
+import { ArrayCamera, Matrix4, Vector4, WebGPUCoordinateSystem } from 'three';
 import { uniformArray } from 'three/tsl';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
@@ -76,7 +76,9 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			const camera = this.cameras[ i ];
 			const viewport = camera.viewport;
 
+			camera.coordinateSystem = WebGPUCoordinateSystem;
 			camera.updateMatrixWorld();
+			camera.updateProjectionMatrix();
 			invViewProjectionMatrices.array[ i ].multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
 			viewports.array[ i ].copy( viewport );
 
