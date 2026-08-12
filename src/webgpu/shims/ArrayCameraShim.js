@@ -23,9 +23,7 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 					let cameraUv = ( pixel - viewport.xy ) / viewport.zw;
 					let ndc = cameraUv * 2.0 - vec2f( 1.0 );
-					let cameraRay = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrices }[ i ] );
-					ray.origin = cameraRay.origin;
-					ray.direction = cameraRay.direction;
+					*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrices }[ i ] );
 					return true;
 
 				}

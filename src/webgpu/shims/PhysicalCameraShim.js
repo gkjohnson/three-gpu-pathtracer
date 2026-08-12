@@ -92,11 +92,11 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const anamorphicRatio = uniform( 1 );
 
 	const fn = wgslTagFn/* wgsl */`
-		fn getCameraRay( uv: vec2f, resolution: vec2f, rayOut: ptr<function, ${ rayStruct }> ) -> bool {
+		fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 			// base ray
 			let ndc = uv * 2.0 - vec2f( 1.0 );
-			var ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+			*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 
 			// depth of field
 			// measure focus distance along the optical axis so the focal surface is a flat
@@ -118,8 +118,6 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			ray.origin += ( ${ cameraWorldMatrix } * vec4f( apertureSample, 0.0, 0.0 ) ).xyz;
 			ray.direction = focalPoint - ray.origin;
 
-			rayOut.origin = ray.origin;
-			rayOut.direction = ray.direction;
 			return true;
 
 		}
