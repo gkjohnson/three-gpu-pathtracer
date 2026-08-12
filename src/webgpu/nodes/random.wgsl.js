@@ -1,6 +1,6 @@
 // Alpha test should be the last index as it is summed with triangle index
 export const RNG_INDEX_RAY_JITTER = 0;
-export const RNG_INDEX_ENVIRONMENT_SAMPLE = 1;
+export const RNG_INDEX_BACKGROUND_SAMPLE = 1;
 export const RNG_INDEX_SCATTER_TYPE = 2;
 export const RNG_INDEX_SCATTER_DIRECTION = 3;
 export const RNG_INDEX_APERTURE_SAMPLE = 4;
