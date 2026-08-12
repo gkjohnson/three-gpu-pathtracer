@@ -26,6 +26,7 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const update = () => {
 
 		cameraToWorld.value.copy( this.matrixWorld );
+		return false;
 
 	};
 

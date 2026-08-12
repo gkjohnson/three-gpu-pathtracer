@@ -65,9 +65,11 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	result.update = () => {
 
+		let needsRebuild = false;
 		if ( this.cameras.length !== cameraCount ) {
 
 			rebuild();
+			needsRebuild = true;
 
 		}
 
@@ -83,6 +85,8 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			viewports.array[ i ].copy( viewport );
 
 		}
+
+		return needsRebuild;
 
 	};
 

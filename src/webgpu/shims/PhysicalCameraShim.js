@@ -139,6 +139,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 		apertureBlades.value = this.apertureBlades;
 		apertureRotation.value = this.apertureRotation;
 		anamorphicRatio.value = this.anamorphicRatio;
+		return false;
 
 	};
 
