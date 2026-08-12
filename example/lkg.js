@@ -70,21 +70,14 @@ const MATERIALS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-l
 const PARTS_PATH = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/';
 const MODELS = {
 	'X-Wing': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/7140-1-X-wingFighter.mpd_Packed.mpd',
-	'UCS AT-ST': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
-	'Death Star': 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models/10143-1 - Death Star II.mpd',
 	'Lunar Vehicle': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
 };
 
 [
 	'6814-1 - Ice Tunnelator.mpd',
-	'6861-2 - Super Model Building Instruction.mpd',
-	'75060 - Slave I.mpd',
 	'6983-1 - Ice Station Odyssey.mpd',
 	'6835-1 - Saucer Scout.mpd',
-	'21311 - Voltron - Voltron.mpd',
-	'21303 - WALLE.mpd',
 	'1180-1 - Space Port Moon Buggy.mpd',
-	'10179-1 - Millennium Falcon - UCS.mpd',
 	'6232-1 - Skeleton Crew.mpd',
 	'6235 - Buried Treasure.mpd',
 ].forEach( name => {
@@ -100,9 +93,9 @@ const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
 const params = {
 
 	enable: true,
-	model: modelName in MODELS ? modelName : 'Voltron - Voltron',
+	model: modelName in MODELS ? modelName : 'X-Wing',
 	renderScale: 1,
-	tiles: 1,
+	tiles: 3,
 
 	samplesPerFrame: 1,
 	bounces: 5,
@@ -131,30 +124,6 @@ const _size = new Vector2();
 // initialize lkg parameters
 let lkgParams = getLkgParams( params.numViews );
 
-const DEVICE_LIMITS_REQUESTED = [
-	'maxBufferSize',
-	'maxStorageBufferBindingSize',
-];
-function getRequiredDeviceLimits( adapter ) {
-
-	const limits = {};
-
-	for ( const limit of DEVICE_LIMITS_REQUESTED ) {
-
-		const value = adapter.limits[ limit ];
-
-		if ( typeof value === 'number' && Number.isFinite( value ) ) {
-
-			limits[ limit ] = value;
-
-		}
-
-	}
-
-	return limits;
-
-}
-
 init();
 
 async function init() {
@@ -164,10 +133,8 @@ async function init() {
 	loadingEl = document.getElementById( 'loading' );
 	samplesEl = document.getElementById( 'samples' );
 
-	const adapter = await navigator.gpu?.requestAdapter();
-	const requiredLimits = getRequiredDeviceLimits( adapter );
 	// init renderer
-	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
+	renderer = new WebGPURenderer( { antialias: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -183,8 +150,6 @@ async function init() {
 	// initialize the path tracer. The quilt has its own fixed resolution, independent
 	// of the preview canvas, so automatic and low-resolution resizing must be disabled.
 	pathTracer = new WebGPUPathTracer( renderer );
-	// Avoid the large fixed ray queues used by the wavefront backend.
-	pathTracer.useMegakernel( true );
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -456,9 +421,7 @@ function updateQuiltCamera() {
 	const height = Math.max( 1, Math.floor( renderScale * quiltHeight ) );
 
 	const displayHalfHeight = DISPLAY_HEIGHT * 0.5;
-	const displayHalfWidth = DISPLAY_WIDTH * 0.5;
 	const halfViewWidth = Math.tan( viewCone * MathUtils.DEG2RAD * 0.5 ) * viewerDistance;
-	const nearScale = camera.near / viewerDistance;
 
 	camera.fov = 2 * Math.atan( displayHalfHeight / viewerDistance ) * MathUtils.RAD2DEG;
 	camera.updateProjectionMatrix();
@@ -486,16 +449,10 @@ function updateQuiltCamera() {
 
 		subCamera.near = camera.near;
 		subCamera.far = camera.far;
-		subCamera.projectionMatrix.makePerspective(
-			nearScale * ( - displayHalfWidth - offset ),
-			nearScale * ( displayHalfWidth - offset ),
-			nearScale * displayHalfHeight,
-			nearScale * - displayHalfHeight,
-			camera.near,
-			camera.far,
-			WebGPUCoordinateSystem,
-		);
-		subCamera.projectionMatrixInverse.copy( subCamera.projectionMatrix ).invert();
+		subCamera.fov = camera.fov;
+		subCamera.aspect = DISPLAY_WIDTH / DISPLAY_HEIGHT;
+		subCamera.filmOffset = - offset * subCamera.getFilmWidth() / viewerDistance;
+		subCamera.updateProjectionMatrix();
 
 		const tileX = i % quiltTilesX;
 		const tileY = Math.floor( i / quiltTilesX );
@@ -579,7 +536,7 @@ function buildGui() {
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'tiles', 1, 3, 1 ).onChange( v => {
+	ptFolder.add( params, 'tiles', 3, 6, 1 ).onChange( v => {
 
 		pathTracer.tiles.setScalar( v );
 
