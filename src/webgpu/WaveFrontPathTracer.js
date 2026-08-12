@@ -9,7 +9,9 @@ import { LightConnectionKernel } from './compute/wavefront/LightConnectionKernel
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
-import { queuedHitStruct, queuedRayStruct } from './compute/wavefront/structs.js';
+import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
+import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
+import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)
@@ -17,9 +19,15 @@ import { PathTracerBackend } from './PathTracerBackend.js';
 const RAYS_TO_PROCESS = 250000;
 const MAX_BUFFER_SIZE = 134217728;
 
+// Both queues use the same element count so the hit queue can never overflow - every intersected
+// ray produces at most one hit, so hits are bounded by the ray queue capacity.
 // subtract 16 bytes for the queue's start/end cursor header that precedes the elements
 const MAX_RAY_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedRayStruct.getLength() * 4 ) );
 const MAX_HIT_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedHitStruct.getLength() * 4 ) );
+
+// Make the buffer size as big as possible so the tile of rays can fit.
+// TODO: This should be adjusted so it can be smaller and arbitrary tile size cannot cause problems
+const MAX_QUEUE_COUNT = Math.min( MAX_RAY_COUNT, MAX_HIT_COUNT );
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -33,11 +41,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.backgroundInfo = new EquirectBackgroundInfo();
 		this.lightsInfo = new LightsInfoNode();
 
-		const rayQueueSize = 4 + MAX_RAY_COUNT * queuedRayStruct.getLength();
+		const rayQueueSize = 4 + MAX_QUEUE_COUNT * queuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
 		this.rayQueue.name = 'Ray Queue';
 
-		const hitQueueSize = 4 + MAX_HIT_COUNT * queuedHitStruct.getLength();
+		const hitQueueSize = 4 + MAX_QUEUE_COUNT * queuedHitStruct.getLength();
 		this.hitQueue = new StorageBufferAttribute( new Float32Array( hitQueueSize ), hitQueueSize );
 		this.hitQueue.name = 'Hit Queue';
 
@@ -53,6 +61,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.lightConnectionKernel = new LightConnectionKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.rayDispatchConverter = new QueueLengthToDispatchKernel( rayQueueStruct ).setWorkgroupSize( 1, 1, 1 );
+		this.hitDispatchConverter = new QueueLengthToDispatchKernel( hitQueueStruct ).setWorkgroupSize( 1, 1, 1 );
 
 		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
 		this.rayIntersectionKernel.envInfo = this.envInfo;
@@ -122,6 +132,16 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setFilterGlossy( value ) {
+
+		// the kernel takes the inverted threshold, mirroring Cycles
+		const filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
+		this.hitProcessKernel.filterGlossy = filterGlossy;
+		this.lightConnectionKernel.filterGlossy = filterGlossy;
+		this.reset();
+
+	}
+
 	setEnvironment( envMap ) {
 
 		this.envInfo.updateFrom( envMap );
@@ -172,6 +192,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		backgroundInfo.rotationNode.value.copy( rotationMatrix );
 		backgroundInfo.intensity = backgroundIntensity;
 		backgroundInfo.blur = backgroundBlurriness;
+
+	}
+
+	setTransmissiveBackground( value ) {
+
+		this.rayIntersectionKernel.transmissiveBackground = value;
+		this.reset();
 
 	}
 
@@ -271,6 +298,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			updateRayQueueParamsKernel,
 			hitProcessKernel,
 			lightConnectionKernel,
+			rayDispatchConverter,
+			hitDispatchConverter,
 
 			lowResMode
 		} = this;
@@ -326,33 +355,37 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				}
 
-				// Step 2: run intersections, add color for terminated rays, add material handling to a dedicated queue
-				// TODO: setting dispatch size to 10000 is causing failures / missed rays
-				const intersectDispatch = rayIntersectionKernel.getDispatchSize( RAYS_TO_PROCESS, 1, 1 );
+				// Step 2: run intersections over a subset of the queued rays, add color for
+				// terminated rays, add material handling to a dedicated queue
+				rayDispatchConverter.queue = rayQueue;
+				rayDispatchConverter.maxCount = RAYS_TO_PROCESS;
+				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
+
 				rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
 				rayIntersectionKernel.rayQueue = rayQueue;
 				rayIntersectionKernel.hitQueue = hitQueue;
-				renderer.compute( rayIntersectionKernel.kernel, intersectDispatch );
+				renderer.compute( rayIntersectionKernel.kernel, rayDispatchConverter.outputDispatch );
 
 				// mark the rays as consumed
-				const processed = intersectDispatch[ 0 ] * rayIntersectionKernel.workgroupSize[ 0 ];
-				updateRayQueueParamsKernel.processed = processed;
 				updateRayQueueParamsKernel.rayQueue = rayQueue;
+				updateRayQueueParamsKernel.maxCount = RAYS_TO_PROCESS;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
-				// Step 3: next event estimation - deposit the direct-light contribution into
+				// Step 3: convert the queued hit count into an indirect dispatch size
+				hitDispatchConverter.queue = hitQueue;
+				renderer.compute( hitDispatchConverter.kernel, [ 1, 1, 1 ] );
+
+				// Step 4: next event estimation - deposit the direct-light contribution into
 				// hitQueue.resultColor before ProcessHits consumes it
 				lightConnectionKernel.hitQueue = hitQueue;
-				renderer.compute( lightConnectionKernel.kernel, lightConnectionKernel.getDispatchSize( processed, 1, 1 ) );
+				renderer.compute( lightConnectionKernel.kernel, hitDispatchConverter.outputDispatch );
 
-				// TODO: we should use an indirect dispatch here to only kick off the number of threads
-				// as needed to iterate over all the fields
-				// Step 4: attenuate ray color, scatter, run russian roulette
+				// Step 5: attenuate ray color, scatter, run russian roulette over exactly the queued hits
 				hitProcessKernel.sampleCountTarget = sampleCountTarget;
 				hitProcessKernel.bounces = bounces;
 				hitProcessKernel.rayQueue = rayQueue;
 				hitProcessKernel.hitQueue = hitQueue;
-				renderer.compute( hitProcessKernel.kernel, hitProcessKernel.getDispatchSize( processed, 1, 1 ) );
+				renderer.compute( hitProcessKernel.kernel, hitDispatchConverter.outputDispatch );
 				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel
 
 				// Future

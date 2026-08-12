@@ -1,5 +1,6 @@
 export * from './WebGPUPathTracer.js';
 export * from './BlurredEnvMapGenerator.js';
+export * from './constants.js';
 
 export * as RANDOM_PCG from './nodes/rand/pcg.wgsl.js';
 export * as RANDOM_SOBOL from './nodes/rand/sobol.wgsl.js';
