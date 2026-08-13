@@ -52,10 +52,13 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
 		remaining -= weights.clearcoat;
 
+		// the opaque share - metals and the fresnel reflection of the non-transmissive
+		// dielectric. The transmissive portion's reflection is carried by the glass lobe.
 		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
-		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * fEstimate );
+		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * fEstimate );
 		remaining -= weights.specular;
 
+		// the glass lobe covers both the reflected and refracted halves of the transmissive portion
 		weights.transmission = remaining * surf.transmission;
 		remaining -= weights.transmission;
 

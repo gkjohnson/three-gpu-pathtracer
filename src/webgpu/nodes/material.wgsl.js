@@ -698,49 +698,6 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 
 `, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
 
-const rgbMixFunc = wgslFn( /* wgsl */ `
-
-	fn rgbMix( base: vec3f, specular: vec3f, rgbAlpha: vec3f ) -> vec3f {
-
-		let alphaMax = max( max( rgbAlpha.x, rgbAlpha.y ), rgbAlpha.z );
-		return ( 1 - alphaMax ) * base + rgbAlpha * specular;
-
-	}
-
-` );
-
-export const iridescentDielectricLayerFunc = wgslFn( /* wgsl */ `
-
-	fn iridescentDielectricLayer(
-		dielectricBase: vec3f, base: vec3f, specular: vec3f, HdotL: f32,
-		outsideIor: f32, baseIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
-	) -> vec3f {
-
-		let baseF0 = vec3( iorToF0( baseIor ) );
-
-		let iridescentF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
-
-		return mix( dielectricBase, rgbMix( base, specular, iridescentF ), strength );
-
-	}
-
-`, [ iorToF0Func, iridescentFresnelFunc, rgbMixFunc ] );
-
-export const iridescentConductorLayerFunc = wgslFn( /* wgsl */ `
-
-	fn iridescentConductorLayer(
-		metalBase: vec3f, specular: vec3f, baseF0: vec3f, HdotL: f32,
-		outsideIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
-	) -> vec3f {
-
-		let iridescenceF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
-
-		return mix( metalBase, specular * iridescenceF, strength );
-
-	}
-
-`, [ iridescentFresnelFunc ] );
-
 export const conductorFresnelFunc = wgslFn( /* wgsl */ `
 
 	fn conductorFresnel( VdotH: f32, f0: vec3f, specular: vec3f ) -> vec3f {
