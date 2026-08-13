@@ -58,11 +58,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
-				// anisotropic roughness along tangent, bitangent
-				let alphaB = surf.roughness * surf.roughness;
-				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-				let alpha = vec2( alphaT, alphaB );
-
 				// Each lobe contributes into "result" within its own scope, evaluated in cascade
 				// order. "attenuation" carries the fraction of energy each layer passes through to
 				// the layers beneath it. Every lobe guards its own hemisphere, matching how Cycles
@@ -110,6 +105,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				{
 
 					if ( surf.transmission > 0.0 ) {
+
+						// anisotropic roughness along tangent, bitangent
+						let alphaB = surf.roughness * surf.roughness;
+						let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+						let alpha = vec2( alphaT, alphaB );
 
 						if ( NdotL < 0.0 ) {
 
@@ -184,6 +184,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				{
 
 					if ( NdotL > 0.0 ) {
+
+						// anisotropic roughness along tangent, bitangent
+						let alphaB = surf.roughness * surf.roughness;
+						let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+						let alpha = vec2( alphaT, alphaB );
 
 						// Sample the single scatter energy for specular at the given roughness.
 						let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
@@ -271,13 +276,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var result: ${ scatterRecordStruct };
 				result.pdf = 0.0;
 
-				// anisotropic roughness along tangent, bitangent
-				let alphaB = surf.roughness * surf.roughness;
-				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-				let alpha = vec2( alphaT, alphaB );
-
-				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-
 				let normalBasis = surf.normalBasis;
 				let invBasis = surf.normalInvBasis;
 				let clearcoatBasis = surf.clearcoatBasis;
@@ -305,6 +303,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				if ( r <= cdfClearcoat ) { // clearcoat
 
+					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
 					wiClearcoat = - normalize( reflect( woClearcoat, whClearcoat ) );
 
@@ -312,6 +311,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
 
 				} else if ( r <= cdfSpecular ) { // specular
+
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
 
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 					wi = - normalize( reflect( wo, wh ) );
@@ -322,6 +326,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( r <= cdfTransmission ) { // transmission ( glass )
 
 					isTransmissive = true;
+
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
 
 					if ( surf.thinWall ) {
 
@@ -384,6 +393,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
 
+						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 						result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
 
 					}
@@ -395,6 +405,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					if ( weights.specular > 0.0 && wi.z > 0.0 ) {
 
+						// anisotropic roughness along tangent, bitangent
+						let alphaB = surf.roughness * surf.roughness;
+						let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+						let alpha = vec2( alphaT, alphaB );
+
 						result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
 
 					}
@@ -405,6 +420,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				{
 
 					if ( weights.transmission > 0.0 ) {
+
+						// anisotropic roughness along tangent, bitangent
+						let alphaB = surf.roughness * surf.roughness;
+						let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+						let alpha = vec2( alphaT, alphaB );
 
 						if ( surf.thinWall ) {
 
