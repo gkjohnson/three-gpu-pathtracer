@@ -172,8 +172,11 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// Bit-level origin offset from Ray Tracing Gems, also used by Cycles. It keeps
-// secondary and shadow rays off the source triangle without a scene-scale bias.
+// Bit-level ray origin offset based on Section 6.2.2 of "A Fast and Robust
+// Method for Avoiding Self-Intersection" in Ray Tracing Gems:
+// https://github.com/Apress/ray-tracing-gems/blob/master/Ch_06_A_Fast_and_Robust_Method_for_Avoiding_Self-Intersection/offset_ray.cu
+// The original implementation expects a normal oriented for the outgoing ray;
+// this version orients the geometric normal internally.
 export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
 
 	fn offsetRayOrigin( point: vec3f, direction: vec3f, geometricNormal: vec3f ) -> vec3f {
