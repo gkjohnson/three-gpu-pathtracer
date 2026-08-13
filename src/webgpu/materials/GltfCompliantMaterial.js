@@ -239,7 +239,20 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						// fresnel-weighted single scatter energy with the multiscatter boost, or the film
 						// fresnel when iridescent, using its strongest channel so the base is not tinted
 						// with the film's inverse color. Only the dielectric half passes light downward.
-						let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
+						// The table is baked for the air-incident case so volume-incident hits use the
+						// exact fresnel instead - total internal reflection then fades the base out at
+						// grazing interior angles.
+						var fresnelEnergySS: f32;
+						if ( surf.frontFace ) {
+
+							fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
+
+						} else {
+
+							fresnelEnergySS = ${ dielectricFresnelFunc }( NdotV, surf.eta );
+
+						}
+
 						let filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
 						attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
 
@@ -299,7 +312,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var wiClearcoat: vec3f;
 				var wh: vec3f;
 				var whClearcoat: vec3f;
-				var isTransmissive = false;
+				var isGlass = false;
 
 				if ( r <= cdfClearcoat ) { // clearcoat
 
@@ -309,6 +322,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					wi = normalize( invBasis * clearcoatBasis * wiClearcoat );
 					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
+
+					// reflected rays must leave above the geometry surface - flip rays that land
+					// below it due to the shading normal
+					let faceNormal = normalize( invBasis * surf.faceNormal );
+					let geomDotDir = dot( wi, faceNormal );
+					if ( geomDotDir < 0.0 ) {
+
+						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
+
+					}
+
+					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
 
 				} else if ( r <= cdfSpecular ) { // specular
 
@@ -320,21 +345,42 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 					wi = - normalize( reflect( wo, wh ) );
 
+					// reflected rays must leave above the geometry surface - flip rays that land
+					// below it due to the shading normal
+					let faceNormal = normalize( invBasis * surf.faceNormal );
+					let geomDotDir = dot( wi, faceNormal );
+					if ( geomDotDir < 0.0 ) {
+
+						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
+
+					}
+
 					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
 					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
 
 				} else if ( r <= cdfTransmission ) { // transmission ( glass )
 
-					isTransmissive = true;
+					isGlass = true;
 
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					if ( surf.thinWall ) {
+					// sample the half vector first and select reflection or refraction by the
+					// facet fresnel, matching Cycles - total internal reflection drives the
+					// fresnel to 1 so TIR facets always reflect with a matching pdf
+					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
+					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+					let rFresnel = ( r - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
+					if ( rFresnel < F ) {
 
-						// model the double refraction as a single reflection flipped through the surface
+						wi = - normalize( reflect( wo, wh ) );
+
+					} else if ( surf.thinWall ) {
+
+						// model the double refraction as a single reflection flipped through the
+						// surface at the remapped thin wall roughness
 						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
 						wh = ${ ggxDirectionFunc }( wo, thinWallAlpha, directionUV );
 						wi = - normalize( reflect( wo, wh ) );
@@ -342,22 +388,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					} else {
 
-						// sample the half vector first and select reflection or refraction by the
-						// facet fresnel, matching Cycles - total internal reflection drives the
-						// fresnel to 1 so TIR facets always reflect with a matching pdf
-						wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
-						let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
-						let rFresnel = ( r - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
-						if ( rFresnel < F ) {
-
-							wi = - normalize( reflect( wo, wh ) );
-							isTransmissive = false;
-
-						} else {
-
-							wi = refract( - wo, wh, surf.eta );
-
-						}
+						wi = refract( - wo, wh, surf.eta );
 
 					}
 
@@ -368,6 +399,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					wi = ${ diffuseDirectionFunc }( wo, directionUV );
 					wh = normalize( wi + wo );
+
+					// reflected rays must leave above the geometry surface - flip rays that land
+					// below it due to the shading normal
+					let faceNormal = normalize( invBasis * surf.faceNormal );
+					let geomDotDir = dot( wi, faceNormal );
+					if ( geomDotDir < 0.0 ) {
+
+						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
+
+					}
 
 					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
 					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
@@ -426,30 +467,22 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 						let alpha = vec2( alphaT, alphaB );
 
-						if ( surf.thinWall ) {
+						// the glass lobe selects reflection or refraction by the facet fresnel so
+						// each side carries the corresponding share of the transmission pdf
+						let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+						if ( wi.z > 0.0 ) {
 
-							if ( wi.z < 0.0 ) {
+							result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
 
-								// the flipped reflection shares the reflection pdf
-								let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
-								result.pdf += weights.transmission * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
+						} else if ( surf.thinWall ) {
 
-							}
+							// the flipped reflection shares the reflection pdf at the remapped roughness
+							let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+							result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
 
 						} else {
 
-							// the glass lobe selects reflection or refraction by the facet fresnel so
-							// each side carries the corresponding share of the transmission pdf
-							let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
-							if ( wi.z > 0.0 ) {
-
-								result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
-
-							} else {
-
-								result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
-
-							}
+							result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
 
 						}
 
@@ -468,20 +501,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isGlass );
 				result.direction = normalize( normalBasis * wi );
-				result.isTransmissive = isTransmissive;
 
-				// Flip the scattered ray through the surface if it lands on the wrong side of the
-				// geometry due to the shading normal - reflected rays must leave above the surface
-				// and transmitted rays below it
-				let scatterNormal = surf.faceNormal * select( 1.0, - 1.0, isTransmissive );
-				let geomDotDir = dot( result.direction, scatterNormal );
-				if ( geomDotDir < 0.0 ) {
-
-					result.direction = normalize( result.direction - 2.0 * geomDotDir * scatterNormal );
-
-				}
+				// the glass lobe accepts rays on either side of the geometry surface - the ray is
+				// labeled transmitted when it crosses below so it is treated as entering or
+				// leaving the volume
+				result.isTransmissive = isGlass && dot( result.direction, surf.faceNormal ) < 0.0;
 
 				return result;
 
