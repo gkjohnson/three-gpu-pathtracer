@@ -3,7 +3,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
@@ -122,7 +122,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
+				var ray: ${ rayStruct };
+				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+					return;
+
+				}
+
 				ray.direction = normalize( ray.direction );
 
 				var resultColor = vec4f( 0, 0, 0, 1 );

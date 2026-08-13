@@ -382,13 +382,15 @@ export class WebGPUPathTracer {
 					}
 
 					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+					return false;
 
 				},
 				fn: wgslTagFn/* wgsl */`
-					fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						return ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						return true;
 
 					}
 				`,
@@ -397,7 +399,9 @@ export class WebGPUPathTracer {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this.updateCamera();
+		this._cameraRayFnHandle.update();
+		this._pathTracer.rebuild();
+		this.reset();
 
 	}
 
@@ -420,7 +424,13 @@ export class WebGPUPathTracer {
 
 	updateCamera() {
 
-		this._cameraRayFnHandle.update();
+		const { _cameraRayFnHandle, _pathTracer } = this;
+		if ( _cameraRayFnHandle.update() ) {
+
+			_pathTracer.rebuild();
+
+		}
+
 		this.reset();
 
 	}
