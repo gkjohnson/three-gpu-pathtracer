@@ -395,6 +395,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				fn resetRayScalar( objectIndex: u32 ) -> void {
 
 					${ scratchRayScalar } = 1.0;
+					${ baseOpacityScalar } = 1.0;
 
 				}
 			`,
