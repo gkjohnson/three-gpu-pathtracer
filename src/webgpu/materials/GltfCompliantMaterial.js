@@ -324,10 +324,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
-					// below it due to the shading normal
+					// below it due to the shading normal. Rays below the shading hemisphere are
+					// left as is since their loss is refunded by the energy compensation tables
 					let faceNormal = normalize( invBasis * surf.faceNormal );
 					let geomDotDir = dot( wi, faceNormal );
-					if ( geomDotDir < 0.0 ) {
+					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
 						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
@@ -346,10 +347,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wi = - normalize( reflect( wo, wh ) );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
-					// below it due to the shading normal
+					// below it due to the shading normal. Rays below the shading hemisphere are
+					// left as is since their loss is refunded by the energy compensation tables
 					let faceNormal = normalize( invBasis * surf.faceNormal );
 					let geomDotDir = dot( wi, faceNormal );
-					if ( geomDotDir < 0.0 ) {
+					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
 						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
@@ -401,10 +403,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wh = normalize( wi + wo );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
-					// below it due to the shading normal
+					// below it due to the shading normal. Rays below the shading hemisphere are
+					// left as is since their loss is refunded by the energy compensation tables
 					let faceNormal = normalize( invBasis * surf.faceNormal );
 					let geomDotDir = dot( wi, faceNormal );
-					if ( geomDotDir < 0.0 ) {
+					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
 						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
