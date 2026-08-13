@@ -1,21 +1,16 @@
-import { texture, textureStore, globalId, float, vec2 } from 'three/tsl';
-import { StorageTexture, RedFormat, LinearFilter, TextureLoader, HalfFloatType } from 'three/webgpu';
+import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { PathtracingMaterial } from './PathtracingMaterial.js';
-import { specularBrdfFunc, specularBtdfFunc, diffuseBrdfFunc, fresnelMixFunc, conductorFresnelFunc, albedoIntegralMetallic, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
-import { dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
+import { PathtracingMaterial } from './PathtracingMaterial';
+import { specularBrdfFunc, specularBtdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
-import { ComputeKernel } from '../compute/ComputeKernel.js';
-
-const TURQUIN_METAL_URL = new URL( '../../textures/turquinMetal.png', import.meta.url ).toString();
-const TURQUIN_METAL_TEXTURE = new TextureLoader().load( TURQUIN_METAL_URL );
+import { TurquinTexture } from '../TurquinTexture.js';
+import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
-const MIN_INCIDENT_COS = float( 1e-3 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -26,60 +21,29 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		const {
 			specularBrdf = specularBrdfFunc,
 			specularBtdf = specularBtdfFunc,
-			diffuseBrdf = diffuseBrdfFunc,
+			diffuseBrdf = lambertBrdfFunc,
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
 			fresnelCoat = fresnelCoatFunc,
 			iridescentDielectricLayer = iridescentDielectricLayerFunc,
 			iridescentConductorLayer = iridescentConductorLayerFunc,
-			calculateTurquinTexture = false,
 		} = options;
 
-		if ( calculateTurquinTexture ) {
-
-			this.turquinTexture = new StorageTexture( 32, 32 );
-			this.turquinTexture.type = HalfFloatType;
-
-		} else {
-
-			this.turquinTexture = TURQUIN_METAL_TEXTURE;
-			this.turquinTexture.flipY = false;
-
-		}
-
-		this.turquinTexture.format = RedFormat;
-		this.turquinTexture.minFilter = LinearFilter;
-		this.turquinTexture.magFilter = LinearFilter;
-
-		const turquinNode = texture( this.turquinTexture, vec2( 0.0 ) ).setName( 'turquinTexture' );
-
+		this.turquinTexture = new TurquinTexture();
 		this.specularBrdf = specularBrdf;
 		this.specularBtdf = specularBtdf;
 		this.diffuseBrdf = diffuseBrdf;
 		this.fresnelMix = fresnelMix;
-		this.conductorFresnel = conductorFresnel( turquinNode );
+		this.conductorFresnel = conductorFresnel;
 		this.fresnelCoat = fresnelCoat;
 		this.iridescentDielectricLayer = iridescentDielectricLayer;
 		this.iridescentConductorLayer = iridescentConductorLayer;
-		this.calculateTurquinTexture = calculateTurquinTexture;
 
 	}
 
 	init( renderer ) {
 
-		if ( ! this.calculateTurquinTexture ) {
-
-			return;
-
-		}
-
-		const turquinParams = {
-			texture: textureStore( this.turquinTexture ).toWriteOnly(),
-			globalId,
-		};
-		const turquinKernel = new ComputeKernel( albedoIntegralMetallic( turquinParams ), { workgroupSize: [ 16, 16, 1 ] } );
-
-		renderer.compute( turquinKernel.kernel, [ 2, 2, 1 ] );
+		this.turquinTexture.generate( renderer );
 
 	}
 
@@ -89,14 +53,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
+				let NdotV = ctx.V.z;
+				let NdotVc = ctx.Vc.z;
+				let NdotL = ctx.L.z;
+
 				// anisotropic roughness along tangent, bitangent
 				let alphaB = surf.roughness * surf.roughness;
 				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 				let alpha = vec2( alphaT, alphaB );
 
-				let NdotV = ctx.V.z;
-				let NdotVc = ctx.Vc.z;
-				let NdotL = ctx.L.z;
+				// Sample the single scatter energy for specular at the given roughness.
+				let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+				let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
 
 				// transmitted directions only gather the refracted lobe — the reflection lobes are
 				// gated to the upper hemisphere, matching the WebGL implementation
@@ -125,10 +93,37 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
+				// specular and diffuse components
 				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+				let boostedSpecular = specular * dielectricBoost;
 				let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
 				let diffuse = ( 1.0 - surf.transmission ) * reflection;
-				let dielectricBase = ${ this.fresnelMix }( ctx.VdotH, surf.specularColor, surf.ior, surf.eta, surf.specularIntensity, diffuse, specular );
+
+				// Sample the single scatter energy, including fresnel, for the specular layer, boosting by the
+				// compensation formula above to account for multi scatter. Attenuate the energy allocated for
+				// diffuse by the remaining energy from specular single scatter.
+				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
+				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
+
+				// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
+				let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
+
+				// front faces use schlick so the KHR_materials_specular tinted f0 applies - interior
+				// hits use the exact dielectric fresnel since schlick cannot represent TIR
+				// TODO: see if we can clean this up and make these branches more consistent
+				var dielectricFr: vec3f;
+				if ( surf.frontFace ) {
+
+					dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
+
+				} else {
+
+					dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
+
+				}
+
+				let dielectricSpecular = boostedSpecular * surf.specularIntensity * dielectricFr;
+				let dielectricBase = dielectricDiffuse + dielectricSpecular;
 
 				// the media on either side of the film - air outside and the volume interior
 				// as the base on front faces, swapped on back faces so TIR can take effect
@@ -136,15 +131,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
 
 				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, specular, ctx.VdotH, outsideIor,
+					dielectricBase, diffuse, boostedSpecular, ctx.VdotH, outsideIor,
 					filmBaseIor, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
-				// TODO: this only handles non-anisotropic surfaces
-				let metallicBase = ${ this.conductorFresnel }( NdotV, ctx.VdotH, surf.color, specular, alpha.y );
-
+				// Fresnel-weighted specular with the multiscatter comp
+				let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
+				let metallicSpecular = specular * metallicBoost;
+				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
 				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, specular, surf.color, ctx.VdotH, outsideIor,
+					metallicBase, metallicSpecular, surf.color, ctx.VdotH, outsideIor,
 					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
 				);
 
@@ -154,12 +150,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let sheenScale = mix( 1.0, ${ sheenAlbedoScalingFunc }( ctx.V, ctx.L, surf ), surf.sheen );
 				let material = baseMaterial * sheenScale + ${ sheenColorFunc }( ctx.V, ctx.L, ctx.H, surf ) * surf.sheen;
 
+				// clearcoat
+				// reuse the same pattern for energy conservation used in the dielectric layer
 				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-				let clearcoat = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) );
+				let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
+				let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
+				let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
 
-				let coatedMaterial = ${ this.fresnelCoat }( max( NdotVc, ${ MIN_INCIDENT_COS } ), ${ CLEARCOAT_IOR }, material, clearcoat, surf.clearcoat );
+				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
+				let clearcoatBase = ( 1.0 - clearcoatFresnelEnergySS ) * material;
+				let coatedMaterial = clearcoatBase + clearcoatSpecular * ${ schlickFresnelFunc }( abs( dot( ctx.Vc, ctx.Hc ) ), ${ iorToF0Func }( 1.5 ) );
 
-				return coatedMaterial;
+				return mix( material, coatedMaterial, surf.clearcoat );
 
 			}
 
