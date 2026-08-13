@@ -113,6 +113,21 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// sides - only a true volume distinguishes entering from exiting hits
 					let airIncident = surf.thinWall || surf.frontFace;
 
+					// Turquin multiscatter compensation for the glass lobe: the volumetric bsdf is
+					// scaled by its total reflected + refracted energy so the reflection to
+					// refraction ratio is preserved. The thin wall halves are reflection-shaped
+					// so each is compensated with the conductor albedo at its own roughness.
+					var glassBoost = 0.0;
+					if ( surf.thinWall ) {
+
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+
+					} else {
+
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, surf.roughness, surf.ior, surf.frontFace ), 1e-5 );
+
+					}
+
 					if ( NdotL < 0.0 ) {
 
 						// TODO: transmitted light also crosses the iridescent thin film so it should be weighted by
@@ -120,15 +135,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						var refraction: vec3f;
 						if ( surf.thinWall ) {
 
-							// model the double refraction as a reflection flipped through the surface
+							// evaluate the flipped reflection, compensated at the remapped roughness
 							let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
 							let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+							let thinWallEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, sqrt( thinWallAlpha.x ) ), 1e-5 );
 							let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
-							refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha );
+							refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha ) / thinWallEnergySS;
 
 						} else {
 
-							refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta );
+							refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta ) * glassBoost;
 
 						}
 
@@ -137,13 +153,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					} else {
 
-						// Sample the single scatter energy for specular at the given roughness
-						let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+						// the raw single scatter lobe scaled by the glass compensation boost rather
+						// than the opaque dielectric boost
 						let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-
-						// dielectric with the multiscatter comp
-						let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
-						let dielectricSpecular = specular * dielectricBoost;
+						let dielectricSpecular = specular * glassBoost;
 
 						// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 						let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
@@ -207,22 +220,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
 					let dielectricSpecular = specular * dielectricBoost;
 
-					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
+					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0.
+					// Schlick is used on both hit sides, matching Cycles - the opaque specular carries no
+					// TIR so the energy removed from the base always matches the energy paid back
 					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
-
-					// front faces use schlick so the KHR_materials_specular tinted f0 applies
-					// we handle internal hits to account for cases where a surface is only partially transmissive.
-					// TODO: see if we can clean this up and make these branches more consistent
-					var dielectricFr: vec3f;
-					if ( surf.frontFace ) {
-
-						dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
-
-					} else {
-
-						dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
-
-					}
+					let dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
 
 					var dielectricReflectance = surf.specularIntensity * dielectricFr;
 
@@ -247,19 +249,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let metallic = metallicSpecular * metallicReflectance;
 					let dielectric = dielectricSpecular * dielectricReflectance;
 
-					// the energy the specular interface takes from the layers below - we handle internal hits to account for
-					// cases where a surface is only partially transmissive.
-					// TODO: Determine how much impact just discarding under-side energy will have.
-					var fresnelEnergySS: f32;
-					if ( surf.frontFace ) {
-
-						fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
-
-					} else {
-
-						fresnelEnergySS = ${ dielectricFresnelFunc }( NdotV, surf.eta );
-
-					}
+					// the energy the specular interface takes from the layers below. The table is baked
+					// air-incident and the eval pays schlick on both sides, so the two always agree
+					let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
 
 					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
 					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
@@ -311,6 +303,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var wh: vec3f;
 
 				var isTransmissionLobe = false;
+				var isDead = false;
 
 				if ( lobeSample <= cdfClearcoat ) {
 
@@ -371,7 +364,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
 					let fresnelSample = ( lobeSample - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
-					if ( fresnelSample < F ) {
+					let doReflect = fresnelSample < F;
+					if ( doReflect ) {
 
 						wi = - normalize( reflect( wo, wh ) );
 
@@ -389,6 +383,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						wi = refract( - wo, wh, surf.eta );
 
 					}
+
+					// the facet choice must agree with the resulting hemisphere - reflection above,
+					// transmission below. Mismatched samples are dropped since their loss is
+					// refunded by the energy compensation tables
+					isDead = doReflect != ( wi.z > 0.0 );
 
 				} else if ( lobeSample <= cdfTotal ) {
 
@@ -476,8 +475,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				//
-
 				// construct the scatter context
 				var ctx: ${ bxdfContextStruct };
 				ctx.V = wo;
@@ -487,7 +484,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				ctx.VdotH = saturate( dot( wo, wh ) );
 
 				// evaluate the bsdf for the sampled direction
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissionLobe );
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissionLobe ) * select( 1.0, 0.0, isDead );
 				result.direction = normalize( surf.normalBasis * wi );
 
 				// a glass ray crossing below the surface enters or leaves the volume
