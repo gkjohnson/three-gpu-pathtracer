@@ -75,7 +75,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.hitProcessKernel.bvhData = bvhData;
 		this.rebuild();
-		this.reset();
 
 	}
 
@@ -85,6 +84,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.enqueueRaysKernel.needsUpdate = true;
 		this.rayIntersectionKernel.needsUpdate = true;
 		this.hitProcessKernel.needsUpdate = true;
+		this.reset();
 
 	}
 

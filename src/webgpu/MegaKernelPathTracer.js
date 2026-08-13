@@ -30,7 +30,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.kernel.bvhData = bvhData;
 		this.rebuild();
-		this.reset();
 
 	}
 
@@ -38,6 +37,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 		this.kernel.needsUpdate = true;
+		this.reset();
 
 	}
 
