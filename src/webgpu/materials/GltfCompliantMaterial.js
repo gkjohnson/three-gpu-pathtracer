@@ -12,56 +12,6 @@ import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresn
 
 const CLEARCOAT_IOR = float( 1.5 );
 
-// TRANSMISSION / THIN WALL ENERGY PRESERVATION NOTES - for review
-//
-// Improvements:
-// - The material is organized as one self-contained scoped block per lobe in Cycles-style
-//   cascade order ( clearcoat, sheen, glass, specular, diffuse ), each accumulating into a
-//   shared result with a running attenuation.
-// - The glass lobe owns BOTH hemispheres of the transmissive share: fresnel reflection above
-//   the horizon and refraction below. The opaque specular only carries the ( 1 - transmission )
-//   remainder, matching how the glTF dielectric factors exactly into a glass lobe plus an
-//   opaque specular-over-diffuse lobe.
-// - Sampling selects reflection vs refraction by the facet fresnel AFTER sampling the half
-//   vector, so TIR facets always reflect with a matching pdf and no fallback paths.
-//   [ Cycles bsdf_microfacet.h:849 ]
-// - Hemisphere rejection: the facet choice must agree with the resulting hemisphere -
-//   mismatched samples are dropped ( isDead ) and their loss is refunded by the energy
-//   tables, mirroring Cycles' LABEL_NONE rejection. The bake counts the same samples as
-//   lost, which is the core invariant: the renderer must lose exactly what the table refunds.
-// - Per-lobe geometric flips ( clearcoat / specular / diffuse ) only rescue rays above the
-//   shading hemisphere that fall below the geometry due to normal mapping ( wi.z > 0 guard ).
-//   Below-horizon samples stay dead since the tables refund them - flipping them double-pays.
-// - Thin wall transmission is a mirrored reflection at a remapped roughness
-//   ( thinWallTransmissionRoughness, Imageworks eq 3.4 ), compensated with the conductor
-//   table at that roughness. Both thin wall halves are reflection-shaped so each uses the
-//   conductor albedo.
-// - Volumetric glass is compensated by 1 / E_total where E_total is the baked total energy
-//   ( fresnel reflection + refraction ) of the interface, so the reflect / refract ratio is
-//   preserved. Entering ( eta = 1 / ior ) and exiting ( eta = ior, includes TIR ) are baked
-//   as separate ior-swept blocks, equivalent to Cycles' ggx_glass_E / ggx_glass_inv_E
-//   [ cycles_precompute.cpp ].
-// - The opaque specular uses schlick on BOTH hit sides and the air-incident fresnel-weighted
-//   dielectric table for its attenuation on both sides. No TIR on the opaque specular - the
-//   energy removed from the base always matches the energy paid back. This mirrors Cycles,
-//   which only bakes air-incident tables for the opaque closure ( ggx_gen_schlick_ior_s ).
-//   The bake weights air-incident reflection by schlick so the table matches what the eval
-//   pays.
-//
-// Known / accepted behavior:
-// - Low-transmission volume interiors converge slowly: energy is conserved in expectation
-//   ( verified with a CPU replica - per-hit E[ throughput multiplier ] = 1 at all angles,
-//   sphere-walk response -> 1 ) but the kill + refund scheme stores the refunded energy in
-//   very rare, very bright TIR-trapped paths, so furnace charts read slightly dark at
-//   practical sample counts with occasional fireflies. Same class of behavior as Cycles.
-//
-// Sources:
-// - Turquin, "Practical multiple scattering compensation for microfacet models"
-//   https://blog.selfshadow.com/publications/turquin/ms_comp_final.pdf
-// - Blender Cycles: kernel/closure/bsdf_microfacet.h ( facet fresnel split, hemisphere
-//   rejection ), app/cycles_precompute.cpp ( baked table set ), closure layering weights
-// - Imageworks, "Revisiting Physically Based Shading" s2017_pbs_imageworks_slides_v2.pdf
-//   ( thin wall transmission roughness remap, page 40 )
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	constructor( options = {} ) {
