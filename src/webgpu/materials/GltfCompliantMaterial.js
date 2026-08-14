@@ -183,36 +183,27 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// Cycles folds the film into the closure fresnel rather than adding a layer.
 				if ( NdotL > 0.0 ) {
 
+
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
+					// metalness
 					// Sample the single scatter energy for specular at the given roughness.
 					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
 					let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
 					let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 					let boostedSpecular = specular * dielectricBoost;
 
-					// the media on either side of the film - air outside and the volume interior
-					// as the base on front faces, swapped on back faces so TIR can take effect
-					let outsideIor = select( surf.ior, 1.0, surf.frontFace );
-					let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
-
-					// metallic half with the multiscatter comp, iridescence blending toward the
-					// film fresnel over the conductor response
+					// metallic half with the multiscatter comp
 					let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
 					let metallicSpecular = specular * metallicBoost;
-					var metallic = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
-					if ( surf.iridescence > 0.0 ) {
+					var metallicFresnel = ${ this.conductorFresnel }( ctx.VdotH, surf.color, vec3f( 1.0 ) );
 
-						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-						metallic = mix( metallic, metallicSpecular * metallicFilmFresnel, surf.iridescence );
+					//
 
-					}
-
-					result += attenuation * surf.metalness * metallic;
-
+					// dielectric
 					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
 
@@ -230,11 +221,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					// dielectric half, iridescence blending toward the film fresnel. Weighted by the
-					// opaque share - the transmissive portion's reflection belongs to the glass lobe
 					var specularFresnel = surf.specularIntensity * dielectricFr;
+
+					// iridescence
 					var filmFresnelMax = 0.0;
 					if ( surf.iridescence > 0.0 ) {
+
+						// the media on either side of the film - air outside and the volume interior
+						// as the base on front faces, swapped on back faces so TIR can take effect
+						let outsideIor = select( surf.ior, 1.0, surf.frontFace );
+						let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
+
+						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+						metallicFresnel = mix( metallicFresnel, metallicFilmFresnel, surf.iridescence );
 
 						let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
 						specularFresnel = mix( specularFresnel, dielectricFilmFresnel, surf.iridescence );
@@ -242,9 +241,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
+					let metallic = metallicSpecular * metallicFresnel;
 					let dielectricSpecular = boostedSpecular * specularFresnel;
-
-					result += attenuation * ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * dielectricSpecular;
 
 					// Attenuate the layers below by the energy taken by the specular interface - the
 					// fresnel-weighted single scatter energy with the multiscatter boost, or the film
@@ -264,6 +262,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
+					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectricSpecular, metallic, surf.metalness );
 					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
 
 				}
