@@ -254,10 +254,29 @@ export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Wraps a bilinear tap that is off the edge of a tile back to the texel the wrap mode calls for
+export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
+
+	fn wrapTexelIndex( i: i32, size: i32, wrapMode: i32 ) -> i32 {
+
+		if ( wrapMode == 0 ) {
+
+			// Repeat wraps to the opposite edge
+			return ( ( i % size ) + size ) % size;
+
+		}
+
+		// ClampToEdge and MirroredRepeat both fold back onto the edge texel
+		return clamp( i, 0, size - 1 );
+
+	}
+
+` );
+
 // Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
 // array node ( must be named "textureInfo" ). Called once per scene so a single
 // sampleTexel / textureInfo binding is shared by every caller in a pipeline.
-export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wgslTagFn/* wgsl */ `
+export const sampleTexelFunc = ( textureInfoUniform, atlas ) => wgslTagFn/* wgsl */ `
 
 	fn sampleTexel( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
@@ -279,8 +298,6 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wg
 			${ applyWrapFunc }( uv.y, wrapT ),
 		);
 
-		let pageDim = vec2f( textureDimensions( ${ atlas }, 0 ).xy );
-
 		if ( nearest == 1 ) {
 
 			let tileTexel = clamp( vec2i( wrappedUv * size ), vec2i( 0 ), vec2i( size ) - vec2i( 1 ) );
@@ -288,15 +305,31 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wg
 
 		} else {
 
-			var atlasUv = ( offset + wrappedUv * size ) / pageDim;
+			// The tile's neighbors in the atlas are unrelated textures, so hardware
+			// filtering cannot supply the taps that fall outside it. Filter here instead
+			// and resolve each tap through the wrap mode.
+			let texelPos = wrappedUv * size - vec2f( 0.5 );
+			let basePos = floor( texelPos );
+			let base = vec2i( basePos );
+			let f = texelPos - basePos;
 
-			// clamp to half a texel inside the tile so bilinear taps never bleed into
-			// neighboring atlas tiles
-			let minUv = ( offset + vec2f( 0.5 ) ) / pageDim;
-			let maxUv = ( offset + size - vec2f( 0.5 ) ) / pageDim;
-			atlasUv = clamp( atlasUv, minUv, maxUv );
+			let intSize = vec2i( size );
+			let x0 = ${ wrapTexelIndexFunc }( base.x,     intSize.x, wrapS );
+			let x1 = ${ wrapTexelIndexFunc }( base.x + 1, intSize.x, wrapS );
+			let y0 = ${ wrapTexelIndexFunc }( base.y,     intSize.y, wrapT );
+			let y1 = ${ wrapTexelIndexFunc }( base.y + 1, intSize.y, wrapT );
 
-			return textureSampleLevel( ${ atlas }, ${ atlasSampler }, atlasUv, page, lod );
+			let tile = vec2i( offset );
+			let c00 = textureLoad( ${ atlas }, tile + vec2i( x0, y0 ), page, 0 );
+			let c10 = textureLoad( ${ atlas }, tile + vec2i( x1, y0 ), page, 0 );
+			let c01 = textureLoad( ${ atlas }, tile + vec2i( x0, y1 ), page, 0 );
+			let c11 = textureLoad( ${ atlas }, tile + vec2i( x1, y1 ), page, 0 );
+
+			return mix(
+				mix( c00, c10, f.x ),
+				mix( c01, c11, f.x ),
+				f.y,
+			);
 
 		}
 

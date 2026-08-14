@@ -494,6 +494,8 @@ async function updateModel() {
 	camera.aspect = width / height;
 	camera.fov = verticalFoV;
 	camera.updateProjectionMatrix();
+
+	controls.target.set( 0, 0, 0 );
 	controls.update();
 
 	pathTracer.setScene( scene, camera );

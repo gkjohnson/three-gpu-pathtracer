@@ -4,7 +4,7 @@ import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayQueueAtomicStruct } from './structs.js';
-import { proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
 
@@ -70,14 +70,19 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				}
 
-				// get the ray index
-				let queueCapacity = arrayLength( &rayQueue.elements );
-				let index = atomicAdd( &rayQueue.end, 1 ) % queueCapacity;
 				${ rngInit }( indexUV.xy, seed + samples, 0 );
 
 				// write the ray data
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
+				var ray: ${ rayStruct };
+				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+					return;
+
+				}
+
+				let queueCapacity = arrayLength( &rayQueue.elements );
+				let index = atomicAdd( &rayQueue.end, 1 ) % queueCapacity;
 				ray.direction = normalize( ray.direction );
 
 				rayQueue.elements[ index ].origin = ray.origin;

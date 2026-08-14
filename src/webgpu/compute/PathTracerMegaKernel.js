@@ -103,7 +103,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
+				var ray: ${ rayStruct };
+				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+					return;
+
+				}
+
 				ray.direction = normalize( ray.direction );
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
