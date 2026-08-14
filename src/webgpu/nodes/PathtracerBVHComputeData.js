@@ -799,7 +799,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			intArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
+			intArray[ index ++ ] = Number( m.isMatteNodeMaterial || false ); // matte
 			floatArray[ index ++ ] = getField( m, 'sheen', 0.0 );
 			index ++; // vec3 alignment requirements
 

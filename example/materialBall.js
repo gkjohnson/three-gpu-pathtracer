@@ -3,9 +3,11 @@ import {
 	Scene,
 	WebGPURenderer,
 	Vector3,
+	RectAreaLightNode,
 } from 'three/webgpu';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, MatteNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
@@ -14,7 +16,7 @@ import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLigh
 const CREDITS = 'Material orb model courtesy of USD Working Group';
 
 let pathTracer, renderer, controls, material;
-let camera, scene, loader;
+let camera, scene, loader, surfaceMesh, matteMaterial;
 
 const params = {
 
@@ -44,6 +46,7 @@ const params = {
 		castShadow: true,
 	},
 
+	enable: true,
 	multipleImportanceSampling: true,
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
@@ -100,11 +103,16 @@ async function init() {
 
 	RectAreaLightUniformsLib.init();
 
+	// the rasterized view builds node materials for the area lights, which need the
+	// LTC tables provided through the node path
+	RectAreaLightTexturesLib.init();
+	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
+
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 0.02;
@@ -125,6 +133,10 @@ async function init() {
 	scene.add( orb.scene );
 	camera = orb.camera;
 	material = orb.material;
+
+	// the matte option swaps the surface over to a MatteNodeMaterial
+	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
+	matteMaterial = new MatteNodeMaterial();
 
 	// move camera to the scene
 	scene.attach( camera );
@@ -150,6 +162,7 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
@@ -231,8 +244,10 @@ function onParamsChange() {
 	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
-	material.matte = materialProperties.matte;
 	material.castShadow = materialProperties.castShadow;
+
+	// swap the surface between the physical material and the matte material
+	surfaceMesh.material = materialProperties.matte ? matteMaterial : material;
 
 	pathTracer.updateMaterials();
 
@@ -241,7 +256,16 @@ function onParamsChange() {
 function animate() {
 
 	requestAnimationFrame( animate );
-	pathTracer.renderSample();
-	loader.setSamples( pathTracer.samples );
+
+	if ( params.enable ) {
+
+		pathTracer.renderSample();
+		loader.setSamples( pathTracer.samples );
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }

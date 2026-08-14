@@ -1,4 +1,5 @@
 export * from './WebGPUPathTracer.js';
+export * from './materials/MatteNodeMaterial.js';
 export * from './BlurredEnvMapGenerator.js';
 export * from './constants.js';
 
