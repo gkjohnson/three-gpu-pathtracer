@@ -81,7 +81,8 @@ export const ggxLambdaFunc = wgslFn( /* wgsl */ `
 		let alphaT = alpha.x;
 		let alphaB = alpha.y;
 
-		let NdotV = max( V.z, MIN_INCIDENT_COS );
+		// abs v.z to support transmitted rays
+		let NdotV = max( abs( V.z ), MIN_INCIDENT_COS );
 		let cos2 = NdotV * NdotV;
 		let t = ( alphaT * alphaT * V.x * V.x + alphaB * alphaB * V.y * V.y ) / cos2;
 		let numerator = - 1.0 + sqrt( 1.0 + t );
@@ -166,6 +167,24 @@ export const ggxReflectionAdjustedPDFFunc = wgslFn( /* wgsl */ `
 		let G1 = ggxShadowMaskG1( V, alpha );
 
 		return D * G1 / ( 4 * NdotV );
+
+	}
+`, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );
+
+// ggxPDF, divided by the Jacobian of refraction operation
+// See equation (3) from [2] for pdf and (17) from [0] for Jacobian
+export const ggxRefractionAdjustedPDFFunc = wgslFn( /* wgsl */ `
+
+	fn ggxRefractionAdjustedPDF( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f, eta: f32 ) -> f32 {
+
+		let NdotV = max( V.z, MIN_INCIDENT_COS );
+		let HdotV = dot( V, H );
+		let HdotL = dot( L, H );
+		let D = ggxDistribution( H, alpha );
+		let G1 = ggxShadowMaskG1( V, alpha );
+
+		let denom = eta * HdotV + HdotL;
+		return D * G1 * abs( HdotV ) * abs( HdotL ) / ( NdotV * denom * denom );
 
 	}
 `, [ ggxDistributionFunc, ggxShadowMaskG1Func ] );

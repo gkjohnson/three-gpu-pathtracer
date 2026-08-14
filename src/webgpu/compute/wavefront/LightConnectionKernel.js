@@ -6,6 +6,7 @@ import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
 
@@ -18,6 +19,7 @@ export class LightConnectionKernel extends ComputeKernel {
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
+			filterGlossy: uniform( 1 ),
 
 			// rays
 			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
@@ -43,6 +45,7 @@ export class LightConnectionKernel extends ComputeKernel {
 			fn compute(
 				// settings
 				misEnabled: u32,
+				filterGlossy: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -81,9 +84,23 @@ export class LightConnectionKernel extends ComputeKernel {
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 				vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal );
+				// blur glossy surfaces after low-probability bounces, matching ProcessHits so the
+				// NEE evaluation sees the same surface record
+				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
+
+				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
+
+				// attenuate the light transmitted through the volume when exiting a backface so the
+				// direct-light contribution matches the megakernel's ordering
+				var throughputColor = input.throughputColor;
+				if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
+
+					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+
+				}
 
 				// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
 				let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
@@ -102,7 +119,7 @@ export class LightConnectionKernel extends ComputeKernel {
 						let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
 
 						// deposit the contribution in place; ProcessHits reads this augmented resultColor
-						hitQueue.elements[ hitIndex ].resultColor += vec4f( input.throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
+						hitQueue.elements[ hitIndex ].resultColor += vec4f( throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
 
 					}
 

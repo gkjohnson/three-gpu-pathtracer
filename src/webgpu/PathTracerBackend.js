@@ -54,6 +54,10 @@ export class PathTracerBackend {
 
 	}
 
+	setFilterGlossy( value ) {
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,

@@ -88,6 +88,9 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].bsdfPdf = 0.0;
 				rayQueue.elements[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
 				rayQueue.elements[ index ].seed = seed + samples;
+				rayQueue.elements[ index ].bsdfPdf = 0.0;
+				rayQueue.elements[ index ].transmissiveRay = 1u;
+				rayQueue.elements[ index ].minPdf = 1.0;
 
 				// write the active params
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
