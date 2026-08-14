@@ -209,21 +209,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
-
-					// front faces use schlick so the KHR_materials_specular tinted f0 applies
-					// we handle internal hits to account for cases where a surface is only partially transmissive.
-					// TODO: see if we can clean this up and make these branches more consistent
-					var dielectricFr: vec3f;
-					if ( surf.frontFace ) {
-
-						dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
-
-					} else {
-
-						dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
-
-					}
-
+					let dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
 					var dielectricReflectance = surf.specularIntensity * dielectricFr;
 
 					// iridescence
@@ -247,19 +233,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let metallic = metallicSpecular * metallicReflectance;
 					let dielectric = dielectricSpecular * dielectricReflectance;
 
-					// the energy the specular interface takes from the layers below - we handle internal hits to account for
-					// cases where a surface is only partially transmissive.
-					// TODO: Determine how much impact just discarding under-side energy will have.
-					var fresnelEnergySS: f32;
-					if ( surf.frontFace ) {
-
-						fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
-
-					} else {
-
-						fresnelEnergySS = ${ dielectricFresnelFunc }( NdotV, surf.eta );
-
-					}
+					// the energy the specular interface takes from the layers below
+					let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
 
 					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
 					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
