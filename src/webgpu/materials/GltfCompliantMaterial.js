@@ -268,44 +268,43 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var result: ${ scatterRecordStruct };
 				result.pdf = 0.0;
 
-				let normalBasis = surf.normalBasis;
-				let invBasis = surf.normalInvBasis;
-				let clearcoatBasis = surf.clearcoatBasis;
-				let invClearcoatBasis = surf.clearcoatInvBasis;
-
-				let wo = normalize( invBasis * worldWo );
-				let woClearcoat = normalize( invClearcoatBasis * worldWo );
+				let wo = normalize( surf.normalInvBasis * worldWo );
+				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
 				// lobe selection weights and cumulative bounds in cascade order:
-				// clearcoat, specular, transmission ( glass ), diffuse
+				// clearcoat, specular, transmission, diffuse
 				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 				let cdfClearcoat = weights.clearcoat;
 				let cdfSpecular = cdfClearcoat + weights.specular;
 				let cdfTransmission = cdfSpecular + weights.transmission;
 				let cdfTotal = cdfTransmission + weights.diffuse;
 
-				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdfTotal;
-
+				// random samples for lobes
+				let lobeSample = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdfTotal;
 				let directionUV = ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } );
+
 				var wi: vec3f;
-				var wiClearcoat: vec3f;
 				var wh: vec3f;
+
+				var wiClearcoat: vec3f;
 				var whClearcoat: vec3f;
+
 				var isGlass = false;
 
-				if ( r <= cdfClearcoat ) { // clearcoat
+				if ( lobeSample <= cdfClearcoat ) {
 
+					// clearcoat
 					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
 					wiClearcoat = - normalize( reflect( woClearcoat, whClearcoat ) );
 
-					wi = normalize( invBasis * clearcoatBasis * wiClearcoat );
-					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
+					wi = normalize( surf.normalInvBasis * surf.clearcoatBasis * wiClearcoat );
+					wh = normalize( surf.normalInvBasis * surf.clearcoatBasis * whClearcoat );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
 					// below it due to the shading normal. Rays below the shading hemisphere are
 					// left as is since their loss is refunded by the energy compensation tables
-					let faceNormal = normalize( invBasis * surf.faceNormal );
+					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
 					let geomDotDir = dot( wi, faceNormal );
 					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
@@ -313,10 +312,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
+					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
 
-				} else if ( r <= cdfSpecular ) { // specular
+				} else if ( lobeSample <= cdfSpecular ) {
 
+					// specular
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
@@ -328,7 +328,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// reflected rays must leave above the geometry surface - flip rays that land
 					// below it due to the shading normal. Rays below the shading hemisphere are
 					// left as is since their loss is refunded by the energy compensation tables
-					let faceNormal = normalize( invBasis * surf.faceNormal );
+					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
 					let geomDotDir = dot( wi, faceNormal );
 					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
@@ -336,11 +336,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
-					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
+					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
+					whClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wh );
 
-				} else if ( r <= cdfTransmission ) { // transmission ( glass )
+				} else if ( lobeSample <= cdfTransmission ) {
 
+					// transmission
 					isGlass = true;
 
 					// anisotropic roughness along tangent, bitangent
@@ -353,8 +354,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// fresnel to 1 so TIR facets always reflect with a matching pdf
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
-					let rFresnel = ( r - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
-					if ( rFresnel < F ) {
+					let fresnelSample = ( lobeSample - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
+					if ( fresnelSample < F ) {
 
 						wi = - normalize( reflect( wo, wh ) );
 
@@ -373,18 +374,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
-					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
+					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
+					whClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wh );
 
-				} else if ( r <= cdfTotal ) { // diffuse
+				} else if ( lobeSample <= cdfTotal ) {
 
+					// diffuse
 					wi = ${ diffuseDirectionFunc }( wo, directionUV );
 					wh = normalize( wi + wo );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
 					// below it due to the shading normal. Rays below the shading hemisphere are
 					// left as is since their loss is refunded by the energy compensation tables
-					let faceNormal = normalize( invBasis * surf.faceNormal );
+					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
 					let geomDotDir = dot( wi, faceNormal );
 					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
@@ -392,21 +394,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
-					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
+					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
+					whClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wh );
 
 				}
-
-				var ctx: ${ bxdfContextStruct };
-				ctx.V = wo;
-				ctx.L = wi;
-				ctx.H = wh;
-
-				ctx.VdotH = saturate( dot( wo, wh ) );
-
-				ctx.Vc = woClearcoat;
-				ctx.Lc = wiClearcoat;
-				ctx.Hc = whClearcoat;
 
 				// pdf mixture - every lobe that can produce the sampled direction contributes its
 				// share, in the same cascade order as the eval blocks
@@ -467,12 +458,25 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isGlass );
-				result.direction = normalize( normalBasis * wi );
+				//
 
-				// the glass lobe accepts rays on either side of the geometry surface - the ray is
-				// labeled transmitted when it crosses below so it is treated as entering or
-				// leaving the volume
+				// construct the scatter context
+				var ctx: ${ bxdfContextStruct };
+				ctx.V = wo;
+				ctx.L = wi;
+				ctx.H = wh;
+
+				ctx.VdotH = saturate( dot( wo, wh ) );
+
+				ctx.Vc = woClearcoat;
+				ctx.Lc = wiClearcoat;
+				ctx.Hc = whClearcoat;
+
+				// evaluate the bsdf for the sampled direction
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isGlass );
+				result.direction = normalize( surf.normalBasis * wi );
+
+				// a glass ray crossing below the surface enters or leaves the volume
 				result.isTransmissive = isGlass && dot( result.direction, surf.faceNormal ) < 0.0;
 
 				return result;
