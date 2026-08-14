@@ -225,7 +225,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// TIR so the energy removed from the base always matches the energy paid back
 					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
 					let dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
-
 					var dielectricReflectance = surf.specularIntensity * dielectricFr;
 
 					// iridescence
@@ -249,8 +248,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let metallic = metallicSpecular * metallicReflectance;
 					let dielectric = dielectricSpecular * dielectricReflectance;
 
-					// the energy the specular interface takes from the layers below. The table is baked
-					// air-incident and the eval pays schlick on both sides, so the two always agree
+					// the energy the specular interface takes from the layers below
 					let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
 
 					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
