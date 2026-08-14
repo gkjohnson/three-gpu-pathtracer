@@ -73,13 +73,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let Hc = normalize( toClearcoatMat * ctx.H );
 					let NdotVc = Vc.z;
 
-					// reuse the same pattern for energy conservation used in the dielectric layer
 					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+
+					// reuse the same pattern for energy conservation used in the dielectric layer
 					let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
 					let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
-					let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
+
 					let clearcoatSpecular = ${ this.specularBrdf }( Vc, Lc, Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
 					let clearcoatFresnel = ${ schlickFresnelFunc }( abs( dot( Vc, Hc ) ), ${ iorToF0Func }( 1.5 ) );
+
+					// retrieve specular energy reflected by this layer
+					let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
 
 					result += surf.clearcoat * clearcoatFresnel * clearcoatSpecular;
 					attenuation *= 1.0 - surf.clearcoat * clearcoatFresnelEnergySS;
@@ -95,10 +99,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				}
 
 				// transmission
-				// the full transmissive dielectric interface: fresnel reflection above the horizon
-				// and refraction below it, so the specular lobe only serves the opaque remainder.
-				// The refracted half is not attenuated by the layers above, matching the WebGL
-				// implementation.
+				// handles specular reflection and transmission
 				if ( surf.transmission > 0.0 ) {
 
 					// anisotropic roughness along tangent, bitangent
@@ -178,9 +179,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				}
 
 				// specular
-				// the metallic and dielectric halves share the ggx lobe with their own fresnel.
-				// Iridescence swaps each half's fresnel for the thin film response, matching how
-				// Cycles folds the film into the closure fresnel rather than adding a layer.
+				// metallic + dielectric + iridescence
 				if ( NdotL > 0.0 ) {
 
 					// anisotropic roughness along tangent, bitangent
@@ -304,7 +303,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var wi: vec3f;
 				var wh: vec3f;
 
-				var isGlass = false;
+				var isTransmissionLobe = false;
 
 				if ( lobeSample <= cdfClearcoat ) {
 
@@ -352,7 +351,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( lobeSample <= cdfTransmission ) {
 
 					// transmission
-					isGlass = true;
+					isTransmissionLobe = true;
 
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
@@ -481,11 +480,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				ctx.VdotH = saturate( dot( wo, wh ) );
 
 				// evaluate the bsdf for the sampled direction
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isGlass );
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissionLobe );
 				result.direction = normalize( surf.normalBasis * wi );
 
 				// a glass ray crossing below the surface enters or leaves the volume
-				result.isTransmissive = isGlass && dot( result.direction, surf.faceNormal ) < 0.0;
+				result.isTransmissive = isTransmissionLobe && dot( result.direction, surf.faceNormal ) < 0.0;
 
 				return result;
 
