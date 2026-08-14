@@ -50,8 +50,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
-			// sheen, transmission ( glass ), specular, diffuse - each accumulating into a shared
-			// result and guarding its own hemisphere.
+			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
+			// guarding its own hemisphere.
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
 				let NdotV = ctx.V.z;
@@ -161,8 +161,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						}
 
 						// iridescence blending toward the film fresnel
-						let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-						let glassSpecular = boostedSpecular * mix( surf.specularIntensity * dielectricFr, dielectricFilmFresnel, surf.iridescence );
+						var glassFresnel = surf.specularIntensity * dielectricFr;
+						if ( surf.iridescence > 0.0 ) {
+
+							let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+							glassFresnel = mix( glassFresnel, dielectricFilmFresnel, surf.iridescence );
+
+						}
+
+						let glassSpecular = boostedSpecular * glassFresnel;
 
 						result += attenuation * ( 1.0 - surf.metalness ) * surf.transmission * glassSpecular;
 
@@ -196,9 +203,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// film fresnel over the conductor response
 					let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
 					let metallicSpecular = specular * metallicBoost;
-					let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-					let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
-					let metallic = mix( metallicBase, metallicSpecular * metallicFilmFresnel, surf.iridescence );
+					var metallic = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
+					if ( surf.iridescence > 0.0 ) {
+
+						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+						metallic = mix( metallic, metallicSpecular * metallicFilmFresnel, surf.iridescence );
+
+					}
 
 					result += attenuation * surf.metalness * metallic;
 
@@ -221,8 +232,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// dielectric half, iridescence blending toward the film fresnel. Weighted by the
 					// opaque share - the transmissive portion's reflection belongs to the glass lobe
-					let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-					let dielectricSpecular = boostedSpecular * mix( surf.specularIntensity * dielectricFr, dielectricFilmFresnel, surf.iridescence );
+					var specularFresnel = surf.specularIntensity * dielectricFr;
+					var filmFresnelMax = 0.0;
+					if ( surf.iridescence > 0.0 ) {
+
+						let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+						specularFresnel = mix( specularFresnel, dielectricFilmFresnel, surf.iridescence );
+						filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
+
+					}
+
+					let dielectricSpecular = boostedSpecular * specularFresnel;
 
 					result += attenuation * ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * dielectricSpecular;
 
@@ -244,7 +264,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					let filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
 					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
 
 				}
