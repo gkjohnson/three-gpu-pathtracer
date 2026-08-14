@@ -4,6 +4,7 @@ import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
 import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
+import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
@@ -153,9 +154,8 @@ export class LightConnectionKernel extends ComputeKernel {
 						let evalRec = ${ bsdfEvalPdfFn }( input.view, lightRec.direction, surface );
 						if ( evalRec.pdf > 0.0 ) {
 
-							// TODO: is an offset needed here?
 							var shadowRay: ${ rayStruct };
-							shadowRay.origin = vertexData.position.xyz;
+							shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
 							shadowRay.direction = lightRec.direction;
 
 							// opaque occlusion up to the light distance ( transmissive shadows not yet handled )

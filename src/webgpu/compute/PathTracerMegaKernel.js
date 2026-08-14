@@ -4,7 +4,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
-import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
@@ -111,7 +111,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-				var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
+				var ray: ${ rayStruct };
+				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+					return;
+
+				}
+
 				ray.direction = normalize( ray.direction );
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
@@ -226,9 +232,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									let evalRec = ${ bsdfEvalPdfFn }( view, lightRec.direction, surface );
 									if ( evalRec.pdf > 0.0 ) {
 
-										// TODO: is an offset needed here?
 										var shadowRay: ${ rayStruct };
-										shadowRay.origin = vertexData.position.xyz;
+										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hitResult.normal );
 										shadowRay.direction = lightRec.direction;
 
 										// opaque occlusion up to the light distance ( transmissive shadows not yet handled )
@@ -289,10 +294,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// TODO: Investigate offsetting this position to not self-intersect multiple times
-						// Adding + scatterRec.direction * 1e-1 seems to fix almost all the fireflies
-						// However that seems like a very large distance to offset
-						ray.origin = vertexData.position.xyz;
+						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
 
 					} else {

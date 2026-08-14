@@ -490,6 +490,17 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ constants, schlickFresnelFunc, surfaceRecordStruct ] );
 
+// Lambertian diffuse BRDF with cosine distribution
+export const lambertBrdfFunc = wgslFn( /* wgsl */ `
+
+	fn lambertBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
+
+		return surf.color / PI;
+
+	}
+
+`, [ constants, surfaceRecordStruct ] );
+
 export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn specularBrdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f ) -> vec3f {
@@ -730,20 +741,15 @@ export const iridescentConductorLayerFunc = wgslFn( /* wgsl */ `
 
 `, [ iridescentFresnelFunc ] );
 
-export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
+export const conductorFresnelFunc = wgslFn( /* wgsl */ `
 
-	fn conductorFresnel( NdotV: f32, VdotH: f32, f0: vec3f, bsdf: vec3f, alpha: f32 ) -> vec3f {
+	fn conductorFresnel( VdotH: f32, f0: vec3f, specular: vec3f ) -> vec3f {
 
-	  let ss = bsdf * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
-
-		let uv = vec2( NdotV, sqrt( alpha ) );
-		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5 );
-
-		return ss * ( 1.0 + f0 * ( 1.0 - energySs ) / energySs );
+		return specular * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
 
 	}
 
-`, [ schlickFresnelVecFunc, turquinTexture ] );
+`, [ schlickFresnelVecFunc ] );
 
 export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
@@ -762,8 +768,11 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 	fn albedo(
-		texture: texture_storage_2d<r16float, write>,
+		ior: f32,
+		includeFresnel: bool,
+		outputTarget: texture_storage_3d<r16float, write>,
 		globalId: vec3u,
+		layer: u32,
 	) -> void {
 
 		// sample the brdf directions in a grid pattern
@@ -772,7 +781,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 		// TODO: this sampling means that energy at 0.0 & 1.0 roughness (and 0 and 90deg cos) are never
 		// written to the texture due to the half texel inset, resulting in small, though possibly noticeable,
 		// error in common cases.
-		let dimensions = textureDimensions( texture ).xy;
+		let dimensions = textureDimensions( outputTarget ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
 
 		let cosThetaO = uv.x;
@@ -802,6 +811,14 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 				let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
 				let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
+				var f = 1.0;
+				if ( includeFresnel ) {
+
+					// use the exact dielectric fresnel so the table agrees with the fresnel used
+					// for lobe sampling
+					f = ${ dielectricFresnelFunc }( dot( wo, wh ), 1.0 / ior );
+
+				}
 
 				var weight = 0.0;
 				if ( pdf != 0.0 ) {
@@ -810,7 +827,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 				}
 
-				result += specular.x * NdotL * weight;
+				result += specular.x * NdotL * weight * f;
 
 			}
 
@@ -818,7 +835,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 		result /= f32( GRID_SIZE * GRID_SIZE );
 
-		textureStore( texture, globalId.xy, vec4( result ) );
+		textureStore( outputTarget, vec3( globalId.xy, layer ), vec4( result ) );
 
 	}
 

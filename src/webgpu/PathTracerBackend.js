@@ -79,6 +79,13 @@ export class PathTracerBackend {
 
 	}
 
+	// Rebuild the render task after a shader-generating function changes.
+	rebuild() {
+
+		this._renderTask = null;
+
+	}
+
 	setSize( w, h ) {
 
 		w = Math.ceil( w );
