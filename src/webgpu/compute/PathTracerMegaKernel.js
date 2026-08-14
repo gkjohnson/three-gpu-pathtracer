@@ -2,7 +2,7 @@ import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
-import { sampleEnvironmentFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
+import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
@@ -183,19 +183,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// track the smallest pdf seen along the path for the glossy filter
 						minPdf = min( minPdf, scatterRec.pdf );
 
-						// russian roulette early out
+						// russian roulette early out:
+						// Matches Cycles path_state_continuation_probability in integrator/path_state.h
 						if ( bounce >= 3u ) {
 
 							let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-							let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
-							if ( ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+							let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+							if ( rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
 
 								break;
 
 							}
 
-							// perform sample clamping here to avoid bright pixels
-							throughputColor *= min( 1.0 / rrProb, 20.0 );
+							throughputColor /= rrProb;
 
 						}
 

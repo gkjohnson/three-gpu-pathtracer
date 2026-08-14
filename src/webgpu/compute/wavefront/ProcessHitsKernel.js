@@ -3,7 +3,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
@@ -106,15 +106,18 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
-				// russian roulette early out
+				// russian roulette early out:
+				// Matches Cycles path_state_continuation_probability in integrator/path_state.h
 				if ( ! isTerminated && input.currentBounce >= 3u ) {
 
 					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-					let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
-					isTerminated = ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+					let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+					isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+					if ( ! isTerminated ) {
 
-					// perform sample clamping here to avoid bright pixels
-					throughputColor *= min( 1.0 / rrProb, 20.0 );
+						throughputColor /= rrProb;
+
+					}
 
 				}
 

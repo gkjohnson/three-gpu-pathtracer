@@ -138,16 +138,6 @@ export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 
 `, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
 
-export const luminanceFn = wgslFn( /* wgsl */ `
-
-	fn luminance( color: vec3f ) -> f32 {
-
-		return dot( color, vec3f( 0.2126, 0.7152, 0.0722 ) );
-
-	}
-
-` );
-
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 
 	fn weightedAlphaBlend( prevColor: vec4f, newColor: vec4f, weight: f32 ) -> vec4f {
