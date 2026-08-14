@@ -12,8 +12,8 @@ const randomOptions = {
 
 const options = {
 	enable: true,
-	useMegakernel: true,
-	random: randomOptions.SOBOL,
+	useMegakernel: false,
+	random: randomOptions.BLUE_DITHER,
 };
 
 // init scene, renderer, camera, controls, etc
