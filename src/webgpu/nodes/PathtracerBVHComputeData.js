@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, sampler, texture, uniformArray, uint } from 'three/tsl';
+import { storage, float, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -171,7 +171,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' );
 
 		// build the single sampleTexel bound to this instance's textureInfo node
-		const sampleTexel = sampleTexelFunc( textureInfo, texture( textures ), sampler( textures ) );
+		const sampleTexel = sampleTexelFunc( textureInfo, texture( textures ) );
 
 		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
 		// the transparency raycast resolve to one textureInfo binding per pipeline
@@ -259,7 +259,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ storage.attributes }[ i1 ].position.xyz;
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
-						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 1e-5 );
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
@@ -395,6 +395,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				fn resetRayScalar( objectIndex: u32 ) -> void {
 
 					${ scratchRayScalar } = 1.0;
+					${ baseOpacityScalar } = 1.0;
 
 				}
 			`,
@@ -756,9 +757,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
 			intArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
 
-			// isThinFilm
-			const isThinFilm = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			intArray[ index ++ ] = Number( isThinFilm );
+			// isThinWall
+			const isThinWall = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
+			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
 			// attenuation - offset 44
@@ -785,7 +786,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = m.alphaTest;
 
 			// side & matte - offset 52
-			if ( ! isThinFilm && m.transmission > 0.0 ) {
+			if ( ! isThinWall && m.transmission > 0.0 ) {
 
 				floatArray[ index ++ ] = 0;
 

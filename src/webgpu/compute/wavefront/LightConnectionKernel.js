@@ -4,9 +4,11 @@ import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
 import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
+import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
+import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
 
@@ -20,6 +22,7 @@ export class LightConnectionKernel extends ComputeKernel {
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
+			filterGlossy: uniform( 1 ),
 
 			// rays
 			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
@@ -49,6 +52,7 @@ export class LightConnectionKernel extends ComputeKernel {
 			fn compute(
 				// settings
 				misEnabled: u32,
+				filterGlossy: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -99,9 +103,23 @@ export class LightConnectionKernel extends ComputeKernel {
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
 				vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 				vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
-				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal );
+				// blur glossy surfaces after low-probability bounces, matching ProcessHits so the
+				// NEE evaluation sees the same surface record
+				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
+
+				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
+
+				// attenuate the light transmitted through the volume when exiting a backface so the
+				// direct-light contribution matches the megakernel's ordering
+				var throughputColor = input.throughputColor;
+				if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
+
+					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+
+				}
 
 				// next event estimation: draw one sample among the analytic lights and the
 				// environment, MIS-weighted against the bsdf pdf.
@@ -136,9 +154,8 @@ export class LightConnectionKernel extends ComputeKernel {
 						let evalRec = ${ bsdfEvalPdfFn }( input.view, lightRec.direction, surface );
 						if ( evalRec.pdf > 0.0 ) {
 
-							// TODO: is an offset needed here?
 							var shadowRay: ${ rayStruct };
-							shadowRay.origin = vertexData.position.xyz;
+							shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
 							shadowRay.direction = lightRec.direction;
 
 							// opaque occlusion up to the light distance ( transmissive shadows not yet handled )
@@ -152,7 +169,7 @@ export class LightConnectionKernel extends ComputeKernel {
 								let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 
 								// deposit the contribution in place; ProcessHits reads this augmented resultColor
-								hitQueue.elements[ hitIndex ].resultColor += vec4f( input.throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
+								hitQueue.elements[ hitIndex ].resultColor += vec4f( throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
 
 							}
 

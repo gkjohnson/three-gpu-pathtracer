@@ -3,6 +3,7 @@ import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
+import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 export class MegaKernelPathTracer extends PathTracerBackend {
@@ -37,6 +38,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	setBVHData( bvhData ) {
 
 		this.kernel.bvhData = bvhData;
+		this.rebuild();
+
+	}
+
+	rebuild() {
+
+		super.rebuild();
 		this.kernel.needsUpdate = true;
 		this.reset();
 
@@ -54,6 +62,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.kernel.material = material.getData();
 		this.kernel.needsUpdate = true;
+		this.reset();
+
+	}
+
+	setFilterGlossy( value ) {
+
+		// the kernel takes the inverted threshold, mirroring Cycles
+		this.kernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
 		this.reset();
 
 	}
@@ -107,6 +123,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		backgroundInfo.rotationNode.value.copy( rotationMatrix );
 		backgroundInfo.intensity = backgroundIntensity;
 		backgroundInfo.blur = backgroundBlurriness;
+
+	}
+
+	setTransmissiveBackground( value ) {
+
+		this.kernel.transmissiveBackground = value;
+		this.reset();
 
 	}
 

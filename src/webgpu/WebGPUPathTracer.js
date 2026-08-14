@@ -14,6 +14,7 @@ import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights, getIesTextures } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -131,6 +132,56 @@ export class WebGPUPathTracer {
 
 	}
 
+	get transmissiveBackground() {
+
+		return this._transmissiveBackground;
+
+	}
+
+	set transmissiveBackground( v ) {
+
+		if ( this._transmissiveBackground !== v ) {
+
+			this._transmissiveBackground = v;
+			this._pathTracer.setTransmissiveBackground( v );
+
+		}
+
+	}
+
+	get filterGlossyFactor() {
+
+		return this._filterGlossyFactor;
+
+	}
+
+	set filterGlossyFactor( v ) {
+
+		if ( this._filterGlossyFactor !== v ) {
+
+			this._filterGlossyFactor = v;
+			this._pathTracer.setFilterGlossy( v );
+
+		}
+
+	}
+
+	get multipleImportanceSampling() {
+
+		return this._multipleImportanceSampling;
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		if ( this._multipleImportanceSampling !== v ) {
+
+			this.setMultipleImportanceSampling( v );
+
+		}
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -169,6 +220,8 @@ export class WebGPUPathTracer {
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
+		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
+		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 		this.updateLights();
@@ -194,6 +247,8 @@ export class WebGPUPathTracer {
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
+		this._pathTracer = new WaveFrontPathTracer( renderer );
+
 		// options
 		this.minSamples = 1;
 		this.renderDelay = 500;
@@ -207,15 +262,12 @@ export class WebGPUPathTracer {
 		this.stableNoise = false;
 		this.pause = false;
 
-		// WebGLPathTracer compatibility stubs (see getters above)
-		// TOOD: implement these correctly
+		this.filterGlossyFactor = 1;
 		this.multipleImportanceSampling = true;
-		this.transmissiveBounces = 5;
-		this.filterGlossyFactor = 0;
+		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
 		this.random = null;
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		this.iesProfiles = new RenderTarget2DArray( 360, 180, { type: HalfFloatType } );
 
@@ -234,7 +286,7 @@ export class WebGPUPathTracer {
 
 	setMultipleImportanceSampling( value ) {
 
-		this.multipleImportanceSampling = value;
+		this._multipleImportanceSampling = value;
 		this._pathTracer.setMultipleImportanceSampling( value );
 
 	}
@@ -289,6 +341,13 @@ export class WebGPUPathTracer {
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
 		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
+
+		if ( this._bvhData ) {
+
+			this._bvhData.dispose();
+			this._bvhData.textureAtlas.dispose();
+
+		}
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -348,13 +407,15 @@ export class WebGPUPathTracer {
 					}
 
 					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+					return false;
 
 				},
 				fn: wgslTagFn/* wgsl */`
-					fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						return ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						return true;
 
 					}
 				`,
@@ -363,7 +424,9 @@ export class WebGPUPathTracer {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this.updateCamera();
+		this._cameraRayFnHandle.update();
+		this._pathTracer.rebuild();
+		this.reset();
 
 	}
 
@@ -376,9 +439,23 @@ export class WebGPUPathTracer {
 
 	}
 
+	updateTransforms() {
+
+		this.scene.updateMatrixWorld( true );
+		this._bvhData.updateTransforms();
+		this.reset();
+
+	}
+
 	updateCamera() {
 
-		this._cameraRayFnHandle.update();
+		const { _cameraRayFnHandle, _pathTracer } = this;
+		if ( _cameraRayFnHandle.update() ) {
+
+			_pathTracer.rebuild();
+
+		}
+
 		this.reset();
 
 	}
@@ -684,6 +761,10 @@ export class WebGPUPathTracer {
 	dispose() {
 
 		this._pathTracer.dispose();
+		this._bvhData.dispose();
+		this._bvhData.textureAtlas.dispose();
+		this._environmentCache.dispose();
+		this._backgroundCache.dispose();
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
 		this.iesProfiles.dispose();

@@ -54,6 +54,10 @@ export class PathTracerBackend {
 
 	}
 
+	setFilterGlossy( value ) {
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,
@@ -72,6 +76,13 @@ export class PathTracerBackend {
 		backgroundRotation,
 		backgroundBlurriness,
 	) {
+
+	}
+
+	// Rebuild the render task after a shader-generating function changes.
+	rebuild() {
+
+		this._renderTask = null;
 
 	}
 
