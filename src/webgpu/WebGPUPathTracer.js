@@ -13,6 +13,7 @@ import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
+import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -241,7 +242,7 @@ export class WebGPUPathTracer {
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'tangent' ];
-		this.stableNoise = false;
+		this.stableNoise = true;
 		this.pause = false;
 
 		this.filterGlossyFactor = 1;
@@ -251,7 +252,7 @@ export class WebGPUPathTracer {
 		this.multipleImportanceSampling = true;
 		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
-		this.random = null;
+		this.random = RANDOM_BLUE_DITHER;
 		this.material = new GltfCompliantMaterial();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
