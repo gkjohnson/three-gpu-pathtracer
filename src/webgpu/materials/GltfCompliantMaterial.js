@@ -137,10 +137,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					} else {
 
-						// the glass interface reflection, mirroring the dielectric half of the specular lobe
+						// Sample the single scatter energy for specular at the given roughness
 						let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+						let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+
+						// dielectric with the multiscatter comp
 						let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
-						let dielectricSpecular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) * dielectricBoost;
+						let dielectricSpecular = specular * dielectricBoost;
 
 						// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 						let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
@@ -191,10 +194,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// a thin wall has no interior volume so air is the incident medium on both
-					// sides - only a true volume distinguishes entering from exiting hits
-					let airIncident = surf.thinWall || surf.frontFace;
-
 					// Sample the single scatter energy for specular at the given roughness
 					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
 					let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
@@ -211,11 +210,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
 
-					// air-incident hits use schlick so the tinted f0 applies - interior hits use
-					// the exact fresnel since schlick cannot represent TIR
+					// front faces use schlick so the KHR_materials_specular tinted f0 applies
+					// we handle internal hits to account for cases where a surface is only partially transmissive.
 					// TODO: see if we can clean this up and make these branches more consistent
 					var dielectricFr: vec3f;
-					if ( airIncident ) {
+					if ( surf.frontFace ) {
 
 						dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
 
@@ -232,9 +231,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					if ( surf.iridescence > 0.0 ) {
 
 						// the media on either side of the film - air outside and the volume interior
-						// as the base, swapped on interior hits so TIR can take effect
-						let outsideIor = select( surf.ior, 1.0, airIncident );
-						let filmBaseIor = select( 1.0, surf.ior, airIncident );
+						// as the base on front faces, swapped on back faces so TIR can take effect
+						let outsideIor = select( surf.ior, 1.0, surf.frontFace );
+						let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
 
 						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
 						metallicReflectance = mix( metallicReflectance, metallicFilmFresnel, surf.iridescence );
@@ -252,7 +251,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// cases where a surface is only partially transmissive.
 					// TODO: Determine how much impact just discarding under-side energy will have.
 					var fresnelEnergySS: f32;
-					if ( airIncident ) {
+					if ( surf.frontFace ) {
 
 						fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
 
