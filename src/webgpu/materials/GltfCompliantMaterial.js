@@ -52,6 +52,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
 			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
 			// guarding its own hemisphere.
+			//
+			// TODO: energy only cascades downward through front faces, so the layers are always traversed
+			// outside-in and cannot reflect energy back into the glass from below.
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
 				let NdotV = ctx.V.z;
@@ -107,16 +110,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
+					// a thin wall has no interior volume so air is the incident medium on both
+					// sides - only a true volume distinguishes entering from exiting hits
+					let airIncident = surf.thinWall || surf.frontFace;
+
 					if ( NdotL < 0.0 ) {
 
-						// TODO: transmitted light also crosses the thin film so it should be weighted by
-						// the film-aware fresnel complement (1 - filmF) rather than the plain dielectric
-						// fresnel, tinting transmission with the film's complementary color. Deferred until
-						// the material is generalized into a layer stack that owns the fresnel per interface.
+						// TODO: transmitted light also crosses the iridescent thin film so it should be weighted by
+						// the iridescence-aware fresnel complement rather than the plain dielectric fresnel
 						var refraction: vec3f;
 						if ( surf.thinWall ) {
 
-							// evaluate the flipped reflection
+							// model the double refraction as a reflection flipped through the surface
 							let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
 							let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
 							let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
@@ -128,30 +133,23 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						}
 
+						// the refracted half is not attenuated by the layers above
 						result += ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
 
 					} else {
 
-						// fresnel reflection of the glass interface, mirroring the dielectric half
-						// of the specular lobe below
-						// Sample the single scatter energy for specular at the given roughness.
+						// the glass interface reflection, mirroring the dielectric half of the specular lobe
 						let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-						let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
-						let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-						let boostedSpecular = specular * dielectricBoost;
-
-						// the media on either side of the film - air outside and the volume interior
-						// as the base on front faces, swapped on back faces so TIR can take effect
-						let outsideIor = select( surf.ior, 1.0, surf.frontFace );
-						let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
+						let glassBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
+						let glassSpecular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha ) * glassBoost;
 
 						// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 						let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
 
-						// front faces use schlick so the KHR_materials_specular tinted f0 applies - interior
-						// hits use the exact dielectric fresnel since schlick cannot represent TIR
+						// air-incident hits use schlick so the tinted f0 applies - interior hits use
+						// the exact fresnel since schlick cannot represent TIR
 						var dielectricFr: vec3f;
-						if ( surf.frontFace ) {
+						if ( airIncident ) {
 
 							dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
 
@@ -161,18 +159,24 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						}
 
-						// iridescence blending toward the film fresnel
-						var glassFresnel = surf.specularIntensity * dielectricFr;
+						var glassReflectance = surf.specularIntensity * dielectricFr;
+
+						// iridescence
 						if ( surf.iridescence > 0.0 ) {
 
+							// the media on either side of the film - air outside and the volume interior
+							// as the base, swapped on interior hits so TIR can take effect
+							let outsideIor = select( surf.ior, 1.0, airIncident );
+							let filmBaseIor = select( 1.0, surf.ior, airIncident );
+
 							let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-							glassFresnel = mix( glassFresnel, dielectricFilmFresnel, surf.iridescence );
+							glassReflectance = mix( glassReflectance, dielectricFilmFresnel, surf.iridescence );
 
 						}
 
-						let glassSpecular = boostedSpecular * glassFresnel;
+						let reflection = glassSpecular * glassReflectance;
 
-						result += attenuation * ( 1.0 - surf.metalness ) * surf.transmission * glassSpecular;
+						result += attenuation * ( 1.0 - surf.metalness ) * surf.transmission * reflection;
 
 					}
 
