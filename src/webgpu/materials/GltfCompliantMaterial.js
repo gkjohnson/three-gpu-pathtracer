@@ -183,32 +183,29 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// Cycles folds the film into the closure fresnel rather than adding a layer.
 				if ( NdotL > 0.0 ) {
 
-
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// metalness
-					// Sample the single scatter energy for specular at the given roughness.
+					// Sample the single scatter energy for specular at the given roughness
 					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-					let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
 					let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-					let boostedSpecular = specular * dielectricBoost;
 
-					// metallic half with the multiscatter comp
+					// metallic with the multiscatter comp
 					let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
 					let metallicSpecular = specular * metallicBoost;
-					var metallicFresnel = ${ this.conductorFresnel }( ctx.VdotH, surf.color, vec3f( 1.0 ) );
+					var metallicReflectance = ${ this.conductorFresnel }( ctx.VdotH, surf.color, vec3f( 1.0 ) );
 
-					//
+					// dielectric with the multiscatter comp
+					let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
+					let dielectricSpecular = specular * dielectricBoost;
 
-					// dielectric
 					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
 					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
 
-					// front faces use schlick so the KHR_materials_specular tinted f0 applies - interior
-					// hits use the exact dielectric fresnel since schlick cannot represent TIR
+					// front faces use schlick so the KHR_materials_specular tinted f0 applies
+					// we handle internal hits to account for cases where a surface is only partially transmissive.
 					// TODO: see if we can clean this up and make these branches more consistent
 					var dielectricFr: vec3f;
 					if ( surf.frontFace ) {
@@ -221,7 +218,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					var specularFresnel = surf.specularIntensity * dielectricFr;
+					var dielectricReflectance = surf.specularIntensity * dielectricFr;
 
 					// iridescence
 					var filmFresnelMax = 0.0;
@@ -233,24 +230,20 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
 
 						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-						metallicFresnel = mix( metallicFresnel, metallicFilmFresnel, surf.iridescence );
+						metallicReflectance = mix( metallicReflectance, metallicFilmFresnel, surf.iridescence );
 
 						let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-						specularFresnel = mix( specularFresnel, dielectricFilmFresnel, surf.iridescence );
+						dielectricReflectance = mix( dielectricReflectance, dielectricFilmFresnel, surf.iridescence );
 						filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
 
 					}
 
-					let metallic = metallicSpecular * metallicFresnel;
-					let dielectricSpecular = boostedSpecular * specularFresnel;
+					let metallic = metallicSpecular * metallicReflectance;
+					let dielectric = dielectricSpecular * dielectricReflectance;
 
-					// Attenuate the layers below by the energy taken by the specular interface - the
-					// fresnel-weighted single scatter energy with the multiscatter boost, or the film
-					// fresnel when iridescent, using its strongest channel so the base is not tinted
-					// with the film's inverse color. Only the dielectric half passes light downward.
-					// The table is baked for the air-incident case so volume-incident hits use the
-					// exact fresnel instead - total internal reflection then fades the base out at
-					// grazing interior angles.
+					// the energy the specular interface takes from the layers below - we handle internal hits to account for
+					// cases where a surface is only partially transmissive.
+					// TODO: Determine how much impact just discarding under-side energy will have.
 					var fresnelEnergySS: f32;
 					if ( surf.frontFace ) {
 
@@ -262,7 +255,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectricSpecular, metallic, surf.metalness );
+					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
 					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
 
 				}
