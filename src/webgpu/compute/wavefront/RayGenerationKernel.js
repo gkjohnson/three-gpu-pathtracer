@@ -85,6 +85,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].pixel = indexUV;
 				rayQueue.elements[ index ].throughputColor = vec3f( 1.0 );
 				rayQueue.elements[ index ].currentBounce = 0;
+				rayQueue.elements[ index ].bsdfPdf = 0.0;
 				rayQueue.elements[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
 				rayQueue.elements[ index ].seed = seed + samples;
 				rayQueue.elements[ index ].bsdfPdf = 0.0;

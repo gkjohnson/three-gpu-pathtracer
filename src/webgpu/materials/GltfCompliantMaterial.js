@@ -170,6 +170,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
+				result.color = vec3f( 0.0 );
+				result.direction = vec3f( 0.0 );
 				result.pdf = 0.0;
 
 				// anisotropic roughness along tangent, bitangent
