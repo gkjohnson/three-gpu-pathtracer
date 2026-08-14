@@ -55,7 +55,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
 				let NdotV = ctx.V.z;
-				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
 				// Each lobe contributes into "result" within its own scope, evaluated in cascade.
@@ -67,13 +66,20 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// clearcoat
 				if ( NdotL > 0.0 && surf.clearcoat > 0.0 ) {
 
+					// the clearcoat evaluates in its own frame
+					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+					let Vc = normalize( toClearcoatMat * ctx.V );
+					let Lc = normalize( toClearcoatMat * ctx.L );
+					let Hc = normalize( toClearcoatMat * ctx.H );
+					let NdotVc = Vc.z;
+
 					// reuse the same pattern for energy conservation used in the dielectric layer
 					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 					let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
 					let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
 					let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
-					let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
-					let clearcoatFresnel = ${ schlickFresnelFunc }( abs( dot( ctx.Vc, ctx.Hc ) ), ${ iorToF0Func }( 1.5 ) );
+					let clearcoatSpecular = ${ this.specularBrdf }( Vc, Lc, Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
+					let clearcoatFresnel = ${ schlickFresnelFunc }( abs( dot( Vc, Hc ) ), ${ iorToF0Func }( 1.5 ) );
 
 					result += surf.clearcoat * clearcoatFresnel * clearcoatSpecular;
 					attenuation *= 1.0 - surf.clearcoat * clearcoatFresnelEnergySS;
@@ -283,11 +289,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let lobeSample = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdfTotal;
 				let directionUV = ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } );
 
+				// output
 				var wi: vec3f;
 				var wh: vec3f;
-
-				var wiClearcoat: vec3f;
-				var whClearcoat: vec3f;
 
 				var isGlass = false;
 
@@ -295,11 +299,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// clearcoat
 					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
-					wiClearcoat = - normalize( reflect( woClearcoat, whClearcoat ) );
+					let whCoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
+					let wiCoat = - normalize( reflect( woClearcoat, whCoat ) );
 
-					wi = normalize( surf.normalInvBasis * surf.clearcoatBasis * wiClearcoat );
-					wh = normalize( surf.normalInvBasis * surf.clearcoatBasis * whClearcoat );
+					wi = normalize( surf.normalInvBasis * surf.clearcoatBasis * wiCoat );
+					wh = normalize( surf.normalInvBasis * surf.clearcoatBasis * whCoat );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
 					// below it due to the shading normal. Rays below the shading hemisphere are
@@ -311,8 +315,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
 					}
-
-					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
 
 				} else if ( lobeSample <= cdfSpecular ) {
 
@@ -335,9 +337,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
 					}
-
-					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
-					whClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wh );
 
 				} else if ( lobeSample <= cdfTransmission ) {
 
@@ -374,9 +373,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
-					whClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wh );
-
 				} else if ( lobeSample <= cdfTotal ) {
 
 					// diffuse
@@ -394,19 +390,24 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
-					wiClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wi );
-					whClearcoat = normalize( surf.clearcoatInvBasis * surf.normalBasis * wh );
-
 				}
 
 				// pdf mixture - every lobe that can produce the sampled direction contributes its
 				// share, in the same cascade order as the eval blocks
 
 				// clearcoat
-				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
+				if ( weights.clearcoat > 0.0 ) {
 
-					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+					// the clearcoat lobe evaluates in its own frame
+					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+					let wiClearcoat = normalize( toClearcoatMat * wi );
+					if ( wiClearcoat.z > 0.0 ) {
+
+						let whClearcoat = normalize( toClearcoatMat * wh );
+						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+						result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+
+					}
 
 				}
 
@@ -422,7 +423,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				// transmission ( glass )
+				// transmission
 				if ( weights.transmission > 0.0 ) {
 
 					// anisotropic roughness along tangent, bitangent
@@ -467,10 +468,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				ctx.H = wh;
 
 				ctx.VdotH = saturate( dot( wo, wh ) );
-
-				ctx.Vc = woClearcoat;
-				ctx.Lc = wiClearcoat;
-				ctx.Hc = whClearcoat;
 
 				// evaluate the bsdf for the sampled direction
 				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isGlass );
