@@ -755,7 +755,7 @@ export class WebGPUPathTracer {
 
 	}
 
-	async getDetailedSampleCount() {
+	getDetailedSampleCount() {
 
 		const pathTracer = this._pathTracer;
 

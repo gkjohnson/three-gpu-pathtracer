@@ -209,6 +209,6 @@ function animate() {
 	pathTracer.pause = pathTracer.samples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples );
+	loader.setSamples( pathTracer.samples, pathTracer.getDetailedSampleCount() );
 
 }

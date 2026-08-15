@@ -184,7 +184,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					completedTiles = Math.min( completedTiles + 1, tileCount );
 					this.minSamples = completedTiles === tileCount ? completedSamples + 1 : completedSamples;
 					this.maxSamples = completedSamples + 1;
-					this.avgSamples = completedSamples + Math.floor( completedTiles / tileCount );
+					this.avgSamples = completedSamples + completedTiles / tileCount;
 
 					yield;
 

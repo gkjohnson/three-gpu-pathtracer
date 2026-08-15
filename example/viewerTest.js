@@ -59,8 +59,6 @@ let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
 let detailedSampleCount = null;
-let lastDetailedSample = 0;
-const detailedSampleInterval = 4;
 
 init();
 
@@ -146,25 +144,8 @@ function animate() {
 	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
 
 		const elapsed = pathTracer.getRenderTime() / 1000;
-		// Reset sample count state if no sample is taken yet
-		if ( elapsed < detailedSampleInterval ) {
-
-			detailedSampleCount = null;
-			lastDetailedSample = 0;
-
-		}
-
-		if ( elapsed - lastDetailedSample > detailedSampleInterval ) {
-
-			lastDetailedSample = Math.floor( elapsed / detailedSampleInterval ) * detailedSampleInterval;
-			pathTracer.getDetailedSampleCount().then( sampleCount => {
-
-				sampleCount.perSecond = sampleCount.avg / elapsed;
-				detailedSampleCount = sampleCount;
-
-			} );
-
-		}
+		detailedSampleCount = pathTracer.getDetailedSampleCount();
+		detailedSampleCount.perSecond = detailedSampleCount.avg / elapsed;
 
 	}
 

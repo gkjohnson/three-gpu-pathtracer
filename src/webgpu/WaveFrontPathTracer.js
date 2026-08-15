@@ -446,7 +446,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			this.minSamples = counters[ SAMPLE_COUNTER_MIN ];
 			this.maxSamples = counters[ SAMPLE_COUNTER_MAX ];
-			this.avgSamples = Math.floor( total / pixelCount );
+			this.avgSamples = total / pixelCount;
 
 		} finally {
 

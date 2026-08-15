@@ -259,7 +259,7 @@ function animate() {
 	if ( params.enable ) {
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.samples );
+		loader.setSamples( pathTracer.samples, pathTracer.getDetailedSampleCount() );
 
 	} else {
 
