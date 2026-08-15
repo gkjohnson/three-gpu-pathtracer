@@ -130,30 +130,18 @@ export class WebGPUPathTracer {
 	// no single "sample count" - pick the field that matches the question being asked. "min" is
 	// what convergence checks want, "avg" is the headline figure to display.
 	//
-	// Both forms measure. On the wavefront backend that means dispatching a full resolution
-	// reduction, so call them only when the numbers are needed. The synchronous form returns the
-	// counts from the previous measurement rather than waiting on this one, so it can be called
-	// every frame. The object is reused, so copy the fields rather than retaining it.
-	getSampleCounts() {
-
-		return this._copySampleCounts( this._pathTracer.getSampleCounts() );
-
-	}
-
+	// On the wavefront backend this dispatches a full resolution reduction and reads it back, so
+	// call it only when the numbers are needed. The object is reused, so copy the fields rather
+	// than retaining it.
 	async getSampleCountsAsync() {
 
-		return this._copySampleCounts( await this._pathTracer.getSampleCountsAsync() );
-
-	}
-
-	_copySampleCounts( source ) {
-
-		const lowResMode = this._pathTracer.lowResMode;
+		const pathTracer = this._pathTracer;
+		const source = await pathTracer.getSampleCountsAsync();
 		const counts = this._sampleCounts;
 
-		counts.min = lowResMode ? 0 : source.min;
-		counts.max = lowResMode ? 0 : source.max;
-		counts.avg = lowResMode ? 0 : source.avg;
+		counts.min = pathTracer.lowResMode ? 0 : source.min;
+		counts.max = pathTracer.lowResMode ? 0 : source.max;
+		counts.avg = pathTracer.lowResMode ? 0 : source.avg;
 
 		return counts;
 
@@ -624,14 +612,18 @@ export class WebGPUPathTracer {
 		}
 
 		// The fade is asking whether the image has converged enough to show, so it gates on the
-		// least converged pixel rather than the average. Measuring costs a full resolution pass, so
-		// it stops once the fade has completed and is skipped entirely when there is no threshold.
+		// least converged pixel rather than the average. Measuring costs a full resolution pass and
+		// the result arrives a frame or two late, so it only runs while the fade is still going and
+		// the gate reads whatever the last measurement resolved to.
 		if ( ! lowResMode ) {
 
-			const measure = this._fadeState < 1 && minSamples > 0;
-			const samples = measure ? this.getSampleCounts() : this._sampleCounts;
+			if ( this._fadeState < 1 && minSamples > 0 ) {
 
-			if ( samples.min >= minSamples ) {
+				this.getSampleCountsAsync();
+
+			}
+
+			if ( this._sampleCounts.min >= minSamples ) {
 
 				this._fadeState += delta / this.fadeDuration;
 				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
@@ -762,15 +754,15 @@ export class WebGPUPathTracer {
 	}
 
 	// Renders a full-screen heatmap of the per pixel sample counts, so uneven convergence across
-	// the image is visible. The ramp is stretched across the recorded min and max by default so it
-	// stays readable whether the counts are spread out or bunched together.
+	// the image is visible. The ramp is stretched across the counts resolved by the last
+	// "getSampleCountsAsync" call by default, so it stays readable whether they are spread out or
+	// bunched together. Pass the range explicitly to avoid depending on that.
 	renderSampleDensity( options = {} ) {
 
 		const renderer = this._renderer;
-		const counts = this.getSampleCounts();
 		const {
-			minCount = counts.min,
-			maxCount = counts.max,
+			minCount = this._sampleCounts.min,
+			maxCount = this._sampleCounts.max,
 		} = options;
 
 		if ( ! renderer._initialized ) {

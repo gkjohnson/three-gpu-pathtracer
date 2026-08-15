@@ -276,7 +276,7 @@ function animate() {
 	if ( params.enable ) {
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.getSampleCounts() );
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 		if ( params.displaySampleDensity ) {
 

@@ -60,6 +60,9 @@ let delaySamples = 0;
 let modelDatabase;
 let detailedSampleCount = null;
 
+// sample counts are measured asynchronously, so the last resolved values are kept for the frame
+let sampleCounts = { min: 0, max: 0, avg: 0 };
+
 init();
 
 async function init() {
@@ -135,17 +138,21 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// if rendering has completed then don't render
-	if ( pathTracer.getSampleCounts().avg >= maxSamples && maxSamples !== - 1 ) {
+	if ( sampleCounts.avg >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
 
 	}
 
-	if ( pathTracer.getRenderTime ) {
+	if ( pathTracer.getRenderTime && pathTracer.getSampleCountsAsync ) {
 
 		const elapsed = pathTracer.getRenderTime() / 1000;
-		const { min, max, avg } = pathTracer.getSampleCounts();
-		detailedSampleCount = { min, max, avg, perSecond: avg / elapsed };
+		pathTracer.getSampleCountsAsync().then( ( { min, max, avg } ) => {
+
+			sampleCounts = { min, max, avg };
+			detailedSampleCount = { min, max, avg, perSecond: avg / elapsed };
+
+		} );
 
 	}
 
@@ -172,7 +179,7 @@ function animate() {
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.pause = params.pause || pathTracer.getSampleCounts().avg > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause || sampleCounts.avg > maxSamples && maxSamples !== - 1;
 
 		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
@@ -188,7 +195,7 @@ function animate() {
 	}
 
 	// rendering has completed
-	if ( pathTracer.getSampleCounts().avg >= maxSamples && maxSamples !== - 1 ) {
+	if ( sampleCounts.avg >= maxSamples && maxSamples !== - 1 ) {
 
 		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
 

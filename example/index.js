@@ -135,6 +135,9 @@ let gradientMap;
 let loader;
 let models;
 
+// sample counts are measured asynchronously, so the last resolved values are kept for the frame
+let sampleCounts = { min: 0, max: 0, avg: 0 };
+
 const orthoWidth = 2;
 
 init();
@@ -290,7 +293,7 @@ function animate() {
 
 	} else if ( params.enable ) {
 
-		if ( ! params.pause || pathTracer.getSampleCounts().avg < 1 ) {
+		if ( ! params.pause || sampleCounts.avg < 1 ) {
 
 			pathTracer.renderSample();
 
@@ -302,7 +305,12 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.getSampleCounts() );
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		sampleCounts = { ...counts };
+		loader.setSamples( counts );
+
+	} );
 
 }
 

@@ -396,25 +396,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	// Reduces the per pixel sample counts and reads the result back. This runs a full resolution
 	// pass, so it only happens when asked for rather than every round.
-	getSampleCounts() {
-
-		this._measureSampleCounts();
-
-		return this._samples;
-
-	}
-
 	async getSampleCountsAsync() {
-
-		await this._measureSampleCounts();
-
-		return this._samples;
-
-	}
-
-	// Dispatches the reduction and starts the readback, returning the in flight read so the async
-	// form can wait on it. A read already in flight is reused rather than dispatching again.
-	_measureSampleCounts() {
 
 		const {
 			renderer,
@@ -422,17 +404,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			sampleCounters,
 			primeSampleCountersKernel,
 			tallySampleCountsKernel,
+			_samples,
 		} = this;
 
 		if ( ! renderer.initialized ) {
 
-			return Promise.resolve( this._samples );
-
-		}
-
-		if ( this._samplesPromise !== null ) {
-
-			return this._samplesPromise;
+			return _samples;
 
 		}
 
@@ -446,40 +423,25 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
 		);
 
-		this._samplesPromise = this._readSampleCounters().finally( () => {
-
-			this._samplesPromise = null;
-
-		} );
-
-		return this._samplesPromise;
-
-	}
-
-	async _readSampleCounters() {
-
-		const samples = this._samples;
 		const generation = this._sampleCountersGeneration;
-		const buffer = await this.renderer.getArrayBufferAsync( this.sampleCounters );
+		const buffer = await renderer.getArrayBufferAsync( sampleCounters );
 		const counters = new Uint32Array( buffer );
 		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
 
 		// a reset while the read was in flight means these counts describe a discarded image, and a
 		// pixel count of zero means no camera ray has been dispatched yet
-		if ( generation !== this._sampleCountersGeneration || pixelCount === 0 ) {
+		if ( generation === this._sampleCountersGeneration && pixelCount !== 0 ) {
 
-			return samples;
+			// the total is accumulated as a split 64 bit value to survive high sample counts
+			const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
+
+			_samples.min = counters[ SAMPLE_COUNTER_MIN ];
+			_samples.max = counters[ SAMPLE_COUNTER_MAX ];
+			_samples.avg = total / pixelCount;
 
 		}
 
-		// the total is accumulated as a split 64 bit value to survive high sample counts
-		const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
-
-		samples.min = counters[ SAMPLE_COUNTER_MIN ];
-		samples.max = counters[ SAMPLE_COUNTER_MAX ];
-		samples.avg = total / pixelCount;
-
-		return samples;
+		return _samples;
 
 	}
 

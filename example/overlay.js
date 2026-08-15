@@ -202,6 +202,6 @@ function animate() {
 	renderer.render( overlayScene, camera );
 	renderer.autoClear = originalAutoClear;
 
-	loader.setSamples( pathTracer.getSampleCounts() );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

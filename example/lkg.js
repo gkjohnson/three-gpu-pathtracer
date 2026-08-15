@@ -88,6 +88,9 @@ const params = {
 let loadingEl, samplesEl, distEl;
 let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, scene;
+
+// sample counts are measured asynchronously, so the last resolved values are kept for the frame
+let sampleCounts = { min: 0, max: 0, avg: 0 };
 const _translation = new Matrix4();
 const _size = new Vector2();
 
@@ -277,7 +280,7 @@ function animate() {
 
 		}
 
-		if ( pathTracer.getSampleCounts().avg > 1 && params.tiltingPreview ) {
+		if ( sampleCounts.avg > 1 && params.tiltingPreview ) {
 
 			// render the animated tilting preview
 			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
@@ -296,7 +299,9 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.getSampleCounts().avg ) }`;
+	pathTracer.getSampleCountsAsync().then( counts => sampleCounts = { ...counts } );
+
+	samplesEl.innerText = `Samples: ${ Math.floor( sampleCounts.avg ) }`;
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 }

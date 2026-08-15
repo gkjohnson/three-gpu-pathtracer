@@ -44,6 +44,9 @@ let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
 
+// sample counts are measured asynchronously, so the last resolved values are kept for the frame
+let sampleCounts = { min: 0, max: 0, avg: 0 };
+
 init();
 
 async function init() {
@@ -205,11 +208,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const samples = pathTracer.getSampleCounts();
-	const doPause = params.pause && samples.avg >= 1;
-	pathTracer.pause = samples.avg >= MAX_SAMPLES || doPause;
+	const doPause = params.pause && sampleCounts.avg >= 1;
+	pathTracer.pause = sampleCounts.avg >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
-	loader.setSamples( samples );
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		sampleCounts = { ...counts };
+		loader.setSamples( counts );
+
+	} );
 
 }

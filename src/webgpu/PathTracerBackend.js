@@ -147,16 +147,8 @@ export class PathTracerBackend {
 	}
 
 	// Measures the current per pixel sample counts. Backends that need GPU work to answer this do
-	// it here, so it only happens when asked for rather than every round. The synchronous form
-	// starts the measurement but returns the counts from the previous one, so it can be called
-	// every frame without stalling. The object is reused, so copy the fields rather than
-	// retaining it.
-	getSampleCounts() {
-
-		return this._samples;
-
-	}
-
+	// it here, so it only happens when asked for rather than every round. The object is reused, so
+	// copy the fields rather than retaining it.
 	async getSampleCountsAsync() {
 
 		return this._samples;
