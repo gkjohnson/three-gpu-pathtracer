@@ -246,6 +246,6 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples, pathTracer.getDetailedSampleCount() );
+	loader.setSamples( pathTracer.getSampleCounts() );
 
 }

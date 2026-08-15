@@ -58,7 +58,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
 		this.sampleCounters.name = 'Sample Counters';
-		this._sampleCountersPending = false;
+		this._samplesPromise = null;
 		this._sampleCountersGeneration = 0;
 
 		// dispatches
@@ -297,10 +297,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			hitProcessKernel,
 			rayDispatchConverter,
 			hitDispatchConverter,
-			primeSampleCountersKernel,
-			tallySampleCountsKernel,
-
-			sampleCounters,
 
 			lowResMode
 		} = this;
@@ -310,9 +306,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// advance the sequence once per task so each render pass starts from fresh
 		// noise unless "stableNoise" has reset it
 		enqueueRaysKernel.seed ++;
-
-		primeSampleCountersKernel.counters = sampleCounters;
-		tallySampleCountsKernel.counters = sampleCounters;
 
 		const tileSize = new Vector2();
 		const iter = lowResMode ? 5 : 1;
@@ -395,64 +388,98 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			}
 
-			// Step 5: reduce the per pixel sample counts once per frame so the min, max, and
-			// average can be read back without pulling down the whole sample count texture
-			renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
-
-			tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
-			renderer.compute(
-				tallySampleCountsKernel.kernel,
-				tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
-			);
-
-			this._readSampleCounters();
-
 			yield;
 
 		}
 
 	}
 
-	// Pulls the reduced counters back to the CPU. The read is asynchronous, so the reported counts
-	// trail the rendered image by a frame or two, and only one read is kept in flight at a time.
+	// Reduces the per pixel sample counts and reads the result back. This runs a full resolution
+	// pass, so it only happens when asked for rather than every round.
+	getSampleCounts() {
+
+		this._measureSampleCounts();
+
+		return this._samples;
+
+	}
+
+	async getSampleCountsAsync() {
+
+		await this._measureSampleCounts();
+
+		return this._samples;
+
+	}
+
+	// Dispatches the reduction and starts the readback, returning the in flight read so the async
+	// form can wait on it. A read already in flight is reused rather than dispatching again.
+	_measureSampleCounts() {
+
+		const {
+			renderer,
+			sampleCountTarget,
+			sampleCounters,
+			primeSampleCountersKernel,
+			tallySampleCountsKernel,
+		} = this;
+
+		if ( ! renderer.initialized ) {
+
+			return Promise.resolve( this._samples );
+
+		}
+
+		if ( this._samplesPromise !== null ) {
+
+			return this._samplesPromise;
+
+		}
+
+		primeSampleCountersKernel.counters = sampleCounters;
+		renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
+
+		tallySampleCountsKernel.counters = sampleCounters;
+		tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
+		renderer.compute(
+			tallySampleCountsKernel.kernel,
+			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
+		);
+
+		this._samplesPromise = this._readSampleCounters().finally( () => {
+
+			this._samplesPromise = null;
+
+		} );
+
+		return this._samplesPromise;
+
+	}
+
 	async _readSampleCounters() {
 
-		if ( this._sampleCountersPending ) {
-
-			return;
-
-		}
-
-		this._sampleCountersPending = true;
-
+		const samples = this._samples;
 		const generation = this._sampleCountersGeneration;
+		const buffer = await this.renderer.getArrayBufferAsync( this.sampleCounters );
+		const counters = new Uint32Array( buffer );
+		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
 
-		try {
+		// a reset while the read was in flight means these counts describe a discarded image, and a
+		// pixel count of zero means no camera ray has been dispatched yet
+		if ( generation !== this._sampleCountersGeneration || pixelCount === 0 ) {
 
-			const buffer = await this.renderer.getArrayBufferAsync( this.sampleCounters );
-			const counters = new Uint32Array( buffer );
-			const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
-
-			// a reset while the read was in flight means these counts describe a discarded image,
-			// and a pixel count of zero means no camera ray has been dispatched yet
-			if ( generation !== this._sampleCountersGeneration || pixelCount === 0 ) {
-
-				return;
-
-			}
-
-			// the total is accumulated as a split 64 bit value to survive high sample counts
-			const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
-
-			this.minSamples = counters[ SAMPLE_COUNTER_MIN ];
-			this.maxSamples = counters[ SAMPLE_COUNTER_MAX ];
-			this.avgSamples = total / pixelCount;
-
-		} finally {
-
-			this._sampleCountersPending = false;
+			return samples;
 
 		}
+
+		// the total is accumulated as a split 64 bit value to survive high sample counts
+		const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
+
+		samples.min = counters[ SAMPLE_COUNTER_MIN ];
+		samples.max = counters[ SAMPLE_COUNTER_MAX ];
+		samples.avg = total / pixelCount;
+
+		return samples;
 
 	}
 

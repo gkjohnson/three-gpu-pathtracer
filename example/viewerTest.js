@@ -135,17 +135,17 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// if rendering has completed then don't render
-	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.getSampleCounts().avg >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
 
 	}
 
-	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
+	if ( pathTracer.getRenderTime ) {
 
 		const elapsed = pathTracer.getRenderTime() / 1000;
-		detailedSampleCount = pathTracer.getDetailedSampleCount();
-		detailedSampleCount.perSecond = detailedSampleCount.avg / elapsed;
+		const { min, max, avg } = pathTracer.getSampleCounts();
+		detailedSampleCount = { min, max, avg, perSecond: avg / elapsed };
 
 	}
 
@@ -172,7 +172,7 @@ function animate() {
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.pause = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause || pathTracer.getSampleCounts().avg > maxSamples && maxSamples !== - 1;
 
 		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
@@ -188,13 +188,13 @@ function animate() {
 	}
 
 	// rendering has completed
-	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.getSampleCounts().avg >= maxSamples && maxSamples !== - 1 ) {
 
 		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
 
 	}
 
-	loader.setSamples( pathTracer.samples, detailedSampleCount );
+	loader.setSamples( detailedSampleCount );
 
 }
 

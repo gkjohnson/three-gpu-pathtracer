@@ -205,10 +205,11 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const doPause = params.pause && pathTracer.samples >= 1;
-	pathTracer.pause = pathTracer.samples >= MAX_SAMPLES || doPause;
+	const samples = pathTracer.getSampleCounts();
+	const doPause = params.pause && samples.avg >= 1;
+	pathTracer.pause = samples.avg >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples, pathTracer.getDetailedSampleCount() );
+	loader.setSamples( samples );
 
 }

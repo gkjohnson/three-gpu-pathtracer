@@ -290,7 +290,7 @@ function animate() {
 
 	} else if ( params.enable ) {
 
-		if ( ! params.pause || pathTracer.samples < 1 ) {
+		if ( ! params.pause || pathTracer.getSampleCounts().avg < 1 ) {
 
 			pathTracer.renderSample();
 
@@ -302,7 +302,7 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.getDetailedSampleCount() );
+	loader.setSamples( pathTracer.getSampleCounts() );
 
 }
 

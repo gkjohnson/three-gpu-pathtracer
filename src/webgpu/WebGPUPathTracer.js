@@ -126,23 +126,36 @@ export class WebGPUPathTracer {
 
 	}
 
-	// Per pixel sample counts vary across the image, so "samples" reports the average. On the
-	// wavefront backend these are read back asynchronously and trail the render slightly.
-	get samples() {
+	// Per pixel sample counts across the rendered pixels. Counts vary across the image, so there is
+	// no single "sample count" - pick the field that matches the question being asked. "min" is
+	// what convergence checks want, "avg" is the headline figure to display.
+	//
+	// Both forms measure. On the wavefront backend that means dispatching a full resolution
+	// reduction, so call them only when the numbers are needed. The synchronous form returns the
+	// counts from the previous measurement rather than waiting on this one, so it can be called
+	// every frame. The object is reused, so copy the fields rather than retaining it.
+	getSampleCounts() {
 
-		return this.avgSamples;
+		return this._copySampleCounts( this._pathTracer.getSampleCounts() );
 
 	}
 
-	get avgSamples() {
+	async getSampleCountsAsync() {
 
-		return this._pathTracer.lowResMode ? 0 : this._pathTracer.avgSamples;
+		return this._copySampleCounts( await this._pathTracer.getSampleCountsAsync() );
 
 	}
 
-	get maxSamples() {
+	_copySampleCounts( source ) {
 
-		return this._pathTracer.lowResMode ? 0 : this._pathTracer.maxSamples;
+		const lowResMode = this._pathTracer.lowResMode;
+		const counts = this._sampleCounts;
+
+		counts.min = lowResMode ? 0 : source.min;
+		counts.max = lowResMode ? 0 : source.max;
+		counts.avg = lowResMode ? 0 : source.avg;
+
+		return counts;
 
 	}
 
@@ -237,6 +250,7 @@ export class WebGPUPathTracer {
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
+		this._sampleCounts = { min: 0, max: 0, avg: 0 };
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
@@ -609,10 +623,20 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
+		// The fade is asking whether the image has converged enough to show, so it gates on the
+		// least converged pixel rather than the average. Measuring costs a full resolution pass, so
+		// it stops once the fade has completed and is skipped entirely when there is no threshold.
+		if ( ! lowResMode ) {
 
-			this._fadeState += delta / this.fadeDuration;
-			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
+			const measure = this._fadeState < 1 && minSamples > 0;
+			const samples = measure ? this.getSampleCounts() : this._sampleCounts;
+
+			if ( samples.min >= minSamples ) {
+
+				this._fadeState += delta / this.fadeDuration;
+				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
+
+			}
 
 		}
 
@@ -743,9 +767,10 @@ export class WebGPUPathTracer {
 	renderSampleDensity( options = {} ) {
 
 		const renderer = this._renderer;
+		const counts = this.getSampleCounts();
 		const {
-			minCount = this._pathTracer.minSamples,
-			maxCount = this.maxSamples,
+			minCount = counts.min,
+			maxCount = counts.max,
 		} = options;
 
 		if ( ! renderer._initialized ) {
@@ -791,18 +816,6 @@ export class WebGPUPathTracer {
 			this._debugBoundsQuad.dispose();
 
 		}
-
-	}
-
-	getDetailedSampleCount() {
-
-		const pathTracer = this._pathTracer;
-
-		return {
-			min: pathTracer.minSamples,
-			max: pathTracer.maxSamples,
-			avg: pathTracer.avgSamples,
-		};
 
 	}
 

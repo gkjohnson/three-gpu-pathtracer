@@ -277,7 +277,7 @@ function animate() {
 
 		}
 
-		if ( pathTracer.samples > 1 && params.tiltingPreview ) {
+		if ( pathTracer.getSampleCounts().avg > 1 && params.tiltingPreview ) {
 
 			// render the animated tilting preview
 			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
@@ -296,7 +296,7 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.getSampleCounts().avg ) }`;
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 }

@@ -4,23 +4,14 @@ import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 export class PathTracerBackend {
 
-	// Per pixel sample counts vary across the image, so "samples" reports the average.
-	get samples() {
-
-		return this.avgSamples;
-
-	}
-
 	constructor( renderer ) {
 
 		this.renderer = renderer;
 		this.bounces = 7;
 		this.lowResMode = false;
 
-		// sample counts across the rendered pixels, filled in by each backend
-		this.minSamples = 0;
-		this.maxSamples = 0;
-		this.avgSamples = 0;
+		// last resolved sample counts, refreshed by "getSampleCounts"
+		this._samples = { min: 0, max: 0, avg: 0 };
 
 		this._renderTask = null;
 
@@ -155,6 +146,23 @@ export class PathTracerBackend {
 
 	}
 
+	// Measures the current per pixel sample counts. Backends that need GPU work to answer this do
+	// it here, so it only happens when asked for rather than every round. The synchronous form
+	// starts the measurement but returns the counts from the previous one, so it can be called
+	// every frame without stalling. The object is reused, so copy the fields rather than
+	// retaining it.
+	getSampleCounts() {
+
+		return this._samples;
+
+	}
+
+	async getSampleCountsAsync() {
+
+		return this._samples;
+
+	}
+
 	resetSeed() {}
 
 	reset() {
@@ -187,9 +195,9 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		this.minSamples = 0;
-		this.maxSamples = 0;
-		this.avgSamples = 0;
+		this._samples.min = 0;
+		this._samples.max = 0;
+		this._samples.avg = 0;
 		this._renderTask = null;
 
 	}

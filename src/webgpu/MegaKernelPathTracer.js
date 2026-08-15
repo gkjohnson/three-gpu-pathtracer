@@ -180,11 +180,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					kernel.offset.set( x, y ).multiply( tileSize );
 					renderer.compute( kernel.kernel, dispatchSize );
 
-					// in low res mode the tiles past the first fall outside the target and do no work
+					// in low res mode the tiles past the first fall outside the target and do no
+					// work. these are free to track, so they stay current without being asked for
 					completedTiles = Math.min( completedTiles + 1, tileCount );
-					this.minSamples = completedTiles === tileCount ? completedSamples + 1 : completedSamples;
-					this.maxSamples = completedSamples + 1;
-					this.avgSamples = completedSamples + completedTiles / tileCount;
+					this._samples.min = completedTiles === tileCount ? completedSamples + 1 : completedSamples;
+					this._samples.max = completedSamples + 1;
+					this._samples.avg = completedSamples + completedTiles / tileCount;
 
 					yield;
 

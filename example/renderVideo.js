@@ -372,7 +372,7 @@ function animate() {
 			pathTracer.renderSample();
 
 			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && pathTracer.samples >= params.samples ) {
+			if ( isRecording && pathTracer.getSampleCounts().avg >= params.samples ) {
 
 				break;
 
@@ -381,7 +381,7 @@ function animate() {
 		}
 
 		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && pathTracer.samples >= params.samples ) {
+		if ( isRecording && ! isWritingFrame && pathTracer.getSampleCounts().avg >= params.samples ) {
 
 			writeVideoFrame();
 
@@ -394,14 +394,14 @@ function animate() {
 
 		const total = Math.ceil( params.frameRate * params.duration );
 		const percStride = 1 / total;
-		const samplesPerc = pathTracer.samples / params.samples;
+		const samplesPerc = pathTracer.getSampleCounts().avg / params.samples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		loader.setPercentage( percentDone );
 
 	} else {
 
 		loader.setPercentage( 1 );
-		loader.setSamples( pathTracer.samples, pathTracer.getDetailedSampleCount() );
+		loader.setSamples( pathTracer.getSampleCounts() );
 
 	}
 
