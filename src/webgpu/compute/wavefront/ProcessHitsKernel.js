@@ -74,6 +74,9 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
 
+				// a matte surface hit by the camera ray renders as a fully transparent
+				let isMatte = material.matte != 0 && input.currentBounce == 0u;
+
 				// apply per-object colors
 				material.color *= object.color.rgb;
 				material.opacity *= object.color.a;
@@ -102,9 +105,14 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// emission
-				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				var resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				if ( isMatte ) {
 
-				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+					resultColor = vec4f( 0.0 );
+
+				}
+
+				var isTerminated = isMatte || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
 				// russian roulette early out:
 				// Matches Cycles path_state_continuation_probability in integrator/path_state.h

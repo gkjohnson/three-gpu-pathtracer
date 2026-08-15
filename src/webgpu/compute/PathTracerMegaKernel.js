@@ -144,6 +144,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let object = transforms[ hitResult.objectIndex ];
 						var material = materials[ object.materialIndex ];
 
+						// a matte surface hit by the camera ray renders as a fully transparent
+						if ( material.matte != 0 && bounce == 0u ) {
+
+							resultColor = vec4f( 0.0 );
+							break;
+
+						}
+
 						// apply per-object colors
 						material.color *= object.color.rgb;
 						material.opacity *= object.color.a;
