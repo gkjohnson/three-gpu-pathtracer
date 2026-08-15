@@ -144,27 +144,12 @@ export class LoaderElement {
 
 	setSamples( count, detailedSamples = null ) {
 
-		if ( detailedSamples !== null ) {
+		// per-pixel sample counts vary across the image, so this is an average
+		this._samples.innerText = `~${ Math.floor( count ) } samples`;
 
-			const {
-				min,
-				max,
-				avg,
-				perSecond,
-			} = detailedSamples;
+		if ( detailedSamples !== null && detailedSamples.perSecond ) {
 
-			this._samples.innerText = `[${ min }..${ max }], avg = ${ avg } samples`;
-
-			if ( perSecond ) {
-
-				this._samples.innerText += ` (${ perSecond.toFixed( 1 ) } samples/sec)`;
-
-			}
-
-		} else {
-
-			// per-pixel sample counts vary across the image, so this is an approximate figure
-			this._samples.innerText = `~${ Math.floor( count ) } samples`;
+			this._samples.innerText += ` (${ detailedSamples.perSecond.toFixed( 1 ) } samples/sec)`;
 
 		}
 

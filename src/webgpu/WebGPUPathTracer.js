@@ -125,9 +125,23 @@ export class WebGPUPathTracer {
 
 	}
 
+	// Per pixel sample counts vary across the image, so "samples" reports the average. On the
+	// wavefront backend these are read back asynchronously and trail the render slightly.
 	get samples() {
 
-		return this._pathTracer.lowResMode ? 0 : this._pathTracer.samples;
+		return this.avgSamples;
+
+	}
+
+	get avgSamples() {
+
+		return this._pathTracer.lowResMode ? 0 : this._pathTracer.avgSamples;
+
+	}
+
+	get maxSamples() {
+
+		return this._pathTracer.lowResMode ? 0 : this._pathTracer.maxSamples;
 
 	}
 
@@ -743,49 +757,13 @@ export class WebGPUPathTracer {
 
 	async getDetailedSampleCount() {
 
-		const sampleCountTarget = this._pathTracer.sampleCountTarget;
-		const { width, height } = sampleCountTarget;
-		const renderer = this._renderer;
-
-		// Create a stub "render target" with just textures field to read from the storage texture
-		const targetStub = { textures: [ sampleCountTarget ] };
-
-		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
-		const uintBuffer = new Uint32Array( buffer.buffer );
-
-		// copyTexture requires a multiple of 256 bytes for texelsPerRow
-		// Hence a multiple of 64 u32 per row
-		const texelsPerRow = Math.ceil( width / 64 ) * 64;
-
-		// Sum up all sample counts and divide by pixel count to get average samples per pixel
-		let totalSamples = 0;
-		let minSamples = Number.MAX_VALUE;
-		let maxSamples = - Number.MAX_VALUE;
-		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
-
-			// Skip padding
-			if ( i % texelsPerRow >= width ) {
-
-				continue;
-
-			}
-
-			// Each entry contains sample count in lower bits and active flag in high bit
-			// Mask out the active flag (0xF0000000) to get just the sample count
-			const samples = uintBuffer[ i ] & 0x0FFFFFFF;
-
-			totalSamples += samples;
-			minSamples = Math.min( minSamples, samples );
-			maxSamples = Math.max( maxSamples, samples );
-
-		}
+		const pathTracer = this._pathTracer;
 
 		return {
-			min: minSamples,
-			max: maxSamples,
-			avg: Math.floor( totalSamples / ( width * height ) ),
+			min: pathTracer.minSamples,
+			max: pathTracer.maxSamples,
+			avg: pathTracer.avgSamples,
 		};
-
 
 	}
 

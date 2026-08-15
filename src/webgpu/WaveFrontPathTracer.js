@@ -9,6 +9,17 @@ import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDi
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
+import {
+	PrimeSampleCountersKernel,
+	TallySampleCountsKernel,
+	SAMPLE_COUNTER_LENGTH,
+	SAMPLE_COUNTER_MAX,
+	SAMPLE_COUNTER_MIN,
+	SAMPLE_COUNTER_PIXEL_COUNT,
+	SAMPLE_COUNTER_TOTAL_HI,
+	SAMPLE_COUNTER_TOTAL_LO,
+	U32_RANGE,
+} from './compute/sampleCounters.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)
@@ -44,6 +55,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitQueue = new StorageBufferAttribute( new Float32Array( hitQueueSize ), hitQueueSize );
 		this.hitQueue.name = 'Hit Queue';
 
+		// reduction target for the per pixel sample counts, read back asynchronously
+		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
+		this.sampleCounters.name = 'Sample Counters';
+		this._sampleCountersPending = false;
+		this._sampleCountersGeneration = 0;
+
 		// dispatches
 		this.tileIndexBuffer = new IndirectStorageBufferAttribute( 2, 1 );
 		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( 3, 1 );
@@ -57,6 +74,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel( rayQueueStruct ).setWorkgroupSize( 1, 1, 1 );
 		this.hitDispatchConverter = new QueueLengthToDispatchKernel( hitQueueStruct ).setWorkgroupSize( 1, 1, 1 );
+		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
+		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -226,6 +245,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.reset();
 
+		// invalidate any sample counter readback still in flight so it can't report counts from
+		// the image we just threw away
+		this._sampleCountersGeneration ++;
+
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
@@ -274,6 +297,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			hitProcessKernel,
 			rayDispatchConverter,
 			hitDispatchConverter,
+			primeSampleCountersKernel,
+			tallySampleCountsKernel,
+
+			sampleCounters,
 
 			lowResMode
 		} = this;
@@ -284,10 +311,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// noise unless "stableNoise" has reset it
 		enqueueRaysKernel.seed ++;
 
+		primeSampleCountersKernel.counters = sampleCounters;
+		tallySampleCountsKernel.counters = sampleCounters;
+
 		const tileSize = new Vector2();
-		const samplesPerIteration = RAYS_TO_PROCESS / ( sampleCountTarget.width * sampleCountTarget.height * bounces );
 		const iter = lowResMode ? 5 : 1;
-		let samples = 0;
 
 		while ( true ) {
 
@@ -365,12 +393,64 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				// - separate "volume" step?
 				// - allow for simultaneous writes by queue pixel writes, sorting, and blending them in a single thread
 
-				samples += samplesPerIteration;
-				this.samples = Math.floor( samples );
+			}
+
+			// Step 5: reduce the per pixel sample counts once per frame so the min, max, and
+			// average can be read back without pulling down the whole sample count texture
+			renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
+
+			tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
+			renderer.compute(
+				tallySampleCountsKernel.kernel,
+				tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
+			);
+
+			this._readSampleCounters();
+
+			yield;
+
+		}
+
+	}
+
+	// Pulls the reduced counters back to the CPU. The read is asynchronous, so the reported counts
+	// trail the rendered image by a frame or two, and only one read is kept in flight at a time.
+	async _readSampleCounters() {
+
+		if ( this._sampleCountersPending ) {
+
+			return;
+
+		}
+
+		this._sampleCountersPending = true;
+
+		const generation = this._sampleCountersGeneration;
+
+		try {
+
+			const buffer = await this.renderer.getArrayBufferAsync( this.sampleCounters );
+			const counters = new Uint32Array( buffer );
+			const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
+
+			// a reset while the read was in flight means these counts describe a discarded image,
+			// and a pixel count of zero means no camera ray has been dispatched yet
+			if ( generation !== this._sampleCountersGeneration || pixelCount === 0 ) {
+
+				return;
 
 			}
 
-			yield;
+			// the total is accumulated as a split 64 bit value to survive high sample counts
+			const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
+
+			this.minSamples = counters[ SAMPLE_COUNTER_MIN ];
+			this.maxSamples = counters[ SAMPLE_COUNTER_MAX ];
+			this.avgSamples = Math.floor( total / pixelCount );
+
+		} finally {
+
+			this._sampleCountersPending = false;
 
 		}
 

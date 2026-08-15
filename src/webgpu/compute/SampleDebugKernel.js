@@ -1,6 +1,7 @@
 import { StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { textureStore, wgslFn, globalId, uniform } from 'three/tsl';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK } from './sampleCounters.js';
 
 // Kernel for copying count + active flag to an output target for debug visualizations
 export class SampleDebugKernel extends ComputeKernel {
@@ -23,10 +24,9 @@ export class SampleDebugKernel extends ComputeKernel {
 				displaySamples: u32
 			) -> void {
 
-				let ACTIVE_FLAG = 0xFF000000u;
 				let combined = textureLoad( inputTarget, globalId.xy ).r;
-				let isActive = ( ACTIVE_FLAG & combined ) != 0u;
-				let samples = combined & ( ~ ACTIVE_FLAG );
+				let isActive = ( ${ SAMPLE_ACTIVE_FLAG }u & combined ) != 0u;
+				let samples = combined & ${ SAMPLE_COUNT_MASK }u;
 
 				if ( displaySamples != 0 ) {
 

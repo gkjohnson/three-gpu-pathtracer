@@ -4,12 +4,23 @@ import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 export class PathTracerBackend {
 
+	// Per pixel sample counts vary across the image, so "samples" reports the average.
+	get samples() {
+
+		return this.avgSamples;
+
+	}
+
 	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.samples = 0;
 		this.bounces = 7;
 		this.lowResMode = false;
+
+		// sample counts across the rendered pixels, filled in by each backend
+		this.minSamples = 0;
+		this.maxSamples = 0;
+		this.avgSamples = 0;
 
 		this._renderTask = null;
 
@@ -176,7 +187,9 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		this.samples = 0;
+		this.minSamples = 0;
+		this.maxSamples = 0;
+		this.avgSamples = 0;
 		this._renderTask = null;
 
 	}
