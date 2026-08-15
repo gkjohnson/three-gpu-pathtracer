@@ -10,6 +10,7 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
+import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
@@ -736,6 +737,43 @@ export class WebGPUPathTracer {
 
 	}
 
+	// Renders a full-screen heatmap of the per pixel sample counts, so uneven convergence across
+	// the image is visible. The ramp is stretched across the recorded min and max by default so it
+	// stays readable whether the counts are spread out or bunched together.
+	renderSampleDensity( options = {} ) {
+
+		const renderer = this._renderer;
+		const {
+			minCount = this._pathTracer.minSamples,
+			maxCount = this.maxSamples,
+		} = options;
+
+		if ( ! renderer._initialized ) {
+
+			return;
+
+		}
+
+		if ( ! this._sampleDensityQuad ) {
+
+			this._sampleDensityQuad = new FullScreenQuad( new SampleDensityMaterial() );
+
+		}
+
+		const originalToneMapping = renderer.toneMapping;
+		renderer.toneMapping = NoToneMapping;
+
+		const quad = this._sampleDensityQuad;
+		quad.material.texture = this._pathTracer.sampleCountTarget;
+		quad.material.minCount = minCount;
+		quad.material.maxCount = maxCount;
+		renderer.setRenderTarget( null );
+		quad.render( renderer );
+
+		renderer.toneMapping = originalToneMapping;
+
+	}
+
 	dispose() {
 
 		this._pathTracer.dispose();
@@ -746,6 +784,7 @@ export class WebGPUPathTracer {
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
 		this._atlasDebugQuad?.dispose();
+		this._sampleDensityQuad?.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 
