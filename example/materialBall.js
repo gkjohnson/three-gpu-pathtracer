@@ -7,7 +7,8 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer, MatteNodeMaterial } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
@@ -16,7 +17,7 @@ import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLigh
 const CREDITS = 'Material orb model courtesy of USD Working Group';
 
 let pathTracer, renderer, controls, material;
-let camera, scene, loader, surfaceMesh, matteMaterial;
+let camera, scene, loader, surfaceMesh;
 
 const params = {
 
@@ -41,6 +42,8 @@ const params = {
 		iridescenceThickness: 400,
 		specularColor: '#ffffff',
 		specularIntensity: 1.0,
+		anisotropy: 0.0,
+		anisotropyRotation: 0.0,
 		matte: false,
 		flatShading: false,
 		castShadow: true,
@@ -136,7 +139,7 @@ async function init() {
 
 	// the matte option swaps the surface over to a MatteNodeMaterial
 	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
-	matteMaterial = new MatteNodeMaterial();
+	surfaceMesh.geometry.computeTangents();
 
 	// move camera to the scene
 	scene.attach( camera );
@@ -194,6 +197,8 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'iridescenceThickness', 0.0, 1200.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'specularColor' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'specularIntensity', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'anisotropy', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'anisotropyRotation', 0.0, 2.0 * Math.PI ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
@@ -235,6 +240,8 @@ function onParamsChange() {
 	material.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
 	material.specularColor.set( materialProperties.specularColor );
 	material.specularIntensity = materialProperties.specularIntensity;
+	material.anisotropy = materialProperties.anisotropy;
+	material.anisotropyRotation = materialProperties.anisotropyRotation;
 	material.transparent = material.opacity < 1;
 	material.flatShading = materialProperties.flatShading;
 
@@ -244,10 +251,8 @@ function onParamsChange() {
 	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
+	material.matte = materialProperties.matte;
 	material.castShadow = materialProperties.castShadow;
-
-	// swap the surface between the physical material and the matte material
-	surfaceMesh.material = materialProperties.matte ? matteMaterial : material;
 
 	pathTracer.updateMaterials();
 
