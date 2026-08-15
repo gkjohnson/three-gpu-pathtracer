@@ -132,7 +132,7 @@ async function init() {
 	camera = orb.camera;
 	material = orb.material;
 
-	// the matte option swaps the surface over to a MatteNodeMaterial
+	// the model ships without tangents, which anisotropy needs to orient its frame
 	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
 	surfaceMesh.geometry.computeTangents();
 
