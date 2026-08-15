@@ -103,10 +103,6 @@ init();
 
 async function init() {
 
-	RectAreaLightUniformsLib.init();
-
-	// the rasterized view builds node materials for the area lights, which need the
-	// LTC tables provided through the node path
 	RectAreaLightTexturesLib.init();
 	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
 
