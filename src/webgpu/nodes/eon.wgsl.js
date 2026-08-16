@@ -19,11 +19,25 @@ const eonDirectionalAlbedoFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// Energy-preserving Oren-Nayar diffuse BRDF (EON).
-// Based on: https://jcgt.org/published/0014/01/01/
-export const eonBrdfFunc = wgslFn( /* wgsl */ `
+const fonSingleScatterFunc = wgslFn( /* wgsl */ `
 
-	fn eonBrdf( NdotV: f32, NdotL: f32, VdotH: f32, VdotL: f32, surf: SurfaceRecord ) -> vec3f {
+	fn fonSingleScatter( NdotV: f32, NdotL: f32, VdotH: f32, roughness: f32, A: f32, rho: vec3f ) -> vec3f {
+
+		let VdotL = 2.0 * VdotH * VdotH - 1.0;
+		let s = VdotL - NdotV * NdotL;
+		let sOverT = select( s, s / max( NdotV, NdotL ), s > 0.0 );
+
+		return ( rho / PI ) * A * ( 1.0 + roughness * sOverT );
+
+	}
+
+`, [ constants ] );
+
+// Fujii's improved Oren-Nayar single-scatter diffuse BRDF.
+// Based on: https://jcgt.org/published/0014/01/06/
+export const fonBrdfFunc = wgslFn( /* wgsl */ `
+
+	fn fonBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
 
 		let roughness = surf.diffuseRoughness;
 		if ( roughness < 1e-5 ) {
@@ -34,9 +48,29 @@ export const eonBrdfFunc = wgslFn( /* wgsl */ `
 
 		let rho = saturate( surf.color );
 		let A = 1.0 / ( 1.0 + ( 0.5 - 2.0 / ( 3.0 * PI ) ) * roughness );
-		let s = VdotL - NdotV * NdotL;
-		let sOverT = select( s, s / max( NdotV, NdotL ), s > 0.0 );
-		let singleScatter = ( rho / PI ) * A * ( 1.0 + roughness * sOverT );
+
+		return fonSingleScatter( NdotV, NdotL, VdotH, roughness, A, rho );
+
+	}
+
+`, [ constants, surfaceRecordStruct, fonSingleScatterFunc ] );
+
+// Energy-preserving Oren-Nayar diffuse BRDF (EON).
+// Based on: https://jcgt.org/published/0014/01/06/
+export const eonBrdfFunc = wgslFn( /* wgsl */ `
+
+	fn eonBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
+
+		let roughness = surf.diffuseRoughness;
+		if ( roughness < 1e-5 ) {
+
+			return surf.color / PI;
+
+		}
+
+		let rho = saturate( surf.color );
+		let A = 1.0 / ( 1.0 + ( 0.5 - 2.0 / ( 3.0 * PI ) ) * roughness );
+		let singleScatter = fonSingleScatter( NdotV, NdotL, VdotH, roughness, A, rho );
 
 		let averageDirectionalAlbedo = A * ( 1.0 + ( 2.0 / 3.0 - 28.0 / ( 15.0 * PI ) ) * roughness );
 		let directionalAlbedoV = eonDirectionalAlbedo( NdotV, roughness, A );
@@ -53,4 +87,4 @@ export const eonBrdfFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ constants, surfaceRecordStruct, eonDirectionalAlbedoFunc ] );
+`, [ constants, surfaceRecordStruct, eonDirectionalAlbedoFunc, fonSingleScatterFunc ] );
