@@ -467,7 +467,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 // Disney Diffuse BRDF without subsurface approximation
 export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
-	fn diffuseBrdf( NdotV: f32, NdotL: f32, VdotH: f32, VdotL: f32, surf: SurfaceRecord ) -> vec3f {
+	fn diffuseBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
 
 		// https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf
 		// See equation (4)
@@ -494,7 +494,7 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 // Lambertian diffuse BRDF with cosine distribution
 export const lambertBrdfFunc = wgslFn( /* wgsl */ `
 
-	fn lambertBrdf( NdotV: f32, NdotL: f32, VdotH: f32, VdotL: f32, surf: SurfaceRecord ) -> vec3f {
+	fn lambertBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
 
 		return surf.color / PI;
 
