@@ -247,7 +247,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// the dielectric base mixes diffuse with transmission - the transmissive half
 					// is carried by the glass lobe above
-					let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, dot( ctx.V, ctx.L ), surf );
+					let diffuseVdotH = sqrt( saturate( 0.5 * ( 1.0 + dot( ctx.V, ctx.L ) ) ) );
+					let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, diffuseVdotH, surf );
 					let diffuse = ( 1.0 - surf.transmission ) * reflection;
 
 					result += attenuation * diffuse;
