@@ -1,7 +1,8 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, specularBtdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { eonBrdfFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
@@ -21,7 +22,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		const {
 			specularBrdf = specularBrdfFunc,
 			specularBtdf = specularBtdfFunc,
-			diffuseBrdf = lambertBrdfFunc,
+			diffuseBrdf = eonBrdfFunc,
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
 			fresnelCoat = fresnelCoatFunc,
@@ -246,7 +247,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// the dielectric base mixes diffuse with transmission - the transmissive half
 					// is carried by the glass lobe above
-					let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
+					let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, dot( ctx.V, ctx.L ), surf );
 					let diffuse = ( 1.0 - surf.transmission ) * reflection;
 
 					result += attenuation * diffuse;
