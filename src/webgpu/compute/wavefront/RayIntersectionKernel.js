@@ -3,6 +3,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
 import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
@@ -87,7 +88,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 				}
 
 				// get the ray info
-				let ACTIVE_FLAG = 0xF0000000u;
 				let input = rayQueue.elements[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
@@ -171,10 +171,11 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 					}
 
-					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
+					// keep the pixel marked as dispatched
+					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
 				}

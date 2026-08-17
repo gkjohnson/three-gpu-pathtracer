@@ -10,9 +10,11 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
+import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
+import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -124,9 +126,34 @@ export class WebGPUPathTracer {
 
 	}
 
-	get samples() {
+	// Per pixel sample counts across the rendered pixels. Counts vary across the image, so there is
+	// no single "sample count" - pick the field that matches the question being asked. "min" is
+	// what convergence checks want, "avg" is the headline figure to display.
+	//
+	// On the wavefront backend this dispatches a full resolution reduction and reads it back, so
+	// call it only when the numbers are needed.
+	async getSampleCountsAsync() {
 
-		return this._pathTracer.lowResMode ? 0 : this._pathTracer.samples;
+		const pathTracer = this._pathTracer;
+		const counts = await pathTracer.getSampleCountsAsync();
+
+		if ( pathTracer.lowResMode ) {
+
+			counts.min = 0;
+			counts.max = 0;
+			counts.avg = 0;
+
+		}
+
+		// averaged over the whole render rather than instantaneous, and "getRenderTime" counts the
+		// gaps between "renderSample" calls, so idle time drags this down
+		const elapsed = this.getRenderTime() / 1000;
+		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+
+		// kept so the fade and the sample density overlay have something to read without measuring
+		this._lastSampleCounts = counts;
+
+		return counts;
 
 	}
 
@@ -221,6 +248,7 @@ export class WebGPUPathTracer {
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
@@ -241,7 +269,7 @@ export class WebGPUPathTracer {
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'tangent' ];
-		this.stableNoise = false;
+		this.stableNoise = true;
 		this.pause = false;
 
 		this.filterGlossyFactor = 1;
@@ -251,7 +279,7 @@ export class WebGPUPathTracer {
 		this.multipleImportanceSampling = true;
 		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
-		this.random = null;
+		this.random = RANDOM_BLUE_DITHER;
 		this.material = new GltfCompliantMaterial();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
@@ -593,10 +621,22 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
+		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
+		// the check reads the last measurement rather than waiting on this one.
+		if ( ! lowResMode ) {
 
-			this._fadeState += delta / this.fadeDuration;
-			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
+			if ( this._fadeState < 1 && minSamples > 0 ) {
+
+				this.getSampleCountsAsync();
+
+			}
+
+			if ( this._lastSampleCounts.min >= minSamples ) {
+
+				this._fadeState += delta / this.fadeDuration;
+				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
+
+			}
 
 		}
 
@@ -721,6 +761,41 @@ export class WebGPUPathTracer {
 
 	}
 
+	// Renders a heatmap of the per pixel sample counts. Measures on every call, drawing with the
+	// previous result since the readback lands a frame later.
+	// TODO: bind the counters buffer in the shader instead to avoid the readback.
+	renderSampleDensity() {
+
+		const renderer = this._renderer;
+
+		if ( ! renderer._initialized ) {
+
+			return;
+
+		}
+
+		this.getSampleCountsAsync();
+
+		if ( ! this._sampleDensityQuad ) {
+
+			this._sampleDensityQuad = new FullScreenQuad( new SampleDensityMaterial() );
+
+		}
+
+		const originalToneMapping = renderer.toneMapping;
+		renderer.toneMapping = NoToneMapping;
+
+		const quad = this._sampleDensityQuad;
+		quad.material.texture = this._pathTracer.sampleCountTarget;
+		quad.material.minCount = this._lastSampleCounts.min;
+		quad.material.maxCount = this._lastSampleCounts.max;
+		renderer.setRenderTarget( null );
+		quad.render( renderer );
+
+		renderer.toneMapping = originalToneMapping;
+
+	}
+
 	dispose() {
 
 		this._pathTracer.dispose();
@@ -731,6 +806,7 @@ export class WebGPUPathTracer {
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
 		this._atlasDebugQuad?.dispose();
+		this._sampleDensityQuad?.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 
@@ -740,57 +816,10 @@ export class WebGPUPathTracer {
 
 	}
 
-	async getDetailedSampleCount() {
-
-		const sampleCountTarget = this._pathTracer.sampleCountTarget;
-		const { width, height } = sampleCountTarget;
-		const renderer = this._renderer;
-
-		// Create a stub "render target" with just textures field to read from the storage texture
-		const targetStub = { textures: [ sampleCountTarget ] };
-
-		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
-		const uintBuffer = new Uint32Array( buffer.buffer );
-
-		// copyTexture requires a multiple of 256 bytes for texelsPerRow
-		// Hence a multiple of 64 u32 per row
-		const texelsPerRow = Math.ceil( width / 64 ) * 64;
-
-		// Sum up all sample counts and divide by pixel count to get average samples per pixel
-		let totalSamples = 0;
-		let minSamples = Number.MAX_VALUE;
-		let maxSamples = - Number.MAX_VALUE;
-		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
-
-			// Skip padding
-			if ( i % texelsPerRow >= width ) {
-
-				continue;
-
-			}
-
-			// Each entry contains sample count in lower bits and active flag in high bit
-			// Mask out the active flag (0xF0000000) to get just the sample count
-			const samples = uintBuffer[ i ] & 0x0FFFFFFF;
-
-			totalSamples += samples;
-			minSamples = Math.min( minSamples, samples );
-			maxSamples = Math.max( maxSamples, samples );
-
-		}
-
-		return {
-			min: minSamples,
-			max: maxSamples,
-			avg: Math.floor( totalSamples / ( width * height ) ),
-		};
-
-
-	}
-
 	// Returns time since last reset in ms
 	getRenderTime() {
 
+		// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 		return this._resetTime;
 
 	}

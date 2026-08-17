@@ -52,13 +52,12 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
 		remaining -= weights.clearcoat;
 
-		// the opaque share - metals and the fresnel reflection of the non-transmissive
-		// dielectric. The transmissive portion's reflection is carried by the glass lobe.
+		// this specular lobe only handles the opaque portion of the specular
 		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * fEstimate );
 		remaining -= weights.specular;
 
-		// the glass lobe covers both the reflected and refracted halves of the transmissive portion
+		// the transmission lobe covers both the reflected and refracted halves of the transmissive portion
 		weights.transmission = remaining * surf.transmission;
 		remaining -= weights.transmission;
 
@@ -138,16 +137,6 @@ export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
 	}
 
 `, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
-
-export const luminanceFn = wgslFn( /* wgsl */ `
-
-	fn luminance( color: vec3f ) -> f32 {
-
-		return dot( color, vec3f( 0.2126, 0.7152, 0.0722 ) );
-
-	}
-
-` );
 
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 

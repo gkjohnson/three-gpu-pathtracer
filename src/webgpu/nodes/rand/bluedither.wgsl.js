@@ -17,7 +17,6 @@ import { BlueNoiseTexture } from '../../../textures/BlueNoiseTexture.js';
 //   https://developer.nvidia.com/blog/rendering-in-real-time-with-spatiotemporal-blue-noise-textures-part-2/
 
 // constants
-// a maximum number of 100 effects is assumed per ray
 const BN_SIZE = 64;
 
 // construct nodes

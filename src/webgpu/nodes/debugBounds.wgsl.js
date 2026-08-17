@@ -2,6 +2,18 @@ import { Matrix4, StructTypeNode } from 'three/webgpu';
 import { uniform, uint, float } from 'three/tsl';
 import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectsTriangle } from 'three-mesh-bvh/webgpu';
 
+// blue -> cyan -> green -> yellow -> red heat ramp shared by the debug visualizations
+export const heatColorFn = wgslTagFn/* wgsl */`
+	fn debugHeatColor( t: f32 ) -> vec3f {
+
+		let r = clamp( 1.5 - abs( 4.0 * t - 3.0 ), 0.0, 1.0 );
+		let g = clamp( 1.5 - abs( 4.0 * t - 2.0 ), 0.0, 1.0 );
+		let b = clamp( 1.5 - abs( 4.0 * t - 1.0 ), 0.0, 1.0 );
+		return vec3f( r, g, b );
+
+	}
+`;
+
 // Result struct holding a running tally of the TLAS and BLAS bounding boxes the ray crosses
 const debugBoundsResultStruct = new StructTypeNode( {
 	tlasCount: 'uint',
@@ -180,18 +192,6 @@ export function getDebugBoundsFunction( bvhData ) {
 		resetShapeFn: resetLevel,
 	} );
 
-	// blue -> cyan -> green -> yellow -> red heat ramp
-	const heatColor = wgslTagFn/* wgsl */`
-		fn debugHeatColor( t: f32 ) -> vec3f {
-
-			let r = clamp( 1.5 - abs( 4.0 * t - 3.0 ), 0.0, 1.0 );
-			let g = clamp( 1.5 - abs( 4.0 * t - 2.0 ), 0.0, 1.0 );
-			let b = clamp( 1.5 - abs( 4.0 * t - 1.0 ), 0.0, 1.0 );
-			return vec3f( r, g, b );
-
-		}
-	`;
-
 	const debugBounds = wgslTagFn/* wgsl */`
 		fn debugBounds( vUv: vec2f ) -> vec4f {
 
@@ -209,7 +209,7 @@ export function getDebugBoundsFunction( bvhData ) {
 
 			let t = clamp( f32( count ) / max( ${ saturationCount }, 1.0 ), 0.0, 1.0 );
 
-			return vec4f( ${ heatColor }( t ), 1.0 );
+			return vec4f( ${ heatColorFn }( t ), 1.0 );
 
 		}
 	`;

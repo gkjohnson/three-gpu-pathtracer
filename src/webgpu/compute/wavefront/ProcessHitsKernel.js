@@ -2,8 +2,9 @@ import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgp
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
@@ -66,13 +67,15 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// get the ray info
-				let ACTIVE_FLAG = 0xF0000000u;
 				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
+
+				// a matte surface hit by the camera ray renders as a fully transparent
+				let isMatte = material.matte != 0 && input.currentBounce == 0u;
 
 				// apply per-object colors
 				material.color *= object.color.rgb;
@@ -102,19 +105,27 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// emission
-				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				var resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				if ( isMatte ) {
 
-				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+					resultColor = vec4f( 0.0 );
 
-				// russian roulette early out
+				}
+
+				var isTerminated = isMatte || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+
+				// russian roulette early out:
+				// Matches Cycles path_state_continuation_probability in integrator/path_state.h
 				if ( ! isTerminated && input.currentBounce >= 3u ) {
 
 					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-					let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
-					isTerminated = ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+					let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+					isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+					if ( ! isTerminated ) {
 
-					// perform sample clamping here to avoid bright pixels
-					throughputColor *= min( 1.0 / rrProb, 20.0 );
+						throughputColor /= rrProb;
+
+					}
 
 				}
 
@@ -130,11 +141,11 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				if ( isTerminated ) {
 
-					// terminate ray, write color
-					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
+					// terminate ray, write color, mark it as inactive
+					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
 
 				} else {

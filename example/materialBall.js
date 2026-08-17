@@ -3,18 +3,19 @@ import {
 	Scene,
 	WebGPURenderer,
 	Vector3,
+	RectAreaLightNode,
 } from 'three/webgpu';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
-import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 const CREDITS = 'Material orb model courtesy of USD Working Group';
 
 let pathTracer, renderer, controls, material;
-let camera, scene, loader;
+let camera, scene, loader, surfaceMesh;
 
 const params = {
 
@@ -39,11 +40,15 @@ const params = {
 		iridescenceThickness: 400,
 		specularColor: '#ffffff',
 		specularIntensity: 1.0,
+		anisotropy: 0.0,
+		anisotropyRotation: 0.0,
 		matte: false,
 		flatShading: false,
 		castShadow: true,
 	},
 
+	enable: true,
+	displaySampleDensity: false,
 	multipleImportanceSampling: true,
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
@@ -98,13 +103,14 @@ init();
 
 async function init() {
 
-	RectAreaLightUniformsLib.init();
+	RectAreaLightTexturesLib.init();
+	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 0.02;
@@ -125,6 +131,10 @@ async function init() {
 	scene.add( orb.scene );
 	camera = orb.camera;
 	material = orb.material;
+
+	// the model ships without tangents, which anisotropy needs to orient its frame
+	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
+	surfaceMesh.geometry.computeTangents();
 
 	// move camera to the scene
 	scene.attach( camera );
@@ -150,6 +160,8 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
@@ -181,6 +193,8 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'iridescenceThickness', 0.0, 1200.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'specularColor' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'specularIntensity', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'anisotropy', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'anisotropyRotation', 0.0, 2.0 * Math.PI ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
@@ -222,6 +236,8 @@ function onParamsChange() {
 	material.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
 	material.specularColor.set( materialProperties.specularColor );
 	material.specularIntensity = materialProperties.specularIntensity;
+	material.anisotropy = materialProperties.anisotropy;
+	material.anisotropyRotation = materialProperties.anisotropyRotation;
 	material.transparent = material.opacity < 1;
 	material.flatShading = materialProperties.flatShading;
 
@@ -241,7 +257,21 @@ function onParamsChange() {
 function animate() {
 
 	requestAnimationFrame( animate );
-	pathTracer.renderSample();
-	loader.setSamples( pathTracer.samples );
+
+	if ( params.enable ) {
+
+		pathTracer.renderSample();
+
+		if ( params.displaySampleDensity ) {
+
+			pathTracer.renderSampleDensity();
+
+		}
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }
