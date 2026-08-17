@@ -3,7 +3,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
 import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
-import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../sampleCounters.js';
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../TallySampleCountsKernel.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';

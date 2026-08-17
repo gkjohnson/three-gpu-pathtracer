@@ -19,7 +19,7 @@ import {
 	SAMPLE_COUNTER_TOTAL_HI,
 	SAMPLE_COUNTER_TOTAL_LO,
 	U32_RANGE,
-} from './compute/sampleCounters.js';
+} from './compute/TallySampleCountsKernel.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)

@@ -2,7 +2,7 @@ import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgp
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
-import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../sampleCounters.js';
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../TallySampleCountsKernel.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';

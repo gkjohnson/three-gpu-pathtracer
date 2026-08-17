@@ -1,7 +1,7 @@
 import { StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { textureStore, wgslFn, globalId, uniform } from 'three/tsl';
-import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK } from './sampleCounters.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK } from './TallySampleCountsKernel.js';
 
 // Kernel for copying count + active flag to an output target for debug visualizations
 export class SampleDebugKernel extends ComputeKernel {

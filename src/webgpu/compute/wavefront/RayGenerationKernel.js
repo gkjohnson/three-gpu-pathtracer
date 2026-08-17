@@ -4,7 +4,7 @@ import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayQueueAtomicStruct } from './structs.js';
-import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../sampleCounters.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../TallySampleCountsKernel.js';
 import { proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
