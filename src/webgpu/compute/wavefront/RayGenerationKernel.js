@@ -95,8 +95,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].transmissiveRay = 1u;
 				rayQueue.elements[ index ].minPdf = 1.0;
 
-				// write the active params. the dispatched flag is set here and never cleared so the
-				// sample count tally can tell an unrendered pixel apart from one still at zero samples
+				// write the active params & dispatched flag
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
 
 			}

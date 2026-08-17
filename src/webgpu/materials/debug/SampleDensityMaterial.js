@@ -4,8 +4,7 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { heatColorFn } from '../../nodes/debugBounds.wgsl.js';
 import { SAMPLE_COUNT_MASK } from '../../constants.js';
 
-// Shows how many samples each pixel has accumulated using the same heat ramp as the bvh bounds
-// overlay, so uneven convergence across the image is visible directly.
+// Shows how many samples each pixel has accumulated
 export class SampleDensityMaterial extends MeshBasicNodeMaterial {
 
 	set texture( v ) {
@@ -14,14 +13,12 @@ export class SampleDensityMaterial extends MeshBasicNodeMaterial {
 
 	}
 
-	// sample count mapped to the cold end of the ramp
 	set minCount( v ) {
 
 		this._minUniform.value = v;
 
 	}
 
-	// sample count mapped to full heat
 	set maxCount( v ) {
 
 		this._maxUniform.value = v;

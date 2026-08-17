@@ -18,8 +18,6 @@ const CREDITS = 'Material orb model courtesy of USD Working Group';
 let pathTracer, renderer, controls, material;
 let camera, scene, loader, surfaceMesh;
 
-// the walls of the box enclosing the shader ball
-const WALL_NAMES = [ 'back', 'front', 'left', 'right', 'top' ];
 
 const params = {
 
@@ -117,7 +115,7 @@ async function init() {
 	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
-	// renderer.toneMappingExposure = 0.02;
+	renderer.toneMappingExposure = 0.02;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
@@ -136,16 +134,7 @@ async function init() {
 	camera = orb.camera;
 	material = orb.material;
 
-	// remove the enclosing box so the orb is lit by the environment instead
-	WALL_NAMES.forEach( name => orb.scene.getObjectByName( name )?.removeFromParent() );
 
-	// light gradient environment and background
-	const envTexture = new GradientEquirectTexture();
-	envTexture.topColor.set( 0xffffff );
-	envTexture.bottomColor.set( 0x999999 );
-	envTexture.update();
-	scene.environment = envTexture;
-	scene.background = envTexture;
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
 	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
@@ -276,7 +265,6 @@ function animate() {
 	if ( params.enable ) {
 
 		pathTracer.renderSample();
-		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 		if ( params.displaySampleDensity ) {
 

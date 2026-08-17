@@ -141,8 +141,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				if ( isTerminated ) {
 
-					// terminate ray, write color. the ray is no longer active but the pixel stays
-					// marked as dispatched so it keeps counting toward the sample count tally
+					// terminate ray, write color, mark it as inactive
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
