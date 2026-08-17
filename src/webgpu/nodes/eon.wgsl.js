@@ -34,7 +34,7 @@ const fonSingleScatterFunc = wgslFn( /* wgsl */ `
 `, [ constants ] );
 
 // Fujii's improved Oren-Nayar single-scatter diffuse BRDF.
-// Based on: https://jcgt.org/published/0014/01/06/
+// Based on: https://jcgt.org/published/0014/01/06/ (Section 2, Listing 1)
 export const fonBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn fonBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
@@ -56,7 +56,7 @@ export const fonBrdfFunc = wgslFn( /* wgsl */ `
 `, [ constants, surfaceRecordStruct, fonSingleScatterFunc ] );
 
 // Energy-preserving Oren-Nayar diffuse BRDF (EON).
-// Based on: https://jcgt.org/published/0014/01/06/
+// Based on: https://jcgt.org/published/0014/01/06/ (Section 3, Listing 2)
 export const eonBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn eonBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {

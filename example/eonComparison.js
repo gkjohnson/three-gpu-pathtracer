@@ -23,13 +23,9 @@ import { eonBrdfFunc, fonBrdfFunc } from '../src/webgpu/nodes/eon.wgsl.js';
 import { lambertBrdfFunc } from '../src/webgpu/nodes/material.wgsl.js';
 import { ProceduralEquirectTexture } from '../src/textures/ProceduralEquirectTexture.js';
 
-// Standard Shader Ball converted for glTF, from the Khronos glTF Sample Assets.
-// https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/USDShaderBallForGltf
-// Geometry and textures by Chris Rydalch; glTF conversion by Eric Chadwick (CC BY 4.0).
 const MODEL_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/USDShaderBallForGltf/glTF-Binary/USDShaderBallForGltf.glb';
 
 // Comparison layout follows the front-lit and side-lit scenes in the EON paper.
-// https://jcgt.org/published/0014/01/06/
 const ALGORITHMS = [
 	{ diffuseBrdf: lambertBrdfFunc },
 	{ diffuseBrdf: fonBrdfFunc },
@@ -59,12 +55,7 @@ let compositeCamera;
 let stage;
 let sampleReadout;
 
-init().catch( error => {
-
-	console.error( error );
-	stage.textContent = 'Unable to load the comparison scene.';
-
-} );
+init();
 
 async function init() {
 
@@ -83,9 +74,6 @@ async function init() {
 	scene.environmentIntensity = 3;
 	scene.backgroundIntensity = 0;
 
-	// A narrow environment highlight approximates the paper's directional source.
-	// WebGPU path tracing currently evaluates environment lighting; explicit light connection
-	// is intentionally outside this algorithm comparison.
 	const environmentDirection = new Vector3();
 	const sunDirection = new Vector3( 0, 0, 1 );
 	environment = new ProceduralEquirectTexture( 256, 128 );
@@ -129,7 +117,6 @@ async function init() {
 
 			const pathTracer = new WebGPUPathTracer( renderer );
 			pathTracer.synchronizeRenderSize = false;
-			pathTracer.renderScale = 0.45;
 			pathTracer.dynamicLowRes = false;
 			pathTracer.renderDelay = 0;
 			pathTracer.setMaterial( new GltfCompliantMaterial( { diffuseBrdf: algorithm.diffuseBrdf } ) );
@@ -177,7 +164,9 @@ function prepareModel( model ) {
 	const scale = 2.0 / Math.max( size.x, size.y, size.z );
 
 	model.scale.setScalar( scale );
-	model.position.copy( center ).multiplyScalar( - scale );
+	model.rotation.set( Math.PI, Math.PI, 0 );
+	model.position.copy( center ).multiplyScalar( scale );
+
 	model.updateMatrixWorld( true );
 
 	model.traverse( child => {
