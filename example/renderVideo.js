@@ -36,6 +36,9 @@ let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
 let loader;
+
+// sample counts are measured asynchronously, so the average is kept for the recording checks
+let averageSamples = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
 let recordingState = 'idle';
@@ -354,6 +357,13 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
+
 	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
@@ -372,7 +382,7 @@ function animate() {
 			pathTracer.renderSample();
 
 			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && pathTracer.samples >= params.samples ) {
+			if ( isRecording && averageSamples >= params.samples ) {
 
 				break;
 
@@ -381,7 +391,7 @@ function animate() {
 		}
 
 		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && pathTracer.samples >= params.samples ) {
+		if ( isRecording && ! isWritingFrame && averageSamples >= params.samples ) {
 
 			writeVideoFrame();
 
@@ -394,14 +404,13 @@ function animate() {
 
 		const total = Math.ceil( params.frameRate * params.duration );
 		const percStride = 1 / total;
-		const samplesPerc = pathTracer.samples / params.samples;
+		const samplesPerc = averageSamples / params.samples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		loader.setPercentage( percentDone );
 
 	} else {
 
 		loader.setPercentage( 1 );
-		loader.setSamples( pathTracer.samples );
 
 	}
 

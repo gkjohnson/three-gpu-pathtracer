@@ -135,6 +135,9 @@ let gradientMap;
 let loader;
 let models;
 
+// sample counts are measured asynchronously, so the average is kept for the pause check
+let averageSamples = 0;
+
 const orthoWidth = 2;
 
 init();
@@ -290,7 +293,7 @@ function animate() {
 
 	} else if ( params.enable ) {
 
-		if ( ! params.pause || pathTracer.samples < 1 ) {
+		if ( ! params.pause || averageSamples < 1 ) {
 
 			pathTracer.renderSample();
 
@@ -302,7 +305,12 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
 
 }
 

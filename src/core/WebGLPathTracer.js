@@ -530,14 +530,4 @@ export class WebGLPathTracer {
 
 	}
 
-	async getDetailedSampleCount() {
-
-		return {
-			min: this.samples,
-			max: this.samples,
-			avg: this.samples,
-		};
-
-	}
-
 }

@@ -48,6 +48,7 @@ const params = {
 	},
 
 	enable: true,
+	displaySampleDensity: false,
 	multipleImportanceSampling: true,
 	bounces: 5,
 	renderScale: 1 / window.devicePixelRatio,
@@ -160,6 +161,7 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
@@ -259,7 +261,12 @@ function animate() {
 	if ( params.enable ) {
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.samples );
+
+		if ( params.displaySampleDensity ) {
+
+			pathTracer.renderSampleDensity();
+
+		}
 
 	} else {
 

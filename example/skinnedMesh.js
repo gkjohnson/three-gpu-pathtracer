@@ -189,7 +189,7 @@ function animate() {
 
 		// playing
 		renderer.render( scene, camera );
-		loader.setSamples( 0 );
+		loader.setSamples( null );
 
 	} else {
 
@@ -201,7 +201,7 @@ function animate() {
 		}
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.samples );
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	}
 
