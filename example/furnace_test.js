@@ -11,7 +11,7 @@ const options = {
 	enable: true,
 	useMegakernel: false,
 	whiteBackground: false,
-	bounces: 5,
+	bounces: 15,
 	xAxis: 'roughness',
 	yAxis: 'metalness',
 };

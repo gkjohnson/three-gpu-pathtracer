@@ -7,7 +7,7 @@ export class PathTracerBackend {
 	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.bounces = 7;
+		this.bounces = 15;
 		this.lowResMode = false;
 
 		this._renderTask = null;

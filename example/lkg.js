@@ -70,7 +70,7 @@ const params = {
 	tiles: 3,
 
 	samplesPerFrame: 1,
-	bounces: 5,
+	bounces: 15,
 	filterGlossyFactor: 0.5,
 	pause: false,
 
@@ -465,7 +465,7 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( () => {
 
 		pathTracer.bounces = params.bounces;
 

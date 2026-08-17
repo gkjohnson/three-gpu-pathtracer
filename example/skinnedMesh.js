@@ -30,7 +30,7 @@ let mixer, mixerAction;
 let loader;
 const params = {
 
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	pause: false,
 	continuous: false,
 	stableNoise: false,

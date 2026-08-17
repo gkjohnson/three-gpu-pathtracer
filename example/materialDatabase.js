@@ -22,9 +22,9 @@ let loader, imgEl;
 const params = {
 	material: null,
 	tiles: 2,
-	bounces: 5,
+	bounces: 15,
 	multipleImportanceSampling: true,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	...getScaledSettings(),
 };
 
@@ -104,7 +104,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	animate();

@@ -50,8 +50,8 @@ const params = {
 	enable: true,
 	displaySampleDensity: false,
 	multipleImportanceSampling: true,
-	bounces: 5,
-	renderScale: 1 / window.devicePixelRatio,
+	bounces: 15,
+	renderScale: 1,
 	filterGlossyFactor: 1,
 	tiles: 3,
 };
@@ -63,7 +63,7 @@ if ( window.location.hash.includes( 'transmission' ) ) {
 	params.materialProperties.transmission = 1.0;
 	params.materialProperties.color = '#ffffff';
 
-	params.bounces = 10;
+	params.bounces = 20;
 	params.tiles = 2;
 
 } else if ( window.location.hash.includes( 'iridescent' ) ) {
@@ -169,7 +169,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const matFolder1 = gui.addFolder( 'Material' );

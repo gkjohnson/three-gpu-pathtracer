@@ -30,8 +30,8 @@ const mouse = new Vector2();
 const focusPoint = new Vector3();
 const params = {
 
-	bounces: 3,
-	renderScale: 1 / window.devicePixelRatio,
+	bounces: 15,
+	renderScale: 1,
 	filterGlossyFactor: 0.5,
 	tiles: 1,
 	autoFocus: true,
@@ -155,7 +155,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );

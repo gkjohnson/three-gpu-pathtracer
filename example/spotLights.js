@@ -43,8 +43,8 @@ let loader;
 // gui parameters
 const params = {
 	multipleImportanceSampling: true,
-	bounces: 3,
-	renderScale: 1 / window.devicePixelRatio,
+	bounces: 15,
+	renderScale: 1,
 	tiles: 2,
 	iesProfile: - 1,
 	...getScaledSettings(),
@@ -186,7 +186,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );

@@ -86,7 +86,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	tiles: 2,
 
 	model: '',
@@ -110,7 +110,7 @@ const params = {
 
 	enable: true,
 	useMegakernel: false,
-	bounces: 5,
+	bounces: 15,
 	filterGlossyFactor: 1,
 	pause: false,
 	debugBounds: false,
@@ -439,7 +439,7 @@ function buildGui() {
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
@@ -722,7 +722,7 @@ async function updateModel() {
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
-	params.bounces = modelInfo.bounces || 5;
+	params.bounces = modelInfo.bounces || 15;
 	params.floorColor = modelInfo.floorColor || '#111111';
 	params.floorRoughness = modelInfo.floorRoughness || 0.2;
 	params.floorMetalness = modelInfo.floorMetalness || 0.2;
