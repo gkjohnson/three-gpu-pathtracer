@@ -58,6 +58,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
 		this.sampleCounters.name = 'Sample Counters';
+		this._samplesPromise = null;
 
 		// dispatches
 		this.tileIndexBuffer = new IndirectStorageBufferAttribute( 2, 1 );
@@ -388,9 +389,26 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Reduces the per pixel sample counts and reads the result back. This runs a full resolution
-	// pass, so it only happens when asked for rather than every round.
-	async getSampleCountsAsync() {
+	// Reduces the per pixel sample counts and reads them back. Runs a full resolution pass, so it
+	// only happens when asked for.
+	getSampleCountsAsync() {
+
+		// share the in flight measurement rather than dispatching another
+		if ( this._samplesPromise === null ) {
+
+			this._samplesPromise = this._measureSampleCounts().finally( () => {
+
+				this._samplesPromise = null;
+
+			} );
+
+		}
+
+		return this._samplesPromise;
+
+	}
+
+	async _measureSampleCounts() {
 
 		const {
 			renderer,

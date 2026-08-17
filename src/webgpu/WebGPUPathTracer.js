@@ -621,10 +621,8 @@ export class WebGPUPathTracer {
 
 		}
 
-		// The fade is asking whether the image has converged enough to show, so it gates on the
-		// least converged pixel rather than the average. Measuring costs a full resolution pass and
-		// the result arrives a frame or two late, so it only runs while the fade is still going and
-		// the gate reads whatever the last measurement resolved to.
+		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
+		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
 			if ( this._fadeState < 1 && minSamples > 0 ) {
@@ -763,23 +761,20 @@ export class WebGPUPathTracer {
 
 	}
 
-	// Renders a full-screen heatmap of the per pixel sample counts, so uneven convergence across
-	// the image is visible. The ramp is stretched across the counts resolved by the last
-	// "getSampleCountsAsync" call by default, so it stays readable whether they are spread out or
-	// bunched together. Pass the range explicitly to avoid depending on that.
-	renderSampleDensity( options = {} ) {
+	// Renders a heatmap of the per pixel sample counts. Measures on every call, drawing with the
+	// previous result since the readback lands a frame later.
+	// TODO: bind the counters buffer in the shader instead to avoid the readback.
+	renderSampleDensity() {
 
 		const renderer = this._renderer;
-		const {
-			minCount = this._lastSampleCounts.min,
-			maxCount = this._lastSampleCounts.max,
-		} = options;
 
 		if ( ! renderer._initialized ) {
 
 			return;
 
 		}
+
+		this.getSampleCountsAsync();
 
 		if ( ! this._sampleDensityQuad ) {
 
@@ -792,8 +787,8 @@ export class WebGPUPathTracer {
 
 		const quad = this._sampleDensityQuad;
 		quad.material.texture = this._pathTracer.sampleCountTarget;
-		quad.material.minCount = minCount;
-		quad.material.maxCount = maxCount;
+		quad.material.minCount = this._lastSampleCounts.min;
+		quad.material.maxCount = this._lastSampleCounts.max;
 		renderer.setRenderTarget( null );
 		quad.render( renderer );
 
@@ -824,6 +819,7 @@ export class WebGPUPathTracer {
 	// Returns time since last reset in ms
 	getRenderTime() {
 
+		// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 		return this._resetTime;
 
 	}
