@@ -17,7 +17,6 @@ const CREDITS = 'Material orb model courtesy of USD Working Group';
 let pathTracer, renderer, controls, material;
 let camera, scene, loader, surfaceMesh;
 
-
 const params = {
 
 	materialProperties: {
@@ -132,8 +131,6 @@ async function init() {
 	scene.add( orb.scene );
 	camera = orb.camera;
 	material = orb.material;
-
-
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
 	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );

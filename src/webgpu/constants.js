@@ -14,8 +14,7 @@ export const TRANSMISSIVE_BACKGROUND_TRANSPARENT = 2;
 // this pixel already has a ray on the queue
 export const SAMPLE_ACTIVE_FLAG = 0x80000000;
 
-// this pixel has had a camera ray at least once. pixels that never do, like the gaps between array
-// camera viewports, are skipped when tallying so they don't drag the min and average down
+// this pixel has had a camera ray at least once
 export const SAMPLE_DISPATCHED_FLAG = 0x40000000;
 
 export const SAMPLE_COUNT_MASK = 0x3FFFFFFF;
