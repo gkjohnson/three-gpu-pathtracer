@@ -131,17 +131,27 @@ export class WebGPUPathTracer {
 	// what convergence checks want, "avg" is the headline figure to display.
 	//
 	// On the wavefront backend this dispatches a full resolution reduction and reads it back, so
-	// call it only when the numbers are needed. The object is reused, so copy the fields rather
-	// than retaining it.
+	// call it only when the numbers are needed.
 	async getSampleCountsAsync() {
 
 		const pathTracer = this._pathTracer;
-		const source = await pathTracer.getSampleCountsAsync();
-		const counts = this._sampleCounts;
+		const counts = await pathTracer.getSampleCountsAsync();
 
-		counts.min = pathTracer.lowResMode ? 0 : source.min;
-		counts.max = pathTracer.lowResMode ? 0 : source.max;
-		counts.avg = pathTracer.lowResMode ? 0 : source.avg;
+		if ( pathTracer.lowResMode ) {
+
+			counts.min = 0;
+			counts.max = 0;
+			counts.avg = 0;
+
+		}
+
+		// averaged over the whole render rather than instantaneous, and "getRenderTime" counts the
+		// gaps between "renderSample" calls, so idle time drags this down
+		const elapsed = this.getRenderTime() / 1000;
+		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+
+		// kept so the fade and the sample density overlay have something to read without measuring
+		this._lastSampleCounts = counts;
 
 		return counts;
 
@@ -238,7 +248,7 @@ export class WebGPUPathTracer {
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
-		this._sampleCounts = { min: 0, max: 0, avg: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
@@ -623,7 +633,7 @@ export class WebGPUPathTracer {
 
 			}
 
-			if ( this._sampleCounts.min >= minSamples ) {
+			if ( this._lastSampleCounts.min >= minSamples ) {
 
 				this._fadeState += delta / this.fadeDuration;
 				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
@@ -761,8 +771,8 @@ export class WebGPUPathTracer {
 
 		const renderer = this._renderer;
 		const {
-			minCount = this._sampleCounts.min,
-			maxCount = this._sampleCounts.max,
+			minCount = this._lastSampleCounts.min,
+			maxCount = this._lastSampleCounts.max,
 		} = options;
 
 		if ( ! renderer._initialized ) {

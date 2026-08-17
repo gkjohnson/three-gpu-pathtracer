@@ -58,8 +58,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
 		this.sampleCounters.name = 'Sample Counters';
-		this._samplesPromise = null;
-		this._sampleCountersGeneration = 0;
 
 		// dispatches
 		this.tileIndexBuffer = new IndirectStorageBufferAttribute( 2, 1 );
@@ -245,10 +243,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.reset();
 
-		// invalidate any sample counter readback still in flight so it can't report counts from
-		// the image we just threw away
-		this._sampleCountersGeneration ++;
-
 		const { width, height } = sampleCountTarget;
 		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
 
@@ -404,12 +398,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			sampleCounters,
 			primeSampleCountersKernel,
 			tallySampleCountsKernel,
-			_samples,
 		} = this;
 
 		if ( ! renderer.initialized ) {
 
-			return _samples;
+			return { min: 0, max: 0, avg: 0 };
 
 		}
 
@@ -423,25 +416,25 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
 		);
 
-		const generation = this._sampleCountersGeneration;
 		const buffer = await renderer.getArrayBufferAsync( sampleCounters );
 		const counters = new Uint32Array( buffer );
 		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
 
-		// a reset while the read was in flight means these counts describe a discarded image, and a
-		// pixel count of zero means no camera ray has been dispatched yet
-		if ( generation === this._sampleCountersGeneration && pixelCount !== 0 ) {
+		// no camera ray has been dispatched yet, so there is nothing to average over
+		if ( pixelCount === 0 ) {
 
-			// the total is accumulated as a split 64 bit value to survive high sample counts
-			const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
-
-			_samples.min = counters[ SAMPLE_COUNTER_MIN ];
-			_samples.max = counters[ SAMPLE_COUNTER_MAX ];
-			_samples.avg = total / pixelCount;
+			return { min: 0, max: 0, avg: 0 };
 
 		}
 
-		return _samples;
+		// the total is accumulated as a split 64 bit value to survive high sample counts
+		const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
+
+		return {
+			min: counters[ SAMPLE_COUNTER_MIN ],
+			max: counters[ SAMPLE_COUNTER_MAX ],
+			avg: total / pixelCount,
+		};
 
 	}
 

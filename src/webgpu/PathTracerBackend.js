@@ -10,9 +10,6 @@ export class PathTracerBackend {
 		this.bounces = 7;
 		this.lowResMode = false;
 
-		// last resolved sample counts, refreshed by "getSampleCounts"
-		this._samples = { min: 0, max: 0, avg: 0 };
-
 		this._renderTask = null;
 
 		this.outputTarget = new StorageTexture( 1, 1, );
@@ -147,11 +144,10 @@ export class PathTracerBackend {
 	}
 
 	// Measures the current per pixel sample counts. Backends that need GPU work to answer this do
-	// it here, so it only happens when asked for rather than every round. The object is reused, so
-	// copy the fields rather than retaining it.
+	// it here, so it only happens when asked for rather than every round.
 	async getSampleCountsAsync() {
 
-		return this._samples;
+		return { min: 0, max: 0, avg: 0 };
 
 	}
 
@@ -187,9 +183,6 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		this._samples.min = 0;
-		this._samples.max = 0;
-		this._samples.avg = 0;
 		this._renderTask = null;
 
 	}

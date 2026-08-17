@@ -135,8 +135,8 @@ let gradientMap;
 let loader;
 let models;
 
-// sample counts are measured asynchronously, so the last resolved values are kept for the frame
-let sampleCounts = { min: 0, max: 0, avg: 0 };
+// sample counts are measured asynchronously, so the average is kept for the pause check
+let averageSamples = 0;
 
 const orthoWidth = 2;
 
@@ -293,7 +293,7 @@ function animate() {
 
 	} else if ( params.enable ) {
 
-		if ( ! params.pause || sampleCounts.avg < 1 ) {
+		if ( ! params.pause || averageSamples < 1 ) {
 
 			pathTracer.renderSample();
 
@@ -307,7 +307,7 @@ function animate() {
 
 	pathTracer.getSampleCountsAsync().then( counts => {
 
-		sampleCounts = { ...counts };
+		averageSamples = counts.avg;
 		loader.setSamples( counts );
 
 	} );

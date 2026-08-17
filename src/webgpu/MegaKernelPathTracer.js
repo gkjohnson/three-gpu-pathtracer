@@ -14,6 +14,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		this.tiles = new Vector2( 2, 2 );
 		this.envInfo = new EquirectHdrInfoUniform();
 
+		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
+		// far through the tile cycle the render is and need no GPU work to measure
+		this._completedSamples = 0;
+		this._tileProgress = 0;
+
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
 
@@ -22,6 +27,27 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	resetSeed() {
 
 		this.kernel.seed = 0;
+
+	}
+
+	reset() {
+
+		super.reset();
+		this._completedSamples = 0;
+		this._tileProgress = 0;
+
+	}
+
+	async getSampleCountsAsync() {
+
+		const completed = this._completedSamples;
+		const progress = this._tileProgress;
+
+		return {
+			min: progress === 1 ? completed + 1 : completed,
+			max: completed + 1,
+			avg: completed + progress,
+		};
 
 	}
 
@@ -180,12 +206,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					kernel.offset.set( x, y ).multiply( tileSize );
 					renderer.compute( kernel.kernel, dispatchSize );
 
-					// in low res mode the tiles past the first fall outside the target and do no
-					// work. these are free to track, so they stay current without being asked for
+					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );
-					this._samples.min = completedTiles === tileCount ? completedSamples + 1 : completedSamples;
-					this._samples.max = completedSamples + 1;
-					this._samples.avg = completedSamples + completedTiles / tileCount;
+					this._completedSamples = completedSamples;
+					this._tileProgress = completedTiles / tileCount;
 
 					yield;
 
