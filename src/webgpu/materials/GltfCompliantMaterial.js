@@ -113,17 +113,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// sides - only a true volume distinguishes entering from exiting hits
 					let airIncident = surf.thinWall || surf.frontFace;
 
-					// Turquin multiscatter compensation for the glass lobe: the volumetric bsdf is
-					// scaled by its total reflected + refracted energy so the reflection to
-					// refraction ratio is preserved. The thin wall halves are reflection-shaped
-					// so each is compensated with the conductor albedo at its own roughness.
+					// multiscatter compensation
 					var glassBoost = 0.0;
 					if ( surf.thinWall ) {
 
+						// thin wall halves are reflection-shaped so each is compensated with the conductor albedo at its own roughness.
 						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
 
 					} else {
 
+						// volumetric bsdf is scaled by its total reflected + refracted energy
 						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, surf.roughness, surf.ior, surf.frontFace ), 1e-5 );
 
 					}
@@ -300,6 +299,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				var wi: vec3f;
 				var wh: vec3f;
 
+				// TODO: see if we can clean up these flags so they're not necessary
 				var isTransmissionLobe = false;
 				var isDead = false;
 
@@ -472,6 +472,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
 
 				}
+
+				//
 
 				// construct the scatter context
 				var ctx: ${ bxdfContextStruct };

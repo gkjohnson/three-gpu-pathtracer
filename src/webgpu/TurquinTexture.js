@@ -140,7 +140,7 @@ export class TurquinTexture extends Storage3DTexture {
 		`;
 
 		// transmissive fetch fn - entering selects the air-incident block, otherwise the
-		// volume-incident ( TIR ) block. ior is clamped at the valid range
+		// volume-incident (TIR) block. ior is clamped at the valid range
 		const enterBlockStart = 1 + dielectricLayerCount;
 		const exitBlockStart = 1 + dielectricLayerCount + transmissiveLayerCount;
 		this._sampleTransmissiveFn = wgslTagFn/* wgsl */`
