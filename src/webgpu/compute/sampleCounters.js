@@ -3,20 +3,18 @@ import { storage, textureStore, globalId } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 
-// Layout of the r32uint "sample count" target. The top two bits are flags, the remaining 30 hold
-// the per pixel sample count.
+// Layout of the r32uint "sample count" target: two flag bits then a 30 bit count.
 
-// A ray for this pixel is currently on the queue, so a second one must not be generated for it.
+// this pixel already has a ray on the queue
 export const SAMPLE_ACTIVE_FLAG = 0x80000000;
 
-// A camera ray has been generated for this pixel at least once. Pixels that never get one - the
-// empty space between array camera viewports, for example - are skipped when tallying sample
-// counts so they can't drag the minimum and average down.
+// this pixel has had a camera ray at least once. pixels that never do, like the gaps between array
+// camera viewports, are skipped when tallying so they don't drag the min and average down
 export const SAMPLE_DISPATCHED_FLAG = 0x40000000;
 
 export const SAMPLE_COUNT_MASK = 0x3FFFFFFF;
 
-// Field order of the sample counter buffer, matching the struct below.
+// field order of the sample counter buffer, matching the struct below
 export const SAMPLE_COUNTER_MIN = 0;
 export const SAMPLE_COUNTER_MAX = 1;
 export const SAMPLE_COUNTER_TOTAL_LO = 2;
@@ -24,12 +22,10 @@ export const SAMPLE_COUNTER_TOTAL_HI = 3;
 export const SAMPLE_COUNTER_PIXEL_COUNT = 4;
 export const SAMPLE_COUNTER_LENGTH = 5;
 
-// The number of values a u32 can hold, used to recombine the split total on read.
 export const U32_RANGE = 4294967296;
 
-// Reduction target for the per pixel sample counts. The summed count outgrows 32 bits after a few
-// thousand samples at high resolutions, so it accumulates as a 64 bit value split across
-// "totalLo" and "totalHi" and is reassembled on the CPU.
+// Reduction target for the sample counts. The total outgrows 32 bits, so it is split across
+// "totalLo" and "totalHi" and reassembled on read.
 export const sampleCountersStruct = new StructTypeNode( {
 	minSamples: { type: 'uint', atomic: true },
 	maxSamples: { type: 'uint', atomic: true },
@@ -38,8 +34,8 @@ export const sampleCountersStruct = new StructTypeNode( {
 	pixelCount: { type: 'uint', atomic: true },
 }, 'SampleCounters' );
 
-// Clears the sample counter buffer ahead of the tally. "minSamples" starts at the largest value a
-// u32 can hold so the first "atomicMin" always replaces it.
+// Clears the counters ahead of the tally. "minSamples" starts at the u32 max so the first
+// "atomicMin" replaces it.
 export class PrimeSampleCountersKernel extends ComputeKernel {
 
 	constructor() {
@@ -68,8 +64,8 @@ export class PrimeSampleCountersKernel extends ComputeKernel {
 
 }
 
-// Reduces the per pixel sample count target down to a min, max, and total so the CPU can read back
-// a handful of values instead of the whole texture.
+// Reduces the sample count target to a min, max, and total so the CPU reads back a few values
+// instead of the whole texture.
 export class TallySampleCountsKernel extends ComputeKernel {
 
 	constructor() {
@@ -90,8 +86,7 @@ export class TallySampleCountsKernel extends ComputeKernel {
 
 				}
 
-				// pixels that have never had a camera ray dispatched are not part of the image, so
-				// they're skipped rather than counted as having zero samples
+				// pixels without a camera ray aren't part of the image, so skip rather than count zero
 				let combinedField = textureLoad( ${ params.sampleCountTarget }, globalId.xy ).r;
 				if ( ( combinedField & ${ SAMPLE_DISPATCHED_FLAG }u ) == 0u ) {
 
@@ -105,8 +100,8 @@ export class TallySampleCountsKernel extends ComputeKernel {
 				atomicMax( &${ params.counters }.maxSamples, samples );
 				atomicAdd( &${ params.counters }.pixelCount, 1u );
 
-				// u32 addition wraps silently, so a sum that lands below the value already in the
-				// low word means it overflowed exactly once and the high word carries
+				// the sum overflowed if it came out smaller than the value already there, so carry
+				// the wrap into "totalHi"
 				let previousTotal = atomicAdd( &${ params.counters }.totalLo, samples );
 				if ( previousTotal + samples < previousTotal ) {
 
