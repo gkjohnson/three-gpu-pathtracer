@@ -2,7 +2,7 @@ import { MeshBasicNodeMaterial, NoBlending, StorageTexture } from 'three/webgpu'
 import { uv, varying, texture, uniform } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { heatColorFn } from '../../nodes/debugBounds.wgsl.js';
-import { SAMPLE_COUNT_MASK } from '../../compute/TallySampleCountsKernel.js';
+import { SAMPLE_COUNT_MASK } from '../../constants.js';
 
 // Shows how many samples each pixel has accumulated using the same heat ramp as the bvh bounds
 // overlay, so uneven convergence across the image is visible directly.

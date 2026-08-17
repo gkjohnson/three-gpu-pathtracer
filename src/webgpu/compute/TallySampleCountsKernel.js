@@ -2,17 +2,7 @@ import { StorageBufferAttribute, StorageTexture, StructTypeNode } from 'three/we
 import { storage, textureStore, globalId } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-
-// Layout of the r32uint "sample count" target: two flag bits then a 30 bit count.
-
-// this pixel already has a ray on the queue
-export const SAMPLE_ACTIVE_FLAG = 0x80000000;
-
-// this pixel has had a camera ray at least once. pixels that never do, like the gaps between array
-// camera viewports, are skipped when tallying so they don't drag the min and average down
-export const SAMPLE_DISPATCHED_FLAG = 0x40000000;
-
-export const SAMPLE_COUNT_MASK = 0x3FFFFFFF;
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 // field order of the sample counter buffer, matching the struct below
 export const SAMPLE_COUNTER_MIN = 0;
