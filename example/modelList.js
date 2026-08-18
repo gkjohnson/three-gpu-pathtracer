@@ -4,6 +4,65 @@ const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDr
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
 const LDRAW_MODELS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models';
 
+// Models that fake glass with a partially transparent material render as noise here, so swap those
+// materials for a physical material with real transmission.
+function convertOpacityToTransmission( model, ior = 1.5 ) {
+
+	model.traverse( c => {
+
+		if ( c.material ) {
+
+			const material = c.material;
+			if ( material.opacity < 0.65 && material.opacity > 0.2 ) {
+
+				const newMaterial = new MeshPhysicalMaterial();
+				for ( const key in material ) {
+
+					if ( key in material ) {
+
+						if ( material[ key ] === null ) {
+
+							continue;
+
+						}
+
+						if ( material[ key ].isTexture ) {
+
+							newMaterial[ key ] = material[ key ];
+
+						} else if ( material[ key ].copy && material[ key ].constructor === newMaterial[ key ].constructor ) {
+
+							newMaterial[ key ].copy( material[ key ] );
+
+						} else if ( ( typeof material[ key ] ) === 'number' ) {
+
+							newMaterial[ key ] = material[ key ];
+
+						}
+
+					}
+
+				}
+
+				newMaterial.opacity = 1.0;
+				newMaterial.transmission = 1.0;
+				newMaterial.ior = ior;
+
+				const hsl = {};
+				newMaterial.color.getHSL( hsl );
+				hsl.l = Math.max( hsl.l, 0.35 );
+				newMaterial.color.setHSL( hsl.h, hsl.s, hsl.l );
+
+				c.material = newMaterial;
+
+			}
+
+		}
+
+	} );
+
+}
+
 // the mecabricks exports use two dark golds that read as muddy brown when path traced
 function mecaBricksGoldCorrection( model ) {
 
@@ -37,10 +96,9 @@ function mecaBricksGoldCorrection( model ) {
 function ldrawModel( file ) {
 
 	return {
-		opacityToTransmission: true,
-		ior: 1.4,
 		url: `${ LDRAW_MODELS_URL }/${ file }`,
 		credit: LDRAW_CREDIT,
+		postProcess: model => convertOpacityToTransmission( model, 1.4 ),
 	};
 
 }
@@ -52,12 +110,18 @@ export const MODEL_LIST = {
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 
+	'MER Rover': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+	},
+
 	'Gelatinous Cube': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/gelatinous-cube/scene.gltf',
 		credit: 'Model by "glenatron" on Sketchfab.',
 		rotation: [ 0, - Math.PI / 8, 0.0 ],
-		opacityToTransmission: true,
 		postProcess( model ) {
+
+			convertOpacityToTransmission( model );
 
 			const toRemove = [];
 			model.traverse( c => {
@@ -95,8 +159,9 @@ export const MODEL_LIST = {
 	'Octopus Tea': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/octopus-tea/scene.gltf',
 		credit: 'Model by "AzTiZ" on Sketchfab.',
-		opacityToTransmission: true,
 		postProcess( model ) {
+
+			convertOpacityToTransmission( model );
 
 			const toRemove = [];
 
@@ -154,8 +219,9 @@ export const MODEL_LIST = {
 	'Halo Twist Ring': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/ring-twist-halo/scene.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
-		opacityToTransmission: true,
 		postProcess( model ) {
+
+			convertOpacityToTransmission( model );
 
 			model.traverse( c => {
 
@@ -216,11 +282,10 @@ export const MODEL_LIST = {
 	'LEGO Ice Tunnelator': ldrawModel( '6814-1 - Ice Tunnelator.mpd' ),
 
 	'LEGO Lunar Vehicle': {
-		opacityToTransmission: true,
-		ior: 1.4,
 		url: 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/1621-1-LunarMPVVehicle.mpd_Packed.mpd',
 		rotation: [ Math.PI, - Math.PI / 2, 0 ],
 		credit: LDRAW_CREDIT,
+		postProcess: model => convertOpacityToTransmission( model, 1.4 ),
 	},
 
 	'LEGO NASA Mars Rover': {
@@ -233,10 +298,9 @@ export const MODEL_LIST = {
 	'LEGO Super Model Building Instruction': ldrawModel( '6861-2 - Super Model Building Instruction.mpd' ),
 
 	'LEGO UCS AT-ST': {
-		opacityToTransmission: true,
-		ior: 1.4,
 		url: 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/ldraw/officialLibrary/models/10174-1-ImperialAT-ST-UCS.mpd_Packed.mpd',
 		credit: LDRAW_CREDIT,
+		postProcess: model => convertOpacityToTransmission( model, 1.4 ),
 	},
 
 	'LEGO UCS Imperial Star Destroyer': ldrawModel( '10030-1 - Imperial Star Destroyer - UCS.mpd' ),

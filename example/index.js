@@ -7,7 +7,6 @@ import {
 	Mesh,
 	MeshStandardMaterial,
 	PlaneGeometry,
-	MeshPhysicalMaterial,
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
@@ -122,12 +121,6 @@ let averageSamples = 0;
 const orthoWidth = 2;
 
 init();
-
-async function waitFrame() {
-
-	return new Promise( resolve => requestAnimationFrame( resolve ) );
-
-}
 
 /**
  * Returns required GPU limits according to DEVICE_LIMITS_REQUESTED.
@@ -441,63 +434,6 @@ function updateCameraProjection( cameraProjection ) {
 
 }
 
-function convertOpacityToTransmission( model, ior ) {
-
-	model.traverse( c => {
-
-		if ( c.material ) {
-
-			const material = c.material;
-			if ( material.opacity < 0.65 && material.opacity > 0.2 ) {
-
-				const newMaterial = new MeshPhysicalMaterial();
-				for ( const key in material ) {
-
-					if ( key in material ) {
-
-						if ( material[ key ] === null ) {
-
-							continue;
-
-						}
-
-						if ( material[ key ].isTexture ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						} else if ( material[ key ].copy && material[ key ].constructor === newMaterial[ key ].constructor ) {
-
-							newMaterial[ key ].copy( material[ key ] );
-
-						} else if ( ( typeof material[ key ] ) === 'number' ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						}
-
-					}
-
-				}
-
-				newMaterial.opacity = 1.0;
-				newMaterial.transmission = 1.0;
-				newMaterial.ior = ior;
-
-				const hsl = {};
-				newMaterial.color.getHSL( hsl );
-				hsl.l = Math.max( hsl.l, 0.35 );
-				newMaterial.color.setHSL( hsl.h, hsl.s, hsl.l );
-
-				c.material = newMaterial;
-
-			}
-
-		}
-
-	} );
-
-}
-
 async function updateModel() {
 
 	if ( gui ) {
@@ -551,12 +487,6 @@ async function updateModel() {
 
 		loader.setCredits( 'Failed to load model:' + err.message );
 		loader.setPercentage( 1 );
-
-	}
-
-	if ( modelInfo.opacityToTransmission ) {
-
-		convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
 
 	}
 
