@@ -48,13 +48,9 @@ _More features and capabilities in progress!_
 
 **Test Scenes**
 
-[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
-
-[Transmission Preset Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)
+[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialOrb.html)
 
 [Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html)
-
-[Physical Material Database](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialDatabase.html)
 
 **Tools**
 

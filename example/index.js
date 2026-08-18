@@ -1,6 +1,5 @@
 import {
 	ACESFilmicToneMapping,
-	NoToneMapping,
 	Box3,
 	LoadingManager,
 	Sphere,
@@ -85,7 +84,6 @@ const envMaps = {
 const params = {
 
 	multipleImportanceSampling: true,
-	acesToneMapping: true,
 	renderScale: 1,
 	tiles: 2,
 
@@ -101,28 +99,12 @@ const params = {
 
 	cameraProjection: 'Perspective',
 
-	backgroundType: 'Gradient',
-	bgGradientTop: '#111111',
-	bgGradientBottom: '#000000',
-	backgroundBlur: 0.0,
 	transparentBackground: false,
 	checkerboardTransparency: true,
 
 	enable: true,
-	useMegakernel: false,
 	bounces: 15,
-	filterGlossyFactor: 1,
 	pause: false,
-	debugBounds: false,
-	displayTLAS: true,
-	displayBLAS: true,
-	stopAtSurface: false,
-	saturationCount: 64,
-
-	floorColor: '#111111',
-	floorOpacity: 1.0,
-	floorRoughness: 0.2,
-	floorMetalness: 0.2,
 
 	...getScaledSettings(),
 
@@ -210,7 +192,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.useMegakernel( params.useMegakernel );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -223,8 +204,8 @@ async function init() {
 
 	// background map
 	gradientMap = new GradientEquirectTexture();
-	gradientMap.topColor.set( params.bgGradientTop );
-	gradientMap.bottomColor.set( params.bgGradientBottom );
+	gradientMap.topColor.set( 0x111111 );
+	gradientMap.bottomColor.set( 0x000000 );
 	gradientMap.update();
 
 	// controls
@@ -282,16 +263,7 @@ function animate() {
 
 	}
 
-	if ( params.debugBounds ) {
-
-		pathTracer.renderDebugBounds( {
-			displayTLAS: params.displayTLAS,
-			displayBLAS: params.displayBLAS,
-			stopAtSurface: params.stopAtSurface,
-			saturationCount: params.saturationCount,
-		} );
-
-	} else if ( params.enable ) {
+	if ( params.enable ) {
 
 		if ( ! params.pause || averageSamples < 1 ) {
 
@@ -318,35 +290,13 @@ function onParamsChange() {
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.renderScale = params.renderScale;
-
-	floorPlane.material.color.set( params.floorColor );
-	floorPlane.material.roughness = params.floorRoughness;
-	floorPlane.material.metalness = params.floorMetalness;
-	floorPlane.material.opacity = params.floorOpacity;
 
 	scene.environmentIntensity = params.environmentIntensity;
 	scene.environmentRotation.y = params.environmentRotation;
-	scene.backgroundBlurriness = params.backgroundBlur;
 
-	if ( params.backgroundType === 'Gradient' ) {
-
-		gradientMap.topColor.set( params.bgGradientTop );
-		gradientMap.bottomColor.set( params.bgGradientBottom );
-		gradientMap.update();
-
-		scene.background = gradientMap;
-		scene.backgroundIntensity = 1;
-		scene.environmentRotation.y = 0;
-
-	} else {
-
-		scene.background = scene.environment;
-		scene.backgroundIntensity = params.environmentIntensity;
-		scene.backgroundRotation.y = params.environmentRotation;
-
-	}
+	scene.background = gradientMap;
+	scene.backgroundIntensity = 1;
 
 	if ( params.transparentBackground ) {
 
@@ -426,21 +376,8 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
-
-		pathTracer.useMegakernel( params.useMegakernel );
-		pathTracer.setScene( scene, activeCamera );
-		pathTracer.reset();
-
-	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-
-	} );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
 		onParamsChange();
@@ -456,40 +393,20 @@ function buildGui() {
 		updateCameraProjection( v );
 
 	} );
-	pathTracingFolder.open();
+	pathTracingFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
 
-	const debugFolder = gui.addFolder( 'debug' );
-	debugFolder.add( params, 'debugBounds' ).name( 'bvh bounds heatmap' );
-	debugFolder.add( params, 'displayTLAS' ).name( 'display TLAS' );
-	debugFolder.add( params, 'displayBLAS' ).name( 'display BLAS' );
-	debugFolder.add( params, 'stopAtSurface' ).name( 'stop at surface' );
-	debugFolder.add( params, 'saturationCount', 1, 512, 1 ).name( 'saturation count' );
+		if ( v ) document.body.classList.add( 'checkerboard' );
+		else document.body.classList.remove( 'checkerboard' );
+
+	} );
+	pathTracingFolder.open();
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
 	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
 	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
 	environmentFolder.open();
-
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
-
-	} );
-
-	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( onParamsChange );
-	floorFolder.close();
 
 }
 
@@ -654,23 +571,6 @@ async function updateModel() {
 
 	}
 
-	// update after model load
-	// TODO: clean up
-	if ( modelInfo.removeEmission ) {
-
-		model.traverse( c => {
-
-			if ( c.material ) {
-
-				c.material.emissiveMap = null;
-				c.material.emissiveIntensity = 0;
-
-			}
-
-		} );
-
-	}
-
 	if ( modelInfo.opacityToTransmission ) {
 
 		convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
@@ -722,12 +622,6 @@ async function updateModel() {
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
-	params.bounces = modelInfo.bounces || 15;
-	params.floorColor = modelInfo.floorColor || '#111111';
-	params.floorRoughness = modelInfo.floorRoughness || 0.2;
-	params.floorMetalness = modelInfo.floorMetalness || 0.2;
-	params.bgGradientTop = modelInfo.gradientTop || '#111111';
-	params.bgGradientBottom = modelInfo.gradientBot || '#000000';
 
 	buildGui();
 	onParamsChange();
