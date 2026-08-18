@@ -507,9 +507,22 @@ async function updateModel() {
 	const sphere = new Sphere();
 	box.getBoundingSphere( sphere );
 
-	model.scale.setScalar( 1 / sphere.radius );
-	model.position.multiplyScalar( 1 / sphere.radius );
+	const scale = 1 / sphere.radius;
+	model.scale.setScalar( scale );
+	model.position.multiplyScalar( scale );
 	box.setFromObject( model );
+
+	// attenuation is measured in world units so it must be scaled with the model
+	model.traverse( c => {
+
+		if ( c.material ) {
+
+			c.material.attenuationDistance *= scale;
+
+		}
+
+	} );
+
 	floorPlane.position.y = box.min.y;
 
 	scene.add( model );
