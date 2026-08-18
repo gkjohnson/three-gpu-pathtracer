@@ -418,7 +418,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			tallySampleCountsKernel,
 		} = this;
 
-		if ( ! renderer.initialized ) {
+		if ( ! renderer.initialized || this.lowResMode ) {
 
 			return { min: 0, max: 0, avg: 0 };
 

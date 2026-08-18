@@ -135,11 +135,10 @@ export class WebGPUPathTracer {
 		// written in place. reset swaps in a new object so a late measurement can't overwrite it.
 		const counts = this._lastSampleCounts;
 		const measured = await pathTracer.getSampleCountsAsync();
-		const lowResMode = pathTracer.lowResMode;
 
-		counts.min = lowResMode ? 0 : measured.min;
-		counts.max = lowResMode ? 0 : measured.max;
-		counts.avg = lowResMode ? 0 : measured.avg;
+		counts.min = measured.min;
+		counts.max = measured.max;
+		counts.avg = measured.avg;
 
 		// averaged over the whole render, and idle time counts against it
 		const elapsed = this.getRenderTime() / 1000;
