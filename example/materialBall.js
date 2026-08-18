@@ -20,10 +20,12 @@ const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb m
 const CUSTOM_MATERIAL = 'Custom';
 
 let pathTracer, renderer, controls, material;
-let camera, scene, loader, surfaceMesh;
+let camera, scene, loader;
 let gui, database, imgEl;
 
 const _color = new Color();
+const initialCameraPosition = new Vector3();
+const initialCameraTarget = new Vector3();
 
 const params = {
 
@@ -66,43 +68,10 @@ const params = {
 	tiles: 3,
 };
 
-if ( window.location.hash.includes( 'transmission' ) ) {
-
-	params.materialProperties.metalness = 0.0;
-	params.materialProperties.roughness = 0.23;
-	params.materialProperties.transmission = 1.0;
-	params.materialProperties.color = '#ffffff';
-
-	params.bounces = 20;
-	params.tiles = 2;
-
-} else if ( window.location.hash.includes( 'iridescent' ) ) {
-
-	params.materialProperties.color = '#474747';
-	params.materialProperties.roughness = 0.25;
-	params.materialProperties.metalness = 1.0;
-	params.materialProperties.iridescence = 1.0;
-	params.materialProperties.iridescenceIOR = 2.2;
-
-} else if ( window.location.hash.includes( 'acrylic' ) ) {
-
-	params.materialProperties.color = '#ffffff';
-	params.materialProperties.roughness = 0;
-	params.materialProperties.metalness = 0;
-	params.materialProperties.transmission = 1.0;
-	params.materialProperties.attenuationDistance = 0.75;
-	params.materialProperties.attenuationColor = '#2a6dc6';
-
-	params.bounces = 20;
-	params.tiles = 3;
-
-}
-
 // adjust performance parameters for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
-	params.bounces = Math.max( params.bounces, 6 );
 	params.renderScale *= 0.5;
 	params.tiles = 2;
 	params.multipleImportanceSampling = false;
@@ -136,8 +105,6 @@ async function init() {
 
 	scene = new Scene();
 
-	window.SCENE = scene;
-
 	// load assets
 	const [ orb, dbJson ] = await Promise.all( [
 		new MaterialOrbSceneLoader().loadAsync(),
@@ -153,8 +120,7 @@ async function init() {
 	material = orb.material;
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
-	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
-	surfaceMesh.geometry.computeTangents();
+	orb.scene.getObjectByName( 'material_surface' ).geometry.computeTangents();
 
 	// move camera to the scene
 	scene.attach( camera );
@@ -169,6 +135,10 @@ async function init() {
 	controls.target.copy( camera.position ).addScaledVector( fwd, 25 );
 	controls.update();
 
+	// the viewpoint authored in the model, restored by the reset button
+	initialCameraPosition.copy( camera.position );
+	initialCameraTarget.copy( controls.target );
+
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
@@ -180,6 +150,7 @@ async function init() {
 	// gui
 	gui = new GUI();
 	gui.add( params, 'material', [ CUSTOM_MATERIAL, ...Object.keys( database ) ] ).onChange( onMaterialChange );
+	gui.add( { resetCamera }, 'resetCamera' ).name( 'reset camera' );
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
@@ -193,8 +164,9 @@ async function init() {
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.close();
 
-	const matFolder1 = gui.addFolder( 'Material' );
+	const matFolder1 = gui.addFolder( 'Material Parameters' );
 	matFolder1.addColor( params.materialProperties, 'color' ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'emissive' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( onParamsChange );
@@ -303,6 +275,15 @@ function onMaterialChange() {
 
 	gui.controllersRecursive().forEach( c => c.updateDisplay() );
 	onParamsChange();
+
+}
+
+function resetCamera() {
+
+	camera.position.copy( initialCameraPosition );
+	controls.target.copy( initialCameraTarget );
+	controls.update();
+	pathTracer.updateCamera();
 
 }
 
