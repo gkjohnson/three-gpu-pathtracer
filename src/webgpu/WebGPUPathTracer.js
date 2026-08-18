@@ -126,34 +126,25 @@ export class WebGPUPathTracer {
 
 	}
 
-	// Per pixel sample counts across the rendered pixels. Counts vary across the image, so there is
-	// no single "sample count" - pick the field that matches the question being asked. "min" is
-	// what convergence checks want, "avg" is the headline figure to display.
-	//
-	// On the wavefront backend this dispatches a full resolution reduction and reads it back, so
-	// call it only when the numbers are needed.
+	// Per pixel sample counts. Use "min" for convergence checks, "avg" to display. Measures on the
+	// wavefront backend, so only call it when the numbers are needed.
 	async getSampleCountsAsync() {
 
 		const pathTracer = this._pathTracer;
-		const counts = await pathTracer.getSampleCountsAsync();
 
-		if ( pathTracer.lowResMode ) {
+		// written in place. reset swaps in a new object so a late measurement can't overwrite it.
+		const counts = this._lastSampleCounts;
+		const measured = await pathTracer.getSampleCountsAsync();
 
-			counts.min = 0;
-			counts.max = 0;
-			counts.avg = 0;
+		counts.min = measured.min;
+		counts.max = measured.max;
+		counts.avg = measured.avg;
 
-		}
-
-		// averaged over the whole render rather than instantaneous, and "getRenderTime" counts the
-		// gaps between "renderSample" calls, so idle time drags this down
+		// averaged over the whole render, and idle time counts against it
 		const elapsed = this.getRenderTime() / 1000;
 		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
 
-		// kept so the fade and the sample density overlay have something to read without measuring
-		this._lastSampleCounts = counts;
-
-		return counts;
+		return { ...counts };
 
 	}
 
@@ -519,6 +510,9 @@ export class WebGPUPathTracer {
 		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._timer.update();
+
+		// a fresh object rather than a clear, so measurements still in flight detach
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 
 		if ( this.stableNoise ) {
 

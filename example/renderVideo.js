@@ -56,7 +56,7 @@ const params = {
 	record: startRecording,
 	stop: finishRecording,
 
-	bounces: 5,
+	bounces: 15,
 	samplesPerFrame: 1,
 	renderScale: 1,
 	...getScaledSettings(),
@@ -193,7 +193,7 @@ function rebuildGUI() {
 	} );
 	renderFolder.add( params, 'samples', 1, 500, 1 );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
+	renderFolder.add( params, 'bounces', 1, 50, 1 ).onChange( regenerateScene );
 
 }
 

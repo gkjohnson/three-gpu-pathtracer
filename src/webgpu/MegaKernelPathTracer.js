@@ -40,6 +40,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	async getSampleCountsAsync() {
 
+		if ( this.lowResMode ) {
+
+			return { min: 0, max: 0, avg: 0 };
+
+		}
+
 		const completed = this._completedSamples;
 		const progress = this._tileProgress;
 

@@ -34,7 +34,7 @@ const params = {
 	showAtlas: - 1,
 
 	enable: true,
-	bounces: 10,
+	bounces: 15,
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
@@ -315,7 +315,7 @@ function buildGui() {
 		}
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 
