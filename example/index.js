@@ -16,6 +16,8 @@ import {
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
@@ -40,6 +42,10 @@ const DEVICE_LIMITS_REQUESTED = [
 	'maxBufferSize',
 	'maxStorageBufferBindingSize',
 ];
+
+const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
+const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
+const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -109,6 +115,8 @@ let gradientMap;
 let loader;
 let models;
 
+const dropZone = document.getElementById( 'drop-zone' );
+
 // sample counts are measured asynchronously, so the average is kept for the pause check
 let averageSamples = 0;
 
@@ -161,7 +169,7 @@ async function init() {
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
-	renderer.init();
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -223,6 +231,22 @@ async function init() {
 
 	window.addEventListener( 'resize', onResize );
 	window.addEventListener( 'popstate', onModelChange );
+	window.addEventListener( 'drop', onDrop );
+	window.addEventListener( 'dragover', e => {
+
+		e.preventDefault();
+		dropZone.classList.remove( 'hidden' );
+
+	} );
+	window.addEventListener( 'dragleave', e => {
+
+		if ( e.relatedTarget === null || e.relatedTarget === document.documentElement ) {
+
+			dropZone.classList.add( 'hidden' );
+
+		}
+
+	} );
 
 }
 
@@ -303,6 +327,31 @@ function onModelChange() {
 		params.model = Object.keys( models )[ 0 ];
 
 	}
+
+	updateModel();
+
+}
+
+// registers dropped files as a model in the list and displays it
+function onDrop( e ) {
+
+	e.preventDefault();
+	dropZone.classList.add( 'hidden' );
+
+	const files = [ ...e.dataTransfer.files ];
+	const rootFile = files.find( file => MODEL_FILE_REGEX.test( file.name ) );
+	if ( ! rootFile ) {
+
+		return;
+
+	}
+
+	// the root file is loaded by name so the extension is still available to pick a loader
+	const fileMap = new Map();
+	files.forEach( file => fileMap.set( file.name, URL.createObjectURL( file ) ) );
+
+	models[ rootFile.name ] = { url: rootFile.name, fileMap };
+	params.model = rootFile.name;
 
 	updateModel();
 
@@ -474,7 +523,7 @@ async function updateModel() {
 
 			loader.setPercentage( 0.5 * v );
 
-		} );
+		}, modelInfo.fileMap );
 
 	} catch ( err ) {
 
@@ -550,10 +599,19 @@ async function updateModel() {
 
 }
 
-async function loadModel( url, onProgress ) {
+async function loadModel( url, onProgress, fileMap = null ) {
 
 	// TODO: clean up
 	const manager = new LoadingManager();
+
+	// dropped files are loaded by name and resolved to their blob urls here so relative
+	// references between them still work
+	if ( fileMap ) {
+
+		manager.setURLModifier( url => fileMap.get( url.split( '/' ).pop() ) || url );
+
+	}
+
 	if ( /dae$/i.test( url ) ) {
 
 		const complete = new Promise( resolve => manager.onLoad = resolve );
@@ -591,16 +649,23 @@ async function loadModel( url, onProgress ) {
 
 	} else if ( /(gltf|glb)$/i.test( url ) ) {
 
+		const dracoLoader = new DRACOLoader().setDecoderPath( DRACO_DECODER_PATH );
+		const ktx2Loader = new KTX2Loader().setTranscoderPath( KTX2_TRANSCODER_PATH ).detectSupport( renderer );
+
 		const complete = new Promise( resolve => manager.onLoad = resolve );
-		const gltf = await new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder ).loadAsync( url, progress => {
+		const gltf = await new GLTFLoader( manager )
+			.setMeshoptDecoder( MeshoptDecoder )
+			.setDRACOLoader( dracoLoader )
+			.setKTX2Loader( ktx2Loader )
+			.loadAsync( url, progress => {
 
-			if ( progress.total !== 0 && progress.total >= progress.loaded ) {
+				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-				onProgress( progress.loaded / progress.total );
+					onProgress( progress.loaded / progress.total );
 
-			}
+				}
 
-		} );
+			} );
 		await complete;
 
 		return gltf.scene;
