@@ -15,7 +15,7 @@ let fsQuad, target1, target2, materials;
 let samplesEl, samples, totalSamples;
 const params = {
 
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	radius: 2.0,
 	samplesPerFrame: 2.0,
 	accumulate: true,

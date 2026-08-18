@@ -70,7 +70,7 @@ const params = {
 	tiles: 3,
 
 	samplesPerFrame: 1,
-	bounces: 5,
+	bounces: 15,
 	filterGlossyFactor: 0.5,
 	pause: false,
 
@@ -88,6 +88,9 @@ const params = {
 let loadingEl, samplesEl, distEl;
 let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, scene;
+
+// sample counts are measured asynchronously, so the average is kept for the frame
+let averageSamples = 0;
 const _translation = new Matrix4();
 const _size = new Vector2();
 
@@ -277,7 +280,7 @@ function animate() {
 
 		}
 
-		if ( pathTracer.samples > 1 && params.tiltingPreview ) {
+		if ( averageSamples > 1 && params.tiltingPreview ) {
 
 			// render the animated tilting preview
 			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
@@ -296,7 +299,9 @@ function animate() {
 
 	}
 
-	samplesEl.innerText = `Samples: ${ Math.floor( pathTracer.samples ) }`;
+	pathTracer.getSampleCountsAsync().then( counts => averageSamples = counts.avg );
+
+	samplesEl.innerText = `Samples: ${ Math.floor( averageSamples ) }`;
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 }
@@ -460,7 +465,7 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( () => {
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( () => {
 
 		pathTracer.bounces = params.bounces;
 

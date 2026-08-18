@@ -30,7 +30,7 @@ let mixer, mixerAction;
 let loader;
 const params = {
 
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	pause: false,
 	continuous: false,
 	stableNoise: false,
@@ -189,7 +189,7 @@ function animate() {
 
 		// playing
 		renderer.render( scene, camera );
-		loader.setSamples( 0 );
+		loader.setSamples( null );
 
 	} else {
 
@@ -201,7 +201,7 @@ function animate() {
 		}
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.samples );
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	}
 

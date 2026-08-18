@@ -1,7 +1,7 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, specularBtdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentDielectricLayerFunc, iridescentConductorLayerFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, lambertBrdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
@@ -25,8 +25,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fresnelMix = fresnelMixFunc,
 			conductorFresnel = conductorFresnelFunc,
 			fresnelCoat = fresnelCoatFunc,
-			iridescentDielectricLayer = iridescentDielectricLayerFunc,
-			iridescentConductorLayer = iridescentConductorLayerFunc,
+			iridescentFresnel = iridescentFresnelFunc,
 		} = options;
 
 		this.turquinTexture = new TurquinTexture();
@@ -36,8 +35,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.fresnelMix = fresnelMix;
 		this.conductorFresnel = conductorFresnel;
 		this.fresnelCoat = fresnelCoat;
-		this.iridescentDielectricLayer = iridescentDielectricLayer;
-		this.iridescentConductorLayer = iridescentConductorLayer;
+		this.iridescentFresnel = iridescentFresnel;
 
 	}
 
@@ -51,117 +49,225 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const bsdfEvalFunc = this._bsdfEvalFunc = wgslTagFn/* wgsl */`
 
+			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
+			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
+			// guarding its own hemisphere.
+			// TODO: energy only cascades downward through front faces, so the layers are always traversed
+			// outside-in and cannot reflect energy back into the glass from below.
 			fn bsdfEval( ctx: ${ bxdfContextStruct }, surf: ${ surfaceRecordStruct } ) -> vec3f {
 
 				let NdotV = ctx.V.z;
-				let NdotVc = ctx.Vc.z;
 				let NdotL = ctx.L.z;
 
-				// anisotropic roughness along tangent, bitangent
-				let alphaB = surf.roughness * surf.roughness;
-				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-				let alpha = vec2( alphaT, alphaB );
+				// Each lobe contributes into "result" within its own scope, evaluated in cascade.
+				// "attenuation" carries the fraction of energy each layer passes through to
+				// the layers beneath it. Every lobe guards its own hemisphere.
+				var result = vec3f( 0.0 );
+				var attenuation = vec3f( 1.0 );
 
-				// Sample the single scatter energy for specular at the given roughness.
-				let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-				let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
+				// clearcoat
+				if ( NdotL > 0.0 && surf.clearcoat > 0.0 ) {
 
-				// transmitted directions only gather the refracted lobe — the reflection lobes are
-				// gated to the upper hemisphere, matching the WebGL implementation
-				if ( NdotL < 0.0 ) {
+					// the clearcoat evaluates in its own frame
+					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+					let Vc = normalize( toClearcoatMat * ctx.V );
+					let Lc = normalize( toClearcoatMat * ctx.L );
+					let Hc = normalize( toClearcoatMat * ctx.H );
+					let NdotVc = Vc.z;
 
-					// TODO: transmitted light also crosses the thin film so it should be weighted by
-					// the film-aware fresnel complement (1 - filmF) rather than the plain dielectric
-					// fresnel, tinting transmission with the film's complementary color. Deferred until
-					// the material is generalized into a layer stack that owns the fresnel per interface.
-					var refraction: vec3f;
+					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+
+					// reuse the same pattern for energy conservation used in the dielectric layer
+					let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
+					let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
+
+					let clearcoatSpecular = ${ this.specularBrdf }( Vc, Lc, Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
+					let clearcoatFresnel = ${ schlickFresnelFunc }( abs( dot( Vc, Hc ) ), ${ iorToF0Func }( 1.5 ) );
+
+					// retrieve specular energy reflected by this layer
+					let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
+
+					result += surf.clearcoat * clearcoatFresnel * clearcoatSpecular;
+					attenuation *= 1.0 - surf.clearcoat * clearcoatFresnelEnergySS;
+
+				}
+
+				// sheen
+				if ( NdotL > 0.0 && surf.sheen > 0.0 ) {
+
+					result += attenuation * surf.sheen * ${ sheenColorFunc }( ctx.V, ctx.L, ctx.H, surf );
+					attenuation *= mix( 1.0, ${ sheenAlbedoScalingFunc }( ctx.V, ctx.L, surf ), surf.sheen );
+
+				}
+
+				// transmission
+				// handles specular reflection and transmission
+				if ( surf.transmission > 0.0 ) {
+
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
+
+					// a thin wall has no interior volume so air is the incident medium on both
+					// sides - only a true volume distinguishes entering from exiting hits
+					let airIncident = surf.thinWall || surf.frontFace;
+
+					// multiscatter compensation
+					var glassBoost = 0.0;
 					if ( surf.thinWall ) {
 
-						// evaluate the flipped reflection
-						let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
-						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
-						let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
-						refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha );
+						// thin wall halves are reflection-shaped so each is compensated with the conductor albedo at its own roughness.
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
 
 					} else {
 
-						refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta );
+						// volumetric bsdf is scaled by its total reflected + refracted energy
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, surf.roughness, surf.ior, surf.frontFace ), 1e-5 );
 
 					}
 
-					return ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
+					if ( NdotL < 0.0 ) {
+
+						// TODO: transmitted light also crosses the iridescent thin film so it should be weighted by
+						// the iridescence-aware fresnel complement rather than the plain dielectric fresnel
+						var refraction: vec3f;
+						if ( surf.thinWall ) {
+
+							// evaluate the flipped reflection, compensated at the remapped roughness
+							let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
+							let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+							let thinWallEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, sqrt( thinWallAlpha.x ) ), 1e-5 );
+							let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
+							refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha ) / thinWallEnergySS;
+
+						} else {
+
+							refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta ) * glassBoost;
+
+						}
+
+						// the refracted half is not attenuated by the layers above
+						result += ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
+
+					} else {
+
+						// the raw single scatter lobe scaled by the glass compensation boost rather
+						// than the opaque dielectric boost
+						let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
+						let dielectricSpecular = specular * glassBoost;
+
+						// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
+						let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
+
+						// air-incident hits use schlick so the tinted f0 applies - interior hits use
+						// the exact fresnel since schlick cannot represent TIR
+						// TODO: see if we can clean this up and make these branches more consistent
+						var dielectricFr: vec3f;
+						if ( airIncident ) {
+
+							dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
+
+						} else {
+
+							dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
+
+						}
+
+						var dielectricReflectance = surf.specularIntensity * dielectricFr;
+
+						// iridescence
+						if ( surf.iridescence > 0.0 ) {
+
+							// the media on either side of the film - air outside and the volume interior
+							// as the base, swapped on interior hits so TIR can take effect
+							let outsideIor = select( surf.ior, 1.0, airIncident );
+							let filmBaseIor = select( 1.0, surf.ior, airIncident );
+
+							let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+							dielectricReflectance = mix( dielectricReflectance, dielectricFilmFresnel, surf.iridescence );
+
+						}
+
+						let reflection = dielectricSpecular * dielectricReflectance;
+
+						result += attenuation * ( 1.0 - surf.metalness ) * surf.transmission * reflection;
+
+					}
 
 				}
 
-				// specular and diffuse components
-				let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
-				let boostedSpecular = specular * dielectricBoost;
-				let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
-				let diffuse = ( 1.0 - surf.transmission ) * reflection;
+				// specular
+				// metallic + dielectric + iridescence
+				if ( NdotL > 0.0 ) {
 
-				// Sample the single scatter energy, including fresnel, for the specular layer, boosting by the
-				// compensation formula above to account for multi scatter. Attenuate the energy allocated for
-				// diffuse by the remaining energy from specular single scatter.
-				let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
-				let dielectricDiffuse = ( 1.0 - fresnelEnergySS ) * diffuse;
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
 
-				// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
-				let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
+					// Sample the single scatter energy for specular at the given roughness
+					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+					let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 
-				// front faces use schlick so the KHR_materials_specular tinted f0 applies - interior
-				// hits use the exact dielectric fresnel since schlick cannot represent TIR
-				// TODO: see if we can clean this up and make these branches more consistent
-				var dielectricFr: vec3f;
-				if ( surf.frontFace ) {
+					// metallic with the multiscatter comp
+					let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
+					let metallicSpecular = specular * metallicBoost;
+					var metallicReflectance = ${ this.conductorFresnel }( ctx.VdotH, surf.color, vec3f( 1.0 ) );
 
-					dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
+					// dielectric with the multiscatter comp
+					let dielectricBoost = 1.0 + surf.f0 * ( 1.0 - energySS ) / energySS;
+					let dielectricSpecular = specular * dielectricBoost;
 
-				} else {
+					// KHR_materials_specular: fold the specular color and intensity into the dielectric f0.
+					// Schlick is used on both hit sides, matching Cycles - the opaque specular carries no
+					// TIR so the energy removed from the base always matches the energy paid back
+					let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
+					let dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
+					var dielectricReflectance = surf.specularIntensity * dielectricFr;
 
-					dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
+					// iridescence
+					var filmFresnelMax = 0.0;
+					if ( surf.iridescence > 0.0 ) {
+
+						// the media on either side of the film - air outside and the volume interior
+						// as the base on front faces, swapped on back faces so TIR can take effect
+						let outsideIor = select( surf.ior, 1.0, surf.frontFace );
+						let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
+
+						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+						metallicReflectance = mix( metallicReflectance, metallicFilmFresnel, surf.iridescence );
+
+						let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+						dielectricReflectance = mix( dielectricReflectance, dielectricFilmFresnel, surf.iridescence );
+						filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
+
+					}
+
+					let metallic = metallicSpecular * metallicReflectance;
+					let dielectric = dielectricSpecular * dielectricReflectance;
+
+					// the energy the specular interface takes from the layers below
+					let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
+
+					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
+					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
 
 				}
 
-				let dielectricSpecular = boostedSpecular * surf.specularIntensity * dielectricFr;
-				let dielectricBase = dielectricDiffuse + dielectricSpecular;
+				// diffuse
+				if ( NdotL > 0.0 ) {
 
-				// the media on either side of the film - air outside and the volume interior
-				// as the base on front faces, swapped on back faces so TIR can take effect
-				let outsideIor = select( surf.ior, 1.0, surf.frontFace );
-				let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
+					// the dielectric base mixes diffuse with transmission - the transmissive half
+					// is carried by the glass lobe above
+					let reflection = ${ this.diffuseBrdf }( NdotV, NdotL, ctx.VdotH, surf );
+					let diffuse = ( 1.0 - surf.transmission ) * reflection;
 
-				let dielectric = ${ this.iridescentDielectricLayer }(
-					dielectricBase, diffuse, boostedSpecular, ctx.VdotH, outsideIor,
-					filmBaseIor, surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
-				);
+					result += attenuation * diffuse;
 
-				// Fresnel-weighted specular with the multiscatter comp
-				let metallicBoost = 1.0 + surf.color * ( 1.0 - energySS ) / energySS;
-				let metallicSpecular = specular * metallicBoost;
-				let metallicBase = ${ this.conductorFresnel }( ctx.VdotH, surf.color, metallicSpecular );
-				let metallic = ${ this.iridescentConductorLayer }(
-					metallicBase, metallicSpecular, surf.color, ctx.VdotH, outsideIor,
-					surf.iridescenceIor, surf.iridescenceThickness, surf.iridescence
-				);
+				}
 
-				let baseMaterial = mix( dielectric, metallic, surf.metalness );
-
-				// sheen
-				let sheenScale = mix( 1.0, ${ sheenAlbedoScalingFunc }( ctx.V, ctx.L, surf ), surf.sheen );
-				let material = baseMaterial * sheenScale + ${ sheenColorFunc }( ctx.V, ctx.L, ctx.H, surf ) * surf.sheen;
-
-				// clearcoat
-				// reuse the same pattern for energy conservation used in the dielectric layer
-				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-				let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
-				let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
-				let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
-
-				let clearcoatSpecular = ${ this.specularBrdf }( ctx.Vc, ctx.Lc, ctx.Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
-				let clearcoatBase = ( 1.0 - clearcoatFresnelEnergySS ) * material;
-				let coatedMaterial = clearcoatBase + clearcoatSpecular * ${ schlickFresnelFunc }( abs( dot( ctx.Vc, ctx.Hc ) ), ${ iorToF0Func }( 1.5 ) );
-
-				return mix( material, coatedMaterial, surf.clearcoat );
+				return result;
 
 			}
 
@@ -176,69 +282,97 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				result.direction = vec3f( 0.0 );
 				result.pdf = 0.0;
 
-				// anisotropic roughness along tangent, bitangent
-				let alphaB = surf.roughness * surf.roughness;
-				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-				let alpha = vec2( alphaT, alphaB );
+				let wo = normalize( surf.normalInvBasis * worldWo );
+				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
-				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-
-				let normalBasis = surf.normalBasis;
-				let invBasis = surf.normalInvBasis;
-				let clearcoatBasis = surf.clearcoatBasis;
-				let invClearcoatBasis = surf.clearcoatInvBasis;
-
-				let wo = normalize( invBasis * worldWo );
-				let woClearcoat = normalize( invClearcoatBasis * worldWo );
-
+				// lobe selection weights and cumulative bounds in cascade order:
+				// clearcoat, specular, transmission, diffuse
 				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let cdfClearcoat = weights.clearcoat;
+				let cdfSpecular = cdfClearcoat + weights.specular;
+				let cdfTransmission = cdfSpecular + weights.transmission;
+				let cdfTotal = cdfTransmission + weights.diffuse;
 
-				var cdf: vec4f;
-				cdf.x = weights.diffuse;
-				cdf.y = weights.specular + cdf.x;
-				cdf.z = weights.clearcoat + cdf.y;
-				cdf.w = weights.transmission + cdf.z;
-
-				let r = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdf.w;
-
+				// random samples for lobes
+				let lobeSample = ${ rand1 }( ${ RNG_INDEX_SCATTER_TYPE } ) * cdfTotal;
 				let directionUV = ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } );
+
+				// output
 				var wi: vec3f;
-				var wiClearcoat: vec3f;
 				var wh: vec3f;
-				var whClearcoat: vec3f;
-				var isTransmissive = false;
 
-				if ( r <= cdf.x ) { // diffuse
+				// TODO: see if we can clean up these flags so they're not necessary
+				var isTransmissionLobe = false;
+				var isDead = false;
 
-					wi = ${ diffuseDirectionFunc }( wo, directionUV );
-					wh = normalize( wi + wo );
+				if ( lobeSample <= cdfClearcoat ) {
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
-					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
+					// clearcoat
+					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+					let whCoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
+					let wiCoat = - normalize( reflect( woClearcoat, whCoat ) );
 
-				} else if ( r <= cdf.y ) { // specular
+					wi = normalize( surf.normalInvBasis * surf.clearcoatBasis * wiCoat );
+					wh = normalize( surf.normalInvBasis * surf.clearcoatBasis * whCoat );
+
+					// reflected rays must leave above the geometry surface - flip rays that land
+					// below it due to the shading normal. Rays below the shading hemisphere are
+					// left as is since their loss is refunded by the energy compensation tables
+					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
+					let geomDotDir = dot( wi, faceNormal );
+					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
+
+						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
+
+					}
+
+				} else if ( lobeSample <= cdfSpecular ) {
+
+					// specular
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
 
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 					wi = - normalize( reflect( wo, wh ) );
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
-					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
+					// reflected rays must leave above the geometry surface - flip rays that land
+					// below it due to the shading normal. Rays below the shading hemisphere are
+					// left as is since their loss is refunded by the energy compensation tables
+					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
+					let geomDotDir = dot( wi, faceNormal );
+					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
-				} else if ( r <= cdf.z ) { // clearcoat
+						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
-					whClearcoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
-					wiClearcoat = - normalize( reflect( woClearcoat, whClearcoat ) );
+					}
 
-					wi = normalize( invBasis * clearcoatBasis * wiClearcoat );
-					wh = normalize( invBasis * clearcoatBasis * whClearcoat );
+				} else if ( lobeSample <= cdfTransmission ) {
 
-				} else if ( r <= cdf.w ) { // transmission / refraction
+					// transmission
+					isTransmissionLobe = true;
 
-					isTransmissive = true;
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
 
-					if ( surf.thinWall ) {
+					// sample the half vector first and select reflection or refraction by the
+					// facet fresnel, matching Cycles - total internal reflection drives the
+					// fresnel to 1 so TIR facets always reflect with a matching pdf
+					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
+					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+					let fresnelSample = ( lobeSample - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
+					let doReflect = fresnelSample < F;
+					if ( doReflect ) {
 
-						// model the double refraction as a single reflection flipped through the surface
+						wi = - normalize( reflect( wo, wh ) );
+
+					} else if ( surf.thinWall ) {
+
+						// model the double refraction as a single reflection flipped through the
+						// surface at the remapped thin wall roughness
 						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
 						wh = ${ ggxDirectionFunc }( wo, thinWallAlpha, directionUV );
 						wi = - normalize( reflect( wo, wh ) );
@@ -246,24 +380,104 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					} else {
 
-						wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 						wi = refract( - wo, wh, surf.eta );
-
-						if ( all( wi == vec3f( 0.0 ) ) ) {
-
-							// total internal reflection - refract returns a zero vector, so bounce the
-							// ray off the inside of the surface instead of terminating it
-							wi = - normalize( reflect( wo, wh ) );
-
-						}
 
 					}
 
-					wiClearcoat = normalize( invClearcoatBasis * normalBasis * wi );
-					whClearcoat = normalize( invClearcoatBasis * normalBasis * wh );
+					// the facet choice must agree with the resulting hemisphere - reflection above,
+					// transmission below. Mismatched samples are dropped since their loss is
+					// refunded by the energy compensation tables
+					isDead = doReflect != ( wi.z > 0.0 );
+
+				} else if ( lobeSample <= cdfTotal ) {
+
+					// diffuse
+					wi = ${ diffuseDirectionFunc }( wo, directionUV );
+					wh = normalize( wi + wo );
+
+					// reflected rays must leave above the geometry surface - flip rays that land
+					// below it due to the shading normal. Rays below the shading hemisphere are
+					// left as is since their loss is refunded by the energy compensation tables
+					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
+					let geomDotDir = dot( wi, faceNormal );
+					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
+
+						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
+
+					}
 
 				}
 
+				// pdf mixture - every lobe that can produce the sampled direction contributes its
+				// share, in the same cascade order as the eval blocks
+
+				// clearcoat
+				if ( weights.clearcoat > 0.0 ) {
+
+					// the clearcoat lobe evaluates in its own frame
+					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+					let wiClearcoat = normalize( toClearcoatMat * wi );
+					if ( wiClearcoat.z > 0.0 ) {
+
+						let whClearcoat = normalize( toClearcoatMat * wh );
+						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+						result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+
+					}
+
+				}
+
+				// specular
+				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
+
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
+
+					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
+
+				}
+
+				// transmission
+				if ( weights.transmission > 0.0 ) {
+
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
+
+					// the glass lobe selects reflection or refraction by the facet fresnel so
+					// each side carries the corresponding share of the transmission pdf
+					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+					if ( wi.z > 0.0 ) {
+
+						result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
+
+					} else if ( surf.thinWall ) {
+
+						// the flipped reflection shares the reflection pdf at the remapped roughness
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
+
+					} else {
+
+						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+
+					}
+
+				}
+
+				// diffuse
+				if ( weights.diffuse > 0.0 ) {
+
+					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
+
+				}
+
+				//
+
+				// construct the scatter context
 				var ctx: ${ bxdfContextStruct };
 				ctx.V = wo;
 				ctx.L = wi;
@@ -271,58 +485,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				ctx.VdotH = saturate( dot( wo, wh ) );
 
-				ctx.Vc = woClearcoat;
-				ctx.Lc = wiClearcoat;
-				ctx.Hc = whClearcoat;
+				// evaluate the bsdf for the sampled direction
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissionLobe ) * select( 1.0, 0.0, isDead );
+				result.direction = normalize( surf.normalBasis * wi );
 
-				if ( weights.diffuse > 0.0 ) {
-
-					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
-
-				}
-
-				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
-
-					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
-
-				}
-
-				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
-
-					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
-
-				}
-
-				if ( weights.transmission > 0.0 && wi.z < 0.0 ) {
-
-					if ( surf.thinWall ) {
-
-						// the flipped reflection shares the reflection pdf
-						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
-						result.pdf += weights.transmission * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
-
-					} else {
-
-						result.pdf += weights.transmission * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
-
-					}
-
-				}
-
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissive );
-				result.direction = normalize( normalBasis * wi );
-				result.isTransmissive = isTransmissive;
-
-				// Flip the scattered ray through the surface if it lands on the wrong side of the
-				// geometry due to the shading normal - reflected rays must leave above the surface
-				// and transmitted rays below it
-				let scatterNormal = surf.faceNormal * select( 1.0, - 1.0, isTransmissive );
-				let geomDotDir = dot( result.direction, scatterNormal );
-				if ( geomDotDir < 0.0 ) {
-
-					result.direction = normalize( result.direction - 2.0 * geomDotDir * scatterNormal );
-
-				}
+				// a glass ray crossing below the surface enters or leaves the volume
+				result.isTransmissive = isTransmissionLobe && dot( result.direction, surf.faceNormal ) < 0.0;
 
 				return result;
 

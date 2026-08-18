@@ -24,7 +24,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	tiles: 2,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 
 	color: '#eeeeee',
 	fog: true,
@@ -32,7 +32,7 @@ const params = {
 	lightIntensity: 500,
 	lightColor: '#ffffff',
 
-	bounces: 10,
+	bounces: 15,
 
 	...getScaledSettings(),
 
@@ -117,7 +117,7 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
@@ -173,7 +173,7 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 

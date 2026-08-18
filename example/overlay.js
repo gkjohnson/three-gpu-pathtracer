@@ -32,8 +32,8 @@ let loader;
 const params = {
 
 	// path tracer settings
-	bounces: 5,
-	renderScale: 1 / window.devicePixelRatio,
+	bounces: 15,
+	renderScale: 1,
 	filterGlossyFactor: 1,
 	tiles: 1,
 	multipleImportanceSampling: true,
@@ -132,7 +132,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
-	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
@@ -202,6 +202,6 @@ function animate() {
 	renderer.render( overlayScene, camera );
 	renderer.autoClear = originalAutoClear;
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

@@ -2,8 +2,8 @@ import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
@@ -126,6 +126,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let objectInfo = transforms[ hitResult.objectIndex ];
 						var materialInfo = materials[ objectInfo.materialIndex ];
 
+						// a matte surface hit by the camera ray renders as a fully transparent
+						if ( material.matte != 0 && bounce == 0u ) {
+
+							resultColor = vec4f( 0.0 );
+							break;
+
+						}
+
 						// apply per-object colors
 						materialInfo.color *= objectInfo.color.rgb;
 						materialInfo.opacity *= objectInfo.color.a;
@@ -191,19 +199,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// track the smallest pdf seen along the path for the glossy filter
 						minPdf = min( minPdf, scatterRec.pdf );
 
-						// russian roulette early out
+						// russian roulette early out:
+						// Matches Cycles path_state_continuation_probability in integrator/path_state.h
 						if ( bounce >= 3u ) {
 
 							let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-							let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
-							if ( ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+							let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+							if ( rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
 
 								break;
 
 							}
 
-							// perform sample clamping here to avoid bright pixels
-							throughputColor *= min( 1.0 / rrProb, 20.0 );
+							throughputColor /= rrProb;
 
 						}
 

@@ -52,10 +52,12 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
 		remaining -= weights.clearcoat;
 
+		// this specular lobe only handles the opaque portion of the specular
 		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
-		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * fEstimate );
+		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * fEstimate );
 		remaining -= weights.specular;
 
+		// the transmission lobe covers both the reflected and refracted halves of the transmissive portion
 		weights.transmission = remaining * surf.transmission;
 		remaining -= weights.transmission;
 

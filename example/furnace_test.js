@@ -11,6 +11,7 @@ const options = {
 	enable: true,
 	useMegakernel: false,
 	whiteBackground: false,
+	bounces: 15,
 	xAxis: 'roughness',
 	yAxis: 'metalness',
 };
@@ -21,6 +22,7 @@ renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.bounces = options.bounces;
 
 document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
@@ -63,6 +65,12 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 
 } );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
+gui.add( options, 'bounces', 1, 100, 1 ).onChange( () => {
+
+	pathTracer.bounces = options.bounces;
+	pathTracer.reset();
+
+} );
 gui.add( options, 'xAxis', AXIS_PROPERTIES ).onChange( rebuild );
 gui.add( options, 'yAxis', AXIS_PROPERTIES ).onChange( rebuild );
 

@@ -128,6 +128,6 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

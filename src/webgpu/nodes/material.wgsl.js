@@ -17,6 +17,7 @@ import {
 	ggxDistributionFunc,
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
+	ggxRefractionAdjustedPDFFunc,
 	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
@@ -698,49 +699,6 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 
 `, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
 
-const rgbMixFunc = wgslFn( /* wgsl */ `
-
-	fn rgbMix( base: vec3f, specular: vec3f, rgbAlpha: vec3f ) -> vec3f {
-
-		let alphaMax = max( max( rgbAlpha.x, rgbAlpha.y ), rgbAlpha.z );
-		return ( 1 - alphaMax ) * base + rgbAlpha * specular;
-
-	}
-
-` );
-
-export const iridescentDielectricLayerFunc = wgslFn( /* wgsl */ `
-
-	fn iridescentDielectricLayer(
-		dielectricBase: vec3f, base: vec3f, specular: vec3f, HdotL: f32,
-		outsideIor: f32, baseIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
-	) -> vec3f {
-
-		let baseF0 = vec3( iorToF0( baseIor ) );
-
-		let iridescentF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
-
-		return mix( dielectricBase, rgbMix( base, specular, iridescentF ), strength );
-
-	}
-
-`, [ iorToF0Func, iridescentFresnelFunc, rgbMixFunc ] );
-
-export const iridescentConductorLayerFunc = wgslFn( /* wgsl */ `
-
-	fn iridescentConductorLayer(
-		metalBase: vec3f, specular: vec3f, baseF0: vec3f, HdotL: f32,
-		outsideIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
-	) -> vec3f {
-
-		let iridescenceF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
-
-		return mix( metalBase, specular * iridescenceF, strength );
-
-	}
-
-`, [ iridescentFresnelFunc ] );
-
 export const conductorFresnelFunc = wgslFn( /* wgsl */ `
 
 	fn conductorFresnel( VdotH: f32, f0: vec3f, specular: vec3f ) -> vec3f {
@@ -764,12 +722,15 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
 `, [ iorToF0Func, schlickFresnelFunc ] );
 
-// GGX Multibounce compensation using Turquin's method
-export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
+// GGX Multibounce compensation using Turquin's method. Bakes the directional albedo of the
+// reflection lobe, optionally fresnel-weighted, and optionally including the refraction lobe
+// for the full transmissive bsdf. "eta" is the incident over transmitted ior ratio.
+export const turquinIntegralFn = wgslTagFn/* wgsl */ `
 
 	fn albedo(
-		ior: f32,
+		eta: f32,
 		includeFresnel: bool,
+		includeRefraction: bool,
 		outputTarget: texture_storage_3d<r16float, write>,
 		globalId: vec3u,
 		layer: u32,
@@ -790,44 +751,64 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 		let wo = vec3( sqrt( 1 - cosThetaO * cosThetaO ), 0 , cosThetaO );
 
+		let f0 = ${ iorToF0Func }( eta );
+
 		var result = 0.0;
 		for ( var x = 0u; x < GRID_SIZE; x++ ) {
 
 			for ( var y = 0u; y < GRID_SIZE; y++ ) {
 
-				// calculate the incident vector to sample
+				// calculate the half vector to sample
 				let gridPoint = vec2f( vec2u( x, y ) ) + vec2f( 0.5 );
 				let sampleUv = gridPoint / f32( GRID_SIZE );
 				let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), sampleUv );
-				var wi = - reflect( wo, wh );
 
-				// if the incident vector is below the surface then skip it
-				let NdotL = wi.z;
-				if ( NdotL <= 0.0 ) {
-
-					continue;
-
-				}
-
-				let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
-				let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
 				var f = 1.0;
 				if ( includeFresnel ) {
 
 					// use the exact dielectric fresnel so the table agrees with the fresnel used
 					// for lobe sampling
-					f = ${ dielectricFresnelFunc }( dot( wo, wh ), 1.0 / ior );
+					f = ${ dielectricFresnelFunc }( dot( wo, wh ), eta );
 
 				}
 
-				var weight = 0.0;
-				if ( pdf != 0.0 ) {
+				// air-incident reflection is evaluated with schlick in bsdfEval - only the
+				// volume-incident ( TIR ) glass reflection uses the exact fresnel
+				var reflectionF = f;
+				if ( eta < 1.0 ) {
 
-					weight = 1 / pdf;
+					reflectionF = ${ schlickFresnelFunc }( dot( wo, wh ), f0 );
 
 				}
 
-				result += specular.x * NdotL * weight * f;
+				// reflection lobe - samples landing below the surface are lost
+				let wi = - reflect( wo, wh );
+				let reflectionPdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
+				if ( wi.z > 0.0 && reflectionPdf != 0.0 ) {
+
+					let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
+					result += reflectionF * specular.x * wi.z / reflectionPdf;
+
+				}
+
+				// refraction lobe - the btdf carries its own ( 1 - F ) fresnel weight, and
+				// samples landing back above the surface are lost
+				if ( includeRefraction ) {
+
+					let wiRefract = refract( - wo, wh, eta );
+					if ( wiRefract.z < 0.0 ) {
+
+						let transmission = ${ specularBtdfFunc }( wo, wiRefract, wh, vec2f( alpha ), eta );
+						let pdf = ${ ggxRefractionAdjustedPDFFunc }( wo, wiRefract, wh, vec2f( alpha ), eta );
+						if ( pdf != 0.0 ) {
+
+							result += transmission.x * abs( wiRefract.z ) / pdf;
+
+						}
+
+					}
+
+				}
 
 			}
 

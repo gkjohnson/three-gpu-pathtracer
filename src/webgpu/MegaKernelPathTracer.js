@@ -14,7 +14,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// options
 		this.tiles = new Vector2( 2, 2 );
 		this.envInfo = new EquirectHdrInfoNode();
-		this.samples = 0;
+
+		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
+		// far through the tile cycle the render is and need no GPU work to measure
+		this._completedSamples = 0;
+		this._tileProgress = 0;
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
@@ -28,6 +32,33 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	resetSeed() {
 
 		this.kernel.seed = 0;
+
+	}
+
+	reset() {
+
+		super.reset();
+		this._completedSamples = 0;
+		this._tileProgress = 0;
+
+	}
+
+	async getSampleCountsAsync() {
+
+		if ( this.lowResMode ) {
+
+			return { min: 0, max: 0, avg: 0 };
+
+		}
+
+		const completed = this._completedSamples;
+		const progress = this._tileProgress;
+
+		return {
+			min: progress === 1 ? completed + 1 : completed,
+			max: completed + 1,
+			avg: completed + progress,
+		};
 
 	}
 
@@ -146,7 +177,15 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		kernel.bounces = bounces;
 
+		// number of tile cycles that have finished, ie. the sample count every pixel has reached
+		let completedSamples = 0;
+
 		while ( true ) {
+
+			// every pixel in a tile finishes its sample in a single dispatch, so the sample counts
+			// can be derived from how far through the tile cycle we are without reading anything back
+			const tileCount = this.lowResMode ? 1 : tiles.x * tiles.y;
+			let completedTiles = 0;
 
 			const tileSize = kernel.tileSize;
 			if ( lowResMode ) {
@@ -175,13 +214,19 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 					kernel.offset.set( x, y ).multiply( tileSize );
 					renderer.compute( kernel.kernel, dispatchSize );
+
+					// in low res mode the tiles past the first fall outside the target and do no work
+					completedTiles = Math.min( completedTiles + 1, tileCount );
+					this._completedSamples = completedSamples;
+					this._tileProgress = completedTiles / tileCount;
+
 					yield;
 
 				}
 
 			}
 
-			this.samples ++;
+			completedSamples ++;
 
 		}
 
