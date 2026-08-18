@@ -243,6 +243,13 @@ export const eonPDFFunc = wgslFn( /* wgsl */ `
 
 	fn eonPdf( wo: vec3f, wi: vec3f, roughness: f32 ) -> f32 {
 
+		// The EON proposal is defined over the positive hemisphere.
+		if ( wo.z <= 0.0 || wi.z <= 0.0 ) {
+
+			return 0.0;
+
+		}
+
 		let uniformProbability = eonUniformProbability( wo, roughness );
 		let cltcProbability = 1.0 - uniformProbability;
 		let uniformPdf = 1.0 / ( 2.0 * PI );
