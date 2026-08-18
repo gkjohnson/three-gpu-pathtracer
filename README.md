@@ -26,8 +26,6 @@ _More features and capabilities in progress!_
 
 [Physically Based Materials](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)
 
-[Lego Models](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)
-
 [Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)
 
 [Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/depthOfField.html)
