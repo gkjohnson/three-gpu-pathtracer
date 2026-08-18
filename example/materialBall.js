@@ -1,5 +1,6 @@
 import {
 	ACESFilmicToneMapping,
+	Color,
 	Scene,
 	WebGPURenderer,
 	Vector3,
@@ -12,12 +13,21 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
 
-const CREDITS = 'Material orb model courtesy of USD Working Group';
+const DB_URL = 'https://api.physicallybased.info/v2/materials';
+const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
+
+// preset entry for hand edited values, ie. not one of the database materials
+const CUSTOM_MATERIAL = 'Custom';
 
 let pathTracer, renderer, controls, material;
 let camera, scene, loader, surfaceMesh;
+let gui, database, imgEl;
+
+const _color = new Color();
 
 const params = {
+
+	material: CUSTOM_MATERIAL,
 
 	materialProperties: {
 		color: '#ffe6bd',
@@ -109,6 +119,10 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
+	// reference photo for the selected database material, hidden while editing by hand
+	imgEl = document.getElementById( 'materialImage' );
+	imgEl.style.display = 'none';
+
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
@@ -125,7 +139,13 @@ async function init() {
 	window.SCENE = scene;
 
 	// load assets
-	const orb = await new MaterialOrbSceneLoader().loadAsync();
+	const [ orb, dbJson ] = await Promise.all( [
+		new MaterialOrbSceneLoader().loadAsync(),
+		fetch( DB_URL ).then( res => res.json() ),
+	] );
+
+	database = {};
+	dbJson.data.forEach( mat => database[ mat.name ] = mat );
 
 	// scene initialization
 	scene.add( orb.scene );
@@ -158,7 +178,9 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	// gui
-	const gui = new GUI();
+	gui = new GUI();
+	gui.add( params, 'material', [ CUSTOM_MATERIAL, ...Object.keys( database ) ] ).onChange( onMaterialChange );
+
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'displaySampleDensity' );
@@ -200,7 +222,87 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
 
+	// editing anything by hand means the values no longer match the selected preset
+	matFolder1.controllersRecursive().forEach( controller => {
+
+		controller.onFinishChange( () => {
+
+			params.material = CUSTOM_MATERIAL;
+			imgEl.style.display = 'none';
+			gui.controllers[ 0 ].updateDisplay();
+
+		} );
+
+	} );
+
 	animate();
+
+}
+
+// copy a physicallybased.info entry into the material properties so the manual controls stay in
+// sync and can be used to tweak the preset afterward
+function applyDatabaseMaterial( info ) {
+
+	const materialProperties = params.materialProperties;
+
+	// the database only describes a subset of the material, so reset the rest to neutral
+	materialProperties.color = '#ffffff';
+	materialProperties.specularColor = '#ffffff';
+	materialProperties.attenuationColor = '#ffffff';
+	materialProperties.attenuationDistance = 1;
+	materialProperties.metalness = 0;
+	materialProperties.roughness = 1;
+	materialProperties.ior = 1.5;
+	materialProperties.transmission = 0;
+	materialProperties.iridescence = 0;
+	materialProperties.iridescenceIOR = 1;
+	materialProperties.iridescenceThickness = 0;
+
+	// database colors are linear, the gui works in hex so they round trip through sRGB
+	const toHex = rgb => '#' + _color.setRGB( ...rgb ).getHexString();
+
+	if ( info.specularColor ) materialProperties.specularColor = toHex( info.specularColor[ 0 ].color[ 0 ].color );
+	if ( 'metalness' in info ) materialProperties.metalness = info.metalness;
+	if ( 'roughness' in info ) materialProperties.roughness = info.roughness;
+	if ( 'ior' in info ) materialProperties.ior = info.ior;
+	if ( 'transmission' in info ) materialProperties.transmission = info.transmission;
+
+	if ( 'thinFilmThickness' in info ) {
+
+		materialProperties.iridescence = 1;
+		materialProperties.iridescenceIOR = info.thinFilmIor;
+		materialProperties.iridescenceThickness = info.thinFilmThickness[ 2 ] ?? info.thinFilmThickness[ 0 ];
+
+	}
+
+	// a transmissive material tints by attenuation rather than base color
+	if ( materialProperties.transmission ) {
+
+		if ( info.color ) materialProperties.attenuationColor = toHex( info.color[ 0 ].color );
+		materialProperties.attenuationDistance = info.transmissionDepth ?? 1;
+
+	} else if ( info.color ) {
+
+		materialProperties.color = toHex( info.color[ 0 ].color );
+
+	}
+
+	imgEl.src = Object.values( info.images[ 1 ] )[ 0 ];
+
+}
+
+function onMaterialChange() {
+
+	if ( params.material !== CUSTOM_MATERIAL ) {
+
+		applyDatabaseMaterial( database[ params.material ] );
+
+	}
+
+	imgEl.style.display = params.material === CUSTOM_MATERIAL ? 'none' : '';
+
+	gui.controllersRecursive().forEach( c => c.updateDisplay() );
+	onParamsChange();
 
 }
 
