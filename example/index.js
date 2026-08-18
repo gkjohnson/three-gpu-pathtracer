@@ -115,6 +115,9 @@ let gradientMap;
 let loader;
 let models;
 
+// a model loaded from a url or dropped file, which is displayed instead of a list entry
+let customModel = null;
+
 const dropZone = document.getElementById( 'drop-zone' );
 
 // sample counts are measured asynchronously, so the average is kept for the pause check
@@ -314,16 +317,17 @@ function onModelChange() {
 
 	if ( /^https?:\/\//.test( value ) ) {
 
-		// an arbitrary model url, registered so it shows up in the list alongside the presets
-		models[ value ] = models[ value ] || { url: value };
-		params.model = value;
+		customModel = { url: value };
+		params.model = '';
 
 	} else if ( value in models ) {
 
+		customModel = null;
 		params.model = value;
 
 	} else {
 
+		customModel = null;
 		params.model = Object.keys( models )[ 0 ];
 
 	}
@@ -332,8 +336,8 @@ function onModelChange() {
 
 }
 
-// registers dropped files as a model in the list and displays it
-function onDrop( e ) {
+// loads dropped files without adding them to the model list
+async function onDrop( e ) {
 
 	e.preventDefault();
 	dropZone.classList.add( 'hidden' );
@@ -350,10 +354,13 @@ function onDrop( e ) {
 	const fileMap = new Map();
 	files.forEach( file => fileMap.set( file.name, URL.createObjectURL( file ) ) );
 
-	models[ rootFile.name ] = { url: rootFile.name, fileMap };
-	params.model = rootFile.name;
+	customModel = { url: rootFile.name, fileMap };
+	params.model = '';
 
-	updateModel();
+	await updateModel();
+
+	// the files are only needed while loading
+	fileMap.forEach( url => URL.revokeObjectURL( url ) );
 
 }
 
@@ -383,7 +390,9 @@ function buildGui() {
 
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ) ).onChange( v => {
+	// custom models are shown as an empty entry since they are not in the list
+	const modelOptions = customModel ? [ '', ...Object.keys( models ) ] : Object.keys( models );
+	gui.add( params, 'model', modelOptions ).onChange( v => {
 
 		const url = new URL( window.location );
 		url.searchParams.set( 'model', v );
@@ -484,7 +493,7 @@ async function updateModel() {
 
 	}
 
-	const modelInfo = models[ params.model ];
+	const modelInfo = customModel || models[ params.model ];
 
 	// hide the canvas and the transparency checkerboard while loading
 	document.body.classList.remove( 'checkerboard' );
