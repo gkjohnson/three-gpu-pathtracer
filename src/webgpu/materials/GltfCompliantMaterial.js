@@ -2,9 +2,9 @@ import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
 import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
-import { eonBrdfFunc } from '../nodes/eon.wgsl.js';
+import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
-import { diffuseDirectionFunc, getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
+import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
 import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
@@ -370,7 +370,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				} else if ( lobeSample <= cdfTotal ) {
 
 					// diffuse
-					wi = ${ diffuseDirectionFunc }( wo, directionUV );
+					// all diffuse BRDF variants share the EON sampling proposal
+					wi = ${ eonDirectionFunc }( wo, surf.diffuseRoughness, directionUV );
 					wh = normalize( wi + wo );
 
 					// reflected rays must leave above the geometry surface - flip rays that land
@@ -449,7 +450,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// diffuse
 				if ( weights.diffuse > 0.0 ) {
 
-					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
+					result.pdf += weights.diffuse * ${ eonPDFFunc }( wo, wi, surf.diffuseRoughness );
 
 				}
 
