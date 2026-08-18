@@ -172,11 +172,9 @@ async function init() {
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 1, 0.25, 1 );
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
-	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	// background map
 	gradientMap = new GradientEquirectTexture();
@@ -191,6 +189,7 @@ async function init() {
 		pathTracer.updateCamera();
 
 	} );
+	resetCamera();
 
 	// scene
 	scene = new Scene();
@@ -388,6 +387,17 @@ function updateEnvMap() {
 
 }
 
+// models are normalized to a unit sphere at the origin so the framing is the same for all of them
+function resetCamera() {
+
+	perspectiveCamera.position.set( - 1, 0.25, 1 );
+	orthoCamera.position.set( - 1, 0.25, 1 );
+
+	controls.target.set( 0, 0, 0 );
+	controls.update();
+
+}
+
 function updateCameraProjection( cameraProjection ) {
 
 	// sync position
@@ -523,10 +533,11 @@ async function updateModel() {
 
 	} );
 
-	floorPlane.position.y = box.min.y;
+	floorPlane.position.y = box.min.y - 1e-3;
 
 	scene.add( model );
 
+	resetCamera();
 	pathTracer.setScene( scene, activeCamera );
 
 	loader.setPercentage( 1 );
