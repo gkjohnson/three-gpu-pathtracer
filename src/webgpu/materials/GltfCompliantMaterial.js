@@ -572,9 +572,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				ctx.L = wi;
 				ctx.H = wh;
 				ctx.VdotH = saturate( dot( wo, wh ) );
-				ctx.Vc = woClearcoat;
-				ctx.Lc = wiClearcoat;
-				ctx.Hc = whClearcoat;
 
 				result.color = ${ bsdfEvalFunc }( ctx, surf ) * max( 0.0, wi.z );
 

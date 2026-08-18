@@ -76,7 +76,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				var materialInfo = materials[ objectInfo.materialIndex ];
 
 				// a matte surface hit by the camera ray renders as a fully transparent
-				let isMatte = material.matte != 0 && input.currentBounce == 0u;
+				let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
 
 				// apply per-object colors
 				materialInfo.color *= objectInfo.color.rgb;
