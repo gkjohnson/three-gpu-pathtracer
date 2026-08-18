@@ -90,12 +90,6 @@ const params = {
 
 	envMap: envMaps[ 'Aristea Wreck Puresky' ],
 
-	gradientTop: '#bfd8ff',
-	gradientBottom: '#ffffff',
-
-	environmentIntensity: 1.0,
-	environmentRotation: 0,
-
 	cameraProjection: 'Perspective',
 
 	transparentBackground: false,
@@ -273,20 +267,20 @@ function onParamsChange() {
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
 
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.environmentRotation.y = params.environmentRotation;
-
-	scene.background = gradientMap;
-	scene.backgroundIntensity = 1;
-
 	if ( params.transparentBackground ) {
 
 		scene.background = null;
 		renderer.setClearAlpha( 0 );
 
+	} else {
+
+		scene.background = gradientMap;
+		renderer.setClearAlpha( 1 );
+
 	}
 
-	pathTracer.updateMaterials();
+	document.body.classList.toggle( 'checkerboard', params.transparentBackground );
+
 	pathTracer.updateEnvironment();
 
 }
@@ -339,12 +333,6 @@ function onResize() {
 
 function buildGui() {
 
-	if ( gui ) {
-
-		gui.destroy();
-
-	}
-
 	gui = new GUI();
 
 	gui.add( params, 'model', Object.keys( models ) ).onChange( v => {
@@ -359,13 +347,9 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'transparentBackground' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onParamsChange();
-
-	} );
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.set( v, v );
@@ -380,8 +364,6 @@ function buildGui() {
 
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
 	environmentFolder.open();
 
 }
@@ -438,7 +420,6 @@ async function updateModel() {
 
 	if ( gui ) {
 
-		document.body.classList.remove( 'checkerboard' );
 		gui.destroy();
 		gui = null;
 
@@ -446,6 +427,8 @@ async function updateModel() {
 
 	const modelInfo = models[ params.model ];
 
+	// hide the canvas and the transparency checkerboard while loading
+	document.body.classList.remove( 'checkerboard' );
 	renderer.domElement.style.visibility = 'hidden';
 	loader.setPercentage( 0 );
 
@@ -540,11 +523,6 @@ async function updateModel() {
 	onParamsChange();
 
 	renderer.domElement.style.visibility = 'visible';
-	if ( params.transparentBackground ) {
-
-		document.body.classList.add( 'checkerboard' );
-
-	}
 
 }
 
