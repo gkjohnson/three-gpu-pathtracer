@@ -83,7 +83,6 @@ const envMaps = {
 
 const params = {
 
-	multipleImportanceSampling: true,
 	renderScale: 1,
 	tiles: 2,
 
@@ -100,7 +99,6 @@ const params = {
 	cameraProjection: 'Perspective',
 
 	transparentBackground: false,
-	checkerboardTransparency: true,
 
 	enable: true,
 	bounces: 15,
@@ -191,7 +189,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -240,14 +237,14 @@ async function init() {
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
-	onHashChange();
+	onModelChange();
 	updateEnvMap();
 	onResize();
 
 	animate();
 
 	window.addEventListener( 'resize', onResize );
-	window.addEventListener( 'hashchange', onHashChange );
+	window.addEventListener( 'popstate', onModelChange );
 
 }
 
@@ -288,7 +285,6 @@ function animate() {
 
 function onParamsChange() {
 
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
 
@@ -310,27 +306,26 @@ function onParamsChange() {
 
 }
 
-function onHashChange() {
+function onModelChange() {
 
-	let hashModel = '';
-	if ( window.location.hash ) {
+	const value = new URLSearchParams( window.location.search ).get( 'model' ) || '';
 
-		const modelName = decodeURI( window.location.hash.substring( 1 ) );
-		if ( modelName in models ) {
+	if ( /^https?:\/\//.test( value ) ) {
 
-			hashModel = modelName;
+		// an arbitrary model url, registered so it shows up in the list alongside the presets
+		models[ value ] = models[ value ] || { url: value };
+		params.model = value;
 
-		}
+	} else if ( value in models ) {
+
+		params.model = value;
+
+	} else {
+
+		params.model = Object.keys( models )[ 0 ];
 
 	}
 
-	if ( ! ( hashModel in models ) ) {
-
-		hashModel = Object.keys( models )[ 0 ];
-
-	}
-
-	params.model = hashModel;
 	updateModel();
 
 }
@@ -369,14 +364,17 @@ function buildGui() {
 
 	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( v => {
 
-		window.location.hash = v;
+		const url = new URL( window.location );
+		url.searchParams.set( 'model', v );
+		window.history.pushState( {}, '', url );
+		onModelChange();
 
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
 
@@ -391,13 +389,6 @@ function buildGui() {
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
-
-	} );
-	pathTracingFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
 
 	} );
 	pathTracingFolder.open();
@@ -627,7 +618,7 @@ async function updateModel() {
 	onParamsChange();
 
 	renderer.domElement.style.visibility = 'visible';
-	if ( params.checkerboardTransparency ) {
+	if ( params.transparentBackground ) {
 
 		document.body.classList.add( 'checkerboard' );
 
