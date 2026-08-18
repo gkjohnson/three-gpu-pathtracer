@@ -28,6 +28,7 @@ import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './utils/getScaledSettings.js';
 import { LoaderElement } from './utils/LoaderElement.js';
+import { MODEL_LIST } from './modelList.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
 /**
@@ -162,16 +163,7 @@ function getRequiredDeviceLimits( adapter ) {
 
 async function init() {
 
-	// Wait for the models list to be available since vite doesn't guarantee execution order
-	// of module tags and we rely on the other script to define the set of models for display
-	// in this example. TODO: handle this more gracefully.
-	while ( ! window.MODEL_LIST ) {
-
-		await waitFrame();
-
-	}
-
-	models = window.MODEL_LIST || {};
+	models = { ...MODEL_LIST };
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
@@ -362,7 +354,7 @@ function buildGui() {
 
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( v => {
+	gui.add( params, 'model', Object.keys( models ) ).onChange( v => {
 
 		const url = new URL( window.location );
 		url.searchParams.set( 'model', v );
