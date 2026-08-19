@@ -46,6 +46,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
+	pathTracer.clampIndirect = 10;
 	pathTracer.renderScale = renderScale;
 	pathTracer.tiles.set( tiles, tiles );
 
