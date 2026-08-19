@@ -203,7 +203,7 @@ export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 `, [ scatterRecordStruct ] );
 
-// Clamp individual light-path contributions by luminance while preserving chromaticity.
+// Clamp individual light-path contributions using Cycles' RGB sum while preserving chromaticity.
 export const clampPathContributionFunc = wgslFn( /* wgsl */ `
 
 	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
@@ -214,17 +214,17 @@ export const clampPathContributionFunc = wgslFn( /* wgsl */ `
 
 		}
 
-		let limit = select( clampIndirect, clampDirect, pathDepth == 1u );
+		let limit = select( clampIndirect, clampDirect, pathDepth == 1u ) * 3.0;
 		if ( limit <= 0.0 ) {
 
 			return contribution;
 
 		}
 
-		let luminance = dot( max( contribution, vec3f( 0.0 ) ), vec3f( 0.2126, 0.7152, 0.0722 ) );
-		if ( luminance > limit ) {
+		let strength = dot( abs( contribution ), vec3f( 1.0 ) );
+		if ( strength > limit ) {
 
-			return contribution * ( limit / luminance );
+			return contribution * ( limit / strength );
 
 		}
 
