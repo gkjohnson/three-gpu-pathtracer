@@ -208,13 +208,7 @@ export const clampPathContributionFunc = wgslFn( /* wgsl */ `
 
 	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
 
-		if ( pathDepth == 0u ) {
-
-			return contribution;
-
-		}
-
-		let limit = select( clampIndirect, clampDirect, pathDepth == 1u ) * 3.0;
+		let limit = select( clampIndirect, clampDirect, pathDepth <= 1u ) * 3.0;
 		if ( limit <= 0.0 ) {
 
 			return contribution;
