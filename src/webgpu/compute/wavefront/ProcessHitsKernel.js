@@ -5,7 +5,7 @@ import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
-import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
+import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
@@ -26,6 +26,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
 			filterGlossy: uniform( 1 ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 0 ),
 
 			// rays
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
@@ -48,6 +50,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				smoothNormals: u32,
 				bounces: u32,
 				filterGlossy: f32,
+				clampDirect: f32,
+				clampIndirect: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -106,7 +110,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// emission
-				var resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, input.currentBounce, clampDirect, clampIndirect );
+				var resultColor = input.resultColor + vec4f( emission, 0.0 );
 				if ( isMatte ) {
 
 					resultColor = vec4f( 0.0 );

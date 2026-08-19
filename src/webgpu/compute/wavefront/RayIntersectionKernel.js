@@ -7,6 +7,7 @@ import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
+import { clampPathContributionFunc } from '../../nodes/utils.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -28,6 +29,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 0 ),
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
@@ -48,6 +51,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			fn compute(
 				// settings
 				misEnabled: u32,
+				clampDirect: f32,
+				clampIndirect: f32,
 
 				transmissiveBackground: u32,
 
@@ -107,7 +112,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 						}
 
-						resultColor += ${ sampleEnvColor }( input.direction ) * vec4f( input.throughputColor * misWeight, 0.0 );
+						let environment = ${ sampleEnvColor }( input.direction ).rgb * input.throughputColor * misWeight;
+						let contribution = ${ clampPathContributionFunc }( environment, input.currentBounce, clampDirect, clampIndirect );
+						resultColor += vec4f( contribution, 0.0 );
 
 					} else {
 

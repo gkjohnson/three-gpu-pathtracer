@@ -203,6 +203,37 @@ export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 `, [ scatterRecordStruct ] );
 
+// Clamp individual light-path contributions by luminance while preserving chromaticity.
+export const clampPathContributionFunc = wgslFn( /* wgsl */ `
+
+	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
+
+		if ( pathDepth == 0u ) {
+
+			return contribution;
+
+		}
+
+		let limit = select( clampIndirect, clampDirect, pathDepth == 1u );
+		if ( limit <= 0.0 ) {
+
+			return contribution;
+
+		}
+
+		let luminance = dot( max( contribution, vec3f( 0.0 ) ), vec3f( 0.2126, 0.7152, 0.0722 ) );
+		if ( luminance > limit ) {
+
+			return contribution * ( limit / luminance );
+
+		}
+
+		return contribution;
+
+	}
+
+` );
+
 export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 	fn applyWrap( v: f32, wrapMode: i32 ) -> f32 {

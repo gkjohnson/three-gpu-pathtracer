@@ -57,6 +57,10 @@ export class PathTracerBackend {
 
 	}
 
+	setClamping( _direct, _indirect ) {
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,

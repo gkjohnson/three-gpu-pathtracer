@@ -101,6 +101,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setClamping( direct, indirect ) {
+
+		this.kernel.clampDirect = direct;
+		this.kernel.clampIndirect = indirect;
+		this.reset();
+
+	}
+
 	setEnvironment( envMap ) {
 
 		this.envInfo.updateFrom( envMap );

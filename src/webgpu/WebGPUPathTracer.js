@@ -182,6 +182,42 @@ export class WebGPUPathTracer {
 
 	}
 
+	get clampDirect() {
+
+		return this._clampDirect;
+
+	}
+
+	set clampDirect( v ) {
+
+		v = Math.max( 0, v );
+		if ( this._clampDirect !== v ) {
+
+			this._clampDirect = v;
+			this._pathTracer.setClamping( v, this._clampIndirect );
+
+		}
+
+	}
+
+	get clampIndirect() {
+
+		return this._clampIndirect;
+
+	}
+
+	set clampIndirect( v ) {
+
+		v = Math.max( 0, v );
+		if ( this._clampIndirect !== v ) {
+
+			this._clampIndirect = v;
+			this._pathTracer.setClamping( this._clampDirect, v );
+
+		}
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -224,6 +260,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
+		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 
@@ -265,6 +302,8 @@ export class WebGPUPathTracer {
 		this.pause = false;
 
 		this.filterGlossyFactor = 1;
+		this._clampDirect = 0;
+		this._clampIndirect = 0;
 
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly
