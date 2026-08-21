@@ -232,6 +232,15 @@ export class AtlasTexture {
 
 		}
 
+		// same textures in a different order: keep the existing
+		// placements and permute the per-index info to the new order
+		// instead of repacking (and re-uploading) every texture
+		if ( this._tryPermuteTextureInfo( textures ) ) {
+
+			return;
+
+		}
+
 		// calculate the maximum dimension of the atlas
 		let maxDim = textures.reduce( ( v, t ) => Math.max( v, t.width, t.height ), 1 );
 		maxDim = Math.min( MAX_TEXTURE_SIZE, maxDim );
@@ -290,6 +299,66 @@ export class AtlasTexture {
 
 		}
 
+		return true;
+
+	}
+
+	// Returns true (after rewriting this.hashes / this.textureInfo) when
+	// `textures` is a permutation of the packed set, i.e. every hash in the
+	// new order matches an unused hash of the packed one. Material traversal
+	// order is not stable across edits that replace material instances, but
+	// the texture *set* is — repacking those identical sources only re-blits
+	// the same texels into the same rects.
+	_tryPermuteTextureInfo( textures ) {
+
+		const hashes = this.hashes;
+		if ( hashes.length !== textures.length ) {
+
+			return false;
+
+		}
+
+		const slotsByHash = new Map();
+		for ( let i = 0, l = hashes.length; i < l; i ++ ) {
+
+			const hash = hashes[ i ];
+			if ( ! slotsByHash.has( hash ) ) {
+
+				slotsByHash.set( hash, [] );
+
+			}
+
+			slotsByHash.get( hash ).push( i );
+
+		}
+
+		const newHashes = new Array( textures.length );
+		const permutation = new Array( textures.length );
+		for ( let i = 0, l = textures.length; i < l; i ++ ) {
+
+			const hash = getTextureHash( textures[ i ] );
+			newHashes[ i ] = hash;
+
+			const slots = slotsByHash.get( hash );
+			if ( slots === undefined || slots.length === 0 ) {
+
+				// a texture we have not packed — repack
+				return false;
+
+			}
+
+			permutation[ i ] = slots.shift();
+
+		}
+
+		const previousInfo = this.textureInfo.slice();
+		for ( let i = 0, l = permutation.length; i < l; i ++ ) {
+
+			this.textureInfo[ i ] = previousInfo[ permutation[ i ] ];
+
+		}
+
+		this.hashes = newHashes;
 		return true;
 
 	}
@@ -409,6 +478,19 @@ export class AtlasTexture {
 
 		}
 
+		// `texture.needsUpdate = true` on the clones below also bumps the
+		// version of the *shared* source, and getTextureHash() hashes that
+		// value. Save the versions so the blit does not invalidate the
+		// hashes this atlas (or another atlas over the same sources) just
+		// computed. WebGPU uploads are gated per texture.version, so the
+		// clones still upload.
+		const prevSourceVersions = new Array( textures.length );
+		for ( let i = 0, l = textures.length; i < l; i ++ ) {
+
+			prevSourceVersions[ i ] = textures[ i ].source.version;
+
+		}
+
 		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
 			const { x, y, w, h, page } = placements[ i ];
@@ -428,6 +510,12 @@ export class AtlasTexture {
 			quadMesh.render( renderer );
 
 			texture.dispose();
+
+		}
+
+		for ( let i = 0, l = textures.length; i < l; i ++ ) {
+
+			textures[ i ].source.version = prevSourceVersions[ i ];
 
 		}
 
