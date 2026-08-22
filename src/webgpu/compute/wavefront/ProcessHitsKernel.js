@@ -27,7 +27,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			bounces: uniform( 1 ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
-			clampIndirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
 
 			// rays
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
@@ -110,7 +110,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// emission
-				let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, input.currentBounce, clampDirect, clampIndirect );
+				let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, input.currentBounce + 1u, clampDirect, clampIndirect );
 				var resultColor = input.resultColor + vec4f( emission, 0.0 );
 				if ( isMatte ) {
 
