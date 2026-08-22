@@ -40,6 +40,7 @@
   "devDependencies": {
     "@lookingglass/webxr": "^0.6.0",
     "@monogrid/gainmap-js": "^3.0.5",
+    "@pmndrs/upscaler": "^0.2.0",
     "@types/node": "^24.3.1",
     "@types/three": "^0.185.1",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
