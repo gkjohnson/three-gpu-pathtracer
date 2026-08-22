@@ -50,7 +50,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.filterGlossyFactor = 0.5;
 
 	// scene
 	scene = new Scene();

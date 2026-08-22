@@ -32,7 +32,7 @@ const params = {
 
 	bounces: 15,
 	renderScale: 1,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	tiles: 1,
 	autoFocus: true,
 
