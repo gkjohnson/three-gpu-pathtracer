@@ -1,7 +1,6 @@
 import {
 	ACESFilmicToneMapping,
 	Scene,
-	EquirectangularReflectionMapping,
 	WebGPURenderer,
 	PerspectiveCamera,
 	MeshBasicNodeMaterial,
@@ -14,12 +13,11 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { Upscaler } from '@pmndrs/upscaler';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './utils/LoaderElement.js';
+import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 
-const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
 const CREDITS = 'Model by "nyancube" on Sketchfab';
 const DESCRIPTION = 'Path tracing at a reduced resolution, upscaled with AMD FidelityFX FSR1.';
@@ -79,7 +77,17 @@ async function init() {
 
 	// scene
 	scene = new Scene();
-	scene.backgroundBlurriness = 0.05;
+
+	// a smooth gradient rather than an hdr keeps the lighting low variance, so the image converges
+	// quickly and without fireflies to distract from the upscale quality
+	const gradientMap = new GradientEquirectTexture();
+	gradientMap.topColor.set( 0x6a8fb5 );
+	gradientMap.bottomColor.set( 0xe8e8e8 );
+	gradientMap.update();
+
+	scene.background = gradientMap;
+	scene.environment = gradientMap;
+	scene.environmentIntensity = 2;
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -87,19 +95,7 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
-	// load the environment map and model
-	const [ gltf, envTexture ] = await Promise.all( [
-		new GLTFLoader().loadAsync( MODEL_URL ),
-		new HDRLoader().loadAsync( ENV_URL ).then( tex => {
-
-			tex.mapping = EquirectangularReflectionMapping;
-			return tex;
-
-		} ),
-	] );
-
-	scene.background = envTexture;
-	scene.environment = envTexture;
+	const gltf = await new GLTFLoader().loadAsync( MODEL_URL );
 	scene.add( gltf.scene );
 
 	// initialize the path tracer
