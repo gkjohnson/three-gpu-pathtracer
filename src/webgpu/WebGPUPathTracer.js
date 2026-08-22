@@ -303,7 +303,7 @@ export class WebGPUPathTracer {
 
 		this.filterGlossyFactor = 1;
 		this._clampDirect = 0;
-		this._clampIndirect = 0;
+		this._clampIndirect = 10;
 
 		// WebGLPathTracer compatibility stubs (see getters above)
 		// TOOD: implement these correctly

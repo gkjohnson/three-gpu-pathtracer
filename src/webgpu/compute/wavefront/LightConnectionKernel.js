@@ -21,7 +21,7 @@ export class LightConnectionKernel extends ComputeKernel {
 			misEnabled: uniform( 1, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
-			clampIndirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
 
 			// rays
 			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
