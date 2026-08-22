@@ -56,7 +56,7 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.renderScale = params.renderScale;
-	pathTracer.tiles.set( 2, 2 );
+	pathTracer.tiles.set( 3, 3 );
 
 	// FSR1 is the single frame spatial path, so the path traced color is all it needs. The temporal
 	// path would want depth and motion vectors, which a converging path tracer has no use for.
