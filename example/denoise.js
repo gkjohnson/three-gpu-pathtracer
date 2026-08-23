@@ -24,7 +24,7 @@ const CREDITS = 'Model by "nyancube" on Sketchfab';
 const DESCRIPTION = 'Path tracing at a reduced resolution, denoised with OIDN and upscaled with FSR1.';
 
 const params = {
-	renderScale: 0.5,
+	renderScale: 0.25,
 	maxSamples: 32,
 	denoise: true,
 	upscale: true,
