@@ -1,14 +1,11 @@
 import {
 	ExternalTexture,
 	UnsignedByteType,
-	MeshBasicNodeMaterial,
 	NearestFilter,
-	NoBlending,
 	NoToneMapping,
 	RenderTarget,
 } from 'three/webgpu';
-import { texture, mrt, diffuseColor, normalView, vec4 } from 'three/tsl';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { mrt, diffuseColor, normalView, vec4 } from 'three/tsl';
 import { initUNetFromURL } from 'oidn-web';
 
 // The weights are stored with git lfs, so "raw" serves only the pointer file and they come from
@@ -72,7 +69,7 @@ export class OIDNDenoiser {
 	 */
 	get albedoTexture() {
 
-		return this._auxFlipTarget.textures[ 0 ];
+		return this._auxTarget.textures[ 0 ];
 
 	}
 
@@ -83,7 +80,7 @@ export class OIDNDenoiser {
 	 */
 	get normalTexture() {
 
-		return this._auxFlipTarget.textures[ 1 ];
+		return this._auxTarget.textures[ 1 ];
 
 	}
 
@@ -144,24 +141,8 @@ export class OIDNDenoiser {
 		this._auxTarget.textures[ 0 ].name = 'output';
 		this._auxTarget.textures[ 1 ].name = 'normal';
 
-		// A rasterized target is stored top down while the path traced color is bottom up, and the
-		// denoiser reads all its inputs with the same indexing, so the buffers are flipped to match.
-		this._auxFlipTarget = this._auxTarget.clone();
-		this._auxFlipTarget.textures[ 0 ].name = 'output';
-		this._auxFlipTarget.textures[ 1 ].name = 'normal';
-
-		// rendering a quad into a render target already inverts y, so the copy provides the flip
-		this._flipAlbedo = texture( this._auxTarget.textures[ 0 ] );
-		this._flipNormal = texture( this._auxTarget.textures[ 1 ] );
-		this._flipQuad = new FullScreenQuad( new MeshBasicNodeMaterial( {
-			colorNode: this._flipAlbedo,
-			blending: NoBlending,
-			toneMapped: false,
-		} ) );
-
 		this._resultPipeline = null;
 		this._resultTexture = null;
-		this._hidden = [];
 
 	}
 
@@ -266,8 +247,6 @@ export class OIDNDenoiser {
 		this.reset();
 
 		this._auxTarget.dispose();
-		this._auxFlipTarget.dispose();
-		this._flipQuad.dispose();
 
 	}
 
@@ -302,33 +281,6 @@ export class OIDNDenoiser {
 
 	}
 
-	// OIDN wants a transmissive first hit to describe whatever is behind the glass, since that is
-	// the detail the color buffer shows, so those surfaces are not drawn.
-	_setTransmissiveVisible( scene, visible ) {
-
-		const hidden = this._hidden;
-		if ( visible ) {
-
-			hidden.forEach( c => c.visible = true );
-			hidden.length = 0;
-			return;
-
-		}
-
-		scene.traverse( c => {
-
-			const material = c.material;
-			if ( c.visible && material && ( material.transmission > 0 || material.transparent ) ) {
-
-				c.visible = false;
-				hidden.push( c );
-
-			}
-
-		} );
-
-	}
-
 	/**
 	 * Rasterizes the albedo and normal buffers without denoising. Run as part of "denoise", and
 	 * exposed so they can be displayed before a pass has run.
@@ -339,13 +291,12 @@ export class OIDNDenoiser {
 	 */
 	renderAux( color, scene, camera ) {
 
-		const { renderer, _auxTarget, _auxFlipTarget } = this;
+		const { renderer, _auxTarget } = this;
 		const { width, height } = color;
 
 		if ( _auxTarget.width !== width || _auxTarget.height !== height ) {
 
 			_auxTarget.setSize( width, height );
-			_auxFlipTarget.setSize( width, height );
 
 		}
 
@@ -363,17 +314,7 @@ export class OIDNDenoiser {
 			normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
 		} ) );
 
-		this._setTransmissiveVisible( scene, false );
 		renderer.render( scene, camera );
-		this._setTransmissiveVisible( scene, true );
-
-		renderer.setRenderTarget( _auxFlipTarget );
-		renderer.setMRT( mrt( {
-			output: this._flipAlbedo,
-			normal: this._flipNormal,
-		} ) );
-
-		this._flipQuad.render( renderer );
 
 		renderer.setMRT( originalMRT );
 		renderer.setRenderTarget( null );
