@@ -104,8 +104,7 @@ async function init() {
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
-		denoiser.reset();
-		averageSamples = 0;
+		resetRender();
 
 	} );
 	controls.update();
@@ -134,15 +133,13 @@ function buildGui() {
 	gui.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
 
 		pathTracer.renderScale = v;
-		denoiser.reset();
-		averageSamples = 0;
+		resetRender();
 
 	} );
 	gui.add( params, 'maxSamples', 1, 200, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
-		denoiser.reset();
-		averageSamples = 0;
+		resetRender();
 
 	} );
 	gui.add( params, 'denoise' );
@@ -156,6 +153,15 @@ function buildGui() {
 
 }
 
+// The image is starting over, so the denoised result no longer matches it. Clearing the sample
+// count also restarts the measurements that animate stops making once the render settles.
+function resetRender() {
+
+	denoiser.reset();
+	averageSamples = 0;
+
+}
+
 function onResize() {
 
 	renderer.setSize( window.innerWidth, window.innerHeight );
@@ -165,17 +171,12 @@ function onResize() {
 	camera.updateProjectionMatrix();
 
 	pathTracer.updateCamera();
-
-	// the denoised result is sized to the old resolution
-	denoiser.reset();
-	averageSamples = 0;
+	resetRender();
 
 }
 
-// The upscaler is told both resolutions up front and the input size follows the render scale, so
-// it is re-checked every frame and reconfigured when either moves.
-// Returns null on the frame it reconfigures, so the caller shows the un-upscaled image for that
-// frame rather than stretching an output still sized to the previous resolution.
+// The upscaler is told both resolutions up front, so they are re-checked every frame. Returns null
+// on the frame it reconfigures, since its output is still sized to the previous resolution.
 function upscale( state, source, enabled ) {
 
 	const { upscaler } = state;
@@ -244,9 +245,6 @@ function animate() {
 	// target ──> denoise ──> upscale ──┐
 	//                                  ├─> crossfade ──> canvas
 	// lowResTarget ─────────> upscale ─┘
-	//
-	// Both sides fall back to the un-upscaled image on the frame the upscaler reconfigures, such as
-	// after a resize, rather than stretching an output sized to the previous resolution.
 	const beauty = params.denoise && denoiser.texture ? denoiser.texture : target;
 	beautyTexNode.value = upscale( beautyUpscale, beauty, params.upscale ) ?? beauty;
 
@@ -266,19 +264,16 @@ function animate() {
 	renderer.setRenderTarget( null );
 	quad.render( renderer );
 
-	// Measuring costs a full resolution pass, and once the render has stopped the numbers cannot
-	// change. "averageSamples" is cleared wherever the render restarts so this picks back up.
-	if ( settled ) {
+	// measuring costs a full resolution pass, and the numbers cannot change once rendering stops
+	if ( ! settled ) {
 
-		return;
+		pathTracer.getSampleCountsAsync().then( counts => {
+
+			averageSamples = counts.avg;
+			loader.setSamples( counts );
+
+		} );
 
 	}
-
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		averageSamples = counts.avg;
-		loader.setSamples( counts );
-
-	} );
 
 }
