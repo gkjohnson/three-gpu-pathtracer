@@ -388,6 +388,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.normal = normal;
 
 		surf.metalness = metalness;
+		surf.diffuseRoughness = saturate( material.diffuseRoughness );
 		surf.color = albedo.rgb;
 		surf.emission = emission;
 
