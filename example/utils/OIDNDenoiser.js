@@ -1,6 +1,6 @@
 import {
 	ExternalTexture,
-	HalfFloatType,
+	UnsignedByteType,
 	MeshBasicNodeMaterial,
 	NearestFilter,
 	NoBlending,
@@ -128,11 +128,12 @@ export class OIDNDenoiser {
 		this._unets = { aux: null, color: null };
 		this._loading = false;
 
-		// Multisampled so the rasterized silhouettes match the jittered path traced ones. Half
-		// float rather than full, since multisampled rgba32float is not broadly supported.
+		// Eight bits per channel, since both buffers hold [0,1] and that is the precision oidn-web
+		// documents for them. Multisampled so the rasterized silhouettes match the jittered path
+		// traced ones.
 		this._auxTarget = new RenderTarget( 1, 1, {
 			count: 2,
-			type: HalfFloatType,
+			type: UnsignedByteType,
 			minFilter: NearestFilter,
 			magFilter: NearestFilter,
 			depthBuffer: true,
