@@ -336,9 +336,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				enqueueRaysKernel.rayQueue = rayQueue;
 				enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
 
+				// pixels at the limit generate no rays, so the queue drains on its own
+				enqueueRaysKernel.maxSamples = this.maxSamples;
+
 				for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
 
-					// TODO: skip rays that have converged, have reach max samples
+					// TODO: skip rays that have converged
 					renderer.compute( primeRayGenerationDispatchKernel.kernel, [ 1, 1, 1 ] );
 					renderer.compute( enqueueRaysKernel.kernel, rayGenerationDispatch );
 					primeRayGenerationDispatchKernel.tileOffset = 1;

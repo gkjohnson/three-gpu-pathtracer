@@ -82,10 +82,10 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.maxSamples = params.maxSamples;
 
 	// The albedo and normal buffers a denoiser needs are rasterized rather than path traced, so
-	// they cost one extra scene draw and need no support from the path tracer itself. Both are
-	// written in one pass through MRT, in float so the normals keep their signed range.
+	// they cost one extra scene draw and need no support from the path tracer itself.
 	// The path traced color is jittered per sample, so its silhouettes are a real blend of what is
 	// in front and behind. A single sample rasterization snaps those same pixels to one surface,
 	// and the denoiser follows the buffers rather than the color, leaving a fringe along every
@@ -196,7 +196,12 @@ function buildGui() {
 
 	gui = new GUI();
 	gui.add( params, 'denoise' ).onChange( resetDenoise );
-	gui.add( params, 'maxSamples', 1, 200, 1 ).onChange( resetDenoise );
+	gui.add( params, 'maxSamples', 1, 200, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+		resetDenoise();
+
+	} );
 	gui.add( params, 'useAux' ).name( 'guide with albedo + normal' ).onChange( resetDenoise );
 	gui.add( params, 'display', [ DISPLAY_BEAUTY, DISPLAY_ALBEDO, DISPLAY_NORMAL ] );
 
@@ -522,14 +527,9 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	// rendering stops once the target sample count is reached, which is also when the image is
-	// settled enough to denoise
+	// the path tracer stops itself at maxSamples, so this only decides when to denoise
 	const settled = averageSamples >= params.maxSamples;
-	if ( ! settled ) {
-
-		pathTracer.renderSample();
-
-	}
+	pathTracer.renderSample();
 
 	// Everything is presented here rather than relying on the path tracer's own blit, so switching
 	// display modes takes effect on the next frame instead of waiting for the path tracer to redraw.
