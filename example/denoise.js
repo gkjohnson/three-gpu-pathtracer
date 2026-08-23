@@ -3,12 +3,8 @@ import {
 	Scene,
 	WebGPURenderer,
 	PerspectiveCamera,
-	MeshBasicNodeMaterial,
-	StorageTexture,
-	NoBlending,
 	Vector2,
 } from 'three/webgpu';
-import { texture, uniform, mix, vec4 } from 'three/tsl';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -17,7 +13,7 @@ import { Upscaler } from '@pmndrs/upscaler';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { OIDNDenoiser } from './utils/OIDNDenoiser.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, RenderToScreenNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
 const CREDITS = 'Model by "nyancube" on Sketchfab';
@@ -25,6 +21,7 @@ const DESCRIPTION = 'Path tracing at a reduced resolution, denoised with OIDN an
 
 const params = {
 	enable: true,
+	transparentBackground: false,
 	renderScale: 0.25,
 	maxSamples: 32,
 	denoise: true,
@@ -33,17 +30,15 @@ const params = {
 };
 
 let pathTracer, denoiser, renderer, controls;
-let camera, scene;
+let camera, scene, gradientMap;
 let loader, gui;
 
 // The final present. Both sides of the path tracer's low res to full res fade are upscaled, then
 // crossfaded here, so the transition is not also a change in sharpness.
-let quad, beautyTexNode, lowResTexNode, fadeUniform;
+let quad;
 
-// One upscaler per fade side, since each holds a single output texture and its own configuration.
-// The configured path is tracked alongside since the upscaler does not report it.
-const beautyUpscale = { upscaler: null, path: null };
-const lowResUpscale = { upscaler: null, path: null };
+// one upscaler per fade side, since each holds a single output texture and its own configuration
+let beautyUpscaler, lowResUpscaler;
 
 const _size = new Vector2();
 let averageSamples = 0;
@@ -68,21 +63,16 @@ async function init() {
 
 	denoiser = new OIDNDenoiser( renderer );
 
-	for ( const state of [ beautyUpscale, lowResUpscale ] ) {
+	beautyUpscaler = new Upscaler( { renderer } );
+	lowResUpscaler = new Upscaler( { renderer } );
+	for ( const upscaler of [ beautyUpscaler, lowResUpscaler ] ) {
 
-		state.upscaler = new Upscaler( { renderer } );
-		state.upscaler.init();
-		state.upscaler.settings.sharpness = params.sharpness;
+		upscaler.init();
+		upscaler.settings.sharpness = params.sharpness;
 
 	}
 
-	beautyTexNode = texture( new StorageTexture( 1, 1 ) );
-	lowResTexNode = texture( new StorageTexture( 1, 1 ) );
-	fadeUniform = uniform( 1 );
-	quad = new FullScreenQuad( new MeshBasicNodeMaterial( {
-		colorNode: vec4( mix( lowResTexNode.rgb, beautyTexNode.rgb, fadeUniform ), 1.0 ),
-		blending: NoBlending,
-	} ) );
+	quad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
 	camera.position.set( 8, 9, 24 );
@@ -91,14 +81,14 @@ async function init() {
 
 	// a smooth gradient keeps the lighting low variance so the noise on show is the path tracer's
 	// own rather than fireflies from a bright hdr
-	const gradientMap = new GradientEquirectTexture();
+	gradientMap = new GradientEquirectTexture();
 	gradientMap.topColor.set( 0x6a8fb5 );
 	gradientMap.bottomColor.set( 0xe8e8e8 );
 	gradientMap.update();
 
-	scene.background = gradientMap;
 	scene.environment = gradientMap;
 	scene.environmentIntensity = 2;
+	updateBackground();
 
 	controls = new OrbitControls( camera, renderer.domElement );
 	controls.target.y = 10;
@@ -132,6 +122,12 @@ function buildGui() {
 
 	gui = new GUI();
 	gui.add( params, 'enable' ).name( 'path trace' );
+	gui.add( params, 'transparentBackground' ).onChange( () => {
+
+		updateBackground();
+		resetRender();
+
+	} );
 	gui.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
 
 		pathTracer.renderScale = v;
@@ -148,10 +144,23 @@ function buildGui() {
 	gui.add( params, 'upscale' );
 	gui.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
 
-		beautyUpscale.upscaler.settings.sharpness = v;
-		lowResUpscale.upscaler.settings.sharpness = v;
+		beautyUpscaler.settings.sharpness = v;
+		lowResUpscaler.settings.sharpness = v;
 
 	} );
+
+}
+
+// with no background the path tracer falls back to the renderer's clear color
+function updateBackground() {
+
+	const transparent = params.transparentBackground;
+
+	scene.background = transparent ? null : gradientMap;
+	renderer.setClearAlpha( transparent ? 0 : 1 );
+	document.body.classList.toggle( 'checkerboard', transparent );
+
+	pathTracer.updateEnvironment();
 
 }
 
@@ -179,9 +188,7 @@ function onResize() {
 
 // The upscaler is told both resolutions up front, so they are re-checked every frame. Returns null
 // on the frame it reconfigures, since its output is still sized to the previous resolution.
-function upscale( state, source, enabled ) {
-
-	const { upscaler } = state;
+function upscale( upscaler, source ) {
 
 	// the upscaler reads the raw GPUTexture, which only exists once three has registered it. A
 	// freshly cloned render target or an ExternalTexture has not been through that yet.
@@ -192,11 +199,7 @@ function upscale( state, source, enabled ) {
 	const displayWidth = Math.max( 1, Math.round( _size.x ) );
 	const displayHeight = Math.max( 1, Math.round( _size.y ) );
 
-	// "bilinear" is the package's own naive baseline, so toggling compares like with like
-	const path = enabled ? 'spatial' : 'bilinear';
-
 	const matches =
-		state.path === path &&
 		upscaler.displayWidth === displayWidth &&
 		upscaler.displayHeight === displayHeight &&
 		upscaler.renderWidth === source.width &&
@@ -204,13 +207,12 @@ function upscale( state, source, enabled ) {
 
 	if ( ! matches ) {
 
-		state.path = path;
 		upscaler.configure( {
 			displayWidth,
 			displayHeight,
 			renderWidth: source.width,
 			renderHeight: source.height,
-			path,
+			path: 'spatial',
 		} );
 
 		return null;
@@ -256,19 +258,20 @@ function animate() {
 	// target ──> denoise ──> upscale ──┐
 	//                                  ├─> crossfade ──> canvas
 	// lowResTarget ─────────> upscale ─┘
+	// FSR writes an opaque result, so upscaling drops the alpha
 	const beauty = params.denoise && denoiser.texture ? denoiser.texture : target;
-	beautyTexNode.value = upscale( beautyUpscale, beauty, params.upscale ) ?? beauty;
+	quad.material.texture = params.upscale ? upscale( beautyUpscaler, beauty ) ?? beauty : beauty;
 
 	// While the path tracer is rendering a preview, "target" is that preview and there is nothing
 	// to fade from. "lowResTarget" only holds anything meaningful once the full render takes over.
 	const fade = pathTracer.lowResMode ? 1 : pathTracer.fadeState;
-	fadeUniform.value = fade;
+	quad.material.transition = fade;
 
 	// the preview is only worth upscaling while it is still visible
 	if ( fade < 1 ) {
 
 		const lowRes = pathTracer.lowResTarget;
-		lowResTexNode.value = upscale( lowResUpscale, lowRes, params.upscale ) ?? lowRes;
+		quad.material.fromTexture = params.upscale ? upscale( lowResUpscaler, lowRes ) ?? lowRes : lowRes;
 
 	}
 
