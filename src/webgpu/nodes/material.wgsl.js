@@ -388,7 +388,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.normal = normal;
 
 		surf.metalness = metalness;
-		surf.diffuseRoughness = saturate( material.diffuseRoughness );
+		surf.diffuseRoughness = material.diffuseRoughness;
 		surf.color = albedo.rgb;
 		surf.emission = emission;
 
@@ -415,7 +415,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.roughness = clamp( roughness, minRoughness, 1.0 );
 		surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
 		surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
-		surf.anisotropy = saturate( anisotropyStrength );
+		surf.anisotropy = anisotropyStrength;
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
