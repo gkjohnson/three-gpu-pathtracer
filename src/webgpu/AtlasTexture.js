@@ -443,7 +443,6 @@ export class AtlasTexture {
 			const texture = textures[ i ].clone();
 			texture.matrixAutoUpdate = false;
 			texture.matrix.identity();
-			texture.needsUpdate = true;
 
 			quadMesh.material.map = texture;
 
