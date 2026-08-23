@@ -221,16 +221,12 @@ export class WebGPUPathTracer {
 
 	}
 
-	// The low resolution preview "target" is faded in from, for apps presenting the result
-	// themselves rather than letting renderSample blit it.
 	get lowResTarget() {
 
 		return this._lowResTarget;
 
 	}
 
-	// Whether "target" currently holds a reduced resolution preview rather than the full render.
-	// While true there is nothing to fade from, since the preview is the image being displayed.
 	get lowResMode() {
 
 		return this._pathTracer.lowResMode;
