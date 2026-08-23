@@ -6,12 +6,14 @@ import {
 	MeshBasicNodeMaterial,
 	StorageTexture,
 	NoBlending,
+	Vector2,
 } from 'three/webgpu';
-import { texture, vec4 } from 'three/tsl';
+import { texture, uniform, mix, vec4 } from 'three/tsl';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { Upscaler } from '@pmndrs/upscaler';
 import { LoaderElement } from './utils/LoaderElement.js';
 import { OIDNDenoiser } from './utils/OIDNDenoiser.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
@@ -19,25 +21,30 @@ import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
 const CREDITS = 'Model by "nyancube" on Sketchfab';
-const DESCRIPTION = 'Path tracing denoised with Open Image Denoise, guided by rasterized albedo and normal buffers.';
-
-const DISPLAY_BEAUTY = 'Beauty';
-const DISPLAY_ALBEDO = 'Albedo';
-const DISPLAY_NORMAL = 'Normal';
+const DESCRIPTION = 'Path tracing at a reduced resolution, denoised with OIDN and upscaled with FSR1.';
 
 const params = {
-	denoise: false,
+	renderScale: 0.5,
 	maxSamples: 32,
-	useAux: true,
-	display: DISPLAY_BEAUTY,
+	denoise: true,
+	upscale: true,
+	sharpness: 1,
 };
 
 let pathTracer, denoiser, renderer, controls;
 let camera, scene;
 let loader, gui;
-let quad, quadTexNode;
 
-// sample counts are measured asynchronously, so the average is kept for the settled check
+// The final present. Both sides of the path tracer's low res to full res fade are upscaled, then
+// crossfaded here, so the transition is not also a change in sharpness.
+let quad, beautyTexNode, lowResTexNode, fadeUniform;
+
+// One upscaler per fade side, since each holds a single output texture and its own configuration.
+// The configured path is tracked alongside since the upscaler does not report it.
+const beautyUpscale = { upscaler: null, path: null };
+const lowResUpscale = { upscaler: null, path: null };
+
+const _size = new Vector2();
 let averageSamples = 0;
 
 init();
@@ -48,21 +55,31 @@ async function init() {
 	loader.attach( document.body );
 
 	// "shader-f16" lets the denoiser run its half precision path, and it can only be asked for when
-	// the device is created. three drops it silently if the adapter lacks it.
+	// the device is created
 	renderer = new WebGPURenderer( { antialias: true, requiredFeatures: [ 'shader-f16' ] } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.renderScale = params.renderScale;
 	pathTracer.maxSamples = params.maxSamples;
 
 	denoiser = new OIDNDenoiser( renderer );
 
-	// everything is presented here so switching display modes takes effect on the next frame
-	quadTexNode = texture( new StorageTexture( 1, 1 ) );
+	for ( const state of [ beautyUpscale, lowResUpscale ] ) {
+
+		state.upscaler = new Upscaler( { renderer } );
+		state.upscaler.init();
+		state.upscaler.settings.sharpness = params.sharpness;
+
+	}
+
+	beautyTexNode = texture( new StorageTexture( 1, 1 ) );
+	lowResTexNode = texture( new StorageTexture( 1, 1 ) );
+	fadeUniform = uniform( 1 );
 	quad = new FullScreenQuad( new MeshBasicNodeMaterial( {
-		colorNode: vec4( quadTexNode.rgb, 1.0 ),
+		colorNode: vec4( mix( lowResTexNode.rgb, beautyTexNode.rgb, fadeUniform ), 1.0 ),
 		blending: NoBlending,
 	} ) );
 
@@ -86,9 +103,9 @@ async function init() {
 	controls.target.y = 10;
 	controls.addEventListener( 'change', () => {
 
-		// the image is starting over, so the denoised frame no longer matches it
 		pathTracer.updateCamera();
 		denoiser.reset();
+		averageSamples = 0;
 
 	} );
 	controls.update();
@@ -114,15 +131,28 @@ async function init() {
 function buildGui() {
 
 	gui = new GUI();
-	gui.add( params, 'denoise' ).onChange( () => denoiser.reset() );
+	gui.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+		denoiser.reset();
+		averageSamples = 0;
+
+	} );
 	gui.add( params, 'maxSamples', 1, 200, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 		denoiser.reset();
+		averageSamples = 0;
 
 	} );
-	gui.add( params, 'useAux' ).name( 'guide with albedo + normal' ).onChange( v => denoiser.useAux = v );
-	gui.add( params, 'display', [ DISPLAY_BEAUTY, DISPLAY_ALBEDO, DISPLAY_NORMAL ] );
+	gui.add( params, 'denoise' );
+	gui.add( params, 'upscale' );
+	gui.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
+
+		beautyUpscale.upscaler.settings.sharpness = v;
+		lowResUpscale.upscaler.settings.sharpness = v;
+
+	} );
 
 }
 
@@ -136,43 +166,113 @@ function onResize() {
 
 	pathTracer.updateCamera();
 
+	// the denoised result is sized to the old resolution
+	denoiser.reset();
+	averageSamples = 0;
+
+}
+
+// The upscaler is told both resolutions up front and the input size follows the render scale, so
+// it is re-checked every frame and reconfigured when either moves.
+// Returns null on the frame it reconfigures, so the caller shows the un-upscaled image for that
+// frame rather than stretching an output still sized to the previous resolution.
+function upscale( state, source, enabled ) {
+
+	const { upscaler } = state;
+
+	// the upscaler reads the raw GPUTexture, which only exists once three has registered it. A
+	// freshly cloned render target or an ExternalTexture has not been through that yet.
+	renderer.initTexture( source );
+
+	renderer.getDrawingBufferSize( _size );
+
+	const displayWidth = Math.max( 1, Math.round( _size.x ) );
+	const displayHeight = Math.max( 1, Math.round( _size.y ) );
+
+	// "bilinear" is the package's own naive baseline, so toggling compares like with like
+	const path = enabled ? 'spatial' : 'bilinear';
+
+	const matches =
+		state.path === path &&
+		upscaler.displayWidth === displayWidth &&
+		upscaler.displayHeight === displayHeight &&
+		upscaler.renderWidth === source.width &&
+		upscaler.renderHeight === source.height;
+
+	if ( ! matches ) {
+
+		state.path = path;
+		upscaler.configure( {
+			displayWidth,
+			displayHeight,
+			renderWidth: source.width,
+			renderHeight: source.height,
+			path,
+		} );
+
+		return null;
+
+	}
+
+	upscaler.dispatch( { color: source }, camera );
+	return upscaler.outputTexture;
+
 }
 
 function animate() {
 
 	requestAnimationFrame( animate );
 
-	// the path tracer stops itself at maxSamples, so this only decides when to denoise
-	const settled = averageSamples >= params.maxSamples;
 	pathTracer.renderSample();
 
-	if ( ! pathTracer.target ) {
+	const target = pathTracer.target;
+	if ( ! target ) {
 
 		return;
 
 	}
 
+	// The denoiser reads the accumulated result rather than the faded composite, so it only runs
+	// once the path tracer has stopped at maxSamples.
+	const settled = averageSamples >= params.maxSamples;
 	if ( params.denoise && settled ) {
 
-		denoiser.denoise( pathTracer.target, scene, camera );
+		denoiser.denoise( target, scene, camera );
 
 	}
 
-	if ( params.display !== DISPLAY_BEAUTY ) {
+	// target ──> denoise ──> upscale ──┐
+	//                                  ├─> crossfade ──> canvas
+	// lowResTarget ─────────> upscale ─┘
+	//
+	// Both sides fall back to the un-upscaled image on the frame the upscaler reconfigures, such as
+	// after a resize, rather than stretching an output sized to the previous resolution.
+	const beauty = params.denoise && denoiser.texture ? denoiser.texture : target;
+	beautyTexNode.value = upscale( beautyUpscale, beauty, params.upscale ) ?? beauty;
 
-		// keep them current even when a denoise pass isn't running
-		denoiser.renderAux( pathTracer.target, scene, camera );
-		quadTexNode.value = params.display === DISPLAY_ALBEDO ? denoiser.albedoTexture : denoiser.normalTexture;
+	// While the path tracer is rendering a preview, "target" is that preview and there is nothing
+	// to fade from. "lowResTarget" only holds anything meaningful once the full render takes over.
+	const fade = pathTracer.lowResMode ? 1 : pathTracer.fadeState;
+	fadeUniform.value = fade;
 
-	} else {
+	// the preview is only worth upscaling while it is still visible
+	if ( fade < 1 ) {
 
-		// until the first denoised tile lands there is nothing to show but the raw image
-		quadTexNode.value = params.denoise && denoiser.texture ? denoiser.texture : pathTracer.target;
+		const lowRes = pathTracer.lowResTarget;
+		lowResTexNode.value = upscale( lowResUpscale, lowRes, params.upscale ) ?? lowRes;
 
 	}
 
 	renderer.setRenderTarget( null );
 	quad.render( renderer );
+
+	// Measuring costs a full resolution pass, and once the render has stopped the numbers cannot
+	// change. "averageSamples" is cleared wherever the render restarts so this picks back up.
+	if ( settled ) {
+
+		return;
+
+	}
 
 	pathTracer.getSampleCountsAsync().then( counts => {
 

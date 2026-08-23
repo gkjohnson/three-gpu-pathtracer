@@ -292,9 +292,11 @@ export class OIDNDenoiser {
 
 	}
 
-	// three keeps the WebGPU texture alongside the three texture once it has been rendered to
+	// three only keeps a WebGPU texture alongside a three texture once it has registered it, which
+	// has not happened for a freshly cloned render target
 	_getGPUTexture( tex ) {
 
+		this.renderer.initTexture( tex );
 		return this.renderer.backend.get( tex ).texture;
 
 	}
@@ -423,9 +425,11 @@ export class OIDNDenoiser {
 				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
 			} );
 
-			// ExternalTexture lets three sample a gpu texture it did not create
+			// ExternalTexture lets three sample a gpu texture it did not create. It has no image
+			// behind it, so its size is set explicitly or "texture.width" reports zero.
 			this._texture?.dispose();
 			this._texture = new ExternalTexture( this._resultTexture );
+			this._texture.image = { width, height };
 
 		}
 
