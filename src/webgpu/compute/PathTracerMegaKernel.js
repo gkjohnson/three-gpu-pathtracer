@@ -297,10 +297,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let nextSampleCount = sampleCount + 1;
-				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+				// store the color rows top down to match a rasterized render target
+				let colorIndex = vec2u( indexUV.x, targetDimensions.y - 1u - indexUV.y );
+
+				let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
-				textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 			}`;
 

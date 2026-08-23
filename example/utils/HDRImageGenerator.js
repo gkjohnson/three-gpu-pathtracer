@@ -91,13 +91,11 @@ async function encodeHDR( image ) {
 			source: sdrImageData,
 			mimeType,
 			quality,
-			flipY: true // output needs to be flipped
 		} ),
 		compress( {
 			source: gainMapImageData,
 			mimeType,
 			quality,
-			flipY: true // output needs to be flipped
 		} )
 	] );
 

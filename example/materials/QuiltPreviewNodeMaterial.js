@@ -6,7 +6,9 @@ const sampleTexel = wgslFn( /* wgsl */`
 	fn sampleTexel( tex: texture_2d<f32>, coord: vec2f ) -> vec4f {
 
 		let size = vec2f( textureDimensions( tex, 0 ) );
-		let pxCoord = coord * size - 0.5;
+
+		// the path tracer stores its color rows top down, so v of 0 is the last texel row
+		let pxCoord = vec2f( coord.x, 1.0 - coord.y ) * size - 0.5;
 		let px = vec2i( floor( pxCoord ) );
 		let fr = fract( pxCoord );
 		let maxPx = vec2i( size ) - 1;
