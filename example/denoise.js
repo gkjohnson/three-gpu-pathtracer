@@ -24,6 +24,7 @@ const CREDITS = 'Model by "nyancube" on Sketchfab';
 const DESCRIPTION = 'Path tracing at a reduced resolution, denoised with OIDN and upscaled with FSR1.';
 
 const params = {
+	enable: true,
 	renderScale: 0.25,
 	maxSamples: 32,
 	denoise: true,
@@ -130,6 +131,7 @@ async function init() {
 function buildGui() {
 
 	gui = new GUI();
+	gui.add( params, 'enable' ).name( 'path trace' );
 	gui.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
 
 		pathTracer.renderScale = v;
@@ -223,6 +225,15 @@ function upscale( state, source, enabled ) {
 function animate() {
 
 	requestAnimationFrame( animate );
+
+	// the rasterized scene, for comparison against the path traced result
+	if ( ! params.enable ) {
+
+		renderer.setRenderTarget( null );
+		renderer.render( scene, camera );
+		return;
+
+	}
 
 	pathTracer.renderSample();
 
