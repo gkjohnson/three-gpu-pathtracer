@@ -87,7 +87,7 @@ export class OIDNDenoiser {
 
 		const useAux = Boolean( albedo && normal );
 		const requestId = ++ this._requestId;
-		const unet = await this._loadUNet( useAux );
+		const unet = await this._initUNet( useAux );
 
 		// bail if a reset or a newer call took over while the weights downloaded
 		if ( requestId !== this._requestId || ! this._running ) {
@@ -106,10 +106,10 @@ export class OIDNDenoiser {
 			color: { data: backend.get( color ).texture, width, height },
 
 			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-			progress: result => this._writeResult( result, width, height ),
-			done: result => {
+			progress: output => this._copyOutputToTexture( output, width, height ),
+			done: output => {
 
-				this._writeResult( result, width, height );
+				this._copyOutputToTexture( output, width, height );
 				this._running = false;
 				this._complete = true;
 				this._abort = null;
@@ -170,7 +170,7 @@ export class OIDNDenoiser {
 	}
 
 	// loads each model once, with concurrent calls sharing the same promise
-	_loadUNet( aux ) {
+	_initUNet( aux ) {
 
 		const key = aux ? 'aux' : 'color';
 		if ( ! this._unets[ key ] ) {
@@ -190,9 +190,10 @@ export class OIDNDenoiser {
 
 	}
 
-	// The result is a gpu buffer of one vec4 per pixel. copyBufferToTexture would need each row
-	// padded to 256 bytes, which a packed buffer is not, so a compute pass writes the texture.
-	_writeResult( result, width, height ) {
+	// Copies the denoiser's packed output buffer into a sampleable texture, using a compute pass
+	// since copyBufferToTexture requires 256 byte row alignment.
+	// TODO: remove the copy once oidn-web can write into a caller-provided storage texture.
+	_copyOutputToTexture( output, width, height ) {
 
 		const device = this.renderer.backend.device;
 
@@ -246,7 +247,7 @@ export class OIDNDenoiser {
 		const bindGroup = device.createBindGroup( {
 			layout: this._resultPipeline.getBindGroupLayout( 0 ),
 			entries: [
-				{ binding: 0, resource: { buffer: result.data } },
+				{ binding: 0, resource: { buffer: output.data } },
 				{ binding: 1, resource: this._rawTexture.createView() },
 			],
 		} );

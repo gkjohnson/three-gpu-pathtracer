@@ -38,15 +38,8 @@ let pathTracer, denoiser, renderer, controls;
 let camera, scene, gradientMap;
 let loader, gui;
 
-// albedo and normal buffers that guide the denoiser
-let auxTarget;
-
-// The final present. Both sides of the path tracer's low res to full res fade are upscaled, then
-// crossfaded here, so the transition is not also a change in sharpness.
-let quad;
-
-// one upscaler per fade side, since each holds a single output texture and its own configuration
-let beautyUpscaler, lowResUpscaler;
+let auxTarget, presentQuad;
+let finalUpscaler, lowResUpscaler;
 
 const _size = new Vector2();
 let averageSamples = 0;
@@ -83,24 +76,23 @@ async function init() {
 	auxTarget.textures[ 0 ].name = 'output';
 	auxTarget.textures[ 1 ].name = 'normal';
 
-	beautyUpscaler = new Upscaler( { renderer } );
+	// Upscalers
+	finalUpscaler = new Upscaler( { renderer } );
 	lowResUpscaler = new Upscaler( { renderer } );
-	for ( const upscaler of [ beautyUpscaler, lowResUpscaler ] ) {
+	for ( const upscaler of [ finalUpscaler, lowResUpscaler ] ) {
 
 		upscaler.init();
 		upscaler.settings.sharpness = params.sharpness;
 
 	}
 
-	quad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+	presentQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
 	camera.position.set( 8, 9, 24 );
 
 	scene = new Scene();
 
-	// a smooth gradient keeps the lighting low variance so the noise on show is the path tracer's
-	// own rather than fireflies from a bright hdr
 	gradientMap = new GradientEquirectTexture();
 	gradientMap.topColor.set( 0x6a8fb5 );
 	gradientMap.bottomColor.set( 0xe8e8e8 );
@@ -129,17 +121,7 @@ async function init() {
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 
-	buildGui();
-
-	window.addEventListener( 'resize', onResize );
-
-	onResize();
-	animate();
-
-}
-
-function buildGui() {
-
+	// gui
 	gui = new GUI();
 	gui.add( params, 'enable' ).name( 'path trace' );
 	gui.add( params, 'transparentBackground' ).onChange( () => {
@@ -164,10 +146,15 @@ function buildGui() {
 	gui.add( params, 'upscale' );
 	gui.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
 
-		beautyUpscaler.settings.sharpness = v;
+		finalUpscaler.settings.sharpness = v;
 		lowResUpscaler.settings.sharpness = v;
 
 	} );
+
+	window.addEventListener( 'resize', onResize );
+
+	onResize();
+	renderer.setAnimationLoop( animate );
 
 }
 
@@ -184,8 +171,7 @@ function updateBackground() {
 
 }
 
-// The image is starting over, so the denoised result no longer matches it. Clearing the sample
-// count also restarts the measurements that animate stops making once the render settles.
+// the image is starting over, so drop the stale denoised result and sample measurements
 function resetRender() {
 
 	denoiser.reset();
@@ -208,7 +194,7 @@ function onResize() {
 
 // Rasterizes the albedo and normal buffers that guide the denoiser. oidn-web takes normals mapped
 // into [0,1], with (0.5, 0.5, 1) as a flat normal.
-function renderAux( width, height ) {
+function renderAux( width, height, auxTarget ) {
 
 	if ( auxTarget.width !== width || auxTarget.height !== height ) {
 
@@ -235,12 +221,10 @@ function renderAux( width, height ) {
 
 }
 
-// The upscaler is told both resolutions up front, so they are re-checked every frame. Returns null
-// on the frame it reconfigures, since its output is still sized to the previous resolution.
+// the upscaler is told both resolutions up front, so they are re-checked every frame
 function upscale( upscaler, source ) {
 
-	// the upscaler reads the raw GPUTexture, which only exists once three has registered it. A
-	// freshly cloned render target or an ExternalTexture has not been through that yet.
+	// the upscaler reads the raw GPUTexture, which only exists once three has initialized it
 	renderer.initTexture( source );
 
 	renderer.getDrawingBufferSize( _size );
@@ -264,8 +248,6 @@ function upscale( upscaler, source ) {
 			path: 'spatial',
 		} );
 
-		return null;
-
 	}
 
 	upscaler.dispatch( { color: source }, camera );
@@ -275,12 +257,9 @@ function upscale( upscaler, source ) {
 
 function animate() {
 
-	requestAnimationFrame( animate );
-
 	// the rasterized scene, for comparison against the path traced result
 	if ( ! params.enable ) {
 
-		renderer.setRenderTarget( null );
 		renderer.render( scene, camera );
 		return;
 
@@ -288,47 +267,33 @@ function animate() {
 
 	pathTracer.renderSample();
 
+	// start a denoise pass once the path tracer has stopped at maxSamples
 	const target = pathTracer.target;
-	if ( ! target ) {
-
-		return;
-
-	}
-
-	// The denoiser reads the accumulated result rather than the faded composite, so it only runs
-	// once the path tracer has stopped at maxSamples.
 	const settled = averageSamples >= params.maxSamples;
 	if ( params.denoise && settled && ! denoiser.running && ! denoiser.complete ) {
 
-		renderAux( target.width, target.height );
+		renderAux( target.width, target.height, auxTarget );
 		denoiser.denoise( target, auxTarget.textures[ 0 ], auxTarget.textures[ 1 ] );
 
 	}
 
-	// target ──> denoise ──> upscale ──┐
-	//                                  ├─> crossfade ──> canvas
-	// lowResTarget ─────────> upscale ─┘
-	// FSR writes an opaque result, so upscaling drops the alpha
-	const beauty = params.denoise && denoiser.texture ? denoiser.texture : target;
-	quad.material.texture = params.upscale ? upscale( beautyUpscaler, beauty ) ?? beauty : beauty;
+	// get the upscaled (and denoised if necessary) version of the final beauty textures
+	const final = params.denoise && denoiser.texture ? denoiser.texture : target;
+	presentQuad.material.texture = params.upscale ? upscale( finalUpscaler, final ) : final;
 
-	// While the path tracer is rendering a preview, "target" is that preview and there is nothing
-	// to fade from. "lowResTarget" only holds anything meaningful once the full render takes over.
-	const fade = pathTracer.lowResMode ? 1 : pathTracer.fadeState;
-	quad.material.transition = fade;
-
-	// the preview is only worth upscaling while it is still visible
-	if ( fade < 1 ) {
+	// get the upscaled low res texture
+	if ( pathTracer.fadeState < 1 ) {
 
 		const lowRes = pathTracer.lowResTarget;
-		quad.material.fromTexture = params.upscale ? upscale( lowResUpscaler, lowRes ) ?? lowRes : lowRes;
+		presentQuad.material.fromTexture = params.upscale ? upscale( lowResUpscaler, lowRes ) : lowRes;
 
 	}
 
-	renderer.setRenderTarget( null );
-	quad.render( renderer );
+	// render
+	presentQuad.material.transition = pathTracer.fadeState;
+	presentQuad.render( renderer );
 
-	// measuring costs a full resolution pass, and the numbers cannot change once rendering stops
+	// measuring the sample counts costs a full resolution pass, so stop once the render settles
 	if ( ! settled ) {
 
 		pathTracer.getSampleCountsAsync().then( counts => {
