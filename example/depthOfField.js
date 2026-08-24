@@ -26,6 +26,7 @@ const mouse = new Vector2();
 const focusPoint = new Vector3();
 const params = {
 
+	enabled: true,
 	bounces: 7,
 	renderScale: 1,
 	filterGlossyFactor: 0.5,
@@ -121,10 +122,12 @@ function buildGui( radius ) {
 	const gui = new GUI();
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enabled' );
 	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
+	cameraFolder.add( params, 'autoFocus' );
 	cameraFolder.add( camera, 'focusDistance', radius * 1.5, radius * 8 ).onChange( onParamsChange ).listen();
 	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
 
@@ -145,7 +148,6 @@ function buildGui( radius ) {
 		pathTracer.updateCamera();
 
 	} ).listen();
-	cameraFolder.add( params, 'autoFocus' );
 
 }
 
@@ -246,6 +248,14 @@ function onParamsChange() {
 function animate() {
 
 	requestAnimationFrame( animate );
+
+	// the rasterized scene, for comparison against the path traced result
+	if ( ! params.enabled ) {
+
+		renderer.render( scene, camera );
+		return;
+
+	}
 
 	pathTracer.renderSample();
 
