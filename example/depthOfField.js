@@ -52,7 +52,6 @@ async function init() {
 
 	// camera, positioned once the model bounds are known
 	camera = new PhysicalCamera( 25, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.apertureBlades = 6;
 	camera.fStop = 1.5;
 
 	// background and environment
