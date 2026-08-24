@@ -1,8 +1,8 @@
 import { ExternalTexture } from 'three/webgpu';
 import { initUNetFromURL } from 'oidn-web';
 
-const WEIGHTS_AUX_URL = new URL( '../denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString();
-const WEIGHTS_COLOR_URL = new URL( '../denoise/rt_hdr.tza', import.meta.url ).toString();
+const WEIGHTS_AUX_URL = new URL( './rt_hdr_alb_nrm.tza', import.meta.url ).toString();
+const WEIGHTS_COLOR_URL = new URL( './rt_hdr.tza', import.meta.url ).toString();
 
 /**
  * Runs Open Image Denoise over a path traced image.
