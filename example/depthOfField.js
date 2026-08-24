@@ -3,6 +3,7 @@ import {
 	Vector2,
 	Vector3,
 	ACESFilmicToneMapping,
+	MeshPhysicalMaterial,
 	Scene,
 	Raycaster,
 	WebGPURenderer,
@@ -16,6 +17,8 @@ import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 const MODEL_URL = './data/renderman-teapot.glb';
+const TINT = 0xb4471f;
+const GREY = 0x333333;
 const CREDITS = 'RenderMan teapot model';
 const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
@@ -25,10 +28,9 @@ const mouse = new Vector2();
 const focusPoint = new Vector3();
 const params = {
 
-	bounces: 15,
+	bounces: 7,
 	renderScale: 1,
 	filterGlossyFactor: 0.5,
-	tiles: 1,
 	autoFocus: true,
 
 	...getScaledSettings(),
@@ -50,12 +52,11 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
 
 	// camera, positioned once the model bounds are known
 	camera = new PhysicalCamera( 25, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.apertureBlades = 6;
-	camera.fStop = 4;
+	camera.fStop = 1.5;
 
 	// background and environment
 	const gradientMap = new GradientEquirectTexture();
@@ -85,28 +86,38 @@ async function init() {
 	const gltf = await new GLTFLoader().loadAsync( MODEL_URL );
 
 	// The file stacks several teapot variants in the same spot along with two coplanar copies of
-	// the floor, so everything but the solid teapot and the gridded floor is removed.
-	const REMOVE = [ 'teapot_Hollow_Grp', 'teapot_Liquid_Grp', 'teapot_Cloth_Grp', 'teapot_Glasses_Grp', 'floor', 'ten_cm_text' ];
+	// the floor. The hollow pot is kept with the calm liquid inside it, along with the solid
+	// variant's lid since the hollow one has none, plus the gridded floor; everything else is
+	// removed.
+	const REMOVE = [
+		'teapot_Cloth_Grp', 'teapot_Glasses_Grp', 'floor', 'ten_cm_text',
+		'teapot_Body_Solid', 'teapot_Foot_Left', 'teapot_Foot_Right',
+		'teapot_Steps', 'teapot_Base',
+		'liquid_Splash', 'liquid_Splash_02', 'liquid_Splash_02_Foam', 'garnish',
+	];
 	REMOVE.forEach( name => gltf.scene.getObjectByName( name ).removeFromParent() );
 
 	// the model is authored in centimeters while the physical camera aperture works in meters
 	gltf.scene.scale.setScalar( 0.01 );
 
-	// turn the pot itself into tinted glass, leaving the pedestal and floor as they are
-	const GLASS = [ 'teapot_Body_Solid', 'teapot_Lid', 'teapot_Foot_Left', 'teapot_Foot_Right' ];
-	GLASS.forEach( name => {
+	// glazed ceramic for the pot and its base, leaving the ring, logo and floor as they are
+	const CERAMIC = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
+	const ceramicMaterial = new MeshPhysicalMaterial( {
+		color: TINT,
+		metalness: 0,
+		roughness: 0.6,
+		clearcoat: 0.4,
+		clearcoatRoughness: 0.3,
+	} );
+	ceramicMaterial.diffuseRoughness = 1;
+	CERAMIC.forEach( name => {
 
-		const material = gltf.scene.getObjectByName( name ).material;
-		material.map = null;
-		material.color.set( 0xffffff );
-		material.metalness = 0;
-		material.roughness = 0.05;
-		material.transmission = 1;
-		material.ior = 1.5;
-		material.attenuationColor.set( 0xd08a4a );
-		material.attenuationDistance = 0.15;
+		gltf.scene.getObjectByName( name ).material = ceramicMaterial;
 
 	} );
+
+	// the ring and logo share a near black material, lightened here
+	gltf.scene.getObjectByName( 'teapot_Base_02' ).material.color.set( GREY );
 
 	scene.add( gltf.scene );
 	scene.updateMatrixWorld( true );
@@ -117,7 +128,7 @@ async function init() {
 	const radius = box.getSize( new Vector3() ).length() * 0.5;
 
 	// a head on view, pulled back to fill the frame at the narrower fov
-	camera.position.copy( center ).add( new Vector3( 0, 0.12, 1 ).normalize().multiplyScalar( radius * 3.6 ) );
+	camera.position.copy( center ).add( new Vector3( 0, 0.12, 1 ).normalize().multiplyScalar( radius * 3.9 ) );
 	controls.target.copy( center );
 	controls.update();
 
@@ -141,16 +152,11 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
-
-		pathTracer.tiles.set( value, value );
-
-	} );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( camera, 'focusDistance', radius * 0.5, radius * 15 ).onChange( onParamsChange ).listen();
+	cameraFolder.add( camera, 'focusDistance', radius * 1.5, radius * 8 ).onChange( onParamsChange ).listen();
 	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
 
 		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
@@ -159,11 +165,13 @@ async function init() {
 
 
 	} );
-	cameraFolder.add( camera, 'apertureRotation', 0, 12.5 ).onChange( onParamsChange );
-	cameraFolder.add( camera, 'anamorphicRatio', 0.1, 10.0 ).onChange( onParamsChange );
-	cameraFolder.add( camera, 'bokehSize', 0, 100 ).onChange( onParamsChange ).listen();
-	cameraFolder.add( camera, 'fStop', 0.02, 20 ).onChange( onParamsChange ).listen();
-	cameraFolder.add( camera, 'fov', 25, 100 ).onChange( () => {
+
+	// a full turn covers every orientation for any blade count
+	cameraFolder.add( camera, 'apertureRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
+	cameraFolder.add( camera, 'anamorphicRatio', 0.5, 2 ).onChange( onParamsChange );
+	cameraFolder.add( camera, 'bokehSize', 1, 50 ).onChange( onParamsChange ).listen();
+	cameraFolder.add( camera, 'fStop', 0.5, 16 ).onChange( onParamsChange ).listen();
+	cameraFolder.add( camera, 'fov', 15, 60 ).onChange( () => {
 
 		camera.updateProjectionMatrix();
 		pathTracer.updateCamera();
