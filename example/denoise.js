@@ -15,8 +15,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { Upscaler } from '@pmndrs/upscaler';
-import { LoaderElement } from './utils/LoaderElement.js';
-import { OIDNDenoiser } from './utils/OIDNDenoiser.js';
+import { LoaderElement } from './src/LoaderElement.js';
+import { OIDNDenoiser } from './src/OIDNDenoiser.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer, RenderToScreenNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 

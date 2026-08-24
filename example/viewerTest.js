@@ -17,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
