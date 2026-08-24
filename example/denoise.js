@@ -285,8 +285,12 @@ function animate() {
 	const final = params.denoise && denoiser.texture ? denoiser.texture : target;
 	presentQuad.material.texture = params.upscale ? upscale( finalUpscaler, final ) : final;
 
+	// While in low res mode "target" is the preview itself and there is nothing to fade from, so
+	// the transition is forced to 1. "lowResTarget" only holds content once the full render begins.
+	const fade = pathTracer.lowResMode ? 1 : pathTracer.fadeState;
+
 	// get the upscaled low res texture
-	if ( pathTracer.fadeState < 1 ) {
+	if ( fade < 1 ) {
 
 		const lowRes = pathTracer.lowResTarget;
 		presentQuad.material.fromTexture = params.upscale ? upscale( lowResUpscaler, lowRes ) : lowRes;
@@ -294,7 +298,7 @@ function animate() {
 	}
 
 	// render
-	presentQuad.material.transition = pathTracer.fadeState;
+	presentQuad.material.transition = fade;
 	presentQuad.render( renderer );
 
 	// measuring the sample counts costs a full resolution pass, so stop once the render settles
