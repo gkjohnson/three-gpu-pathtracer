@@ -1,27 +1,22 @@
 import {
+	Box3,
 	Vector2,
 	Vector3,
 	ACESFilmicToneMapping,
 	Scene,
-	SphereGeometry,
-	MeshStandardMaterial,
-	Mesh,
 	Raycaster,
 	WebGPURenderer,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer, BlurredEnvMapGenerator } from 'three-gpu-pathtracer/webgpu';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
-const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb';
-const CREDITS = 'Model by tipatat on Sketchfab';
+const MODEL_URL = './data/renderman-teapot.glb';
+const CREDITS = 'RenderMan teapot model';
 const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
 let pathTracer, renderer, controls, camera, scene;
@@ -57,29 +52,24 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
-	// camera
-	camera = new PhysicalCamera( 60, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( - 0.262, 0.5276, - 1.1606 );
+	// camera, positioned once the model bounds are known
+	camera = new PhysicalCamera( 25, window.innerWidth / window.innerHeight, 0.025, 500 );
 	camera.apertureBlades = 6;
-	camera.fStop = 0.6;
-	camera.focusDistance = 1.1878;
-	focusPoint.set( - 0.5253353217832674, 0.3031596413506029, 0.000777794185259223 );
+	camera.fStop = 4;
 
-	// background
+	// background and environment
 	const gradientMap = new GradientEquirectTexture();
-	gradientMap.topColor.set( 0x390f20 ).convertSRGBToLinear();
-	gradientMap.bottomColor.set( 0x151b1f ).convertSRGBToLinear();
+	gradientMap.topColor.set( 0xffffff );
+	gradientMap.bottomColor.set( 0x666666 );
 	gradientMap.update();
 
 	// scene
 	scene = new Scene();
 	scene.background = gradientMap;
-	scene.environmentIntensity = 0.5;
+	scene.environment = gradientMap;
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.182, 0.147, 0.06 );
-	controls.update();
 	controls.addEventListener( 'change', () => {
 
 		if ( params.autoFocus ) {
@@ -92,47 +82,48 @@ async function init() {
 
 	} );
 
-	const [ envTexture, gltf ] = await Promise.all( [
-		new HDRLoader().loadAsync( ENV_URL ),
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL )
-	] );
+	const gltf = await new GLTFLoader().loadAsync( MODEL_URL );
 
-	// set up environment map
-	const generator = new BlurredEnvMapGenerator( renderer );
-	const blurredTex = await generator.generate( envTexture, 0.35 );
-	generator.dispose();
-	envTexture.dispose();
+	// The file stacks several teapot variants in the same spot along with two coplanar copies of
+	// the floor, so everything but the solid teapot and the gridded floor is removed.
+	const REMOVE = [ 'teapot_Hollow_Grp', 'teapot_Liquid_Grp', 'teapot_Cloth_Grp', 'teapot_Glasses_Grp', 'floor', 'ten_cm_text' ];
+	REMOVE.forEach( name => gltf.scene.getObjectByName( name ).removeFromParent() );
 
-	scene.environment = blurredTex;
+	// the model is authored in centimeters while the physical camera aperture works in meters
+	gltf.scene.scale.setScalar( 0.01 );
 
-	// create bright points around the scene
-	const geometry = new SphereGeometry( 1, 10, 10 );
-	const mat = new MeshStandardMaterial( { emissiveIntensity: 10, emissive: 0xffffff } );
-	for ( let i = 0; i < 300; i ++ ) {
+	// turn the pot itself into tinted glass, leaving the pedestal and floor as they are
+	const GLASS = [ 'teapot_Body_Solid', 'teapot_Lid', 'teapot_Foot_Left', 'teapot_Foot_Right' ];
+	GLASS.forEach( name => {
 
-		const m = new Mesh( geometry, mat );
-		m.scale.setScalar( 0.075 * Math.random() + 0.03 );
-		m.position.randomDirection().multiplyScalar( 30 + Math.random() * 15 );
-		scene.add( m );
-
-	}
-
-	gltf.scene.scale.setScalar( 0.5 );
-	gltf.scene.traverse( c => {
-
-		if ( c.material ) {
-
-			c.material.roughness = 0.05;
-			c.material.metalness = 0.05;
-
-			// tangents cannot be generated when no uv is present
-			c.material.flatShading = true;
-
-		}
+		const material = gltf.scene.getObjectByName( name ).material;
+		material.map = null;
+		material.color.set( 0xffffff );
+		material.metalness = 0;
+		material.roughness = 0.05;
+		material.transmission = 1;
+		material.ior = 1.5;
+		material.attenuationColor.set( 0xd08a4a );
+		material.attenuationDistance = 0.15;
 
 	} );
+
 	scene.add( gltf.scene );
 	scene.updateMatrixWorld( true );
+
+	// frame the camera on the teapot rather than the backdrop
+	const box = new Box3().setFromObject( gltf.scene.getObjectByName( 'Teapot_Grp' ) );
+	const center = box.getCenter( new Vector3() );
+	const radius = box.getSize( new Vector3() ).length() * 0.5;
+
+	// a head on view, pulled back to fill the frame at the narrower fov
+	camera.position.copy( center ).add( new Vector3( 0, 0.12, 1 ).normalize().multiplyScalar( radius * 3.6 ) );
+	controls.target.copy( center );
+	controls.update();
+
+	focusPoint.copy( center );
+	camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
+
 
 	// update the scene
 	pathTracer.setScene( scene, camera );
@@ -159,7 +150,7 @@ async function init() {
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
-	cameraFolder.add( camera, 'focusDistance', 1, 100 ).onChange( onParamsChange ).listen();
+	cameraFolder.add( camera, 'focusDistance', radius * 0.5, radius * 15 ).onChange( onParamsChange ).listen();
 	cameraFolder.add( camera, 'apertureBlades', 0, 10, 1 ).onChange( function ( v ) {
 
 		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
