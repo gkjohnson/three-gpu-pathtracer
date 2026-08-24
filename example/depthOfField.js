@@ -9,14 +9,14 @@ import {
 	WebGPURenderer,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
-const MODEL_URL = './data/renderman-teapot.glb';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/renderman-teapot/renderman-teapot.glb';
 const TINT = 0xb4471f;
 const GREY = 0x333333;
 const CREDITS = 'RenderMan teapot model';
@@ -33,8 +33,6 @@ const params = {
 	filterGlossyFactor: 0.5,
 	autoFocus: true,
 
-	...getScaledSettings(),
-
 };
 
 init();
@@ -46,7 +44,7 @@ async function init() {
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true } );
-	renderer.init();
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -83,47 +81,12 @@ async function init() {
 
 	} );
 
-	const gltf = await new GLTFLoader().loadAsync( MODEL_URL );
-
-	// The file stacks several teapot variants in the same spot along with two coplanar copies of
-	// the floor. The hollow pot is kept with the calm liquid inside it, along with the solid
-	// variant's lid since the hollow one has none, plus the gridded floor; everything else is
-	// removed.
-	const REMOVE = [
-		'teapot_Cloth_Grp', 'teapot_Glasses_Grp', 'floor', 'ten_cm_text',
-		'teapot_Body_Solid', 'teapot_Foot_Left', 'teapot_Foot_Right',
-		'teapot_Steps', 'teapot_Base',
-		'liquid_Splash', 'liquid_Splash_02', 'liquid_Splash_02_Foam', 'garnish',
-	];
-	REMOVE.forEach( name => gltf.scene.getObjectByName( name ).removeFromParent() );
-
-	// the model is authored in centimeters while the physical camera aperture works in meters
-	gltf.scene.scale.setScalar( 0.01 );
-
-	// glazed ceramic for the pot and its base, leaving the ring, logo and floor as they are
-	const CERAMIC = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
-	const ceramicMaterial = new MeshPhysicalMaterial( {
-		color: TINT,
-		metalness: 0,
-		roughness: 0.6,
-		clearcoat: 0.4,
-		clearcoatRoughness: 0.3,
-	} );
-	ceramicMaterial.diffuseRoughness = 1;
-	CERAMIC.forEach( name => {
-
-		gltf.scene.getObjectByName( name ).material = ceramicMaterial;
-
-	} );
-
-	// the ring and logo share a near black material, lightened here
-	gltf.scene.getObjectByName( 'teapot_Base_02' ).material.color.set( GREY );
-
-	scene.add( gltf.scene );
+	const model = await loadModel();
+	scene.add( model );
 	scene.updateMatrixWorld( true );
 
 	// frame the camera on the teapot rather than the backdrop
-	const box = new Box3().setFromObject( gltf.scene.getObjectByName( 'Teapot_Grp' ) );
+	const box = new Box3().setFromObject( model.getObjectByName( 'Teapot_Grp' ) );
 	const center = box.getCenter( new Vector3() );
 	const radius = box.getSize( new Vector3() ).length() * 0.5;
 
@@ -134,7 +97,6 @@ async function init() {
 
 	focusPoint.copy( center );
 	camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
-
 
 	// update the scene
 	pathTracer.setScene( scene, camera );
@@ -149,8 +111,17 @@ async function init() {
 	renderer.domElement.addEventListener( 'mouseup', onMouseUp );
 	renderer.domElement.addEventListener( 'mousedown', onMouseDown );
 
-	// gui
+	buildGui( radius );
+
+	animate();
+
+}
+
+// the focus range is derived from the model size so the slider stays useful at any scale
+function buildGui( radius ) {
+
 	const gui = new GUI();
+
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
@@ -162,7 +133,6 @@ async function init() {
 		camera.apertureBlades = v === 0 ? 0 : Math.max( v, 3 );
 		this.updateDisplay();
 		onParamsChange();
-
 
 	} );
 
@@ -179,11 +149,47 @@ async function init() {
 	} ).listen();
 	cameraFolder.add( params, 'autoFocus' );
 
-	animate();
+}
+
+// Loads the teapot and prepares it for the scene. The file ships several variants of the pot
+// stacked in the same spot along with two coplanar floors, so most of it is discarded and the
+// surfaces that are kept are re-materialed.
+async function loadModel() {
+
+	const gltf = await new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL );
+	const model = gltf.scene;
+
+	// keep the hollow pot, the solid variant's lid, and the gridded floor
+	const remove = [
+		'teapot_Liquid_Grp', 'teapot_Cloth_Grp', 'teapot_Glasses_Grp',
+		'teapot_Body_Solid', 'teapot_Foot_Left', 'teapot_Foot_Right', 'teapot_Steps', 'teapot_Base',
+		'floor', 'ten_cm_text',
+	];
+	remove.forEach( name => model.getObjectByName( name ).removeFromParent() );
+
+	// the model is authored in centimeters while the physical camera aperture works in meters
+	model.scale.setScalar( 0.01 );
+
+	// glazed ceramic for the pot and its base, leaving the ring, logo and floor as they are
+	const ceramic = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
+	const ceramicMaterial = new MeshPhysicalMaterial( {
+		color: TINT,
+		metalness: 0,
+		roughness: 0.6,
+		clearcoat: 0.4,
+		clearcoatRoughness: 0.3,
+	} );
+	ceramicMaterial.diffuseRoughness = 1;
+	ceramic.forEach( name => model.getObjectByName( name ).material = ceramicMaterial );
+
+	// the ring and logo share a near black material, lightened here
+	model.getObjectByName( 'teapot_Base_02' ).material.color.set( GREY );
+
+	return model;
 
 }
 
-// mouse events for focusing on clicked poin
+// mouse events for focusing on the clicked point
 function onMouseDown( e ) {
 
 	mouse.set( e.clientX, e.clientY );
