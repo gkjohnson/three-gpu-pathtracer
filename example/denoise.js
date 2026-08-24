@@ -123,28 +123,32 @@ async function init() {
 
 	// gui
 	gui = new GUI();
-	gui.add( params, 'enable' ).name( 'path trace' );
-	gui.add( params, 'transparentBackground' ).onChange( () => {
+
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'transparentBackground' ).onChange( () => {
 
 		updateBackground();
 		resetRender();
 
 	} );
-	gui.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
+	ptFolder.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
 
 		pathTracer.renderScale = v;
 		resetRender();
 
 	} );
-	gui.add( params, 'maxSamples', 1, 200, 1 ).onChange( v => {
+	ptFolder.add( params, 'maxSamples', 1, 200, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 		resetRender();
 
 	} );
-	gui.add( params, 'denoise' );
-	gui.add( params, 'upscale' );
-	gui.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
+
+	const settingsFolder = gui.addFolder( 'upscale settings' );
+	settingsFolder.add( params, 'denoise' );
+	settingsFolder.add( params, 'upscale' );
+	settingsFolder.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
 
 		finalUpscaler.settings.sharpness = v;
 		lowResUpscaler.settings.sharpness = v;
