@@ -67,7 +67,7 @@ const params = {
 	enable: true,
 	model: modelName in MODELS ? modelName : 'X-Wing',
 	renderScale: 1,
-	tiles: 3,
+	tiles: 5,
 
 	samplesPerFrame: 1,
 	bounces: 15,
@@ -476,7 +476,7 @@ function buildGui() {
 
 	} );
 	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'tiles', 3, 6, 1 ).onChange( v => {
+	ptFolder.add( params, 'tiles', 5, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.setScalar( v );
 
