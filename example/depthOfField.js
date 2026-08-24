@@ -17,8 +17,6 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/renderman-teapot/renderman-teapot.glb';
-const TINT = 0xb4471f;
-const GREY = 0x333333;
 const CREDITS = 'RenderMan teapot model';
 const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
@@ -173,7 +171,7 @@ async function loadModel() {
 	// glazed ceramic for the pot and its base, leaving the ring, logo and floor as they are
 	const ceramic = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
 	const ceramicMaterial = new MeshPhysicalMaterial( {
-		color: TINT,
+		color: 0xb4471f,
 		metalness: 0,
 		roughness: 0.6,
 		clearcoat: 0.4,
@@ -183,7 +181,7 @@ async function loadModel() {
 	ceramic.forEach( name => model.getObjectByName( name ).material = ceramicMaterial );
 
 	// the ring and logo share a near black material, lightened here
-	model.getObjectByName( 'teapot_Base_02' ).material.color.set( GREY );
+	model.getObjectByName( 'teapot_Base_02' ).material.color.set( 0x333333 );
 
 	return model;
 
