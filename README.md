@@ -42,7 +42,7 @@ _More features and capabilities in progress!_
 
 [Volumetric Fog Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/fog.html)
 
-[AMD FidelityFX FSR1 Upscaling](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/upscaling.html)
+[Denoising and Upscaling](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/denoise.html)
 
 **Test Scenes**
 

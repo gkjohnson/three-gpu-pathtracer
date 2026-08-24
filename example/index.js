@@ -23,12 +23,12 @@ import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 import { MODEL_LIST } from './modelList.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 

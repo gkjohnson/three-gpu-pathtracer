@@ -24,10 +24,10 @@ import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawConditionalLineMaterial } from 'three/examples/jsm/materials/LDrawConditionalLineNodeMaterial.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { QuiltPreviewNodeMaterial } from './materials/QuiltPreviewNodeMaterial.js';
+import { QuiltPreviewNodeMaterial } from './src/materials/QuiltPreviewNodeMaterial.js';
 
 // lkg display constants
 const LKG_WIDTH = 420;

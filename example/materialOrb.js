@@ -10,8 +10,8 @@ import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLigh
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { LoaderElement } from './utils/LoaderElement.js';
-import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
+import { LoaderElement } from './src/LoaderElement.js';
+import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
 
 const DB_URL = 'https://api.physicallybased.info/v2/materials';
 const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
