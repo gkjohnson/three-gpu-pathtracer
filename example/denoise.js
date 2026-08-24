@@ -1,10 +1,15 @@
 import {
 	ACESFilmicToneMapping,
+	NearestFilter,
+	NoToneMapping,
+	RenderTarget,
 	Scene,
+	UnsignedByteType,
 	WebGPURenderer,
 	PerspectiveCamera,
 	Vector2,
 } from 'three/webgpu';
+import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -33,6 +38,9 @@ let pathTracer, denoiser, renderer, controls;
 let camera, scene, gradientMap;
 let loader, gui;
 
+// albedo and normal buffers that guide the denoiser
+let auxTarget;
+
 // The final present. Both sides of the path tracer's low res to full res fade are upscaled, then
 // crossfaded here, so the transition is not also a change in sharpness.
 let quad;
@@ -50,9 +58,7 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
-	// "shader-f16" lets the denoiser run its half precision path, and it can only be asked for when
-	// the device is created
-	renderer = new WebGPURenderer( { antialias: true, requiredFeatures: [ 'shader-f16' ] } );
+	renderer = new WebGPURenderer( { antialias: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -62,6 +68,20 @@ async function init() {
 	pathTracer.maxSamples = params.maxSamples;
 
 	denoiser = new OIDNDenoiser( renderer );
+
+	// Eight bits per channel since both buffers hold [0,1]. Multisampled so the rasterized
+	// silhouettes match the jittered path traced ones.
+	auxTarget = new RenderTarget( 1, 1, {
+		count: 2,
+		type: UnsignedByteType,
+		minFilter: NearestFilter,
+		magFilter: NearestFilter,
+		samples: 4,
+	} );
+
+	// the MRT keys are matched against these names
+	auxTarget.textures[ 0 ].name = 'output';
+	auxTarget.textures[ 1 ].name = 'normal';
 
 	beautyUpscaler = new Upscaler( { renderer } );
 	lowResUpscaler = new Upscaler( { renderer } );
@@ -186,6 +206,35 @@ function onResize() {
 
 }
 
+// Rasterizes the albedo and normal buffers that guide the denoiser. oidn-web takes normals mapped
+// into [0,1], with (0.5, 0.5, 1) as a flat normal.
+function renderAux( width, height ) {
+
+	if ( auxTarget.width !== width || auxTarget.height !== height ) {
+
+		auxTarget.setSize( width, height );
+
+	}
+
+	const originalMRT = renderer.getMRT();
+	const originalToneMapping = renderer.toneMapping;
+
+	// the buffers are data rather than an image, so they must not be tone mapped
+	renderer.toneMapping = NoToneMapping;
+	renderer.setRenderTarget( auxTarget );
+	renderer.setMRT( mrt( {
+		output: diffuseColor,
+		normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
+	} ) );
+
+	renderer.render( scene, camera );
+
+	renderer.setMRT( originalMRT );
+	renderer.setRenderTarget( null );
+	renderer.toneMapping = originalToneMapping;
+
+}
+
 // The upscaler is told both resolutions up front, so they are re-checked every frame. Returns null
 // on the frame it reconfigures, since its output is still sized to the previous resolution.
 function upscale( upscaler, source ) {
@@ -249,9 +298,10 @@ function animate() {
 	// The denoiser reads the accumulated result rather than the faded composite, so it only runs
 	// once the path tracer has stopped at maxSamples.
 	const settled = averageSamples >= params.maxSamples;
-	if ( params.denoise && settled ) {
+	if ( params.denoise && settled && ! denoiser.running && ! denoiser.complete ) {
 
-		denoiser.denoise( target, scene, camera );
+		renderAux( target.width, target.height );
+		denoiser.denoise( target, auxTarget.textures[ 0 ], auxTarget.textures[ 1 ] );
 
 	}
 

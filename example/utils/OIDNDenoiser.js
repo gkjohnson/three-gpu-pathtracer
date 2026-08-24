@@ -1,31 +1,16 @@
-import {
-	ExternalTexture,
-	UnsignedByteType,
-	NearestFilter,
-	NoToneMapping,
-	RenderTarget,
-} from 'three/webgpu';
-import { mrt, diffuseColor, normalView, vec4 } from 'three/tsl';
+import { ExternalTexture } from 'three/webgpu';
 import { initUNetFromURL } from 'oidn-web';
 
-// The weights are stored with git lfs, so "raw" serves only the pointer file and they come from
-// the media host instead.
-const WEIGHTS_BASE_URL = 'https://media.githubusercontent.com/media/RenderKit/oidn-weights/master';
-const WEIGHTS_AUX = 'rt_hdr_alb_nrm.tza';
-const WEIGHTS_COLOR = 'rt_hdr.tza';
+const WEIGHTS_AUX_URL = new URL( '../denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString();
+const WEIGHTS_COLOR_URL = new URL( '../denoise/rt_hdr.tza', import.meta.url ).toString();
 
 /**
- * Runs Open Image Denoise over a path traced image. Shares the renderer's device, so nothing is
- * read back to the CPU. The albedo and normal buffers that guide the filter are rasterized from
- * the scene, so this needs no support from the path tracer itself.
+ * Runs Open Image Denoise over a path traced image.
  *
  *     const denoiser = new OIDNDenoiser( renderer );
  *
- *     denoiser.denoise( pathTracer.target, scene, camera );
+ *     denoiser.denoise( pathTracer.target, albedoTexture, normalTexture );
  *     quad.material.map = denoiser.texture ?? pathTracer.target;
- *
- * Create the renderer with `requiredFeatures: [ 'shader-f16' ]` for the half precision path, since
- * WebGPU features cannot be enabled after the device exists.
  */
 export class OIDNDenoiser {
 
@@ -63,101 +48,34 @@ export class OIDNDenoiser {
 	}
 
 	/**
-	 * The rasterized albedo buffer handed to the denoiser.
-	 *
-	 * @type {Texture}
-	 */
-	get albedoTexture() {
-
-		return this._auxTarget.textures[ 0 ];
-
-	}
-
-	/**
-	 * The rasterized normal buffer handed to the denoiser.
-	 *
-	 * @type {Texture}
-	 */
-	get normalTexture() {
-
-		return this._auxTarget.textures[ 1 ];
-
-	}
-
-	/**
-	 * Whether to guide the filter with the albedo and normal buffers. The two models are separate
-	 * networks, so switching downloads a different set of weights.
-	 *
-	 * @type {boolean}
-	 * @default true
-	 */
-	get useAux() {
-
-		return this._useAux;
-
-	}
-
-	set useAux( v ) {
-
-		if ( this._useAux !== v ) {
-
-			this._useAux = v;
-			this.reset();
-
-		}
-
-	}
-
-	/**
 	 * @param {WebGPURenderer} renderer
 	 */
 	constructor( renderer ) {
 
 		this.renderer = renderer;
 
-		this._useAux = true;
 		this._texture = null;
 		this._running = false;
 		this._complete = false;
 		this._abort = null;
-
-		// one network per model, loaded the first time it is asked for
+		this._requestId = 0;
 		this._unets = { aux: null, color: null };
-		this._loading = false;
-
-		// Eight bits per channel, since both buffers hold [0,1] and that is the precision oidn-web
-		// documents for them. Multisampled so the rasterized silhouettes match the jittered path
-		// traced ones.
-		this._auxTarget = new RenderTarget( 1, 1, {
-			count: 2,
-			type: UnsignedByteType,
-			minFilter: NearestFilter,
-			magFilter: NearestFilter,
-			depthBuffer: true,
-			samples: 4,
-		} );
-
-		// the MRT keys are matched against these names
-		this._auxTarget.textures[ 0 ].name = 'output';
-		this._auxTarget.textures[ 1 ].name = 'normal';
 
 		this._resultPipeline = null;
-		this._resultTexture = null;
+		this._rawTexture = null;
 
 	}
 
 	/**
-	 * Runs a pass unless one is already running or finished. Call it once the image has settled,
-	 * since denoising a moving image is wasted work.
+	 * Runs a pass unless one is already running or finished. The optional albedo and normal
+	 * buffers guide the filter and select the guided model. Both hold [0,1] values, with normals
+	 * mapped so a flat normal is (0.5, 0.5, 1).
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {Scene} scene - Used to rasterize the albedo and normal buffers.
-	 * @param {Camera} camera
+	 * @param {?Texture} albedo
+	 * @param {?Texture} normal
 	 */
-	denoise( color, scene, camera ) {
-
-		const useAux = this._useAux;
-		const unet = this._unets[ useAux ? 'aux' : 'color' ];
+	async denoise( color, albedo = null, normal = null ) {
 
 		if ( this._complete || this._running ) {
 
@@ -165,23 +83,27 @@ export class OIDNDenoiser {
 
 		}
 
-		if ( ! unet ) {
+		this._running = true;
 
-			this._loadUNet( useAux );
+		const useAux = Boolean( albedo && normal );
+		const requestId = ++ this._requestId;
+		const unet = await this._loadUNet( useAux );
+
+		// bail if a reset or a newer call took over while the weights downloaded
+		if ( requestId !== this._requestId || ! this._running ) {
+
 			return;
 
 		}
 
-		const colorGPU = this._getGPUTexture( color );
-		if ( ! colorGPU ) {
-
-			return;
-
-		}
+		// three only holds a WebGPU texture for a three texture once it has been initialized
+		const { renderer } = this;
+		const backend = renderer.backend;
+		renderer.initTexture( color );
 
 		const { width, height } = color;
 		const inputs = {
-			color: { data: colorGPU, width, height },
+			color: { data: backend.get( color ).texture, width, height },
 
 			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
 			progress: result => this._writeResult( result, width, height ),
@@ -198,22 +120,13 @@ export class OIDNDenoiser {
 		// the guided model needs both buffers, and the color only model must not be given them
 		if ( useAux ) {
 
-			this.renderAux( color, scene, camera );
-
-			const albedo = this._getGPUTexture( this.albedoTexture );
-			const normal = this._getGPUTexture( this.normalTexture );
-			if ( ! albedo || ! normal ) {
-
-				return;
-
-			}
-
-			inputs.albedo = { data: albedo, width, height };
-			inputs.normal = { data: normal, width, height };
+			renderer.initTexture( albedo );
+			renderer.initTexture( normal );
+			inputs.albedo = { data: backend.get( albedo ).texture, width, height };
+			inputs.normal = { data: backend.get( normal ).texture, width, height };
 
 		}
 
-		this._running = true;
 		this._abort = unet.tileExecute( inputs );
 
 	}
@@ -234,8 +147,8 @@ export class OIDNDenoiser {
 		this._texture?.dispose();
 		this._texture = null;
 
-		this._resultTexture?.destroy();
-		this._resultTexture = null;
+		this._rawTexture?.destroy();
+		this._rawTexture = null;
 
 		this._running = false;
 		this._complete = false;
@@ -246,79 +159,34 @@ export class OIDNDenoiser {
 
 		this.reset();
 
-		this._auxTarget.dispose();
+		// the networks hold the weights on the GPU, and a load may still be in flight
+		for ( const key in this._unets ) {
+
+			this._unets[ key ]?.then( unet => unet.dispose() );
+			this._unets[ key ] = null;
+
+		}
 
 	}
 
-	async _loadUNet( aux ) {
+	// loads each model once, with concurrent calls sharing the same promise
+	_loadUNet( aux ) {
 
 		const key = aux ? 'aux' : 'color';
-		if ( this._unets[ key ] || this._loading ) {
+		if ( ! this._unets[ key ] ) {
 
-			return this._unets[ key ];
+			this._unets[ key ] = ( async () => {
+
+				const device = this.renderer.backend.device;
+				const url = aux ? WEIGHTS_AUX_URL : WEIGHTS_COLOR_URL;
+
+				return initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, { aux, hdr: true } );
+
+			} )();
 
 		}
-
-		this._loading = true;
-
-		const device = this.renderer.backend.device;
-		const adapterInfo = device.adapterInfo ?? ( await navigator.gpu.requestAdapter() ).info;
-		const url = `${ WEIGHTS_BASE_URL }/${ aux ? WEIGHTS_AUX : WEIGHTS_COLOR }`;
-
-		this._unets[ key ] = await initUNetFromURL( url, { device, adapterInfo }, { aux, hdr: true } );
-		this._loading = false;
 
 		return this._unets[ key ];
-
-	}
-
-	// three only keeps a WebGPU texture alongside a three texture once it has registered it, which
-	// has not happened for a freshly cloned render target
-	_getGPUTexture( tex ) {
-
-		this.renderer.initTexture( tex );
-		return this.renderer.backend.get( tex ).texture;
-
-	}
-
-	/**
-	 * Rasterizes the albedo and normal buffers without denoising. Run as part of "denoise", and
-	 * exposed so they can be displayed before a pass has run.
-	 *
-	 * @param {Texture} color - Only its dimensions are used.
-	 * @param {Scene} scene
-	 * @param {Camera} camera
-	 */
-	renderAux( color, scene, camera ) {
-
-		const { renderer, _auxTarget } = this;
-		const { width, height } = color;
-
-		if ( _auxTarget.width !== width || _auxTarget.height !== height ) {
-
-			_auxTarget.setSize( width, height );
-
-		}
-
-		const originalMRT = renderer.getMRT();
-		const originalToneMapping = renderer.toneMapping;
-
-		// the buffers are data rather than an image, so they must not be tone mapped
-		renderer.toneMapping = NoToneMapping;
-		renderer.setRenderTarget( _auxTarget );
-
-		// oidn-web takes normals mapped into [0,1], not the signed range the OIDN docs describe.
-		// Its own reference inputs use (0.5, 0.5, 1) for a flat normal.
-		renderer.setMRT( mrt( {
-			output: diffuseColor,
-			normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
-		} ) );
-
-		renderer.render( scene, camera );
-
-		renderer.setMRT( originalMRT );
-		renderer.setRenderTarget( null );
-		renderer.toneMapping = originalToneMapping;
 
 	}
 
@@ -358,10 +226,10 @@ export class OIDNDenoiser {
 
 		}
 
-		if ( ! this._resultTexture || this._resultTexture.width !== width || this._resultTexture.height !== height ) {
+		if ( ! this._rawTexture || this._rawTexture.width !== width || this._rawTexture.height !== height ) {
 
-			this._resultTexture?.destroy();
-			this._resultTexture = device.createTexture( {
+			this._rawTexture?.destroy();
+			this._rawTexture = device.createTexture( {
 				size: [ width, height ],
 				format: 'rgba16float',
 				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
@@ -370,7 +238,7 @@ export class OIDNDenoiser {
 			// ExternalTexture lets three sample a gpu texture it did not create. It has no image
 			// behind it, so its size is set explicitly or "texture.width" reports zero.
 			this._texture?.dispose();
-			this._texture = new ExternalTexture( this._resultTexture );
+			this._texture = new ExternalTexture( this._rawTexture );
 			this._texture.image = { width, height };
 
 		}
@@ -379,7 +247,7 @@ export class OIDNDenoiser {
 			layout: this._resultPipeline.getBindGroupLayout( 0 ),
 			entries: [
 				{ binding: 0, resource: { buffer: result.data } },
-				{ binding: 1, resource: this._resultTexture.createView() },
+				{ binding: 1, resource: this._rawTexture.createView() },
 			],
 		} );
 
