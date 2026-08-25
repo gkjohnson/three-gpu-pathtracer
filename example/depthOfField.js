@@ -17,7 +17,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/renderman-teapot/renderman-teapot.glb';
-const CREDITS = 'RenderMan teapot model';
+const CREDITS = 'Model courtesy of RenderMan';
 const DESCRIPTION = 'Path tracing with configurable bokeh and depth of field. Click point in scene to focus.';
 
 let pathTracer, renderer, controls, camera, scene;
@@ -64,6 +64,7 @@ async function init() {
 	scene = new Scene();
 	scene.background = gradientMap;
 	scene.environment = gradientMap;
+	scene.environmentIntensity = 1.5;
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
@@ -94,7 +95,7 @@ async function init() {
 	controls.update();
 
 	focusPoint.copy( center );
-	camera.focusDistance = camera.position.distanceTo( focusPoint ) - camera.near;
+	camera.focusDistance = 0.74;
 
 	// update the scene
 	pathTracer.setScene( scene, camera );
