@@ -15,6 +15,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			bvhData: { value: null },
 
 			seed: uniform( 0 ),
+			maxSamples: uniform( 0, 'uint' ),
 
 			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 			tileSize: uniform( new Vector2() ),
@@ -31,6 +32,7 @@ export class RayGenerationKernel extends ComputeKernel {
 		const fn = wgslTagFn /* wgsl */`
 			fn compute(
 				seed: u32,
+				maxSamples: u32,
 				tileSize: vec2u,
 
 				globalId: vec3u
@@ -59,12 +61,13 @@ export class RayGenerationKernel extends ComputeKernel {
 				// calculate the screen uv
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 
-				// check whether ray is already active (added on the queue) and skip it if it is
+				// skip the pixel if it already has a ray on the queue or has hit the sample limit
 				let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
 				let isActive = ( ${ SAMPLE_ACTIVE_FLAG }u & combinedField ) != 0;
 				let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
+				let isComplete = maxSamples != 0u && samples >= maxSamples;
 
-				if ( isActive ) {
+				if ( isActive || isComplete ) {
 
 					return;
 

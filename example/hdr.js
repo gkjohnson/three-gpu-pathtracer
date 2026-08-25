@@ -15,13 +15,13 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { LoaderElement } from './src/LoaderElement.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
+import { HDRImageGenerator } from './src/HDRImageGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb';

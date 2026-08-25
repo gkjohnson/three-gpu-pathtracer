@@ -147,12 +147,15 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				if ( isTerminated ) {
 
+					// store the color rows top down to match a rasterized render target
+					let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
+
 					// terminate ray, write color, mark it as inactive
 					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
-					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
-					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				} else {
 

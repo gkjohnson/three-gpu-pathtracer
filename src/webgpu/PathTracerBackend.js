@@ -10,6 +10,9 @@ export class PathTracerBackend {
 		this.bounces = 15;
 		this.lowResMode = false;
 
+		// stop taking samples once a pixel reaches this count. zero means no limit.
+		this.maxSamples = 0;
+
 		this._renderTask = null;
 
 		this.outputTarget = new StorageTexture( 1, 1, );

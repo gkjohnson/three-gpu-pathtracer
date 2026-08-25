@@ -126,6 +126,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	// Stops taking samples once a pixel reaches this count. Zero means no limit.
+	get maxSamples() {
+
+		return this._pathTracer.maxSamples;
+
+	}
+
+	set maxSamples( v ) {
+
+		this._pathTracer.maxSamples = v;
+
+	}
+
 	// Per pixel sample counts. Use "min" for convergence checks, "avg" to display. Measures on the
 	// wavefront backend, so only call it when the numbers are needed.
 	async getSampleCountsAsync() {
@@ -244,6 +257,18 @@ export class WebGPUPathTracer {
 
 	}
 
+	get lowResTarget() {
+
+		return this._lowResTarget;
+
+	}
+
+	get lowResMode() {
+
+		return this._pathTracer.lowResMode;
+
+	}
+
 	get textureAtlas() {
 
 		return this._bvhData.textureAtlas;
@@ -252,8 +277,11 @@ export class WebGPUPathTracer {
 
 	useMegakernel( value ) {
 
+		const maxSamples = this._pathTracer.maxSamples;
+
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._pathTracer.maxSamples = maxSamples;
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );

@@ -6,7 +6,9 @@ const sampleTexel = wgslFn( /* wgsl */`
 	fn sampleTexel( tex: texture_2d<f32>, coord: vec2f ) -> vec4f {
 
 		let size = vec2f( textureDimensions( tex, 0 ) );
-		let pxCoord = coord * size - 0.5;
+
+		// the path tracer stores its color rows top down, so v of 0 is the last texel row
+		let pxCoord = vec2f( coord.x, 1.0 - coord.y ) * size - 0.5;
 		let px = vec2i( floor( pxCoord ) );
 		let fr = fract( pxCoord );
 		let maxPx = vec2i( size ) - 1;
@@ -102,6 +104,10 @@ export class QuiltPreviewNodeMaterial extends MeshBasicNodeMaterial {
 		const getColor = wgslTagFn/* wgsl */`
 			fn getColor( uv: vec2f ) -> vec4f {
 
+				// the corner radius is measured in panel heights
+				let CORNER_RADIUS = 0.02;
+				let MATTE_COLOR = vec4f( 0.015, 0.015, 0.015, 1.0 );
+
 				if ( ${ displayIndex } < 0 ) {
 
 					return ${ sampleTexel }( ${ quiltMap }, uv );
@@ -114,11 +120,12 @@ export class QuiltPreviewNodeMaterial extends MeshBasicNodeMaterial {
 				tileUv.y -= ( 1.0 - ${ heightScale } ) * 0.5;
 				tileUv /= ${ heightScale };
 
-				if ( any( tileUv < vec2f( 0.0 ) ) || any( tileUv > vec2f( 1.0 ) ) ) {
-
-					return vec4f( 0.05, 0.05, 0.05, 1.0 );
-
-				}
+				// Distance to the rounded edge of the panel. The x axis is scaled by the aspect
+				// ratio so the corners come out circular rather than elliptical, which leaves the
+				// radius measured in panel heights.
+				let scale = vec2f( ${ aspectRatio }, 1.0 );
+				let corner = abs( ( tileUv - 0.5 ) * scale ) - scale * 0.5 + CORNER_RADIUS;
+				let dist = length( max( corner, vec2f( 0.0 ) ) ) + min( max( corner.x, corner.y ), 0.0 ) - CORNER_RADIUS;
 
 				let size = vec2f( textureDimensions( ${ quiltMap }, 0 ) );
 				let tileTexelHalfWidth = 0.5 * ${ quiltDimensions } / size;
@@ -130,7 +137,11 @@ export class QuiltPreviewNodeMaterial extends MeshBasicNodeMaterial {
 					f32( ${ displayIndex } / columns )
 				);
 				let quiltUv = ( tileIndex + tileUv ) / ${ quiltDimensions };
-				return ${ sampleTexel }( ${ quiltMap }, quiltUv );
+				let color = ${ sampleTexel }( ${ quiltMap }, quiltUv );
+
+				// fade across a single pixel of the edge so the corners are not jagged
+				let aa = fwidth( dist );
+				return mix( color, MATTE_COLOR, smoothstep( - aa, aa, dist ) );
 
 			}
 		`;

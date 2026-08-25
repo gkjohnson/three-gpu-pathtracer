@@ -11,7 +11,9 @@ const sampleTexelFn = wgslFn( /* wgsl */`
 		// Manual bilinear filtering using textureLoad to support filterable float32 textures
 		// on all devices
 		let size = vec2f( textureDimensions( tex, 0 ) );
-		let pxCoord = coord * size - 0.5;
+
+		// the path tracer stores its color rows top down
+		let pxCoord = vec2f( coord.x, 1.0 - coord.y ) * size - 0.5;
 		let px = vec2i( floor( pxCoord ) );
 		let fr = fract( pxCoord );
 

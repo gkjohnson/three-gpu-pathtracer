@@ -190,6 +190,15 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
+			// skip the tile loop entirely once every pixel is finished
+			kernel.maxSamples = this.maxSamples;
+			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
+
+				yield;
+				continue;
+
+			}
+
 			// every pixel in a tile finishes its sample in a single dispatch, so the sample counts
 			// can be derived from how far through the tile cycle we are without reading anything back
 			const tileCount = this.lowResMode ? 1 : tiles.x * tiles.y;

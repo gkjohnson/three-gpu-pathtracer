@@ -68,6 +68,7 @@ export const materialStruct = new StructTypeNode( {
 	// offset 32 floats
 	iridescenceThicknessMinimum: 'float',
 	iridescenceThicknessMaximum: 'float',
+	diffuseRoughness: 'float',
 
 	// offset 36 floats
 	specularColor: 'vec3',
@@ -168,6 +169,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 
 	// material
 	roughness: 'f32',
+	diffuseRoughness: 'f32',
 	metalness: 'f32',
 	anisotropy: 'f32',
 	color: 'vec3f',

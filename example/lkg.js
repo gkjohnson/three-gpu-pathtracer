@@ -24,10 +24,11 @@ import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawConditionalLineMaterial } from 'three/examples/jsm/materials/LDrawConditionalLineNodeMaterial.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { QuiltPreviewNodeMaterial } from './materials/QuiltPreviewNodeMaterial.js';
+import { QuiltPreviewNodeMaterial } from './src/materials/QuiltPreviewNodeMaterial.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 // lkg display constants
 const LKG_WIDTH = 420;
@@ -64,20 +65,16 @@ const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
 
 const params = {
 
-	enable: true,
 	model: modelName in MODELS ? modelName : 'X-Wing',
 	renderScale: 1,
-	tiles: 3,
+	tiles: 5,
 
-	samplesPerFrame: 1,
-	bounces: 15,
-	filterGlossyFactor: 1,
 	pause: false,
 
 	tiltingPreview: true,
 	animationSpeed: 1,
 
-	numViews: 54,
+	numViews: 32,
 	viewCone: 35,
 	viewerDistance: VIEWER_DISTANCE,
 
@@ -85,7 +82,7 @@ const params = {
 
 };
 
-let loadingEl, samplesEl, distEl;
+let loader, distEl;
 let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, scene;
 
@@ -103,8 +100,8 @@ async function init() {
 
 	// get elements
 	distEl = document.getElementById( 'distance' );
-	loadingEl = document.getElementById( 'loading' );
-	samplesEl = document.getElementById( 'samples' );
+	loader = new LoaderElement();
+	loader.attach( document.body );
 
 	// init renderer
 	renderer = new WebGPURenderer( { antialias: true } );
@@ -127,8 +124,6 @@ async function init() {
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.bounces = params.bounces;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
@@ -153,18 +148,17 @@ async function init() {
 
 		}
 
-		const percent = Math.floor( 100 * loaded / total );
-		loadingEl.innerText = `Loading : ${ percent }%`;
+		loader.setPercentage( loaded / total );
 
 	};
 
 	try {
 
 		const envPromise = new HDRLoader().loadAsync( ENVMAP_URL );
-		const loader = new LDrawLoader( manager );
-		loader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
-		await loader.preloadMaterials( MATERIALS_URL );
-		const result = await loader
+		const ldrawLoader = new LDrawLoader( manager );
+		ldrawLoader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
+		await ldrawLoader.preloadMaterials( MATERIALS_URL );
+		const result = await ldrawLoader
 			.setPartsLibraryPath( PARTS_PATH )
 			.loadAsync( MODELS[ params.model ] );
 
@@ -242,7 +236,6 @@ async function init() {
 		group.add( model, floorPlane );
 		scene.add( group );
 
-		loadingEl.innerText = 'Building scene';
 		const envTexture = await envPromise;
 		envTexture.mapping = EquirectangularReflectionMapping;
 		scene.environment = envTexture;
@@ -250,14 +243,14 @@ async function init() {
 
 		pathTracer.setScene( scene, quiltCamera );
 
-		loadingEl.style.visibility = 'hidden';
+		loader.setPercentage( 1 );
 		renderer.domElement.style.visibility = 'visible';
 		renderer.setAnimationLoop( animate );
 
 	} catch ( err ) {
 
 		failed = true;
-		loadingEl.innerText = 'Failed to load model. ' + err.message;
+		loader.setCredits( 'Failed to load model. ' + err.message );
 
 	}
 
@@ -265,43 +258,33 @@ async function init() {
 
 function animate() {
 
-	if ( ! params.enable ) {
+	pathTracer.pause = params.pause;
+	pathTracer.renderSample();
 
-		renderer.render( scene, camera );
+	if ( params.tiltingPreview ) {
+
+		// render the animated tilting preview
+		const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
+		previewQuad.material.displayIndex = Math.min( params.numViews - 1, Math.floor( displayIndex ) );
+		previewQuad.material.aspectRatio = DISPLAY_WIDTH / DISPLAY_HEIGHT * window.innerHeight / window.innerWidth;
+		previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
 
 	} else {
 
-		// set path tracer variables
-		pathTracer.pause = params.pause;
-		const samplesPerFrame = params.pause ? 1 : params.samplesPerFrame;
-		for ( let i = 0; i < samplesPerFrame; i ++ ) {
-
-			pathTracer.renderSample();
-
-		}
-
-		if ( averageSamples > 1 && params.tiltingPreview ) {
-
-			// render the animated tilting preview
-			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
-			previewQuad.material.displayIndex = Math.min( params.numViews - 1, Math.floor( displayIndex ) );
-			previewQuad.material.aspectRatio = DISPLAY_WIDTH / DISPLAY_HEIGHT * window.innerHeight / window.innerWidth;
-			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
-
-		} else {
-
-			previewQuad.material.displayIndex = - 1;
-
-		}
-
-		previewQuad.material.quiltMap = pathTracer.target;
-		previewQuad.render( renderer );
+		previewQuad.material.displayIndex = - 1;
 
 	}
 
-	pathTracer.getSampleCountsAsync().then( counts => averageSamples = counts.avg );
+	previewQuad.material.quiltMap = pathTracer.target;
+	previewQuad.render( renderer );
 
-	samplesEl.innerText = `Samples: ${ Math.floor( averageSamples ) }`;
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
+
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 }
@@ -459,24 +442,11 @@ function buildGui() {
 		window.location.reload();
 
 	} );
-	gui.add( params, 'enable' );
 	gui.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onLkgParamsChange );
-	gui.add( params, 'saveQuilt' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( () => {
-
-		pathTracer.bounces = params.bounces;
-
-	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-
-	} );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	ptFolder.add( params, 'tiles', 3, 6, 1 ).onChange( v => {
+	ptFolder.add( params, 'tiles', 5, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.setScalar( v );
 
@@ -490,6 +460,7 @@ function buildGui() {
 	const quiltPreviewFolder = gui.addFolder( 'Preview' );
 	quiltPreviewFolder.add( params, 'tiltingPreview' );
 	quiltPreviewFolder.add( params, 'animationSpeed', 0, 2 );
+	quiltPreviewFolder.add( params, 'saveQuilt' );
 	quiltPreviewFolder.open();
 
 }

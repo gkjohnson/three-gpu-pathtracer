@@ -30,6 +30,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
 			misEnabled: uniform( 1, 'uint' ),
+			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
@@ -75,6 +76,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				seed: u32,
 				bounces: u32,
 				misEnabled: u32,
+				maxSamples: u32,
 				filterGlossy: f32,
 				clampDirect: f32,
 				clampIndirect: f32,
@@ -97,6 +99,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let indexUV = offset + globalId.xy;
 				let targetDimensions = textureDimensions( ${ params.outputTarget } );
 				if ( indexUV.x >= targetDimensions.x || indexUV.y >= targetDimensions.y ) {
+
+					return;
+
+				}
+
+				// skip the pixel once it has hit the sample limit
+				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+				if ( maxSamples != 0u && sampleCount >= maxSamples ) {
 
 					return;
 
@@ -313,11 +323,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r + 1;
-				let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
-				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-				textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+				let nextSampleCount = sampleCount + 1;
+				// store the color rows top down to match a rasterized render target
+				let colorIndex = vec2u( indexUV.x, targetDimensions.y - 1u - indexUV.y );
+
+				let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
+				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
+				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 			}`;
 

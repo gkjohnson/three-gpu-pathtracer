@@ -1,5 +1,6 @@
 import {
 	ACESFilmicToneMapping,
+	Color,
 	Scene,
 	WebGPURenderer,
 	Vector3,
@@ -9,15 +10,26 @@ import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLigh
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { LoaderElement } from './utils/LoaderElement.js';
-import { MaterialOrbSceneLoader } from './utils/MaterialOrbSceneLoader.js';
+import { LoaderElement } from './src/LoaderElement.js';
+import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
 
-const CREDITS = 'Material orb model courtesy of USD Working Group';
+const DB_URL = 'https://api.physicallybased.info/v2/materials';
+const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
+
+// preset entry for hand edited values, ie. not one of the database materials
+const CUSTOM_MATERIAL = 'Custom';
 
 let pathTracer, renderer, controls, material;
-let camera, scene, loader, surfaceMesh;
+let camera, scene, loader;
+let gui, database, imgEl;
+
+const _color = new Color();
+const initialCameraPosition = new Vector3();
+const initialCameraTarget = new Vector3();
 
 const params = {
+
+	material: CUSTOM_MATERIAL,
 
 	materialProperties: {
 		color: '#ffe6bd',
@@ -56,43 +68,10 @@ const params = {
 	tiles: 3,
 };
 
-if ( window.location.hash.includes( 'transmission' ) ) {
-
-	params.materialProperties.metalness = 0.0;
-	params.materialProperties.roughness = 0.23;
-	params.materialProperties.transmission = 1.0;
-	params.materialProperties.color = '#ffffff';
-
-	params.bounces = 20;
-	params.tiles = 2;
-
-} else if ( window.location.hash.includes( 'iridescent' ) ) {
-
-	params.materialProperties.color = '#474747';
-	params.materialProperties.roughness = 0.25;
-	params.materialProperties.metalness = 1.0;
-	params.materialProperties.iridescence = 1.0;
-	params.materialProperties.iridescenceIOR = 2.2;
-
-} else if ( window.location.hash.includes( 'acrylic' ) ) {
-
-	params.materialProperties.color = '#ffffff';
-	params.materialProperties.roughness = 0;
-	params.materialProperties.metalness = 0;
-	params.materialProperties.transmission = 1.0;
-	params.materialProperties.attenuationDistance = 0.75;
-	params.materialProperties.attenuationColor = '#2a6dc6';
-
-	params.bounces = 20;
-	params.tiles = 3;
-
-}
-
 // adjust performance parameters for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
-	params.bounces = Math.max( params.bounces, 6 );
 	params.renderScale *= 0.5;
 	params.tiles = 2;
 	params.multipleImportanceSampling = false;
@@ -109,6 +88,10 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
+	// reference photo for the selected database material, hidden while editing by hand
+	imgEl = document.getElementById( 'materialImage' );
+	imgEl.style.display = 'none';
+
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
@@ -122,10 +105,14 @@ async function init() {
 
 	scene = new Scene();
 
-	window.SCENE = scene;
-
 	// load assets
-	const orb = await new MaterialOrbSceneLoader().loadAsync();
+	const [ orb, dbJson ] = await Promise.all( [
+		new MaterialOrbSceneLoader().loadAsync(),
+		fetch( DB_URL ).then( res => res.json() ),
+	] );
+
+	database = {};
+	dbJson.data.forEach( mat => database[ mat.name ] = mat );
 
 	// scene initialization
 	scene.add( orb.scene );
@@ -133,8 +120,7 @@ async function init() {
 	material = orb.material;
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
-	surfaceMesh = orb.scene.getObjectByName( 'material_surface' );
-	surfaceMesh.geometry.computeTangents();
+	orb.scene.getObjectByName( 'material_surface' ).geometry.computeTangents();
 
 	// move camera to the scene
 	scene.attach( camera );
@@ -149,6 +135,10 @@ async function init() {
 	controls.target.copy( camera.position ).addScaledVector( fwd, 25 );
 	controls.update();
 
+	// the viewpoint authored in the model, restored by the reset button
+	initialCameraPosition.copy( camera.position );
+	initialCameraTarget.copy( controls.target );
+
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
@@ -158,7 +148,10 @@ async function init() {
 	window.addEventListener( 'resize', onResize );
 
 	// gui
-	const gui = new GUI();
+	gui = new GUI();
+	gui.add( params, 'material', [ CUSTOM_MATERIAL, ...Object.keys( database ) ] ).onChange( onMaterialChange );
+	gui.add( { resetCamera }, 'resetCamera' ).name( 'reset camera' );
+
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'displaySampleDensity' );
@@ -171,8 +164,9 @@ async function init() {
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.close();
 
-	const matFolder1 = gui.addFolder( 'Material' );
+	const matFolder1 = gui.addFolder( 'Material Parameters' );
 	matFolder1.addColor( params.materialProperties, 'color' ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'emissive' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( onParamsChange );
@@ -200,7 +194,96 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
 
+	// editing anything by hand means the values no longer match the selected preset
+	matFolder1.controllersRecursive().forEach( controller => {
+
+		controller.onFinishChange( () => {
+
+			params.material = CUSTOM_MATERIAL;
+			imgEl.style.display = 'none';
+			gui.controllers[ 0 ].updateDisplay();
+
+		} );
+
+	} );
+
 	animate();
+
+}
+
+// copy a physicallybased.info entry into the material properties so the manual controls stay in
+// sync and can be used to tweak the preset afterward
+function applyDatabaseMaterial( info ) {
+
+	const materialProperties = params.materialProperties;
+
+	// the database only describes a subset of the material, so reset the rest to neutral
+	materialProperties.color = '#ffffff';
+	materialProperties.specularColor = '#ffffff';
+	materialProperties.attenuationColor = '#ffffff';
+	materialProperties.attenuationDistance = 1;
+	materialProperties.metalness = 0;
+	materialProperties.roughness = 1;
+	materialProperties.ior = 1.5;
+	materialProperties.transmission = 0;
+	materialProperties.iridescence = 0;
+	materialProperties.iridescenceIOR = 1;
+	materialProperties.iridescenceThickness = 0;
+
+	// database colors are linear, the gui works in hex so they round trip through sRGB
+	const toHex = rgb => '#' + _color.setRGB( ...rgb ).getHexString();
+
+	if ( info.specularColor ) materialProperties.specularColor = toHex( info.specularColor[ 0 ].color[ 0 ].color );
+	if ( 'metalness' in info ) materialProperties.metalness = info.metalness;
+	if ( 'roughness' in info ) materialProperties.roughness = info.roughness;
+	if ( 'ior' in info ) materialProperties.ior = info.ior;
+	if ( 'transmission' in info ) materialProperties.transmission = info.transmission;
+
+	if ( 'thinFilmThickness' in info ) {
+
+		materialProperties.iridescence = 1;
+		materialProperties.iridescenceIOR = info.thinFilmIor;
+		materialProperties.iridescenceThickness = info.thinFilmThickness[ 2 ] ?? info.thinFilmThickness[ 0 ];
+
+	}
+
+	// a transmissive material tints by attenuation rather than base color
+	if ( materialProperties.transmission ) {
+
+		if ( info.color ) materialProperties.attenuationColor = toHex( info.color[ 0 ].color );
+		materialProperties.attenuationDistance = info.transmissionDepth ?? 1;
+
+	} else if ( info.color ) {
+
+		materialProperties.color = toHex( info.color[ 0 ].color );
+
+	}
+
+	imgEl.src = Object.values( info.images[ 1 ] )[ 0 ];
+
+}
+
+function onMaterialChange() {
+
+	if ( params.material !== CUSTOM_MATERIAL ) {
+
+		applyDatabaseMaterial( database[ params.material ] );
+
+	}
+
+	imgEl.style.display = params.material === CUSTOM_MATERIAL ? 'none' : '';
+
+	gui.controllersRecursive().forEach( c => c.updateDisplay() );
+	onParamsChange();
+
+}
+
+function resetCamera() {
+
+	camera.position.copy( initialCameraPosition );
+	controls.target.copy( initialCameraTarget );
+	controls.update();
+	pathTracer.updateCamera();
 
 }
 
