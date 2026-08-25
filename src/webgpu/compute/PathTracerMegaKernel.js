@@ -4,7 +4,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
+import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
@@ -31,6 +31,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			bounces: uniform( 5 ),
 			misEnabled: uniform( 1, 'uint' ),
 			filterGlossy: uniform( 1 ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
 
 			backgroundInfo: { value: null },
 
@@ -74,6 +76,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				bounces: u32,
 				misEnabled: u32,
 				filterGlossy: f32,
+				clampDirect: f32,
+				clampIndirect: f32,
 
 				transmissiveBackground: u32,
 
@@ -159,7 +163,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// emission
-						resultColor += vec4f( throughputColor * surface.emission, 0.0 );
+						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce + 1u, clampDirect, clampIndirect );
+						resultColor += vec4f( emission, 0.0 );
 
 						// next event estimation
 						// importance-sample the environment, MIS-weighted against the bsdf pdf.
@@ -179,7 +184,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
 
 									let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
-									resultColor += vec4f( throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf, 0.0 );
+									let directLight = throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf;
+									let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+									resultColor += vec4f( contribution, 0.0 );
 
 								}
 
@@ -241,7 +248,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							resultColor += ${ sampleEnvColor }( ray.direction ) * vec4f( throughputColor * misWeight, 0.0 );
+							let environment = ${ sampleEnvColor }( ray.direction ).rgb * throughputColor * misWeight;
+							let contribution = ${ clampPathContributionFunc }( environment, bounce + 1u, clampDirect, clampIndirect );
+							resultColor += vec4f( contribution, 0.0 );
 
 						} else {
 
@@ -252,7 +261,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( bounce == 0u ) {
 
 								// sample the background directly if this is the primary ray
-								resultColor = vec4f( bg.a * bg.rgb, bg.a );
+								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, bounce + 1u, clampDirect, clampIndirect );
+								resultColor = vec4f( background, bg.a );
 
 							} else {
 
@@ -264,16 +274,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 									// display the env map through transmissive surfaces
+									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
-										resultColor.rgb + env.rgb * throughputColor,
+										resultColor.rgb + background,
 										1.0,
 									);
 
 								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 									// fade the background by the throughput color average
+									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
-										resultColor.rgb + bg.a * bg.rgb * throughputColor,
+										resultColor.rgb + background,
 										1.0 - transparency,
 									);
 
@@ -281,8 +293,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 									// fade the background by the throughput color average, mixing in env lighting
 									var light = mix( env.rgb, bg.rgb, bg.a );
+									let background = ${ clampPathContributionFunc }( light * throughputColor, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
-										resultColor.rgb + light * throughputColor,
+										resultColor.rgb + background,
 										1.0 - transparency,
 									);
 

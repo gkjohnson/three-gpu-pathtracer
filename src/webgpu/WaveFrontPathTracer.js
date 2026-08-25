@@ -163,6 +163,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setClamping( direct, indirect ) {
+
+		this.rayIntersectionKernel.clampDirect = direct;
+		this.rayIntersectionKernel.clampIndirect = indirect;
+		this.hitProcessKernel.clampDirect = direct;
+		this.hitProcessKernel.clampIndirect = indirect;
+		this.lightConnectionKernel.clampDirect = direct;
+		this.lightConnectionKernel.clampIndirect = indirect;
+		this.reset();
+
+	}
+
 	setEnvironment( envMap ) {
 
 		this.envInfo.updateFrom( envMap );

@@ -68,7 +68,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.filterGlossyFactor = 0.5;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;

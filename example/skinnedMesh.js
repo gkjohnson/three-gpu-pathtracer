@@ -56,7 +56,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.minSamples = 1;
 	// keep a live low-res preview while the camera or animation is moving
 	pathTracer.dynamicLowRes = true;

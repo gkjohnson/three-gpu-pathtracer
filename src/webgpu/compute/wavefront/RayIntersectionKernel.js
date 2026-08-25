@@ -7,6 +7,7 @@ import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
+import { clampPathContributionFunc } from '../../nodes/utils.wgsl.js';
 
 export class RayIntersectionKernel extends ComputeKernel {
 
@@ -28,6 +29,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
@@ -48,6 +51,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 			fn compute(
 				// settings
 				misEnabled: u32,
+				clampDirect: f32,
+				clampIndirect: f32,
 
 				transmissiveBackground: u32,
 
@@ -107,7 +112,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 						}
 
-						resultColor += ${ sampleEnvColor }( input.direction ) * vec4f( input.throughputColor * misWeight, 0.0 );
+						let environment = ${ sampleEnvColor }( input.direction ).rgb * input.throughputColor * misWeight;
+						let contribution = ${ clampPathContributionFunc }( environment, input.currentBounce + 1u, clampDirect, clampIndirect );
+						resultColor += vec4f( contribution, 0.0 );
 
 					} else {
 
@@ -118,7 +125,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 						if ( input.currentBounce == 0u ) {
 
 							// sample the background directly if this is the primary ray
-							resultColor = vec4f( bg.a * bg.rgb, bg.a );
+							let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, input.currentBounce + 1u, clampDirect, clampIndirect );
+							resultColor = vec4f( background, bg.a );
 
 						} else {
 
@@ -130,16 +138,18 @@ export class RayIntersectionKernel extends ComputeKernel {
 							if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 								// display the env map through transmissive surfaces
+								let background = ${ clampPathContributionFunc }( env.rgb * input.throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
 								resultColor = vec4f(
-									resultColor.rgb + env.rgb * input.throughputColor,
+									resultColor.rgb + background,
 									1.0,
 								);
 
 							} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 								// fade the background by the throughput color average
+								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * input.throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
 								resultColor = vec4f(
-									resultColor.rgb + bg.a * bg.rgb * input.throughputColor,
+									resultColor.rgb + background,
 									1.0 - transparency,
 								);
 
@@ -147,8 +157,9 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 								// fade the background by the throughput color average, mixing in env lighting
 								var light = mix( env.rgb, bg.rgb, bg.a );
+								let background = ${ clampPathContributionFunc }( light * input.throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
 								resultColor = vec4f(
-									resultColor.rgb + light * input.throughputColor,
+									resultColor.rgb + background,
 									1.0 - transparency,
 								);
 

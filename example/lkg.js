@@ -71,7 +71,7 @@ const params = {
 
 	samplesPerFrame: 1,
 	bounces: 15,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	pause: false,
 
 	tiltingPreview: true,
