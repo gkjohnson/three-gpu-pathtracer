@@ -106,14 +106,30 @@ function ldrawModel( file ) {
 export const MODEL_LIST = {
 
 	// the first entry is the model shown when no "model" search parameter is provided
-	'M2020 Rover': {
+	'NASA JPL M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 
-	'MER Rover': {
+	'NASA JPL MER Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
+	},
+
+	'NASA JPL Ingenuity Helicopter': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Ingenuity.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+	},
+
+	'NASA JPL InSight Lander': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/InSight.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+	},
+
+	'NASA JPL Juno': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Juno.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+		rotation: [ Math.PI / 6, Math.PI / 5, 0 ],
 	},
 
 	'Coffee Maker': {
