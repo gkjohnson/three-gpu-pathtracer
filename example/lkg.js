@@ -65,7 +65,6 @@ const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
 
 const params = {
 
-	enable: true,
 	model: modelName in MODELS ? modelName : 'X-Wing',
 	renderScale: 1,
 	tiles: 5,
@@ -259,33 +258,25 @@ async function init() {
 
 function animate() {
 
-	if ( ! params.enable ) {
+	pathTracer.pause = params.pause;
+	pathTracer.renderSample();
 
-		renderer.render( scene, camera );
+	if ( params.tiltingPreview ) {
+
+		// render the animated tilting preview
+		const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
+		previewQuad.material.displayIndex = Math.min( params.numViews - 1, Math.floor( displayIndex ) );
+		previewQuad.material.aspectRatio = DISPLAY_WIDTH / DISPLAY_HEIGHT * window.innerHeight / window.innerWidth;
+		previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
 
 	} else {
 
-		pathTracer.pause = params.pause;
-		pathTracer.renderSample();
-
-		if ( params.tiltingPreview ) {
-
-			// render the animated tilting preview
-			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
-			previewQuad.material.displayIndex = Math.min( params.numViews - 1, Math.floor( displayIndex ) );
-			previewQuad.material.aspectRatio = DISPLAY_WIDTH / DISPLAY_HEIGHT * window.innerHeight / window.innerWidth;
-			previewQuad.material.heightScale = Math.min( LKG_HEIGHT / window.innerHeight, 1.0 );
-
-		} else {
-
-			previewQuad.material.displayIndex = - 1;
-
-		}
-
-		previewQuad.material.quiltMap = pathTracer.target;
-		previewQuad.render( renderer );
+		previewQuad.material.displayIndex = - 1;
 
 	}
+
+	previewQuad.material.quiltMap = pathTracer.target;
+	previewQuad.render( renderer );
 
 	pathTracer.getSampleCountsAsync().then( counts => {
 
@@ -451,9 +442,7 @@ function buildGui() {
 		window.location.reload();
 
 	} );
-	gui.add( params, 'enable' );
 	gui.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onLkgParamsChange );
-	gui.add( params, 'saveQuilt' );
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
@@ -471,6 +460,7 @@ function buildGui() {
 	const quiltPreviewFolder = gui.addFolder( 'Preview' );
 	quiltPreviewFolder.add( params, 'tiltingPreview' );
 	quiltPreviewFolder.add( params, 'animationSpeed', 0, 2 );
+	quiltPreviewFolder.add( params, 'saveQuilt' );
 	quiltPreviewFolder.open();
 
 }
