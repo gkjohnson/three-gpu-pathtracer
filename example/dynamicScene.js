@@ -15,6 +15,11 @@ import { LoaderElement } from './src/LoaderElement.js';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/renderman-teapot/renderman-teapot.glb';
 const CREDITS = 'Model courtesy of RenderMan';
 const DESCRIPTION = 'Click a teapot to select it. Press W / E / R for Translate / Rotate / Scale.';
+const TRANSFORM_MODES = {
+	KeyW: 'translate',
+	KeyE: 'rotate',
+	KeyR: 'scale',
+};
 
 const scene = new Scene();
 const transformScene = new Scene();
@@ -38,17 +43,9 @@ scene.background = environment;
 const MAX_TEAPOTS = 5;
 
 // ceramic glazes, ordered so consecutive pots contrast in both hue and value
-const COLORS = [
-	0xe57373,
-	0x4db6ac,
-	0xff9800,
-	0x66bb6a,
-	0xf5f5f5,
-	0x29b6f6,
-	0xff5722,
-];
+const COLORS = [ 0xe57373, 0x4db6ac, 0xff9800, 0x66bb6a, 0xf5f5f5, 0x29b6f6, 0xff5722 ];
 
-// the flat part of the stage, in multiples of the pot's own radius
+// the flat part of the stage that new pots are dropped onto
 const STAGE_HALF_WIDTH = 0.25;
 const STAGE_HALF_DEPTH = 0.15;
 
@@ -80,17 +77,11 @@ transformControls.addEventListener( 'mouseUp', () => orbit.enabled = true );
 // "objectChange" rather than "change", which also fires when the gizmo highlights under the cursor
 transformControls.addEventListener( 'objectChange', () => transformNeedsUpdate = true );
 
-const transformModes = {
-	KeyW: 'translate',
-	KeyE: 'rotate',
-	KeyR: 'scale',
-};
-
 window.addEventListener( 'keydown', event => {
 
 	if ( event.target?.closest?.( 'input, select, textarea' ) || event.target?.isContentEditable ) return;
 
-	const mode = transformModes[ event.code ];
+	const mode = TRANSFORM_MODES[ event.code ];
 	if ( mode !== undefined ) {
 
 		transformControls.setMode( mode );
@@ -106,7 +97,6 @@ loader.attach( document.body );
 const raycaster = new Raycaster();
 const pointer = new Vector2();
 const pointerStart = new Vector2();
-const pointerEnd = new Vector2();
 
 const params = {
 	add,
@@ -124,8 +114,9 @@ const roughnessController = gui.add( params, 'roughness', 0, 1, 0.01 ).onChange(
 renderer.domElement.addEventListener( 'pointerdown', event => pointerStart.set( event.clientX, event.clientY ) );
 renderer.domElement.addEventListener( 'pointerup', event => {
 
-	pointerEnd.set( event.clientX, event.clientY );
-	if ( transformControls.dragging || pointerStart.distanceTo( pointerEnd ) > 4 ) return;
+	// ignore the click if the gizmo was used or the camera was dragged
+	const moved = Math.hypot( event.clientX - pointerStart.x, event.clientY - pointerStart.y );
+	if ( transformControls.dragging || moved > 4 ) return;
 
 	const rect = renderer.domElement.getBoundingClientRect();
 	pointer.set(
@@ -153,7 +144,7 @@ function remove() {
 	// the geometry is shared with the other pots, so only this pot's material is freed
 	object.userData.material.dispose();
 
-	select( objects.at( - 1 ) ?? null );
+	select( objects.at( - 1 ) );
 	pathTracer.setScene( scene, camera );
 
 }
@@ -339,14 +330,15 @@ async function loadModel() {
 
 	model.scale.setScalar( 0.01 );
 
-	// glazed ceramic for the pot and its base, leaving the ring, logo and floor as they are
-	const ceramic = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
-	const ceramicMaterial = new MeshPhysicalMaterial( {
+	// one material across the pot and its stepped base, which is the one the gui edits. the ring,
+	// logo and floor keep the materials they shipped with.
+	const potPieces = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
+	const potMaterial = new MeshPhysicalMaterial( {
 		color: 0xb2dfdb,
 		metalness: 1.0,
 		roughness: 0.2,
 	} );
-	ceramic.forEach( name => model.getObjectByName( name ).material = ceramicMaterial );
+	potPieces.forEach( name => model.getObjectByName( name ).material = potMaterial );
 
 	// the ring and logo share a near black material, lightened here
 	model.getObjectByName( 'teapot_Base_02' ).material.color.set( 0x333333 );
@@ -354,11 +346,12 @@ async function loadModel() {
 	// lighten the stage and backdrop so the pots read against it
 	model.getObjectByName( 'floor_W_Grid' ).material.color.set( 0xdedede );
 
-	// the pot is edited as a whole, so it carries the one material the gui drives
+	// shrink the pot against the stage, then drop it back down onto the floor. it is selected and
+	// edited as a whole, so it carries the material the gui drives.
 	const teapot = model.getObjectByName( 'Teapot_Grp' );
 	teapot.scale.setScalar( 0.05 );
 	teapot.position.y -= 0.375;
-	teapot.userData.material = ceramicMaterial;
+	teapot.userData.material = potMaterial;
 
 	return model;
 
