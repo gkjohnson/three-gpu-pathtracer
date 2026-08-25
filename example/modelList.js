@@ -1,4 +1,4 @@
-import { MeshPhysicalMaterial } from 'three';
+import { Box3, MeshPhysicalMaterial, Vector3 } from 'three';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -105,6 +105,7 @@ function ldrawModel( file ) {
 
 export const MODEL_LIST = {
 
+	// the first entry is the model shown when no "model" search parameter is provided
 	'M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
@@ -113,6 +114,46 @@ export const MODEL_LIST = {
 	'MER Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
+	},
+
+	'Coffee Maker': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/coffee-maker.glb',
+		credit: 'Model by "cekuhnen", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+	},
+
+	'Dragon': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/dragon.glb',
+		credit: 'Model by "Delatronic", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		postProcess( model ) {
+
+			// the scene is authored in arbitrary units, so the glass is tinted over a fraction of
+			// the model size rather than a fixed distance
+			const size = new Box3().setFromObject( model ).getSize( new Vector3() );
+
+			const material = new MeshPhysicalMaterial();
+			material.roughness = 0.15;
+			material.metalness = 0;
+			material.transmission = 1;
+			material.ior = 1.6;
+			material.thickness = 1;
+			material.attenuationColor.set( 0xe8a441 );
+			material.attenuationDistance = 0.1 * Math.max( size.x, size.y, size.z );
+
+			model.traverse( c => {
+
+				if ( c.material ) c.material = material;
+
+			} );
+
+		}
+	},
+
+	'Little Lamp': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/little-lamp.glb',
+		credit: 'Model by "UP3D", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
 	},
 
 	'Gelatinous Cube': {

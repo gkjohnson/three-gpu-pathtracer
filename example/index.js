@@ -45,6 +45,8 @@ const DEVICE_LIMITS_REQUESTED = [
 
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
+const DEFAULT_FOV = 60;
+
 const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
 const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
@@ -185,7 +187,7 @@ async function init() {
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
+	perspectiveCamera = new PerspectiveCamera( DEFAULT_FOV, aspect, 0.025, 500 );
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
@@ -452,9 +454,28 @@ function updateEnvMap() {
 function resetCamera() {
 
 	perspectiveCamera.position.set( - 1, 0.25, 1 );
+	perspectiveCamera.fov = DEFAULT_FOV;
+	perspectiveCamera.updateProjectionMatrix();
 	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	controls.target.set( 0, 0, 0 );
+	controls.update();
+
+}
+
+// frame the view from the camera embedded in the model, keeping the screen aspect ratio
+function useModelCamera( sceneCamera ) {
+
+	scene.updateMatrixWorld( true );
+
+	sceneCamera.getWorldPosition( perspectiveCamera.position );
+	orthoCamera.position.copy( perspectiveCamera.position );
+
+	perspectiveCamera.fov = sceneCamera.fov;
+	perspectiveCamera.updateProjectionMatrix();
+
+	// orbit around a point ahead of the camera along its view direction
+	sceneCamera.getWorldDirection( controls.target ).add( perspectiveCamera.position );
 	controls.update();
 
 }
@@ -584,10 +605,12 @@ async function updateModel() {
 	box.setFromObject( model );
 
 	// attenuation is measured in world units so it must be scaled with the model
+	const scaledMaterials = new Set();
 	model.traverse( c => {
 
-		if ( c.material ) {
+		if ( c.material && ! scaledMaterials.has( c.material ) ) {
 
+			scaledMaterials.add( c.material );
 			c.material.attenuationDistance *= scale;
 
 		}
@@ -598,7 +621,24 @@ async function updateModel() {
 
 	scene.add( model );
 
-	resetCamera();
+	// view the scene through the camera embedded in the model when one is present
+	let sceneCamera = null;
+	model.traverse( c => {
+
+		if ( ! sceneCamera && c.isPerspectiveCamera ) sceneCamera = c;
+
+	} );
+
+	if ( sceneCamera ) {
+
+		useModelCamera( sceneCamera );
+
+	} else {
+
+		resetCamera();
+
+	}
+
 	pathTracer.setScene( scene, activeCamera );
 
 	loader.setPercentage( 1 );
