@@ -49,15 +49,15 @@ const COLORS = [
 ];
 
 // the flat part of the stage, in multiples of the pot's own radius
-const STAGE_HALF_WIDTH = 2.5;
-const STAGE_HALF_DEPTH = 1.5;
+const STAGE_HALF_WIDTH = 0.25;
+const STAGE_HALF_DEPTH = 0.15;
 
 const objects = [];
 let selected;
 let colorIndex = 0;
 
 // the first pot doubles as the template new ones are cloned from
-let teapot, teapotParent, stageScale;
+let teapot, teapotParent;
 const basePosition = new Vector3();
 
 let transformNeedsUpdate = false;
@@ -66,7 +66,7 @@ let materialNeedsUpdate = false;
 const orbit = new OrbitControls( camera, renderer.domElement );
 orbit.addEventListener( 'change', () => pathTracer.updateCamera() );
 
-// the selection is outlined in the overlay pass, so it never disturbs the path traced image
+// drawn in the overlay pass so the path traced image is left alone
 const selectionBox = new Box3Helper( new Box3(), 0xffffff );
 selectionBox.visible = false;
 transformScene.add( selectionBox );
@@ -77,8 +77,7 @@ transformScene.add( transformControls.getHelper() );
 transformControls.addEventListener( 'mouseDown', () => orbit.enabled = false );
 transformControls.addEventListener( 'mouseUp', () => orbit.enabled = true );
 
-// "change" also fires when the gizmo merely highlights under the cursor, so the accumulated render
-// is only thrown away when the attached object actually moves
+// "objectChange" rather than "change", which also fires when the gizmo highlights under the cursor
 transformControls.addEventListener( 'objectChange', () => transformNeedsUpdate = true );
 
 const transformModes = {
@@ -135,7 +134,7 @@ renderer.domElement.addEventListener( 'pointerup', event => {
 	);
 	raycaster.setFromCamera( pointer, camera );
 
-	// the hit is a mesh somewhere inside a selectable object, so walk back up to that object
+	// the ray hits one of the pot's meshes, so walk up to the pot it belongs to
 	let hit = raycaster.intersectObjects( objects, true )[ 0 ]?.object || null;
 	while ( hit && ! objects.includes( hit ) ) hit = hit.parent;
 	select( hit );
@@ -145,16 +144,16 @@ renderer.domElement.addEventListener( 'pointerup', event => {
 function remove() {
 
 	if ( ! selected ) return;
+
 	const object = selected;
 	transformControls.detach();
 	object.removeFromParent();
 	objects.splice( objects.indexOf( object ), 1 );
 
-	// the geometry is shared with every other pot, so only the per pot material is freed
+	// the geometry is shared with the other pots, so only this pot's material is freed
 	object.userData.material.dispose();
 
-	selected = objects.at( - 1 );
-	select( selected );
+	select( objects.at( - 1 ) ?? null );
 	pathTracer.setScene( scene, camera );
 
 }
@@ -173,35 +172,27 @@ function updateMaterial() {
 
 }
 
-// Picks a spot in the stage rectangle, taking the candidate that sits furthest from the pots
-// already placed so a new one does not land on top of its neighbours.
+// picks the spot furthest from the pots already placed so they do not bunch together
 function randomStagePosition() {
 
 	const candidate = new Vector3();
 	const other = new Vector3();
-	let best = null;
-	let bestDistance = - Infinity;
+	const best = new Vector3();
+	let bestDistance = - 1;
 
 	for ( let i = 0; i < 20; i ++ ) {
 
 		candidate.set(
-			basePosition.x + ( Math.random() * 2 - 1 ) * STAGE_HALF_WIDTH * stageScale,
+			basePosition.x + ( Math.random() * 2 - 1 ) * STAGE_HALF_WIDTH,
 			basePosition.y,
-			basePosition.z + ( Math.random() * 2 - 1 ) * STAGE_HALF_DEPTH * stageScale,
+			basePosition.z + ( Math.random() * 2 - 1 ) * STAGE_HALF_DEPTH,
 		);
 
-		let distance = Infinity;
-		for ( const object of objects ) {
-
-			object.getWorldPosition( other );
-			distance = Math.min( distance, candidate.distanceTo( other ) );
-
-		}
-
+		const distance = Math.min( ...objects.map( o => candidate.distanceTo( o.getWorldPosition( other ) ) ) );
 		if ( distance > bestDistance ) {
 
 			bestDistance = distance;
-			best = candidate.clone();
+			best.copy( candidate );
 
 		}
 
@@ -217,8 +208,7 @@ function add() {
 
 	const object = teapot.clone();
 
-	// the clone shares geometry with the original but takes its own copy of the material so the
-	// gui only edits the selected pot
+	// the clone shares geometry but gets its own material so the gui edits one pot at a time
 	const source = teapot.userData.material;
 	const material = source.clone();
 	object.traverse( c => {
@@ -228,18 +218,18 @@ function add() {
 	} );
 	object.userData.material = material;
 
-	// a new glaze from the palette so a new pot is not a copy of the one it came from
+	// the next glaze in the palette, finished as matte, metal or glass
 	material.color.set( COLORS[ colorIndex % COLORS.length ] );
 	material.roughness = Math.random();
 	material.metalness = 0;
 	colorIndex ++;
 
-	const r = Math.random();
-	if ( r < 0.333 ) {
+	const finish = Math.random();
+	if ( finish < 0.333 ) {
 
 		material.metalness = 1;
 
-	} else if ( r < 0.666 ) {
+	} else if ( finish < 0.666 ) {
 
 		material.attenuationColor.copy( material.color );
 		material.color.set( 0xffffff );
@@ -250,7 +240,7 @@ function add() {
 
 	}
 
-	// the position is chosen in world space then converted so the pot inherits the model scale
+	// the spot is picked in world space, then converted so the pot inherits the model scale
 	object.position.copy( teapotParent.worldToLocal( randomStagePosition() ) );
 	object.rotation.y = Math.random() * 2 * Math.PI;
 
@@ -264,6 +254,7 @@ function add() {
 function select( object ) {
 
 	selected = object;
+
 	if ( object ) {
 
 		transformControls.attach( object );
@@ -279,13 +270,12 @@ function select( object ) {
 
 	}
 
-	selectionBox.visible = Boolean( selected );
-
-	colorController.updateDisplay().enable( Boolean( selected ) );
-	roughnessController.updateDisplay().enable( Boolean( selected ) );
-
+	const hasSelection = Boolean( object );
+	selectionBox.visible = hasSelection;
+	colorController.updateDisplay().enable( hasSelection );
+	roughnessController.updateDisplay().enable( hasSelection );
+	removeController.enable( hasSelection );
 	addController.enable( objects.length < MAX_TEAPOTS );
-	removeController.enable( Boolean( selected ) );
 
 }
 
@@ -333,9 +323,7 @@ function resize() {
 
 }
 
-// Loads the teapot and prepares it for the scene. The file ships several variants of the pot
-// stacked in the same spot along with two coplanar floors, so most of it is discarded and the
-// surfaces that are kept are given new materials.
+// the file ships several variants of the pot stacked in the same spot, so most of it is discarded
 async function loadModel() {
 
 	const gltf = await new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL );
@@ -366,7 +354,7 @@ async function loadModel() {
 	// lighten the stage and backdrop so the pots read against it
 	model.getObjectByName( 'floor_W_Grid' ).material.color.set( 0xdedede );
 
-	// the pot is selected and edited as a whole, so it carries the one material the gui drives
+	// the pot is edited as a whole, so it carries the one material the gui drives
 	const teapot = model.getObjectByName( 'Teapot_Grp' );
 	teapot.scale.setScalar( 0.05 );
 	teapot.position.y -= 0.375;
@@ -396,7 +384,6 @@ async function init() {
 
 	// new pots are scattered over the stage rectangle around the original
 	teapot.getWorldPosition( basePosition );
-	stageScale = radius;
 
 	camera.position.copy( center ).add( new Vector3( 0.15, 0.35, 1 ).normalize().multiplyScalar( radius * 6 ) );
 	orbit.target.copy( center );
