@@ -18,8 +18,8 @@ import { PhysicalSpotLight } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf';
 const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
@@ -43,8 +43,8 @@ let loader;
 // gui parameters
 const params = {
 	multipleImportanceSampling: true,
-	bounces: 3,
-	renderScale: 1 / window.devicePixelRatio,
+	bounces: 15,
+	renderScale: 1,
 	tiles: 2,
 	iesProfile: - 1,
 	...getScaledSettings(),
@@ -68,7 +68,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.filterGlossyFactor = 0.5;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -186,7 +185,7 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 30, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
@@ -235,6 +234,6 @@ function animate() {
 
 	camera.updateMatrixWorld();
 	pathTracer.renderSample();
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

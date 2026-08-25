@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>PBR Path Tracing</title>
+		<title>OIDN Denoising Example</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
 		<style>
@@ -20,34 +20,10 @@
 				background-size: 20px 20px;
 				background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
 			}
-
-			#drop-zone {
-				position: absolute;
-				top: 0;
-				left: 0;
-				width: 100%;
-				height: 100%;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				text-align: center;
-				font-family: 'Courier New', Courier, monospace;
-				color: white;
-				font-size: 24px;
-				box-sizing: border-box;
-				border: 12px solid white;
-				background: rgba(0, 0, 0, 0.5);
-				pointer-events: none;
-			}
-
-			#drop-zone.hidden {
-				display: none;
-			}
 		</style>
 
 	</head>
 	<body>
-		<div id="drop-zone" class="hidden">Drop a GLTF, GLB, DAE, or MPD file here</div>
-		<script src="./index.js" type="module"></script>
+		<script src="./denoise.js" type="module"></script>
 	</body>
 </html>

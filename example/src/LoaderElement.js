@@ -142,29 +142,17 @@ export class LoaderElement {
 
 	}
 
-	setSamples( count, detailedSamples = null ) {
+	setSamples( samples ) {
 
-		if ( detailedSamples !== null ) {
+		const { min = 0, max = 0, avg = 0, samplesPerSecond = 0 } = samples ?? {};
 
-			const {
-				min,
-				max,
-				avg,
-				perSecond,
-			} = detailedSamples;
+		// per-pixel sample counts vary across the image, so the headline figure is the average and
+		// the spread across the image follows in brackets
+		this._samples.innerText = `~${ Number.isInteger( avg ) ? avg : avg.toFixed( 2 ) } samples [min: ${ min }, max: ${ max }]`;
 
-			this._samples.innerText = `[${ min }..${ max }], avg = ${ avg } samples`;
+		if ( samplesPerSecond ) {
 
-			if ( perSecond ) {
-
-				this._samples.innerText += ` (${ perSecond.toFixed( 1 ) } samples/sec)`;
-
-			}
-
-		} else {
-
-			// per-pixel sample counts vary across the image, so this is an approximate figure
-			this._samples.innerText = `~${ Math.floor( count ) } samples`;
+			this._samples.innerText += `, ${ samplesPerSecond.toFixed( 1 ) } samples/sec`;
 
 		}
 

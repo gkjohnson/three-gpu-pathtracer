@@ -68,6 +68,7 @@ export const materialStruct = new StructTypeNode( {
 	// offset 32 floats
 	iridescenceThicknessMinimum: 'float',
 	iridescenceThicknessMaximum: 'float',
+	diffuseRoughness: 'float',
 
 	// offset 36 floats
 	specularColor: 'vec3',
@@ -168,6 +169,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 
 	// material
 	roughness: 'f32',
+	diffuseRoughness: 'f32',
 	metalness: 'f32',
 	anisotropy: 'f32',
 	color: 'vec3f',
@@ -256,10 +258,6 @@ export const bxdfContextStruct = new StructTypeNode( {
 	V: 'vec3f', // view dir
 	L: 'vec3f', // light dir
 	H: 'vec3f', // half dir
-
-	Vc: 'vec3f', // clearcoat view dir
-	Lc: 'vec3f', // clearcoat light dir
-	Hc: 'vec3f', // clearcoat half dir
 
 	VdotH: 'float',
 

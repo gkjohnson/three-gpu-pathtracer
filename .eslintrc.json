@@ -1,6 +1,9 @@
 {
 	"root": true,
 	"extends": "./node_modules/eslint-config-mdcs/index.js",
+	"globals": {
+		"GPUTextureUsage": "readonly"
+	},
 	"rules": {
 		"no-throw-literal": [
 			"error"

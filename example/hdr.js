@@ -15,13 +15,13 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { LoaderElement } from './src/LoaderElement.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
+import { HDRImageGenerator } from './src/HDRImageGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb';
@@ -44,6 +44,9 @@ let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
 
+// sample counts are measured asynchronously, so the average is kept for the pause checks
+let averageSamples = 0;
+
 init();
 
 async function init() {
@@ -61,7 +64,6 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
@@ -205,10 +207,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const doPause = params.pause && pathTracer.samples >= 1;
-	pathTracer.pause = pathTracer.samples >= MAX_SAMPLES || doPause;
+	const doPause = params.pause && averageSamples >= 1;
+	pathTracer.pause = averageSamples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
 
 }

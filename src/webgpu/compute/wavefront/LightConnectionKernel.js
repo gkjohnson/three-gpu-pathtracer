@@ -4,7 +4,7 @@ import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
 import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
-import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
+import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
@@ -23,6 +23,8 @@ export class LightConnectionKernel extends ComputeKernel {
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
 			filterGlossy: uniform( 1 ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
 
 			// rays
 			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
@@ -53,6 +55,8 @@ export class LightConnectionKernel extends ComputeKernel {
 				// settings
 				misEnabled: u32,
 				filterGlossy: f32,
+				clampDirect: f32,
+				clampIndirect: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -169,7 +173,9 @@ export class LightConnectionKernel extends ComputeKernel {
 								let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 
 								// deposit the contribution in place; ProcessHits reads this augmented resultColor
-								hitQueue.elements[ hitIndex ].resultColor += vec4f( throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf, 0.0 );
+								let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
+								let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
+								hitQueue.elements[ hitIndex ].resultColor += vec4f( contribution, 0.0 );
 
 							}
 

@@ -1,5 +1,5 @@
 import { compress, encode, findTextureMinMax } from '@monogrid/gainmap-js/encode';
-import { encodeJPEGMetadata } from '../libs/libultrahdr.js';
+import { encodeJPEGMetadata } from '@monogrid/gainmap-js/libultrahdr';
 import { FloatType, LinearSRGBColorSpace, RGBAFormat } from 'three';
 
 export class HDRImageGenerator {
@@ -91,13 +91,11 @@ async function encodeHDR( image ) {
 			source: sdrImageData,
 			mimeType,
 			quality,
-			flipY: true // output needs to be flipped
 		} ),
 		compress( {
 			source: gainMapImageData,
 			mimeType,
 			quality,
-			flipY: true // output needs to be flipped
 		} )
 	] );
 

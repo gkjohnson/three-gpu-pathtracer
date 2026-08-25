@@ -5,12 +5,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 // material properties that can be assigned to a grid axis
-const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
+const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
 
 const options = {
 	enable: true,
 	useMegakernel: false,
 	whiteBackground: false,
+	bounces: 15,
 	xAxis: 'roughness',
 	yAxis: 'metalness',
 };
@@ -21,6 +22,7 @@ renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.bounces = options.bounces;
 
 document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
@@ -63,6 +65,12 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 
 } );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
+gui.add( options, 'bounces', 1, 100, 1 ).onChange( () => {
+
+	pathTracer.bounces = options.bounces;
+	pathTracer.reset();
+
+} );
 gui.add( options, 'xAxis', AXIS_PROPERTIES ).onChange( rebuild );
 gui.add( options, 'yAxis', AXIS_PROPERTIES ).onChange( rebuild );
 
@@ -171,6 +179,10 @@ function buildGrid() {
 		} else if ( field === 'roughness' ) {
 
 			material.roughness = val;
+
+		} else if ( field === 'diffuse roughness' ) {
+
+			material.diffuseRoughness = val;
 
 		} else if ( field === 'iridescence' ) {
 
