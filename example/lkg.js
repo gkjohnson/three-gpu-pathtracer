@@ -28,6 +28,7 @@ import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js'
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { QuiltPreviewNodeMaterial } from './src/materials/QuiltPreviewNodeMaterial.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 // lkg display constants
 const LKG_WIDTH = 420;
@@ -69,15 +70,12 @@ const params = {
 	renderScale: 1,
 	tiles: 5,
 
-	samplesPerFrame: 1,
-	bounces: 15,
-	filterGlossyFactor: 0.5,
 	pause: false,
 
 	tiltingPreview: true,
 	animationSpeed: 1,
 
-	numViews: 54,
+	numViews: 32,
 	viewCone: 35,
 	viewerDistance: VIEWER_DISTANCE,
 
@@ -85,7 +83,7 @@ const params = {
 
 };
 
-let loadingEl, samplesEl, distEl;
+let loader, distEl;
 let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, scene;
 
@@ -103,8 +101,8 @@ async function init() {
 
 	// get elements
 	distEl = document.getElementById( 'distance' );
-	loadingEl = document.getElementById( 'loading' );
-	samplesEl = document.getElementById( 'samples' );
+	loader = new LoaderElement();
+	loader.attach( document.body );
 
 	// init renderer
 	renderer = new WebGPURenderer( { antialias: true } );
@@ -127,8 +125,6 @@ async function init() {
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.bounces = params.bounces;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
@@ -153,18 +149,17 @@ async function init() {
 
 		}
 
-		const percent = Math.floor( 100 * loaded / total );
-		loadingEl.innerText = `Loading : ${ percent }%`;
+		loader.setPercentage( loaded / total );
 
 	};
 
 	try {
 
 		const envPromise = new HDRLoader().loadAsync( ENVMAP_URL );
-		const loader = new LDrawLoader( manager );
-		loader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
-		await loader.preloadMaterials( MATERIALS_URL );
-		const result = await loader
+		const ldrawLoader = new LDrawLoader( manager );
+		ldrawLoader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
+		await ldrawLoader.preloadMaterials( MATERIALS_URL );
+		const result = await ldrawLoader
 			.setPartsLibraryPath( PARTS_PATH )
 			.loadAsync( MODELS[ params.model ] );
 
@@ -242,7 +237,6 @@ async function init() {
 		group.add( model, floorPlane );
 		scene.add( group );
 
-		loadingEl.innerText = 'Building scene';
 		const envTexture = await envPromise;
 		envTexture.mapping = EquirectangularReflectionMapping;
 		scene.environment = envTexture;
@@ -250,14 +244,14 @@ async function init() {
 
 		pathTracer.setScene( scene, quiltCamera );
 
-		loadingEl.style.visibility = 'hidden';
+		loader.setPercentage( 1 );
 		renderer.domElement.style.visibility = 'visible';
 		renderer.setAnimationLoop( animate );
 
 	} catch ( err ) {
 
 		failed = true;
-		loadingEl.innerText = 'Failed to load model. ' + err.message;
+		loader.setCredits( 'Failed to load model. ' + err.message );
 
 	}
 
@@ -271,16 +265,10 @@ function animate() {
 
 	} else {
 
-		// set path tracer variables
 		pathTracer.pause = params.pause;
-		const samplesPerFrame = params.pause ? 1 : params.samplesPerFrame;
-		for ( let i = 0; i < samplesPerFrame; i ++ ) {
+		pathTracer.renderSample();
 
-			pathTracer.renderSample();
-
-		}
-
-		if ( averageSamples > 1 && params.tiltingPreview ) {
+		if ( params.tiltingPreview ) {
 
 			// render the animated tilting preview
 			const displayIndex = ( 0.5 + 0.5 * Math.sin( params.animationSpeed * window.performance.now() * 0.0025 ) ) * params.numViews;
@@ -299,9 +287,13 @@ function animate() {
 
 	}
 
-	pathTracer.getSampleCountsAsync().then( counts => averageSamples = counts.avg );
+	pathTracer.getSampleCountsAsync().then( counts => {
 
-	samplesEl.innerText = `Samples: ${ Math.floor( averageSamples ) }`;
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
+
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
 }
@@ -465,17 +457,6 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( () => {
-
-		pathTracer.bounces = params.bounces;
-
-	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( () => {
-
-		pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-
-	} );
-	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 	ptFolder.add( params, 'tiles', 5, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.setScalar( v );
