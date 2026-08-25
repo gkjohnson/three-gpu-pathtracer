@@ -18,8 +18,8 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb';
@@ -32,8 +32,8 @@ let loader;
 const params = {
 
 	// path tracer settings
-	bounces: 5,
-	renderScale: 1 / window.devicePixelRatio,
+	bounces: 15,
+	renderScale: 1,
 	filterGlossyFactor: 1,
 	tiles: 1,
 	multipleImportanceSampling: true,
@@ -132,7 +132,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
-	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
@@ -202,6 +202,6 @@ function animate() {
 	renderer.render( overlayScene, camera );
 	renderer.autoClear = originalAutoClear;
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

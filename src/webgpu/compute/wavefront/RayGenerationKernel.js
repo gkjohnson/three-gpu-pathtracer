@@ -4,6 +4,7 @@ import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayQueueAtomicStruct } from './structs.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
@@ -14,6 +15,7 @@ export class RayGenerationKernel extends ComputeKernel {
 			bvhData: { value: null },
 
 			seed: uniform( 0 ),
+			maxSamples: uniform( 0, 'uint' ),
 
 			tileIndexBuffer: storage( new IndirectStorageBufferAttribute( 2, 1 ), 'u32' ),
 			tileSize: uniform( new Vector2() ),
@@ -30,6 +32,7 @@ export class RayGenerationKernel extends ComputeKernel {
 		const fn = wgslTagFn /* wgsl */`
 			fn compute(
 				seed: u32,
+				maxSamples: u32,
 				tileSize: vec2u,
 
 				globalId: vec3u
@@ -58,13 +61,13 @@ export class RayGenerationKernel extends ComputeKernel {
 				// calculate the screen uv
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 
-				// check whether ray is already active (added on the queue) and skip it if it is
-				let ACTIVE_FLAG = 0xF0000000u;
+				// skip the pixel if it already has a ray on the queue or has hit the sample limit
 				let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
-				let isActive = ( ACTIVE_FLAG & combinedField ) != 0;
-				let samples = ( ( ~ ACTIVE_FLAG ) & combinedField );
+				let isActive = ( ${ SAMPLE_ACTIVE_FLAG }u & combinedField ) != 0;
+				let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
+				let isComplete = maxSamples != 0u && samples >= maxSamples;
 
-				if ( isActive ) {
+				if ( isActive || isComplete ) {
 
 					return;
 
@@ -97,8 +100,8 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].transmissiveRay = 1u;
 				rayQueue.elements[ index ].minPdf = 1.0;
 
-				// write the active params
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ACTIVE_FLAG | samples ) );
+				// write the active params & dispatched flag
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
 
 			}
 		`;

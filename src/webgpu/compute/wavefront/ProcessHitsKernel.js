@@ -2,9 +2,10 @@ import { StorageBufferAttribute, StorageTexture, DataTexture } from 'three/webgp
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId, texture, sampler } from 'three/tsl';
 import { rayQueueAtomicStruct, hitQueueStruct } from './structs.js';
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
-import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
@@ -25,6 +26,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
 			filterGlossy: uniform( 1 ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
 
 			// rays
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
@@ -47,6 +50,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 				smoothNormals: u32,
 				bounces: u32,
 				filterGlossy: f32,
+				clampDirect: f32,
+				clampIndirect: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -67,13 +72,15 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// get the ray info
-				let ACTIVE_FLAG = 0xF0000000u;
 				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
 				let objectInfo = transforms[ input.objectIndex ];
 				var materialInfo = materials[ objectInfo.materialIndex ];
+
+				// a matte surface hit by the camera ray renders as a fully transparent
+				let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
 
 				// apply per-object colors
 				materialInfo.color *= objectInfo.color.rgb;
@@ -103,19 +110,28 @@ export class ProcessHitsKernel extends ComputeKernel {
 				}
 
 				// emission
-				let resultColor = input.resultColor + vec4f( throughputColor * surface.emission, 0.0 );
+				let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, input.currentBounce + 1u, clampDirect, clampIndirect );
+				var resultColor = input.resultColor + vec4f( emission, 0.0 );
+				if ( isMatte ) {
 
-				var isTerminated = input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+					resultColor = vec4f( 0.0 );
 
-				// russian roulette early out
+				}
+
+				var isTerminated = isMatte || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+
+				// russian roulette early out:
+				// Matches Cycles path_state_continuation_probability in integrator/path_state.h
 				if ( ! isTerminated && input.currentBounce >= 3u ) {
 
 					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-					let rrProb = sqrt( saturate( ${ luminanceFn }( rrThroughput ) / max( ${ luminanceFn }( throughputColor ), 1e-4 ) ) );
-					isTerminated = ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+					let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+					isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+					if ( ! isTerminated ) {
 
-					// perform sample clamping here to avoid bright pixels
-					throughputColor *= min( 1.0 / rrProb, 20.0 );
+						throughputColor /= rrProb;
+
+					}
 
 				}
 
@@ -131,12 +147,15 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				if ( isTerminated ) {
 
-					// terminate ray, write color
-					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ( ~ ACTIVE_FLAG ) ) + 1;
-					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+					// store the color rows top down to match a rasterized render target
+					let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
+
+					// terminate ray, write color, mark it as inactive
+					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
+					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
+					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				} else {
 

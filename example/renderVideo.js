@@ -16,15 +16,15 @@ import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import {
 	BufferTarget,
 	CanvasSource,
 	Output,
 	WebMOutputFormat,
 } from 'mediabunny';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb';
@@ -36,6 +36,9 @@ let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
 let loader;
+
+// sample counts are measured asynchronously, so the average is kept for the recording checks
+let averageSamples = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
 let recordingState = 'idle';
@@ -53,7 +56,7 @@ const params = {
 	record: startRecording,
 	stop: finishRecording,
 
-	bounces: 5,
+	bounces: 15,
 	samplesPerFrame: 1,
 	renderScale: 1,
 	...getScaledSettings(),
@@ -75,7 +78,6 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
@@ -190,7 +192,7 @@ function rebuildGUI() {
 	} );
 	renderFolder.add( params, 'samples', 1, 500, 1 );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
+	renderFolder.add( params, 'bounces', 1, 50, 1 ).onChange( regenerateScene );
 
 }
 
@@ -354,6 +356,13 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
+
 	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
@@ -372,7 +381,7 @@ function animate() {
 			pathTracer.renderSample();
 
 			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && pathTracer.samples >= params.samples ) {
+			if ( isRecording && averageSamples >= params.samples ) {
 
 				break;
 
@@ -381,7 +390,7 @@ function animate() {
 		}
 
 		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && pathTracer.samples >= params.samples ) {
+		if ( isRecording && ! isWritingFrame && averageSamples >= params.samples ) {
 
 			writeVideoFrame();
 
@@ -394,14 +403,13 @@ function animate() {
 
 		const total = Math.ceil( params.frameRate * params.duration );
 		const percStride = 1 / total;
-		const samplesPerc = pathTracer.samples / params.samples;
+		const samplesPerc = averageSamples / params.samples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		loader.setPercentage( percentDone );
 
 	} else {
 
 		loader.setPercentage( 1 );
-		loader.setSamples( pathTracer.samples );
 
 	}
 

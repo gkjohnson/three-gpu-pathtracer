@@ -181,22 +181,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
-		const discardDimensionOffset = uint( 0 ).toVar( 'bvh_effect' );
 
 		fns.raycastFirstHit = this.getShapecastFn( {
 			name: 'raycastFirstHit',
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
-			prefixFn: wgslTagFn/* wgsl */`
-				fn prefixFn() -> void {
-
-					// Reset the random dimension offset that is incremented as
-					// we hit faces and test for transparency.
-					${ discardDimensionOffset } = 0u;
-
-				}
-			`,
 			boundsOrderFn: wgslTagFn/* wgsl */`
 				fn getBoundsOrder( ray: ${ rayStruct }, splitAxis: u32, node: ${ bvhNodeStruct } ) -> bool {
 
@@ -319,8 +309,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								if ( material.transparent != 0 ) {
 
-									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ${ discardDimensionOffset } );
-									${ discardDimensionOffset } += 1u;
+									// index the discard random sample on the triangle index - just using ray hit order
+									// can vary based on ray direction, causing artifacts.
+									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti );
 
 									if ( doDiscard ) {
 
@@ -732,8 +723,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );
 			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
 			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
+			floatArray[ index ++ ] = getField( m, 'diffuseRoughness', 0.0 );
 			// vec3f alignment requirements
-			index ++;
 			index ++;
 
 			// specular color - offset 36

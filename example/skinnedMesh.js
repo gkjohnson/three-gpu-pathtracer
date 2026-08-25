@@ -15,9 +15,9 @@ import { WebGPUPathTracer, BlurredEnvMapGenerator } from 'three-gpu-pathtracer/w
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
 const MORPH_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
@@ -30,7 +30,7 @@ let mixer, mixerAction;
 let loader;
 const params = {
 
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	pause: false,
 	continuous: false,
 	stableNoise: false,
@@ -56,7 +56,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.multipleImportanceSampling = false;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.filterGlossyFactor = 0.25;
 	pathTracer.minSamples = 1;
 	// keep a live low-res preview while the camera or animation is moving
 	pathTracer.dynamicLowRes = true;
@@ -189,7 +188,7 @@ function animate() {
 
 		// playing
 		renderer.render( scene, camera );
-		loader.setSamples( 0 );
+		loader.setSamples( null );
 
 	} else {
 
@@ -201,7 +200,7 @@ function animate() {
 		}
 
 		pathTracer.renderSample();
-		loader.setSamples( pathTracer.samples );
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	}
 

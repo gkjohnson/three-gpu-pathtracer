@@ -9,34 +9,9 @@
 				overflow: hidden;
 				background: #222;
 			}
-
-			#description {
-				position: absolute;
-				top: 0;
-				left: 0;
-				right: 260px;
-				padding: 8px 16px;
-				box-sizing: border-box;
-				color: white;
-				font: 14px/1.4 monospace;
-				text-align: center;
-				text-shadow: 0 1px 2px #000;
-				pointer-events: none;
-			}
-
-			@media (max-width: 520px) {
-				#description {
-					top: 180px;
-					right: 0;
-					padding: 8px 12px;
-					background: rgba( 0, 0, 0, 0.35 );
-					text-align: left;
-				}
-			}
 		</style>
 	</head>
 	<body>
-		<div id="description">Click an object to select it. Press T / R / S for Translate / Rotate / Scale.</div>
 		<script src="./dynamicScene.js" type="module"></script>
 	</body>
 </html>
