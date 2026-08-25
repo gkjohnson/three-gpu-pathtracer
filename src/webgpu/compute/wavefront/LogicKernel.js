@@ -3,10 +3,11 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn, luminanceFn } from '../../nodes/sampling.wgsl.js';
-import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
+import { clampPathContributionFunc, isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 import {
 	rngInit, rand1, rand2, rand3,
-	RNG_INDEX_ENVIRONMENT_SAMPLE,
+	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_RUSSIAN_ROULETTE,
 	RNG_INDEX_DIRECT_LIGHT_SELECTION,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
@@ -15,6 +16,7 @@ import {
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct } from './structs.js';
+import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
 // results, accumulates emission and NEE / forward MIS contributions, terminates finished paths into
@@ -36,6 +38,9 @@ export class LogicKernel extends ComputeKernel {
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
 			bounces: uniform( 5, 'uint' ),
+			clampDirect: uniform( 0 ),
+			clampIndirect: uniform( 10 ),
+			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
 			rayData: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersections: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
@@ -62,6 +67,9 @@ export class LogicKernel extends ComputeKernel {
 				// settings
 				misEnabled: u32,
 				bounces: u32,
+				clampDirect: f32,
+				clampIndirect: f32,
+				transmissiveBackground: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -110,14 +118,17 @@ export class LogicKernel extends ComputeKernel {
 
 						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
 						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), ${ isMISWeightLightFn }( input.lightType ) );
-						resultColor += vec4f( throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf, 0.0 );
+						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf;
+						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
+						resultColor += vec4f( contribution, 0.0 );
 
 					}
 
 				}
 
 				// emission gathered at the previous surface ( pre-scatter throughput )
-				resultColor += vec4f( throughputColor * input.emission, 0.0 );
+				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, input.currentBounce, clampDirect, clampIndirect );
+				resultColor += vec4f( emission, 0.0 );
 
 				// reconstruct the scatter record staged by MaterialKernel
 				var scatterRec: ${ scatterRecordStruct };
@@ -163,7 +174,8 @@ export class LogicKernel extends ComputeKernel {
 
 								let lightPdf = lightRec.pdf / lightsDenom;
 								let misWeight = ${ misHeuristicFn }( input.pdf, lightPdf );
-								resultColor += vec4f( lightRec.emission * throughputColor * misWeight, 0.0 );
+								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, input.currentBounce + 1u, clampDirect, clampIndirect );
+								resultColor += vec4f( lightHit, 0.0 );
 
 							}
 
@@ -179,6 +191,7 @@ export class LogicKernel extends ComputeKernel {
 						rayData[ index ].side = hitResult.side;
 						rayData[ index ].indices = hitResult.indices;
 						rayData[ index ].objectIndex = hitResult.objectIndex;
+						rayData[ index ].dist = hitResult.dist;
 
 						// next event estimation: pick one sample among the analytic lights plus the
 						// environment ( env is the last "light" when active ), each with probability
@@ -216,10 +229,9 @@ export class LogicKernel extends ComputeKernel {
 
 					} else {
 
-						// the segment escaped the scene: gather the environment ( or the background for
-						// camera segments ) and terminate
-						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
-						if ( input.currentBounce > 0u ) {
+						// the segment escaped the scene: gather the environment for opaque paths, or
+						// the background for camera segments and fully transmissive paths
+						if ( input.currentBounce > 0u && input.transmissiveRay == 0u ) {
 
 							var misWeight = 1.0;
 							if ( misEnabled != 0u && envActive ) {
@@ -230,11 +242,60 @@ export class LogicKernel extends ComputeKernel {
 
 							}
 
-							resultColor += ${ sampleEnvColor }( input.direction, rng ) * vec4f( throughputColor * misWeight, 0.0 );
+							let environment = ${ sampleEnvColor }( input.direction ).rgb * throughputColor * misWeight;
+							let contribution = ${ clampPathContributionFunc }( environment, input.currentBounce + 1u, clampDirect, clampIndirect );
+							resultColor += vec4f( contribution, 0.0 );
 
 						} else {
 
-							resultColor = ${ sampleBackground }( input.direction, rng );
+							// hit the background
+							// support multiple transparent background blending techniques
+							let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
+							let bg = ${ sampleBackground }( input.direction, rng );
+							if ( input.currentBounce == 0u ) {
+
+								// sample the background directly if this is the primary ray
+								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, input.currentBounce + 1u, clampDirect, clampIndirect );
+								resultColor = vec4f( background, bg.a );
+
+							} else {
+
+								// transmissive ray handling
+								let env = ${ sampleEnvColor }( input.direction );
+								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
+								let transparency = ( 1.0 - bg.a ) * avg;
+
+								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
+
+									// display the env map through transmissive surfaces
+									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
+									resultColor = vec4f(
+										resultColor.rgb + background,
+										1.0,
+									);
+
+								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
+
+									// fade the background by the throughput color average
+									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
+									resultColor = vec4f(
+										resultColor.rgb + background,
+										1.0 - transparency,
+									);
+
+								} else {
+
+									// fade the background by the throughput color average, mixing in env lighting
+									var light = mix( env.rgb, bg.rgb, bg.a );
+									let background = ${ clampPathContributionFunc }( light * throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
+									resultColor = vec4f(
+										resultColor.rgb + background,
+										1.0 - transparency,
+									);
+
+								}
+
+							}
 
 						}
 
@@ -246,12 +307,15 @@ export class LogicKernel extends ComputeKernel {
 
 				if ( isTerminated ) {
 
-					// blend the finished sample into the output and free the slot for a new camera ray
-					let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r + 1;
-					let prevColor = textureLoad( ${ params.prevOutputTarget }, indexUV );
+					// Blend the finished sample into the output and free the slot for a new camera
+					// ray. The color rows are stored top down to match a rasterized render target.
+					let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
+
+					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
+					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( sampleCount ) );
-					textureStore( ${ params.outputTarget }, indexUV, blendedColor );
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
+					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 					rayData[ index ].objectIndex = - 1;
 

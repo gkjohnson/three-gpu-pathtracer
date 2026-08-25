@@ -1,10 +1,12 @@
 import { Vector2 } from 'three';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, storage, globalId } from 'three/tsl';
-import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { uniform, storage, textureStore, globalId } from 'three/tsl';
+import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
+import { SAMPLE_COUNT_MASK } from '../../constants.js';
+import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -19,6 +21,10 @@ export class MaterialKernel extends ComputeKernel {
 
 			seed: uniform( 0, 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
+			maxSamples: uniform( 0, 'uint' ),
+			filterGlossy: uniform( 1 ),
+
+			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 
 			rayData: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
@@ -39,6 +45,8 @@ export class MaterialKernel extends ComputeKernel {
 			fn compute(
 				seed: u32,
 				targetDimensions: vec2u,
+				maxSamples: u32,
+				filterGlossy: f32,
 
 				globalId: vec3u
 			) -> void {
@@ -72,11 +80,34 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
+
+					// leave the slot dormant once the pixel has taken its full sample budget. The
+					// pixel exchange above still rotates the overflow queue, so pixels that are not
+					// yet finished keep finding slots.
+					if ( maxSamples != 0u && ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) >= maxSamples ) {
+
+						rayData[ index ].pixelIndex = pixelIndex;
+						rayData[ index ].rayIntersectionIndex = - 1;
+						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
 					${ rngInit }( indexUV, seed, 0 );
 
 					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-					var ray = ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ) );
+					var ray: ${ rayStruct };
+					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+						// the camera declined the pixel, so leave the slot dormant for this round
+						rayData[ index ].pixelIndex = pixelIndex;
+						rayData[ index ].rayIntersectionIndex = - 1;
+						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
 					ray.direction = normalize( ray.direction );
 
 					let rayIndex = atomicAdd( &rayQueue.length, 1u );
@@ -95,6 +126,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayData[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
 					rayData[ index ].bsdf = vec3f( 1.0 );
 					rayData[ index ].pdf = 1.0;
+					rayData[ index ].minPdf = 1.0;
+					rayData[ index ].transmissiveRay = 1u;
 					rayData[ index ].emission = vec3f( 0.0 );
 					rayData[ index ].lightPdf = 0.0;
 					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
@@ -115,15 +148,32 @@ export class MaterialKernel extends ComputeKernel {
 
 					var vertexData = ${ sampleTrianglePointFn }( input.barycoord, input.indices );
 					vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+					vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 					vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
-					let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal );
 					let view = - input.direction;
+
+					// blur glossy surfaces after low-probability bounces to suppress fireflies,
+					// from the Cycles "filter glossy" approach in integrator/surface_shader.h
+					let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
+
+					let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, view, blurRoughness );
+
+					// attenuate the light transmitted through the volume when exiting a backface. The
+					// staged throughput is read back by LogicKernel when this surface's emission and
+					// NEE contribution resolve, matching the megakernel's ordering.
+					if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
+
+						rayData[ index ].throughputColor = input.throughputColor * ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+
+					}
 
 					// sample the next bounce direction and stage the scatter state for LogicKernel
 					let scatterRec = ${ bsdfSampleFn }( view, surface );
 					rayData[ index ].bsdf = scatterRec.color;
 					rayData[ index ].pdf = scatterRec.pdf;
+					rayData[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
+					rayData[ index ].transmissiveRay = input.transmissiveRay & select( 0u, 1u, scatterRec.isTransmissive );
 					rayData[ index ].emission = surface.emission;
 
 					let newOrigin = vertexData.position.xyz;

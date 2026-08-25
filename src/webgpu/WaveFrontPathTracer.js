@@ -11,6 +11,18 @@ import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
 import { rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, rayQueueStruct, pixelQueueStruct } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
+import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
+import {
+	PrimeSampleCountersKernel,
+	TallySampleCountsKernel,
+	SAMPLE_COUNTER_LENGTH,
+	SAMPLE_COUNTER_MAX,
+	SAMPLE_COUNTER_MIN,
+	SAMPLE_COUNTER_PIXEL_COUNT,
+	SAMPLE_COUNTER_TOTAL_HI,
+	SAMPLE_COUNTER_TOTAL_LO,
+	U32_RANGE,
+} from './compute/TallySampleCountsKernel.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -55,6 +67,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// overflow pixel indices waiting for a free path slot, lazily sized to the resolution
 		this.pixelQueue = null;
 
+		// reduction target for the per pixel sample counts, read back asynchronously
+		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
+		this.sampleCounters.name = 'Sample Counters';
+		this._samplesPromise = null;
+
 		// kernels
 		this.populatePixelIndicesKernel = new PopulatePixelIndicesKernel().setWorkgroupSize( 8, 8, 1 );
 		this.logicKernel = new LogicKernel( ).setWorkgroupSize( 64, 1, 1 );
@@ -63,6 +80,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel = new TraceShadowRayKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
+		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
+		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
 		this.logicKernel.envInfo = this.envInfo;
@@ -120,6 +139,29 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.materialKernel.material = material.getData();
 		this.materialKernel.needsUpdate = true;
+		this.reset();
+
+	}
+
+	setFilterGlossy( value ) {
+
+		// the kernel takes the inverted threshold, mirroring Cycles
+		this.materialKernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
+		this.reset();
+
+	}
+
+	setClamping( direct, indirect ) {
+
+		this.logicKernel.clampDirect = direct;
+		this.logicKernel.clampIndirect = indirect;
+		this.reset();
+
+	}
+
+	setTransmissiveBackground( value ) {
+
+		this.logicKernel.transmissiveBackground = value;
 		this.reset();
 
 	}
@@ -310,7 +352,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
 				materialKernel.pixelQueue = this.pixelQueue;
+				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
+				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -338,6 +382,73 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			yield;
 
 		}
+
+	}
+
+	// Reduces the per pixel sample counts and reads them back. Runs a full resolution pass, so it
+	// only happens when asked for.
+	getSampleCountsAsync() {
+
+		// share the in flight measurement rather than dispatching another
+		if ( this._samplesPromise === null ) {
+
+			this._samplesPromise = this._measureSampleCounts().finally( () => {
+
+				this._samplesPromise = null;
+
+			} );
+
+		}
+
+		return this._samplesPromise;
+
+	}
+
+	async _measureSampleCounts() {
+
+		const {
+			renderer,
+			sampleCountTarget,
+			sampleCounters,
+			primeSampleCountersKernel,
+			tallySampleCountsKernel,
+		} = this;
+
+		if ( ! renderer.initialized || this.lowResMode ) {
+
+			return { min: 0, max: 0, avg: 0 };
+
+		}
+
+		primeSampleCountersKernel.counters = sampleCounters;
+		renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
+
+		tallySampleCountsKernel.counters = sampleCounters;
+		tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
+		renderer.compute(
+			tallySampleCountsKernel.kernel,
+			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
+		);
+
+		const buffer = await renderer.getArrayBufferAsync( sampleCounters );
+		const counters = new Uint32Array( buffer );
+		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
+
+		// no camera ray has been dispatched yet, so there is nothing to average over
+		if ( pixelCount === 0 ) {
+
+			return { min: 0, max: 0, avg: 0 };
+
+		}
+
+		// the total is accumulated as a split 64 bit value to survive high sample counts
+		const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
+
+		return {
+			min: counters[ SAMPLE_COUNTER_MIN ],
+			max: counters[ SAMPLE_COUNTER_MAX ],
+			avg: total / pixelCount,
+		};
 
 	}
 

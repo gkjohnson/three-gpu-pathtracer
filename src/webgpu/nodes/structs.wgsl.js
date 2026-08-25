@@ -13,7 +13,7 @@ export const constants = wgsl( /* wgsl */ `
 
 export const scatterRecordStruct = new StructTypeNode( {
 	color: 'vec3f',
-	specularPdf: 'float',
+	isTransmissive: 'bool',
 	direction: 'vec3f',
 	pdf: 'float',
 }, 'ScatterRecord' );
@@ -68,6 +68,7 @@ export const materialStruct = new StructTypeNode( {
 	// offset 32 floats
 	iridescenceThicknessMinimum: 'float',
 	iridescenceThicknessMaximum: 'float',
+	diffuseRoughness: 'float',
 
 	// offset 36 floats
 	specularColor: 'vec3',
@@ -76,7 +77,7 @@ export const materialStruct = new StructTypeNode( {
 	// offset 40 floats
 	specularIntensity: 'float',
 	specularIntensityMap: 'int',
-	thinFilm: 'int', // actually a boolean
+	thinWall: 'int', // actually a boolean
 
 	// offset 44 floats
 	attenuationColor: 'vec3',
@@ -168,6 +169,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 
 	// material
 	roughness: 'f32',
+	diffuseRoughness: 'f32',
 	metalness: 'f32',
 	anisotropy: 'f32',
 	color: 'vec3f',
@@ -176,7 +178,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	// transmission
 	ior: 'f32',
 	transmission: 'f32',
-	thinFilm: 'bool',
+	thinWall: 'bool',
 	attenuationColor: 'vec3f',
 	attenuationDistance: ' f32',
 
@@ -256,10 +258,6 @@ export const bxdfContextStruct = new StructTypeNode( {
 	V: 'vec3f', // view dir
 	L: 'vec3f', // light dir
 	H: 'vec3f', // half dir
-
-	Vc: 'vec3f', // clearcoat view dir
-	Lc: 'vec3f', // clearcoat light dir
-	Hc: 'vec3f', // clearcoat half dir
 
 	VdotH: 'float',
 

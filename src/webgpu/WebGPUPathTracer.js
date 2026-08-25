@@ -11,9 +11,12 @@ import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
+import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights, getIesTextures } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
+import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -125,9 +128,124 @@ export class WebGPUPathTracer {
 
 	}
 
-	get samples() {
+	// Stops taking samples once a pixel reaches this count. Zero means no limit.
+	get maxSamples() {
 
-		return this._pathTracer.lowResMode ? 0 : this._pathTracer.samples;
+		return this._pathTracer.maxSamples;
+
+	}
+
+	set maxSamples( v ) {
+
+		this._pathTracer.maxSamples = v;
+
+	}
+
+	// Per pixel sample counts. Use "min" for convergence checks, "avg" to display. Measures on the
+	// wavefront backend, so only call it when the numbers are needed.
+	async getSampleCountsAsync() {
+
+		const pathTracer = this._pathTracer;
+
+		// written in place. reset swaps in a new object so a late measurement can't overwrite it.
+		const counts = this._lastSampleCounts;
+		const measured = await pathTracer.getSampleCountsAsync();
+
+		counts.min = measured.min;
+		counts.max = measured.max;
+		counts.avg = measured.avg;
+
+		// averaged over the whole render, and idle time counts against it
+		const elapsed = this.getRenderTime() / 1000;
+		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+
+		return { ...counts };
+
+	}
+
+	get transmissiveBackground() {
+
+		return this._transmissiveBackground;
+
+	}
+
+	set transmissiveBackground( v ) {
+
+		if ( this._transmissiveBackground !== v ) {
+
+			this._transmissiveBackground = v;
+			this._pathTracer.setTransmissiveBackground( v );
+
+		}
+
+	}
+
+	get filterGlossyFactor() {
+
+		return this._filterGlossyFactor;
+
+	}
+
+	set filterGlossyFactor( v ) {
+
+		if ( this._filterGlossyFactor !== v ) {
+
+			this._filterGlossyFactor = v;
+			this._pathTracer.setFilterGlossy( v );
+
+		}
+
+	}
+
+	get multipleImportanceSampling() {
+
+		return this._multipleImportanceSampling;
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		if ( this._multipleImportanceSampling !== v ) {
+
+			this.setMultipleImportanceSampling( v );
+
+		}
+
+	}
+
+	get clampDirect() {
+
+		return this._clampDirect;
+
+	}
+
+	set clampDirect( v ) {
+
+		v = Math.max( 0, v );
+		if ( this._clampDirect !== v ) {
+
+			this._clampDirect = v;
+			this._pathTracer.setClamping( v, this._clampIndirect );
+
+		}
+
+	}
+
+	get clampIndirect() {
+
+		return this._clampIndirect;
+
+	}
+
+	set clampIndirect( v ) {
+
+		v = Math.max( 0, v );
+		if ( this._clampIndirect !== v ) {
+
+			this._clampIndirect = v;
+			this._pathTracer.setClamping( this._clampDirect, v );
+
+		}
 
 	}
 
@@ -155,6 +273,18 @@ export class WebGPUPathTracer {
 
 	}
 
+	get lowResTarget() {
+
+		return this._lowResTarget;
+
+	}
+
+	get lowResMode() {
+
+		return this._pathTracer.lowResMode;
+
+	}
+
 	get textureAtlas() {
 
 		return this._bvhData.textureAtlas;
@@ -163,12 +293,18 @@ export class WebGPUPathTracer {
 
 	useMegakernel( value ) {
 
+		const maxSamples = this._pathTracer.maxSamples;
+
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
+		this._pathTracer.maxSamples = maxSamples;
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
+		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
+		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
+		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
 		this.updateLights();
@@ -186,6 +322,7 @@ export class WebGPUPathTracer {
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
@@ -193,6 +330,8 @@ export class WebGPUPathTracer {
 		this._lowResTarget = new StorageTexture( 1, 1 );
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
+
+		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		// options
 		this.minSamples = 1;
@@ -204,18 +343,17 @@ export class WebGPUPathTracer {
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
 		this.commonAttributes = [ 'normal', 'tangent' ];
-		this.stableNoise = false;
+		this.stableNoise = true;
 		this.pause = false;
 
-		// WebGLPathTracer compatibility stubs (see getters above)
-		// TOOD: implement these correctly
+		this.filterGlossyFactor = 1;
+		this._clampDirect = 0;
+		this._clampIndirect = 10;
 		this.multipleImportanceSampling = true;
-		this.transmissiveBounces = 5;
-		this.filterGlossyFactor = 0;
+		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
-		this.random = null;
+		this.random = RANDOM_BLUE_DITHER;
 		this.material = new GltfCompliantMaterial();
-		this._pathTracer = new WaveFrontPathTracer( renderer );
 
 		this.iesProfiles = new RenderTarget2DArray( 360, 180, { type: HalfFloatType } );
 
@@ -234,7 +372,7 @@ export class WebGPUPathTracer {
 
 	setMultipleImportanceSampling( value ) {
 
-		this.multipleImportanceSampling = value;
+		this._multipleImportanceSampling = value;
 		this._pathTracer.setMultipleImportanceSampling( value );
 
 	}
@@ -289,6 +427,13 @@ export class WebGPUPathTracer {
 		const bvhData = new PathtracerBVHComputeData( scene );
 		bvhData.update();
 		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
+
+		if ( this._bvhData ) {
+
+			this._bvhData.dispose();
+			this._bvhData.textureAtlas.dispose();
+
+		}
 
 		this.scene = scene;
 		this._bvhData = bvhData;
@@ -348,13 +493,15 @@ export class WebGPUPathTracer {
 					}
 
 					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+					return false;
 
 				},
 				fn: wgslTagFn/* wgsl */`
-					fn getCameraRay( uv: vec2f, resolution: vec2f ) -> ${ rayStruct } {
+					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						return ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						return true;
 
 					}
 				`,
@@ -363,7 +510,9 @@ export class WebGPUPathTracer {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this.updateCamera();
+		this._cameraRayFnHandle.update();
+		this._pathTracer.rebuild();
+		this.reset();
 
 	}
 
@@ -376,9 +525,23 @@ export class WebGPUPathTracer {
 
 	}
 
+	updateTransforms() {
+
+		this.scene.updateMatrixWorld( true );
+		this._bvhData.updateTransforms();
+		this.reset();
+
+	}
+
 	updateCamera() {
 
-		this._cameraRayFnHandle.update();
+		const { _cameraRayFnHandle, _pathTracer } = this;
+		if ( _cameraRayFnHandle.update() ) {
+
+			_pathTracer.rebuild();
+
+		}
+
 		this.reset();
 
 	}
@@ -451,6 +614,9 @@ export class WebGPUPathTracer {
 		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._timer.update();
+
+		// a fresh object rather than a clear, so measurements still in flight detach
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 
 		if ( this.stableNoise ) {
 
@@ -553,10 +719,22 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( ! lowResMode && pathTracer.samples >= minSamples ) {
+		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
+		// the check reads the last measurement rather than waiting on this one.
+		if ( ! lowResMode ) {
 
-			this._fadeState += delta / this.fadeDuration;
-			this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
+			if ( this._fadeState < 1 && minSamples > 0 ) {
+
+				this.getSampleCountsAsync();
+
+			}
+
+			if ( this._lastSampleCounts.min >= minSamples ) {
+
+				this._fadeState += delta / this.fadeDuration;
+				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
+
+			}
 
 		}
 
@@ -681,15 +859,55 @@ export class WebGPUPathTracer {
 
 	}
 
+	// Renders a heatmap of the per pixel sample counts. Measures on every call, drawing with the
+	// previous result since the readback lands a frame later.
+	// TODO: bind the counters buffer in the shader instead to avoid the readback.
+	renderSampleDensity() {
+
+		const renderer = this._renderer;
+
+		if ( ! renderer._initialized ) {
+
+			return;
+
+		}
+
+		this.getSampleCountsAsync();
+
+		if ( ! this._sampleDensityQuad ) {
+
+			this._sampleDensityQuad = new FullScreenQuad( new SampleDensityMaterial() );
+
+		}
+
+		const originalToneMapping = renderer.toneMapping;
+		renderer.toneMapping = NoToneMapping;
+
+		const quad = this._sampleDensityQuad;
+		quad.material.texture = this._pathTracer.sampleCountTarget;
+		quad.material.minCount = this._lastSampleCounts.min;
+		quad.material.maxCount = this._lastSampleCounts.max;
+		renderer.setRenderTarget( null );
+		quad.render( renderer );
+
+		renderer.toneMapping = originalToneMapping;
+
+	}
+
 	dispose() {
 
 		this._pathTracer.dispose();
+		this._bvhData.dispose();
+		this._bvhData.textureAtlas.dispose();
+		this._environmentCache.dispose();
+		this._backgroundCache.dispose();
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
 		this.iesProfiles.dispose();
 		this._envColorTexture.dispose();
 		this._backgroundColorTexture.dispose();
 		this._atlasDebugQuad?.dispose();
+		this._sampleDensityQuad?.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 
@@ -699,57 +917,10 @@ export class WebGPUPathTracer {
 
 	}
 
-	async getDetailedSampleCount() {
-
-		const sampleCountTarget = this._pathTracer.sampleCountTarget;
-		const { width, height } = sampleCountTarget;
-		const renderer = this._renderer;
-
-		// Create a stub "render target" with just textures field to read from the storage texture
-		const targetStub = { textures: [ sampleCountTarget ] };
-
-		const buffer = await renderer.readRenderTargetPixelsAsync( targetStub, 0, 0, width, height );
-		const uintBuffer = new Uint32Array( buffer.buffer );
-
-		// copyTexture requires a multiple of 256 bytes for texelsPerRow
-		// Hence a multiple of 64 u32 per row
-		const texelsPerRow = Math.ceil( width / 64 ) * 64;
-
-		// Sum up all sample counts and divide by pixel count to get average samples per pixel
-		let totalSamples = 0;
-		let minSamples = Number.MAX_VALUE;
-		let maxSamples = - Number.MAX_VALUE;
-		for ( let i = 0, l = uintBuffer.length; i < l; i ++ ) {
-
-			// Skip padding
-			if ( i % texelsPerRow >= width ) {
-
-				continue;
-
-			}
-
-			// Each entry contains sample count in lower bits and active flag in high bit
-			// Mask out the active flag (0xF0000000) to get just the sample count
-			const samples = uintBuffer[ i ] & 0x0FFFFFFF;
-
-			totalSamples += samples;
-			minSamples = Math.min( minSamples, samples );
-			maxSamples = Math.max( maxSamples, samples );
-
-		}
-
-		return {
-			min: minSamples,
-			max: maxSamples,
-			avg: Math.floor( totalSamples / ( width * height ) ),
-		};
-
-
-	}
-
 	// Returns time since last reset in ms
 	getRenderTime() {
 
+		// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 		return this._resetTime;
 
 	}

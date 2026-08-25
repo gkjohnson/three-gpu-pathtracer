@@ -119,6 +119,17 @@ export const totalInternalReflectionFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+export const totalInternalReflectionVecFunc = wgslFn( /* wgsl */ `
+
+	fn totalInternalReflectionVec( cosTheta: f32, eta: vec3f ) -> vec3<bool> {
+
+		let sinTheta = sqrt( 1.0 - cosTheta * cosTheta );
+		return eta * sinTheta > vec3f( 1.0 );
+
+	}
+
+` );
+
 export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 	fn evaluateFresnel( cosine: f32, eta: f32, f0: vec3f, f90: vec3f ) -> vec3f {
@@ -134,6 +145,54 @@ export const evaluateFresnelFunc = wgslFn( /* wgsl */ `
 
 `, [ totalInternalReflectionFunc ] );
 
+export const dielectricFresnelFunc = wgslFn( /* wgsl */ `
+
+	fn dielectricFresnel( cosThetaI: f32, eta: f32 ) -> f32 {
+
+		// https://schuttejoe.github.io/post/disneybsdf/
+		let ni = eta;
+		let nt = 1.0;
+
+		// Check for total internal reflection
+		let sinThetaISq = 1.0 - cosThetaI * cosThetaI;
+		let sinThetaTSq = eta * eta * sinThetaISq;
+		if ( sinThetaTSq >= 1.0 ) {
+
+			return 1.0;
+
+		}
+
+		let sinThetaT = sqrt( sinThetaTSq );
+		let cosThetaT = sqrt( max( 0.0, 1.0 - sinThetaT * sinThetaT ) );
+		let rParallel = ( ( nt * cosThetaI ) - ( ni * cosThetaT ) ) / ( ( nt * cosThetaI ) + ( ni * cosThetaT ) );
+		let rPerpendicular = ( ( ni * cosThetaI ) - ( nt * cosThetaT ) ) / ( ( ni * cosThetaI ) + ( nt * cosThetaT ) );
+		return ( rParallel * rParallel + rPerpendicular * rPerpendicular ) / 2.0;
+
+	}
+
+` );
+
+export const disneyFresnelFunc = wgslFn( /* wgsl */ `
+
+	fn disneyFresnel( wo: vec3f, wi: vec3f, wh: vec3f, f0: f32, eta: f32, metalness: f32 ) -> f32 {
+
+		let dotHV = dot( wo, wh );
+		if ( totalInternalReflection( dotHV, eta ) ) {
+
+			return 1.0;
+
+		}
+
+		let dotHL = dot( wi, wh );
+		let dielectricF = dielectricFresnel( abs( dotHV ), eta );
+		let metallicF = schlickFresnel( dotHL, f0 );
+
+		return mix( dielectricF, metallicF, metalness );
+
+	}
+
+`, [ totalInternalReflectionFunc, dielectricFresnelFunc, schlickFresnelFunc ] );
+
 export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 	fn isTerminatingScatter( scatterRec: ScatterRecord ) -> bool {
@@ -143,6 +202,31 @@ export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 	}
 
 `, [ scatterRecordStruct ] );
+
+// Clamp individual light-path contributions using Cycles' RGB sum while preserving chromaticity.
+export const clampPathContributionFunc = wgslFn( /* wgsl */ `
+
+	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
+
+		let limit = select( clampIndirect, clampDirect, pathDepth <= 1u ) * 3.0;
+		if ( limit <= 0.0 ) {
+
+			return contribution;
+
+		}
+
+		let strength = dot( abs( contribution ), vec3f( 1.0 ) );
+		if ( strength > limit ) {
+
+			return contribution * ( limit / strength );
+
+		}
+
+		return contribution;
+
+	}
+
+` );
 
 export const applyWrapFunc = wgslFn( /* wgsl */ `
 
@@ -172,10 +256,52 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Bit-level ray origin offset based on Section 6.2.2 of "A Fast and Robust
+// Method for Avoiding Self-Intersection" in Ray Tracing Gems:
+// https://github.com/Apress/ray-tracing-gems/blob/master/Ch_06_A_Fast_and_Robust_Method_for_Avoiding_Self-Intersection/offset_ray.cu
+// The original implementation expects a normal oriented for the outgoing ray;
+// this version orients the geometric normal internally.
+export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
+
+	fn offsetRayOrigin( point: vec3f, direction: vec3f, geometricNormal: vec3f ) -> vec3f {
+
+		let normal = normalize( select( -geometricNormal, geometricNormal, dot( direction, geometricNormal ) >= 0.0 ) );
+		let intScale = 256.0;
+		let integerOffset = vec3i( intScale * normal );
+		let pointBits = bitcast<vec3i>( point );
+		let signedOffset = select( integerOffset, -integerOffset, point < vec3f( 0.0 ) );
+		let offsetPoint = bitcast<vec3f>( pointBits + signedOffset );
+		let origin = 1.0 / 32.0;
+		let floatScale = 1.0 / 65536.0;
+		return select( offsetPoint, point + floatScale * normal, abs( point ) < vec3f( origin ) );
+
+	}
+
+` );
+
+// Wraps a bilinear tap that is off the edge of a tile back to the texel the wrap mode calls for
+export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
+
+	fn wrapTexelIndex( i: i32, size: i32, wrapMode: i32 ) -> i32 {
+
+		if ( wrapMode == 0 ) {
+
+			// Repeat wraps to the opposite edge
+			return ( ( i % size ) + size ) % size;
+
+		}
+
+		// ClampToEdge and MirroredRepeat both fold back onto the edge texel
+		return clamp( i, 0, size - 1 );
+
+	}
+
+` );
+
 // Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
 // array node ( must be named "textureInfo" ). Called once per scene so a single
 // sampleTexel / textureInfo binding is shared by every caller in a pipeline.
-export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wgslTagFn/* wgsl */ `
+export const sampleTexelFunc = ( textureInfoUniform, atlas ) => wgslTagFn/* wgsl */ `
 
 	fn sampleTexel( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
@@ -197,8 +323,6 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wg
 			${ applyWrapFunc }( uv.y, wrapT ),
 		);
 
-		let pageDim = vec2f( textureDimensions( ${ atlas }, 0 ).xy );
-
 		if ( nearest == 1 ) {
 
 			let tileTexel = clamp( vec2i( wrappedUv * size ), vec2i( 0 ), vec2i( size ) - vec2i( 1 ) );
@@ -206,15 +330,31 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, atlasSampler ) => wg
 
 		} else {
 
-			var atlasUv = ( offset + wrappedUv * size ) / pageDim;
+			// The tile's neighbors in the atlas are unrelated textures, so hardware
+			// filtering cannot supply the taps that fall outside it. Filter here instead
+			// and resolve each tap through the wrap mode.
+			let texelPos = wrappedUv * size - vec2f( 0.5 );
+			let basePos = floor( texelPos );
+			let base = vec2i( basePos );
+			let f = texelPos - basePos;
 
-			// clamp to half a texel inside the tile so bilinear taps never bleed into
-			// neighboring atlas tiles
-			let minUv = ( offset + vec2f( 0.5 ) ) / pageDim;
-			let maxUv = ( offset + size - vec2f( 0.5 ) ) / pageDim;
-			atlasUv = clamp( atlasUv, minUv, maxUv );
+			let intSize = vec2i( size );
+			let x0 = ${ wrapTexelIndexFunc }( base.x,     intSize.x, wrapS );
+			let x1 = ${ wrapTexelIndexFunc }( base.x + 1, intSize.x, wrapS );
+			let y0 = ${ wrapTexelIndexFunc }( base.y,     intSize.y, wrapT );
+			let y1 = ${ wrapTexelIndexFunc }( base.y + 1, intSize.y, wrapT );
 
-			return textureSampleLevel( ${ atlas }, ${ atlasSampler }, atlasUv, page, lod );
+			let tile = vec2i( offset );
+			let c00 = textureLoad( ${ atlas }, tile + vec2i( x0, y0 ), page, 0 );
+			let c10 = textureLoad( ${ atlas }, tile + vec2i( x1, y0 ), page, 0 );
+			let c01 = textureLoad( ${ atlas }, tile + vec2i( x0, y1 ), page, 0 );
+			let c11 = textureLoad( ${ atlas }, tile + vec2i( x1, y1 ), page, 0 );
+
+			return mix(
+				mix( c00, c10, f.x ),
+				mix( c01, c11, f.x ),
+				f.y,
+			);
 
 		}
 

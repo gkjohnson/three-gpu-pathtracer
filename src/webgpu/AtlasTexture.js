@@ -218,6 +218,7 @@ export class AtlasTexture {
 		this.textureInfo = [ new Vector4() ];
 
 		this.hashes = [];
+		this.placements = [];
 		this.quadMesh = new QuadMesh( new MeshBasicMaterial() );
 		this.quadMesh.material.blending = NoBlending;
 
@@ -225,9 +226,17 @@ export class AtlasTexture {
 
 	setTextures( renderer, textures ) {
 
+		// The order the textures arrive in follows material order, which can change without the
+		// set of textures changing. Pack in a uuid-stable order instead, and map the placements
+		// back to the caller's indices afterwards.
+		const order = textures.map( ( t, i ) => i );
+		order.sort( ( a, b ) => textures[ a ].source.uuid < textures[ b ].source.uuid ? - 1 : 1 );
+		textures = order.map( i => textures[ i ] );
+
 		// nothing to do if the set of textures is unchanged
 		if ( this._hashesMatch( textures ) ) {
 
+			this._buildCallerTextureInfo( order );
 			return;
 
 		}
@@ -248,8 +257,8 @@ export class AtlasTexture {
 		renderTarget.setSize( width, height, pageCount );
 		this.texture.isArrayTexture = true;
 
-		this._buildTextureInfo( placements );
 		this._renderTextures( renderer, textures, placements );
+		this.placements = placements;
 
 		// rebuild hashes and the texture -> index lookup
 		const hashes = new Array( textures.length );
@@ -261,6 +270,23 @@ export class AtlasTexture {
 		}
 
 		this.hashes = hashes;
+
+		this._buildCallerTextureInfo( order );
+
+	}
+
+	// The atlas packs in its own stable order, the shader indexes textureInfo with the order the
+	// caller passed the textures in - "order[ i ]" is where the i-th packed texture came from.
+	_buildCallerTextureInfo( order ) {
+
+		const placements = new Array( order.length );
+		for ( let i = 0, l = order.length; i < l; i ++ ) {
+
+			placements[ order[ i ] ] = this.placements[ i ];
+
+		}
+
+		this._buildTextureInfo( placements );
 
 	}
 
@@ -417,7 +443,6 @@ export class AtlasTexture {
 			const texture = textures[ i ].clone();
 			texture.matrixAutoUpdate = false;
 			texture.matrix.identity();
-			texture.needsUpdate = true;
 
 			quadMesh.material.map = texture;
 

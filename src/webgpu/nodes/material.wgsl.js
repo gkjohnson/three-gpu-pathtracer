@@ -8,17 +8,131 @@ import {
 	iorToF0GeneralFunc,
 	fresnel0ToIorFunc,
 	iorToF0GeneralVecFunc,
+	dielectricFresnelFunc,
+	totalInternalReflectionFunc,
+	totalInternalReflectionVecFunc,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
 	ggxDistributionFunc,
 	ggxDirectionFunc,
 	ggxReflectionAdjustedPDFFunc,
+	ggxRefractionAdjustedPDFFunc,
+	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
 import { constants, surfaceRecordStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
+// Correct the shading normal to prevent scattering rays below the geometry surface by bending
+// the normal towards the geometry normal such that the perfect reflection ray is just above the
+// geometry surface. Ported verbatim from Blender Cycles "ensure_valid_specular_reflection"
+// (src/kernel/closure/bsdf_util.h), which is derived from from the Iray paper (Keller et al. 2017, A.3).
+//
+// This only guarantees perfect reflection rays are above surface - other diffuse rays, for example,
+// flipped when sampling.
+const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
+
+	fn ensureValidReflectionNormal( n: vec3f, ng: vec3f, i: vec3f ) -> vec3f {
+
+		// reflected ray
+		let R = 2.0 * dot( n, i ) * n - i;
+
+		let Iz = dot( i, ng );
+
+		// reflection rays may always be at least as shallow as the incoming ray
+		let threshold = min( 0.9 * Iz, 0.01 );
+		if ( dot( ng, R ) >= threshold ) {
+
+			return n;
+
+		}
+
+		// Form coordinate system with Ng as the Z axis and N inside the X-Z-plane.
+   		// The X axis is found by normalizing the component of N that's orthogonal to Ng.
+   		// The Y axis isn't actually needed.
+		let orthoN = n - dot( n, ng ) * ng;
+		let orthoLen = length( orthoN );
+		let X = select( n, orthoN / orthoLen, orthoLen != 0.0 );
+
+		// Calculate N.z and N.x in the local coordinate system.
+		//
+		// The goal of this computation is to find a N' that is rotated towards Ng just enough
+   		// to lift R' above the threshold (here called t), therefore dot(R', Ng) = t.
+		//
+		// See the Blender implementation for a full description of the solution.
+		let Ix = dot( i, X );
+
+		let a = Ix * Ix + Iz * Iz;
+		let b = 2.0 * ( a + Iz * threshold );
+		let c = ( threshold + Iz ) * ( threshold + Iz );
+
+		// only one root is valid; the sign of Ix selects it
+		var Nz2: f32;
+		if ( Ix < 0.0 ) {
+
+			Nz2 = 0.25 * ( b + sqrt( max( b * b - 4.0 * a * c, 0.0 ) ) ) / a;
+
+		} else {
+
+			Nz2 = 0.25 * ( b - sqrt( max( b * b - 4.0 * a * c, 0.0 ) ) ) / a;
+
+		}
+
+		let Nx = sqrt( max( 1.0 - Nz2, 0.0 ) );
+		let Nz = sqrt( max( Nz2, 0.0 ) );
+
+		return Nx * X + Nz * ng;
+
+	}
+
+`;
+
+// Adjusts the shading normal such that the provided view normal is guaranteed to be in
+// positive hemisphere by rotating it towards the view direction just enough so view is
+// just glancing the surface as a small epsilon if needed.
+const ensureValidViewNormal = wgslTagFn/* wgsl */`
+
+	fn ensureValidViewNormal( n: vec3f, ng: vec3f, view: vec3f ) -> vec3f {
+
+		// ensure the view is at least slightly above the surface normal hemisphere
+		const MIN_VIEW_COS = 1e-6;
+
+		// if we're positive already then early out
+		let c = dot( n, view );
+		if ( c > MIN_VIEW_COS ) {
+
+			return n;
+
+		}
+
+		// perpendicular vector to normal and view
+		var perp = n - c * view;
+		let perpLen = length( perp );
+
+		// if we reach here that means that he view is nearly the opposite direction and
+		// we can't derive plan to rotate on towards the view, so just use the geometry
+		// normal. This could likely only really happen with a severe normal map application.
+		if ( perpLen <= 1e-6 ) {
+
+			return ng;
+
+		}
+
+		perp = perp / perpLen;
+
+		// rotate the normal to be at larger than the above threshold - pythagorean
+		// theorem for generating normal with threshold*view component
+		return MIN_VIEW_COS * view + sqrt( 1.0 - MIN_VIEW_COS * MIN_VIEW_COS ) * perp;
+
+	}
+
+`;
+
 // Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
+// Sentinel for a disabled glossy filter ( FLT_MAX, mirroring Cycles ): the blur term
+// clamps to zero for any path pdf when the inverted filter value is this large.
+export const FILTER_GLOSSY_DISABLED = 3.402823466e38;
+
 export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
@@ -26,17 +140,19 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
+		view: vec3f,
+		blurRoughness: f32,
 	) -> SurfaceRecord {
 
+		// "faceNormal" is provided on the hit side so flip it back to the geometric side
 		var normal = faceNormal * side;
 		if ( material.flatShading == 0 ) {
 
-			normal = vertexData.normal.xyz;
+			normal = normalize( vertexData.normal.xyz );
 
 		}
-		normal = normalize( normal );
-		let baseNormal = normal;
 
+		var baseNormal = normal;
 		if ( material.normalMap != -1 ) {
 
 			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
@@ -61,8 +177,11 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		normal *= side;
 
-		var albedo = vec4( material.color, material.opacity );
+		normal = ensureValidViewNormal( normal, faceNormal, view );
 
+		normal = ensureValidReflectionNormal( normal, faceNormal, view );
+
+		var albedo = vec4( material.color, material.opacity );
 		if ( material.vertexColors == 1 ) {
 
 			let vertexColor = getColor( vertexData ).xyz;
@@ -154,7 +273,12 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			}
 
 		}
+
 		clearcoatNormal *= side;
+
+		clearcoatNormal = ensureValidViewNormal( clearcoatNormal, faceNormal, view );
+
+		clearcoatNormal = ensureValidReflectionNormal( clearcoatNormal, faceNormal, view );
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
@@ -264,12 +388,13 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.normal = normal;
 
 		surf.metalness = metalness;
+		surf.diffuseRoughness = material.diffuseRoughness;
 		surf.color = albedo.rgb;
 		surf.emission = emission;
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
-		surf.thinFilm = material.thinFilm == 1;
+		surf.thinWall = material.thinWall == 1;
 		surf.attenuationColor = material.attenuationColor;
 		surf.attenuationDistance = material.attenuationDistance;
 
@@ -286,15 +411,16 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.sheen = material.sheen;
 		surf.sheenColor = sheenColor;
 
-		surf.roughness = clamp( roughness, MIN_ROUGHNESS, 1.0 );
-		surf.clearcoatRoughness = clamp( clearcoatRoughness, MIN_ROUGHNESS, 1.0 );
-		surf.sheenRoughness = clamp( sheenRoughness, MIN_ROUGHNESS, 1.0 );
-		surf.anisotropy = saturate( anisotropyStrength );
+		let minRoughness = max( MIN_ROUGHNESS, blurRoughness );
+		surf.roughness = clamp( roughness, minRoughness, 1.0 );
+		surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
+		surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
+		surf.anisotropy = anisotropyStrength;
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
 		surf.frontFace = side == 1.0 || transmission == 0.0;
-		if ( material.thinFilm == 1 || surf.frontFace ) {
+		if ( material.thinWall == 1 || surf.frontFace ) {
 
 			surf.eta = 1.0 / material.ior;
 
@@ -324,6 +450,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	getColor,
 	surfaceRecordStruct,
 	constants,
+	ensureValidReflectionNormal,
+	ensureValidViewNormal,
 ] );
 
 /*
@@ -364,6 +492,17 @@ export const diffuseBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ constants, schlickFresnelFunc, surfaceRecordStruct ] );
 
+// Lambertian diffuse BRDF with cosine distribution
+export const lambertBrdfFunc = wgslFn( /* wgsl */ `
+
+	fn lambertBrdf( NdotV: f32, NdotL: f32, VdotH: f32, surf: SurfaceRecord ) -> vec3f {
+
+		return surf.color / PI;
+
+	}
+
+`, [ constants, surfaceRecordStruct ] );
+
 export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 	fn specularBrdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f ) -> vec3f {
@@ -380,24 +519,90 @@ export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
 
+export const specularBtdfFunc = wgslFn( /* wgsl */`
+
+	fn specularBtdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f, eta: f32 ) -> vec3f {
+
+		let NdotV = V.z;
+		let NdotL = L.z;
+		let HdotV = dot( V, H );
+		let HdotL = dot( L, H );
+
+		// Heaviside function for G term
+		if ( NdotV * HdotV < 0.0 || NdotL * HdotL < 0.0 || HdotV * HdotL > 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		let G1_i = ggxShadowMaskG1( V, alpha );
+		let G1_o = ggxShadowMaskG1( L, alpha );
+
+		// separable G2 product, no height correlation
+		let denom = eta * HdotV + HdotL;
+		let Vis = G1_i * G1_o * abs( HdotV ) * abs( HdotL ) /
+			( abs( NdotV ) * abs( NdotL ) * denom * denom );
+
+		let F = dielectricFresnel( abs( HdotV ), eta );
+
+		let D = ggxDistribution( H, alpha );
+
+		return vec3f( ( 1 - F ) * D * Vis );
+
+	}
+
+`, [ ggxShadowMaskG1Func, ggxDistributionFunc, dielectricFresnelFunc ] );
+
+// Effective roughness for thin walled transmission, from page 40 (note the slides' 3.7 is a typo for 3.4) -
+// referenced from Blender Cycles:
+// https://blog.selfshadow.com/publications/s2017-shading-course/imageworks/s2017_pbs_imageworks_slides_v2.pdf
+export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
+
+	fn thinWallTransmissionRoughness( alpha: f32, eta: f32 ) -> f32 {
+
+		let t = 3.4 * ( eta - 1.0 ) * ( eta - 0.5 ) * ( eta - 0.5 ) / ( eta * eta * eta );
+		return saturate( alpha * sqrt( max( t, 0.0 ) ) );
+
+	}
+
+` );
+
+// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
+export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
+
+	fn transmissionAttenuation( dist: f32, attColor: vec3f, attDist: f32 ) -> vec3f {
+
+		return pow( attColor, vec3f( dist / attDist ) );
+
+	}
+
+` );
+
 // Dielectric layer fresnel operator that supports custom f0 color, specular weight.
 // Based on the specular color specification:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_specular
 export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
-	fn fresnelMix( VdotH: f32, f0Color: vec3f, ior: f32, weight: f32, base: vec3f, layer: vec3f ) -> vec3f {
+	fn fresnelMix( VdotH: f32, f0Color: vec3f, ior: f32, eta: f32, weight: f32, base: vec3f, layer: vec3f ) -> vec3f {
 
 		var f0 = iorToF0( ior ) * f0Color;
 		f0 = min( f0, vec3f( 1.0 ) );
 
-		let fr = schlickFresnelVec( abs( VdotH ), f0, vec3f( 1.0 ) );
+		// reflect all light on total internal reflection, matching the WebGL evaluateFresnel function
+		var fr = vec3f( 1.0 );
+		if ( ! totalInternalReflection( abs( VdotH ), eta ) ) {
+
+			fr = schlickFresnelVec( abs( VdotH ), f0, vec3f( 1.0 ) );
+
+		}
+
 		let maxFr = max( max( fr.r, fr.g ), fr.b );
 
 		return ( 1.0 - weight * maxFr ) * base + weight * fr * layer;
 
 	}
 
-`, [ schlickFresnelVecFunc, iorToF0Func ] );
+`, [ schlickFresnelVecFunc, iorToF0Func, totalInternalReflectionFunc ] );
 
 const XYZ_TO_REC709 = mat3(
 	3.2404542, - 0.9692660, 0.0556434,
@@ -456,9 +661,13 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 		let phi21 = PI - phi12;
 
 		// Second interface: iridescent thin film -> base material
-		let baseIor = fresnel0ToIor( baseF0 + 0.0001 ); // guard against 1.0
+		let baseIor = fresnel0ToIor( clamp( baseF0, vec3( 0.0 ), vec3( 0.9999 ) ) ); // guard against 1.0
 		let R1 = iorToF0GeneralVec( baseIor, vec3( iridescenceIor ) );
-		let R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+		var R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+
+		// Handle total internal reflection at the film -> base interface
+		// NOTE: Added separately from the original implementation. Is this correct?
+		R23 = select( R23, vec3( 1.0 ), totalInternalReflectionVec( cosTheta2, vec3( iridescenceIor ) / baseIor ) );
 		let phi23 = select( vec3( 0.0 ), vec3( PI ), baseIor < vec3( iridescenceIor ) );
 
 		// Phase shift
@@ -489,65 +698,17 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc ] );
+`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
 
-const rgbMixFunc = wgslFn( /* wgsl */ `
+export const conductorFresnelFunc = wgslFn( /* wgsl */ `
 
-	fn rgbMix( base: vec3f, specular: vec3f, rgbAlpha: vec3f ) -> vec3f {
+	fn conductorFresnel( VdotH: f32, f0: vec3f, specular: vec3f ) -> vec3f {
 
-		let alphaMax = max( max( rgbAlpha.x, rgbAlpha.y ), rgbAlpha.z );
-		return ( 1 - alphaMax ) * base + rgbAlpha * specular;
-
-	}
-
-` );
-
-export const iridescentDielectricLayerFunc = wgslFn( /* wgsl */ `
-
-	fn iridescentDielectricLayer(
-		dielectricBase: vec3f, base: vec3f, specular: vec3f, HdotL: f32,
-		outsideIor: f32, baseIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
-	) -> vec3f {
-
-		let baseF0 = vec3( iorToF0( baseIor ) );
-
-		let iridescentF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
-
-		return mix( dielectricBase, rgbMix( base, specular, iridescentF ), strength );
+		return specular * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
 
 	}
 
-`, [ iorToF0Func, iridescentFresnelFunc, rgbMixFunc ] );
-
-export const iridescentConductorLayerFunc = wgslFn( /* wgsl */ `
-
-	fn iridescentConductorLayer(
-		metalBase: vec3f, specular: vec3f, baseF0: vec3f, HdotL: f32,
-		outsideIor: f32, iridescenceIor: f32, thickness: f32, strength: f32,
-	) -> vec3f {
-
-		let iridescenceF = iridescentFresnel( HdotL, baseF0, iridescenceIor, outsideIor, thickness );
-
-		return mix( metalBase, specular * iridescenceF, strength );
-
-	}
-
-`, [ iridescentFresnelFunc ] );
-
-export const conductorFresnelFunc = ( turquinTexture ) => wgslFn( /* wgsl */ `
-
-	fn conductorFresnel( NdotV: f32, VdotH: f32, f0: vec3f, bsdf: vec3f, alpha: f32 ) -> vec3f {
-
-	  let ss = bsdf * schlickFresnelVec( abs( VdotH ), f0, vec3f( 1 ) );
-
-		let uv = vec2( NdotV, sqrt( alpha ) );
-		let energySs = max( textureSampleLevel( turquinTexture, turquinTexture_sampler, uv, 0 ).r, 1e-5 );
-
-		return ss * ( 1.0 + f0 * ( 1.0 - energySs ) / energySs );
-
-	}
-
-`, [ schlickFresnelVecFunc, turquinTexture ] );
+`, [ schlickFresnelVecFunc ] );
 
 export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
@@ -562,12 +723,18 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
 `, [ iorToF0Func, schlickFresnelFunc ] );
 
-// GGX Multibounce compensation using Turquin's method
-export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
+// GGX Multibounce compensation using Turquin's method. Bakes the directional albedo of the
+// reflection lobe, optionally fresnel-weighted, and optionally including the refraction lobe
+// for the full transmissive bsdf. "eta" is the incident over transmitted ior ratio.
+export const turquinIntegralFn = wgslTagFn/* wgsl */ `
 
 	fn albedo(
-		texture: texture_storage_2d<r16float, write>,
+		eta: f32,
+		includeFresnel: bool,
+		includeRefraction: bool,
+		outputTarget: texture_storage_3d<r16float, write>,
 		globalId: vec3u,
+		layer: u32,
 	) -> void {
 
 		// sample the brdf directions in a grid pattern
@@ -576,7 +743,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 		// TODO: this sampling means that energy at 0.0 & 1.0 roughness (and 0 and 90deg cos) are never
 		// written to the texture due to the half texel inset, resulting in small, though possibly noticeable,
 		// error in common cases.
-		let dimensions = textureDimensions( texture ).xy;
+		let dimensions = textureDimensions( outputTarget ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
 
 		let cosThetaO = uv.x;
@@ -585,36 +752,64 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 		let wo = vec3( sqrt( 1 - cosThetaO * cosThetaO ), 0 , cosThetaO );
 
+		let f0 = ${ iorToF0Func }( eta );
+
 		var result = 0.0;
 		for ( var x = 0u; x < GRID_SIZE; x++ ) {
 
 			for ( var y = 0u; y < GRID_SIZE; y++ ) {
 
-				// calculate the incident vector to sample
+				// calculate the half vector to sample
 				let gridPoint = vec2f( vec2u( x, y ) ) + vec2f( 0.5 );
 				let sampleUv = gridPoint / f32( GRID_SIZE );
 				let wh = ${ ggxDirectionFunc }( wo, vec2( alpha ), sampleUv );
-				var wi = - reflect( wo, wh );
 
-				// if the incident vector is below the surface then skip it
-				let NdotL = wi.z;
-				if ( NdotL <= 0.0 ) {
+				var f = 1.0;
+				if ( includeFresnel ) {
 
-					continue;
-
-				}
-
-				let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
-				let pdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
-
-				var weight = 0.0;
-				if ( pdf != 0.0 ) {
-
-					weight = 1 / pdf;
+					// use the exact dielectric fresnel so the table agrees with the fresnel used
+					// for lobe sampling
+					f = ${ dielectricFresnelFunc }( dot( wo, wh ), eta );
 
 				}
 
-				result += specular.x * NdotL * weight;
+				// air-incident reflection is evaluated with schlick in bsdfEval - only the
+				// volume-incident ( TIR ) glass reflection uses the exact fresnel
+				var reflectionF = f;
+				if ( eta < 1.0 ) {
+
+					reflectionF = ${ schlickFresnelFunc }( dot( wo, wh ), f0 );
+
+				}
+
+				// reflection lobe - samples landing below the surface are lost
+				let wi = - reflect( wo, wh );
+				let reflectionPdf = ${ ggxReflectionAdjustedPDFFunc }( wo, wh, vec2f( alpha ) );
+				if ( wi.z > 0.0 && reflectionPdf != 0.0 ) {
+
+					let specular = ${ specularBrdfFunc }( wo, wi, wh, vec2f( alpha ) );
+					result += reflectionF * specular.x * wi.z / reflectionPdf;
+
+				}
+
+				// refraction lobe - the btdf carries its own ( 1 - F ) fresnel weight, and
+				// samples landing back above the surface are lost
+				if ( includeRefraction ) {
+
+					let wiRefract = refract( - wo, wh, eta );
+					if ( wiRefract.z < 0.0 ) {
+
+						let transmission = ${ specularBtdfFunc }( wo, wiRefract, wh, vec2f( alpha ), eta );
+						let pdf = ${ ggxRefractionAdjustedPDFFunc }( wo, wiRefract, wh, vec2f( alpha ), eta );
+						if ( pdf != 0.0 ) {
+
+							result += transmission.x * abs( wiRefract.z ) / pdf;
+
+						}
+
+					}
+
+				}
 
 			}
 
@@ -622,7 +817,7 @@ export const albedoIntegralMetallic = wgslTagFn/* wgsl */ `
 
 		result /= f32( GRID_SIZE * GRID_SIZE );
 
-		textureStore( texture, globalId.xy, vec4( result ) );
+		textureStore( outputTarget, vec3( globalId.xy, layer ), vec4( result ) );
 
 	}
 

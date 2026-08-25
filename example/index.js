@@ -1,6 +1,5 @@
 import {
 	ACESFilmicToneMapping,
-	NoToneMapping,
 	Box3,
 	LoadingManager,
 	Sphere,
@@ -8,7 +7,6 @@ import {
 	Mesh,
 	MeshStandardMaterial,
 	PlaneGeometry,
-	MeshPhysicalMaterial,
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
@@ -18,17 +16,20 @@ import {
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer, RANDOM_BLUE_DITHER, RANDOM_PCG, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
+import { MODEL_LIST } from './modelList.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
 /**
@@ -41,6 +42,12 @@ const DEVICE_LIMITS_REQUESTED = [
 	'maxBufferSize',
 	'maxStorageBufferBindingSize',
 ];
+
+const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
+
+const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
+const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
+const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
 const envMaps = {
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
@@ -86,44 +93,20 @@ const params = {
 
 	multipleImportanceSampling: true,
 	random: RANDOM_SOBOL,
-	acesToneMapping: true,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	tiles: 2,
 
 	model: '',
 
 	envMap: envMaps[ 'Aristea Wreck Puresky' ],
 
-	gradientTop: '#bfd8ff',
-	gradientBottom: '#ffffff',
-
-	environmentIntensity: 1.0,
-	environmentRotation: 0,
-
 	cameraProjection: 'Perspective',
 
-	backgroundType: 'Gradient',
-	bgGradientTop: '#111111',
-	bgGradientBottom: '#000000',
-	backgroundBlur: 0.0,
 	transparentBackground: false,
-	checkerboardTransparency: true,
 
 	enable: true,
-	useMegakernel: false,
-	bounces: 5,
-	filterGlossyFactor: 0.5,
+	bounces: 15,
 	pause: false,
-	debugBounds: false,
-	displayTLAS: true,
-	displayBLAS: true,
-	stopAtSurface: false,
-	saturationCount: 64,
-
-	floorColor: '#111111',
-	floorOpacity: 1.0,
-	floorRoughness: 0.2,
-	floorMetalness: 0.2,
 
 	...getScaledSettings(),
 
@@ -136,15 +119,17 @@ let gradientMap;
 let loader;
 let models;
 
+// a model loaded from a url or dropped file, which is displayed instead of a list entry
+let customModel = null;
+
+const dropZone = document.getElementById( 'drop-zone' );
+
+// sample counts are measured asynchronously, so the average is kept for the pause check
+let averageSamples = 0;
+
 const orthoWidth = 2;
 
 init();
-
-async function waitFrame() {
-
-	return new Promise( resolve => requestAnimationFrame( resolve ) );
-
-}
 
 /**
  * Returns required GPU limits according to DEVICE_LIMITS_REQUESTED.
@@ -180,19 +165,11 @@ function getRequiredDeviceLimits( adapter ) {
 
 async function init() {
 
-	// Wait for the models list to be available since vite doesn't guarantee execution order
-	// of module tags and we rely on the other script to define the set of models for display
-	// in this example. TODO: handle this more gracefully.
-	while ( ! window.MODEL_LIST ) {
-
-		await waitFrame();
-
-	}
-
-	models = window.MODEL_LIST || {};
+	models = { ...MODEL_LIST };
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
+	loader.setDescription( DESCRIPTION );
 
 	// adapter limits
 	const adapter = await navigator.gpu?.requestAdapter();
@@ -200,7 +177,7 @@ async function init() {
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
-	renderer.init();
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
@@ -210,21 +187,18 @@ async function init() {
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 	pathTracer.setRandom( params.random );
 	pathTracer.transmissiveBounces = 10;
-	pathTracer.useMegakernel( params.useMegakernel );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
 	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 1, 0.25, 1 );
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
-	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	// background map
 	gradientMap = new GradientEquirectTexture();
-	gradientMap.topColor.set( params.bgGradientTop );
-	gradientMap.bottomColor.set( params.bgGradientBottom );
+	gradientMap.topColor.set( 0x111111 );
+	gradientMap.bottomColor.set( 0x000000 );
 	gradientMap.update();
 
 	// controls
@@ -234,6 +208,7 @@ async function init() {
 		pathTracer.updateCamera();
 
 	} );
+	resetCamera();
 
 	// scene
 	scene = new Scene();
@@ -259,14 +234,30 @@ async function init() {
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
-	onHashChange();
+	onModelChange();
 	updateEnvMap();
 	onResize();
 
 	animate();
 
 	window.addEventListener( 'resize', onResize );
-	window.addEventListener( 'hashchange', onHashChange );
+	window.addEventListener( 'popstate', onModelChange );
+	window.addEventListener( 'drop', onDrop );
+	window.addEventListener( 'dragover', e => {
+
+		e.preventDefault();
+		dropZone.classList.remove( 'hidden' );
+
+	} );
+	window.addEventListener( 'dragleave', e => {
+
+		if ( e.relatedTarget === null || e.relatedTarget === document.documentElement ) {
+
+			dropZone.classList.add( 'hidden' );
+
+		}
+
+	} );
 
 }
 
@@ -282,18 +273,9 @@ function animate() {
 
 	}
 
-	if ( params.debugBounds ) {
+	if ( params.enable ) {
 
-		pathTracer.renderDebugBounds( {
-			displayTLAS: params.displayTLAS,
-			displayBLAS: params.displayBLAS,
-			stopAtSurface: params.stopAtSurface,
-			saturationCount: params.saturationCount,
-		} );
-
-	} else if ( params.enable ) {
-
-		if ( ! params.pause || pathTracer.samples < 1 ) {
+		if ( ! params.pause || averageSamples < 1 ) {
 
 			pathTracer.renderSample();
 
@@ -305,79 +287,90 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples );
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
 
 }
 
 function onParamsChange() {
 
 	pathTracer.bounces = params.bounces;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.renderScale = params.renderScale;
-
-	floorPlane.material.color.set( params.floorColor );
-	floorPlane.material.roughness = params.floorRoughness;
-	floorPlane.material.metalness = params.floorMetalness;
-	floorPlane.material.opacity = params.floorOpacity;
-
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.environmentRotation.y = params.environmentRotation;
-	scene.backgroundBlurriness = params.backgroundBlur;
-
-	if ( params.backgroundType === 'Gradient' ) {
-
-		gradientMap.topColor.set( params.bgGradientTop );
-		gradientMap.bottomColor.set( params.bgGradientBottom );
-		gradientMap.update();
-
-		scene.background = gradientMap;
-		scene.backgroundIntensity = 1;
-		scene.environmentRotation.y = 0;
-
-	} else {
-
-		scene.background = scene.environment;
-		scene.backgroundIntensity = params.environmentIntensity;
-		scene.backgroundRotation.y = params.environmentRotation;
-
-	}
 
 	if ( params.transparentBackground ) {
 
 		scene.background = null;
 		renderer.setClearAlpha( 0 );
 
+	} else {
+
+		scene.background = gradientMap;
+		renderer.setClearAlpha( 1 );
+
 	}
 
-	pathTracer.updateMaterials();
+	document.body.classList.toggle( 'checkerboard', params.transparentBackground );
+
 	pathTracer.updateEnvironment();
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 	pathTracer.setRandom( params.random );
 
 }
 
-function onHashChange() {
+function onModelChange() {
 
-	let hashModel = '';
-	if ( window.location.hash ) {
+	const value = new URLSearchParams( window.location.search ).get( 'model' ) || '';
 
-		const modelName = decodeURI( window.location.hash.substring( 1 ) );
-		if ( modelName in models ) {
+	if ( /^https?:\/\//.test( value ) ) {
 
-			hashModel = modelName;
+		customModel = { url: value };
+		params.model = '';
 
-		}
+	} else if ( value in models ) {
+
+		customModel = null;
+		params.model = value;
+
+	} else {
+
+		customModel = null;
+		params.model = Object.keys( models )[ 0 ];
 
 	}
 
-	if ( ! ( hashModel in models ) ) {
-
-		hashModel = Object.keys( models )[ 0 ];
-
-	}
-
-	params.model = hashModel;
 	updateModel();
+
+}
+
+// loads dropped files without adding them to the model list
+async function onDrop( e ) {
+
+	e.preventDefault();
+	dropZone.classList.add( 'hidden' );
+
+	const files = [ ...e.dataTransfer.files ];
+	const rootFile = files.find( file => MODEL_FILE_REGEX.test( file.name ) );
+	if ( ! rootFile ) {
+
+		return;
+
+	}
+
+	// the root file is loaded by name so the extension is still available to pick a loader
+	const fileMap = new Map();
+	files.forEach( file => fileMap.set( file.name, URL.createObjectURL( file ) ) );
+
+	customModel = { url: rootFile.name, fileMap };
+	params.model = '';
+
+	await updateModel();
+
+	// the files are only needed while loading
+	fileMap.forEach( url => URL.revokeObjectURL( url ) );
 
 }
 
@@ -405,48 +398,31 @@ function onResize() {
 
 function buildGui() {
 
-	if ( gui ) {
-
-		gui.destroy();
-
-	}
-
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( v => {
+	// custom models are shown as an empty entry since they are not in the list
+	const modelOptions = customModel ? [ '', ...Object.keys( models ) ] : Object.keys( models );
+	gui.add( params, 'model', modelOptions ).onChange( v => {
 
-		window.location.hash = v;
+		const url = new URL( window.location );
+		url.searchParams.set( 'model', v );
+		window.history.pushState( {}, '', url );
+		onModelChange();
 
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
-
-		pathTracer.useMegakernel( params.useMegakernel );
-		pathTracer.setScene( scene, activeCamera );
-		pathTracer.reset();
-
-	} );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-
-	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onParamsChange();
-
-	} );
+	pathTracingFolder.add( params, 'transparentBackground' ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.set( v, v );
 
 	} );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'random', { RANDOM_SOBOL, RANDOM_BLUE_DITHER, RANDOM_PCG } ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
@@ -455,38 +431,9 @@ function buildGui() {
 	} );
 	pathTracingFolder.open();
 
-	const debugFolder = gui.addFolder( 'debug' );
-	debugFolder.add( params, 'debugBounds' ).name( 'bvh bounds heatmap' );
-	debugFolder.add( params, 'displayTLAS' ).name( 'display TLAS' );
-	debugFolder.add( params, 'displayBLAS' ).name( 'display BLAS' );
-	debugFolder.add( params, 'stopAtSurface' ).name( 'stop at surface' );
-	debugFolder.add( params, 'saturationCount', 1, 512, 1 ).name( 'saturation count' );
-
 	const environmentFolder = gui.addFolder( 'environment' );
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
 	environmentFolder.open();
-
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
-
-	} );
-
-	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( onParamsChange );
-	floorFolder.close();
 
 }
 
@@ -507,6 +454,17 @@ function updateEnvMap() {
 			onParamsChange();
 
 		} );
+
+}
+
+// models are normalized to a unit sphere at the origin so the framing is the same for all of them
+function resetCamera() {
+
+	perspectiveCamera.position.set( - 1, 0.25, 1 );
+	orthoCamera.position.set( - 1, 0.25, 1 );
+
+	controls.target.set( 0, 0, 0 );
+	controls.update();
 
 }
 
@@ -538,75 +496,19 @@ function updateCameraProjection( cameraProjection ) {
 
 }
 
-function convertOpacityToTransmission( model, ior ) {
-
-	model.traverse( c => {
-
-		if ( c.material ) {
-
-			const material = c.material;
-			if ( material.opacity < 0.65 && material.opacity > 0.2 ) {
-
-				const newMaterial = new MeshPhysicalMaterial();
-				for ( const key in material ) {
-
-					if ( key in material ) {
-
-						if ( material[ key ] === null ) {
-
-							continue;
-
-						}
-
-						if ( material[ key ].isTexture ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						} else if ( material[ key ].copy && material[ key ].constructor === newMaterial[ key ].constructor ) {
-
-							newMaterial[ key ].copy( material[ key ] );
-
-						} else if ( ( typeof material[ key ] ) === 'number' ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						}
-
-					}
-
-				}
-
-				newMaterial.opacity = 1.0;
-				newMaterial.transmission = 1.0;
-				newMaterial.ior = ior;
-
-				const hsl = {};
-				newMaterial.color.getHSL( hsl );
-				hsl.l = Math.max( hsl.l, 0.35 );
-				newMaterial.color.setHSL( hsl.h, hsl.s, hsl.l );
-
-				c.material = newMaterial;
-
-			}
-
-		}
-
-	} );
-
-}
-
 async function updateModel() {
 
 	if ( gui ) {
 
-		document.body.classList.remove( 'checkerboard' );
 		gui.destroy();
 		gui = null;
 
 	}
 
-	const modelInfo = models[ params.model ];
+	const modelInfo = customModel || models[ params.model ];
 
+	// hide the canvas and the transparency checkerboard while loading
+	document.body.classList.remove( 'checkerboard' );
 	renderer.domElement.style.visibility = 'hidden';
 	loader.setPercentage( 0 );
 
@@ -642,35 +544,12 @@ async function updateModel() {
 
 			loader.setPercentage( 0.5 * v );
 
-		} );
+		}, modelInfo.fileMap );
 
 	} catch ( err ) {
 
 		loader.setCredits( 'Failed to load model:' + err.message );
 		loader.setPercentage( 1 );
-
-	}
-
-	// update after model load
-	// TODO: clean up
-	if ( modelInfo.removeEmission ) {
-
-		model.traverse( c => {
-
-			if ( c.material ) {
-
-				c.material.emissiveMap = null;
-				c.material.emissiveIntensity = 0;
-
-			}
-
-		} );
-
-	}
-
-	if ( modelInfo.opacityToTransmission ) {
-
-		convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
 
 	}
 
@@ -708,40 +587,52 @@ async function updateModel() {
 	const sphere = new Sphere();
 	box.getBoundingSphere( sphere );
 
-	model.scale.setScalar( 1 / sphere.radius );
-	model.position.multiplyScalar( 1 / sphere.radius );
+	const scale = 1 / sphere.radius;
+	model.scale.setScalar( scale );
+	model.position.multiplyScalar( scale );
 	box.setFromObject( model );
-	floorPlane.position.y = box.min.y;
+
+	// attenuation is measured in world units so it must be scaled with the model
+	model.traverse( c => {
+
+		if ( c.material ) {
+
+			c.material.attenuationDistance *= scale;
+
+		}
+
+	} );
+
+	floorPlane.position.y = box.min.y - 1e-3;
 
 	scene.add( model );
 
+	resetCamera();
 	pathTracer.setScene( scene, activeCamera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
-	params.bounces = modelInfo.bounces || 5;
-	params.floorColor = modelInfo.floorColor || '#111111';
-	params.floorRoughness = modelInfo.floorRoughness || 0.2;
-	params.floorMetalness = modelInfo.floorMetalness || 0.2;
-	params.bgGradientTop = modelInfo.gradientTop || '#111111';
-	params.bgGradientBottom = modelInfo.gradientBot || '#000000';
 
 	buildGui();
 	onParamsChange();
 
 	renderer.domElement.style.visibility = 'visible';
-	if ( params.checkerboardTransparency ) {
-
-		document.body.classList.add( 'checkerboard' );
-
-	}
 
 }
 
-async function loadModel( url, onProgress ) {
+async function loadModel( url, onProgress, fileMap = null ) {
 
 	// TODO: clean up
 	const manager = new LoadingManager();
+
+	// dropped files are loaded by name and resolved to their blob urls here so relative
+	// references between them still work
+	if ( fileMap ) {
+
+		manager.setURLModifier( url => fileMap.get( url.split( '/' ).pop() ) || url );
+
+	}
+
 	if ( /dae$/i.test( url ) ) {
 
 		const complete = new Promise( resolve => manager.onLoad = resolve );
@@ -779,16 +670,23 @@ async function loadModel( url, onProgress ) {
 
 	} else if ( /(gltf|glb)$/i.test( url ) ) {
 
+		const dracoLoader = new DRACOLoader().setDecoderPath( DRACO_DECODER_PATH );
+		const ktx2Loader = new KTX2Loader().setTranscoderPath( KTX2_TRANSCODER_PATH ).detectSupport( renderer );
+
 		const complete = new Promise( resolve => manager.onLoad = resolve );
-		const gltf = await new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder ).loadAsync( url, progress => {
+		const gltf = await new GLTFLoader( manager )
+			.setMeshoptDecoder( MeshoptDecoder )
+			.setDRACOLoader( dracoLoader )
+			.setKTX2Loader( ktx2Loader )
+			.loadAsync( url, progress => {
 
-			if ( progress.total !== 0 && progress.total >= progress.loaded ) {
+				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-				onProgress( progress.loaded / progress.total );
+					onProgress( progress.loaded / progress.total );
 
-			}
+				}
 
-		} );
+			} );
 		await complete;
 
 		return gltf.scene;

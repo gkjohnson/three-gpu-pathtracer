@@ -7,9 +7,11 @@ export class PathTracerBackend {
 	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.samples = 0;
-		this.bounces = 7;
+		this.bounces = 15;
 		this.lowResMode = false;
+
+		// stop taking samples once a pixel reaches this count. zero means no limit.
+		this.maxSamples = 0;
 
 		this._renderTask = null;
 
@@ -54,6 +56,14 @@ export class PathTracerBackend {
 
 	}
 
+	setFilterGlossy( value ) {
+
+	}
+
+	setClamping( _direct, _indirect ) {
+
+	}
+
 	setEnvironment(
 		envMap,
 		envMapIntensity,
@@ -72,6 +82,13 @@ export class PathTracerBackend {
 		backgroundRotation,
 		backgroundBlurriness,
 	) {
+
+	}
+
+	// Rebuild the render task after a shader-generating function changes.
+	rebuild() {
+
+		this._renderTask = null;
 
 	}
 
@@ -137,6 +154,14 @@ export class PathTracerBackend {
 
 	}
 
+	// Measures the current per pixel sample counts. Backends that need GPU work to answer this do
+	// it here, so it only happens when asked for rather than every round.
+	async getSampleCountsAsync() {
+
+		return { min: 0, max: 0, avg: 0 };
+
+	}
+
 	resetSeed() {}
 
 	reset() {
@@ -169,7 +194,6 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		this.samples = 0;
 		this._renderTask = null;
 
 	}

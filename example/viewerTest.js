@@ -17,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
@@ -34,8 +34,7 @@ const params = {
 	showAtlas: - 1,
 
 	enable: true,
-	bounces: 10,
-	transmissiveBounces: 10,
+	bounces: 15,
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
@@ -60,8 +59,9 @@ let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
 let detailedSampleCount = null;
-let lastDetailedSample = 0;
-const detailedSampleInterval = 4;
+
+// sample counts are measured asynchronously, so the average is kept for the completion checks
+let averageSamples = 0;
 
 init();
 
@@ -138,34 +138,20 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// if rendering has completed then don't render
-	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( averageSamples >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
 
 	}
 
-	if ( pathTracer.getRenderTime && pathTracer.getDetailedSampleCount ) {
+	if ( pathTracer.getSampleCountsAsync ) {
 
-		const elapsed = pathTracer.getRenderTime() / 1000;
-		// Reset sample count state if no sample is taken yet
-		if ( elapsed < detailedSampleInterval ) {
+		pathTracer.getSampleCountsAsync().then( counts => {
 
-			detailedSampleCount = null;
-			lastDetailedSample = 0;
+			averageSamples = counts.avg;
+			detailedSampleCount = { ...counts };
 
-		}
-
-		if ( elapsed - lastDetailedSample > detailedSampleInterval ) {
-
-			lastDetailedSample = Math.floor( elapsed / detailedSampleInterval ) * detailedSampleInterval;
-			pathTracer.getDetailedSampleCount().then( sampleCount => {
-
-				sampleCount.perSecond = sampleCount.avg / elapsed;
-				detailedSampleCount = sampleCount;
-
-			} );
-
-		}
+		} );
 
 	}
 
@@ -192,7 +178,7 @@ function animate() {
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.pause = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause || averageSamples > maxSamples && maxSamples !== - 1;
 
 		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
@@ -208,13 +194,13 @@ function animate() {
 	}
 
 	// rendering has completed
-	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( averageSamples >= maxSamples && maxSamples !== - 1 ) {
 
 		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
 
 	}
 
-	loader.setSamples( pathTracer.samples, detailedSampleCount );
+	loader.setSamples( detailedSampleCount );
 
 }
 
@@ -256,7 +242,6 @@ function onParamsChange() {
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
-	pathTracer.transmissiveBounces = params.transmissiveBounces;
 	pathTracer.renderScale = params.scale;
 
 	const model = modelDatabase[ params.model ];
@@ -330,8 +315,7 @@ function buildGui() {
 		}
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 
@@ -497,6 +481,8 @@ async function updateModel() {
 	camera.aspect = width / height;
 	camera.fov = verticalFoV;
 	camera.updateProjectionMatrix();
+
+	controls.target.set( 0, 0, 0 );
 	controls.update();
 
 	pathTracer.setScene( scene, camera );

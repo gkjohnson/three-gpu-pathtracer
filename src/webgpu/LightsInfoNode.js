@@ -90,7 +90,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		this.iesProfilesTexture = tex;
 		this.iesProfilesNode.value = tex;
-		console.log( this.iesSamplerNode.node.value = tex )
+		this.iesSamplerNode.node.value = tex;
 
 	}
 

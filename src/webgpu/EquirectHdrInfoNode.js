@@ -1,9 +1,20 @@
 import { Matrix3 } from 'three/webgpu';
-import { texture, sampler, uniform } from 'three/tsl';
+import { texture, sampler, uniform, wgslFn } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { environmentSampleStruct } from './nodes/structs.wgsl.js';
-import { equirectDirectionPdfFn, equirectDirectionToUvFn, equirectUvToDirectionFn, luminanceFn, sampleHemisphereFn } from './nodes/sampling.wgsl.js';
+import { constants, environmentSampleStruct } from './nodes/structs.wgsl.js';
+import { equirectDirectionToUvFn, equirectUvToDirectionFn, luminanceFn } from './nodes/sampling.wgsl.js';
+
+// totalWeight includes sin( theta ), which cancels in the solid-angle conversion.
+const equirectLuminancePdfFn = wgslFn( /* wgsl */ `
+
+	fn equirectLuminancePdf( luminance: f32, totalWeight: f32, resolution: vec2u ) -> f32 {
+
+		return f32( resolution.x * resolution.y ) * luminance / ( 2.0 * PI * PI * totalWeight );
+
+	}
+
+`, [ constants ] );
 
 export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
@@ -25,6 +36,14 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		this.totalSumNode = uniform( this.totalSum );
 
 		this._initFns();
+
+	}
+
+	getPixelWeight( r, g, b, row, height ) {
+
+		// weight the pixel contribution by its spherical solid angle.
+		const theta = Math.PI * ( row + 0.5 ) / height;
+		return super.getPixelWeight( r, g, b ) * Math.sin( theta );
 
 	}
 
@@ -62,10 +81,9 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		} = this;
 
 		this.sampleColor = wgslTagFn/* wgsl */`
-			fn sampleEnv( direction: vec3f, uv: vec2f ) -> vec4f {
+			fn sampleEnv( direction: vec3f ) -> vec4f {
 
-				let offsetDir = ${ sampleHemisphereFn }( direction, uv ) * 0.5;
-				let sampleDir = normalize( ${ rotationNode } * direction + offsetDir );
+				let sampleDir = ${ rotationNode } * direction;
 				let mapUv = ${ equirectDirectionToUvFn }( sampleDir );
 				let col = textureSampleLevel( ${ mapNode }, ${ mapSampler }, mapUv, 0 );
 
@@ -95,8 +113,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 					let lum = ${ luminanceFn }( color );
 					let resolution = textureDimensions( ${ mapNode } );
-					let pdf = lum / totalSum;
-					result.pdf = f32( resolution.x * resolution.y ) * pdf * ${ equirectDirectionPdfFn }( direction );
+					result.pdf = ${ equirectLuminancePdfFn }( lum, totalSum, resolution );
 
 				} else {
 
@@ -123,9 +140,8 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				let color = textureSampleLevel( ${ mapNode }, ${ mapSampler }, mapUv, 0 ).rgb;
 				let lum = ${ luminanceFn }( color );
 				let resolution = textureDimensions( ${ mapNode } );
-				let pdf = lum / ${ totalSumNode };
 
-				return f32( resolution.x * resolution.y ) * pdf * ${ equirectDirectionPdfFn }( rotatedDir );
+				return ${ equirectLuminancePdfFn }( lum, ${ totalSumNode }, resolution );
 
 			}
 		`;

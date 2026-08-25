@@ -39,10 +39,14 @@ export const rayDataStruct = new StructTypeNode( {
 	pdf: 'float',
 
 	bsdf: 'vec3f',
-	_alignment0: 'uint',
+
+	// the smallest scatter pdf seen along the path, for the glossy filter
+	minPdf: 'float',
 
 	origin: 'vec3f',
-	_alignment1: 'uint',
+
+	// whether every scatter so far has been transmissive, for the background modes
+	transmissiveRay: 'uint',
 
 	direction: 'vec3f',
 	side: 'float',
@@ -68,7 +72,9 @@ export const rayDataStruct = new StructTypeNode( {
 	rayIntersectionIndex: 'int',
 	shadowRayIntersectionIndex: 'int',
 	lightType: 'int',
-	_alignment2: 'uint',
+
+	// the traced segment length, for the transmission attenuation applied by MaterialKernel
+	dist: 'float',
 
 }, 'RayData' );
 

@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { constants, lobeWeightsStruct } from './structs.wgsl.js';
-import { evaluateFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
+import { disneyFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -42,39 +42,32 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
-	fn getLobeWeights(wo: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord) -> LobeWeights {
-
-		// TODO: experiment with this; I don't see any usage of normal?
-		let metalness = surf.metalness;
-		let transmission = surf.transmission;
-		let HdotL = dot( wh, wo );
-		let fEstimate = evaluateFresnel( HdotL, surf.eta, vec3f( surf.f0 ), vec3f( 1.0 ) ).x;
-
-		let transSpecularProb = mix( max( 0.25, fEstimate ), 1.0, metalness );
-		let diffSpecularProb = 0.5 + 0.5 * metalness;
+	fn getLobeWeights( wo: vec3f, wi: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord ) -> LobeWeights {
 
 		var weights: LobeWeights;
-		weights.diffuse = ( 1.0 - transmission ) * ( 1.0 - diffSpecularProb );
-		weights.specular = transmission * transSpecularProb + ( 1.0 - transmission ) * diffSpecularProb;
+		var remaining = 1.0;
 
 		let clearcoatF0 = iorToF0( clearcoatIor );
 		let clearcoatFresnel = schlickFresnel( saturate( woClearcoat.z ), clearcoatF0 );
 		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
+		remaining -= weights.clearcoat;
 
-		weights.transmission = transmission * ( 1.0 - transSpecularProb );
+		// this specular lobe only handles the opaque portion of the specular
+		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
+		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * fEstimate );
+		remaining -= weights.specular;
 
-		let totalWeight = weights.diffuse + weights.specular;
-		if ( totalWeight > 0 ) {
-			weights.diffuse = ( weights.diffuse / totalWeight ) * ( 1 - weights.clearcoat );
-			weights.specular = ( weights.specular / totalWeight ) * ( 1 - weights.clearcoat );
-		}
-		// weights.transmission /= totalWeight;
+		// the transmission lobe covers both the reflected and refracted halves of the transmissive portion
+		weights.transmission = remaining * surf.transmission;
+		remaining -= weights.transmission;
+
+		weights.diffuse = remaining;
 
 		return weights;
 
 	}
 
-`, [ schlickFresnelFunc, iorToF0Func, evaluateFresnelFunc, lobeWeightsStruct, constants ] );
+`, [ disneyFresnelFunc, schlickFresnelFunc, iorToF0Func, lobeWeightsStruct, constants ] );
 
 export const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
