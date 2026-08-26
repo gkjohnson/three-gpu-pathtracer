@@ -2,561 +2,1009 @@
 	{
 		"name": "x-AnisotropyDiscTest",
 		"model": "../../../glTF-Sample-Assets/Models/AnisotropyDiscTest/glTF/AnisotropyDiscTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 9.35,
+			"radius": 3.95,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": -0.53,
+			"y": 1.38,
+			"z": 0.0005
 		}
 	},
 	{
 		"name": "x-CarbonFibre",
 		"model": "../../../glTF-Sample-Assets/Models/CarbonFibre/glTF/CarbonFibre.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 2.38,
+			"radius": 2.42,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 706,
+			"height": 694
+		},
+		"target": {
+			"x": 0,
+			"y": 0.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CarConcept",
 		"model": "../../../glTF-Sample-Assets/Models/CarConcept/glTF/CarConcept.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 7.27,
+			"radius": 5.87,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 904,
+			"height": 542
+		},
+		"target": {
+			"x": -0.0052,
+			"y": 0.495,
+			"z": 0.238
 		}
 	},
 	{
 		"name": "x-ChairDamaskPurplegold",
 		"model": "../../../glTF-Sample-Assets/Models/ChairDamaskPurplegold/glTF/ChairDamaskPurplegold.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.67,
+			"radius": 1.62,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 740,
+			"height": 662
+		},
+		"target": {
+			"x": -0.0008,
+			"y": 0.343,
+			"z": 0.0087
 		}
 	},
 	{
 		"name": "x-ChronographWatch",
 		"model": "../../../glTF-Sample-Assets/Models/ChronographWatch/glTF/ChronographWatch.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 13.1,
+			"radius": 13.8,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 654,
+			"height": 750
+		},
+		"target": {
+			"x": 0.0487,
+			"y": -0.0441,
+			"z": -1.94
 		}
 	},
 	{
 		"name": "x-ClearcoatWicker",
 		"model": "../../../glTF-Sample-Assets/Models/ClearcoatWicker/glTF/ClearcoatWicker.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 2.36,
-			"theta": 0,
-			"phi": 80
+			"radius": 2.39,
+			"theta": 25,
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 710,
+			"height": 690
+		},
+		"target": {
+			"x": 0,
+			"y": 0.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CommercialRefrigerator",
 		"model": "../../../glTF-Sample-Assets/Models/CommercialRefrigerator/glTF/CommercialRefrigerator.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.5,
+			"radius": 3.95,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 586,
+			"height": 836
+		},
+		"target": {
+			"x": -0.0381,
+			"y": 1.09,
+			"z": 0.032
 		}
 	},
 	{
 		"name": "x-CompareAlphaCoverage",
 		"model": "../../../glTF-Sample-Assets/Models/CompareAlphaCoverage/glTF/CompareAlphaCoverage.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.79,
+			"radius": 2.52,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": -0.0012,
+			"y": 0.128,
+			"z": -0.0076
 		}
 	},
 	{
 		"name": "x-CompareAmbientOcclusion",
 		"model": "../../../glTF-Sample-Assets/Models/CompareAmbientOcclusion/glTF/CompareAmbientOcclusion.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.13,
+			"radius": 0.66,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 914,
+			"height": 536
+		},
+		"target": {
+			"x": -0.0004,
+			"y": 0.0765,
+			"z": 0.0352
 		}
 	},
 	{
 		"name": "x-CompareAnisotropy",
 		"model": "../../../glTF-Sample-Assets/Models/CompareAnisotropy/glTF/CompareAnisotropy.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.51,
+			"radius": 2.4,
 			"theta": 0,
-			"phi": 80
+			"phi": 70
+		},
+		"dimensions": {
+			"width": 866,
+			"height": 566
+		},
+		"target": {
+			"x": 0.0003,
+			"y": 0.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareBaseColor",
 		"model": "../../../glTF-Sample-Assets/Models/CompareBaseColor/glTF/CompareBaseColor.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.79,
+			"radius": 2.5,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareClearcoat",
 		"model": "../../../glTF-Sample-Assets/Models/CompareClearcoat/glTF/CompareClearcoat.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.8,
+			"radius": 2.5,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareDispersion",
 		"model": "../../../glTF-Sample-Assets/Models/CompareDispersion/glTF/CompareDispersion.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.94,
+			"radius": 2.55,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 988,
+			"height": 496
+		},
+		"target": {
+			"x": 0,
+			"y": -0.0065,
+			"z": -0.158
 		}
 	},
 	{
 		"name": "x-CompareEmissiveStrength",
 		"model": "../../../glTF-Sample-Assets/Models/CompareEmissiveStrength/glTF/CompareEmissiveStrength.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.19,
+			"radius": 2.28,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareIor",
 		"model": "../../../glTF-Sample-Assets/Models/CompareIor/glTF/CompareIor.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 5.04,
+			"radius": 2.63,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": -0.25
 		}
 	},
 	{
 		"name": "x-CompareIridescence",
 		"model": "../../../glTF-Sample-Assets/Models/CompareIridescence/glTF/CompareIridescence.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.47,
+			"radius": 1.82,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareMetallic",
 		"model": "../../../glTF-Sample-Assets/Models/CompareMetallic/glTF/CompareMetallic.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.47,
+			"radius": 1.82,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareNormal",
 		"model": "../../../glTF-Sample-Assets/Models/CompareNormal/glTF/CompareNormal.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.46,
+			"radius": 1.82,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareRoughness",
 		"model": "../../../glTF-Sample-Assets/Models/CompareRoughness/glTF/CompareRoughness.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.47,
+			"radius": 1.82,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareSheen",
 		"model": "../../../glTF-Sample-Assets/Models/CompareSheen/glTF/CompareSheen.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.47,
+			"radius": 1.82,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareSpecular",
 		"model": "../../../glTF-Sample-Assets/Models/CompareSpecular/glTF/CompareSpecular.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 3.42,
+			"radius": 1.78,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-CompareTransmission",
 		"model": "../../../glTF-Sample-Assets/Models/CompareTransmission/glTF/CompareTransmission.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.94,
+			"radius": 2.55,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 988,
+			"height": 496
+		},
+		"target": {
+			"x": 0,
+			"y": -0.0065,
+			"z": -0.158
 		}
 	},
 	{
 		"name": "x-CompareVolume",
 		"model": "../../../glTF-Sample-Assets/Models/CompareVolume/glTF/CompareVolume.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.94,
+			"radius": 2.55,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 988,
+			"height": 496
+		},
+		"target": {
+			"x": 0,
+			"y": -0.0065,
+			"z": -0.158
 		}
 	},
 	{
 		"name": "x-CubeVisibility",
 		"model": "../../../glTF-Sample-Assets/Models/CubeVisibility/glTF/CubeVisibility.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 7.88,
+			"radius": 5.52,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 700,
+			"height": 700
+		},
+		"target": {
+			"x": 0,
+			"y": 1.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-DiffuseTransmissionPlant",
 		"model": "../../../glTF-Sample-Assets/Models/DiffuseTransmissionPlant/glTF/DiffuseTransmissionPlant.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.75,
+			"radius": 1.85,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 654,
+			"height": 748
+		},
+		"target": {
+			"x": -0.0461,
+			"y": 0.421,
+			"z": -0.0916
 		}
 	},
 	{
 		"name": "x-DiffuseTransmissionTeacup",
 		"model": "../../../glTF-Sample-Assets/Models/DiffuseTransmissionTeacup/glTF/DiffuseTransmissionTeacup.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.309,
-			"theta": 25,
-			"phi": 80
+			"radius": 0.305,
+			"theta": 40,
+			"phi": 65
+		},
+		"dimensions": {
+			"width": 822,
+			"height": 596
+		},
+		"target": {
+			"x": 0,
+			"y": 0.0345,
+			"z": -0.0026
 		}
 	},
 	{
 		"name": "x-DiffuseTransmissionTest",
 		"model": "../../../glTF-Sample-Assets/Models/DiffuseTransmissionTest/glTF/DiffuseTransmissionTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 13.4,
-			"theta": 25,
-			"phi": 80
+			"radius": 6.74,
+			"theta": 0,
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 886,
+			"height": 554
+		},
+		"target": {
+			"x": 1.18,
+			"y": -1.57,
+			"z": -0.25
 		}
 	},
 	{
 		"name": "x-DirectionalLight",
 		"model": "../../../glTF-Sample-Assets/Models/DirectionalLight/glTF/DirectionalLight.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 2.39,
-			"theta": 0,
-			"phi": 80
+			"radius": 1.62,
+			"theta": 25,
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-DispersionTest",
 		"model": "../../../glTF-Sample-Assets/Models/DispersionTest/glTF/DispersionTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.423,
+			"radius": 0.235,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 974,
+			"height": 502
+		},
+		"target": {
+			"x": -0.0146,
+			"y": 0.0087,
+			"z": 0.0435
 		}
 	},
 	{
 		"name": "x-DragonDispersion",
 		"model": "../../../glTF-Sample-Assets/Models/DragonDispersion/glTF/DragonDispersion.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 13.5,
-			"theta": 25,
-			"phi": 80
+			"radius": 7.79,
+			"theta": 0,
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 930,
+			"height": 526
+		},
+		"target": {
+			"x": 0.124,
+			"y": 0.954,
+			"z": 1.52
 		}
 	},
 	{
 		"name": "x-GlassBrokenWindow",
 		"model": "../../../glTF-Sample-Assets/Models/GlassBrokenWindow/glTF/GlassBrokenWindow.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.995,
-			"theta": 25,
-			"phi": 80
+			"radius": 0.668,
+			"theta": 0,
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 694,
+			"height": 706
+		},
+		"target": {
+			"x": 0.0019,
+			"y": 0.258,
+			"z": 0.0006
 		}
 	},
 	{
 		"name": "x-IORTestGrid",
 		"model": "../../../glTF-Sample-Assets/Models/IORTestGrid/glTF/IORTestGrid.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.41,
-			"theta": 25,
-			"phi": 80
+			"radius": 1,
+			"theta": 0,
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 670,
+			"height": 732
+		},
+		"target": {
+			"x": -0.0677,
+			"y": 0.0467,
+			"z": 0.0113
 		}
 	},
 	{
 		"name": "x-IridescenceAbalone",
 		"model": "../../../glTF-Sample-Assets/Models/IridescenceAbalone/glTF/IridescenceAbalone.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.441,
+			"radius": 0.405,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 798,
+			"height": 614
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-LightVisibility",
 		"model": "../../../glTF-Sample-Assets/Models/LightVisibility/glTF/LightVisibility.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 9.2,
+			"radius": 3.77,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-MandarinOrange",
 		"model": "../../../glTF-Sample-Assets/Models/MandarinOrange/glTF/MandarinOrange.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.0455,
-			"theta": 0,
-			"phi": 80
+			"radius": 0.0479,
+			"theta": 25,
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 660,
+			"height": 742
+		},
+		"target": {
+			"x": -0.0006,
+			"y": 0.0003,
+			"z": 0.0038
 		}
 	},
 	{
 		"name": "x-MeshoptCubeTest",
 		"model": "../../../glTF-Sample-Assets/Models/MeshoptCubeTest/glTF/MeshoptCubeTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 43.1,
+			"radius": 26.4,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 750,
+			"height": 652
+		},
+		"target": {
+			"x": 5.75,
+			"y": 9.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-MeshPrimitiveModes",
 		"model": "../../../glTF-Sample-Assets/Models/MeshPrimitiveModes/glTF/MeshPrimitiveModes.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 13.5,
+			"radius": 10,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 592,
+			"height": 826
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-NodeVisibilityTest",
 		"model": "../../../glTF-Sample-Assets/Models/NodeVisibilityTest/glTF/NodeVisibilityTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 22.3,
+			"radius": 10,
 			"theta": 0,
-			"phi": 35
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": 8,
+			"y": -0.5,
+			"z": 0.01
 		}
 	},
 	{
 		"name": "x-PlaysetLightTest",
 		"model": "../../../glTF-Sample-Assets/Models/PlaysetLightTest/glTF/PlaysetLightTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 2.66,
+			"radius": 2.36,
 			"theta": 25,
-			"phi": 80
+			"phi": 60
+		},
+		"dimensions": {
+			"width": 856,
+			"height": 572
+		},
+		"target": {
+			"x": -0.0035,
+			"y": 0.159,
+			"z": -0.0161
 		}
 	},
 	{
 		"name": "x-PointLightIntensityTest",
 		"model": "../../../glTF-Sample-Assets/Models/PointLightIntensityTest/glTF/PointLightIntensityTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 11.3,
+			"radius": 6.2,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 812,
+			"height": 604
+		},
+		"target": {
+			"x": 0,
+			"y": -1.41,
+			"z": 0.015
 		}
 	},
 	{
 		"name": "x-PotOfCoals",
 		"model": "../../../glTF-Sample-Assets/Models/PotOfCoals/glTF/PotOfCoals.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.169,
+			"radius": 0.193,
 			"theta": 25,
-			"phi": 80
+			"phi": 45
+		},
+		"dimensions": {
+			"width": 688,
+			"height": 712
+		},
+		"target": {
+			"x": 0,
+			"y": 0.0253,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-ScatteringSkull",
 		"model": "../../../glTF-Sample-Assets/Models/ScatteringSkull/glTF/ScatteringSkull.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.645,
-			"theta": 0,
+			"radius": 0.616,
+			"theta": 30,
 			"phi": 80
+		},
+		"dimensions": {
+			"width": 732,
+			"height": 670
+		},
+		"target": {
+			"x": 0,
+			"y": 0.126,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-SheenTestGrid",
 		"model": "../../../glTF-Sample-Assets/Models/SheenTestGrid/glTF/SheenTestGrid.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.54,
-			"theta": 25,
-			"phi": 80
+			"radius": 0.875,
+			"theta": 0,
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 824,
+			"height": 594
+		},
+		"target": {
+			"x": -0.176,
+			"y": 0.0021,
+			"z": 0.0113
 		}
 	},
 	{
 		"name": "x-SheenWoodLeatherSofa",
 		"model": "../../../glTF-Sample-Assets/Models/SheenWoodLeatherSofa/glTF/SheenWoodLeatherSofa.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 4.24,
+			"radius": 3.11,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 938,
+			"height": 522
+		},
+		"target": {
+			"x": 0,
+			"y": 0.559,
+			"z": -0.0011
 		}
 	},
 	{
 		"name": "x-SimpleInstancing",
 		"model": "../../../glTF-Sample-Assets/Models/SimpleInstancing/glTF/SimpleInstancing.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 2.38,
-			"theta": 0,
-			"phi": 80
+			"radius": 2.42,
+			"theta": 25,
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 706,
+			"height": 694
+		},
+		"target": {
+			"x": 0.5,
+			"y": 0.5,
+			"z": 0.5
 		}
 	},
 	{
 		"name": "x-SimpleMaterial",
 		"model": "../../../glTF-Sample-Assets/Models/SimpleMaterial/glTF/SimpleMaterial.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.94,
+			"radius": 1.26,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 700,
+			"height": 700
+		},
+		"target": {
+			"x": 0.5,
+			"y": 0.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-SimpleTexture",
 		"model": "../../../glTF-Sample-Assets/Models/SimpleTexture/glTF/SimpleTexture.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.94,
+			"radius": 1.26,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 700,
+			"height": 700
+		},
+		"target": {
+			"x": 0.5,
+			"y": 0.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-SpecularSilkPouf",
 		"model": "../../../glTF-Sample-Assets/Models/SpecularSilkPouf/glTF/SpecularSilkPouf.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.21,
+			"radius": 1.25,
 			"theta": 25,
-			"phi": 80
+			"phi": 45
+		},
+		"dimensions": {
+			"width": 746,
+			"height": 656
+		},
+		"target": {
+			"x": 0,
+			"y": 0.0989,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-StainedGlassLamp",
 		"model": "../../../glTF-Sample-Assets/Models/StainedGlassLamp/glTF/StainedGlassLamp.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.27,
+			"radius": 1.4,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 592,
+			"height": 828
+		},
+		"target": {
+			"x": 0,
+			"y": 0.344,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-SunglassesKhronos",
 		"model": "../../../glTF-Sample-Assets/Models/SunglassesKhronos/glTF/SunglassesKhronos.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.313,
+			"radius": 0.247,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 954,
+			"height": 514
+		},
+		"target": {
+			"x": 0,
+			"y": 0.0288,
+			"z": -0.0764
 		}
 	},
 	{
 		"name": "x-TrafficCone",
 		"model": "../../../glTF-Sample-Assets/Models/TrafficCone/glTF/TrafficCone.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 38.2,
+			"radius": 1.4,
 			"theta": 25,
-			"phi": 35
+			"phi": 72
+		},
+		"dimensions": {
+			"width": 852,
+			"height": 576
+		},
+		"target": {
+			"x": 0,
+			"y": -0.0101,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-TransmissionOrderTest",
 		"model": "../../../glTF-Sample-Assets/Models/TransmissionOrderTest/glTF/TransmissionOrderTest.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 16.2,
+			"radius": 9.35,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 930,
+			"height": 526
+		},
+		"target": {
+			"x": 0.117,
+			"y": 1.25,
+			"z": 2.27
 		}
 	},
 	{
 		"name": "x-TransmissionThinwallTestGrid",
 		"model": "../../../glTF-Sample-Assets/Models/TransmissionThinwallTestGrid/glTF/TransmissionThinwallTestGrid.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 28.6,
-			"theta": 25,
-			"phi": 80
+			"radius": 12.9,
+			"theta": 0,
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 990,
+			"height": 494
+		},
+		"target": {
+			"x": -1.66,
+			"y": 4.34,
+			"z": 0.226
 		}
 	},
 	{
 		"name": "x-Unicode❤♻Test",
 		"model": "../../../glTF-Sample-Assets/Models/Unicode❤♻Test/glTF/Unicode❤♻Test.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 1.94,
+			"radius": 1.26,
 			"theta": 0,
-			"phi": 80
+			"phi": 90
+		},
+		"dimensions": {
+			"width": 700,
+			"height": 700
+		},
+		"target": {
+			"x": 0.5,
+			"y": 0.5,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-USDShaderBallForGltf",
 		"model": "../../../glTF-Sample-Assets/Models/USDShaderBallForGltf/glTF/USDShaderBallForGltf.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.207,
+			"radius": 0.206,
 			"theta": 25,
-			"phi": 80
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 726,
+			"height": 674
+		},
+		"target": {
+			"x": 0,
+			"y": 0.041,
+			"z": 0
 		}
 	},
 	{
 		"name": "x-WaterBottle",
 		"model": "../../../glTF-Sample-Assets/Models/WaterBottle/glTF/WaterBottle.gltf",
-		"autoFrame": true,
 		"orbit": {
-			"radius": 0.415,
-			"theta": 0,
-			"phi": 80
+			"radius": 0.466,
+			"theta": 25,
+			"phi": 75
+		},
+		"dimensions": {
+			"width": 586,
+			"height": 836
+		},
+		"target": {
+			"x": 0,
+			"y": 0,
+			"z": 0
 		}
 	}
 ]
