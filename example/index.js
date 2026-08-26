@@ -1,6 +1,7 @@
 import {
 	ACESFilmicToneMapping,
 	Box3,
+	Group,
 	LoadingManager,
 	Sphere,
 	DoubleSide,
@@ -10,10 +11,12 @@ import {
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
+	Vector3,
 	WebGPURenderer,
 	EquirectangularReflectionMapping,
 } from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -29,6 +32,7 @@ import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
+import { Backdrop } from './src/Backdrop.js';
 import { MODEL_LIST } from './modelList.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
@@ -46,6 +50,9 @@ const DEVICE_LIMITS_REQUESTED = [
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
 const DEFAULT_FOV = 60;
+
+// how far behind the model the backdrop's curve begins
+const BACKDROP_DISTANCE = 1;
 
 const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
 const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
@@ -102,6 +109,8 @@ const params = {
 
 	cameraProjection: 'Perspective',
 
+	stage: 'floor',
+
 	transparentBackground: false,
 
 	enable: true,
@@ -112,7 +121,7 @@ const params = {
 
 };
 
-let floorPlane, gui, stats;
+let floorPlane, pedestal, backdrop, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -128,6 +137,8 @@ const dropZone = document.getElementById( 'drop-zone' );
 let averageSamples = 0;
 
 const orthoWidth = 2;
+
+const _forward = new Vector3();
 
 init();
 
@@ -227,10 +238,30 @@ async function init() {
 	floorPlane.rotation.x = - Math.PI / 2;
 	scene.add( floorPlane );
 
+	// a two tier cylinder for the model to sit on, with the top surface at the model's base
+	const pedestalMaterial = new MeshStandardMaterial( { color: 0x1c1c1c, roughness: 0.35, metalness: 0 } );
+	pedestal = new Group();
+	const tiers = [ { radius: 0.9, height: 0.05 }, { radius: 0.92, height: 0.05 } ];
+	tiers.forEach( ( { radius, height }, i ) => {
+
+		// each tier sinks halfway into the one above it so the pair reads as a single piece with a
+		// ridge running around it rather than two stacked discs
+		const tier = new Mesh( createPedestalGeometry( radius, height ), pedestalMaterial );
+		tier.position.y = - height * ( 0.5 + i * 0.2 );
+		pedestal.add( tier );
+
+	} );
+	scene.add( pedestal );
+
+	// oriented once per model load, see alignBackdropToCamera
+	backdrop = new Backdrop();
+	scene.add( backdrop );
+
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
+	updateStage();
 	onModelChange();
 	updateEnvMap();
 	onResize();
@@ -290,6 +321,43 @@ function animate() {
 		loader.setSamples( counts );
 
 	} );
+
+}
+
+// A rounded box scaled into a disc. The corner radius is half the box width so the x / z profile
+// closes into a circle, and scaling y shrinks that same radius into a small bevel around the rim.
+function createPedestalGeometry( radius, height, bevel = 0.01, segments = 32 ) {
+
+	const geometry = new RoundedBoxGeometry( 2, height / bevel, 2, segments, 1 );
+	geometry.scale( radius, bevel, radius );
+
+	return geometry;
+
+}
+
+// the scenery objects are all present in the scene and swapped by toggling visibility, which only
+// requires the transforms to be re-uploaded rather than a full scene rebuild
+function updateStage() {
+
+	floorPlane.visible = params.stage === 'floor';
+	pedestal.visible = params.stage === 'pedestal';
+	backdrop.visible = params.stage === 'backdrop';
+
+	pathTracer.updateTransforms();
+
+}
+
+// Aims the backdrop so its wall sits opposite the camera and the model is framed against the curve.
+// Only run when the model changes, so the backdrop stays put while orbiting.
+function alignBackdropToCamera() {
+
+	const dx = activeCamera.position.x;
+	const dz = activeCamera.position.z;
+	const angle = Math.atan2( dx, dz );
+
+	backdrop.rotation.y = angle;
+	backdrop.position.x = - Math.sin( angle ) * BACKDROP_DISTANCE;
+	backdrop.position.z = - Math.cos( angle ) * BACKDROP_DISTANCE;
 
 }
 
@@ -428,6 +496,10 @@ function buildGui() {
 	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
 	environmentFolder.open();
 
+	const stageFolder = gui.addFolder( 'stage' );
+	stageFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'scenery' ).onChange( updateStage );
+	stageFolder.open();
+
 }
 
 function updateEnvMap() {
@@ -474,8 +546,13 @@ function useModelCamera( sceneCamera ) {
 	perspectiveCamera.fov = sceneCamera.fov;
 	perspectiveCamera.updateProjectionMatrix();
 
-	// orbit around a point ahead of the camera along its view direction
-	sceneCamera.getWorldDirection( controls.target ).add( perspectiveCamera.position );
+	// Orbit around the model rather than a point just in front of the lens. The model is centered
+	// at the origin, so the pivot is the origin projected onto the view direction - the authored
+	// framing is preserved while the controls still swing around the subject.
+	const forward = sceneCamera.getWorldDirection( _forward );
+	const distance = Math.max( - forward.dot( perspectiveCamera.position ), 0.1 );
+	controls.target.copy( perspectiveCamera.position ).addScaledVector( forward, distance );
+
 	controls.update();
 
 }
@@ -617,7 +694,10 @@ async function updateModel() {
 
 	} );
 
+	// rest the scenery on the bottom of the model
 	floorPlane.position.y = box.min.y - 1e-3;
+	pedestal.position.y = box.min.y - 1e-3;
+	backdrop.position.y = box.min.y - 1e-3;
 
 	scene.add( model );
 
@@ -638,6 +718,8 @@ async function updateModel() {
 		resetCamera();
 
 	}
+
+	alignBackdropToCamera();
 
 	pathTracer.setScene( scene, activeCamera );
 
