@@ -54,6 +54,34 @@ const DEFAULT_FOV = 45;
 // how far behind the model the backdrop's curve begins
 const BACKDROP_DISTANCE = 1;
 
+// stage lighting rigs built from emissive panels
+const LIGHT_RIGS = {
+	'three point': [
+		{ size: 2, position: [ 2, 1.6, 1.8 ], intensity: 6, color: 0xfff0dd },
+		{ size: 2.5, position: [ - 2.4, 0.8, 1.6 ], intensity: 1.5, color: 0xdfeaff },
+		{ size: 1.6, position: [ - 1.2, 1.8, - 2.2 ], intensity: 9, color: 0xffffff },
+	],
+	// taken from the Coffee Maker scene
+	softbox: [
+		{ size: [ 2.1, 2.5 ], position: [ - 1.55, 0.35, 0.9 ], intensity: 2, color: 0xffffff },
+		{ size: [ 2.5, 2 ], position: [ 1.8, 0.5, 0.25 ], intensity: 2, color: 0xffffff },
+		{ size: 2.55, position: [ 0, 1.9, 0.2 ], intensity: 2, color: 0xffffff },
+	],
+	overhead: [
+		{ size: 3, position: [ 0, 2.4, 0.4 ], intensity: 8, color: 0xffffff },
+	],
+	'side strips': [
+		{ size: [ 0.5, 3.2 ], position: [ - 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+		{ size: [ 0.5, 3.2 ], position: [ 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+	],
+	'overhead strips': [
+		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ - 0.3, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.3, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.9, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+	],
+};
+
 const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
 const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
@@ -113,6 +141,8 @@ const params = {
 
 	background: 'black',
 
+	lighting: 'none',
+
 	enable: true,
 	bounces: 15,
 	pause: false,
@@ -121,7 +151,7 @@ const params = {
 
 };
 
-let floorPlane, pedestal, pedestalMaterial, backdrop, gui, stats;
+let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -257,11 +287,41 @@ async function init() {
 	backdrop = new Backdrop();
 	scene.add( backdrop );
 
+	// one group per lighting rig
+	lightRigs = new Group();
+	for ( const name in LIGHT_RIGS ) {
+
+		const rig = new Group();
+		rig.name = name;
+		LIGHT_RIGS[ name ].forEach( ( { size, position, rotation, intensity, color } ) => {
+
+			const [ width, height ] = Array.isArray( size ) ? size : [ size, size ];
+			const panel = new Mesh(
+				new PlaneGeometry( width, height ),
+				new MeshStandardMaterial( { color: 0x000000, emissive: color, emissiveIntensity: intensity, side: DoubleSide } ),
+			);
+			panel.position.set( ...position );
+
+			// panels aim at the model unless the rig fixes their orientation
+			if ( rotation ) panel.rotation.set( ...rotation );
+			else panel.lookAt( 0, 0.35, 0 );
+
+			rig.add( panel );
+
+		} );
+
+		lightRigs.add( rig );
+
+	}
+
+	scene.add( lightRigs );
+
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
 	updateStage();
+	updateLighting();
 	onModelChange();
 	updateEnvMap();
 	onResize();
@@ -347,8 +407,19 @@ function updateStage() {
 
 }
 
-// Aims the backdrop so its wall sits opposite the camera and the model is framed against the curve.
-// Only run when the model changes, so the backdrop stays put while orbiting.
+// the environment is dimmed while a rig is active so the panels light the model
+function updateLighting() {
+
+	lightRigs.children.forEach( rig => rig.visible = rig.name === params.lighting );
+	scene.environmentIntensity = params.lighting === 'none' ? 1 : 0.1;
+
+	pathTracer.updateTransforms();
+	pathTracer.updateEnvironment();
+
+}
+
+// Orients the backdrop and light rigs relative to the camera. Only run when the model changes so
+// they stay put while orbiting.
 function alignBackdropToCamera() {
 
 	const dx = activeCamera.position.x;
@@ -358,6 +429,8 @@ function alignBackdropToCamera() {
 	backdrop.rotation.y = angle;
 	backdrop.position.x = - Math.sin( angle ) * BACKDROP_DISTANCE;
 	backdrop.position.z = - Math.cos( angle ) * BACKDROP_DISTANCE;
+
+	lightRigs.rotation.y = angle;
 
 }
 
@@ -506,6 +579,7 @@ function buildGui() {
 	backdropFolder.add( params, 'envMap', envMaps ).name( 'environment' ).onChange( updateEnvMap );
 	backdropFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'stage' ).onChange( updateStage );
 	backdropFolder.add( params, 'background', [ 'black', 'white', 'transparent' ] ).name( 'background' ).onChange( onParamsChange );
+	backdropFolder.add( params, 'lighting', [ 'none', ...Object.keys( LIGHT_RIGS ) ] ).name( 'lighting' ).onChange( updateLighting );
 	backdropFolder.open();
 
 }
@@ -533,7 +607,7 @@ function updateEnvMap() {
 // models are normalized to a unit sphere at the origin so the framing is the same for all of them
 function resetCamera() {
 
-	perspectiveCamera.position.set( - 1, 0.25, 1 ).multiplyScalar( 1.7 );
+	perspectiveCamera.position.set( - 1, 0.35, 1 ).multiplyScalar( 1.7 );
 	perspectiveCamera.fov = DEFAULT_FOV;
 	perspectiveCamera.updateProjectionMatrix();
 	orthoCamera.position.set( - 1, 0.25, 1 );
