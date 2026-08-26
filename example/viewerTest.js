@@ -117,8 +117,8 @@ async function init() {
 
 	} );
 
-	window.addEventListener( 'hashchange', onHashChange );
-	onHashChange();
+	window.addEventListener( 'popstate', onModelChange );
+	onModelChange();
 
 	animate();
 
@@ -217,19 +217,10 @@ function animate() {
 
 }
 
-function onHashChange() {
+function onModelChange() {
 
-	params.model = Object.keys( modelDatabase )[ 0 ];
-	if ( window.location.hash ) {
-
-		const modelName = decodeURIComponent( window.location.hash.substring( 1 ) );
-		if ( modelName in modelDatabase ) {
-
-			params.model = modelName;
-
-		}
-
-	}
+	const modelName = new URLSearchParams( window.location.search ).get( 'model' );
+	params.model = modelName in modelDatabase ? modelName : Object.keys( modelDatabase )[ 0 ];
 
 	updateModel();
 
@@ -288,7 +279,10 @@ function buildGui() {
 	gui = new GUI();
 	gui.add( params, 'model', Object.keys( modelDatabase ) ).onChange( v => {
 
-		window.location.hash = v;
+		const url = new URL( window.location );
+		url.searchParams.set( 'model', v );
+		window.history.pushState( {}, '', url );
+		onModelChange();
 
 	} );
 
