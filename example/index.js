@@ -143,7 +143,7 @@ const params = {
 
 	stage: 'floor',
 
-	background: 'black',
+	background: 'white',
 
 	lighting: 'none',
 
@@ -466,6 +466,7 @@ function onParamsChange() {
 	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
 
 	document.body.classList.toggle( 'checkerboard', transparent );
+	document.body.classList.toggle( 'light-background', light );
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
@@ -824,7 +825,7 @@ async function updateModel() {
 	params.envMap = modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
 	params.lighting = modelInfo.lighting ?? 'none';
 	params.stage = modelInfo.stage ?? 'floor';
-	params.background = modelInfo.background ?? 'black';
+	params.background = modelInfo.background ?? 'white';
 
 	updateStage();
 	updateLighting();
