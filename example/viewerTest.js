@@ -18,9 +18,9 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LoaderElement } from './src/LoaderElement.js';
-import EXTRA_SCENARIOS from './extraScenarios.json';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
+const EXTRA_CONFIG_URL = new URL( './extraScenarios.json', import.meta.url ).toString();
 const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
 
 const urlParams = new URLSearchParams( window.location.search );
@@ -101,13 +101,16 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// models
-	const { scenarios } = await fetch( CONFIG_URL ).then( res => res.json() );
+	const [ { scenarios }, extraScenarios ] = await Promise.all( [
+		fetch( CONFIG_URL ).then( res => res.json() ),
+		fetch( EXTRA_CONFIG_URL ).then( res => res.json() ),
+	] );
 	modelDatabase = {};
 	scenarios.forEach( s => modelDatabase[ s.name ] = s );
 
 	// add local scenarios for any sample assets the fidelity repo does not cover
 	const covered = new Set( scenarios.map( getSampleAssetName ) );
-	EXTRA_SCENARIOS.forEach( s => {
+	extraScenarios.forEach( s => {
 
 		if ( ! covered.has( getSampleAssetName( s ) ) ) {
 
