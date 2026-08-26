@@ -180,6 +180,7 @@ export const MODEL_LIST = {
 	'Porsche 911 Stinger GTR': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/porsche-911-stinger-gtr.glb',
 		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
+		rotation: [ 0, Math.PI, 0 ],
 	},
 
 	// devices
@@ -187,12 +188,16 @@ export const MODEL_LIST = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/coffee-maker.glb',
 		credit: 'Model by "cekuhnen", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
+		envMap: 'none',
+		stage: 'none',
 	},
 
 	'Little Lamp': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/little-lamp.glb',
 		credit: 'Model by "UP3D", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
+		envMap: 'none',
+		stage: 'none',
 	},
 
 	'Headphone with Stand': {

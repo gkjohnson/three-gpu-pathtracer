@@ -86,7 +86,11 @@ const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5
 const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
+// sentinel for models that light themselves and should not get an environment
+const NO_ENVIRONMENT = 'none';
+
 const envMaps = {
+	'None': NO_ENVIRONMENT,
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
 	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/moonless_golf_1k.hdr',
 	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
@@ -586,6 +590,16 @@ function buildGui() {
 
 function updateEnvMap() {
 
+	if ( params.envMap === NO_ENVIRONMENT ) {
+
+		scene.environment?.dispose();
+		scene.environment = null;
+		pathTracer.updateEnvironment();
+		onParamsChange();
+		return;
+
+	}
+
 	new HDRLoader()
 		.load( params.envMap, texture => {
 
@@ -805,6 +819,16 @@ async function updateModel() {
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
+
+	// models that carry their own lighting can override the scene defaults
+	params.envMap = modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
+	params.lighting = modelInfo.lighting ?? 'none';
+	params.stage = modelInfo.stage ?? 'floor';
+	params.background = modelInfo.background ?? 'black';
+
+	updateStage();
+	updateLighting();
+	updateEnvMap();
 
 	buildGui();
 	onParamsChange();
