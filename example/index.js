@@ -49,7 +49,7 @@ const DEVICE_LIMITS_REQUESTED = [
 
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
-const DEFAULT_FOV = 60;
+const DEFAULT_FOV = 45;
 
 // how far behind the model the backdrop's curve begins
 const BACKDROP_DISTANCE = 1;
@@ -111,7 +111,7 @@ const params = {
 
 	stage: 'floor',
 
-	transparentBackground: false,
+	background: 'black',
 
 	enable: true,
 	bounces: 15,
@@ -121,7 +121,7 @@ const params = {
 
 };
 
-let floorPlane, pedestal, backdrop, gui, stats;
+let floorPlane, pedestal, pedestalMaterial, backdrop, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -239,7 +239,7 @@ async function init() {
 	scene.add( floorPlane );
 
 	// a two tier cylinder for the model to sit on, with the top surface at the model's base
-	const pedestalMaterial = new MeshStandardMaterial( { color: 0x1c1c1c, roughness: 0.35, metalness: 0 } );
+	pedestalMaterial = new MeshStandardMaterial( { color: 0x1c1c1c, roughness: 0.35, metalness: 0 } );
 	pedestal = new Group();
 	const tiers = [ { radius: 0.9, height: 0.05 }, { radius: 0.92, height: 0.05 } ];
 	tiers.forEach( ( { radius, height }, i ) => {
@@ -366,20 +366,31 @@ function onParamsChange() {
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
 
-	if ( params.transparentBackground ) {
+	const transparent = params.background === 'transparent';
+	if ( transparent ) {
 
 		scene.background = null;
 		renderer.setClearAlpha( 0 );
 
 	} else {
 
+		const dark = params.background === 'black';
+		gradientMap.topColor.set( dark ? 0x111111 : 0xe0e0e0 );
+		gradientMap.bottomColor.set( dark ? 0x000000 : 0xc4c4c4 );
+		gradientMap.update();
+
 		scene.background = gradientMap;
 		renderer.setClearAlpha( 1 );
 
 	}
 
-	document.body.classList.toggle( 'checkerboard', params.transparentBackground );
+	const light = params.background === 'white';
+	floorPlane.material.color.set( light ? 0xd2d2d2 : 0x111111 );
+	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
 
+	document.body.classList.toggle( 'checkerboard', transparent );
+
+	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 
 }
@@ -477,7 +488,6 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'transparentBackground' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
@@ -492,13 +502,11 @@ function buildGui() {
 	} );
 	pathTracingFolder.open();
 
-	const environmentFolder = gui.addFolder( 'environment' );
-	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.open();
-
-	const stageFolder = gui.addFolder( 'stage' );
-	stageFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'scenery' ).onChange( updateStage );
-	stageFolder.open();
+	const backdropFolder = gui.addFolder( 'Backdrop' );
+	backdropFolder.add( params, 'envMap', envMaps ).name( 'environment' ).onChange( updateEnvMap );
+	backdropFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'stage' ).onChange( updateStage );
+	backdropFolder.add( params, 'background', [ 'black', 'white', 'transparent' ] ).name( 'background' ).onChange( onParamsChange );
+	backdropFolder.open();
 
 }
 
@@ -525,7 +533,7 @@ function updateEnvMap() {
 // models are normalized to a unit sphere at the origin so the framing is the same for all of them
 function resetCamera() {
 
-	perspectiveCamera.position.set( - 1, 0.25, 1 );
+	perspectiveCamera.position.set( - 1, 0.25, 1 ).multiplyScalar( 1.7 );
 	perspectiveCamera.fov = DEFAULT_FOV;
 	perspectiveCamera.updateProjectionMatrix();
 	orthoCamera.position.set( - 1, 0.25, 1 );
@@ -546,9 +554,7 @@ function useModelCamera( sceneCamera ) {
 	perspectiveCamera.fov = sceneCamera.fov;
 	perspectiveCamera.updateProjectionMatrix();
 
-	// Orbit around the model rather than a point just in front of the lens. The model is centered
-	// at the origin, so the pivot is the origin projected onto the view direction - the authored
-	// framing is preserved while the controls still swing around the subject.
+	// adjust the controls target point
 	const forward = sceneCamera.getWorldDirection( _forward );
 	const distance = Math.max( - forward.dot( perspectiveCamera.position ), 0.1 );
 	controls.target.copy( perspectiveCamera.position ).addScaledVector( forward, distance );
