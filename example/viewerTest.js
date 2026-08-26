@@ -18,6 +18,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LoaderElement } from './src/LoaderElement.js';
+import EXTRA_SCENARIOS from './extraScenarios.json';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
 const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
@@ -103,6 +104,18 @@ async function init() {
 	const { scenarios } = await fetch( CONFIG_URL ).then( res => res.json() );
 	modelDatabase = {};
 	scenarios.forEach( s => modelDatabase[ s.name ] = s );
+
+	// add local scenarios for any sample assets the fidelity repo does not cover
+	const covered = new Set( scenarios.map( getSampleAssetName ) );
+	EXTRA_SCENARIOS.forEach( s => {
+
+		if ( ! covered.has( getSampleAssetName( s ) ) ) {
+
+			modelDatabase[ s.name ] = s;
+
+		}
+
+	} );
 
 	window.addEventListener( 'hashchange', onHashChange );
 	onHashChange();
@@ -209,7 +222,7 @@ function onHashChange() {
 	params.model = Object.keys( modelDatabase )[ 0 ];
 	if ( window.location.hash ) {
 
-		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
+		const modelName = decodeURIComponent( window.location.hash.substring( 1 ) );
 		if ( modelName in modelDatabase ) {
 
 			params.model = modelName;
@@ -247,6 +260,14 @@ function onParamsChange() {
 	const model = modelDatabase[ params.model ];
 	scene.background = model && model.renderSkybox ? scene.environment : null;
 	pathTracer.updateEnvironment();
+
+}
+
+// the sample asset folder a scenario points at
+function getSampleAssetName( scenario ) {
+
+	const match = ( scenario.model || '' ).match( /glTF-Sample-Assets\/Models\/([^/]+)\// );
+	return match ? match[ 1 ] : null;
 
 }
 
