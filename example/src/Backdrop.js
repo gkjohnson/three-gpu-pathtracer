@@ -1,8 +1,7 @@
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshStandardMaterial } from 'three';
 
-// A "cyclorama" backdrop - a flat floor that sweeps up into a wall along an exponential curve, so
-// the transition hugs the floor for a while before rising steeply and leaves no visible seam. The
-// curve begins at the object origin with the floor extending toward +z and the wall rising behind.
+// A "cyclorama" backdrop - a seamless floor that sweeps up into a wall. The curve begins at the
+// object origin with the floor extending toward +z and the wall rising behind.
 export class Backdrop extends Mesh {
 
 	constructor( options = {} ) {
