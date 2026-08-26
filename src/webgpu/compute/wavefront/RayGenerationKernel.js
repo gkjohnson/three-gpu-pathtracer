@@ -97,6 +97,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].seed = seed + samples;
 				rayQueue.elements[ index ].transmissiveRay = 1u;
 				rayQueue.elements[ index ].minPdf = 1.0;
+				rayQueue.elements[ index ].alphaDepth = 0u;
 
 				// write the active params & dispatched flag
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );

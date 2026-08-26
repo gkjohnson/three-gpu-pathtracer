@@ -1,7 +1,7 @@
 import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
@@ -178,6 +178,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+
+						// Stochastically pass through partially transparent surfaces by restarting
+						// the ray at the hit point, advancing the rng but not the bounce count.
+						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+
+							ray.origin = vertexData.position.xyz;
+							${ rngNextBounce }();
+							bounce --;
+							continue;
+
+						}
+
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						// attenuate the light transmitted through the volume when exiting a backface

@@ -6,7 +6,7 @@ import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
@@ -69,7 +69,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// get the ray info
 				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
-				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
+				${ rngInit }( indexUV.xy, input.seed, input.currentBounce + input.alphaDepth );
 
 				let object = transforms[ input.objectIndex ];
 				var material = materials[ object.materialIndex ];
@@ -93,6 +93,27 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
+
+				// Stochastically pass through partially transparent surfaces by re-enqueueing
+				// the ray at the hit point, advancing the alpha depth but not the bounce count.
+				if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+
+					let rayQueueCapacity = arrayLength( &rayQueue.elements );
+					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
+					rayQueue.elements[ index ].origin = vertexData.position.xyz;
+					rayQueue.elements[ index ].direction = - input.view;
+					rayQueue.elements[ index ].pixel = indexUV;
+					rayQueue.elements[ index ].throughputColor = input.throughputColor;
+					rayQueue.elements[ index ].currentBounce = input.currentBounce;
+					rayQueue.elements[ index ].resultColor = input.resultColor;
+					rayQueue.elements[ index ].seed = input.seed;
+					rayQueue.elements[ index ].transmissiveRay = input.transmissiveRay;
+					rayQueue.elements[ index ].minPdf = input.minPdf;
+					rayQueue.elements[ index ].alphaDepth = input.alphaDepth + 1u;
+					return;
+
+				}
+
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
@@ -164,6 +185,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].seed = input.seed;
 					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
+					rayQueue.elements[ index ].alphaDepth = input.alphaDepth;
 
 				}
 

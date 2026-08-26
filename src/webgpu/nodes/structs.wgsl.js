@@ -174,6 +174,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	anisotropy: 'f32',
 	color: 'vec3f',
 	emission: 'vec3f',
+	opacity: 'f32',
 
 	// transmission
 	ior: 'f32',

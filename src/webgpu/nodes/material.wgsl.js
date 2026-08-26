@@ -184,16 +184,21 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var albedo = vec4( material.color, material.opacity );
 		if ( material.vertexColors == 1 ) {
 
-			let vertexColor = getColor( vertexData ).xyz;
-			albedo *= vec4f( vertexColor, 1.0 );
+			albedo *= getColor( vertexData );
 
 		}
 
 		if ( material.map != -1 ) {
 
 			let uvPrime = material.mapTransform * vec3f( getUvFromChannel( vertexData, material.map ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.map, 0 );
-			albedo *= vec4f( texColor.rgb, 1.0 );
+			albedo *= sampleTexel( uvPrime.xy, material.map, 0 );
+
+		}
+
+		if ( material.alphaMap != -1 ) {
+
+			let uvPrime = material.alphaMapTransform * vec3f( getUvFromChannel( vertexData, material.alphaMap ), 1 );
+			albedo.a *= sampleTexel( uvPrime.xy, material.alphaMap, 0 ).g;
 
 		}
 
@@ -391,6 +396,9 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.diffuseRoughness = material.diffuseRoughness;
 		surf.color = albedo.rgb;
 		surf.emission = emission;
+
+		// only alpha-blended materials treat the albedo alpha as coverage
+		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
