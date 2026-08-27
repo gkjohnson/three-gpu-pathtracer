@@ -64,7 +64,6 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.5;
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
