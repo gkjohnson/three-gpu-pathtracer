@@ -3,6 +3,7 @@ import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 // material properties that can be assigned to a grid axis
 const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
@@ -56,6 +57,10 @@ controls.addEventListener( 'change', () => {
 	pathTracer.updateCamera();
 
 } );
+
+const loader = new LoaderElement();
+loader.attach( document.body );
+loader.setPercentage( 1 );
 
 const gui = new GUI();
 gui.add( options, 'enable' );
@@ -111,6 +116,8 @@ function animate() {
 		renderer.render( scene, camera );
 
 	}
+
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 
