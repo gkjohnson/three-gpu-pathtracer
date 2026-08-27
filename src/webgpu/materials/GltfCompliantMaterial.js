@@ -433,9 +433,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let invalid = isDead || ( ! isTransmissionLobe && wi.z <= 0.0 );
 				result.color *= select( 1.0, 0.0, invalid );
 
-				// a glass ray crossing below the surface enters or leaves the volume
-				result.isTransmissive = isTransmissionLobe && dot( result.direction, surf.faceNormal ) < 0.0;
-
 				return result;
 
 			}
