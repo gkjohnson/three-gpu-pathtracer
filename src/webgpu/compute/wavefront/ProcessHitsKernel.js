@@ -71,36 +71,36 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
-				let object = transforms[ input.objectIndex ];
-				var material = materials[ object.materialIndex ];
+				let objectInfo = transforms[ input.objectIndex ];
+				var materialInfo = materials[ objectInfo.materialIndex ];
 
 				// a matte surface hit by the camera ray renders as a fully transparent
-				let isMatte = material.matte != 0 && input.currentBounce == 0u;
+				let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
 
 				// apply per-object colors
-				material.color *= object.color.rgb;
-				material.opacity *= object.color.a;
+				materialInfo.color *= objectInfo.color.rgb;
+				materialInfo.opacity *= objectInfo.color.a;
 
 				let barycoord = vec3( input.barycoord, 1.0 - input.barycoord.x - input.barycoord.y );
 				var vertexData = ${ sampleTrianglePointFn }( barycoord, input.indices.xyz );
-				vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
-				vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-				vertexData.position = object.matrixWorld * vertexData.position;
+				vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+				vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
+				vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
 				// blur glossy surfaces after low-probability bounces to suppress fireflies,
 				// from the Cycles "filter glossy" approach in integrator/surface_shader.h
 				// The smallest pdf seen along the path for the glossy filter is tracked below
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-				let surface = ${ getSurfaceRecordFn }( material, vertexData, input.side, input.normal, input.view, blurRoughness );
+				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
 
 				// attenuate the light transmitted through the volume when exiting a backface
-				if ( input.side < 0.0 && material.transmission > 0.0 ) {
+				if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
-					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, material.attenuationColor, material.attenuationDistance );
+					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
 
 				}
 

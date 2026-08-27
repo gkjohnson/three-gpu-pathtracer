@@ -1,7 +1,7 @@
 import { DataTexture, Matrix3, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
-import { rngInit, rand2, RNG_INDEX_ENVIRONMENT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand2, RNG_INDEX_BACKGROUND_SAMPLE } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -117,7 +117,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
+					let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u && input.transmissiveRay == 0u ) {
 

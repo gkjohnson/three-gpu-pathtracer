@@ -69,7 +69,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 `, [ disneyFresnelFunc, schlickFresnelFunc, iorToF0Func, lobeWeightsStruct, constants ] );
 
-const equirectDirectionToUvFn = wgslFn( /* wgsl */`
+export const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
 
@@ -96,7 +96,7 @@ const sampleEquirectColorFn = wgslFn( /* wgsl */ `
 
 `, [ equirectDirectionToUvFn ] );
 
-const sampleHemisphereFn = wgslFn( /* wgsl */ `
+export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 	fn sampleHemisphere( n: vec3f, uv: vec2f ) -> vec3f {
 
