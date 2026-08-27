@@ -280,11 +280,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								let env = ${ sampleEnvColor }( ray.direction );
 								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
 								let transparency = ( 1.0 - bg.a ) * avg;
+								var envMisWeight = 1.0;
+								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
+
+									let envPdf = ${ getEnvDirPdf }( ray.direction );
+									envMisWeight = ${ misHeuristicFn }( misPdf, envPdf );
+
+								}
 
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 									// display the env map through transmissive surfaces
-									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor, bounce + 1u, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor * envMisWeight, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0,
@@ -293,7 +300,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 									// fade the background by the throughput color average
-									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor, bounce + 1u, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor * envMisWeight, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0 - transparency,
@@ -302,7 +309,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								} else {
 
 									// fade the background by the throughput color average, mixing in env lighting
-									var light = mix( env.rgb, bg.rgb, bg.a );
+									var light = mix( env.rgb, bg.rgb, bg.a ) * envMisWeight;
 									let background = ${ clampPathContributionFunc }( light * throughputColor, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
 										resultColor.rgb + background,
