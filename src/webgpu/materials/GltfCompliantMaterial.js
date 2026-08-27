@@ -48,7 +48,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	getBsdfNode() {
 
-		const bsdfEvalFunc = this._bsdfEvalFunc = wgslTagFn/* wgsl */`
+		this._bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
 			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
@@ -275,6 +275,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		`;
 
+		const bsdfEvalPdfFn = this.getBsdfEvalPdfNode();
+
 		return wgslTagFn/* wgsl */`
 
 			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
@@ -422,96 +424,14 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				// pdf mixture - every lobe that can produce the sampled direction contributes its
-				// share, in the same cascade order as the eval blocks
+				// evaluate the shared eval / pdf function for the sampled direction so the sample
+				// and light-sampling paths can never disagree on color or pdf
+				result = ${ bsdfEvalPdfFn }( worldWo, normalize( surf.normalBasis * wi ), surf );
 
-				// clearcoat
-				if ( weights.clearcoat > 0.0 ) {
-
-					// the clearcoat lobe evaluates in its own frame
-					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
-					let wiClearcoat = normalize( toClearcoatMat * wi );
-					if ( wiClearcoat.z > 0.0 ) {
-
-						let whClearcoat = normalize( toClearcoatMat * wh );
-						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-						result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
-
-					}
-
-				}
-
-				// specular
-				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
-
-					// anisotropic roughness along tangent, bitangent
-					let alphaB = surf.roughness * surf.roughness;
-					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-					let alpha = vec2( alphaT, alphaB );
-
-					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
-
-				}
-
-				// transmission
-				if ( weights.transmission > 0.0 ) {
-
-					// anisotropic roughness along tangent, bitangent
-					let alphaB = surf.roughness * surf.roughness;
-					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-					let alpha = vec2( alphaT, alphaB );
-
-					// the glass lobe selects reflection or refraction by the facet fresnel so
-					// each side carries the corresponding share of the transmission pdf
-					var F: f32;
-					if ( surf.thinWall ) {
-
-						F = ${ dielectricFresnelFunc }( wo.z, surf.eta );
-
-					} else {
-
-						F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
-
-					}
-
-					if ( wi.z > 0.0 ) {
-
-						result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
-
-					} else if ( surf.thinWall ) {
-
-						// the flipped reflection shares the reflection pdf at the remapped roughness
-						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
-						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
-
-					} else {
-
-						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
-
-					}
-
-				}
-
-				// diffuse
-				if ( weights.diffuse > 0.0 ) {
-
-					result.pdf += weights.diffuse * ${ eonPDFFunc }( wo, wi, surf.diffuseRoughness );
-
-				}
-
-				//
-
-				// construct the scatter context
-				var ctx: ${ bxdfContextStruct };
-				ctx.V = wo;
-				ctx.L = wi;
-				ctx.H = wh;
-
-				ctx.VdotH = saturate( dot( wo, wh ) );
-
-				// evaluate the bsdf for the sampled direction
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * select( max( 0.0, wi.z ), abs( wi.z ), isTransmissionLobe ) * select( 1.0, 0.0, isDead );
-				result.direction = normalize( surf.normalBasis * wi );
+				// mismatched glass facets and reflection lobe samples that land below the
+				// hemisphere carry no energy - their loss is refunded by the compensation tables
+				let invalid = isDead || ( ! isTransmissionLobe && wi.z <= 0.0 );
+				result.color *= select( 1.0, 0.0, invalid );
 
 				// a glass ray crossing below the surface enters or leaves the volume
 				result.isTransmissive = isTransmissionLobe && dot( result.direction, surf.faceNormal ) < 0.0;
@@ -529,6 +449,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 	// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
 	getBsdfEvalPdfNode() {
 
+		// bsdfSample embeds this node so both share a single instance
+		if ( this._bsdfEvalPdfNode ) {
+
+			return this._bsdfEvalPdfNode;
+
+		}
+
 		if ( ! this._bsdfEvalFunc ) {
 
 			this.getBsdfNode();
@@ -537,7 +464,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		const bsdfEvalFunc = this._bsdfEvalFunc;
 
-		return wgslTagFn/* wgsl */`
+		this._bsdfEvalPdfNode = wgslTagFn/* wgsl */`
 
 			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
 
@@ -671,6 +598,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			}
 
 		`;
+
+		return this._bsdfEvalPdfNode;
 
 	}
 
