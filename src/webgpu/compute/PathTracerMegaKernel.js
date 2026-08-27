@@ -1,7 +1,7 @@
 import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ENVIRONMENT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { isTerminatingScatterFunc } from '../nodes/utils.wgsl.js';
@@ -16,12 +16,16 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			bvhData: { value: null },
 			material: { value: null },
 
+			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
+			// tiles
 			offset: uniform( new Vector2() ),
 			tileSize: uniform( new Vector2() ),
+
+			// settings
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
 			maxSamples: uniform( 0, 'uint' ),
@@ -151,11 +155,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var hitResult: ${ raycastOutput };
 					if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
-						let object = transforms[ hitResult.objectIndex ];
-						var material = materials[ object.materialIndex ];
+						let objectInfo = transforms[ hitResult.objectIndex ];
+						var materialInfo = materials[ objectInfo.materialIndex ];
 
 						// a matte surface hit by the camera ray renders as a fully transparent
-						if ( material.matte != 0 && bounce == 0u ) {
+						if ( materialInfo.matte != 0 && bounce == 0u ) {
 
 							resultColor = vec4f( 0.0 );
 							break;
@@ -163,27 +167,27 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// apply per-object colors
-						material.color *= object.color.rgb;
-						material.opacity *= object.color.a;
+						materialInfo.color *= objectInfo.color.rgb;
+						materialInfo.opacity *= objectInfo.color.a;
 
 						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
-						vertexData.normal = normalize( transpose( object.inverseMatrixWorld ) * vertexData.normal );
-						vertexData.tangent = vec4f( ( object.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-						vertexData.position = object.matrixWorld * vertexData.position;
+						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
+						vertexData.position = objectInfo.matrixWorld * vertexData.position;
 
 						// blur glossy surfaces after low-probability bounces to suppress fireflies,
 						// from the Cycles "filter glossy" approach in integrator/surface_shader.h
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						let surface = ${ getSurfaceRecordFn }( material, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						// attenuate the light transmitted through the volume when exiting a backface
-						if ( hitResult.side < 0.0 && material.transmission > 0.0 ) {
+						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
-							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, material.attenuationColor, material.attenuationDistance );
+							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
 
 						}
 
@@ -235,7 +239,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
-						let rng = ${ rand2 }( ${ RNG_INDEX_ENVIRONMENT_SAMPLE } );
+						let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							resultColor += ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ) * vec4f( throughputColor, 0.0 );
