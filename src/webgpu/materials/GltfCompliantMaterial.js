@@ -521,62 +521,119 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
-				result.pdf = 0.0;
 				result.color = vec3f( 0.0 );
 				result.direction = worldWi;
+				result.pdf = 0.0;
 
-				// anisotropic roughness along tangent, bitangent
-				let alphaB = surf.roughness * surf.roughness;
-				let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
-				let alpha = vec2( alphaT, alphaB );
-				let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+				let wo = normalize( surf.normalInvBasis * worldWo );
+				let wi = normalize( surf.normalInvBasis * worldWi );
+				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
-				let invBasis = surf.normalInvBasis;
-				let invClearcoatBasis = surf.clearcoatInvBasis;
+				let isTransmission = wi.z < 0.0;
 
-				let wo = normalize( invBasis * worldWo );
-				let wi = normalize( invBasis * worldWi );
-				let woClearcoat = normalize( invClearcoatBasis * worldWo );
-				let wiClearcoat = normalize( invClearcoatBasis * worldWi );
+				// reconstruct the half vector bsdfSample would have used for this direction -
+				// reflections use the standard half vector while refractions use the generalized
+				// form scaled by the ior ratio, oriented into the upper hemisphere
+				var wh: vec3f;
+				if ( ! isTransmission ) {
 
-				// reject directions on the far side of the surface
-				if ( wo.z < 0.0 || woClearcoat.z < 0.0 || wi.z <= 0.0 ) {
+					wh = normalize( wo + wi );
 
-					return result;
+				} else if ( surf.thinWall ) {
+
+					// thin wall transmission is modeled as a reflection flipped through the surface
+					wh = normalize( wo + vec3f( wi.xy, - wi.z ) );
+
+				} else {
+
+					wh = normalize( wi + wo * surf.eta );
+					wh *= sign( wh.z );
 
 				}
-
-				let wh = normalize( wo + wi );
-				let whClearcoat = normalize( woClearcoat + wiClearcoat );
 
 				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
-				// pdf of having sampled this direction - must match the lobe mixture in bsdfSample
-				if ( weights.diffuse > 0.0 ) {
+				// pdf mixture - every lobe that can produce the direction contributes its share,
+				// in the same cascade order and with the same terms as bsdfSample
 
-					result.pdf += weights.diffuse * max( wi.z, 0.0 ) / PI;
+				// clearcoat
+				if ( weights.clearcoat > 0.0 ) {
+
+					// the clearcoat lobe evaluates in its own frame
+					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+					let wiClearcoat = normalize( toClearcoatMat * wi );
+					if ( wiClearcoat.z > 0.0 ) {
+
+						let whClearcoat = normalize( toClearcoatMat * wh );
+						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+						result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+
+					}
 
 				}
 
-				if ( weights.specular > 0.0 ) {
+				// specular
+				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
+
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
 
 					result.pdf += weights.specular * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
 
 				}
 
-				if ( weights.clearcoat > 0.0 && wiClearcoat.z > 0.0 ) {
+				// transmission
+				if ( weights.transmission > 0.0 ) {
 
-					result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+					// anisotropic roughness along tangent, bitangent
+					let alphaB = surf.roughness * surf.roughness;
+					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
+					let alpha = vec2( alphaT, alphaB );
+
+					// the glass lobe selects reflection or refraction by the facet fresnel so
+					// each side carries the corresponding share of the transmission pdf
+					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+					if ( wi.z > 0.0 ) {
+
+						result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
+
+					} else if ( surf.thinWall ) {
+
+						// the flipped reflection shares the reflection pdf at the remapped roughness
+						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
+						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
+
+					} else {
+
+						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+
+					}
 
 				}
 
+				// diffuse
+				if ( weights.diffuse > 0.0 ) {
+
+					result.pdf += weights.diffuse * ${ eonPDFFunc }( wo, wi, surf.diffuseRoughness );
+
+				}
+
+				//
+
+				// construct the scatter context
 				var ctx: ${ bxdfContextStruct };
 				ctx.V = wo;
 				ctx.L = wi;
 				ctx.H = wh;
 				ctx.VdotH = saturate( dot( wo, wh ) );
 
-				result.color = ${ bsdfEvalFunc }( ctx, surf ) * max( 0.0, wi.z );
+				// evaluate the bsdf for the direction
+				result.color = ${ bsdfEvalFunc }( ctx, surf ) * abs( wi.z );
+
+				// a direction crossing below the surface enters or leaves the volume
+				result.isTransmissive = isTransmission && dot( worldWi, surf.faceNormal ) < 0.0;
 
 				return result;
 
