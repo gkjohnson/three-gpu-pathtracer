@@ -204,6 +204,8 @@ export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 `, [ scatterRecordStruct ] );
 
 // Clamp individual light-path contributions using Cycles' RGB sum while preserving chromaticity.
+// Matches film_clamp_light in Cycles' kernel/film/light_passes.h, including the x3 limit
+// scaling applied to the user-facing clamp values in scene/integrator.cpp.
 export const clampPathContributionFunc = wgslFn( /* wgsl */ `
 
 	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
