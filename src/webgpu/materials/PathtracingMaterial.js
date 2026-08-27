@@ -25,7 +25,7 @@ export class PathtracingMaterial {
 	 */
 	getBsdfNode() {
 
-		return wgslTagFn`
+		return wgslTagFn/* wgsl */`
 
 			fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
 
@@ -55,7 +55,7 @@ export class PathtracingMaterial {
 	 */
 	getBsdfEvalPdfNode() {
 
-		return wgslTagFn`
+		return wgslTagFn/* wgsl */`
 
 			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
 
