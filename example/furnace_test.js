@@ -10,6 +10,7 @@ const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'irides
 const options = {
 	enable: true,
 	useMegakernel: false,
+	multipleImportanceSampling: true,
 	whiteBackground: false,
 	bounces: 15,
 	xAxis: 'roughness',
@@ -22,6 +23,7 @@ renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
 pathTracer.bounces = options.bounces;
 
 document.body.appendChild( renderer.domElement );
@@ -62,6 +64,11 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 	pathTracer.useMegakernel( options.useMegakernel );
 	pathTracer.setScene( scene, camera );
 	pathTracer.reset();
+
+} );
+gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
+
+	pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
 
 } );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
