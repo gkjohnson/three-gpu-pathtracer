@@ -64,6 +64,27 @@ function initializeStyles() {
 		.loader-container .samples {
 			color: rgba( 255, 255, 255, 0.75 );
 		}
+
+		body.light-background .loader-container,
+		body.light-background .description {
+			color: #111111;
+		}
+
+		body.light-background .loader-container .bar {
+			background: #111111;
+		}
+
+		body.light-background .loader-container .credits a,
+		body.light-background .loader-container .credits,
+		body.light-background .loader-container .samples {
+			color: rgba( 0, 0, 0, 0.7 );
+		}
+
+		body.light-background .loader-container .credits,
+		body.light-background .loader-container .samples,
+		body.light-background .loader-container .percentage {
+			background: rgba( 255, 255, 255, 0.3 );
+		}
 	`;
 	document.head.appendChild( _styleElement );
 

@@ -37,6 +37,7 @@ const params = {
 		emissiveIntensity: 1,
 		roughness: 0,
 		metalness: 1,
+		diffuseRoughness: 1,
 		ior: 1.495,
 		transmission: 0.0,
 		thinWall: false,
@@ -171,6 +172,7 @@ async function init() {
 	matFolder1.addColor( params.materialProperties, 'emissive' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'emissiveIntensity', 0.0, 50.0, 0.01 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'roughness', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'diffuseRoughness', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'metalness', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'opacity', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'transmission', 0, 1 ).onChange( onParamsChange );
@@ -224,6 +226,7 @@ function applyDatabaseMaterial( info ) {
 	materialProperties.attenuationDistance = 1;
 	materialProperties.metalness = 0;
 	materialProperties.roughness = 1;
+	materialProperties.diffuseRoughness = 0;
 	materialProperties.ior = 1.5;
 	materialProperties.transmission = 0;
 	materialProperties.iridescence = 0;
@@ -330,6 +333,7 @@ function onParamsChange() {
 	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
+	material.diffuseRoughness = materialProperties.diffuseRoughness;
 	material.matte = materialProperties.matte;
 	material.castShadow = materialProperties.castShadow;
 
@@ -356,5 +360,7 @@ function animate() {
 		renderer.render( scene, camera );
 
 	}
+
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
