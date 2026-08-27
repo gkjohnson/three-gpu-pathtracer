@@ -28,7 +28,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer, RANDOM_BLUE_DITHER, RANDOM_PCG, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -133,7 +133,6 @@ const envMaps = {
 const params = {
 
 	multipleImportanceSampling: true,
-	random: RANDOM_SOBOL,
 	renderScale: 1,
 	tiles: 2,
 
@@ -232,7 +231,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
-	pathTracer.setRandom( params.random );
 	pathTracer.transmissiveBounces = 10;
 
 	// camera
@@ -476,7 +474,6 @@ function onParamsChange() {
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
-	pathTracer.setRandom( params.random );
 
 }
 
@@ -581,7 +578,6 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'random', { RANDOM_SOBOL, RANDOM_BLUE_DITHER, RANDOM_PCG } ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
