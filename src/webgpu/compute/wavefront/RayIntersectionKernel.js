@@ -1,11 +1,11 @@
-import { DataTexture, Matrix3, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { uniform, texture, sampler, storage, textureStore, globalId } from 'three/tsl';
+import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { rngInit, rand2, RNG_INDEX_BACKGROUND_SAMPLE } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, hitQueueAtomicStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 import { clampPathContributionFunc } from '../../nodes/utils.wgsl.js';
 
@@ -15,6 +15,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 		const params = {
 			bvhData: { value: null },
+			envInfo: { value: null },
+			backgroundInfo: { value: null },
 
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
@@ -28,18 +30,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 
-			// environment
-			envMap: texture( new DataTexture() ),
-			envMapSampler: sampler( new DataTexture() ),
-			envMapRotation: uniform( new Matrix3() ),
-			envMapIntensity: uniform( 1 ),
-
-			background: texture( new DataTexture() ),
-			backgroundSampler: sampler( new DataTexture() ),
-			backgroundRotation: uniform( new Matrix3() ),
-			backgroundIntensity: uniform( 1 ),
-			backgroundBlurriness: uniform( 0 ),
-
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
 			globalId: globalId,
@@ -48,24 +38,16 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
 
+		// environment resources
+		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
+		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
+
 		const fn = wgslTagFn /* wgsl */`
 
 			fn compute(
 				// settings
 				clampDirect: f32,
 				clampIndirect: f32,
-
-				// environment
-				envMap: texture_2d<f32>,
-				envMapSampler: sampler,
-				envMapRotation: mat3x3f,
-				envMapIntensity: f32,
-
-				background: texture_2d<f32>,
-				backgroundSampler: sampler,
-				backgroundRotation: mat3x3f,
-				backgroundIntensity: f32,
-				backgroundBlurriness: f32,
 
 				transmissiveBackground: u32,
 
@@ -74,18 +56,6 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				let rayQueue = &${ params.rayQueue };
 				let hitQueue = &${ params.hitQueue };
-
-				let envInfo = EnvironmentInfo(
-					envMapRotation,
-					envMapIntensity,
-					0.0 // blur,
-				);
-
-				let backgroundInfo = EnvironmentInfo(
-					backgroundRotation,
-					backgroundIntensity,
-					backgroundBlurriness,
-				);
 
 				// skip any rays invocations beyond the ray count
 				let queueCapacity = arrayLength( &rayQueue.elements );
@@ -126,11 +96,10 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				} else {
 
-					let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
 					var resultColor = input.resultColor;
 					if ( input.currentBounce > 0u && input.transmissiveRay == 0u ) {
 
-						let environment = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng ).rgb * input.throughputColor;
+						let environment = ${ sampleEnvColor }( input.direction ).rgb * input.throughputColor;
 						let contribution = ${ clampPathContributionFunc }( environment, input.currentBounce + 1u, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 
@@ -138,7 +107,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 						// hit the background
 						// support multiple transparent background blending techniques
-						let bg = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, input.direction, rng );
+						let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
+						let bg = ${ sampleBackground }( input.direction, rng );
 						if ( input.currentBounce == 0u ) {
 
 							// sample the background directly if this is the primary ray
@@ -148,7 +118,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 						} else {
 
 							// transmissive ray handling
-							let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, input.direction, rng );
+							let env = ${ sampleEnvColor }( input.direction );
 							let avg = saturate( dot( input.throughputColor, vec3f( 1.0 / 3.0 ) ) );
 							let transparency = ( 1.0 - bg.a ) * avg;
 

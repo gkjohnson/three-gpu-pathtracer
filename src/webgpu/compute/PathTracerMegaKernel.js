@@ -1,8 +1,8 @@
-import { DataTexture, Matrix3, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
-import { sampleEnvironmentFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
@@ -15,6 +15,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const params = {
 			bvhData: { value: null },
 			material: { value: null },
+			envInfo: { value: null },
+			backgroundInfo: { value: null },
 
 			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -33,18 +35,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 
-			// environment
-			envMap: texture( new DataTexture() ),
-			envMapSampler: sampler( new DataTexture() ),
-			envMapRotation: uniform( new Matrix3() ),
-			envMapIntensity: uniform( 1 ),
-
-			background: texture( new DataTexture() ),
-			backgroundSampler: sampler( new DataTexture() ),
-			backgroundRotation: uniform( new Matrix3() ),
-			backgroundIntensity: uniform( 1 ),
-			backgroundBlurriness: uniform( 0 ),
-
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
 			textures: texture( new DataTexture() ),
@@ -60,6 +50,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
+
+		// environment resources
+		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
+		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -80,36 +74,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				clampDirect: f32,
 				clampIndirect: f32,
 
-				// environment
-				envMap: texture_2d<f32>,
-				envMapSampler: sampler,
-				envMapRotation: mat3x3f,
-				envMapIntensity: f32,
-
-				background: texture_2d<f32>,
-				backgroundSampler: sampler,
-				backgroundRotation: mat3x3f,
-				backgroundIntensity: f32,
-				backgroundBlurriness: f32,
-
 				transmissiveBackground: u32,
 
 			) -> void {
 
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
-
-				let envInfo = EnvironmentInfo(
-					envMapRotation,
-					envMapIntensity,
-					0.0 // blur,
-				);
-
-				let backgroundInfo = EnvironmentInfo(
-					backgroundRotation,
-					backgroundIntensity,
-					backgroundBlurriness,
-				);
 
 				// make sure we don't bleed over the edge of our tile
 				if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -241,10 +211,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
-						let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
-							let environment = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng ).rgb * throughputColor;
+							let environment = ${ sampleEnvColor }( ray.direction ).rgb * throughputColor;
 							let contribution = ${ clampPathContributionFunc }( environment, bounce + 1u, clampDirect, clampIndirect );
 							resultColor += vec4f( contribution, 0.0 );
 
@@ -252,7 +221,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							// hit the background
 							// support multiple transparent background blending techniques
-							let bg = ${ sampleEnvironmentFn }( background, backgroundSampler, backgroundInfo, ray.direction, rng );
+							let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
+							let bg = ${ sampleBackground }( ray.direction, rng );
 							if ( bounce == 0u ) {
 
 								// sample the background directly if this is the primary ray
@@ -262,7 +232,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							} else {
 
 								// transmissive ray handling
-								let env = ${ sampleEnvironmentFn }( envMap, envMapSampler, envInfo, ray.direction, rng );
+								let env = ${ sampleEnvColor }( ray.direction );
 								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
 								let transparency = ( 1.0 - bg.a ) * avg;
 

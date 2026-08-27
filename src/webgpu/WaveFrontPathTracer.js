@@ -6,7 +6,8 @@ import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueuePa
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
 import {
@@ -45,7 +46,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// options
 		this.tiles = new Vector2( 3, 3 );
-		this.envInfo = new EquirectHdrInfoUniform();
+		this.envInfo = new EquirectHdrInfoNode();
+		this.backgroundInfo = new EquirectBackgroundInfo();
 
 		const rayQueueSize = 4 + MAX_QUEUE_COUNT * queuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
@@ -75,6 +77,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitDispatchConverter = new QueueLengthToDispatchKernel( hitQueueStruct ).setWorkgroupSize( 1, 1, 1 );
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
+
+		// bind the shared env provider so the kernels' proxies resolve even before an environment is set
+		this.rayIntersectionKernel.envInfo = this.envInfo;
+		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -155,33 +161,24 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setEnvironment( envMap ) {
 
-		const { rayIntersectionKernel, envInfo } = this;
-		envInfo.updateFrom( envMap );
-		rayIntersectionKernel.envMap = envInfo.map;
-		rayIntersectionKernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+		this.envInfo.updateFrom( envMap );
 
 	}
 
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
-		const { rayIntersectionKernel } = this;
+		const { envInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		rayIntersectionKernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		rayIntersectionKernel.envMapIntensity = envMapIntensity;
+		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
+		envInfo.intensityNode.value = envMapIntensity;
 
 	}
 
 	setBackground( background ) {
 
-		const { rayIntersectionKernel } = this;
-		if ( rayIntersectionKernel.background.isTexture ) {
-
-			rayIntersectionKernel.background.dispose();
-
-		}
-
-		rayIntersectionKernel.background = background;
-		rayIntersectionKernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		const { backgroundInfo } = this;
+		backgroundInfo.dispose();
+		backgroundInfo.map = background;
 
 	}
 
@@ -191,11 +188,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		backgroundBlurriness,
 	) {
 
-		const { rayIntersectionKernel } = this;
+		const { backgroundInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		rayIntersectionKernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		rayIntersectionKernel.backgroundIntensity = backgroundIntensity;
-		rayIntersectionKernel.backgroundBlurriness = backgroundBlurriness;
+		backgroundInfo.rotationNode.value.copy( rotationMatrix );
+		backgroundInfo.intensity = backgroundIntensity;
+		backgroundInfo.blur = backgroundBlurriness;
 
 	}
 
