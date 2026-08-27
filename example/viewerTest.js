@@ -20,6 +20,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
+const EXTRA_CONFIG_URL = new URL( './extraScenarios.json', import.meta.url ).toString();
 const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
 
 const urlParams = new URLSearchParams( window.location.search );
@@ -100,12 +101,27 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// models
-	const { scenarios } = await fetch( CONFIG_URL ).then( res => res.json() );
+	const [ { scenarios }, extraScenarios ] = await Promise.all( [
+		fetch( CONFIG_URL ).then( res => res.json() ),
+		fetch( EXTRA_CONFIG_URL ).then( res => res.json() ),
+	] );
 	modelDatabase = {};
 	scenarios.forEach( s => modelDatabase[ s.name ] = s );
 
-	window.addEventListener( 'hashchange', onHashChange );
-	onHashChange();
+	// add local scenarios for any sample assets the fidelity repo does not cover
+	const covered = new Set( scenarios.map( getSampleAssetName ) );
+	extraScenarios.forEach( s => {
+
+		if ( ! covered.has( getSampleAssetName( s ) ) ) {
+
+			modelDatabase[ s.name ] = s;
+
+		}
+
+	} );
+
+	window.addEventListener( 'popstate', onModelChange );
+	onModelChange();
 
 	animate();
 
@@ -204,19 +220,10 @@ function animate() {
 
 }
 
-function onHashChange() {
+function onModelChange() {
 
-	params.model = Object.keys( modelDatabase )[ 0 ];
-	if ( window.location.hash ) {
-
-		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
-		if ( modelName in modelDatabase ) {
-
-			params.model = modelName;
-
-		}
-
-	}
+	const modelName = new URLSearchParams( window.location.search ).get( 'model' );
+	params.model = modelName in modelDatabase ? modelName : Object.keys( modelDatabase )[ 0 ];
 
 	updateModel();
 
@@ -250,6 +257,14 @@ function onParamsChange() {
 
 }
 
+// the sample asset folder a scenario points at
+function getSampleAssetName( scenario ) {
+
+	const match = ( scenario.model || '' ).match( /glTF-Sample-Assets\/Models\/([^/]+)\// );
+	return match ? match[ 1 ] : null;
+
+}
+
 function buildGui() {
 
 	if ( hideUI ) {
@@ -267,7 +282,10 @@ function buildGui() {
 	gui = new GUI();
 	gui.add( params, 'model', Object.keys( modelDatabase ) ).onChange( v => {
 
-		window.location.hash = v;
+		const url = new URL( window.location );
+		url.searchParams.set( 'model', v );
+		window.history.pushState( {}, '', url );
+		onModelChange();
 
 	} );
 

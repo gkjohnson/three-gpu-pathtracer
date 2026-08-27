@@ -1,6 +1,7 @@
 import {
 	ACESFilmicToneMapping,
 	Box3,
+	Group,
 	LoadingManager,
 	Sphere,
 	DoubleSide,
@@ -10,10 +11,12 @@ import {
 	Scene,
 	PerspectiveCamera,
 	OrthographicCamera,
+	Vector3,
 	WebGPURenderer,
 	EquirectangularReflectionMapping,
 } from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -29,6 +32,7 @@ import { WebGPUPathTracer, RANDOM_BLUE_DITHER, RANDOM_PCG, RANDOM_SOBOL } from '
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
+import { Backdrop } from './src/Backdrop.js';
 import { MODEL_LIST } from './modelList.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
@@ -45,11 +49,48 @@ const DEVICE_LIMITS_REQUESTED = [
 
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
+const DEFAULT_FOV = 45;
+
+// how far behind the model the backdrop's curve begins
+const BACKDROP_DISTANCE = 1;
+
+// stage lighting rigs built from emissive panels
+const LIGHT_RIGS = {
+	'three point': [
+		{ size: 2, position: [ 2, 1.6, 1.8 ], intensity: 6, color: 0xfff0dd },
+		{ size: 2.5, position: [ - 2.4, 0.8, 1.6 ], intensity: 1.5, color: 0xdfeaff },
+		{ size: 1.6, position: [ - 1.2, 1.8, - 2.2 ], intensity: 9, color: 0xffffff },
+	],
+	// taken from the Coffee Maker scene
+	softbox: [
+		{ size: [ 2.1, 2.5 ], position: [ - 1.55, 0.35, 0.9 ], intensity: 2, color: 0xffffff },
+		{ size: [ 2.5, 2 ], position: [ 1.8, 0.5, 0.25 ], intensity: 2, color: 0xffffff },
+		{ size: 2.55, position: [ 0, 1.9, 0.2 ], intensity: 2, color: 0xffffff },
+	],
+	overhead: [
+		{ size: 3, position: [ 0, 2.4, 0.4 ], intensity: 8, color: 0xffffff },
+	],
+	'side strips': [
+		{ size: [ 0.5, 3.2 ], position: [ - 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+		{ size: [ 0.5, 3.2 ], position: [ 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+	],
+	'overhead strips': [
+		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ - 0.3, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.3, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.9, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+	],
+};
+
 const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
 const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
+// sentinel for models that light themselves and should not get an environment
+const NO_ENVIRONMENT = 'none';
+
 const envMaps = {
+	'None': NO_ENVIRONMENT,
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
 	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/moonless_golf_1k.hdr',
 	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
@@ -102,7 +143,11 @@ const params = {
 
 	cameraProjection: 'Perspective',
 
-	transparentBackground: false,
+	stage: 'floor',
+
+	background: 'white',
+
+	lighting: 'none',
 
 	enable: true,
 	bounces: 15,
@@ -112,7 +157,7 @@ const params = {
 
 };
 
-let floorPlane, gui, stats;
+let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -128,6 +173,8 @@ const dropZone = document.getElementById( 'drop-zone' );
 let averageSamples = 0;
 
 const orthoWidth = 2;
+
+const _forward = new Vector3();
 
 init();
 
@@ -190,7 +237,7 @@ async function init() {
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
+	perspectiveCamera = new PerspectiveCamera( DEFAULT_FOV, aspect, 0.025, 500 );
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
@@ -230,10 +277,60 @@ async function init() {
 	floorPlane.rotation.x = - Math.PI / 2;
 	scene.add( floorPlane );
 
+	// a two tier cylinder for the model to sit on, with the top surface at the model's base
+	pedestalMaterial = new MeshStandardMaterial( { color: 0x1c1c1c, roughness: 0.35, metalness: 0 } );
+	pedestal = new Group();
+	const tiers = [ { radius: 0.9, height: 0.05 }, { radius: 0.92, height: 0.05 } ];
+	tiers.forEach( ( { radius, height }, i ) => {
+
+		// each tier sinks halfway into the one above it so the pair reads as a single piece with a
+		// ridge running around it rather than two stacked discs
+		const tier = new Mesh( createPedestalGeometry( radius, height ), pedestalMaterial );
+		tier.position.y = - height * ( 0.5 + i * 0.2 );
+		pedestal.add( tier );
+
+	} );
+	scene.add( pedestal );
+
+	// oriented once per model load, see alignBackdropToCamera
+	backdrop = new Backdrop();
+	scene.add( backdrop );
+
+	// one group per lighting rig
+	lightRigs = new Group();
+	for ( const name in LIGHT_RIGS ) {
+
+		const rig = new Group();
+		rig.name = name;
+		LIGHT_RIGS[ name ].forEach( ( { size, position, rotation, intensity, color } ) => {
+
+			const [ width, height ] = Array.isArray( size ) ? size : [ size, size ];
+			const panel = new Mesh(
+				new PlaneGeometry( width, height ),
+				new MeshStandardMaterial( { color: 0x000000, emissive: color, emissiveIntensity: intensity, side: DoubleSide } ),
+			);
+			panel.position.set( ...position );
+
+			// panels aim at the model unless the rig fixes their orientation
+			if ( rotation ) panel.rotation.set( ...rotation );
+			else panel.lookAt( 0, 0.35, 0 );
+
+			rig.add( panel );
+
+		} );
+
+		lightRigs.add( rig );
+
+	}
+
+	scene.add( lightRigs );
+
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
+	updateStage();
+	updateLighting();
 	onModelChange();
 	updateEnvMap();
 	onResize();
@@ -296,25 +393,87 @@ function animate() {
 
 }
 
+// A rounded box scaled into a disc. The corner radius is half the box width so the x / z profile
+// closes into a circle, and scaling y shrinks that same radius into a small bevel around the rim.
+function createPedestalGeometry( radius, height, bevel = 0.01, segments = 32 ) {
+
+	const geometry = new RoundedBoxGeometry( 2, height / bevel, 2, segments, 1 );
+	geometry.scale( radius, bevel, radius );
+
+	return geometry;
+
+}
+
+// the scenery objects are all present in the scene and swapped by toggling visibility, which only
+// requires the transforms to be re-uploaded rather than a full scene rebuild
+function updateStage() {
+
+	floorPlane.visible = params.stage === 'floor';
+	pedestal.visible = params.stage === 'pedestal';
+	backdrop.visible = params.stage === 'backdrop';
+
+	pathTracer.updateTransforms();
+
+}
+
+// the environment is dimmed while a rig is active so the panels light the model
+function updateLighting() {
+
+	lightRigs.children.forEach( rig => rig.visible = rig.name === params.lighting );
+	scene.environmentIntensity = params.lighting === 'none' ? 1 : 0.1;
+
+	pathTracer.updateTransforms();
+	pathTracer.updateEnvironment();
+
+}
+
+// Orients the backdrop and light rigs relative to the camera. Only run when the model changes so
+// they stay put while orbiting.
+function alignBackdropToCamera() {
+
+	const dx = activeCamera.position.x;
+	const dz = activeCamera.position.z;
+	const angle = Math.atan2( dx, dz );
+
+	backdrop.rotation.y = angle;
+	backdrop.position.x = - Math.sin( angle ) * BACKDROP_DISTANCE;
+	backdrop.position.z = - Math.cos( angle ) * BACKDROP_DISTANCE;
+
+	lightRigs.rotation.y = angle;
+
+}
+
 function onParamsChange() {
 
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
 
-	if ( params.transparentBackground ) {
+	const transparent = params.background === 'transparent';
+	if ( transparent ) {
 
 		scene.background = null;
 		renderer.setClearAlpha( 0 );
 
 	} else {
 
+		const dark = params.background === 'black';
+		gradientMap.topColor.set( dark ? 0x111111 : 0xe0e0e0 );
+		gradientMap.bottomColor.set( dark ? 0x000000 : 0xc4c4c4 );
+		gradientMap.update();
+
 		scene.background = gradientMap;
 		renderer.setClearAlpha( 1 );
 
 	}
 
-	document.body.classList.toggle( 'checkerboard', params.transparentBackground );
+	const light = params.background === 'white';
+	floorPlane.material.color.set( light ? 0xd2d2d2 : 0x111111 );
+	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
 
+	document.body.classList.toggle( 'checkerboard', transparent );
+	document.body.classList.toggle( 'light-background', light );
+
+	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 	pathTracer.setRandom( params.random );
@@ -414,7 +573,6 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'transparentBackground' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
@@ -431,13 +589,26 @@ function buildGui() {
 	} );
 	pathTracingFolder.open();
 
-	const environmentFolder = gui.addFolder( 'environment' );
-	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.open();
+	const backdropFolder = gui.addFolder( 'Backdrop' );
+	backdropFolder.add( params, 'envMap', envMaps ).name( 'environment' ).onChange( updateEnvMap );
+	backdropFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'stage' ).onChange( updateStage );
+	backdropFolder.add( params, 'background', [ 'black', 'white', 'transparent' ] ).name( 'background' ).onChange( onParamsChange );
+	backdropFolder.add( params, 'lighting', [ 'none', ...Object.keys( LIGHT_RIGS ) ] ).name( 'lighting' ).onChange( updateLighting );
+	backdropFolder.open();
 
 }
 
 function updateEnvMap() {
+
+	if ( params.envMap === NO_ENVIRONMENT ) {
+
+		scene.environment?.dispose();
+		scene.environment = null;
+		pathTracer.updateEnvironment();
+		onParamsChange();
+		return;
+
+	}
 
 	new HDRLoader()
 		.load( params.envMap, texture => {
@@ -460,10 +631,32 @@ function updateEnvMap() {
 // models are normalized to a unit sphere at the origin so the framing is the same for all of them
 function resetCamera() {
 
-	perspectiveCamera.position.set( - 1, 0.25, 1 );
+	perspectiveCamera.position.set( - 1, 0.35, 1 ).multiplyScalar( 1.7 );
+	perspectiveCamera.fov = DEFAULT_FOV;
+	perspectiveCamera.updateProjectionMatrix();
 	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	controls.target.set( 0, 0, 0 );
+	controls.update();
+
+}
+
+// frame the view from the camera embedded in the model, keeping the screen aspect ratio
+function useModelCamera( sceneCamera ) {
+
+	scene.updateMatrixWorld( true );
+
+	sceneCamera.getWorldPosition( perspectiveCamera.position );
+	orthoCamera.position.copy( perspectiveCamera.position );
+
+	perspectiveCamera.fov = sceneCamera.fov;
+	perspectiveCamera.updateProjectionMatrix();
+
+	// adjust the controls target point
+	const forward = sceneCamera.getWorldDirection( _forward );
+	const distance = Math.max( - forward.dot( perspectiveCamera.position ), 0.1 );
+	controls.target.copy( perspectiveCamera.position ).addScaledVector( forward, distance );
+
 	controls.update();
 
 }
@@ -593,25 +786,59 @@ async function updateModel() {
 	box.setFromObject( model );
 
 	// attenuation is measured in world units so it must be scaled with the model
+	const scaledMaterials = new Set();
 	model.traverse( c => {
 
-		if ( c.material ) {
+		if ( c.material && ! scaledMaterials.has( c.material ) ) {
 
+			scaledMaterials.add( c.material );
 			c.material.attenuationDistance *= scale;
 
 		}
 
 	} );
 
+	// rest the scenery on the bottom of the model
 	floorPlane.position.y = box.min.y - 1e-3;
+	pedestal.position.y = box.min.y - 1e-3;
+	backdrop.position.y = box.min.y - 1e-3;
 
 	scene.add( model );
 
-	resetCamera();
+	// view the scene through the camera embedded in the model when one is present
+	let sceneCamera = null;
+	model.traverse( c => {
+
+		if ( ! sceneCamera && c.isPerspectiveCamera ) sceneCamera = c;
+
+	} );
+
+	if ( sceneCamera ) {
+
+		useModelCamera( sceneCamera );
+
+	} else {
+
+		resetCamera();
+
+	}
+
+	alignBackdropToCamera();
+
 	pathTracer.setScene( scene, activeCamera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
+
+	// models that carry their own lighting can override the scene defaults
+	params.envMap = modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
+	params.lighting = modelInfo.lighting ?? 'none';
+	params.stage = modelInfo.stage ?? 'floor';
+	params.background = modelInfo.background ?? 'white';
+
+	updateStage();
+	updateLighting();
+	updateEnvMap();
 
 	buildGui();
 	onParamsChange();
