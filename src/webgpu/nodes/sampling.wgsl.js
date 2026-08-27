@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
+import { constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { disneyFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
@@ -86,16 +86,6 @@ export const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 ` );
 
-const sampleEquirectColorFn = wgslFn( /* wgsl */ `
-
-	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
-
-		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 );
-
-	}
-
-`, [ equirectDirectionToUvFn ] );
-
 export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 	fn sampleHemisphere( n: vec3f, uv: vec2f ) -> vec3f {
@@ -117,26 +107,6 @@ export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 	}
 
 `, [ constants ] );
-
-export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
-
-	fn sampleEnvironment(
-		envMap: texture_2d<f32>,
-		envMapSampler: sampler,
-		env: EnvironmentInfo,
-		direction: vec3f,
-		uv: vec2f,
-	) -> vec4f {
-
-		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * env.blur;
-		let sampleDir = normalize( env.rotation * direction + offsetDir );
-		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
-
-		return vec4f( env.intensity * col.rgb, col.a );
-
-	}
-
-`, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
 
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 
