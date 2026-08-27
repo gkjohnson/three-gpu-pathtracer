@@ -364,7 +364,18 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// facet fresnel, matching Cycles - total internal reflection drives the
 					// fresnel to 1 so TIR facets always reflect with a matching pdf
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
-					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+
+					var F: f32;
+					if ( surf.thinWall ) {
+
+						F = ${ dielectricFresnelFunc }( wo.z, surf.eta );
+
+					} else {
+
+						F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+
+					}
+
 					let fresnelSample = ( lobeSample - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
 					let doReflect = fresnelSample < F;
 					if ( doReflect ) {
@@ -452,7 +463,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// the glass lobe selects reflection or refraction by the facet fresnel so
 					// each side carries the corresponding share of the transmission pdf
-					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+					var F: f32;
+					if ( surf.thinWall ) {
+
+						F = ${ dielectricFresnelFunc }( wo.z, surf.eta );
+
+					} else {
+
+						F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+
+					}
+
 					if ( wi.z > 0.0 ) {
 
 						result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
@@ -594,7 +615,17 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// the glass lobe selects reflection or refraction by the facet fresnel so
 					// each side carries the corresponding share of the transmission pdf
-					let F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+					var F: f32;
+					if ( surf.thinWall ) {
+
+						F = ${ dielectricFresnelFunc }( wo.z, surf.eta );
+
+					} else {
+
+						F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
+
+					}
+
 					if ( wi.z > 0.0 ) {
 
 						result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
