@@ -231,6 +231,29 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Bit-level ray origin offset based on Section 6.2.2 of "A Fast and Robust
+// Method for Avoiding Self-Intersection" in Ray Tracing Gems:
+// https://github.com/Apress/ray-tracing-gems/blob/master/Ch_06_A_Fast_and_Robust_Method_for_Avoiding_Self-Intersection/offset_ray.cu
+// The original implementation expects a normal oriented for the outgoing ray;
+// this version orients the geometric normal internally.
+export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
+
+	fn offsetRayOrigin( point: vec3f, direction: vec3f, geometricNormal: vec3f ) -> vec3f {
+
+		let normal = normalize( select( -geometricNormal, geometricNormal, dot( direction, geometricNormal ) >= 0.0 ) );
+		let intScale = 256.0;
+		let integerOffset = vec3i( intScale * normal );
+		let pointBits = bitcast<vec3i>( point );
+		let signedOffset = select( integerOffset, -integerOffset, point < vec3f( 0.0 ) );
+		let offsetPoint = bitcast<vec3f>( pointBits + signedOffset );
+		let origin = 1.0 / 32.0;
+		let floatScale = 1.0 / 65536.0;
+		return select( offsetPoint, point + floatScale * normal, abs( point ) < vec3f( origin ) );
+
+	}
+
+` );
+
 // Wraps a bilinear tap that is off the edge of a tile back to the texel the wrap mode calls for
 export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 
