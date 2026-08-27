@@ -1,4 +1,4 @@
-import { MeshPhysicalMaterial } from 'three';
+import { Box3, MeshPhysicalMaterial, Vector3 } from 'three';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -105,56 +105,161 @@ function ldrawModel( file ) {
 
 export const MODEL_LIST = {
 
-	'M2020 Rover': {
+	// the first entry is the model shown when no "model" search parameter is provided
+	'NASA JPL M2020 Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Perseverance.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 
-	'MER Rover': {
+	'NASA JPL MER Rover': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
 	},
 
-	'Gelatinous Cube': {
-		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/gelatinous-cube/scene.gltf',
-		credit: 'Model by "glenatron" on Sketchfab.',
-		rotation: [ 0, - Math.PI / 8, 0.0 ],
-		postProcess( model ) {
-
-			convertOpacityToTransmission( model );
-
-			const toRemove = [];
-			model.traverse( c => {
-
-				if ( c.material ) {
-
-					if ( c.material instanceof MeshPhysicalMaterial ) {
-
-						const material = c.material;
-						material.metalness = 0.0;
-						material.ior = 1.2;
-						material.map = null;
-
-						c.geometry.computeVertexNormals();
-
-					} else if ( c.material.opacity < 1.0 ) {
-
-						toRemove.push( c );
-
-					}
-
-				}
-
-			} );
-
-			toRemove.forEach( c => {
-
-				c.parent.remove( c );
-
-			} );
-
-		}
+	'NASA JPL Ingenuity Helicopter': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Ingenuity.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
 	},
+
+	'NASA JPL InSight Lander': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/InSight.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+	},
+
+	'NASA JPL Juno': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/Juno.glb',
+		credit: 'Model credit NASA / JPL-Caltech',
+		rotation: [ Math.PI / 6, Math.PI / 5, 0 ],
+	},
+
+	// vehicles
+	'Yamaha MT-09 SP': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/yamaha-mt-09-sp.glb',
+		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	'Toyota Supra GT300': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/toyota-supra-gt300.glb',
+		credit: 'Model by "vecarz" on <a href="https://sketchfab.com/heynic">Sketchfab</a>.',
+	},
+
+	'Jaguar XJ13': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/jaguar-xj13.glb',
+		credit: 'Model by "vecarz" on <a href="https://sketchfab.com/heynic">Sketchfab</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	'McLaren MP4/5': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/mclaren-mp4-5.glb',
+		credit: 'Model by "vecarz" on <a href="https://sketchfab.com/heynic">Sketchfab</a>.',
+	},
+
+	'Jeep Wrangler Rubicon': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/jeep-wrangler-rubicon.glb',
+		credit: 'Model by "vecarz" on <a href="https://sketchfab.com/heynic">Sketchfab</a>.',
+	},
+
+	'Ferrari LaFerrari Aperta': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/ferrari-laferrari-aperta.glb',
+		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	'Lamborghini Huracan GT3': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/lamborghini-huracan-gt3.glb',
+		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
+	},
+
+	'Range Rover': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/range-rover.glb',
+		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	'Porsche 911 Stinger GTR': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/porsche-911-stinger-gtr.glb',
+		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	// devices
+	'Coffee Maker': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/coffee-maker.glb',
+		credit: 'Model by "cekuhnen", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		envMap: 'none',
+		stage: 'none',
+	},
+
+	'Little Lamp': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/little-lamp.glb',
+		credit: 'Model by "UP3D", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		envMap: 'none',
+		stage: 'none',
+	},
+
+	'Headphone with Stand': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/devices/headphone-with-stand.glb',
+		credit: 'Model by "Halil Kantarci" on <a href="https://sketchfab.com/">Sketchfab</a>.',
+	},
+
+	'Sony PlayStation 2': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/devices/sony-playstation-2.glb',
+		credit: 'Model by "Ilgis (Dolgov) Fatykhov" on <a href="https://sketchfab.com/">Sketchfab</a>.',
+	},
+
+	'Sony TC-510-2 Tape Recorder': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/devices/sony-tc-510-2-tape-recorder.glb',
+		credit: 'Model by "Ilgis (Dolgov) Fatykhov" on <a href="https://sketchfab.com/">Sketchfab</a>.',
+	},
+
+	'Sony Walkman WM-F2078': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/devices/sony-walkman-wm-f2078.glb',
+		credit: 'Model by "Ilgis (Dolgov) Fatykhov" on <a href="https://sketchfab.com/">Sketchfab</a>.',
+	},
+
+	// 'Gelatinous Cube': {
+	// 	url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/gelatinous-cube/scene.gltf',
+	// 	credit: 'Model by "glenatron" on Sketchfab.',
+	// 	rotation: [ 0, - Math.PI / 8, 0.0 ],
+	// 	postProcess( model ) {
+
+	// 		convertOpacityToTransmission( model );
+
+	// 		const toRemove = [];
+	// 		model.traverse( c => {
+
+	// 			if ( c.material ) {
+
+	// 				if ( c.material instanceof MeshPhysicalMaterial ) {
+
+	// 					const material = c.material;
+	// 					material.metalness = 0.0;
+	// 					material.ior = 1.2;
+	// 					material.map = null;
+
+	// 					c.geometry.computeVertexNormals();
+
+	// 				} else if ( c.material.opacity < 1.0 ) {
+
+	// 					toRemove.push( c );
+
+	// 				}
+
+	// 			}
+
+	// 		} );
+
+	// 		toRemove.forEach( c => {
+
+	// 			c.parent.remove( c );
+
+	// 		} );
+
+	// 	}
+	// },
 
 	'Octopus Tea': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/octopus-tea/scene.gltf',
@@ -252,6 +357,34 @@ export const MODEL_LIST = {
 		credit: 'glTF Sample Model.',
 	},
 
+	'Dragon': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/dragon.glb',
+		credit: 'Model by "Delatronic", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		postProcess( model ) {
+
+			// the scene is authored in arbitrary units, so the glass is tinted over a fraction of
+			// the model size rather than a fixed distance
+			const size = new Box3().setFromObject( model ).getSize( new Vector3() );
+
+			const material = new MeshPhysicalMaterial();
+			material.roughness = 0.15;
+			material.metalness = 0;
+			material.transmission = 1;
+			material.ior = 1.6;
+			material.thickness = 1;
+			material.attenuationColor.set( 0xe8a441 );
+			material.attenuationDistance = 0.1 * Math.max( size.x, size.y, size.z );
+
+			model.traverse( c => {
+
+				if ( c.material ) c.material = material;
+
+			} );
+
+		}
+	},
+
 	'Crab Sculpture': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/threedscans/Crab.glb',
 		rotation: [ - 2 * Math.PI / 4, 0, 0 ],
@@ -273,6 +406,7 @@ export const MODEL_LIST = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mecabricks/apollo-11-lunar-lander/lunar-lander.dae',
 		postProcess: mecaBricksGoldCorrection,
 		credit: MECABRICKS_CREDIT,
+		rotation: [ 0, - Math.PI * 0.6, 0 ],
 	},
 
 	'LEGO B-wing Starfighter': ldrawModel( '10227-1 - B-wing Starfighter.mpd' ),
