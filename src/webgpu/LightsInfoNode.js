@@ -109,8 +109,10 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 					var spotAttenuation: f32;
 					if ( light.iesProfile >= 0 ) {
 
-						let iesAngle = acos( cosTheta ) / PI;
-						spotAttenuation = textureSampleLevel( ${ iesProfilesNode }, ${ iesSamplerNode }, vec2f( iesAngle, 0.0 ), light.iesProfile, 0.0 ).r;
+						// tilt angle off the forward axis and twist angle around it
+						let tiltAngle = acos( cosTheta ) / PI;
+						let twistAngle = ( atan2( dot( result.direction, light.v ), dot( result.direction, light.u ) ) + PI ) / ( 2.0 * PI );
+						spotAttenuation = textureSampleLevel( ${ iesProfilesNode }, ${ iesSamplerNode }, vec2f( tiltAngle, twistAngle ), light.iesProfile, 0.0 ).r;
 
 					} else {
 
