@@ -4,9 +4,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 // TODO: this scene should technically be rendered at a 1000x smaller scale
 
-// TEMP: local v1.1 export for testing - upload to 3d-demo-data and restore the remote url
-// const ORB_SCENE_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/usd-shader-ball/usd-shaderball-scene.glb';
-const ORB_SCENE_URL = new URL( '../data/standard-shader-ball.glb', import.meta.url ).href;
+const ORB_SCENE_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/usd-shader-ball/standard-shader-ball.glb';
 
 // Light and camera values from the StandardShaderBall v1.1 layers. USD RectLight intensity
 // maps directly onto three.js' RectAreaLight intensity.
