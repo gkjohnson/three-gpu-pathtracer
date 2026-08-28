@@ -2,7 +2,7 @@ import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn, luminanceFn } from '../nodes/sampling.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
