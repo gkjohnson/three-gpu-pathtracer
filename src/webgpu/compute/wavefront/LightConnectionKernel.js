@@ -146,43 +146,36 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-					// reject samples that fall below the geometric surface
-					var lightPdf = lightRec.pdf;
-					if ( dot( surface.faceNormal, lightRec.direction ) < 0.0 ) {
+				if ( lightRec.pdf > 0.0 ) {
 
-						lightPdf = 0.0;
+					let evalRec = ${ bsdfEvalPdfFn }( input.view, lightRec.direction, surface );
+					if ( evalRec.pdf > 0.0 ) {
 
-					}
+						var shadowRay: ${ rayStruct };
+						shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
+						shadowRay.direction = lightRec.direction;
 
-					if ( lightPdf > 0.0 ) {
+						// opaque occlusion up to the light distance ( transmissive shadows not yet handled )
+						var shadowHit: ${ raycastOutput };
+						let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - EPSILON;
+						if ( ! occluded ) {
 
-						let evalRec = ${ bsdfEvalPdfFn }( input.view, lightRec.direction, surface );
-						if ( evalRec.pdf > 0.0 ) {
+							var lightPdf = lightRec.pdf;
+							lightPdf /= lightsDenom;
 
-							var shadowRay: ${ rayStruct };
-							shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
-							shadowRay.direction = lightRec.direction;
+							// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
+							let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 
-							// opaque occlusion up to the light distance ( transmissive shadows not yet handled )
-							var shadowHit: ${ raycastOutput };
-							let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - EPSILON;
-							if ( ! occluded ) {
-
-								lightPdf /= lightsDenom;
-
-								// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
-								let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
-
-								// deposit the contribution in place; ProcessHits reads this augmented resultColor
-								let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
-								let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
-								hitQueue.elements[ hitIndex ].resultColor += vec4f( contribution, 0.0 );
-
-							}
+							// deposit the contribution in place; ProcessHits reads this augmented resultColor
+							let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
+							let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
+							hitQueue.elements[ hitIndex ].resultColor += vec4f( contribution, 0.0 );
 
 						}
 
 					}
+
+				}
 
 			}`;
 

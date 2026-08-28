@@ -243,15 +243,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								}
 
-								// reject samples that fall below the geometric surface
-								var lightPdf = lightRec.pdf;
-								if ( dot( surface.faceNormal, lightRec.direction ) < 0.0 ) {
-
-									lightPdf = 0.0;
-
-								}
-
-								if ( lightPdf > 0.0 ) {
+								if ( lightRec.pdf > 0.0 ) {
 
 									let evalRec = ${ bsdfEvalPdfFn }( view, lightRec.direction, surface );
 									if ( evalRec.pdf > 0.0 ) {
@@ -265,6 +257,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - EPSILON;
 										if ( ! occluded ) {
 
+											var lightPdf = lightRec.pdf;
 											lightPdf /= lightsDenom;
 
 											// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
