@@ -1,10 +1,10 @@
 import {
-	ACESFilmicToneMapping,
 	Color,
 	Scene,
 	WebGPURenderer,
 	Vector3,
 	RectAreaLightNode,
+	AgXToneMapping,
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -16,9 +16,6 @@ import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
 const DB_URL = 'https://api.physicallybased.info/v2/materials';
 const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
 
-// preset entry for hand edited values, ie. not one of the database materials
-const CUSTOM_MATERIAL = 'Custom';
-
 let pathTracer, renderer, controls, material;
 let camera, scene, loader;
 let gui, database, imgEl;
@@ -29,7 +26,7 @@ const initialCameraTarget = new Vector3();
 
 const params = {
 
-	material: CUSTOM_MATERIAL,
+	material: '',
 
 	materialProperties: {
 		color: '#ffe6bd',
@@ -62,6 +59,7 @@ const params = {
 
 	enable: true,
 	displaySampleDensity: false,
+	overlayReference: false,
 	multipleImportanceSampling: true,
 	bounces: 15,
 	renderScale: 1,
@@ -91,14 +89,13 @@ async function init() {
 
 	// reference photo for the selected database material, hidden while editing by hand
 	imgEl = document.getElementById( 'materialImage' );
-	imgEl.style.display = 'none';
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.toneMappingExposure = 0.02;
-	document.body.appendChild( renderer.domElement );
+	renderer.toneMapping = AgXToneMapping;
+	renderer.toneMappingExposure = 1;
+	document.getElementById( 'canvasContainer' ).appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
@@ -115,9 +112,16 @@ async function init() {
 	database = {};
 	dbJson.data.forEach( mat => database[ mat.name ] = mat );
 
+	// select the material named in the url query if present, falling back to the first entry
+	const urlMaterial = new URLSearchParams( window.location.search ).get( 'material' );
+	params.material = urlMaterial !== null && urlMaterial in database ? urlMaterial : Object.keys( database )[ 0 ];
+	applyDatabaseMaterial( database[ params.material ] );
+
 	// scene initialization
 	scene.add( orb.scene );
 	camera = orb.camera;
+	camera.aspect = 1;
+	camera.updateProjectionMatrix();
 	material = orb.material;
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
@@ -129,6 +133,7 @@ async function init() {
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
+	controls.enablePan = false;
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// shift target
@@ -150,7 +155,12 @@ async function init() {
 
 	// gui
 	gui = new GUI();
-	gui.add( params, 'material', [ CUSTOM_MATERIAL, ...Object.keys( database ) ] ).onChange( onMaterialChange );
+	gui.add( params, 'material', Object.keys( database ) ).onChange( onMaterialChange );
+	gui.add( params, 'overlayReference' ).onChange( v => {
+
+		imgEl.classList.toggle( 'overlay', v );
+
+	} );
 	gui.add( { resetCamera }, 'resetCamera' ).name( 'reset camera' );
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
@@ -196,19 +206,6 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
 
-	// editing anything by hand means the values no longer match the selected preset
-	matFolder1.controllersRecursive().forEach( controller => {
-
-		controller.onFinishChange( () => {
-
-			params.material = CUSTOM_MATERIAL;
-			imgEl.style.display = 'none';
-			gui.controllers[ 0 ].updateDisplay();
-
-		} );
-
-	} );
-
 	animate();
 
 }
@@ -246,7 +243,9 @@ function applyDatabaseMaterial( info ) {
 
 		materialProperties.iridescence = 1;
 		materialProperties.iridescenceIOR = info.thinFilmIor;
-		materialProperties.iridescenceThickness = info.thinFilmThickness[ 2 ] ?? info.thinFilmThickness[ 0 ];
+		// thickness is [ min, max, nominal ] with the nominal sometimes absent
+		const [ min, max, nominal ] = info.thinFilmThickness;
+		materialProperties.iridescenceThickness = nominal ?? ( min + max ) / 2;
 
 	}
 
@@ -262,19 +261,18 @@ function applyDatabaseMaterial( info ) {
 
 	}
 
-	imgEl.src = Object.values( info.images[ 1 ] )[ 0 ];
+	imgEl.src = info.images[ 0 ][ '600' ];
 
 }
 
 function onMaterialChange() {
 
-	if ( params.material !== CUSTOM_MATERIAL ) {
+	applyDatabaseMaterial( database[ params.material ] );
 
-		applyDatabaseMaterial( database[ params.material ] );
-
-	}
-
-	imgEl.style.display = params.material === CUSTOM_MATERIAL ? 'none' : '';
+	// reflect the selected material in the url
+	const search = new URLSearchParams( window.location.search );
+	search.set( 'material', params.material );
+	history.replaceState( null, '', `?${ search }` );
 
 	gui.controllersRecursive().forEach( c => c.updateDisplay() );
 	onParamsChange();
@@ -292,11 +290,10 @@ function resetCamera() {
 
 function onResize() {
 
-	renderer.setSize( window.innerWidth, window.innerHeight );
+	// square canvas matching the format of the database reference renders
+	const dim = 0.5 * Math.min( window.innerWidth, window.innerHeight );
+	renderer.setSize( dim, dim );
 	renderer.setPixelRatio( window.devicePixelRatio );
-	camera.aspect = window.innerWidth / window.innerHeight;
-	camera.updateProjectionMatrix();
-	pathTracer.updateCamera();
 
 }
 

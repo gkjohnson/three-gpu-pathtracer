@@ -11,6 +11,13 @@
 				background-color: #111;
 			}
 
+			#canvasContainer {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate( -50%, -50% );
+			}
+
 			.checkerboard {
 				background-image:
 					linear-gradient(45deg, #222 25%, transparent 25%),
@@ -27,10 +34,23 @@
 				bottom: 0;
 				right: 0;
 			}
+
+			#materialImage.overlay {
+				z-index: 1;
+				width: 50vmin;
+				height: 50vmin;
+				bottom: auto;
+				right: auto;
+				top: 50%;
+				left: 50%;
+				transform: translate( -50%, -50% );
+				pointer-events: none;
+			}
 		</style>
 
 	</head>
-	<body class="checkerboard">
+	<body>
+		<div id="canvasContainer" class="checkerboard"></div>
 		<img id="materialImage"/>
 		<script src="./materialOrb.js" type="module"></script>
 	</body>
