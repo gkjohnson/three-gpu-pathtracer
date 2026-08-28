@@ -302,10 +302,11 @@ export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 
 // Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
 // array node ( must be named "textureInfo" ). Called once per scene so a single
-// sampleTexel / textureInfo binding is shared by every caller in a pipeline.
-export const sampleTexelFunc = ( textureInfoUniform, atlas ) => wgslTagFn/* wgsl */ `
+// sampleTexel / textureInfo binding is shared by every caller in a pipeline. A distinct
+// name must be given when a second atlas binding is used in the same pipeline.
+export const sampleTexelFunc = ( textureInfoUniform, atlas, name = 'sampleTexel' ) => wgslTagFn/* wgsl */ `
 
-	fn sampleTexel( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
+	fn ${ name }( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
 		let texIndex = packed & 0x7FFFFF;
 		let wrapS    = ( packed >> 26 ) & 0x3;

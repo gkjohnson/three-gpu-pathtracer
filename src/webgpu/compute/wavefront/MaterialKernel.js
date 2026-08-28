@@ -192,13 +192,6 @@ export class MaterialKernel extends ComputeKernel {
 
 					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray
 					var lightPdf = input.lightPdf;
-					if ( lightPdf > 0.0 && dot( surface.faceNormal, input.lightDirection ) < 0.0 ) {
-
-						// reject samples that fall below the geometric surface
-						lightPdf = 0.0;
-
-					}
-
 					if ( lightPdf > 0.0 ) {
 
 						let evalRec = ${ bsdfEvalPdfFn }( view, input.lightDirection, surface );
