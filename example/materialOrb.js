@@ -95,7 +95,7 @@ async function init() {
 	renderer.init();
 	renderer.toneMapping = AgXToneMapping;
 	renderer.toneMappingExposure = 1;
-	document.body.appendChild( renderer.domElement );
+	document.getElementById( 'canvasContainer' ).appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
