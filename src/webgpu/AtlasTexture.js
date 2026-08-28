@@ -8,7 +8,7 @@ import {
 	Vector4,
 } from 'three/webgpu';
 
-const MAX_TEXTURE_SIZE = 4096 * 2;
+const MAX_TEXTURE_SIZE = 4096;
 const _prevClearColor = new Color();
 
 function getTextureHash( texture ) {

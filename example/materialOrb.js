@@ -129,6 +129,8 @@ async function init() {
 	// scene initialization
 	scene.add( orb.scene );
 	camera = orb.camera;
+	camera.aspect = 1;
+	camera.updateProjectionMatrix();
 	material = orb.material;
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
@@ -329,9 +331,6 @@ function onResize() {
 	const dim = 0.5 * Math.min( window.innerWidth, window.innerHeight );
 	renderer.setSize( dim, dim );
 	renderer.setPixelRatio( window.devicePixelRatio );
-	camera.aspect = 1;
-	camera.updateProjectionMatrix();
-	pathTracer.updateCamera();
 
 }
 
