@@ -41,7 +41,7 @@ export class LightConnectionKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
 
-		// environment resources pulled straight off the envInfo provider ( EquirectHdrInfoNode )
+		// environment resources pulled straight off the envInfo provider
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 
@@ -97,6 +97,7 @@ export class LightConnectionKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
+				// TODO: this material handling / processing is duplicated for primary paths and NEE rays
 				let objectInfo = transforms[ input.objectIndex ];
 				var materialInfo = materials[ objectInfo.materialIndex ];
 

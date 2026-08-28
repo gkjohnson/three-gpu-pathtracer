@@ -371,6 +371,7 @@ export class WebGPUPathTracer {
 
 		this._multipleImportanceSampling = value;
 		this._pathTracer.setMultipleImportanceSampling( value );
+		this.reset();
 
 	}
 
