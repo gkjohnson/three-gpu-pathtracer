@@ -62,6 +62,7 @@ const params = {
 
 	enable: true,
 	displaySampleDensity: false,
+	overlayReference: false,
 	multipleImportanceSampling: true,
 	bounces: 15,
 	renderScale: 1,
@@ -115,6 +116,16 @@ async function init() {
 	database = {};
 	dbJson.data.forEach( mat => database[ mat.name ] = mat );
 
+	// select the material named in the url query if present
+	const urlMaterial = new URLSearchParams( window.location.search ).get( 'material' );
+	if ( urlMaterial !== null && urlMaterial in database ) {
+
+		params.material = urlMaterial;
+		applyDatabaseMaterial( database[ urlMaterial ] );
+		imgEl.style.display = '';
+
+	}
+
 	// scene initialization
 	scene.add( orb.scene );
 	camera = orb.camera;
@@ -153,6 +164,11 @@ async function init() {
 	gui = new GUI();
 	gui.add( params, 'material', [ CUSTOM_MATERIAL, ...Object.keys( database ) ] ).onChange( onMaterialChange );
 	gui.add( { resetCamera }, 'resetCamera' ).name( 'reset camera' );
+	gui.add( params, 'overlayReference' ).onChange( v => {
+
+		imgEl.classList.toggle( 'overlay', v );
+
+	} );
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
@@ -276,6 +292,20 @@ function onMaterialChange() {
 	}
 
 	imgEl.style.display = params.material === CUSTOM_MATERIAL ? 'none' : '';
+
+	// reflect the selected material in the url
+	const search = new URLSearchParams( window.location.search );
+	if ( params.material === CUSTOM_MATERIAL ) {
+
+		search.delete( 'material' );
+
+	} else {
+
+		search.set( 'material', params.material );
+
+	}
+
+	history.replaceState( null, '', search.size ? `?${ search }` : window.location.pathname );
 
 	gui.controllersRecursive().forEach( c => c.updateDisplay() );
 	onParamsChange();
