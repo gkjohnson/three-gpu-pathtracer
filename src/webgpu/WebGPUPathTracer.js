@@ -12,7 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
-import { getLights, getIesTextures } from '../core/utils/sceneUpdateUtils.js';
+import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
@@ -588,8 +588,7 @@ export class WebGPUPathTracer {
 		const { _pathTracer, scene } = this;
 
 		const lights = getLights( scene );
-		const iesTextures = getIesTextures( lights );
-		_pathTracer.setLights( lights, iesTextures );
+		_pathTracer.setLights( lights );
 		this.reset();
 
 	}

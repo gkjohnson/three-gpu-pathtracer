@@ -10,11 +10,11 @@ import {
 	MeshStandardMaterial,
 	BoxGeometry,
 	PerspectiveCamera,
+	IESSpotLight,
 } from 'three/webgpu';
 import { IESLoader } from 'three/examples/jsm/loaders/IESLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalSpotLight } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -42,7 +42,7 @@ let loader;
 
 // gui parameters
 const params = {
-	multipleImportanceSampling: true,
+	enable: true,
 	bounces: 15,
 	renderScale: 1,
 	tiles: 2,
@@ -143,14 +143,18 @@ async function init() {
 	scene.add( wall );
 
 	// spot light
-	spotLight = new PhysicalSpotLight( 0xffffff );
+	// TODO: use PhysicalSpotLight once it can extend IESSpotLight - currently the class is only
+	// exported from "three/webgpu" and the node library resolves light nodes by exact constructor
+	// so a subclass would not rasterize
+	spotLight = new IESSpotLight( 0xffffff );
 	spotLight.position.set( 0, 7.0, 4 );
 	spotLight.angle = Math.PI / 4.5;
 	spotLight.decay = 0;
 	spotLight.penumbra = 1.0;
 	spotLight.distance = 0.0;
 	spotLight.intensity = 50.0;
-	spotLight.radius = 0.5;
+	spotLight.radius = 0.0;
+	spotLight.iesMap = params.iesProfile === - 1 ? null : iesTextures[ params.iesProfile ];
 
 	// spot light shadow
 	spotLight.shadow.mapSize.width = 512;
@@ -179,7 +183,7 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
+	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
@@ -199,6 +203,15 @@ async function init() {
 	lightFolder.add( params, 'iesProfile', - 1, IES_PROFILE_URLS.length - 1, 1 ).onChange( v => {
 
 		spotLight.iesMap = v === - 1 ? null : iesTextures[ v ];
+
+		// TODO: three.js does not pick up "iesMap" changes after the first compile - remove this
+		// rebuild once that is fixed
+		scene.traverse( c => {
+
+			if ( c.material ) c.material.needsUpdate = true;
+
+		} );
+
 		onParamsChange();
 
 	} );
@@ -222,7 +235,6 @@ function onResize() {
 function onParamsChange() {
 
 	// pathTracer.renderScale = params.renderScale;
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
 	pathTracer.updateLights();
 
@@ -233,7 +245,16 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	camera.updateMatrixWorld();
-	pathTracer.renderSample();
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+
+	if ( params.enable ) {
+
+		pathTracer.renderSample();
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }

@@ -163,8 +163,7 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 
 `, [ lightStruct, lightRecordStruct, constants ] );
 
-// Samples the disc of a spot light, applying cone and distance falloff. IES profiles are not
-// yet ported so the analytic cone attenuation is always used.
+// Samples the disc of a spot light with distance falloff. Angular ( cone or IES ) attenuation is applied by the caller.
 export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
 
 	fn randomSpotLightSample( light: Light, rayOrigin: vec3f, ruv: vec2f ) -> LightRecord {
@@ -188,20 +187,17 @@ export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
 		let dist = sqrt( lightDistSq );
 
 		let direction = toLight / max( dist, EPSILON );
-		let cosTheta = dot( direction, normal );
-
-		let spotAttenuation = getSpotAttenuation( light.coneCos, light.penumbraCos, cosTheta );
 		let distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 
 		var lightRec: LightRecord;
 		lightRec.lightType = light.lightType;
 		lightRec.dist = dist;
 		lightRec.direction = direction;
-		lightRec.emission = light.color * light.intensity * distanceAttenuation * spotAttenuation;
+		lightRec.emission = light.color * light.intensity * distanceAttenuation;
 		lightRec.pdf = 1.0;
 
 		return lightRec;
 
 	}
 
-`, [ lightStruct, lightRecordStruct, constants, getSpotAttenuationFn, getDistanceAttenuationFn ] );
+`, [ lightStruct, lightRecordStruct, constants, getDistanceAttenuationFn ] );

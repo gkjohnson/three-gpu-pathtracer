@@ -119,9 +119,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setLights( lights, iesTextures ) {
+	setLights( lights ) {
 
-		this.lightsInfo.updateFrom( lights, iesTextures );
+		this.lightsInfo.updateFrom( this.renderer, lights );
 		this.reset();
 
 	}

@@ -1,8 +1,10 @@
-import { storage, uniform } from 'three/tsl';
-import { StorageBufferAttribute } from 'three/webgpu';
+import { storage, uniform, uniformArray, texture } from 'three/tsl';
+import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { AtlasTexture } from './AtlasTexture.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
+import { sampleTexelFunc } from './nodes/utils.wgsl.js';
 import {
 	RECT_AREA_LIGHT_TYPE,
 	CIRC_AREA_LIGHT_TYPE,
@@ -14,6 +16,7 @@ import {
 	intersectsCircleFn,
 	randomAreaLightSampleFn,
 	randomSpotLightSampleFn,
+	getSpotAttenuationFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -24,22 +27,26 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
-		this._resizeBuffer( 2 );
+		this.buffer = new StorageBufferAttribute( new Float32Array( 2 * lightStruct.getLength() ), lightStruct.getLength() );
+		this.bufferNode = storage( this.buffer, lightStruct ).toReadOnly().setName( 'lights' );
+
+		// ies profiles packed into an atlas alongside their placement rects
+		this.iesAtlas = new AtlasTexture( { type: HalfFloatType } );
+		this.iesProfilesNode = texture( this.iesAtlas.texture );
+		this.iesInfoNode = uniformArray( this.iesAtlas.textureInfo, 'uvec4' );
+
 		this._initFns();
 
 	}
 
-	_resizeBuffer( lightCapacity ) {
+	updateFrom( renderer, lights ) {
 
-		const stride = lightStruct.getLength();
-		this.buffer = new StorageBufferAttribute( new Float32Array( lightCapacity * stride ), stride );
-		this.bufferNode = storage( this.buffer, lightStruct ).toReadOnly().setName( 'lights' );
-
-	}
-
-	updateFrom( lights, iesTextures = [] ) {
-
+		// the unique set of ies textures referenced by the lights' "iesMap" fields
+		const iesTextures = Array.from( new Set( lights.map( l => l.iesMap ).filter( t => t ) ) );
 		const changed = super.updateFrom( lights, iesTextures );
+
+		this.iesAtlas.setTextures( renderer, iesTextures );
+		this.iesProfilesNode.value = this.iesAtlas.texture;
 
 		const stride = lightStruct.getLength();
 		const count = this.count;
@@ -76,7 +83,10 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode } = this;
+		const { bufferNode, iesProfilesNode, iesInfoNode } = this;
+
+		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
+		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
 
 		// uniformly pick a light and sample it
 		this.randomLightSample = wgslTagFn/* wgsl */`
@@ -88,6 +98,26 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
 
 					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv );
+
+					let spotNormal = normalize( cross( light.u, light.v ) );
+					let cosTheta = dot( result.direction, spotNormal );
+					var spotAttenuation: f32;
+					if ( light.iesProfile >= 0 ) {
+
+						// tilt angle off the forward axis and twist angle around it, with the
+						// tilt axis clamped and the twist axis wrapped ( wrapS = 1, wrapT = 0 )
+						let tiltAngle = acos( cosTheta ) / PI;
+						let twistAngle = ( atan2( dot( result.direction, light.v ), dot( result.direction, light.u ) ) + PI ) / ( 2.0 * PI );
+						let packedProfile = ( 1 << 26 ) | light.iesProfile;
+						spotAttenuation = ${ sampleIesTexelFn }( vec2f( tiltAngle, twistAngle ), packedProfile, 0.0 ).r;
+
+					} else {
+
+						spotAttenuation = ${ getSpotAttenuationFn }( light.coneCos, light.penumbraCos, cosTheta );
+
+					}
+
+					result.emission *= spotAttenuation;
 
 				} else if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
 
@@ -182,6 +212,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 	dispose() {
 
 		this.tex.dispose();
+		this.iesAtlas.dispose();
 
 	}
 
