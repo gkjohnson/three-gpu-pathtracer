@@ -16,9 +16,6 @@ import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
 const DB_URL = 'https://api.physicallybased.info/v2/materials';
 const CREDITS = 'Materials courtesy of "physicallybased.info"</br>Material orb model courtesy of USD Working Group';
 
-// preset entry for hand edited values, ie. not one of the database materials
-const CUSTOM_MATERIAL = 'Custom';
-
 let pathTracer, renderer, controls, material;
 let camera, scene, loader;
 let gui, database, imgEl;
@@ -29,7 +26,7 @@ const initialCameraTarget = new Vector3();
 
 const params = {
 
-	material: CUSTOM_MATERIAL,
+	material: '',
 
 	materialProperties: {
 		color: '#ffe6bd',
@@ -92,7 +89,6 @@ async function init() {
 
 	// reference photo for the selected database material, hidden while editing by hand
 	imgEl = document.getElementById( 'materialImage' );
-	imgEl.style.display = 'none';
 
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
@@ -116,15 +112,10 @@ async function init() {
 	database = {};
 	dbJson.data.forEach( mat => database[ mat.name ] = mat );
 
-	// select the material named in the url query if present
+	// select the material named in the url query if present, falling back to the first entry
 	const urlMaterial = new URLSearchParams( window.location.search ).get( 'material' );
-	if ( urlMaterial !== null && urlMaterial in database ) {
-
-		params.material = urlMaterial;
-		applyDatabaseMaterial( database[ urlMaterial ] );
-		imgEl.style.display = '';
-
-	}
+	params.material = urlMaterial !== null && urlMaterial in database ? urlMaterial : Object.keys( database )[ 0 ];
+	applyDatabaseMaterial( database[ params.material ] );
 
 	// scene initialization
 	scene.add( orb.scene );
@@ -164,13 +155,13 @@ async function init() {
 
 	// gui
 	gui = new GUI();
-	gui.add( params, 'material', [ CUSTOM_MATERIAL, ...Object.keys( database ) ] ).onChange( onMaterialChange );
-	gui.add( { resetCamera }, 'resetCamera' ).name( 'reset camera' );
+	gui.add( params, 'material', Object.keys( database ) ).onChange( onMaterialChange );
 	gui.add( params, 'overlayReference' ).onChange( v => {
 
 		imgEl.classList.toggle( 'overlay', v );
 
 	} );
+	gui.add( { resetCamera }, 'resetCamera' ).name( 'reset camera' );
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
@@ -214,19 +205,6 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
-
-	// editing anything by hand means the values no longer match the selected preset
-	matFolder1.controllersRecursive().forEach( controller => {
-
-		controller.onFinishChange( () => {
-
-			params.material = CUSTOM_MATERIAL;
-			imgEl.style.display = 'none';
-			gui.controllers[ 0 ].updateDisplay();
-
-		} );
-
-	} );
 
 	animate();
 
@@ -289,27 +267,12 @@ function applyDatabaseMaterial( info ) {
 
 function onMaterialChange() {
 
-	if ( params.material !== CUSTOM_MATERIAL ) {
-
-		applyDatabaseMaterial( database[ params.material ] );
-
-	}
-
-	imgEl.style.display = params.material === CUSTOM_MATERIAL ? 'none' : '';
+	applyDatabaseMaterial( database[ params.material ] );
 
 	// reflect the selected material in the url
 	const search = new URLSearchParams( window.location.search );
-	if ( params.material === CUSTOM_MATERIAL ) {
-
-		search.delete( 'material' );
-
-	} else {
-
-		search.set( 'material', params.material );
-
-	}
-
-	history.replaceState( null, '', search.size ? `?${ search }` : window.location.pathname );
+	search.set( 'material', params.material );
+	history.replaceState( null, '', `?${ search }` );
 
 	gui.controllersRecursive().forEach( c => c.updateDisplay() );
 	onParamsChange();
