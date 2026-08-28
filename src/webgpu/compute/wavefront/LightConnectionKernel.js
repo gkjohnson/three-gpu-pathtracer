@@ -6,7 +6,7 @@ import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand3, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
@@ -155,18 +155,19 @@ export class LightConnectionKernel extends ComputeKernel {
 						shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
 						shadowRay.direction = lightRec.direction;
 
-						// opaque occlusion up to the light distance ( transmissive shadows not yet handled )
+						// opaque occlusion up to the light distance. A shadow-specific any hit traversal could support
+						// tinted shadows from transmissive and partially opaque objects
 						var shadowHit: ${ raycastOutput };
-						let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - EPSILON;
+						let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - ${ LIGHT_EPSILON };
 						if ( ! occluded ) {
 
 							var lightPdf = lightRec.pdf;
 							lightPdf /= lightsDenom;
 
-							// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
+							// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight
 							let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 
-							// deposit the contribution in place; ProcessHits reads this augmented resultColor
+							// deposit the contribution in place
 							let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
 							let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
 							hitQueue.elements[ hitIndex ].resultColor += vec4f( contribution, 0.0 );

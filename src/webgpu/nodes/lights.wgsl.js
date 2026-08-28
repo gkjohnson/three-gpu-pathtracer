@@ -11,6 +11,9 @@ export const POINT_LIGHT_TYPE = 4;
 export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
+// tolerance for comparing a shadow hit distance to the sampled light distance
+export const LIGHT_EPSILON = 1e-5;
+
 // light kinds that are also bsdf-sampled and so take MIS-weighted NEE - punctual lights take full weight
 export const isMISWeightLightFn = wgslFn( /* wgsl */ `
 
