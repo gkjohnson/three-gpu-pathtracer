@@ -219,6 +219,33 @@ export const environmentSampleStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'EnvironmentSample' );
 
+// A single scene light unpacked from the lights data texture.
+export const lightStruct = new StructTypeNode( {
+	position: 'vec3f',
+	lightType: 'int',
+	color: 'vec3f',
+	intensity: 'float',
+	u: 'vec3f',
+	v: 'vec3f',
+	area: 'float',
+	radius: 'float',
+	decay: 'float',
+	distance: 'float',
+	coneCos: 'float',
+	penumbraCos: 'float',
+	iesProfile: 'int',
+}, 'Light' );
+
+// Result of sampling (or intersecting) a light: a world-space direction toward the light,
+// the distance to it, its emitted radiance, and the pdf (solid-angle measure) of the sample.
+export const lightRecordStruct = new StructTypeNode( {
+	dist: 'float',
+	direction: 'vec3f',
+	pdf: 'float',
+	emission: 'vec3f',
+	lightType: 'int',
+}, 'LightRecord' );
+
 export const lobeWeightsStruct = new StructTypeNode( {
 	diffuse: 'float',
 	specular: 'float',

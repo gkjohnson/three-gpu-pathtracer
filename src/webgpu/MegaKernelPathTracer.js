@@ -2,6 +2,7 @@ import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -26,6 +27,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.backgroundInfo = new EquirectBackgroundInfo();
 		this.kernel.backgroundInfo = this.backgroundInfo;
+
+		this.lightsInfo = new LightsInfoNode();
+		this.kernel.lightsInfo = this.lightsInfo;
 
 	}
 
@@ -112,6 +116,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	setEnvironment( envMap ) {
 
 		this.envInfo.updateFrom( envMap );
+
+	}
+
+	setLights( lights, iesTextures ) {
+
+		this.lightsInfo.updateFrom( lights, iesTextures );
+		this.reset();
 
 	}
 
@@ -255,6 +266,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
+		this.lightsInfo.dispose();
 
 	}
 

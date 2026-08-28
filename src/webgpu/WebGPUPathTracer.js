@@ -12,6 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
+import { getLights, getIesTextures } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
@@ -195,6 +196,22 @@ export class WebGPUPathTracer {
 
 	}
 
+	get multipleImportanceSampling() {
+
+		return this._multipleImportanceSampling;
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		if ( this._multipleImportanceSampling !== v ) {
+
+			this.setMultipleImportanceSampling( v );
+
+		}
+
+	}
+
 	get clampDirect() {
 
 		return this._clampDirect;
@@ -247,8 +264,6 @@ export class WebGPUPathTracer {
 
 	}
 
-	updateLights() {}
-
 	// --- end compatibility stubs ---
 
 	get fadeState() {
@@ -291,6 +306,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -332,9 +348,6 @@ export class WebGPUPathTracer {
 		this.filterGlossyFactor = 1;
 		this._clampDirect = 0;
 		this._clampIndirect = 10;
-
-		// WebGLPathTracer compatibility stubs (see getters above)
-		// TOOD: implement these correctly
 		this.multipleImportanceSampling = true;
 		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
@@ -356,7 +369,7 @@ export class WebGPUPathTracer {
 
 	setMultipleImportanceSampling( value ) {
 
-		this.multipleImportanceSampling = value;
+		this._multipleImportanceSampling = value;
 		this._pathTracer.setMultipleImportanceSampling( value );
 		this.reset();
 
@@ -425,6 +438,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -565,6 +579,17 @@ export class WebGPUPathTracer {
 			scene.backgroundBlurriness,
 		);
 
+		this.reset();
+
+	}
+
+	updateLights() {
+
+		const { _pathTracer, scene } = this;
+
+		const lights = getLights( scene );
+		const iesTextures = getIesTextures( lights );
+		_pathTracer.setLights( lights, iesTextures );
 		this.reset();
 
 	}

@@ -8,6 +8,7 @@ import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
 import { LightConnectionKernel } from './compute/wavefront/LightConnectionKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
@@ -49,6 +50,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.tiles = new Vector2( 3, 3 );
 		this.envInfo = new EquirectHdrInfoNode();
 		this.backgroundInfo = new EquirectBackgroundInfo();
+		this.lightsInfo = new LightsInfoNode();
 
 		const rayQueueSize = 4 + MAX_QUEUE_COUNT * queuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
@@ -80,10 +82,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 
-		// bind the shared env provider so the kernels' proxies resolve even before an environment is set
+		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
 		this.rayIntersectionKernel.envInfo = this.envInfo;
 		this.lightConnectionKernel.envInfo = this.envInfo;
 		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
+		this.rayIntersectionKernel.lightsInfo = this.lightsInfo;
+		this.lightConnectionKernel.lightsInfo = this.lightsInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -181,6 +185,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setLights( lights, iesTextures ) {
+
+		this.lightsInfo.updateFrom( lights, iesTextures );
+		this.reset();
+
+	}
+
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
 		const { envInfo } = this;
@@ -248,6 +259,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
+		this.lightsInfo.dispose();
 
 	}
 

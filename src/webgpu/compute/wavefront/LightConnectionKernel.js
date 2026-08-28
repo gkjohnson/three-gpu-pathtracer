@@ -5,7 +5,9 @@ import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit, rand2, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand3, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
@@ -16,6 +18,7 @@ export class LightConnectionKernel extends ComputeKernel {
 			bvhData: { value: null },
 			material: { value: null },
 			envInfo: { value: null },
+			lightsInfo: { value: null },
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
@@ -42,6 +45,10 @@ export class LightConnectionKernel extends ComputeKernel {
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 
+		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
+		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
+		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -67,8 +74,19 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-				// nothing to do without an importance-sampleable environment
-				if ( misEnabled == 0u || ${ envTotalSumNode } <= 0.0 ) {
+				// one-sample NEE selects between the analytic lights and the environment -
+				// lightsDenom is the number of options
+				let envActive = ${ envTotalSumNode } > 0.0;
+				let lightsCount = ${ lightsCountNode };
+				var lightsDenom = f32( lightsCount );
+				if ( envActive ) {
+
+					lightsDenom += 1.0;
+
+				}
+
+				// nothing to do without any lights or an importance-sampleable environment
+				if ( misEnabled == 0u || lightsDenom <= 0.0 ) {
 
 					return;
 
@@ -107,26 +125,54 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-				// next event estimation: importance-sample the environment, MIS-weighted against the bsdf pdf.
-				let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+				// next event estimation: pick one light or the environment with a single sample
+				// TODO: importance-sample the selection by light intensity and solid angle
+				let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
+				let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
+				var lightRec: ${ lightRecordStruct };
+				if ( envActive && lightIndex == lightsCount ) {
 
-				// TODO: do we need to guard against other forms of invalid rays? Eg below the surface?
-				let evalRec = ${ bsdfEvalPdfFn }( input.view, envSample.direction, surface );
-				if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
+					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+					let envSample = ${ sampleEnvDir }( ruv.yz );
+					lightRec.direction = envSample.direction;
+					lightRec.emission = envSample.color;
+					lightRec.pdf = envSample.pdf;
+					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-					var shadowRay: ${ rayStruct };
-					shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, envSample.direction, input.normal );
-					shadowRay.direction = envSample.direction;
+				} else {
 
-					var shadowHit: ${ raycastOutput };
-					if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
+					lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
 
-						let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
+				}
 
-						// deposit the contribution in place; ProcessHits reads this augmented resultColor
-						let directLight = throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf;
-						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
-						hitQueue.elements[ hitIndex ].resultColor += vec4f( contribution, 0.0 );
+				if ( lightRec.pdf > 0.0 ) {
+
+					let evalRec = ${ bsdfEvalPdfFn }( input.view, lightRec.direction, surface );
+					if ( evalRec.pdf > 0.0 ) {
+
+						var shadowRay: ${ rayStruct };
+						shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
+						shadowRay.direction = lightRec.direction;
+
+						// opaque occlusion up to the light distance. A shadow-specific any hit traversal could support
+						// tinted shadows from transmissive and partially opaque objects
+						var shadowHit: ${ raycastOutput };
+						let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - ${ LIGHT_EPSILON };
+						if ( ! occluded ) {
+
+							var lightPdf = lightRec.pdf;
+							lightPdf /= lightsDenom;
+
+							// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight
+							let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
+
+							// deposit the contribution in place
+							let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
+							let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
+							hitQueue.elements[ hitIndex ].resultColor += vec4f( contribution, 0.0 );
+
+						}
 
 					}
 
