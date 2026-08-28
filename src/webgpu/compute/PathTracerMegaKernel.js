@@ -157,8 +157,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward MIS: a bsdf-sampled ray that lands on a ( non-occluded ) area light.
-					// Only area lights can be hit this way; the camera ray is skipped.
+					// forward MIS: a bsdf-sampled ray that lands on a area light.
 					if ( misEnabled != 0u && bounce > 0u ) {
 
 						for ( var li = 0u; li < lightsCount; li ++ ) {

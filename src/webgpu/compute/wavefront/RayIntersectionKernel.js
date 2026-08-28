@@ -49,7 +49,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
-		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
+		// analytic scene lights pulled off the lightsInfo provider
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
 
@@ -83,7 +83,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let indexUV = input.pixel;
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
-				// one-sample NEE selection normalization ( lights + env ), matched with LightConnectionKernel
+				// one-sample NEE selection normalization (lights + env)
 				let envActive = ${ envTotalSumNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
@@ -101,8 +101,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				var resultColor = input.resultColor;
 
-				// forward MIS: a bsdf-sampled ray that lands on a ( non-occluded ) area light.
-				// Only area lights can be hit this way; the camera ray is skipped.
+				// forward MIS: a bsdf-sampled ray that lands on a area light.
 				if ( misEnabled != 0u && input.currentBounce > 0u ) {
 
 					for ( var li = 0u; li < lightsCount; li ++ ) {
