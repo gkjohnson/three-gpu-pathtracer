@@ -104,13 +104,13 @@ async function init() {
 
 	// long, thin tube lights on either side of the model, kept out of frame and tinted with
 	// complementary colors.
-	leftLight = new RectAreaLight( new Color( 0x2ae7ff ).convertSRGBToLinear(), params.intensity, params.width, params.height );
+	leftLight = new RectAreaLight( new Color( 0x06ccff ), params.intensity, params.width, params.height );
 	leftLight.isCircular = false;
 	leftLight.position.set( - 2.5, 1.25, 0.75 );
 	leftLight.lookAt( 0, 1, 0 );
 	scene.add( leftLight );
 
-	rightLight = new RectAreaLight( new Color( 0xff9800 ).convertSRGBToLinear(), params.intensity, params.width, params.height );
+	rightLight = new RectAreaLight( new Color( 0xff5500 ), params.intensity, params.width, params.height );
 	rightLight.isCircular = false;
 	rightLight.position.set( 2.5, 1.25, 0.75 );
 	rightLight.lookAt( 0, 1, 0 );
