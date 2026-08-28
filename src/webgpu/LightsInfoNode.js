@@ -47,12 +47,13 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const count = this.count;
 		const capacity = Math.max( count, 2 );
 
-		// resize the buffer in place to the exact light count. Storage arrays are runtime-sized in WGSL
+		// resize the buffer to the exact light count. Storage arrays are runtime-sized in WGSL
 		// and the loop bound comes from countNode, so this needs no pipeline rebuild — just a buffer
 		// reallocation + re-upload, keeping the same binding node.
 		if ( this.buffer.array.length !== capacity * stride ) {
 
-			this.buffer.array = new Float32Array( capacity * stride );
+			this.buffer = new StorageBufferAttribute( new Float32Array( capacity * stride ), stride );
+			this.bufferNode.value = this.buffer;
 
 		}
 
