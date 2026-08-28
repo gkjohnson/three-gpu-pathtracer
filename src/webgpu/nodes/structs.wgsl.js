@@ -237,7 +237,7 @@ export const lightStruct = new StructTypeNode( {
 }, 'Light' );
 
 // Result of sampling (or intersecting) a light: a world-space direction toward the light,
-// the distance to it, its emitted radiance, and the pdf ( solid-angle measure ) of the sample.
+// the distance to it, its emitted radiance, and the pdf (solid-angle measure) of the sample.
 export const lightRecordStruct = new StructTypeNode( {
 	dist: 'float',
 	direction: 'vec3f',

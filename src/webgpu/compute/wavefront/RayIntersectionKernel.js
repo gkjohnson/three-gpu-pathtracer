@@ -43,13 +43,13 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
 
-		// environment + background resources pulled off their providers ( embedded functions )
+		// environment + background resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
-		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
+		// analytic scene lights pulled off the lightsInfo provider
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
 
@@ -83,7 +83,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				let indexUV = input.pixel;
 				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
 
-				// one-sample NEE selection normalization ( lights + env ), matched with LightConnectionKernel
+				// one-sample NEE selection normalization (lights + env)
 				let envActive = ${ envTotalSumNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
@@ -101,17 +101,23 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				var resultColor = input.resultColor;
 
-				// forward MIS: a bsdf-sampled ray that lands on a ( non-occluded ) area light.
-				// Only area lights can be hit this way; the camera ray is skipped.
-				if ( misEnabled != 0u && input.currentBounce > 0u ) {
+				// forward hits: a bsdf-sampled ray that lands on a area light. MIS-weighted
+				// only when NEE is also sampling the lights
+				if ( input.currentBounce > 0u ) {
 
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						var lightRec: ${ lightRecordStruct };
 						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
 
-							let lightPdf = lightRec.pdf / lightsDenom;
-							let misWeight = ${ misHeuristicFn }( input.bsdfPdf, lightPdf );
+							var misWeight = 1.0;
+							if ( misEnabled != 0u ) {
+
+								let lightPdf = lightRec.pdf / lightsDenom;
+								misWeight = ${ misHeuristicFn }( input.bsdfPdf, lightPdf );
+
+							}
+
 							let lightHit = ${ clampPathContributionFunc }( lightRec.emission * input.throughputColor * misWeight, input.currentBounce + 1u, clampDirect, clampIndirect );
 							resultColor += vec4f( lightHit, 0.0 );
 
@@ -177,10 +183,18 @@ export class RayIntersectionKernel extends ComputeKernel {
 							let avg = saturate( dot( input.throughputColor, vec3f( 1.0 / 3.0 ) ) );
 							let transparency = ( 1.0 - bg.a ) * avg;
 
+							var misWeight = 1.0;
+							if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
+
+								let envPdf = ${ getEnvDirPdf }( input.direction );
+								misWeight = ${ misHeuristicFn }( input.bsdfPdf, envPdf );
+
+							}
+
 							if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 								// display the env map through transmissive surfaces
-								let background = ${ clampPathContributionFunc }( env.rgb * input.throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
+								let background = ${ clampPathContributionFunc }( env.rgb * input.throughputColor * misWeight, input.currentBounce + 1u, clampDirect, clampIndirect );
 								resultColor = vec4f(
 									resultColor.rgb + background,
 									1.0,
@@ -189,7 +203,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 							} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 								// fade the background by the throughput color average
-								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * input.throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
+								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * input.throughputColor * misWeight, input.currentBounce + 1u, clampDirect, clampIndirect );
 								resultColor = vec4f(
 									resultColor.rgb + background,
 									1.0 - transparency,
@@ -198,7 +212,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 							} else {
 
 								// fade the background by the throughput color average, mixing in env lighting
-								var light = mix( env.rgb, bg.rgb, bg.a );
+								var light = mix( env.rgb, bg.rgb, bg.a ) * misWeight;
 								let background = ${ clampPathContributionFunc }( light * input.throughputColor, input.currentBounce + 1u, clampDirect, clampIndirect );
 								resultColor = vec4f(
 									resultColor.rgb + background,

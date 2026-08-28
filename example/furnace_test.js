@@ -3,6 +3,7 @@ import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 // material properties that can be assigned to a grid axis
 const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
@@ -10,6 +11,7 @@ const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'irides
 const options = {
 	enable: true,
 	useMegakernel: false,
+	multipleImportanceSampling: true,
 	whiteBackground: false,
 	bounces: 15,
 	xAxis: 'roughness',
@@ -22,6 +24,7 @@ renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.useMegakernel( options.useMegakernel );
+pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
 pathTracer.bounces = options.bounces;
 
 document.body.appendChild( renderer.domElement );
@@ -55,6 +58,10 @@ controls.addEventListener( 'change', () => {
 
 } );
 
+const loader = new LoaderElement();
+loader.attach( document.body );
+loader.setPercentage( 1 );
+
 const gui = new GUI();
 gui.add( options, 'enable' );
 gui.add( options, 'useMegakernel' ).onChange( () => {
@@ -62,6 +69,11 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 	pathTracer.useMegakernel( options.useMegakernel );
 	pathTracer.setScene( scene, camera );
 	pathTracer.reset();
+
+} );
+gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
+
+	pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
 
 } );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
@@ -104,6 +116,8 @@ function animate() {
 		renderer.render( scene, camera );
 
 	}
+
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 

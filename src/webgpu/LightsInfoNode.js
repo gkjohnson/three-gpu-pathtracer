@@ -23,9 +23,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		super();
 
-		// lights packed into a storage buffer of Light structs, read directly as lights[ i ]. The buffer
-		// is resized in place to the exact light count on update; the binding node stays stable so no
-		// pipeline rebuild is needed.
+		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
 
 		this.iesProfilesTexture = new DataArrayTexture( new Uint8Array( 4 ), 1, 1, 1 );
@@ -53,12 +51,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const count = this.count;
 		const capacity = Math.max( count, 2 );
 
-		// resize the buffer in place to the exact light count. Storage arrays are runtime-sized in WGSL
-		// and the loop bound comes from countNode, so this needs no pipeline rebuild — just a buffer
-		// reallocation + re-upload, keeping the same binding node.
+		// resize the buffer to the exact light count, keeping the same binding node
 		if ( this.buffer.array.length !== capacity * stride ) {
 
-			this.buffer.array = new Float32Array( capacity * stride );
+			this.buffer = new StorageBufferAttribute( new Float32Array( capacity * stride ), stride );
+			this.bufferNode.value = this.buffer;
 
 		}
 
@@ -66,8 +63,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const src = this.tex.image.data;
 		this.buffer.array.set( src.subarray( 0, count * stride ) );
 
-		// lightType ( float offset 3 ) and iesProfile ( offset 21 ) are stored as float values in the
-		// texture; rewrite them as i32 bits to match lightStruct's int fields
+		// rewrite the int fields ( lightType, iesProfile ) as i32 bits
 		const intView = new Int32Array( this.buffer.array.buffer );
 		for ( let i = 0; i < count; i ++ ) {
 
@@ -96,30 +92,18 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, countNode, iesProfilesNode, iesSamplerNode } = this;
-
-		// read a single light directly from the storage buffer as a Light struct
-		const readLightInfo = wgslTagFn/* wgsl */`
-			fn readLightInfo( index: u32 ) -> ${ lightStruct } {
-
-				let lights = &${ bufferNode };
-				return lights[ index ];
-
-			}
-		`;
+		const { bufferNode, iesProfilesNode, iesSamplerNode } = this;
 
 		// uniformly pick a light and sample it
 		this.randomLightSample = wgslTagFn/* wgsl */`
-			fn randomLightSample( rayOrigin: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
+			fn randomLightSample( lightIndex: u32, rayOrigin: vec3f, ruv: vec2f ) -> ${ lightRecordStruct } {
 
-				let count = ${ countNode };
-				let l = min( u32( ruv.x * f32( count ) ), count - 1u );
-				let light = ${ readLightInfo }( l );
+				let light = ${ bufferNode }[ lightIndex ];
 
 				var result: ${ lightRecordStruct };
 				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
 
-					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv.yz );
+					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv );
 
 					let spotNormal = normalize( cross( light.u, light.v ) );
 					let cosTheta = dot( result.direction, spotNormal );
@@ -168,7 +152,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				} else {
 
-					result = ${ randomAreaLightSampleFn }( light, rayOrigin, ruv.yz );
+					result = ${ randomAreaLightSampleFn }( light, rayOrigin, ruv );
 
 				}
 
@@ -177,12 +161,13 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// forward intersection of a ray with a single area light (rect / circ only), used for
-		// MIS when a bsdf-sampled ray happens to hit a light ( mirrors intersectLightAtIndex ).
+		// forward intersection of a ray with a single area light ( rect / circ only ), used for MIS
+		// TODO: support hitting the spot light disk here and move spot lights into the
+		// MIS-weighted set so they appear in sharp reflections
 		this.intersectLightAtIndex = wgslTagFn/* wgsl */`
 			fn intersectLightAtIndex( rayOrigin: vec3f, rayDirection: vec3f, index: u32, lightRec: ptr<function, ${ lightRecordStruct }> ) -> bool {
 
-				let light = ${ readLightInfo }( index );
+				let light = ${ bufferNode }[ index ];
 
 				var u = light.u;
 				var v = light.v;

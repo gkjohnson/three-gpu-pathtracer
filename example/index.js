@@ -231,7 +231,6 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
-	pathTracer.transmissiveBounces = 10;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
