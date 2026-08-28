@@ -78,11 +78,16 @@ export class RenderTarget2DArray {
 
 	setTextures( renderer, textures ) {
 
+		// a depth change recreates the target so all layers must be rerendered
 		const depth = textures.length || 1;
-		this.renderTarget.setSize( this.width, this.height, depth );
-		this.texture.isArrayTexture = true;
+		if ( depth !== this.renderTarget.depth ) {
 
-		this.hashes.length = this.renderTarget.depth;
+			this.renderTarget.setSize( this.width, this.height, depth );
+			this.hashes = new Array( depth ).fill( null );
+
+		}
+
+		this.texture.isArrayTexture = true;
 
 		if ( textures.length > 0 ) {
 
