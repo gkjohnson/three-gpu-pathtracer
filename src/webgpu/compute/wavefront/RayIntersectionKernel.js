@@ -43,7 +43,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
 
-		// environment + background resources pulled off their providers ( embedded functions )
+		// environment + background resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
