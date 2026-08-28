@@ -22,9 +22,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		super();
 
-		// lights packed into a storage buffer of Light structs, read directly as lights[ i ]. The buffer
-		// is resized in place to the exact light count on update; the binding node stays stable so no
-		// pipeline rebuild is needed.
+		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
 		this._resizeBuffer( 2 );
 		this._initFns();
@@ -47,9 +45,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const count = this.count;
 		const capacity = Math.max( count, 2 );
 
-		// resize the buffer to the exact light count. Storage arrays are runtime-sized in WGSL
-		// and the loop bound comes from countNode, so this needs no pipeline rebuild — just a buffer
-		// reallocation + re-upload, keeping the same binding node.
+		// resize the buffer to the exact light count, keeping the same binding node
 		if ( this.buffer.array.length !== capacity * stride ) {
 
 			this.buffer = new StorageBufferAttribute( new Float32Array( capacity * stride ), stride );
@@ -61,8 +57,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const src = this.tex.image.data;
 		this.buffer.array.set( src.subarray( 0, count * stride ) );
 
-		// lightType ( float offset 3 ) and iesProfile ( offset 21 ) are stored as float values in the
-		// texture; rewrite them as i32 bits to match lightStruct's int fields
+		// rewrite the int fields ( lightType, iesProfile ) as i32 bits
 		const intView = new Int32Array( this.buffer.array.buffer );
 		for ( let i = 0; i < count; i ++ ) {
 
@@ -136,8 +131,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// forward intersection of a ray with a single area light (rect / circ only), used for
-		// MIS when a bsdf-sampled ray happens to hit a light ( mirrors intersectLightAtIndex ).
+		// forward intersection of a ray with a single area light ( rect / circ only ), used for MIS
 		// TODO: support hitting the spot light disk here and move spot lights into the
 		// MIS-weighted set so they appear in sharp reflections
 		this.intersectLightAtIndex = wgslTagFn/* wgsl */`

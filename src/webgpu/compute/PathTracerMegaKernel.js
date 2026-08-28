@@ -140,10 +140,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 
-
-				// one-sample next event estimation selects between the analytic lights and the
-				// environment. lightsDenom normalizes that selection: the light count, plus one
-				// for the environment when it is active.
+				// one-sample NEE selects between the analytic lights and the environment -
+				// lightsDenom is the number of options
 				let envActive = ${ envTotalSumNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
@@ -220,9 +218,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce + 1u, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
-						// next event estimation
-						// draw one light among the analytic lights + the environment ( env is the last "light" when
-							// active ), each with probability 1 / lightsDenom, and MIS-weight it against the bsdf pdf.
+						// next event estimation: draw one light or the environment, each with
+						// probability 1 / lightsDenom
 						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
 
 							let selectRand = ${ rand1 }( ${ RNG_INDEX_DIRECT_LIGHT_SELECTION } );

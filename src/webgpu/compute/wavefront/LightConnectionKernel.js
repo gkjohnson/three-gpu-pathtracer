@@ -74,9 +74,8 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-				// one-sample next event estimation selects between the analytic lights and the
-				// environment. lightsDenom normalizes that selection: the light count, plus one
-				// for the environment when it is active.
+				// one-sample NEE selects between the analytic lights and the environment -
+				// lightsDenom is the number of options
 				let envActive = ${ envTotalSumNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
