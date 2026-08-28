@@ -2,8 +2,6 @@ import { MathUtils, MeshPhysicalMaterial, RectAreaLight } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
-const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
-
 // TODO: this scene should technically be rendered at a 1000x smaller scale
 
 // TEMP: local v1.1 export for testing - upload to 3d-demo-data and restore the remote url
@@ -31,7 +29,6 @@ export class MaterialOrbSceneLoader {
 	loadAsync( url = ORB_SCENE_URL, ...rest ) {
 
 		const dracoLoader = new DRACOLoader();
-		dracoLoader.setDecoderPath( DRACO_DECODER_PATH );
 
 		return new GLTFLoader( this.manager )
 			.setDRACOLoader( dracoLoader )
@@ -83,6 +80,11 @@ export class MaterialOrbSceneLoader {
 					scene,
 
 				};
+
+			} )
+			.finally( () => {
+
+				dracoLoader.dispose();
 
 			} );
 
