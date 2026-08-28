@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, Vector3 } from 'three';
+import { Box3, DoubleSide, MeshPhysicalMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -87,6 +87,102 @@ function mecaBricksGoldCorrection( model ) {
 			}
 
 		}
+
+	} );
+
+}
+
+// Replaces flat emissive quads with equivalent RectAreaLights so they can be importance
+// sampled. Curved emitters are left as emissive geometry - sampling a CDF over emissive
+// triangles would handle those, too.
+function convertEmissivePlanesToLights( model ) {
+
+	const FLAT_RATIO = 1e-3;
+	const size = new Vector3();
+	const center = new Vector3();
+	const position = new Vector3();
+	const quaternion = new Quaternion();
+	const scale = new Vector3();
+	const alignment = new Quaternion();
+	const axis = new Vector3();
+
+	model.updateMatrixWorld( true );
+
+	const meshes = [];
+	model.traverse( c => {
+
+		if ( c.isMesh && c.material.emissiveIntensity > 0 && c.material.emissive.getHex() !== 0 ) {
+
+			meshes.push( c );
+
+		}
+
+	} );
+
+	meshes.forEach( mesh => {
+
+		// only a flat mesh can be represented by a rect area light, and its dimensions are taken
+		// from the bounding box so the mesh is assumed to fill it
+		const geometry = mesh.geometry;
+		geometry.computeBoundingBox();
+		geometry.boundingBox.getSize( size );
+		geometry.boundingBox.getCenter( center );
+
+		const maxDim = Math.max( size.x, size.y, size.z );
+		const flatAxis =
+			size.x < FLAT_RATIO * maxDim ? 'x' :
+				size.y < FLAT_RATIO * maxDim ? 'y' :
+					size.z < FLAT_RATIO * maxDim ? 'z' : null;
+		if ( flatAxis === null ) {
+
+			return;
+
+		}
+
+		position.copy( center ).applyMatrix4( mesh.matrixWorld );
+		mesh.matrixWorld.decompose( new Vector3(), quaternion, scale );
+
+		// orient the light plane ( local XY ) onto the flat axis
+		let width, height;
+		if ( flatAxis === 'x' ) {
+
+			alignment.setFromAxisAngle( axis.set( 0, 1, 0 ), Math.PI / 2 );
+			width = size.z * Math.abs( scale.z );
+			height = size.y * Math.abs( scale.y );
+
+		} else if ( flatAxis === 'y' ) {
+
+			alignment.setFromAxisAngle( axis.set( 1, 0, 0 ), Math.PI / 2 );
+			width = size.x * Math.abs( scale.x );
+			height = size.z * Math.abs( scale.z );
+
+		} else {
+
+			alignment.identity();
+			width = size.x * Math.abs( scale.x );
+			height = size.y * Math.abs( scale.y );
+
+		}
+
+		// a double sided emissive plane needs a light facing each way
+		const material = mesh.material;
+		const sides = material.side === DoubleSide ? 2 : 1;
+		for ( let i = 0; i < sides; i ++ ) {
+
+			const light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
+			light.position.copy( position );
+			light.quaternion.copy( quaternion ).multiply( alignment );
+			if ( i === 1 ) {
+
+				light.quaternion.multiply( alignment.setFromAxisAngle( axis.set( 1, 0, 0 ), Math.PI ) );
+
+			}
+
+			model.add( light );
+
+		}
+
+		mesh.removeFromParent();
 
 	} );
 
@@ -190,6 +286,7 @@ export const MODEL_LIST = {
 		rotation: [ 0, 0, 0 ],
 		envMap: 'none',
 		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Little Lamp': {
@@ -198,6 +295,7 @@ export const MODEL_LIST = {
 		rotation: [ 0, 0, 0 ],
 		envMap: 'none',
 		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Headphone with Stand': {
