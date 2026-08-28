@@ -145,8 +145,17 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 		lightRec.dist = dist;
 		lightRec.direction = direction;
 
-		// TODO: the denominator is potentially zero
-		lightRec.pdf = lightDistSq / ( light.area * dot( direction, lightNormal ) );
+		// points behind or edge-on to the light receive no contribution
+		let cosTheta = dot( direction, lightNormal );
+		if ( cosTheta <= 0.0 ) {
+
+			lightRec.pdf = 0.0;
+
+		} else {
+
+			lightRec.pdf = lightDistSq / ( light.area * cosTheta );
+
+		}
 
 		return lightRec;
 
