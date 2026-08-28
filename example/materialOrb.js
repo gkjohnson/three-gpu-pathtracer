@@ -263,7 +263,9 @@ function applyDatabaseMaterial( info ) {
 
 		materialProperties.iridescence = 1;
 		materialProperties.iridescenceIOR = info.thinFilmIor;
-		materialProperties.iridescenceThickness = info.thinFilmThickness[ 2 ] ?? info.thinFilmThickness[ 0 ];
+		// thickness is [ min, max, nominal ] with the nominal sometimes absent
+		const [ min, max, nominal ] = info.thinFilmThickness;
+		materialProperties.iridescenceThickness = nominal ?? ( min + max ) / 2;
 
 	}
 
@@ -279,7 +281,7 @@ function applyDatabaseMaterial( info ) {
 
 	}
 
-	imgEl.src = Object.values( info.images[ 1 ] )[ 0 ];
+	imgEl.src = info.images[ 0 ][ '600' ];
 
 }
 
