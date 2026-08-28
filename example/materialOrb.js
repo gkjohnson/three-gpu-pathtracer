@@ -37,7 +37,7 @@ const params = {
 		emissiveIntensity: 1,
 		roughness: 0,
 		metalness: 1,
-		diffuseRoughness: 1,
+		diffuseRoughness: 0,
 		ior: 1.495,
 		transmission: 0.0,
 		thinWall: false,
