@@ -82,23 +82,13 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		const { bufferNode, countNode } = this;
 
-		// read a single light directly from the storage buffer as a Light struct
-		const readLightInfo = wgslTagFn/* wgsl */`
-			fn readLightInfo( index: u32 ) -> ${ lightStruct } {
-
-				let lights = &${ bufferNode };
-				return lights[ index ];
-
-			}
-		`;
-
 		// uniformly pick a light and sample it
 		this.randomLightSample = wgslTagFn/* wgsl */`
 			fn randomLightSample( rayOrigin: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
 
 				let count = ${ countNode };
 				let l = min( u32( ruv.x * f32( count ) ), count - 1u );
-				let light = ${ readLightInfo }( l );
+				let light = ${ bufferNode }[ l ];
 
 				var result: ${ lightRecordStruct };
 				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
@@ -147,10 +137,12 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		// forward intersection of a ray with a single area light (rect / circ only), used for
 		// MIS when a bsdf-sampled ray happens to hit a light ( mirrors intersectLightAtIndex ).
+		// TODO: support hitting the spot light disk here and move spot lights into the
+		// MIS-weighted set so they appear in sharp reflections
 		this.intersectLightAtIndex = wgslTagFn/* wgsl */`
 			fn intersectLightAtIndex( rayOrigin: vec3f, rayDirection: vec3f, index: u32, lightRec: ptr<function, ${ lightRecordStruct }> ) -> bool {
 
-				let light = ${ readLightInfo }( index );
+				let light = ${ bufferNode }[ index ];
 
 				var u = light.u;
 				var v = light.v;
