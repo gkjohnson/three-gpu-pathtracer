@@ -101,16 +101,23 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				var resultColor = input.resultColor;
 
-				// forward MIS: a bsdf-sampled ray that lands on a area light.
-				if ( misEnabled != 0u && input.currentBounce > 0u ) {
+				// forward hits: a bsdf-sampled ray that lands on a area light. MIS-weighted
+				// only when NEE is also sampling the lights
+				if ( input.currentBounce > 0u ) {
 
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						var lightRec: ${ lightRecordStruct };
 						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
 
-							let lightPdf = lightRec.pdf / lightsDenom;
-							let misWeight = ${ misHeuristicFn }( input.bsdfPdf, lightPdf );
+							var misWeight = 1.0;
+							if ( misEnabled != 0u ) {
+
+								let lightPdf = lightRec.pdf / lightsDenom;
+								misWeight = ${ misHeuristicFn }( input.bsdfPdf, lightPdf );
+
+							}
+
 							let lightHit = ${ clampPathContributionFunc }( lightRec.emission * input.throughputColor * misWeight, input.currentBounce + 1u, clampDirect, clampIndirect );
 							resultColor += vec4f( lightHit, 0.0 );
 

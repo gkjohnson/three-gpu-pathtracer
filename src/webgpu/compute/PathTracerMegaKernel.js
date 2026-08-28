@@ -157,16 +157,23 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward MIS: a bsdf-sampled ray that lands on a area light.
-					if ( misEnabled != 0u && bounce > 0u ) {
+					// forward hits: a bsdf-sampled ray that lands on a area light. MIS-weighted
+					// only when NEE is also sampling the lights
+					if ( bounce > 0u ) {
 
 						for ( var li = 0u; li < lightsCount; li ++ ) {
 
 							var lightRec: ${ lightRecordStruct };
 							if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
 
-								let lightPdf = lightRec.pdf / lightsDenom;
-								let misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf );
+								var misWeight = 1.0;
+								if ( misEnabled != 0u ) {
+
+									let lightPdf = lightRec.pdf / lightsDenom;
+									misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf );
+
+								}
+
 								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce + 1u, clampDirect, clampIndirect );
 								resultColor += vec4f( lightHit, 0.0 );
 
