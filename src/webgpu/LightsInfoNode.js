@@ -1,8 +1,10 @@
-import { storage, uniform, texture, sampler } from 'three/tsl';
-import { StorageBufferAttribute, DataArrayTexture } from 'three/webgpu';
+import { storage, uniform, texture } from 'three/tsl';
+import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { AtlasTexture } from './AtlasTexture.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
+import { sampleTexelFunc } from './nodes/utils.wgsl.js';
 import {
 	RECT_AREA_LIGHT_TYPE,
 	CIRC_AREA_LIGHT_TYPE,
@@ -26,9 +28,10 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
 
-		this.iesProfilesTexture = new DataArrayTexture( new Uint8Array( 4 ), 1, 1, 1 );
-		this.iesProfilesNode = texture( this.iesProfilesTexture );
-		this.iesSamplerNode = sampler( this.iesProfilesNode );
+		// ies profiles packed into an atlas alongside their placement rects
+		this.iesAtlas = new AtlasTexture( { type: HalfFloatType } );
+		this.iesProfilesNode = texture( this.iesAtlas.texture );
+		this._resizeIesInfoBuffer( 1 );
 
 		this._resizeBuffer( 2 );
 		this._initFns();
@@ -43,9 +46,22 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	}
 
-	updateFrom( lights, iesTextures = [] ) {
+	_resizeIesInfoBuffer( capacity ) {
 
+		this.iesInfoBuffer = new StorageBufferAttribute( new Uint32Array( capacity * 4 ), 4 );
+		this.iesInfoNode = storage( this.iesInfoBuffer, 'uvec4' ).toReadOnly().setName( 'iesTextureInfo' );
+
+	}
+
+	updateFrom( renderer, lights ) {
+
+		// the unique set of ies textures referenced by the lights' "iesMap" fields
+		const iesTextures = Array.from( new Set( lights.map( l => l.iesMap ).filter( t => t ) ) );
 		const changed = super.updateFrom( lights, iesTextures );
+
+		this.iesAtlas.setTextures( renderer, iesTextures );
+		this.iesProfilesNode.value = this.iesAtlas.texture;
+		this._updateIesInfoBuffer();
 
 		const stride = lightStruct.getLength();
 		const count = this.count;
@@ -80,18 +96,38 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	}
 
-	setIesProfiles( tex ) {
+	// copy the packed per-profile atlas rects, resizing the buffer to fit
+	_updateIesInfoBuffer() {
 
-		if ( ! tex ) return;
+		const info = this.iesAtlas.textureInfo;
+		const capacity = Math.max( info.length, 1 );
+		if ( this.iesInfoBuffer.array.length !== capacity * 4 ) {
 
-		this.iesProfilesTexture = tex;
-		this.iesProfilesNode.value = tex;
+			this.iesInfoBuffer = new StorageBufferAttribute( new Uint32Array( capacity * 4 ), 4 );
+			this.iesInfoNode.value = this.iesInfoBuffer;
+
+		}
+
+		const array = this.iesInfoBuffer.array;
+		for ( let i = 0; i < info.length; i ++ ) {
+
+			array[ i * 4 + 0 ] = info[ i ].x;
+			array[ i * 4 + 1 ] = info[ i ].y;
+			array[ i * 4 + 2 ] = info[ i ].z;
+			array[ i * 4 + 3 ] = info[ i ].w;
+
+		}
+
+		this.iesInfoBuffer.needsUpdate = true;
 
 	}
 
 	_initFns() {
 
-		const { bufferNode, iesProfilesNode, iesSamplerNode } = this;
+		const { bufferNode, iesProfilesNode, iesInfoNode } = this;
+
+		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
+		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
 
 		// uniformly pick a light and sample it
 		this.randomLightSample = wgslTagFn/* wgsl */`
@@ -109,10 +145,12 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 					var spotAttenuation: f32;
 					if ( light.iesProfile >= 0 ) {
 
-						// tilt angle off the forward axis and twist angle around it
+						// tilt angle off the forward axis and twist angle around it, with the
+						// tilt axis clamped and the twist axis wrapped ( wrapS = 1, wrapT = 0 )
 						let tiltAngle = acos( cosTheta ) / PI;
 						let twistAngle = ( atan2( dot( result.direction, light.v ), dot( result.direction, light.u ) ) + PI ) / ( 2.0 * PI );
-						spotAttenuation = textureSampleLevel( ${ iesProfilesNode }, ${ iesSamplerNode }, vec2f( tiltAngle, twistAngle ), light.iesProfile, 0.0 ).r;
+						let packedProfile = ( 1 << 26 ) | light.iesProfile;
+						spotAttenuation = ${ sampleIesTexelFn }( vec2f( tiltAngle, twistAngle ), packedProfile, 0.0 ).r;
 
 					} else {
 
@@ -215,6 +253,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 	dispose() {
 
 		this.tex.dispose();
+		this.iesAtlas.dispose();
 
 	}
 

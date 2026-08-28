@@ -1,5 +1,4 @@
-import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
-import { RenderTarget2DArray } from './RenderTarget2DArray.js';
+import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -13,7 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
-import { getLights, getIesTextures } from '../core/utils/sceneUpdateUtils.js';
+import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
@@ -355,8 +354,6 @@ export class WebGPUPathTracer {
 		this.random = RANDOM_BLUE_DITHER;
 		this.material = new GltfCompliantMaterial();
 
-		this.iesProfiles = new RenderTarget2DArray( 360, 180, { type: HalfFloatType } );
-
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
@@ -591,9 +588,7 @@ export class WebGPUPathTracer {
 		const { _pathTracer, scene } = this;
 
 		const lights = getLights( scene );
-		const iesTextures = getIesTextures( lights );
-		this.iesProfiles.setTextures( this._renderer, iesTextures );
-		_pathTracer.setLights( lights, iesTextures, this.iesProfiles.texture );
+		_pathTracer.setLights( lights );
 		this.reset();
 
 	}
@@ -904,7 +899,6 @@ export class WebGPUPathTracer {
 		this._backgroundCache.dispose();
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
-		this.iesProfiles.dispose();
 		this._atlasDebugQuad?.dispose();
 		this._sampleDensityQuad?.dispose();
 
