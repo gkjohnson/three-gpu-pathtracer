@@ -95,7 +95,7 @@ function mecaBricksGoldCorrection( model ) {
 // Replaces flat emissive quads with equivalent RectAreaLights so they can be importance
 // sampled. Curved emitters are left as emissive geometry.
 // TODO: sample a CDF over emissive triangles so all emissive surfaces can be importance sampled
-function convertEmissivePlanesToLights( model ) {
+export function convertEmissivePlanesToLights( model ) {
 
 	const FLAT_RATIO = 1e-3;
 	const size = new Vector3();

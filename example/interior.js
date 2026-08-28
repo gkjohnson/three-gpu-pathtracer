@@ -3,35 +3,33 @@ import {
 	PerspectiveCamera,
 	Box3,
 	Vector3,
-	EquirectangularReflectionMapping,
+	Color,
 	Scene,
 	WebGPURenderer,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EquirectCamera } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
+import { convertEmissivePlanesToLights } from './modelList.js';
 
-const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/aristea_wreck_puresky_2k.hdr';
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/pathtracing-bathroom/modernbathroom.glb';
-const CREDITS = 'Interior scene by <a href="https://twitter.com/charlesforman">Charles Forman</a>';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/white-room.glb';
+const CREDITS = 'Model by "Jay-Artist", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>';
 
 let pathTracer, renderer, controls, sphericalControls, activeCamera, scene;
 let camera, equirectCamera, loader;
 
 const params = {
 
-	environmentIntensity: 1,
-	emissiveIntensity: 5,
-	bounces: 20,
+	bounces: 15,
 	renderScale: 1,
 	tiles: 2,
-	projection: 'Perspective',
+	projection: 'Equirectangular',
 	...getScaledSettings(),
 
 };
@@ -54,42 +52,28 @@ async function init() {
 	pathTracer.dynamicLowRes = true;
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
-	// camera
+	// cameras, positioned once the scene's authored viewpoint is available
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 0.4, 0.6, 2.65 );
-
-	// Almost, but not quite on top of the control target.
-	// This allows for full rotation without moving the camera very much.
 	equirectCamera = new EquirectCamera();
-	equirectCamera.position.set( - 0.2, 0.33, 0.08 );
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( - 0.15, 0.33, - 0.08 );
-	camera.lookAt( controls.target );
-	controls.update();
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	sphericalControls = new OrbitControls( equirectCamera, renderer.domElement );
-	sphericalControls.target.set( - 0.15, 0.33, - 0.08 );
-	equirectCamera.lookAt( sphericalControls.target );
-	sphericalControls.update();
 	sphericalControls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	scene = new Scene();
+	scene.background = new Color( 0xffffff );
 
 	// load assets
-	const [ envTexture, gltf ] = await Promise.all( [
-		new HDRLoader().loadAsync( ENV_URL ),
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
-	] );
-
-	// set environment
-	envTexture.mapping = EquirectangularReflectionMapping;
-	scene.background = envTexture;
-	scene.environment = envTexture;
+	const dracoLoader = new DRACOLoader();
+	dracoLoader.setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
+	const gltf = await new GLTFLoader().setDRACOLoader( dracoLoader ).setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL );
+	dracoLoader.dispose();
 
 	// set scene
+	convertEmissivePlanesToLights( gltf.scene );
 	gltf.scene.traverse( c => {
 
 		if ( c.material ) {
@@ -110,7 +94,26 @@ async function init() {
 	const center = new Vector3();
 	box.getCenter( center );
 
-	gltf.scene.position.addScaledVector( center, - 0.5 );
+	// frame the viewpoint authored in the scene
+	let sceneCamera = null;
+	gltf.scene.traverse( c => {
+
+		if ( ! sceneCamera && c.isPerspectiveCamera ) sceneCamera = c;
+
+	} );
+
+	camera.fov = sceneCamera.fov;
+	camera.updateProjectionMatrix();
+	camera.position.setFromMatrixPosition( sceneCamera.matrixWorld );
+	const forward = new Vector3( 0, 0, - 1 ).transformDirection( sceneCamera.matrixWorld );
+	controls.target.copy( camera.position ).addScaledVector( forward, 3 );
+	controls.update();
+
+	// Almost, but not quite on top of the control target.
+	// This allows for full rotation without moving the camera very much.
+	equirectCamera.position.copy( center );
+	sphericalControls.target.copy( center ).addScaledVector( forward, 0.05 );
+	sphericalControls.update();
 
 	pathTracer.setScene( scene, camera );
 
@@ -123,19 +126,14 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
-
-	const sceneFolder = gui.addFolder( 'Scene' );
-	sceneFolder.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
-	sceneFolder.add( params, 'environmentIntensity', 0, 25 ).onChange( onParamsChange );
-	sceneFolder.add( params, 'emissiveIntensity', 0, 50 ).onChange( onParamsChange );
+	gui.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	gui.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
+	gui.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
 
 	animate();
 
@@ -158,11 +156,11 @@ function onParamsChange() {
 	const projection = params.projection;
 	if ( projection === 'Perspective' ) {
 
+		// the perspective view is locked to the scene's authored viewpoint
 		activeCamera = camera;
 
 		sphericalControls.enabled = false;
-		controls.enabled = true;
-		controls.update();
+		controls.enabled = false;
 
 	} else if ( projection === 'Equirectangular' ) {
 
@@ -174,19 +172,6 @@ function onParamsChange() {
 
 	}
 
-	scene.traverse( c => {
-
-		const material = c.material;
-		if ( material ) {
-
-			material.emissiveIntensity = params.emissiveIntensity;
-
-		}
-
-	} );
-
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.backgroundIntensity = params.environmentIntensity;
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
 
