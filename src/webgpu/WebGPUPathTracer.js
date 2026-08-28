@@ -905,8 +905,6 @@ export class WebGPUPathTracer {
 		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
 		this.iesProfiles.dispose();
-		this._envColorTexture.dispose();
-		this._backgroundColorTexture.dispose();
 		this._atlasDebugQuad?.dispose();
 		this._sampleDensityQuad?.dispose();
 
