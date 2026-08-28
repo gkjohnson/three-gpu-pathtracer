@@ -1,10 +1,10 @@
 import {
-	ACESFilmicToneMapping,
 	Color,
 	Scene,
 	WebGPURenderer,
 	Vector3,
 	RectAreaLightNode,
+	AgXToneMapping,
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -96,8 +96,8 @@ async function init() {
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
 	renderer.init();
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.toneMappingExposure = 0.02;
+	renderer.toneMapping = AgXToneMapping;
+	renderer.toneMappingExposure = 1;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
@@ -129,6 +129,7 @@ async function init() {
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
+	controls.enablePan = false;
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// shift target
@@ -292,9 +293,11 @@ function resetCamera() {
 
 function onResize() {
 
-	renderer.setSize( window.innerWidth, window.innerHeight );
+	// square canvas matching the format of the database reference renders
+	const dim = 0.5 * Math.min( window.innerWidth, window.innerHeight );
+	renderer.setSize( dim, dim );
 	renderer.setPixelRatio( window.devicePixelRatio );
-	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.aspect = 1;
 	camera.updateProjectionMatrix();
 	pathTracer.updateCamera();
 
