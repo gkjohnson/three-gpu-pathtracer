@@ -1,4 +1,4 @@
-import { storage, uniform, texture } from 'three/tsl';
+import { storage, uniform, uniformArray, texture } from 'three/tsl';
 import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
@@ -27,29 +27,15 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
+		this.buffer = new StorageBufferAttribute( new Float32Array( 2 * lightStruct.getLength() ), lightStruct.getLength() );
+		this.bufferNode = storage( this.buffer, lightStruct ).toReadOnly().setName( 'lights' );
 
 		// ies profiles packed into an atlas alongside their placement rects
 		this.iesAtlas = new AtlasTexture( { type: HalfFloatType } );
 		this.iesProfilesNode = texture( this.iesAtlas.texture );
-		this._resizeIesInfoBuffer( 1 );
+		this.iesInfoNode = uniformArray( this.iesAtlas.textureInfo, 'uvec4' );
 
-		this._resizeBuffer( 2 );
 		this._initFns();
-
-	}
-
-	_resizeBuffer( lightCapacity ) {
-
-		const stride = lightStruct.getLength();
-		this.buffer = new StorageBufferAttribute( new Float32Array( lightCapacity * stride ), stride );
-		this.bufferNode = storage( this.buffer, lightStruct ).toReadOnly().setName( 'lights' );
-
-	}
-
-	_resizeIesInfoBuffer( capacity ) {
-
-		this.iesInfoBuffer = new StorageBufferAttribute( new Uint32Array( capacity * 4 ), 4 );
-		this.iesInfoNode = storage( this.iesInfoBuffer, 'uvec4' ).toReadOnly().setName( 'iesTextureInfo' );
 
 	}
 
@@ -61,7 +47,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		this.iesAtlas.setTextures( renderer, iesTextures );
 		this.iesProfilesNode.value = this.iesAtlas.texture;
-		this._updateIesInfoBuffer();
 
 		const stride = lightStruct.getLength();
 		const count = this.count;
@@ -93,32 +78,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.countNode.value = this.count;
 
 		return changed;
-
-	}
-
-	// copy the packed per-profile atlas rects, resizing the buffer to fit
-	_updateIesInfoBuffer() {
-
-		const info = this.iesAtlas.textureInfo;
-		const capacity = Math.max( info.length, 1 );
-		if ( this.iesInfoBuffer.array.length !== capacity * 4 ) {
-
-			this.iesInfoBuffer = new StorageBufferAttribute( new Uint32Array( capacity * 4 ), 4 );
-			this.iesInfoNode.value = this.iesInfoBuffer;
-
-		}
-
-		const array = this.iesInfoBuffer.array;
-		for ( let i = 0; i < info.length; i ++ ) {
-
-			array[ i * 4 + 0 ] = info[ i ].x;
-			array[ i * 4 + 1 ] = info[ i ].y;
-			array[ i * 4 + 2 ] = info[ i ].z;
-			array[ i * 4 + 3 ] = info[ i ].w;
-
-		}
-
-		this.iesInfoBuffer.needsUpdate = true;
 
 	}
 
