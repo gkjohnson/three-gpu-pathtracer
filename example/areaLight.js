@@ -30,7 +30,6 @@ const params = {
 	// area light settings
 	isCircular: false,
 	intensity: 10,
-	color: '#ffffff',
 	width: 0.15,
 	height: 1.5,
 
@@ -38,9 +37,7 @@ const params = {
 	enable: true,
 	bounces: 15,
 	renderScale: 1,
-	filterGlossyFactor: 1,
 	tiles: 1,
-	multipleImportanceSampling: true,
 
 	...getScaledSettings(),
 
@@ -105,15 +102,15 @@ async function init() {
 	backdrop.position.set( 0, - 1e-3, box.min.z );
 	scene.add( backdrop );
 
-	// long, thin tube lights on either side of the model, kept out of frame. The path
-	// tracer reads the "isCircular" flag to sample the light as a disk.
-	leftLight = new RectAreaLight( new Color( 0xffffff ), params.intensity, params.width, params.height );
+	// long, thin tube lights on either side of the model, kept out of frame and tinted with
+	// complementary colors.
+	leftLight = new RectAreaLight( new Color( 0x2ae7ff ).convertSRGBToLinear(), params.intensity, params.width, params.height );
 	leftLight.isCircular = false;
 	leftLight.position.set( - 2.5, 1.25, 0.75 );
 	leftLight.lookAt( 0, 1, 0 );
 	scene.add( leftLight );
 
-	rightLight = new RectAreaLight( new Color( 0xffffff ), params.intensity, params.width, params.height );
+	rightLight = new RectAreaLight( new Color( 0xff9800 ).convertSRGBToLinear(), params.intensity, params.width, params.height );
 	rightLight.isCircular = false;
 	rightLight.position.set( 2.5, 1.25, 0.75 );
 	rightLight.lookAt( 0, 1, 0 );
@@ -134,16 +131,13 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
 
 	const areaLightFolder = gui.addFolder( 'Area Light' );
 	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( onParamsChange );
-	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'width', 0, 5 ).name( 'width' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( onParamsChange );
 
@@ -163,15 +157,11 @@ function onParamsChange() {
 		light.intensity = params.intensity;
 		light.width = params.width;
 		light.height = params.height;
-		light.color.set( params.color ).convertSRGBToLinear();
-		light.visible = params.enabled;
 
 	} );
 
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
 	pathTracer.renderScale = params.renderScale;
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 	pathTracer.updateLights();
 
