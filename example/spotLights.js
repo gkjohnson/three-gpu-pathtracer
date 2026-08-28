@@ -43,7 +43,6 @@ let loader;
 // gui parameters
 const params = {
 	enable: true,
-	multipleImportanceSampling: true,
 	bounces: 15,
 	renderScale: 1,
 	tiles: 2,
@@ -185,7 +184,6 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
@@ -237,7 +235,6 @@ function onResize() {
 function onParamsChange() {
 
 	// pathTracer.renderScale = params.renderScale;
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
 	pathTracer.updateLights();
 
