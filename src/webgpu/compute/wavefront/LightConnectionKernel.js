@@ -5,7 +5,7 @@ import { hitQueueStruct } from './structs.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit, rand1, rand2, rand3, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand3, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
@@ -125,14 +125,15 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				}
 
-				// next event estimation: draw one sample among the analytic lights and the
-				// environment, MIS-weighted against the bsdf pdf.
-				let selectRand = ${ rand1 }( ${ RNG_INDEX_DIRECT_LIGHT_SELECTION } );
+				// next event estimation: pick one light or the environment with a single sample
+				// TODO: importance-sample the selection by light intensity and solid angle
+				let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
+				let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
 				var lightRec: ${ lightRecordStruct };
-				if ( envActive && selectRand >= f32( lightsCount ) / lightsDenom ) {
+				if ( envActive && lightIndex == lightsCount ) {
 
 					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-					let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_ENV_SAMPLE } ) );
+					let envSample = ${ sampleEnvDir }( ruv.yz );
 					lightRec.direction = envSample.direction;
 					lightRec.emission = envSample.color;
 					lightRec.pdf = envSample.pdf;
@@ -141,7 +142,7 @@ export class LightConnectionKernel extends ComputeKernel {
 
 				} else {
 
-					lightRec = ${ randomLightSampleFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+					lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
 
 				}
 

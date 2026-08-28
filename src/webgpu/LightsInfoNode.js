@@ -76,20 +76,18 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, countNode } = this;
+		const { bufferNode } = this;
 
 		// uniformly pick a light and sample it
 		this.randomLightSample = wgslTagFn/* wgsl */`
-			fn randomLightSample( rayOrigin: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
+			fn randomLightSample( lightIndex: u32, rayOrigin: vec3f, ruv: vec2f ) -> ${ lightRecordStruct } {
 
-				let count = ${ countNode };
-				let l = min( u32( ruv.x * f32( count ) ), count - 1u );
-				let light = ${ bufferNode }[ l ];
+				let light = ${ bufferNode }[ lightIndex ];
 
 				var result: ${ lightRecordStruct };
 				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
 
-					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv.yz );
+					result = ${ randomSpotLightSampleFn }( light, rayOrigin, ruv );
 
 				} else if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
 
@@ -122,7 +120,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				} else {
 
-					result = ${ randomAreaLightSampleFn }( light, rayOrigin, ruv.yz );
+					result = ${ randomAreaLightSampleFn }( light, rayOrigin, ruv );
 
 				}
 

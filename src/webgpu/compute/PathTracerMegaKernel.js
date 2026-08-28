@@ -1,7 +1,7 @@
 import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SELECTION, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_DIRECT_ENV_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
@@ -222,23 +222,26 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// probability 1 / lightsDenom
 						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
 
-							let selectRand = ${ rand1 }( ${ RNG_INDEX_DIRECT_LIGHT_SELECTION } );
+							// pick one light or the environment with a single sample
+							// TODO: importance-sample the selection by light intensity and solid angle
+							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
+							let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
 							var lightRec: ${ lightRecordStruct };
-								if ( envActive && selectRand >= f32( lightsCount ) / lightsDenom ) {
+							if ( envActive && lightIndex == lightsCount ) {
 
-									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-									let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_ENV_SAMPLE } ) );
-									lightRec.direction = envSample.direction;
-									lightRec.emission = envSample.color;
-									lightRec.pdf = envSample.pdf;
-									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+								let envSample = ${ sampleEnvDir }( ruv.yz );
+								lightRec.direction = envSample.direction;
+								lightRec.emission = envSample.color;
+								lightRec.pdf = envSample.pdf;
+								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								} else {
+							} else {
 
-									lightRec = ${ randomLightSampleFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+								lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
 
-								}
+							}
 
 								if ( lightRec.pdf > 0.0 ) {
 
