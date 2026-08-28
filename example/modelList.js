@@ -1,4 +1,4 @@
-import { Box3, DoubleSide, MeshPhysicalMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -105,6 +105,8 @@ function convertEmissivePlanesToLights( model ) {
 	const scale = new Vector3();
 	const alignment = new Quaternion();
 	const axis = new Vector3();
+	const normal = new Vector3();
+	const emitDirection = new Vector3();
 
 	model.updateMatrixWorld( true );
 
@@ -164,24 +166,28 @@ function convertEmissivePlanesToLights( model ) {
 
 		}
 
-		// a double sided emissive plane needs a light facing each way
+		// the source emitters are single sided, emitting along the quad normal - the material's
+		// double sidedness only reflects how the surface shades so it is ignored here
 		const material = mesh.material;
-		const sides = material.side === DoubleSide ? 2 : 1;
-		for ( let i = 0; i < sides; i ++ ) {
+		const light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
+		light.position.copy( position );
+		light.quaternion.copy( quaternion ).multiply( alignment );
 
-			const light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
-			light.position.copy( position );
-			light.quaternion.copy( quaternion ).multiply( alignment );
-			if ( i === 1 ) {
+		// flip the light if it emits away from the quad's normal
+		const normalAttr = geometry.attributes.normal;
+		if ( normalAttr ) {
+
+			normal.fromBufferAttribute( normalAttr, 0 );
+			emitDirection.set( 0, 0, - 1 ).applyQuaternion( alignment );
+			if ( emitDirection.dot( normal ) < 0 ) {
 
 				light.quaternion.multiply( alignment.setFromAxisAngle( axis.set( 1, 0, 0 ), Math.PI ) );
 
 			}
 
-			model.add( light );
-
 		}
 
+		model.add( light );
 		mesh.removeFromParent();
 
 	} );
@@ -277,6 +283,72 @@ export const MODEL_LIST = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/porsche-911-stinger-gtr.glb',
 		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
 		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	// bitterli rooms
+	'Bedroom': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/bedroom.glb',
+		credit: 'Model by "SlykDrako", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'The Breakfast Room': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/breakfast-room.glb',
+		credit: 'Model by "Wig42", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Contemporary Bathroom': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/contemporary-bathroom.glb',
+		credit: 'Model by "Mareck", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Country Kitchen': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/country-kitchen.glb',
+		credit: 'Model by "Jay-Artist", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'The Grey & White Room': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/grey-and-white-room.glb',
+		credit: 'Model by "Wig42", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Salle de Bain': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/salle-de-bain.glb',
+		credit: 'Model by "nacimus", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'The White Room': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/white-room.glb',
+		credit: 'Model by "Jay-Artist", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'The Wooden Staircase': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/wooden-staircase.glb',
+		credit: 'Model by "Wig42", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
+		rotation: [ 0, 0, 0 ],
+		envMap: 'none',
+		stage: 'none',
+		postProcess: convertEmissivePlanesToLights,
 	},
 
 	// devices

@@ -781,7 +781,8 @@ async function updateModel() {
 	model.position.multiplyScalar( scale );
 	box.setFromObject( model );
 
-	// attenuation is measured in world units so it must be scaled with the model
+	// attenuation and light dimensions are measured in world units and ignore the object
+	// hierarchy scale, so they must be scaled with the model
 	const scaledMaterials = new Set();
 	model.traverse( c => {
 
@@ -789,6 +790,13 @@ async function updateModel() {
 
 			scaledMaterials.add( c.material );
 			c.material.attenuationDistance *= scale;
+
+		}
+
+		if ( c.isRectAreaLight ) {
+
+			c.width *= scale;
+			c.height *= scale;
 
 		}
 
