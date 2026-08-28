@@ -1,43 +1,41 @@
 import {
-	ACESFilmicToneMapping,
+	AgXToneMapping,
 	Box3,
 	Color,
-	CylinderGeometry,
-	EquirectangularReflectionMapping,
-	Mesh,
-	MeshStandardMaterial,
 	PerspectiveCamera,
+	RectAreaLight,
+	RectAreaLightNode,
 	Scene,
+	Vector3,
 	WebGPURenderer,
 } from 'three/webgpu';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ShapedAreaLight } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
+import { Backdrop } from './src/Backdrop.js';
 
-const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/leadenhall_market_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/mercury-about-to-kill-argos/scene.glb';
 const CREDITS = 'Model courtesy of Virtual Museums of Małopolska';
 
-let pathTracer, renderer, controls, areaLight, scene, camera;
+let pathTracer, renderer, controls, leftLight, rightLight, scene, camera;
 let loader;
 
 const params = {
 
 	// area light settings
-	enabled: true,
 	isCircular: false,
-	intensity: 2,
+	intensity: 10,
 	color: '#ffffff',
-	width: 1,
-	height: 1,
+	width: 0.15,
+	height: 1.5,
 
 	// path tracer settings
+	enable: true,
 	bounces: 15,
 	renderScale: 1,
 	filterGlossyFactor: 1,
@@ -55,10 +53,14 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
+	// ltc textures so rect area lights rasterize correctly in the preview
+	RectAreaLightTexturesLib.init();
+	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
+
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true } );
 	renderer.init();
-	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.toneMapping = AgXToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
@@ -66,30 +68,20 @@ async function init() {
 	pathTracer.tiles.set( params.tiles, params.tiles );
 
 	// camera
-	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
-	camera.position.set( 0.0, 0.6, 2.65 );
+	camera = new PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.025, 500 );
+	camera.position.set( 0.0, 0.9, 4.25 );
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.set( 0, 0.33, - 0.08 );
+	controls.target.set( 0, 0.72, 0 );
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 	controls.update();
 
 	// init scene
 	scene = new Scene();
-	scene.environmentIntensity = 0.03;
-	scene.backgroundIntensity = 0.03;
 
 	// load the assets
-	const [ envTexture, gltf ] = await Promise.all( [
-		new HDRLoader().loadAsync( ENV_URL ),
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
-	] );
-
-	// update the env map
-	envTexture.mapping = EquirectangularReflectionMapping;
-	scene.background = envTexture;
-	scene.environment = envTexture;
+	const gltf = await new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL );
 
 	// position the model
 	const box = new Box3();
@@ -106,29 +98,26 @@ async function init() {
 	gltf.scene.position.y -= box.min.y;
 	scene.add( gltf.scene );
 
-	// set the floor
-	const floorGeom = new CylinderGeometry( 3.5, 3.5, 0.05, 60 );
-	const floorMat = new MeshStandardMaterial( { color: new Color( 0x999999 ), metalness: 0.2, roughness: 0.02 } );
-	const floor = new Mesh( floorGeom, floorMat );
-	floor.position.y = - 0.025;
-	scene.add( floor );
+	// set the backdrop
+	const size = box.getSize( new Vector3() );
+	const dim = Math.max( size.x, size.y, size.z );
+	const backdrop = new Backdrop( { width: 4 * dim, depth: 2.5 * dim, height: 1.75 * dim, curve: dim } );
+	backdrop.position.set( 0, - 1e-3, box.min.z );
+	scene.add( backdrop );
 
-	// initialize lights
-	areaLight = new ShapedAreaLight( new Color( 0xffffff ), 5.0, 1.0, 1.0 );
-	areaLight.position.x = 1.5;
-	areaLight.position.y = 1.0;
-	areaLight.position.z = - 0.5;
-	areaLight.rotateZ( - Math.PI / 4 );
-	areaLight.rotateX( - Math.PI / 2 );
-	areaLight.isCircular = false;
-	scene.add( areaLight );
+	// long, thin tube lights on either side of the model, kept out of frame. The path
+	// tracer reads the "isCircular" flag to sample the light as a disk.
+	leftLight = new RectAreaLight( new Color( 0xffffff ), params.intensity, params.width, params.height );
+	leftLight.isCircular = false;
+	leftLight.position.set( - 2.5, 1.25, 0.75 );
+	leftLight.lookAt( 0, 1, 0 );
+	scene.add( leftLight );
 
-	const redLight = new ShapedAreaLight( new Color( 0xff0000 ), 15.0, 1.25, 2.75 );
-	redLight.position.y = 1.25;
-	redLight.position.z = - 1.5;
-	redLight.rotateX( Math.PI );
-	redLight.isCircular = false;
-	scene.add( redLight );
+	rightLight = new RectAreaLight( new Color( 0xffffff ), params.intensity, params.width, params.height );
+	rightLight.isCircular = false;
+	rightLight.position.set( 2.5, 1.25, 0.75 );
+	rightLight.lookAt( 0, 1, 0 );
+	scene.add( rightLight );
 
 	// initialize scene
 	pathTracer.setScene( scene, camera );
@@ -139,6 +128,7 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
 
 		pathTracer.tiles.set( value, value );
@@ -151,7 +141,6 @@ async function init() {
 	ptFolder.close();
 
 	const areaLightFolder = gui.addFolder( 'Area Light' );
-	areaLightFolder.add( params, 'enabled' ).name( 'enable' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( onParamsChange );
 	areaLightFolder.addColor( params, 'color' ).name( 'color' ).onChange( onParamsChange );
@@ -168,12 +157,16 @@ async function init() {
 
 function onParamsChange() {
 
-	areaLight.isCircular = params.isCircular;
-	areaLight.intensity = params.intensity;
-	areaLight.width = params.width;
-	areaLight.height = params.height;
-	areaLight.color.set( params.color ).convertSRGBToLinear();
-	areaLight.visible = params.enabled;
+	[ leftLight, rightLight ].forEach( light => {
+
+		light.isCircular = params.isCircular;
+		light.intensity = params.intensity;
+		light.width = params.width;
+		light.height = params.height;
+		light.color.set( params.color ).convertSRGBToLinear();
+		light.visible = params.enabled;
+
+	} );
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.bounces = params.bounces;
@@ -199,8 +192,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	pathTracer.renderSample();
+	if ( params.enable ) {
 
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+		pathTracer.renderSample();
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }
