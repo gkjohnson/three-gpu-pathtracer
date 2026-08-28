@@ -115,6 +115,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setMultipleImportanceSampling( enabled ) {
+
+		this.kernel.misEnabled = enabled ? 1 : 0;
+		this.reset();
+
+	}
+
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
 		const { envInfo } = this;

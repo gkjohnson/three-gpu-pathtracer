@@ -38,8 +38,13 @@ export const queuedRayStruct = new StructTypeNode( {
 	currentBounce: 'uint',
 
 	pixel: 'vec2u',
+	bsdfPdf: 'float',
 	transmissiveRay: 'uint',
+
 	minPdf: 'float',
+	_alignment1: 'uint',
+	_alignment2: 'uint',
+	_alignment3: 'uint',
 
 	resultColor: 'vec4f',
 

@@ -1,8 +1,8 @@
 import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
-import { weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
@@ -16,7 +16,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			bvhData: { value: null },
 			material: { value: null },
 			envInfo: { value: null },
-			backgroundInfo: { value: null },
 
 			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
@@ -30,10 +29,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// settings
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
+			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
+
+			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
@@ -50,9 +52,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
+		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
 		// environment resources
+		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
+		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
+		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		const shader = wgslTagFn/* wgsl */`
@@ -69,6 +75,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
+				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
 				clampDirect: f32,
@@ -121,6 +128,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
+				var bsdfPdf = 0.0;
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 
@@ -156,7 +164,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
-						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						// attenuate the light transmitted through the volume when exiting a backface
 						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 ) {
@@ -169,6 +176,35 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce + 1u, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
+						// next event estimation
+						// importance-sample the environment, MIS-weighted against the bsdf pdf.
+						if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
+
+							let envSample = ${ sampleEnvDir }( ${ rand2 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+
+							// TODO: do we need to guard against other forms of invalid rays? Eg below the surface?
+							let evalRec = ${ bsdfEvalPdfFn }( view, envSample.direction, surface );
+							if ( envSample.pdf > 0.0 && evalRec.pdf > 0.0 ) {
+
+								var shadowRay: ${ rayStruct };
+								shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, envSample.direction, hitResult.normal );
+								shadowRay.direction = envSample.direction;
+
+								var shadowHit: ${ raycastOutput };
+								if ( ! ${ raycastFirstHitFn }( shadowRay, &shadowHit ) ) {
+
+									let misWeight = ${ misHeuristicFn }( envSample.pdf, evalRec.pdf );
+									let directLight = throughputColor * envSample.color * evalRec.color * misWeight / envSample.pdf;
+									let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+									resultColor += vec4f( contribution, 0.0 );
+
+								}
+
+							}
+
+						}
+
+						let scatterRec = ${ bsdfSampleFn }( view, surface );
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
@@ -198,6 +234,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
+						bsdfPdf = scatterRec.pdf;
 
 						// exit if our throughput is 0.0
 						if ( all( throughputColor == vec3f( 0.0 ) ) ) {
@@ -213,7 +250,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
-							let environment = ${ sampleEnvColor }( ray.direction ).rgb * throughputColor;
+							var misWeight = 1.0;
+							if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
+
+								let envPdf = ${ getEnvDirPdf }( ray.direction );
+								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
+
+							}
+
+							let environment = ${ sampleEnvColor }( ray.direction ).rgb * throughputColor * misWeight;
 							let contribution = ${ clampPathContributionFunc }( environment, bounce + 1u, clampDirect, clampIndirect );
 							resultColor += vec4f( contribution, 0.0 );
 
@@ -235,11 +280,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								let env = ${ sampleEnvColor }( ray.direction );
 								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
 								let transparency = ( 1.0 - bg.a ) * avg;
+								var envMisWeight = 1.0;
+								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
+
+									let envPdf = ${ getEnvDirPdf }( ray.direction );
+									envMisWeight = ${ misHeuristicFn }( misPdf, envPdf );
+
+								}
 
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 									// display the env map through transmissive surfaces
-									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor, bounce + 1u, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor * envMisWeight, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0,
@@ -248,7 +300,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 									// fade the background by the throughput color average
-									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor, bounce + 1u, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor * envMisWeight, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0 - transparency,
@@ -257,7 +309,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								} else {
 
 									// fade the background by the throughput color average, mixing in env lighting
-									var light = mix( env.rgb, bg.rgb, bg.a );
+									var light = mix( env.rgb, bg.rgb, bg.a ) * envMisWeight;
 									let background = ${ clampPathContributionFunc }( light * throughputColor, bounce + 1u, clampDirect, clampIndirect );
 									resultColor = vec4f(
 										resultColor.rgb + background,

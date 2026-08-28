@@ -132,6 +132,7 @@ const envMaps = {
 
 const params = {
 
+	multipleImportanceSampling: true,
 	renderScale: 1,
 	tiles: 2,
 
@@ -229,6 +230,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -470,6 +472,7 @@ function onParamsChange() {
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 }
 
@@ -573,6 +576,7 @@ function buildGui() {
 		pathTracer.tiles.set( v, v );
 
 	} );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );

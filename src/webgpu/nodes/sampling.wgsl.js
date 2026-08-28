@@ -108,6 +108,69 @@ export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
+// power heuristic for multiple importance sampling
+export const misHeuristicFn = wgslFn( /* wgsl */ `
+
+	fn misHeuristic( a: f32, b: f32 ) -> f32 {
+
+		let aa = a * a;
+		let bb = b * b;
+		return aa / ( aa + bb );
+
+	}
+
+` );
+
+export const luminanceFn = wgslFn( /* wgsl */ `
+
+	fn luminance( color: vec3f ) -> f32 {
+
+		return dot( color, vec3f( 0.2126, 0.7152, 0.0722 ) );
+
+	}
+
+` );
+
+// inverse of equirectDirectionToUv: map an equirect uv back to a direction
+export const equirectUvToDirectionFn = wgslFn( /* wgsl */ `
+
+	fn equirectUvToDirection( uvIn: vec2f ) -> vec3f {
+
+		// undo the adjustments applied in equirectDirectionToUv
+		var uv = uvIn;
+		uv.x -= 0.5;
+		uv.y = 1.0 - uv.y;
+
+		let theta = uv.x * 2.0 * PI;
+		let phi = uv.y * PI;
+		let sinPhi = sin( phi );
+
+		return vec3f( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
+
+	}
+
+`, [ constants ] );
+
+// solid-angle pdf factor for the equirect parameterization ( accounts for pole compression )
+export const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
+
+	fn equirectDirectionPdf( direction: vec3f ) -> f32 {
+
+		let uv = equirectDirectionToUv( direction );
+		let theta = uv.y * PI;
+		let sinTheta = sin( theta );
+		if ( sinTheta == 0.0 ) {
+
+			return 0.0;
+
+		}
+
+		return 1.0 / ( 2.0 * PI * PI * sinTheta );
+
+	}
+
+`, [ constants, equirectDirectionToUvFn ] );
+
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 
 	fn weightedAlphaBlend( prevColor: vec4f, newColor: vec4f, weight: f32 ) -> vec4f {

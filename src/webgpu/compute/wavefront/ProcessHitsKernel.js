@@ -17,6 +17,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			bvhData: { value: null },
 			material: { value: null },
 
+			// targets
 			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
 			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
@@ -167,6 +168,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].currentBounce = input.currentBounce + 1;
 					rayQueue.elements[ index ].resultColor = resultColor;
 					rayQueue.elements[ index ].seed = input.seed;
+					rayQueue.elements[ index ].bsdfPdf = scatterRec.pdf;
 					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 
