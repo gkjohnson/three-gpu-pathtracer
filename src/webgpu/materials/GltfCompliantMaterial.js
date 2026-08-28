@@ -289,6 +289,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let wo = normalize( surf.normalInvBasis * worldWo );
 				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
+				// TODO: mirror bsdfEval's layer structure - the glass layer should own both its
+				// reflection and refraction halves
 				// lobe selection weights and cumulative bounds in cascade order:
 				// clearcoat, specular, transmission, diffuse
 				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
@@ -498,6 +500,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
+				// TODO: mirror bsdfEval's layer structure - the glass layer should own both its
+				// reflection and refraction halves
 				// pdf mixture - every lobe that can produce the direction contributes its share,
 				// in the same cascade order and with the same terms as bsdfSample
 
