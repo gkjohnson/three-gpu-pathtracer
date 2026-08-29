@@ -82,9 +82,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
 
-					// leave the slot dormant once the pixel has taken its full sample budget. The
-					// pixel exchange above still rotates the overflow queue, so pixels that are not
-					// yet finished keep finding slots.
+					// skip the pixel if it has hit the sample limit
 					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
 					let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
 					let isComplete = maxSamples != 0u && samples >= maxSamples;
@@ -151,8 +149,6 @@ export class MaterialKernel extends ComputeKernel {
 					let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
 					if ( isMatte ) {
 
-						// a zeroed throughput terminates the path in LogicKernel, which blends the
-						// cleared result and frees the slot
 						rayData[ index ].resultColor = vec4f( 0.0 );
 						rayData[ index ].throughputColor = vec3f( 0.0 );
 						rayData[ index ].emission = vec3f( 0.0 );
@@ -206,8 +202,6 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].seed = input.seed;
 					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
 
-					// LogicKernel intersects the lights against this segment, so it takes the same
-					// offset origin the queued ray was given
 					rayData[ index ].origin = rayQueue.elements[ rayIndex ].origin;
 					rayData[ index ].direction = scatterRec.direction;
 					rayData[ index ].currentBounce = newBounce;
