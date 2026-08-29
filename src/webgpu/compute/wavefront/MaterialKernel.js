@@ -85,7 +85,11 @@ export class MaterialKernel extends ComputeKernel {
 					// leave the slot dormant once the pixel has taken its full sample budget. The
 					// pixel exchange above still rotates the overflow queue, so pixels that are not
 					// yet finished keep finding slots.
-					if ( maxSamples != 0u && ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) >= maxSamples ) {
+					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+					let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
+					let isComplete = maxSamples != 0u && samples >= maxSamples;
+
+					if ( isComplete ) {
 
 						rayData[ index ].pixelIndex = pixelIndex;
 						rayData[ index ].rayIntersectionIndex = - 1;
@@ -94,7 +98,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					${ rngInit }( indexUV, seed, 0 );
+					${ rngInit }( indexUV, seed + samples, 0 );
 
 					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
@@ -116,12 +120,12 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].direction = ray.direction;
 					rayQueue.elements[ rayIndex ].pixelIndex = pixelIndex;
 					rayQueue.elements[ rayIndex ].currentBounce = 0u;
-					rayQueue.elements[ rayIndex ].seed = seed;
+					rayQueue.elements[ rayIndex ].seed = seed + samples;
 
 					rayData[ index ].origin = ray.origin;
 					rayData[ index ].direction = ray.direction;
 					rayData[ index ].pixelIndex = pixelIndex;
-					rayData[ index ].seed = seed;
+					rayData[ index ].seed = seed + samples;
 					rayData[ index ].currentBounce = 0u;
 					rayData[ index ].throughputColor = vec3f( 1.0 );
 					rayData[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );

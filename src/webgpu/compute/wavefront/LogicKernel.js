@@ -117,7 +117,7 @@ export class LogicKernel extends ComputeKernel {
 						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
 						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), ${ isMISWeightLightFn }( input.lightType ) );
 						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf;
-						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
+						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce + 1u, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 
 					}
@@ -125,7 +125,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				// emission gathered at the previous surface ( pre-scatter throughput )
-				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, input.currentBounce, clampDirect, clampIndirect );
+				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, input.currentBounce + 1u, clampDirect, clampIndirect );
 				resultColor += vec4f( emission, 0.0 );
 
 				// reconstruct the scatter record staged by MaterialKernel
