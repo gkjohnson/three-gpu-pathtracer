@@ -5,7 +5,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
-import { SAMPLE_COUNT_MASK } from '../../constants.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 
@@ -25,7 +25,7 @@ export class MaterialKernel extends ComputeKernel {
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
+			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
 			rayData: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
@@ -135,6 +135,9 @@ export class MaterialKernel extends ComputeKernel {
 					rayData[ index ].lightPdf = 0.0;
 					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayData[ index ].shadowRayIntersectionIndex = - 1;
+
+					// write the active params & dispatched flag
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
 
 				} else {
 
