@@ -20,6 +20,20 @@ import { Backdrop } from './src/Backdrop.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf';
 const CREDITS = 'Model by Benedict Chew on Sketchfab';
+// luminaire names come from the manufacturer metadata in each file's header
+const IES_PROFILES = {
+	'None': - 1,
+	'BEGA 50988.2K3': 0,
+	'BEGA 50899.2K3': 1,
+	'BEGA 50975.6K3': 2,
+	'BEGA 51010.4K3': 3,
+	'Collingwood GL200DX4X30': 4,
+	'Cooper Lighting 210-D-CF3': 5,
+	'BEGA 84659K4': 6,
+	'Efficient Lighting DT106': 7,
+	'BEGA 84693K4': 8,
+};
+
 const IES_PROFILE_URLS = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/0646706b3d2d9658994fc4ad80681dec.ies',
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/06b4cfdc8805709e767b5e2e904be8ad.ies',
@@ -130,7 +144,7 @@ async function init() {
 	spotLight.penumbra = 1.0;
 	spotLight.distance = 0.0;
 	spotLight.intensity = 50.0;
-	spotLight.radius = 0.0;
+	spotLight.radius = 0.2;
 	spotLight.iesMap = params.iesProfile === - 1 ? null : iesTextures[ params.iesProfile ];
 
 	// spot light shadow
@@ -157,7 +171,7 @@ async function init() {
 	fillLight.decay = 0;
 	fillLight.penumbra = 1.0;
 	fillLight.distance = 0.0;
-	fillLight.intensity = 12.0;
+	fillLight.intensity = 6.0;
 	fillLight.radius = 0.5;
 	fillLight.castShadow = true;
 	fillLight.shadow.mapSize.width = 512;
@@ -198,7 +212,7 @@ async function init() {
 	lightFolder.add( spotLight, 'distance', 0.0, 20.0 ).onChange( onParamsChange );
 	lightFolder.add( spotLight, 'angle', 0.0, Math.PI / 2.0 ).onChange( onParamsChange );
 	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( onParamsChange );
-	lightFolder.add( params, 'iesProfile', - 1, IES_PROFILE_URLS.length - 1, 1 ).onChange( v => {
+	lightFolder.add( params, 'iesProfile', IES_PROFILES ).name( 'iesProfile' ).onChange( v => {
 
 		spotLight.iesMap = v === - 1 ? null : iesTextures[ v ];
 
