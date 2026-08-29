@@ -1,7 +1,9 @@
 import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
 export class MegaKernelPathTracer extends PathTracerBackend {
@@ -12,7 +14,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// options
 		this.tiles = new Vector2( 2, 2 );
-		this.envInfo = new EquirectHdrInfoUniform();
+		this.envInfo = new EquirectHdrInfoNode();
 
 		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
 		// far through the tile cycle the render is and need no GPU work to measure
@@ -21,6 +23,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
+		this.kernel.envInfo = this.envInfo;
+
+		this.backgroundInfo = new EquirectBackgroundInfo();
+		this.kernel.backgroundInfo = this.backgroundInfo;
+
+		this.lightsInfo = new LightsInfoNode();
+		this.kernel.lightsInfo = this.lightsInfo;
 
 	}
 
@@ -96,35 +105,48 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setClamping( direct, indirect ) {
+
+		this.kernel.clampDirect = direct;
+		this.kernel.clampIndirect = indirect;
+		this.reset();
+
+	}
+
 	setEnvironment( envMap ) {
 
-		const { kernel, envInfo } = this;
-		envInfo.updateFrom( envMap );
-		kernel.envMap = envInfo.map;
-		kernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+		this.envInfo.updateFrom( envMap );
+
+	}
+
+	setLights( lights ) {
+
+		this.lightsInfo.updateFrom( this.renderer, lights );
+		this.reset();
+
+	}
+
+	setMultipleImportanceSampling( enabled ) {
+
+		this.kernel.misEnabled = enabled ? 1 : 0;
+		this.reset();
 
 	}
 
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
-		const { kernel } = this;
+		const { envInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		kernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		kernel.envMapIntensity = envMapIntensity;
+		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
+		envInfo.intensityNode.value = envMapIntensity;
 
 	}
 
 	setBackground( background ) {
 
-		const { kernel } = this;
-		if ( kernel.background.isTexture ) {
-
-			kernel.background.dispose();
-
-		}
-
-		kernel.background = background;
-		kernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		const { backgroundInfo } = this;
+		backgroundInfo.dispose();
+		backgroundInfo.map = background;
 
 	}
 
@@ -134,11 +156,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		backgroundBlurriness,
 	) {
 
-		const { kernel } = this;
+		const { backgroundInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		kernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		kernel.backgroundIntensity = backgroundIntensity;
-		kernel.backgroundBlurriness = backgroundBlurriness;
+		backgroundInfo.rotationNode.value.copy( rotationMatrix );
+		backgroundInfo.intensity = backgroundIntensity;
+		backgroundInfo.blur = backgroundBlurriness;
 
 	}
 
@@ -244,6 +266,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
+		this.lightsInfo.dispose();
 
 	}
 

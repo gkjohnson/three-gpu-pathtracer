@@ -12,6 +12,7 @@ import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
+import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
@@ -195,6 +196,58 @@ export class WebGPUPathTracer {
 
 	}
 
+	get multipleImportanceSampling() {
+
+		return this._multipleImportanceSampling;
+
+	}
+
+	set multipleImportanceSampling( v ) {
+
+		if ( this._multipleImportanceSampling !== v ) {
+
+			this.setMultipleImportanceSampling( v );
+
+		}
+
+	}
+
+	get clampDirect() {
+
+		return this._clampDirect;
+
+	}
+
+	set clampDirect( v ) {
+
+		v = Math.max( 0, v );
+		if ( this._clampDirect !== v ) {
+
+			this._clampDirect = v;
+			this._pathTracer.setClamping( v, this._clampIndirect );
+
+		}
+
+	}
+
+	get clampIndirect() {
+
+		return this._clampIndirect;
+
+	}
+
+	set clampIndirect( v ) {
+
+		v = Math.max( 0, v );
+		if ( this._clampIndirect !== v ) {
+
+			this._clampIndirect = v;
+			this._pathTracer.setClamping( this._clampDirect, v );
+
+		}
+
+	}
+
 	// --- WebGLPathTracer compatibility stubs ---
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
@@ -210,8 +263,6 @@ export class WebGPUPathTracer {
 		return this._pathTracer.outputTarget ?? null;
 
 	}
-
-	updateLights() {}
 
 	// --- end compatibility stubs ---
 
@@ -249,10 +300,13 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
+		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this.setCamera( this.camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -292,9 +346,8 @@ export class WebGPUPathTracer {
 		this.pause = false;
 
 		this.filterGlossyFactor = 1;
-
-		// WebGLPathTracer compatibility stubs (see getters above)
-		// TOOD: implement these correctly
+		this._clampDirect = 0;
+		this._clampIndirect = 10;
 		this.multipleImportanceSampling = true;
 		this.transmissiveBackground = TRANSMISSIVE_BACKGROUND_OVERLAY;
 
@@ -311,6 +364,14 @@ export class WebGPUPathTracer {
 		this.setMaterial( this.material );
 		this.setRandom( this.random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
+
+	}
+
+	setMultipleImportanceSampling( value ) {
+
+		this._multipleImportanceSampling = value;
+		this._pathTracer.setMultipleImportanceSampling( value );
+		this.reset();
 
 	}
 
@@ -377,6 +438,7 @@ export class WebGPUPathTracer {
 		this._pathTracer.setBVHData( bvhData );
 		this.setCamera( camera );
 		this.updateEnvironment();
+		this.updateLights();
 
 	}
 
@@ -517,6 +579,16 @@ export class WebGPUPathTracer {
 			scene.backgroundBlurriness,
 		);
 
+		this.reset();
+
+	}
+
+	updateLights() {
+
+		const { _pathTracer, scene } = this;
+
+		const lights = getLights( scene );
+		_pathTracer.setLights( lights );
 		this.reset();
 
 	}

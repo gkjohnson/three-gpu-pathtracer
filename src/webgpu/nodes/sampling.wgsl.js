@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { environmentInfoStruct, constants, lobeWeightsStruct } from './structs.wgsl.js';
+import { constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { disneyFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
 
 /*
@@ -69,7 +69,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 `, [ disneyFresnelFunc, schlickFresnelFunc, iorToF0Func, lobeWeightsStruct, constants ] );
 
-const equirectDirectionToUvFn = wgslFn( /* wgsl */`
+export const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 	fn equirectDirectionToUv(direction: vec3f) -> vec2f {
 
@@ -86,17 +86,7 @@ const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 
 ` );
 
-const sampleEquirectColorFn = wgslFn( /* wgsl */ `
-
-	fn sampleEquirectColor( envMap: texture_2d<f32>, envMapSampler: sampler, direction: vec3f ) -> vec4f {
-
-		return textureSampleLevel( envMap, envMapSampler, equirectDirectionToUv( direction ), 0 );
-
-	}
-
-`, [ equirectDirectionToUvFn ] );
-
-const sampleHemisphereFn = wgslFn( /* wgsl */ `
+export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 	fn sampleHemisphere( n: vec3f, uv: vec2f ) -> vec3f {
 
@@ -118,25 +108,68 @@ const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
-export const sampleEnvironmentFn = wgslFn( /* wgsl */ `
+// power heuristic for multiple importance sampling
+export const misHeuristicFn = wgslFn( /* wgsl */ `
 
-	fn sampleEnvironment(
-		envMap: texture_2d<f32>,
-		envMapSampler: sampler,
-		env: EnvironmentInfo,
-		direction: vec3f,
-		uv: vec2f,
-	) -> vec4f {
+	fn misHeuristic( a: f32, b: f32 ) -> f32 {
 
-		let offsetDir = sampleHemisphere( direction, uv ) * 0.5 * env.blur;
-		let sampleDir = normalize( env.rotation * direction + offsetDir );
-		let col = sampleEquirectColor( envMap, envMapSampler, sampleDir );
-
-		return vec4f( env.intensity * col.rgb, col.a );
+		let aa = a * a;
+		let bb = b * b;
+		return aa / ( aa + bb );
 
 	}
 
-`, [ sampleEquirectColorFn, sampleHemisphereFn, environmentInfoStruct ] );
+` );
+
+export const luminanceFn = wgslFn( /* wgsl */ `
+
+	fn luminance( color: vec3f ) -> f32 {
+
+		return dot( color, vec3f( 0.2126, 0.7152, 0.0722 ) );
+
+	}
+
+` );
+
+// inverse of equirectDirectionToUv: map an equirect uv back to a direction
+export const equirectUvToDirectionFn = wgslFn( /* wgsl */ `
+
+	fn equirectUvToDirection( uvIn: vec2f ) -> vec3f {
+
+		// undo the adjustments applied in equirectDirectionToUv
+		var uv = uvIn;
+		uv.x -= 0.5;
+		uv.y = 1.0 - uv.y;
+
+		let theta = uv.x * 2.0 * PI;
+		let phi = uv.y * PI;
+		let sinPhi = sin( phi );
+
+		return vec3f( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
+
+	}
+
+`, [ constants ] );
+
+// solid-angle pdf factor for the equirect parameterization ( accounts for pole compression )
+export const equirectDirectionPdfFn = wgslFn( /* wgsl */ `
+
+	fn equirectDirectionPdf( direction: vec3f ) -> f32 {
+
+		let uv = equirectDirectionToUv( direction );
+		let theta = uv.y * PI;
+		let sinTheta = sin( theta );
+		if ( sinTheta == 0.0 ) {
+
+			return 0.0;
+
+		}
+
+		return 1.0 / ( 2.0 * PI * PI * sinTheta );
+
+	}
+
+`, [ constants, equirectDirectionToUvFn ] );
 
 export const weightedAlphaBlendFn = wgslFn( /* wgsl */`
 

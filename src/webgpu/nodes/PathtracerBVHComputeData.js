@@ -248,7 +248,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ storage.attributes }[ i1 ].position.xyz;
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
-						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 1e-5 );
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 

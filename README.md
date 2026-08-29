@@ -24,7 +24,7 @@ _More features and capabilities in progress!_
 
 [Physically Based Materials](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)
 
-[Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)
+[Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/equirect.html)
 
 [Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/depthOfField.html)
 
@@ -53,8 +53,6 @@ _More features and capabilities in progress!_
 **Tools**
 
 [Animation Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/renderVideo.html)
-
-[Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
 ## Running examples locally
 

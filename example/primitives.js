@@ -1,22 +1,9 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
-const randomOptions = {
-	PCG: RANDOM_PCG,
-	SOBOL: RANDOM_SOBOL,
-	BLUE_DITHER: RANDOM_BLUE_DITHER,
-};
-
-const options = {
-	enable: true,
-	useMegakernel: false,
-	random: randomOptions.BLUE_DITHER,
-};
-
-// init scene, renderer, camera, controls, etc
+// init scene
 const scene = new Scene();
 const sphereGeom = new SphereGeometry( 0.49, 64, 32 );
 const ball1 = new Mesh(
@@ -55,86 +42,49 @@ scene.add( ball1, ball2, ball3, ground );
 
 // set the environment map
 const texture = new GradientEquirectTexture();
-texture.bottomColor.set( 0xffffff );
+texture.topColor.set( 0xffffff );
 texture.bottomColor.set( 0x666666 );
 texture.update();
 scene.environment = texture;
 scene.background = texture;
 
+// camera
 const camera = new PerspectiveCamera();
 camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
-const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+// renderer
+const renderer = new WebGPURenderer( { antialias: true } );
 renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
-document.body.appendChild( renderer.domElement );
-renderer.setSize( innerWidth, innerHeight );
-renderer.setPixelRatio( devicePixelRatio );
 renderer.setAnimationLoop( animate );
+document.body.appendChild( renderer.domElement );
 
+// path tracer
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.useMegakernel( options.useMegakernel );
 pathTracer.setScene( scene, camera );
 
+// controls
 const controls = new OrbitControls( camera, renderer.domElement );
-controls.addEventListener( 'change', () => {
-
-	pathTracer.updateCamera();
-
-} );
-
-const gui = new GUI();
-gui.add( options, 'enable' );
-gui.add( options, 'useMegakernel' ).onChange( () => {
-
-	pathTracer.useMegakernel( options.useMegakernel );
-	pathTracer.setScene( scene, camera );
-
-} );
-gui.add( options, 'random', randomOptions ).onChange( v => {
-
-	pathTracer.setRandom( v );
-
-} );
-
+controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 onResize();
-
 window.addEventListener( 'resize', onResize );
 
 function animate() {
 
-	// update the camera and render one sample
-	if ( options.enable ) {
-
-		if ( ! pathTracer.dynamicLowRes && pathTracer.fadeState !== 1 ) {
-
-			renderer.render( scene, camera );
-
-		}
-
-		pathTracer.renderSample();
-
-	} else {
-
-		renderer.render( scene, camera );
-
-	}
+	// render one path traced sample
+	pathTracer.renderSample();
 
 }
 
 function onResize() {
 
 	// update rendering resolution
-	const w = window.innerWidth;
-	const h = window.innerHeight;
-
-	renderer.setSize( w, h );
+	renderer.setSize( window.innerWidth, window.innerHeight );
 	renderer.setPixelRatio( window.devicePixelRatio );
 
-	const aspect = w / h;
-	camera.aspect = aspect;
+	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 
 	pathTracer.updateCamera();

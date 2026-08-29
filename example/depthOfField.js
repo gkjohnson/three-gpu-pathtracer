@@ -29,7 +29,7 @@ const params = {
 	enabled: true,
 	bounces: 7,
 	renderScale: 1,
-	filterGlossyFactor: 0.5,
+	filterGlossyFactor: 1,
 	autoFocus: true,
 
 };

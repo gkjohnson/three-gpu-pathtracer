@@ -14,7 +14,10 @@ import {
 	Vector3,
 	WebGPURenderer,
 	EquirectangularReflectionMapping,
+	RectAreaLight,
+	RectAreaLightNode,
 } from 'three/webgpu';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
@@ -54,7 +57,7 @@ const DEFAULT_FOV = 45;
 // how far behind the model the backdrop's curve begins
 const BACKDROP_DISTANCE = 1;
 
-// stage lighting rigs built from emissive panels
+// stage lighting rigs built from rect area lights
 const LIGHT_RIGS = {
 	'three point': [
 		{ size: 2, position: [ 2, 1.6, 1.8 ], intensity: 6, color: 0xfff0dd },
@@ -75,10 +78,10 @@ const LIGHT_RIGS = {
 		{ size: [ 0.5, 3.2 ], position: [ 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
 	],
 	'overhead strips': [
-		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
-		{ size: [ 0.35, 3.4 ], position: [ - 0.3, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
-		{ size: [ 0.35, 3.4 ], position: [ 0.3, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
-		{ size: [ 0.35, 3.4 ], position: [ 0.9, 2.4, 0 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ - 0.3, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.3, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
 	],
 };
 
@@ -90,7 +93,7 @@ const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 const NO_ENVIRONMENT = 'none';
 
 const envMaps = {
-	'None': NO_ENVIRONMENT,
+	'none': NO_ENVIRONMENT,
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
 	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/moonless_golf_1k.hdr',
 	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
@@ -132,6 +135,7 @@ const envMaps = {
 
 const params = {
 
+	multipleImportanceSampling: true,
 	renderScale: 1,
 	tiles: 2,
 
@@ -220,6 +224,10 @@ async function init() {
 	const adapter = await navigator.gpu?.requestAdapter();
 	const requiredLimits = getRequiredDeviceLimits( adapter );
 
+	// ltc textures so rect area lights rasterize correctly in the preview
+	RectAreaLightTexturesLib.init();
+	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
+
 	// renderer
 	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
 	await renderer.init();
@@ -229,6 +237,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -300,17 +309,14 @@ async function init() {
 		LIGHT_RIGS[ name ].forEach( ( { size, position, rotation, intensity, color } ) => {
 
 			const [ width, height ] = Array.isArray( size ) ? size : [ size, size ];
-			const panel = new Mesh(
-				new PlaneGeometry( width, height ),
-				new MeshStandardMaterial( { color: 0x000000, emissive: color, emissiveIntensity: intensity, side: DoubleSide } ),
-			);
-			panel.position.set( ...position );
+			const light = new RectAreaLight( color, intensity, width, height );
+			light.position.set( ...position );
 
-			// panels aim at the model unless the rig fixes their orientation
-			if ( rotation ) panel.rotation.set( ...rotation );
-			else panel.lookAt( 0, 0.35, 0 );
+			// lights aim at the model unless the rig fixes their orientation
+			if ( rotation ) light.rotation.set( ...rotation );
+			else light.lookAt( 0, 0.35, 0 );
 
-			rig.add( panel );
+			rig.add( light );
 
 		} );
 
@@ -411,14 +417,11 @@ function updateStage() {
 
 }
 
-// the environment is dimmed while a rig is active so the panels light the model
 function updateLighting() {
 
 	lightRigs.children.forEach( rig => rig.visible = rig.name === params.lighting );
-	scene.environmentIntensity = params.lighting === 'none' ? 1 : 0.1;
 
-	pathTracer.updateTransforms();
-	pathTracer.updateEnvironment();
+	pathTracer.updateLights();
 
 }
 
@@ -464,12 +467,14 @@ function onParamsChange() {
 	const light = params.background === 'white';
 	floorPlane.material.color.set( light ? 0xd2d2d2 : 0x111111 );
 	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
+	backdrop.material.color.set( light ? 0xc6c6c6 : 0x161616 );
 
 	document.body.classList.toggle( 'checkerboard', transparent );
 	document.body.classList.toggle( 'light-background', light );
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 }
 
@@ -573,6 +578,7 @@ function buildGui() {
 		pathTracer.tiles.set( v, v );
 
 	} );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
@@ -776,7 +782,8 @@ async function updateModel() {
 	model.position.multiplyScalar( scale );
 	box.setFromObject( model );
 
-	// attenuation is measured in world units so it must be scaled with the model
+	// attenuation and light dimensions are measured in world units and ignore the object
+	// hierarchy scale, so they must be scaled with the model
 	const scaledMaterials = new Set();
 	model.traverse( c => {
 
@@ -784,6 +791,13 @@ async function updateModel() {
 
 			scaledMaterials.add( c.material );
 			c.material.attenuationDistance *= scale;
+
+		}
+
+		if ( c.isRectAreaLight ) {
+
+			c.width *= scale;
+			c.height *= scale;
 
 		}
 

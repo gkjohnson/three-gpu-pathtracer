@@ -5,8 +5,11 @@ import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel
 import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
+import { LightConnectionKernel } from './compute/wavefront/LightConnectionKernel.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
 import {
@@ -45,7 +48,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// options
 		this.tiles = new Vector2( 3, 3 );
-		this.envInfo = new EquirectHdrInfoUniform();
+		this.envInfo = new EquirectHdrInfoNode();
+		this.backgroundInfo = new EquirectBackgroundInfo();
+		this.lightsInfo = new LightsInfoNode();
 
 		const rayQueueSize = 4 + MAX_QUEUE_COUNT * queuedRayStruct.getLength();
 		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
@@ -71,17 +76,24 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionKernel = new RayIntersectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
 		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.lightConnectionKernel = new LightConnectionKernel( ).setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel( rayQueueStruct ).setWorkgroupSize( 1, 1, 1 );
 		this.hitDispatchConverter = new QueueLengthToDispatchKernel( hitQueueStruct ).setWorkgroupSize( 1, 1, 1 );
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
+
+		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
+		this.rayIntersectionKernel.envInfo = this.envInfo;
+		this.lightConnectionKernel.envInfo = this.envInfo;
+		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
+		this.rayIntersectionKernel.lightsInfo = this.lightsInfo;
+		this.lightConnectionKernel.lightsInfo = this.lightsInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
 
 		// later
 		this.volumeKernel = null;
-		this.lightConnectionKernel = null;
 
 	}
 
@@ -98,6 +110,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionKernel.bvhData = bvhData;
 
 		this.hitProcessKernel.bvhData = bvhData;
+
+		this.lightConnectionKernel.bvhData = bvhData;
+
 		this.rebuild();
 
 	}
@@ -108,6 +123,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.enqueueRaysKernel.needsUpdate = true;
 		this.rayIntersectionKernel.needsUpdate = true;
 		this.hitProcessKernel.needsUpdate = true;
+		this.lightConnectionKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -123,6 +139,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.hitProcessKernel.context.random = random;
 		this.hitProcessKernel.needsUpdate = true;
 
+		this.lightConnectionKernel.context.random = random;
+		this.lightConnectionKernel.needsUpdate = true;
+
 		this.reset();
 
 	}
@@ -131,6 +150,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.hitProcessKernel.material = material.getData();
 		this.hitProcessKernel.needsUpdate = true;
+
+		this.lightConnectionKernel.material = material.getData();
+		this.lightConnectionKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -138,40 +160,61 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setFilterGlossy( value ) {
 
 		// the kernel takes the inverted threshold, mirroring Cycles
-		this.hitProcessKernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
+		const filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
+		this.hitProcessKernel.filterGlossy = filterGlossy;
+		this.lightConnectionKernel.filterGlossy = filterGlossy;
+		this.reset();
+
+	}
+
+	setClamping( direct, indirect ) {
+
+		this.rayIntersectionKernel.clampDirect = direct;
+		this.rayIntersectionKernel.clampIndirect = indirect;
+		this.hitProcessKernel.clampDirect = direct;
+		this.hitProcessKernel.clampIndirect = indirect;
+		this.lightConnectionKernel.clampDirect = direct;
+		this.lightConnectionKernel.clampIndirect = indirect;
 		this.reset();
 
 	}
 
 	setEnvironment( envMap ) {
 
-		const { rayIntersectionKernel, envInfo } = this;
-		envInfo.updateFrom( envMap );
-		rayIntersectionKernel.envMap = envInfo.map;
-		rayIntersectionKernel.kernel.computeNode.parameters.envMapSampler.node.value = envInfo.map;
+		this.envInfo.updateFrom( envMap );
+
+	}
+
+	setLights( lights ) {
+
+		this.lightsInfo.updateFrom( this.renderer, lights );
+		this.reset();
 
 	}
 
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
-		const { rayIntersectionKernel } = this;
+		const { envInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		rayIntersectionKernel.envMapRotation.setFromMatrix4( rotationMatrix );
-		rayIntersectionKernel.envMapIntensity = envMapIntensity;
+		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
+		envInfo.intensityNode.value = envMapIntensity;
+
+	}
+
+	setMultipleImportanceSampling( enabled ) {
+
+		const value = enabled ? 1 : 0;
+		this.rayIntersectionKernel.misEnabled = value;
+		this.lightConnectionKernel.misEnabled = value;
+		this.reset();
 
 	}
 
 	setBackground( background ) {
 
-		const { rayIntersectionKernel } = this;
-		if ( rayIntersectionKernel.background.isTexture ) {
-
-			rayIntersectionKernel.background.dispose();
-
-		}
-
-		rayIntersectionKernel.background = background;
-		rayIntersectionKernel.kernel.computeNode.parameters.backgroundSampler.node.value = background;
+		const { backgroundInfo } = this;
+		backgroundInfo.dispose();
+		backgroundInfo.map = background;
 
 	}
 
@@ -181,11 +224,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		backgroundBlurriness,
 	) {
 
-		const { rayIntersectionKernel } = this;
+		const { backgroundInfo } = this;
 		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		rayIntersectionKernel.backgroundRotation.setFromMatrix4( rotationMatrix );
-		rayIntersectionKernel.backgroundIntensity = backgroundIntensity;
-		rayIntersectionKernel.backgroundBlurriness = backgroundBlurriness;
+		backgroundInfo.rotationNode.value.copy( rotationMatrix );
+		backgroundInfo.intensity = backgroundIntensity;
+		backgroundInfo.blur = backgroundBlurriness;
 
 	}
 
@@ -216,6 +259,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
+		this.lightsInfo.dispose();
 
 	}
 
@@ -290,6 +334,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			rayIntersectionKernel,
 			updateRayQueueParamsKernel,
 			hitProcessKernel,
+			lightConnectionKernel,
 			rayDispatchConverter,
 			hitDispatchConverter,
 
@@ -364,19 +409,22 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				updateRayQueueParamsKernel.maxCount = RAYS_TO_PROCESS;
 				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
 
-				// Step 3: attenuate ray color, scatter, run russian roulette over exactly the queued hits
+				// Step 3: convert the queued hit count into an indirect dispatch size
 				hitDispatchConverter.queue = hitQueue;
 				renderer.compute( hitDispatchConverter.kernel, [ 1, 1, 1 ] );
 
+				// Step 4: next event estimation - deposit the direct-light contribution into
+				// hitQueue.resultColor before ProcessHits consumes it
+				lightConnectionKernel.hitQueue = hitQueue;
+				renderer.compute( lightConnectionKernel.kernel, hitDispatchConverter.outputDispatch );
+
+				// Step 5: attenuate ray color, scatter, run russian roulette over exactly the queued hits
 				hitProcessKernel.sampleCountTarget = sampleCountTarget;
 				hitProcessKernel.bounces = bounces;
 				hitProcessKernel.rayQueue = rayQueue;
 				hitProcessKernel.hitQueue = hitQueue;
 				renderer.compute( hitProcessKernel.kernel, hitDispatchConverter.outputDispatch );
 				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel
-
-				// Step 4: connect to lights
-				// TODO
 
 				// Future
 				// - track variance to skip rays

@@ -196,10 +196,39 @@ export const disneyFresnelFunc = wgslFn( /* wgsl */ `
 export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 	fn isTerminatingScatter( scatterRec: ScatterRecord ) -> bool {
+
 		return scatterRec.pdf <= 0;
+
 	}
 
 `, [ scatterRecordStruct ] );
+
+// Clamp individual light-path contributions using Cycles' RGB sum while preserving chromaticity.
+// Matches film_clamp_light in Cycles' kernel/film/light_passes.h, including the x3 limit
+// scaling applied to the user-facing clamp values in scene/integrator.cpp.
+export const clampPathContributionFunc = wgslFn( /* wgsl */ `
+
+	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
+
+		let limit = select( clampIndirect, clampDirect, pathDepth <= 1u ) * 3.0;
+		if ( limit <= 0.0 ) {
+
+			return contribution;
+
+		}
+
+		let strength = dot( abs( contribution ), vec3f( 1.0 ) );
+		if ( strength > limit ) {
+
+			return contribution * ( limit / strength );
+
+		}
+
+		return contribution;
+
+	}
+
+` );
 
 export const applyWrapFunc = wgslFn( /* wgsl */ `
 
@@ -229,6 +258,29 @@ export const applyWrapFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Bit-level ray origin offset based on Section 6.2.2 of "A Fast and Robust
+// Method for Avoiding Self-Intersection" in Ray Tracing Gems:
+// https://github.com/Apress/ray-tracing-gems/blob/master/Ch_06_A_Fast_and_Robust_Method_for_Avoiding_Self-Intersection/offset_ray.cu
+// The original implementation expects a normal oriented for the outgoing ray;
+// this version orients the geometric normal internally.
+export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
+
+	fn offsetRayOrigin( point: vec3f, direction: vec3f, geometricNormal: vec3f ) -> vec3f {
+
+		let normal = normalize( select( -geometricNormal, geometricNormal, dot( direction, geometricNormal ) >= 0.0 ) );
+		let intScale = 256.0;
+		let integerOffset = vec3i( intScale * normal );
+		let pointBits = bitcast<vec3i>( point );
+		let signedOffset = select( integerOffset, -integerOffset, point < vec3f( 0.0 ) );
+		let offsetPoint = bitcast<vec3f>( pointBits + signedOffset );
+		let origin = 1.0 / 32.0;
+		let floatScale = 1.0 / 65536.0;
+		return select( offsetPoint, point + floatScale * normal, abs( point ) < vec3f( origin ) );
+
+	}
+
+` );
+
 // Wraps a bilinear tap that is off the edge of a tile back to the texel the wrap mode calls for
 export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 
@@ -250,10 +302,11 @@ export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 
 // Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
 // array node ( must be named "textureInfo" ). Called once per scene so a single
-// sampleTexel / textureInfo binding is shared by every caller in a pipeline.
-export const sampleTexelFunc = ( textureInfoUniform, atlas ) => wgslTagFn/* wgsl */ `
+// sampleTexel / textureInfo binding is shared by every caller in a pipeline. A distinct
+// name must be given when a second atlas binding is used in the same pipeline.
+export const sampleTexelFunc = ( textureInfoUniform, atlas, name = 'sampleTexel' ) => wgslTagFn/* wgsl */ `
 
-	fn sampleTexel( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
+	fn ${ name }( uv: vec2f, packed: i32, lod: f32 ) -> vec4f {
 
 		let texIndex = packed & 0x7FFFFF;
 		let wrapS    = ( packed >> 26 ) & 0x3;
