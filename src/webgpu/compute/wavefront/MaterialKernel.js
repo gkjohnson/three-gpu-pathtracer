@@ -7,6 +7,7 @@ import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK } from '../../constants.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -142,6 +143,21 @@ export class MaterialKernel extends ComputeKernel {
 					let objectInfo = transforms[ u32( input.objectIndex ) ];
 					var materialInfo = materials[ objectInfo.materialIndex ];
 
+					// a matte surface hit by the camera ray renders as a fully transparent
+					let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
+					if ( isMatte ) {
+
+						// a zeroed throughput terminates the path in LogicKernel, which blends the
+						// cleared result and frees the slot
+						rayData[ index ].resultColor = vec4f( 0.0 );
+						rayData[ index ].throughputColor = vec3f( 0.0 );
+						rayData[ index ].emission = vec3f( 0.0 );
+						rayData[ index ].lightPdf = 0.0;
+						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
 					// apply per-object colors
 					materialInfo.color *= objectInfo.color.rgb;
 					materialInfo.opacity *= objectInfo.color.a;
@@ -176,19 +192,21 @@ export class MaterialKernel extends ComputeKernel {
 					rayData[ index ].transmissiveRay = input.transmissiveRay & select( 0u, 1u, scatterRec.isTransmissive );
 					rayData[ index ].emission = surface.emission;
 
-					let newOrigin = vertexData.position.xyz;
 					let newBounce = input.currentBounce + 1u;
-					rayData[ index ].origin = newOrigin;
-					rayData[ index ].direction = scatterRec.direction;
-					rayData[ index ].currentBounce = newBounce;
 
 					let rayIndex = atomicAdd( &rayQueue.length, 1u );
-					rayQueue.elements[ rayIndex ].origin = newOrigin;
+					rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 					rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
 					rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
 					rayQueue.elements[ rayIndex ].currentBounce = newBounce;
 					rayQueue.elements[ rayIndex ].seed = input.seed;
 					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
+
+					// LogicKernel intersects the lights against this segment, so it takes the same
+					// offset origin the queued ray was given
+					rayData[ index ].origin = rayQueue.elements[ rayIndex ].origin;
+					rayData[ index ].direction = scatterRec.direction;
+					rayData[ index ].currentBounce = newBounce;
 
 					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray
 					var lightPdf = input.lightPdf;
@@ -201,7 +219,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayData[ index ].lightBsdfPdf = evalRec.pdf;
 
 							let shadowIndex = atomicAdd( &shadowRayQueue.length, 1u );
-							shadowRayQueue.elements[ shadowIndex ].origin = newOrigin;
+							shadowRayQueue.elements[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.normal );
 							shadowRayQueue.elements[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
 							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
