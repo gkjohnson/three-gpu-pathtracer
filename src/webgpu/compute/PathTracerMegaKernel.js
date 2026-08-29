@@ -218,7 +218,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the ray at the hit point, advancing the rng but not the bounce count.
-						if ( transparentBounce < transparentBounces && ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+
+							// stop once the transparent bounces run out
+							if ( transparentBounce >= transparentBounces ) {
+
+								break;
+
+							}
 
 							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
 							${ rngNextBounce }();

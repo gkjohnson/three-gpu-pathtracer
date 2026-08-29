@@ -103,7 +103,8 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// Stochastically pass through partially transparent surfaces by re-enqueueing
 				// the ray at the hit point, advancing the alpha depth but not the bounce count.
-				if ( input.alphaDepth < transparentBounces && ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+				let passesThrough = ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+				if ( passesThrough && input.alphaDepth < transparentBounces ) {
 
 					let rayQueueCapacity = arrayLength( &rayQueue.elements );
 					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
@@ -142,7 +143,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				}
 
-				var isTerminated = isMatte || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var isTerminated = isMatte || passesThrough || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
 				// russian roulette early out:
 				// Matches Cycles path_state_continuation_probability in integrator/path_state.h
