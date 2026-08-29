@@ -128,12 +128,10 @@ async function init() {
 	gltf.scene.updateMatrixWorld( true );
 	scene.add( gltf.scene );
 
-	// backdrop behind the model, scaled to its bounds
+	// backdrop behind the model
+	const backdrop = new Backdrop( { width: 16.3, depth: 7.2, height: 3.6, curve: 3.6 } );
 	const box = new Box3().setFromObject( gltf.scene );
-	const size = box.getSize( new Vector3() );
 	const center = box.getCenter( new Vector3() );
-	const dim = Math.max( size.x, size.y, size.z ) * 0.75;
-	const backdrop = new Backdrop( { width: 4.5 * dim, depth: 2 * dim, height: 1 * dim, curve: dim } );
 	backdrop.position.set( center.x, box.min.y - 1e-3, box.min.z );
 	scene.add( backdrop );
 
