@@ -197,6 +197,9 @@ export class MaterialKernel extends ComputeKernel {
 
 					let newBounce = input.currentBounce + 1u;
 
+					// TODO: run the bounce limit, russian roulette, terminating scatter and zero
+					// throughput checks here and skip the enqueue when they fire. LogicKernel decides
+					// them a frame later, so every terminating path traces one segment for nothing
 					let rayIndex = atomicAdd( &rayQueue.length, 1u );
 					rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 					rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
