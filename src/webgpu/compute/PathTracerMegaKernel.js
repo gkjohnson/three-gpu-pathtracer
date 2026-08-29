@@ -32,7 +32,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// settings
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
-			transparentBounces: uniform( 15, 'uint' ),
+			maxTransparentBounces: uniform( 15, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -84,7 +84,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
-				transparentBounces: u32,
+				maxTransparentBounces: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -221,7 +221,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 							// stop once the transparent bounces run out
-							if ( transparentBounce >= transparentBounces ) {
+							if ( transparentBounce >= maxTransparentBounces ) {
 
 								break;
 

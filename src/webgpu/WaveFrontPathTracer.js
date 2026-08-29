@@ -319,7 +319,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const {
 			renderer,
 			bounces,
-			transparentBounces,
+			maxTransparentBounces,
 
 			tiles,
 			sampleCountTarget,
@@ -422,7 +422,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				// Step 5: attenuate ray color, scatter, run russian roulette over exactly the queued hits
 				hitProcessKernel.sampleCountTarget = sampleCountTarget;
 				hitProcessKernel.bounces = bounces;
-				hitProcessKernel.transparentBounces = transparentBounces;
+				hitProcessKernel.maxTransparentBounces = maxTransparentBounces;
 				hitProcessKernel.rayQueue = rayQueue;
 				hitProcessKernel.hitQueue = hitQueue;
 				renderer.compute( hitProcessKernel.kernel, hitDispatchConverter.outputDispatch );

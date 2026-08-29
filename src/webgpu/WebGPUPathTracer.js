@@ -127,15 +127,15 @@ export class WebGPUPathTracer {
 
 	}
 
-	get transparentBounces() {
+	get maxTransparentBounces() {
 
-		return this._pathTracer.transparentBounces;
+		return this._pathTracer.maxTransparentBounces;
 
 	}
 
-	set transparentBounces( v ) {
+	set maxTransparentBounces( v ) {
 
-		this._pathTracer.transparentBounces = v;
+		this._pathTracer.maxTransparentBounces = v;
 		this._pathTracer.reset();
 
 	}
