@@ -127,6 +127,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	get transparentBounces() {
+
+		return this._pathTracer.transparentBounces;
+
+	}
+
+	set transparentBounces( v ) {
+
+		this._pathTracer.transparentBounces = v;
+		this._pathTracer.reset();
+
+	}
+
 	// Stops taking samples once a pixel reaches this count. Zero means no limit.
 	get maxSamples() {
 

@@ -25,6 +25,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
+			transparentBounces: uniform( 15, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
@@ -49,6 +50,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
+				transparentBounces: u32,
 				filterGlossy: f32,
 				clampDirect: f32,
 				clampIndirect: f32,
@@ -101,7 +103,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				// Stochastically pass through partially transparent surfaces by re-enqueueing
 				// the ray at the hit point, advancing the alpha depth but not the bounce count.
-				if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+				if ( input.alphaDepth < transparentBounces && ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 					let rayQueueCapacity = arrayLength( &rayQueue.elements );
 					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;

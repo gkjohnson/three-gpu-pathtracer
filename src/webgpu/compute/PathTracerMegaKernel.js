@@ -32,6 +32,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// settings
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
+			transparentBounces: uniform( 15, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -83,6 +84,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
+				transparentBounces: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -139,6 +141,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var bsdfPdf = 0.0;
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
+				var transparentBounce = 0u;
 
 				// one-sample NEE selects between the analytic lights and the environment -
 				// lightsDenom is the number of options
@@ -215,10 +218,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the ray at the hit point, advancing the rng but not the bounce count.
-						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+						if ( transparentBounce < transparentBounces && ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
 							${ rngNextBounce }();
+							transparentBounce ++;
 							bounce --;
 							continue;
 
