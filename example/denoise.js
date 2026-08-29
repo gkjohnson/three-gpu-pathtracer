@@ -8,34 +8,40 @@ import {
 	WebGPURenderer,
 	PerspectiveCamera,
 	Vector2,
+	Vector3,
+	Box3,
+	EquirectangularReflectionMapping,
 } from 'three/webgpu';
 import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { Upscaler } from '@pmndrs/upscaler';
 import { LoaderElement } from './src/LoaderElement.js';
+import { Backdrop } from './src/Backdrop.js';
 import { OIDNDenoiser } from './src/denoise/OIDNDenoiser.js';
-import { GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { WebGPUPathTracer, RenderToScreenNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
-const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
-const CREDITS = 'Model by "nyancube" on Sketchfab';
+const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/toyota-supra-gt300.glb';
+const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/modern_buildings_2_2k.hdr';
+const CREDITS = 'Model by "vecarz" on Sketchfab';
 const DESCRIPTION = 'Path tracing at a reduced resolution, denoised with OIDN and upscaled with FSR1.';
 
 const params = {
 	enable: true,
 	transparentBackground: false,
-	renderScale: 0.25,
-	maxSamples: 32,
+	renderScale: 0.5,
+	maxSamples: 6,
 	denoise: true,
 	upscale: true,
 	sharpness: 1,
 };
 
 let pathTracer, denoiser, renderer, controls;
-let camera, scene, gradientMap;
+let camera, scene, environmentMap;
 let loader, gui;
 
 let auxTarget, presentQuad;
@@ -88,22 +94,13 @@ async function init() {
 
 	presentQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
-	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
-	camera.position.set( 8, 9, 24 );
+	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
+	camera.position.set( 0, 2, 4 ).multiplyScalar( 1.2 );
 
 	scene = new Scene();
 
-	gradientMap = new GradientEquirectTexture();
-	gradientMap.topColor.set( 0x6a8fb5 );
-	gradientMap.bottomColor.set( 0xe8e8e8 );
-	gradientMap.update();
-
-	scene.environment = gradientMap;
-	scene.environmentIntensity = 2;
-	updateBackground();
-
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.y = 10;
+	controls.target.y = 0.5;
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
@@ -112,8 +109,31 @@ async function init() {
 	} );
 	controls.update();
 
-	const gltf = await new GLTFLoader().loadAsync( MODEL_URL );
+	const dracoLoader = new DRACOLoader();
+	dracoLoader.setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
+	const [ envMap, gltf ] = await Promise.all( [
+		new HDRLoader().loadAsync( ENV_URL ),
+		new GLTFLoader().setDRACOLoader( dracoLoader ).loadAsync( MODEL_URL ),
+	] );
+	dracoLoader.dispose();
+
+	envMap.mapping = EquirectangularReflectionMapping;
+	scene.environment = envMap;
+	scene.environmentRotation.y = 0.4;
+	environmentMap = envMap;
+	updateBackground();
+
+	// angle the model a little for some visual interest
+	gltf.scene.rotation.y = Math.PI / 5;
+	gltf.scene.updateMatrixWorld( true );
 	scene.add( gltf.scene );
+
+	// backdrop behind the model
+	const backdrop = new Backdrop( { width: 16.3, depth: 7.2, height: 3.6, curve: 3.6 } );
+	const box = new Box3().setFromObject( gltf.scene );
+	const center = box.getCenter( new Vector3() );
+	backdrop.position.set( center.x, box.min.y - 1e-3, box.min.z );
+	scene.add( backdrop );
 
 	pathTracer.setScene( scene, camera );
 
@@ -138,7 +158,7 @@ async function init() {
 		resetRender();
 
 	} );
-	ptFolder.add( params, 'maxSamples', 1, 200, 1 ).onChange( v => {
+	ptFolder.add( params, 'maxSamples', 1, 50, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 		resetRender();
@@ -167,7 +187,7 @@ function updateBackground() {
 
 	const transparent = params.transparentBackground;
 
-	scene.background = transparent ? null : gradientMap;
+	scene.background = transparent ? null : environmentMap;
 	renderer.setClearAlpha( transparent ? 0 : 1 );
 	document.body.classList.toggle( 'checkerboard', transparent );
 

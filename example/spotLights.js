@@ -3,27 +3,37 @@ import {
 	ACESFilmicToneMapping,
 	PCFSoftShadowMap,
 	Scene,
-	EquirectangularReflectionMapping,
 	Box3,
-	Mesh,
-	CylinderGeometry,
-	MeshStandardMaterial,
-	BoxGeometry,
+	Vector3,
 	PerspectiveCamera,
 	IESSpotLight,
 } from 'three/webgpu';
 import { IESLoader } from 'three/examples/jsm/loaders/IESLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
-import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
+import { Backdrop } from './src/Backdrop.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/steampunk-robot/scene.gltf';
-const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const CREDITS = 'Model by Benedict Chew on Sketchfab';
+// luminaire names come from the manufacturer metadata in each file's header
+const IES_PROFILES = {
+	'None': - 1,
+	'BEGA 50988.2K3': 0,
+	'BEGA 50899.2K3': 1,
+	'BEGA 50975.6K3': 2,
+	'BEGA 51010.4K3': 3,
+	'Collingwood GL200DX4X30': 4,
+	'Cooper Lighting 210-D-CF3': 5,
+	'BEGA 84659K4': 6,
+	'Efficient Lighting DT106': 7,
+	'BEGA 84693K4': 8,
+};
+
 const IES_PROFILE_URLS = [
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/0646706b3d2d9658994fc4ad80681dec.ies',
 	'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/ies/06b4cfdc8805709e767b5e2e904be8ad.ies',
@@ -37,7 +47,7 @@ const IES_PROFILE_URLS = [
 ];
 
 let pathTracer, renderer, controls;
-let scene, camera, spotLight, iesTextures;
+let scene, camera, spotLight, fillLight, iesTextures;
 let loader;
 
 // gui parameters
@@ -46,7 +56,7 @@ const params = {
 	bounces: 15,
 	renderScale: 1,
 	tiles: 2,
-	iesProfile: - 1,
+	iesProfile: 6,
 	...getScaledSettings(),
 };
 
@@ -71,89 +81,70 @@ async function init() {
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	camera = new PerspectiveCamera( 75, aspect, 0.025, 500 );
-	camera.position.set( - 2, 4, 8 ).multiplyScalar( 0.8 );
+	camera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
+	camera.position.set( - 1.5, 2.2, 5.5 );
 
 	// controls
 	controls = new OrbitControls( camera, renderer.domElement );
-	controls.target.y = 1.5;
+	controls.target.y = 0.75;
 	controls.update();
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// scene
 	scene = new Scene();
-	scene.backgroundBlurriness = 0.1;
-	scene.environmentIntensity = 0.1;
-	scene.backgroundIntensity = 0.1;
 
 	// load assets
 	const iesLoader = new IESLoader();
-	const [ envTexture, gltf, textures ] = await Promise.all( [
-		new HDRLoader().loadAsync( ENV_URL ),
-		new GLTFLoader().loadAsync( MODEL_URL ),
+	const [ gltf, textures ] = await Promise.all( [
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
 		Promise.all( IES_PROFILE_URLS.map( url => iesLoader.loadAsync( url ) ) )
 	] );
 
 	// ies textures
 	iesTextures = textures;
 
-	// environment
-	envTexture.mapping = EquirectangularReflectionMapping;
-	scene.environment = envTexture;
-	scene.background = envTexture;
-
 	// objects
-	gltf.scene.scale.setScalar( 1 );
-	gltf.scene.updateMatrixWorld();
+	gltf.scene.updateMatrixWorld( true );
 	gltf.scene.traverse( c => {
 
 		c.castShadow = true;
 		c.receiveShadow = true;
 
 	} );
-	scene.add( gltf.scene );
 
+	// rest the model on the ground and scale it into view
 	const box = new Box3();
 	box.setFromObject( gltf.scene );
+	const size = box.getSize( new Vector3() );
+	gltf.scene.scale.setScalar( 3 / Math.max( size.x, size.y, size.z ) );
+	gltf.scene.updateMatrixWorld( true );
+	box.setFromObject( gltf.scene );
+	gltf.scene.position.y -= box.min.y;
+	gltf.scene.updateMatrixWorld( true );
+	scene.add( gltf.scene );
 
-	// init environment
-	const floor = new Mesh(
-		new CylinderGeometry( 8, 8, 0.5, 200 ),
-		new MeshStandardMaterial( { color: 0x555555, roughness: 0.05, metalness: 0.4 } ),
-	);
-	floor.geometry = floor.geometry.toNonIndexed();
-	floor.geometry.clearGroups();
-	floor.position.y = box.min.y - 0.25;
-	floor.receiveShadow = true;
-	floor.material.color.convertSRGBToLinear();
-	scene.add( floor );
+	box.setFromObject( gltf.scene );
 
-	const wall = new Mesh(
-		new BoxGeometry( 14, 6, 0.5 ),
-		new MeshStandardMaterial( { color: 0xa06464, roughness: 0.4, metalness: 0.1 } ),
-	);
-	wall.castShadow = true;
-	wall.receiveShadow = true;
-	wall.geometry = wall.geometry.toNonIndexed();
-	wall.geometry.clearGroups();
-	wall.position.x = 0.0;
-	wall.position.y = box.min.y + 3;
-	wall.position.z = box.min.z - 0.5;
-	wall.material.color.convertSRGBToLinear();
-	scene.add( wall );
+	// set the backdrop
+	const dim = Math.max( size.x, size.y, size.z );// * 0.25;
+	const backdrop = new Backdrop( { width: 8 * dim, depth: 5 * dim, height: 3 * dim, curve: 2 * dim } );
+	backdrop.position.set( 0, - 1e-3, box.min.z );
+	backdrop.material.roughness = 1;
+	backdrop.receiveShadow = true;
+	scene.add( backdrop );
 
 	// spot light
 	// TODO: use PhysicalSpotLight once it can extend IESSpotLight - currently the class is only
 	// exported from "three/webgpu" and the node library resolves light nodes by exact constructor
 	// so a subclass would not rasterize
-	spotLight = new IESSpotLight( 0xffffff );
-	spotLight.position.set( 0, 7.0, 4 );
+	spotLight = new IESSpotLight( 0xff170f );
+	spotLight.position.set( 1.5, 5.0, 3 );
 	spotLight.angle = Math.PI / 4.5;
 	spotLight.decay = 0;
 	spotLight.penumbra = 1.0;
 	spotLight.distance = 0.0;
 	spotLight.intensity = 50.0;
-	spotLight.radius = 0.0;
+	spotLight.radius = 0.2;
 	spotLight.iesMap = params.iesProfile === - 1 ? null : iesTextures[ params.iesProfile ];
 
 	// spot light shadow
@@ -166,11 +157,32 @@ async function init() {
 	scene.add( spotLight );
 
 	// spot light target
+	const targetHeight = 0.5 * ( box.max.y - box.min.y );
 	const targetObject = spotLight.target;
 	targetObject.position.x = 0;
-	targetObject.position.y = floor.position.y + 2;
-	targetObject.position.z = 0.05;
+	targetObject.position.y = targetHeight;
+	targetObject.position.z = 0;
 	scene.add( targetObject );
+
+	// dimmer, cooler fill light from the left side of the model
+	fillLight = new IESSpotLight( 0xbfd4ff );
+	fillLight.position.set( - 2.5, 4.0, 2.5 );
+	fillLight.angle = Math.PI / 3.5;
+	fillLight.decay = 0;
+	fillLight.penumbra = 1.0;
+	fillLight.distance = 0.0;
+	fillLight.intensity = 6.0;
+	fillLight.radius = 0.5;
+	fillLight.castShadow = true;
+	fillLight.shadow.mapSize.width = 512;
+	fillLight.shadow.mapSize.height = 512;
+	fillLight.shadow.camera.near = 0.1;
+	fillLight.shadow.camera.far = 10.0;
+	fillLight.shadow.focus = 1.0;
+	scene.add( fillLight );
+
+	fillLight.target.position.set( 0, targetHeight, 0 );
+	scene.add( fillLight.target );
 
 	pathTracer.setScene( scene, camera );
 
@@ -200,7 +212,7 @@ async function init() {
 	lightFolder.add( spotLight, 'distance', 0.0, 20.0 ).onChange( onParamsChange );
 	lightFolder.add( spotLight, 'angle', 0.0, Math.PI / 2.0 ).onChange( onParamsChange );
 	lightFolder.add( spotLight, 'penumbra', 0.0, 1.0 ).onChange( onParamsChange );
-	lightFolder.add( params, 'iesProfile', - 1, IES_PROFILE_URLS.length - 1, 1 ).onChange( v => {
+	lightFolder.add( params, 'iesProfile', IES_PROFILES ).name( 'iesProfile' ).onChange( v => {
 
 		spotLight.iesMap = v === - 1 ? null : iesTextures[ v ];
 

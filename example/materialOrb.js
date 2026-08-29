@@ -24,30 +24,28 @@ const _color = new Color();
 const initialCameraPosition = new Vector3();
 const initialCameraTarget = new Vector3();
 
-const params = {
+function getDefaultMaterialProperties() {
 
-	material: '',
-
-	materialProperties: {
-		color: '#ffe6bd',
+	return {
+		color: '#ffffff',
 		emissive: '#000000',
 		emissiveIntensity: 1,
-		roughness: 0,
-		metalness: 1,
+		roughness: 1,
+		metalness: 0,
 		diffuseRoughness: 0,
-		ior: 1.495,
+		ior: 1.5,
 		transmission: 0.0,
 		thinWall: false,
 		attenuationColor: '#ffffff',
-		attenuationDistance: 0.5,
+		attenuationDistance: 1.0,
 		opacity: 1.0,
 		clearcoat: 0.0,
 		clearcoatRoughness: 0.0,
 		sheenColor: '#000000',
 		sheenRoughness: 0.0,
 		iridescence: 0.0,
-		iridescenceIOR: 1.5,
-		iridescenceThickness: 400,
+		iridescenceIOR: 1.0,
+		iridescenceThickness: 0.0,
 		specularColor: '#ffffff',
 		specularIntensity: 1.0,
 		anisotropy: 0.0,
@@ -55,7 +53,15 @@ const params = {
 		matte: false,
 		flatShading: false,
 		castShadow: true,
-	},
+	};
+
+}
+
+const params = {
+
+	material: '',
+
+	materialProperties: getDefaultMaterialProperties(),
 
 	enable: true,
 	displaySampleDensity: false,
@@ -216,19 +222,8 @@ function applyDatabaseMaterial( info ) {
 
 	const materialProperties = params.materialProperties;
 
-	// the database only describes a subset of the material, so reset the rest to neutral
-	materialProperties.color = '#ffffff';
-	materialProperties.specularColor = '#ffffff';
-	materialProperties.attenuationColor = '#ffffff';
-	materialProperties.attenuationDistance = 1;
-	materialProperties.metalness = 0;
-	materialProperties.roughness = 1;
-	materialProperties.diffuseRoughness = 0;
-	materialProperties.ior = 1.5;
-	materialProperties.transmission = 0;
-	materialProperties.iridescence = 0;
-	materialProperties.iridescenceIOR = 1;
-	materialProperties.iridescenceThickness = 0;
+	// the database only describes a subset of the material, so reset everything to neutral
+	Object.assign( materialProperties, getDefaultMaterialProperties() );
 
 	// database colors are linear, the gui works in hex so they round trip through sRGB
 	const toHex = rgb => '#' + _color.setRGB( ...rgb ).getHexString();

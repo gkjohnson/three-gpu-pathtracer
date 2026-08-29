@@ -467,6 +467,7 @@ function onParamsChange() {
 	const light = params.background === 'white';
 	floorPlane.material.color.set( light ? 0xd2d2d2 : 0x111111 );
 	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
+	backdrop.material.color.set( light ? 0xc6c6c6 : 0x161616 );
 
 	document.body.classList.toggle( 'checkerboard', transparent );
 	document.body.classList.toggle( 'light-background', light );
