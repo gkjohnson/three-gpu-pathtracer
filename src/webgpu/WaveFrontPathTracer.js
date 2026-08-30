@@ -32,6 +32,8 @@ const MAX_BUFFER_SIZE = 134217728;
 // ( queues, intersections ) is sized to the same count so a full pool can never overflow them
 const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
 
+const LOW_RES_ITERATIONS = 5;
+
 export class WaveFrontPathTracer extends PathTracerBackend {
 
 	constructor( renderer ) {
@@ -321,7 +323,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
-			const iter = this.lowResMode ? 5 : 1;
+			const iter = this.lowResMode ? Math.min( this.bounces, LOW_RES_ITERATIONS ) : 1;
+
 			for ( let i = 0; i < iter; i ++ ) {
 
 				this.getSize( targetDimensions );

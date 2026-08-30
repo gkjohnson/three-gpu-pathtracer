@@ -316,13 +316,14 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
+				// the color rows are stored top down to match a rasterized render target
+				let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
+				let storedSamples = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u;
+
 				if ( isTerminated ) {
 
-					// Blend the finished sample into the output and free the slot for a new camera
-					// ray. The color rows are stored top down to match a rasterized render target.
-					let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
-
-					let sampleCount = ( textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u ) + 1;
+					// blend the finished sample into the output and free the slot for a new camera ray
+					let sampleCount = storedSamples + 1;
 					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
@@ -331,6 +332,13 @@ export class LogicKernel extends ComputeKernel {
 					rayDataStorage[ index ].objectIndex = - 1;
 
 				} else {
+
+					// show the path so far, which the first sample overwrites
+					if ( storedSamples == 0u ) {
+
+						textureStore( ${ params.outputTarget }, colorIndex, resultColor );
+
+					}
 
 					rayDataStorage[ index ].resultColor = resultColor;
 					rayDataStorage[ index ].throughputColor = throughputColor;
