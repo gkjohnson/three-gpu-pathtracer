@@ -306,8 +306,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								// Fully transparent surfaces never register a hit while partial opacity is resolved
-								// at the surface hit.
+								// Opacity is resolved at surface processing but skip full transparent hits here.
 								if ( material.transparent != 0 && opacity <= 0.0 ) {
 
 									continue;

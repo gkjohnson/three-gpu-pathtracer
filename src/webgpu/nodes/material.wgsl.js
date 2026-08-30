@@ -397,7 +397,6 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.color = albedo.rgb;
 		surf.emission = emission;
 
-		// only alpha-blended materials treat the albedo alpha as coverage
 		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
 
 		surf.ior = material.ior;

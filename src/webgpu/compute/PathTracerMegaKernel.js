@@ -32,7 +32,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// settings
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
-			maxTransparentBounces: uniform( 15, 'uint' ),
+			maxTransparentBounces: uniform( 5, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),

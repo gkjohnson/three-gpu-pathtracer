@@ -25,7 +25,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
-			maxTransparentBounces: uniform( 15, 'uint' ),
+			maxTransparentBounces: uniform( 5, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
