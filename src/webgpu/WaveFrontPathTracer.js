@@ -314,6 +314,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		const targetDimensions = new Vector2();
 
+		// advance the sequence once per task so each render pass starts from fresh
+		// noise unless "stableNoise" has reset it
+		this.seed ++;
+
 		while ( true ) {
 
 			const iter = this.lowResMode ? 5 : 1;
@@ -372,8 +376,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				traceShadowRayKernel.shadowRayQueue = shadowRayQueue;
 				traceShadowRayKernel.shadowRayIntersections = shadowRayIntersections;
 				renderer.compute( traceShadowRayKernel.kernel, shadowDispatchConverter.outputDispatch );
-
-				this.seed ++;
 
 			}
 
