@@ -294,22 +294,27 @@ export const MODEL_LIST = {
 		lighting: 'light box',
 		postProcess: model => {
 
+			let mat = null;
 			model.traverse( c => {
 
-				if ( c.material && ! c.material.transmission ) {
+				if ( c.material && c.material.name === 'Material.002' ) {
 
-					c.material.roughness = 0.1;
+					mat = c.material;
 
 				}
 
 			} );
+
+			mat.roughness = 0.05;
+			mat.color.lerp( mat.color.clone().set( 0xC47258 ), 0.45 );
+
 
 		}
 	},
 
 	'Magie Noire Perfume': {
 		url: './data/magie-noire.glb',
-		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
+		credit: 'Model by "Bagoule" on <a href="https://blendswap.com/blend/30512">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
 		lighting: 'colored three point',
@@ -319,9 +324,9 @@ export const MODEL_LIST = {
 		focusDistance: 0.536,
 	},
 
-	'Stormtrooper Helmet': {
+	'Stormtrooper Fan Art': {
 		url: './data/stormtrooper.glb',
-		credit: 'Model from <a href="https://blendswap.com/blend/76637">Blendswap</a>.',
+		credit: 'Fan art model by "ScottGraham" on <a href="https://blendswap.com/blend/13953">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
 		postProcess: convertEmissivePlanesToLights,
