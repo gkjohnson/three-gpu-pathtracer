@@ -323,6 +323,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
+			// TODO: this only makes sense if we can cap the number rays per iteration to the full
+			// frame
 			const iter = this.lowResMode ? Math.min( this.bounces, LOW_RES_ITERATIONS ) : 1;
 
 			for ( let i = 0; i < iter; i ++ ) {
