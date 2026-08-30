@@ -227,7 +227,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	}
 
 	// number of path slots dispatched per update, capped by the pool and the pixel count
-	getSlotCount( width, height ) {
+	getFrameBudget( width, height ) {
 
 		return Math.min( MAX_RAY_DATA_COUNT, width * height, Math.max( 1, Math.floor( this.frameBudget ) ) );
 
@@ -235,7 +235,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	_updatePixelQueue( width, height ) {
 
-		const overflowCount = Math.max( 0, width * height - this.getSlotCount( width, height ) );
+		const overflowCount = Math.max( 0, width * height - this.getFrameBudget( width, height ) );
 		const size = pixelQueueStruct.getLength() + Math.max( overflowCount, 1 );
 		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
@@ -286,7 +286,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-		populatePixelIndicesKernel.slotCount = this.getSlotCount( width, height );
+		populatePixelIndicesKernel.frameBudget = this.getFrameBudget( width, height );
 		populatePixelIndicesKernel.targetDimensions.set( width, height );
 		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( width, height, 1 ) );
 
@@ -325,7 +325,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			for ( let i = 0; i < iter; i ++ ) {
 
 				this.getSize( targetDimensions );
-				const rayCount = this.getSlotCount( targetDimensions.x, targetDimensions.y );
+				const rayCount = this.getFrameBudget( targetDimensions.x, targetDimensions.y );
 
 				// Swap targets to support devices without <rgba32float, read_write> textures
 				// Copy latest data to a new outputTarget to keep the appearance
@@ -342,8 +342,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				logicKernel.bounces = this.bounces;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
-
-				yield;
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = rayQueue;
@@ -365,8 +363,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.targetDimensions.copy( targetDimensions );
 				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-				yield;
-
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
 				rayDispatchConverter.queue = rayQueue;
 				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
@@ -374,8 +370,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				traceRayKernel.rayQueue = rayQueue;
 				traceRayKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				renderer.compute( traceRayKernel.kernel, rayDispatchConverter.outputDispatch );
-
-				yield;
 
 				shadowDispatchConverter.queue = shadowRayQueue;
 				renderer.compute( shadowDispatchConverter.kernel, [ 1, 1, 1 ] );

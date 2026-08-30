@@ -16,12 +16,12 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueNonAtomicStruct ),
 			targetDimensions: uniform( new Vector2() ),
-			slotCount: uniform( 0, 'uint' ),
+			frameBudget: uniform( 0, 'uint' ),
 			globalId: globalId,
 		};
 
 		const fn = wgslTagFn/* wgsl */`
-			fn compute( targetDimensions: vec2u, slotCount: u32, globalId: vec3u ) -> void {
+			fn compute( targetDimensions: vec2u, frameBudget: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let pixelQueue = &${ params.pixelQueue };
@@ -32,7 +32,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 				}
 
-				let rayCount = min( slotCount, arrayLength( rayDataStorage ) );
+				let rayCount = min( frameBudget, arrayLength( rayDataStorage ) );
 				let pixelCount = targetDimensions.x * targetDimensions.y;
 				if ( globalId.x == 0u && globalId.y == 0u ) {
 
