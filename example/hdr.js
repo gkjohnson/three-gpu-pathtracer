@@ -13,6 +13,7 @@ import {
 	HalfFloatType,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -91,10 +92,12 @@ async function init() {
 	controls.update();
 
 	// load the environment map and model
+	const dracoLoader = new DRACOLoader();
 	const [ gltf, envTexture ] = await Promise.all( [
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).setDRACOLoader( dracoLoader ).loadAsync( MODEL_URL ),
 		new HDRLoader().loadAsync( ENV_URL ),
 	] );
+	dracoLoader.dispose();
 
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.environment = envTexture;

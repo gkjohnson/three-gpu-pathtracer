@@ -60,7 +60,7 @@
     "three": "^0.185.1",
     "three-mesh-bvh": "^0.9.13",
     "typescript": "^5.9.2",
-    "vite": "^6.2.2",
+    "vite": "^8.2.2",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
