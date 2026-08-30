@@ -77,6 +77,13 @@ const LIGHT_RIGS = {
 		{ size: [ 0.5, 3.2 ], position: [ - 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
 		{ size: [ 0.5, 3.2 ], position: [ 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
 	],
+	// taken from the Sasha ring scene
+	'light box': [
+		{ size: [ 3.55, 8.8 ], position: [ 0.65, 1.75, - 3.45 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 5, color: 0xffffff },
+		{ size: [ 1.65, 7.7 ], position: [ - 1.8, 0.6, - 2.8 ], rotation: [ 0, - Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
+		{ size: [ 1.65, 1.7 ], position: [ 2.25, 0.6, 0.2 ], rotation: [ 0, Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
+		{ size: [ 1.7, 2.8 ], position: [ 0.1, 1.15, 2.4 ], rotation: [ 0, 0, 0 ], intensity: 3, color: 0xffffff },
+	],
 	'overhead strips': [
 		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
 		{ size: [ 0.35, 3.4 ], position: [ - 0.3, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
