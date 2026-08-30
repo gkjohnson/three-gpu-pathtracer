@@ -127,6 +127,19 @@ export class WebGPUPathTracer {
 
 	}
 
+	// number of path slots dispatched per update, independent of resolution
+	get frameBudget() {
+
+		return this._pathTracer.frameBudget;
+
+	}
+
+	set frameBudget( v ) {
+
+		this._pathTracer.frameBudget = v;
+
+	}
+
 	get maxTransparentBounces() {
 
 		return this._pathTracer.maxTransparentBounces;
@@ -265,12 +278,6 @@ export class WebGPUPathTracer {
 	// These mirror the WebGLPathTracer API surface so existing examples run unchanged.
 	// They are currently no-ops on the WebGPU path tracer until the corresponding
 	// features are implemented.
-	get tiles() {
-
-		return this._pathTracer.tiles;
-
-	}
-
 	get target() {
 
 		return this._pathTracer.outputTarget ?? null;

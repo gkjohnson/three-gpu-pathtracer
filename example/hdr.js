@@ -66,7 +66,7 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 
 	// generator
 	hdrGenerator = new HDRImageGenerator( renderer );
