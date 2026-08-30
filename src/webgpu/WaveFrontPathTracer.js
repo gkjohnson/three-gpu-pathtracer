@@ -284,7 +284,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const { width, height } = this.sampleCountTarget;
 		this._updatePixelQueue( width, height );
 
-		populatePixelIndicesKernel.rayData = rayDataStorage;
+		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.targetDimensions.set( width, height );
 		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( width, height, 1 ) );
@@ -336,9 +336,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path
-				logicKernel.rayData = rayDataStorage;
-				logicKernel.rayIntersections = rayIntersectionsStorage;
-				logicKernel.shadowRayIntersections = shadowRayIntersectionsStorage;
+				logicKernel.rayDataStorage = rayDataStorage;
+				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
+				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				logicKernel.bounces = this.bounces;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -351,7 +351,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// Step 3: evaluate materials — spawn camera rays for freed slots, sample the bsdf, and
 				// enqueue this frame's bounce + shadow rays
-				materialKernel.rayData = rayDataStorage;
+				materialKernel.rayDataStorage = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
 				materialKernel.pixelQueue = this.pixelQueue;
@@ -367,14 +367,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
 
 				traceRayKernel.rayQueue = rayQueue;
-				traceRayKernel.rayIntersections = rayIntersectionsStorage;
+				traceRayKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				renderer.compute( traceRayKernel.kernel, rayDispatchConverter.outputDispatch );
 
 				shadowDispatchConverter.queue = shadowRayQueue;
 				renderer.compute( shadowDispatchConverter.kernel, [ 1, 1, 1 ] );
 
 				traceShadowRayKernel.shadowRayQueue = shadowRayQueue;
-				traceShadowRayKernel.shadowRayIntersections = shadowRayIntersectionsStorage;
+				traceShadowRayKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				renderer.compute( traceShadowRayKernel.kernel, shadowDispatchConverter.outputDispatch );
 
 			}

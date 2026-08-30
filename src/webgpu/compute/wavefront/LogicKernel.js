@@ -40,9 +40,9 @@ export class LogicKernel extends ComputeKernel {
 			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 
-			rayData: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			rayIntersections: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
-			shadowRayIntersections: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
@@ -72,19 +72,19 @@ export class LogicKernel extends ComputeKernel {
 				globalId: vec3u
 			) -> void {
 
-				let rayData = &${ params.rayData };
-				let rayIntersections = &${ params.rayIntersections };
-				let shadowRayIntersections = &${ params.shadowRayIntersections };
+				let rayDataStorage = &${ params.rayDataStorage };
+				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
+				let shadowRayIntersectionsStorage = &${ params.shadowRayIntersectionsStorage };
 
 				let index = globalId.x;
-				if ( index >= arrayLength( rayData ) ) {
+				if ( index >= arrayLength( rayDataStorage ) ) {
 
 					return;
 
 				}
 
 				// skip slots that have never spawned a ray
-				let input = rayData[ index ];
+				let input = rayDataStorage[ index ];
 				if ( input.rayIntersectionIndex < 0 ) {
 
 					return;
@@ -110,7 +110,7 @@ export class LogicKernel extends ComputeKernel {
 				// resolve the previous surface's NEE shadow ray ( pre-scatter throughput )
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
-					let shadowHit = shadowRayIntersections[ u32( input.shadowRayIntersectionIndex ) ];
+					let shadowHit = shadowRayIntersectionsStorage[ u32( input.shadowRayIntersectionIndex ) ];
 					let occluded = shadowHit.objectIndex >= 0 && shadowHit.dist < input.lightDist - ${ LIGHT_EPSILON };
 					if ( ! occluded ) {
 
@@ -155,7 +155,7 @@ export class LogicKernel extends ComputeKernel {
 					// apply the scatter across the traced segment
 					throughputColor *= scatterRec.color / scatterRec.pdf;
 
-					let hitResult = rayIntersections[ u32( input.rayIntersectionIndex ) ];
+					let hitResult = rayIntersectionsStorage[ u32( input.rayIntersectionIndex ) ];
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
@@ -188,12 +188,12 @@ export class LogicKernel extends ComputeKernel {
 					if ( didHit ) {
 
 						// stage the hit for MaterialKernel
-						rayData[ index ].barycoord = hitResult.barycoord;
-						rayData[ index ].normal = hitResult.normal;
-						rayData[ index ].side = hitResult.side;
-						rayData[ index ].indices = hitResult.indices;
-						rayData[ index ].objectIndex = hitResult.objectIndex;
-						rayData[ index ].dist = hitResult.dist;
+						rayDataStorage[ index ].barycoord = hitResult.barycoord;
+						rayDataStorage[ index ].normal = hitResult.normal;
+						rayDataStorage[ index ].side = hitResult.side;
+						rayDataStorage[ index ].indices = hitResult.indices;
+						rayDataStorage[ index ].objectIndex = hitResult.objectIndex;
+						rayDataStorage[ index ].dist = hitResult.dist;
 
 						// next event estimation: pick one light or the environment with a single sample.
 						// MaterialKernel evaluates the bsdf and enqueues the shadow ray.
@@ -221,14 +221,14 @@ export class LogicKernel extends ComputeKernel {
 							}
 
 							lightPdf = lightRec.pdf / lightsDenom;
-							rayData[ index ].lightDirection = lightRec.direction;
-							rayData[ index ].lightEmission = lightRec.emission;
-							rayData[ index ].lightDist = lightRec.dist;
-							rayData[ index ].lightType = lightRec.lightType;
+							rayDataStorage[ index ].lightDirection = lightRec.direction;
+							rayDataStorage[ index ].lightEmission = lightRec.emission;
+							rayDataStorage[ index ].lightDist = lightRec.dist;
+							rayDataStorage[ index ].lightType = lightRec.lightType;
 
 						}
 
-						rayData[ index ].lightPdf = lightPdf;
+						rayDataStorage[ index ].lightPdf = lightPdf;
 
 					} else {
 
@@ -328,12 +328,12 @@ export class LogicKernel extends ComputeKernel {
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
-					rayData[ index ].objectIndex = - 1;
+					rayDataStorage[ index ].objectIndex = - 1;
 
 				} else {
 
-					rayData[ index ].resultColor = resultColor;
-					rayData[ index ].throughputColor = throughputColor;
+					rayDataStorage[ index ].resultColor = resultColor;
+					rayDataStorage[ index ].throughputColor = throughputColor;
 
 				}
 

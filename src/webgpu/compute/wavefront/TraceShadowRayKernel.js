@@ -16,7 +16,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 			bvhData: { value: null },
 
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
-			shadowRayIntersections: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
@@ -29,7 +29,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 			fn compute( globalId: vec3u ) -> void {
 
 				let shadowRayQueue = &${ params.shadowRayQueue };
-				let shadowRayIntersections = &${ params.shadowRayIntersections };
+				let shadowRayIntersectionsStorage = &${ params.shadowRayIntersectionsStorage };
 
 				let index = globalId.x;
 				if ( index >= shadowRayQueue.length ) {
@@ -46,12 +46,12 @@ export class TraceShadowRayKernel extends ComputeKernel {
 				var hitResult: ${ raycastOutput };
 				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
-					shadowRayIntersections[ index ].objectIndex = i32( hitResult.objectIndex );
-					shadowRayIntersections[ index ].dist = hitResult.dist;
+					shadowRayIntersectionsStorage[ index ].objectIndex = i32( hitResult.objectIndex );
+					shadowRayIntersectionsStorage[ index ].dist = hitResult.dist;
 
 				} else {
 
-					shadowRayIntersections[ index ].objectIndex = - 1;
+					shadowRayIntersectionsStorage[ index ].objectIndex = - 1;
 
 				}
 

@@ -28,7 +28,7 @@ export class MaterialKernel extends ComputeKernel {
 
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
-			rayData: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueStruct ),
@@ -54,7 +54,7 @@ export class MaterialKernel extends ComputeKernel {
 				globalId: vec3u
 			) -> void {
 
-				let rayData = &${ params.rayData };
+				let rayDataStorage = &${ params.rayDataStorage };
 				let rayQueue = &${ params.rayQueue };
 				let shadowRayQueue = &${ params.shadowRayQueue };
 				let pixelQueue = &${ params.pixelQueue };
@@ -63,13 +63,13 @@ export class MaterialKernel extends ComputeKernel {
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
 				let index = globalId.x;
-				if ( index >= arrayLength( rayData ) ) {
+				if ( index >= arrayLength( rayDataStorage ) ) {
 
 					return;
 
 				}
 
-				let input = rayData[ index ];
+				let input = rayDataStorage[ index ];
 				if ( input.objectIndex < 0 ) {
 
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
@@ -91,9 +91,9 @@ export class MaterialKernel extends ComputeKernel {
 
 					if ( isComplete ) {
 
-						rayData[ index ].pixelIndex = pixelIndex;
-						rayData[ index ].rayIntersectionIndex = - 1;
-						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						rayDataStorage[ index ].pixelIndex = pixelIndex;
+						rayDataStorage[ index ].rayIntersectionIndex = - 1;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
 					}
@@ -106,9 +106,9 @@ export class MaterialKernel extends ComputeKernel {
 					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
 						// the camera declined the pixel, so leave the slot dormant for this round
-						rayData[ index ].pixelIndex = pixelIndex;
-						rayData[ index ].rayIntersectionIndex = - 1;
-						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						rayDataStorage[ index ].pixelIndex = pixelIndex;
+						rayDataStorage[ index ].rayIntersectionIndex = - 1;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
 					}
@@ -123,22 +123,22 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].seed = seed + samples;
 					rayQueue.elements[ rayIndex ].alphaDepth = 0u;
 
-					rayData[ index ].origin = ray.origin;
-					rayData[ index ].direction = ray.direction;
-					rayData[ index ].pixelIndex = pixelIndex;
-					rayData[ index ].seed = seed + samples;
-					rayData[ index ].currentBounce = 0u;
-					rayData[ index ].throughputColor = vec3f( 1.0 );
-					rayData[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
-					rayData[ index ].bsdf = vec3f( 1.0 );
-					rayData[ index ].pdf = 1.0;
-					rayData[ index ].minPdf = 1.0;
-					rayData[ index ].transmissiveRay = 1u;
-					rayData[ index ].emission = vec3f( 0.0 );
-					rayData[ index ].lightPdf = 0.0;
-					rayData[ index ].alphaDepth = 0u;
-					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
-					rayData[ index ].shadowRayIntersectionIndex = - 1;
+					rayDataStorage[ index ].origin = ray.origin;
+					rayDataStorage[ index ].direction = ray.direction;
+					rayDataStorage[ index ].pixelIndex = pixelIndex;
+					rayDataStorage[ index ].seed = seed + samples;
+					rayDataStorage[ index ].currentBounce = 0u;
+					rayDataStorage[ index ].throughputColor = vec3f( 1.0 );
+					rayDataStorage[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
+					rayDataStorage[ index ].bsdf = vec3f( 1.0 );
+					rayDataStorage[ index ].pdf = 1.0;
+					rayDataStorage[ index ].minPdf = 1.0;
+					rayDataStorage[ index ].transmissiveRay = 1u;
+					rayDataStorage[ index ].emission = vec3f( 0.0 );
+					rayDataStorage[ index ].lightPdf = 0.0;
+					rayDataStorage[ index ].alphaDepth = 0u;
+					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
+					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -156,11 +156,11 @@ export class MaterialKernel extends ComputeKernel {
 					let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
 					if ( isMatte ) {
 
-						rayData[ index ].resultColor = vec4f( 0.0 );
-						rayData[ index ].throughputColor = vec3f( 0.0 );
-						rayData[ index ].emission = vec3f( 0.0 );
-						rayData[ index ].lightPdf = 0.0;
-						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						rayDataStorage[ index ].resultColor = vec4f( 0.0 );
+						rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
 					}
@@ -191,10 +191,10 @@ export class MaterialKernel extends ComputeKernel {
 						// should be invisible. A zeroed throughput terminates in LogicKernel.
 						if ( input.alphaDepth >= maxTransparentBounces ) {
 
-							rayData[ index ].throughputColor = vec3f( 0.0 );
-							rayData[ index ].emission = vec3f( 0.0 );
-							rayData[ index ].lightPdf = 0.0;
-							rayData[ index ].shadowRayIntersectionIndex = - 1;
+							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
+							rayDataStorage[ index ].emission = vec3f( 0.0 );
+							rayDataStorage[ index ].lightPdf = 0.0;
+							rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 							return;
 
 						}
@@ -210,13 +210,13 @@ export class MaterialKernel extends ComputeKernel {
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
-						rayData[ index ].alphaDepth = input.alphaDepth + 1u;
-						rayData[ index ].emission = vec3f( 0.0 );
-						rayData[ index ].bsdf = vec3f( input.pdf );
-						rayData[ index ].lightPdf = 0.0;
-						rayData[ index ].origin = rayQueue.elements[ alphaIndex ].origin;
-						rayData[ index ].rayIntersectionIndex = i32( alphaIndex );
-						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
+						rayDataStorage[ index ].bsdf = vec3f( input.pdf );
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].origin = rayQueue.elements[ alphaIndex ].origin;
+						rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
 					}
@@ -226,17 +226,17 @@ export class MaterialKernel extends ComputeKernel {
 					// NEE contribution resolve, matching the megakernel's ordering.
 					if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
-						rayData[ index ].throughputColor = input.throughputColor * ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+						rayDataStorage[ index ].throughputColor = input.throughputColor * ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
 
 					}
 
 					// sample the next bounce direction and stage the scatter state for LogicKernel
 					let scatterRec = ${ bsdfSampleFn }( view, surface );
-					rayData[ index ].bsdf = scatterRec.color;
-					rayData[ index ].pdf = scatterRec.pdf;
-					rayData[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
-					rayData[ index ].transmissiveRay = input.transmissiveRay & select( 0u, 1u, scatterRec.isTransmissive );
-					rayData[ index ].emission = surface.emission;
+					rayDataStorage[ index ].bsdf = scatterRec.color;
+					rayDataStorage[ index ].pdf = scatterRec.pdf;
+					rayDataStorage[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
+					rayDataStorage[ index ].transmissiveRay = input.transmissiveRay & select( 0u, 1u, scatterRec.isTransmissive );
+					rayDataStorage[ index ].emission = surface.emission;
 
 					let newBounce = input.currentBounce + 1u;
 
@@ -250,11 +250,11 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].currentBounce = newBounce;
 					rayQueue.elements[ rayIndex ].seed = input.seed;
 					rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
-					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
+					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
-					rayData[ index ].origin = rayQueue.elements[ rayIndex ].origin;
-					rayData[ index ].direction = scatterRec.direction;
-					rayData[ index ].currentBounce = newBounce;
+					rayDataStorage[ index ].origin = rayQueue.elements[ rayIndex ].origin;
+					rayDataStorage[ index ].direction = scatterRec.direction;
+					rayDataStorage[ index ].currentBounce = newBounce;
 
 					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray
 					var lightPdf = input.lightPdf;
@@ -263,8 +263,8 @@ export class MaterialKernel extends ComputeKernel {
 						let evalRec = ${ bsdfEvalPdfFn }( view, input.lightDirection, surface );
 						if ( evalRec.pdf > 0.0 ) {
 
-							rayData[ index ].lightBsdf = evalRec.color;
-							rayData[ index ].lightBsdfPdf = evalRec.pdf;
+							rayDataStorage[ index ].lightBsdf = evalRec.color;
+							rayDataStorage[ index ].lightBsdfPdf = evalRec.pdf;
 
 							let shadowIndex = atomicAdd( &shadowRayQueue.length, 1u );
 							shadowRayQueue.elements[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.normal );
@@ -273,7 +273,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
 							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
-							rayData[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
+							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {
 
@@ -285,8 +285,8 @@ export class MaterialKernel extends ComputeKernel {
 
 					if ( lightPdf <= 0.0 ) {
 
-						rayData[ index ].lightPdf = 0.0;
-						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 
 					}
 

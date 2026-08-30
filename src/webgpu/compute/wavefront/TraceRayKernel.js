@@ -15,7 +15,7 @@ export class TraceRayKernel extends ComputeKernel {
 			bvhData: { value: null },
 
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
-			rayIntersections: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
@@ -28,7 +28,7 @@ export class TraceRayKernel extends ComputeKernel {
 			fn compute( globalId: vec3u ) -> void {
 
 				let rayQueue = &${ params.rayQueue };
-				let rayIntersections = &${ params.rayIntersections };
+				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 
 				let index = globalId.x;
 				if ( index >= rayQueue.length ) {
@@ -45,17 +45,17 @@ export class TraceRayKernel extends ComputeKernel {
 				var hitResult: ${ raycastOutput };
 				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
-					rayIntersections[ index ].barycoord = hitResult.barycoord;
-					rayIntersections[ index ].objectIndex = i32( hitResult.objectIndex );
-					rayIntersections[ index ].position = ray.origin + ray.direction * hitResult.dist;
-					rayIntersections[ index ].dist = hitResult.dist;
-					rayIntersections[ index ].normal = hitResult.normal.xyz;
-					rayIntersections[ index ].side = hitResult.side;
-					rayIntersections[ index ].indices = hitResult.indices.xyz;
+					rayIntersectionsStorage[ index ].barycoord = hitResult.barycoord;
+					rayIntersectionsStorage[ index ].objectIndex = i32( hitResult.objectIndex );
+					rayIntersectionsStorage[ index ].position = ray.origin + ray.direction * hitResult.dist;
+					rayIntersectionsStorage[ index ].dist = hitResult.dist;
+					rayIntersectionsStorage[ index ].normal = hitResult.normal.xyz;
+					rayIntersectionsStorage[ index ].side = hitResult.side;
+					rayIntersectionsStorage[ index ].indices = hitResult.indices.xyz;
 
 				} else {
 
-					rayIntersections[ index ].objectIndex = - 1;
+					rayIntersectionsStorage[ index ].objectIndex = - 1;
 
 				}
 

@@ -13,7 +13,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			rayData: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueNonAtomicStruct ),
 			targetDimensions: uniform( new Vector2() ),
 			globalId: globalId,
@@ -22,7 +22,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 		const fn = wgslTagFn/* wgsl */`
 			fn compute( targetDimensions: vec2u, globalId: vec3u ) -> void {
 
-				let rayData = &${ params.rayData };
+				let rayDataStorage = &${ params.rayDataStorage };
 				let pixelQueue = &${ params.pixelQueue };
 
 				if ( globalId.x >= targetDimensions.x || globalId.y >= targetDimensions.y ) {
@@ -31,7 +31,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 				}
 
-				let rayCount = arrayLength( rayData );
+				let rayCount = arrayLength( rayDataStorage );
 				let pixelCount = targetDimensions.x * targetDimensions.y;
 				if ( globalId.x == 0u && globalId.y == 0u ) {
 
@@ -44,13 +44,13 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 				let pixelIndex = globalId.x + globalId.y * targetDimensions.x;
 				if ( pixelIndex < rayCount ) {
 
-					rayData[ pixelIndex ].pixelIndex = pixelHash;
-					rayData[ pixelIndex ].resultColor = vec4f( 0.0 );
-					rayData[ pixelIndex ].throughputColor = vec3f( 0.0 );
-					rayData[ pixelIndex ].objectIndex = - 1;
-					rayData[ pixelIndex ].alphaDepth = 0u;
-					rayData[ pixelIndex ].rayIntersectionIndex = - 1;
-					rayData[ pixelIndex ].shadowRayIntersectionIndex = - 1;
+					rayDataStorage[ pixelIndex ].pixelIndex = pixelHash;
+					rayDataStorage[ pixelIndex ].resultColor = vec4f( 0.0 );
+					rayDataStorage[ pixelIndex ].throughputColor = vec3f( 0.0 );
+					rayDataStorage[ pixelIndex ].objectIndex = - 1;
+					rayDataStorage[ pixelIndex ].alphaDepth = 0u;
+					rayDataStorage[ pixelIndex ].rayIntersectionIndex = - 1;
+					rayDataStorage[ pixelIndex ].shadowRayIntersectionIndex = - 1;
 
 				} else {
 
