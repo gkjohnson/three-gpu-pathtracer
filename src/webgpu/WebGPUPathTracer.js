@@ -101,6 +101,7 @@ class TextureCache {
 
 				this.texture?.dispose();
 				this.texture = value;
+				this.hash = hash;
 
 			}
 
