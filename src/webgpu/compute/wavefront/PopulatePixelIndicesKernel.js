@@ -8,6 +8,10 @@ import { rayDataStruct, pixelQueueNonAtomicStruct } from './structs.js';
 // Runs once per reset: assigns each of the first rayData-pool-count pixels to a path slot and parks
 // the overflow pixel indices in the pixel queue. Slots are initialized so LogicKernel skips them and
 // MaterialKernel immediately generates fresh camera rays.
+//
+// TODO: this bakes the slot / queue split at reset, so "frameBudget" cannot change without one.
+// Queueing every pixel and having slots pull on demand would let it be tuned per frame, at the cost
+// of a real head / tail ring rather than the current exchange.
 export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 	constructor( ) {
