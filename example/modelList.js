@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -330,6 +330,48 @@ export const MODEL_LIST = {
 		stage: 'none',
 		envMap: 'none',
 		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Monster Under The Bed': {
+		url: './data/monster.glb',
+		credit: 'Model by Metin Seven, based on 2D concept art by Blake Stevenson, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
+		stage: 'none',
+		envMap: 'none',
+
+		postProcess: model => {
+
+			// the source scene renders the monster with subsurface scattering, which the path tracer
+			// has no equivalent for, so stand in a rough transmissive material
+			model.traverse( c => {
+
+				if ( c.material && /^monster/.test( c.material.name ) ) {
+
+					// copied as a standard material because MeshPhysicalMaterial.copy reads physical
+					// only fields the source does not have
+					const material = new MeshPhysicalMaterial();
+					MeshStandardMaterial.prototype.copy.call( material, c.material );
+					material.transmission = 1;
+					material.roughness = 0.55;
+					material.ior = 1.4;
+					material.thickness = 0.15;
+					material.attenuationDistance = 0.25;
+					material.attenuationColor.copy( c.material.color );
+					c.material = material;
+
+				}
+
+			} );
+
+			convertEmissivePlanesToLights( model );
+
+		}
+	},
+
+	'Lone Monk': {
+		url: './data/lone-monk.glb',
+		credit: 'Model by Carlo Bergonzini / Monorender, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
+		stage: 'none',
+		envMap: 'none',
 	},
 
 	// bitterli rooms
