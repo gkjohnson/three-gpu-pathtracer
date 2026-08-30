@@ -1,7 +1,7 @@
 import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
@@ -32,6 +32,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// settings
 			seed: uniform( 0 ),
 			bounces: uniform( 5 ),
+			maxTransparentBounces: uniform( 5, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -83,6 +84,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// settings
 				seed: u32,
 				bounces: u32,
+				maxTransparentBounces: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -139,6 +141,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var bsdfPdf = 0.0;
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
+				var transparentBounce = 0u;
 
 				// one-sample NEE selects between the analytic lights and the environment -
 				// lightsDenom is the number of options
@@ -212,6 +215,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+
+						// Stochastically pass through partially transparent surfaces by restarting
+						// the ray at the hit point, advancing the rng but not the bounce count.
+						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+
+							// stop once the transparent bounces run out
+							if ( transparentBounce >= maxTransparentBounces ) {
+
+								break;
+
+							}
+
+							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
+							${ rngNextBounce }();
+							transparentBounce ++;
+							bounce --;
+							continue;
+
+						}
 
 						// attenuate the light transmitted through the volume when exiting a backface
 						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 ) {

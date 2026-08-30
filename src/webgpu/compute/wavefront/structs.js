@@ -43,6 +43,8 @@ export const queuedRayStruct = new StructTypeNode( {
 
 	resultColor: 'vec4f',
 
+	alphaDepth: 'uint',
+
 }, 'QueuedRay' );
 
 export const queuedHitStruct = new StructTypeNode( {
@@ -66,9 +68,12 @@ export const queuedHitStruct = new StructTypeNode( {
 	dist: 'float',
 	transmissiveRay: 'uint',
 	minPdf: 'float',
-	_alignment0: 'uint',
+	alphaDepth: 'uint',
 
 	resultColor: 'vec4f',
+
+	// carried through so a ray that passes an alpha-tested surface keeps its MIS weight
+	bsdfPdf: 'float',
 
 }, 'QueuedHit' );
 

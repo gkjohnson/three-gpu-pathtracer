@@ -6,7 +6,7 @@ import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
@@ -25,6 +25,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 			// settings
 			smoothNormals: uniform( 1 ),
 			bounces: uniform( 1 ),
+			maxTransparentBounces: uniform( 5, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
@@ -49,6 +50,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// settings
 				smoothNormals: u32,
 				bounces: u32,
+				maxTransparentBounces: u32,
 				filterGlossy: f32,
 				clampDirect: f32,
 				clampIndirect: f32,
@@ -74,7 +76,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// get the ray info
 				let input = hitQueue.elements[ hitIndex ];
 				let indexUV = vec2u( input.pixel_x, input.pixel_y );
-				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
+				${ rngInit }( indexUV.xy, input.seed, input.currentBounce + input.alphaDepth );
 
 				let objectInfo = transforms[ input.objectIndex ];
 				var materialInfo = materials[ objectInfo.materialIndex ];
@@ -98,6 +100,29 @@ export class ProcessHitsKernel extends ComputeKernel {
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
+
+				// Stochastically pass through partially transparent surfaces by re-enqueueing
+				// the ray at the hit point, advancing the alpha depth but not the bounce count.
+				let passesThrough = ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+				if ( passesThrough && input.alphaDepth < maxTransparentBounces ) {
+
+					let rayQueueCapacity = arrayLength( &rayQueue.elements );
+					let index = atomicAdd( &rayQueue.end, 1 ) % rayQueueCapacity;
+					rayQueue.elements[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, - input.view, input.normal );
+					rayQueue.elements[ index ].direction = - input.view;
+					rayQueue.elements[ index ].pixel = indexUV;
+					rayQueue.elements[ index ].throughputColor = input.throughputColor;
+					rayQueue.elements[ index ].currentBounce = input.currentBounce;
+					rayQueue.elements[ index ].resultColor = input.resultColor;
+					rayQueue.elements[ index ].seed = input.seed;
+					rayQueue.elements[ index ].transmissiveRay = input.transmissiveRay;
+					rayQueue.elements[ index ].minPdf = input.minPdf;
+					rayQueue.elements[ index ].alphaDepth = input.alphaDepth + 1u;
+					rayQueue.elements[ index ].bsdfPdf = input.bsdfPdf;
+					return;
+
+				}
+
 				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				var throughputColor = input.throughputColor;
@@ -118,7 +143,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 
 				}
 
-				var isTerminated = isMatte || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var isTerminated = isMatte || passesThrough || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
 				// russian roulette early out:
 				// Matches Cycles path_state_continuation_probability in integrator/path_state.h
@@ -171,6 +196,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].bsdfPdf = scatterRec.pdf;
 					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
+					rayQueue.elements[ index ].alphaDepth = input.alphaDepth;
 
 				}
 

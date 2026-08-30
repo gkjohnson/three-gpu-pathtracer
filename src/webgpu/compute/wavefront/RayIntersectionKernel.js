@@ -81,7 +81,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				// get the ray info
 				let input = rayQueue.elements[ rayIndex % queueCapacity ];
 				let indexUV = input.pixel;
-				${ rngInit }( indexUV.xy, input.seed, input.currentBounce );
+				${ rngInit }( indexUV.xy, input.seed, input.currentBounce + input.alphaDepth );
 
 				// one-sample NEE selection normalization (lights + env)
 				let envActive = ${ envTotalSumNode } > 0.0;
@@ -146,6 +146,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].dist = hitResult.dist;
 					hitQueue.elements[ index ].transmissiveRay = input.transmissiveRay;
 					hitQueue.elements[ index ].minPdf = input.minPdf;
+					hitQueue.elements[ index ].alphaDepth = input.alphaDepth;
+					hitQueue.elements[ index ].bsdfPdf = input.bsdfPdf;
 
 				} else {
 
