@@ -843,7 +843,7 @@ async function updateModel() {
 	model.scale.setScalar( scale );
 	console.log( scale )
 	model.position.multiplyScalar( scale );
-	box.setFromObject( model );
+	box.setFromObject( model, true );
 
 	// attenuation and light dimensions are measured in world units and ignore the object
 	// hierarchy scale, so they must be scaled with the model

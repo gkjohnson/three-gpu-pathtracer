@@ -285,16 +285,29 @@ export const MODEL_LIST = {
 		rotation: [ 0, Math.PI, 0 ],
 	},
 
-	'Sasha': {
+	'Sasha Ring': {
 		url: './data/sasha.glb',
 		credit: 'Model by "saber7711" on <a href="https://blendswap.com/blend/29574">Blendswap</a>.',
 		rotation: [ 0, 0, Math.PI / 4 ],
 		stage: 'pedestal',
 		envMap: 'Brown Photostudio 01',
 		lighting: 'light box',
+		postProcess: model => {
+
+			model.traverse( c => {
+
+				if ( c.material && ! c.material.transmission ) {
+
+					c.material.roughness = 0.1;
+
+				}
+
+			} );
+
+		}
 	},
 
-	'Magie Noire': {
+	'Magie Noire Perfume': {
 		url: './data/magie-noire.glb',
 		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
 		stage: 'none',
@@ -312,12 +325,6 @@ export const MODEL_LIST = {
 		stage: 'none',
 		envMap: 'none',
 		postProcess: convertEmissivePlanesToLights,
-	},
-
-	'Robot 8': {
-		url: './data/robot8.glb',
-		credit: 'Model by "AlbinMERLE" on <a href="https://blendswap.com/blend/73279">Blendswap</a>.',
-		stage: 'none',
 	},
 
 	// bitterli rooms
