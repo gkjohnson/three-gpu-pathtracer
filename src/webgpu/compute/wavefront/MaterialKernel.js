@@ -130,10 +130,10 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].currentBounce = 0u;
 					rayDataStorage[ index ].throughputColor = vec3f( 1.0 );
 					rayDataStorage[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
-					rayDataStorage[ index ].bsdf = vec3f( 1.0 );
-					rayDataStorage[ index ].pdf = 1.0;
+					rayDataStorage[ index ].scatterColor = vec3f( 1.0 );
+					rayDataStorage[ index ].scatterPdf = 1.0;
 					rayDataStorage[ index ].minPdf = 1.0;
-					rayDataStorage[ index ].transmissiveRay = 1u;
+					rayDataStorage[ index ].isFullyTransmissive = 1u;
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
@@ -212,7 +212,7 @@ export class MaterialKernel extends ComputeKernel {
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
 						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
-						rayDataStorage[ index ].bsdf = vec3f( input.pdf );
+						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
 						rayDataStorage[ index ].origin = rayQueue.elements[ alphaIndex ].origin;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
@@ -232,10 +232,10 @@ export class MaterialKernel extends ComputeKernel {
 
 					// sample the next bounce direction and stage the scatter state for LogicKernel
 					let scatterRec = ${ bsdfSampleFn }( view, surface );
-					rayDataStorage[ index ].bsdf = scatterRec.color;
-					rayDataStorage[ index ].pdf = scatterRec.pdf;
+					rayDataStorage[ index ].scatterColor = scatterRec.color;
+					rayDataStorage[ index ].scatterPdf = scatterRec.pdf;
 					rayDataStorage[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
-					rayDataStorage[ index ].transmissiveRay = input.transmissiveRay & select( 0u, 1u, scatterRec.isTransmissive );
+					rayDataStorage[ index ].isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 					rayDataStorage[ index ].emission = surface.emission;
 
 					let newBounce = input.currentBounce + 1u;

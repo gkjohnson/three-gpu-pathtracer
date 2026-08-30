@@ -130,8 +130,8 @@ export class LogicKernel extends ComputeKernel {
 
 				// reconstruct the scatter record staged by MaterialKernel
 				var scatterRec: ${ scatterRecordStruct };
-				scatterRec.color = input.bsdf;
-				scatterRec.pdf = input.pdf;
+				scatterRec.color = input.scatterColor;
+				scatterRec.pdf = input.scatterPdf;
 
 				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
 
@@ -172,7 +172,7 @@ export class LogicKernel extends ComputeKernel {
 								if ( misEnabled != 0u ) {
 
 									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( input.pdf, lightPdf );
+									misWeight = ${ misHeuristicFn }( input.scatterPdf,lightPdf );
 
 								}
 
@@ -234,14 +234,14 @@ export class LogicKernel extends ComputeKernel {
 
 						// the segment escaped the scene: gather the environment for opaque paths, or
 						// the background for camera segments and fully transmissive paths
-						if ( input.currentBounce > 0u && input.transmissiveRay == 0u ) {
+						if ( input.currentBounce > 0u && input.isFullyTransmissive == 0u ) {
 
 							var misWeight = 1.0;
 							if ( misEnabled != 0u && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
 								let envPdf = ${ getEnvDirPdf }( input.direction ) / lightsDenom;
-								misWeight = ${ misHeuristicFn }( input.pdf, envPdf );
+								misWeight = ${ misHeuristicFn }( input.scatterPdf,envPdf );
 
 							}
 
@@ -272,7 +272,7 @@ export class LogicKernel extends ComputeKernel {
 								if ( misEnabled != 0u && envActive ) {
 
 									let envPdf = ${ getEnvDirPdf }( input.direction );
-									misWeight = ${ misHeuristicFn }( input.pdf, envPdf );
+									misWeight = ${ misHeuristicFn }( input.scatterPdf,envPdf );
 
 								}
 

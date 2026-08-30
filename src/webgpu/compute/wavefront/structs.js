@@ -36,9 +36,9 @@ export const rayDataStruct = new StructTypeNode( {
 	resultColor: 'vec4f',
 
 	emission: 'vec3f',
-	pdf: 'float',
+	scatterPdf: 'float',
 
-	bsdf: 'vec3f',
+	scatterColor: 'vec3f',
 
 	// the smallest scatter pdf seen along the path, for the glossy filter
 	minPdf: 'float',
@@ -46,7 +46,7 @@ export const rayDataStruct = new StructTypeNode( {
 	origin: 'vec3f',
 
 	// whether every scatter so far has been transmissive, for the background modes
-	transmissiveRay: 'uint',
+	isFullyTransmissive: 'uint',
 
 	direction: 'vec3f',
 	side: 'float',
