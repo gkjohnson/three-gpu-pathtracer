@@ -85,8 +85,6 @@ const LIGHT_RIGS = {
 	],
 };
 
-const DRACO_DECODER_PATH = 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/';
-const KTX2_TRANSCODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.181.1/examples/jsm/libs/basis/';
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
 // sentinel for models that light themselves and should not get an environment
@@ -902,8 +900,8 @@ async function loadModel( url, onProgress, fileMap = null ) {
 
 	} else if ( /(gltf|glb)$/i.test( url ) ) {
 
-		const dracoLoader = new DRACOLoader().setDecoderPath( DRACO_DECODER_PATH );
-		const ktx2Loader = new KTX2Loader().setTranscoderPath( KTX2_TRANSCODER_PATH ).detectSupport( renderer );
+		const dracoLoader = new DRACOLoader();
+		const ktx2Loader = new KTX2Loader().detectSupport( renderer );
 
 		const complete = new Promise( resolve => manager.onLoad = resolve );
 		const gltf = await new GLTFLoader( manager )
