@@ -4,7 +4,6 @@ import { storage, float, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
-import { rand1, RNG_INDEX_ALPHA_TEST } from './random.wgsl.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
@@ -307,17 +306,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
-								if ( material.transparent != 0 ) {
+								// Opacity is resolved at surface processing but skip full transparent hits here.
+								if ( material.transparent != 0 && opacity <= 0.0 ) {
 
-									// index the discard random sample on the triangle index - just using ray hit order
-									// can vary based on ray direction, causing artifacts.
-									let doDiscard = opacity < ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } + ti );
-
-									if ( doDiscard ) {
-
-										continue;
-
-									}
+									continue;
 
 								}
 

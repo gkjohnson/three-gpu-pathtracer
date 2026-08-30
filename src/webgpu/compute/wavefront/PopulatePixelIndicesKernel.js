@@ -48,6 +48,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 					rayData[ pixelIndex ].resultColor = vec4f( 0.0 );
 					rayData[ pixelIndex ].throughputColor = vec3f( 0.0 );
 					rayData[ pixelIndex ].objectIndex = - 1;
+					rayData[ pixelIndex ].alphaDepth = 0u;
 					rayData[ pixelIndex ].rayIntersectionIndex = - 1;
 					rayData[ pixelIndex ].shadowRayIntersectionIndex = - 1;
 

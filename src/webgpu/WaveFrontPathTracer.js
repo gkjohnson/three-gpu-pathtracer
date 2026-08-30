@@ -295,6 +295,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		const {
 			renderer,
+			maxTransparentBounces,
 
 			rayData,
 			rayQueue,
@@ -353,6 +354,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
+				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 

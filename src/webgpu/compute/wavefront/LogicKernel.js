@@ -92,7 +92,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
 				// one-sample NEE selection normalization ( lights + env ), matched with the megakernel
 				let envActive = ${ envTotalSumNode } > 0.0;

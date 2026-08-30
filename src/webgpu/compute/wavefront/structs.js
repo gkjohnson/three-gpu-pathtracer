@@ -76,6 +76,9 @@ export const rayDataStruct = new StructTypeNode( {
 	// the traced segment length, for the transmission attenuation applied by MaterialKernel
 	dist: 'float',
 
+	// alpha test pass throughs, counted separately from the bounce count
+	alphaDepth: 'uint',
+
 }, 'RayData' );
 
 // A ray queued for BVH traversal by the trace kernels.
@@ -88,9 +91,9 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	currentBounce: 'uint',
 
 	seed: 'uint',
+	alphaDepth: 'uint',
 	_alignment0: 'uint',
 	_alignment1: 'uint',
-	_alignment2: 'uint',
 
 }, 'TraceQueuedRay' );
 

@@ -3,7 +3,7 @@ import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
@@ -24,6 +24,7 @@ export class MaterialKernel extends ComputeKernel {
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
+			maxTransparentBounces: uniform( 5, 'uint' ),
 
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
@@ -48,6 +49,7 @@ export class MaterialKernel extends ComputeKernel {
 				targetDimensions: vec2u,
 				maxSamples: u32,
 				filterGlossy: f32,
+				maxTransparentBounces: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -119,6 +121,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].pixelIndex = pixelIndex;
 					rayQueue.elements[ rayIndex ].currentBounce = 0u;
 					rayQueue.elements[ rayIndex ].seed = seed + samples;
+					rayQueue.elements[ rayIndex ].alphaDepth = 0u;
 
 					rayData[ index ].origin = ray.origin;
 					rayData[ index ].direction = ray.direction;
@@ -133,6 +136,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayData[ index ].transmissiveRay = 1u;
 					rayData[ index ].emission = vec3f( 0.0 );
 					rayData[ index ].lightPdf = 0.0;
+					rayData[ index ].alphaDepth = 0u;
 					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayData[ index ].shadowRayIntersectionIndex = - 1;
 
@@ -143,7 +147,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// evaluate the surface staged by LogicKernel
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-					${ rngInit }( indexUV, input.seed, input.currentBounce );
+					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
 					let objectInfo = transforms[ u32( input.objectIndex ) ];
 					var materialInfo = materials[ objectInfo.materialIndex ];
@@ -178,6 +182,45 @@ export class MaterialKernel extends ComputeKernel {
 
 					let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, view, blurRoughness );
 
+					// Stochastically pass through partially transparent surfaces by re-enqueueing
+					// the ray at the hit point, advancing the alpha depth but not the bounce count.
+					let passesThrough = ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+					if ( passesThrough ) {
+
+						// out of transparent bounces, so stop rather than shading a surface that
+						// should be invisible. A zeroed throughput terminates in LogicKernel.
+						if ( input.alphaDepth >= maxTransparentBounces ) {
+
+							rayData[ index ].throughputColor = vec3f( 0.0 );
+							rayData[ index ].emission = vec3f( 0.0 );
+							rayData[ index ].lightPdf = 0.0;
+							rayData[ index ].shadowRayIntersectionIndex = - 1;
+							return;
+
+						}
+
+						let alphaIndex = atomicAdd( &rayQueue.length, 1u );
+						rayQueue.elements[ alphaIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
+						rayQueue.elements[ alphaIndex ].direction = input.direction;
+						rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
+						rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
+						rayQueue.elements[ alphaIndex ].seed = input.seed;
+						rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
+
+						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
+						// "pdf" is left alone so the previous scatter still weights the forward MIS,
+						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
+						rayData[ index ].alphaDepth = input.alphaDepth + 1u;
+						rayData[ index ].emission = vec3f( 0.0 );
+						rayData[ index ].bsdf = vec3f( input.pdf );
+						rayData[ index ].lightPdf = 0.0;
+						rayData[ index ].origin = rayQueue.elements[ alphaIndex ].origin;
+						rayData[ index ].rayIntersectionIndex = i32( alphaIndex );
+						rayData[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
 					// attenuate the light transmitted through the volume when exiting a backface. The
 					// staged throughput is read back by LogicKernel when this surface's emission and
 					// NEE contribution resolve, matching the megakernel's ordering.
@@ -206,6 +249,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
 					rayQueue.elements[ rayIndex ].currentBounce = newBounce;
 					rayQueue.elements[ rayIndex ].seed = input.seed;
+					rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
 					rayData[ index ].rayIntersectionIndex = i32( rayIndex );
 
 					rayData[ index ].origin = rayQueue.elements[ rayIndex ].origin;
@@ -228,6 +272,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
 							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
+							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
 							rayData[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {
