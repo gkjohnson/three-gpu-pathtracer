@@ -285,6 +285,41 @@ export const MODEL_LIST = {
 		rotation: [ 0, Math.PI, 0 ],
 	},
 
+	'Sasha': {
+		url: './data/sasha.glb',
+		credit: 'Model by "saber7711" on <a href="https://blendswap.com/blend/29574">Blendswap</a>.',
+		rotation: [ 0, 0, Math.PI / 4 ],
+		stage: 'pedestal',
+		envMap: 'Brown Photostudio 01',
+		lighting: 'light box',
+	},
+
+	'Magie Noire': {
+		url: './data/magie-noire.glb',
+		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'none',
+		lighting: 'colored three point',
+
+		// aperture refit from the source scene's f/0.45 at 82mm to the normalized model scale
+		bokehSize: 28,
+		focusDistance: 0.536,
+	},
+
+	'Stormtrooper Helmet': {
+		url: './data/stormtrooper.glb',
+		credit: 'Model from <a href="https://blendswap.com/blend/76637">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'none',
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Robot 8': {
+		url: './data/robot8.glb',
+		credit: 'Model by "AlbinMERLE" on <a href="https://blendswap.com/blend/73279">Blendswap</a>.',
+		stage: 'none',
+	},
+
 	// bitterli rooms
 	'Bedroom': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/bedroom.glb',
