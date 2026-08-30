@@ -46,8 +46,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.lightsInfo = new LightsInfoNode();
 
 		// persistent per-path state, one slot per in-flight path
-		this.rayData = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, rayDataStruct.getLength() );
-		this.rayData.name = 'Ray Data';
+		this.rayDataStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, rayDataStruct.getLength() );
+		this.rayDataStorage.name = 'Ray Data';
 
 		// append-only trace queues, prefixed by an atomic length header
 		const queueSize = rayQueueStruct.getLength() + MAX_RAY_DATA_COUNT * traceQueuedRayStruct.getLength();
@@ -58,18 +58,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.shadowRayQueue.name = 'Shadow Ray Queue';
 
 		// per-queue-slot trace results, indexed by the ray's position in its queue
-		this.rayIntersections = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
-		this.rayIntersections.name = 'Ray Intersections';
+		this.rayIntersectionsStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
+		this.rayIntersectionsStorage.name = 'Ray Intersections';
 
-		this.shadowRayIntersections = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
-		this.shadowRayIntersections.name = 'Shadow Ray Intersections';
+		this.shadowRayIntersectionsStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
+		this.shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
 
 		// overflow pixel indices waiting for a free path slot, lazily sized to the resolution
 		this.pixelQueue = null;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
-		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
-		this.sampleCounters.name = 'Sample Counters';
+		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
+		this.sampleCountersStorage.name = 'Sample Counters';
 		this._samplesPromise = null;
 
 		// kernels
@@ -260,7 +260,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
 
-			rayData,
+			rayDataStorage,
 			rayQueue,
 			shadowRayQueue,
 		} = this;
@@ -284,7 +284,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const { width, height } = this.sampleCountTarget;
 		this._updatePixelQueue( width, height );
 
-		populatePixelIndicesKernel.rayData = rayData;
+		populatePixelIndicesKernel.rayData = rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.targetDimensions.set( width, height );
 		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( width, height, 1 ) );
@@ -297,11 +297,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			renderer,
 			maxTransparentBounces,
 
-			rayData,
+			rayDataStorage,
 			rayQueue,
 			shadowRayQueue,
-			rayIntersections,
-			shadowRayIntersections,
+			rayIntersectionsStorage,
+			shadowRayIntersectionsStorage,
 
 			logicKernel,
 			materialKernel,
@@ -336,9 +336,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path
-				logicKernel.rayData = rayData;
-				logicKernel.rayIntersections = rayIntersections;
-				logicKernel.shadowRayIntersections = shadowRayIntersections;
+				logicKernel.rayData = rayDataStorage;
+				logicKernel.rayIntersections = rayIntersectionsStorage;
+				logicKernel.shadowRayIntersections = shadowRayIntersectionsStorage;
 				logicKernel.bounces = this.bounces;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -351,7 +351,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// Step 3: evaluate materials — spawn camera rays for freed slots, sample the bsdf, and
 				// enqueue this frame's bounce + shadow rays
-				materialKernel.rayData = rayData;
+				materialKernel.rayData = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
 				materialKernel.pixelQueue = this.pixelQueue;
@@ -367,14 +367,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
 
 				traceRayKernel.rayQueue = rayQueue;
-				traceRayKernel.rayIntersections = rayIntersections;
+				traceRayKernel.rayIntersections = rayIntersectionsStorage;
 				renderer.compute( traceRayKernel.kernel, rayDispatchConverter.outputDispatch );
 
 				shadowDispatchConverter.queue = shadowRayQueue;
 				renderer.compute( shadowDispatchConverter.kernel, [ 1, 1, 1 ] );
 
 				traceShadowRayKernel.shadowRayQueue = shadowRayQueue;
-				traceShadowRayKernel.shadowRayIntersections = shadowRayIntersections;
+				traceShadowRayKernel.shadowRayIntersections = shadowRayIntersectionsStorage;
 				renderer.compute( traceShadowRayKernel.kernel, shadowDispatchConverter.outputDispatch );
 
 			}
@@ -409,7 +409,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const {
 			renderer,
 			sampleCountTarget,
-			sampleCounters,
+			sampleCountersStorage,
 			primeSampleCountersKernel,
 			tallySampleCountsKernel,
 		} = this;
@@ -420,17 +420,17 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		}
 
-		primeSampleCountersKernel.counters = sampleCounters;
+		primeSampleCountersKernel.counters = sampleCountersStorage;
 		renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
 
-		tallySampleCountsKernel.counters = sampleCounters;
+		tallySampleCountsKernel.counters = sampleCountersStorage;
 		tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
 		renderer.compute(
 			tallySampleCountsKernel.kernel,
 			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
 		);
 
-		const buffer = await renderer.getArrayBufferAsync( sampleCounters );
+		const buffer = await renderer.getArrayBufferAsync( sampleCountersStorage );
 		const counters = new Uint32Array( buffer );
 		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
 
