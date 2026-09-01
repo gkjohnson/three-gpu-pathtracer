@@ -398,6 +398,37 @@ export const MODEL_LIST = {
 		postProcess: convertEmissivePlanesToLights,
 	},
 
+	'Dodge Challenger': {
+		url: './data/dodge-challenger.glb',
+		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
+		rotation: [ 0, Math.PI / 2, 0 ],
+
+		postProcess: model => {
+
+			// the body texture is exported as a white/black tint mask - the stripes stay dark and
+			// the paint takes whatever colour is set here
+			model.traverse( c => {
+
+				if ( c.material && c.material.name === 'paint_w_stripes' ) {
+
+					c.material.color.set( 0x7a0c0c );
+
+				}
+
+			} );
+
+		},
+	},
+
+	'Tropical Island': {
+		url: './data/tropical.glb',
+		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
+		stage: 'none',
+
+		// the source scene's beach environment, rendered out with its rotation and strength applied
+		envMap: './data/tropical-beach.hdr',
+	},
+
 	// bitterli rooms
 	'Bedroom': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/bedroom.glb',
