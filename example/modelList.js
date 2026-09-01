@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
@@ -170,10 +170,22 @@ export function convertEmissivePlanesToLights( model, filter = () => true ) {
 
 		// the source emitters are single sided, emitting along the quad normal - the material's
 		// double sidedness only reflects how the surface shades so it is ignored here. The converter
-		// marks emitters that stand in for disk lights, which sample as circles of that diameter.
+		// marks emitters that stand in for disk lights, which sample as circles of that diameter -
+		// everything else stays a plain RectAreaLight, which the rasterized view can render too.
 		const material = mesh.material;
-		const light = new ShapedAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
-		light.isCircular = /_disk_emission$/.test( material.name );
+		const isCircular = /_disk_emission$/.test( material.name );
+		let light;
+		if ( isCircular ) {
+
+			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+			light.isCircular = true;
+
+		} else {
+
+			light = new RectAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+
+		}
+
 		light.position.copy( position );
 		light.quaternion.copy( quaternion ).multiply( alignment );
 
@@ -334,6 +346,8 @@ export const MODEL_LIST = {
 		stage: 'none',
 		envMap: 'none',
 		background: 'black',
+		bokehSize: 10,
+		focusDistance: 0.55,
 		postProcess: convertEmissivePlanesToLights,
 	},
 
