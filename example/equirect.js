@@ -68,7 +68,6 @@ async function init() {
 
 	// load assets
 	const dracoLoader = new DRACOLoader();
-	dracoLoader.setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
 	const gltf = await new GLTFLoader().setDRACOLoader( dracoLoader ).setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL );
 	dracoLoader.dispose();
 

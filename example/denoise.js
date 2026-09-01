@@ -110,7 +110,6 @@ async function init() {
 	controls.update();
 
 	const dracoLoader = new DRACOLoader();
-	dracoLoader.setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
 	const [ envMap, gltf ] = await Promise.all( [
 		new HDRLoader().loadAsync( ENV_URL ),
 		new GLTFLoader().setDRACOLoader( dracoLoader ).loadAsync( MODEL_URL ),

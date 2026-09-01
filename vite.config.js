@@ -26,7 +26,4 @@ export default ( { mode } ) => ( {
 			],
 		},
 	},
-	optimizeDeps: {
-    	exclude: [ 'three', 'three-mesh-bvh', '@monogrid/gainmap-js' ],
-  	},
 } );
