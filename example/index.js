@@ -841,7 +841,6 @@ async function updateModel() {
 
 	const scale = 1 / sphere.radius;
 	model.scale.setScalar( scale );
-	console.log( scale )
 	model.position.multiplyScalar( scale );
 	box.setFromObject( model, true );
 
@@ -898,8 +897,9 @@ async function updateModel() {
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
 
-	// models that carry their own lighting can override the scene defaults
-	params.envMap = modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
+	// models that carry their own lighting can override the scene defaults, naming an environment
+	// from the list above rather than restating its url
+	params.envMap = envMaps[ modelInfo.envMap ] ?? modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
 	params.lighting = modelInfo.lighting ?? 'none';
 	params.stage = modelInfo.stage ?? 'floor';
 	params.background = modelInfo.background ?? 'white';

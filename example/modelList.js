@@ -1,4 +1,5 @@
-import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
+import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -93,9 +94,10 @@ function mecaBricksGoldCorrection( model ) {
 }
 
 // Replaces flat emissive quads with equivalent RectAreaLights so they can be importance
-// sampled. Curved emitters are left as emissive geometry.
+// sampled. Curved emitters are left as emissive geometry. A converted quad is removed, so pass a
+// filter when the model has emissive detail meant to stay visible.
 // TODO: sample a CDF over emissive triangles so all emissive surfaces can be importance sampled
-export function convertEmissivePlanesToLights( model ) {
+export function convertEmissivePlanesToLights( model, filter = () => true ) {
 
 	const FLAT_RATIO = 1e-3;
 	const size = new Vector3();
@@ -113,7 +115,7 @@ export function convertEmissivePlanesToLights( model ) {
 	const meshes = [];
 	model.traverse( c => {
 
-		if ( c.isMesh && c.material.emissiveIntensity > 0 && c.material.emissive.getHex() !== 0 ) {
+		if ( c.isMesh && c.material.emissiveIntensity > 0 && c.material.emissive.getHex() !== 0 && filter( c ) ) {
 
 			meshes.push( c );
 
@@ -167,9 +169,11 @@ export function convertEmissivePlanesToLights( model ) {
 		}
 
 		// the source emitters are single sided, emitting along the quad normal - the material's
-		// double sidedness only reflects how the surface shades so it is ignored here
+		// double sidedness only reflects how the surface shades so it is ignored here. The converter
+		// marks emitters that stand in for disk lights, which sample as circles of that diameter.
 		const material = mesh.material;
-		const light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
+		const light = new ShapedAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+		light.isCircular = /_disk_emission$/.test( material.name );
 		light.position.copy( position );
 		light.quaternion.copy( quaternion ).multiply( alignment );
 
@@ -372,6 +376,26 @@ export const MODEL_LIST = {
 		credit: 'Model by Carlo Bergonzini / Monorender, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
 		stage: 'none',
 		envMap: 'none',
+	},
+
+	'Stelton Theo Teapot Set': {
+		url: './data/teapot.glb',
+		credit: 'Model from <a href="https://blendswap.com/blend/22379">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'Vestibule',
+	},
+
+	'Dining Room': {
+		url: './data/dining-room.glb',
+		credit: 'Model from <a href="https://blendswap.com/blend/18762">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'none',
+
+		// aperture refit from the source scene's f/6 at 35mm to the normalized model scale
+		bokehSize: 1,
+		focusDistance: 0.74,
+
+		postProcess: convertEmissivePlanesToLights,
 	},
 
 	// bitterli rooms
