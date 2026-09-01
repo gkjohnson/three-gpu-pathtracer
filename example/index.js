@@ -643,8 +643,17 @@ function updateEnvMap() {
 
 	}
 
+	const url = params.envMap;
 	new HDRLoader()
-		.load( params.envMap, texture => {
+		.load( url, texture => {
+
+			// a different environment - or none - was selected while this one downloaded
+			if ( params.envMap !== url ) {
+
+				texture.dispose();
+				return;
+
+			}
 
 			if ( scene.environment ) {
 

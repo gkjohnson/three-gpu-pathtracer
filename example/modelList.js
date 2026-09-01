@@ -333,6 +333,7 @@ export const MODEL_LIST = {
 		credit: 'Fan art model by "ScottGraham" on <a href="https://blendswap.com/blend/13953">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
+		background: 'black',
 		postProcess: convertEmissivePlanesToLights,
 	},
 
@@ -375,7 +376,6 @@ export const MODEL_LIST = {
 		url: './data/lone-monk.glb',
 		credit: 'Model by Carlo Bergonzini / Monorender, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
 		stage: 'none',
-		envMap: 'none',
 	},
 
 	'Stelton Theo Teapot Set': {
