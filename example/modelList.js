@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
@@ -423,10 +423,26 @@ export const MODEL_LIST = {
 	'Tropical Island': {
 		url: './data/tropical.glb',
 		credit: 'Model by "ksyu3d" on <a href="https://blendswap.com/blend/29301">Blendswap</a>.',
-		stage: 'none',
+		stage: 'floor',
+
+		// the model and its environment turn together - the hdr is rolled 180 degrees to match
+		rotation: [ 0, Math.PI, 0 ],
 
 		// the source scene's beach environment, rendered out with its rotation and strength applied
 		envMap: './data/tropical-beach.hdr',
+
+		postProcess: model => {
+
+			// the source camera was dropped in conversion, so stand one at an elevated three
+			// quarter view - placed in the model's own frame so the normalization carries it along
+			const camera = new PerspectiveCamera( 45, 1 );
+			camera.position.set( 3.17, 3.11, - 2.62 );
+
+			// aimed a little to the camera's right of center, which slides the island left in frame
+			camera.lookAt( - 0.52, 0, 0.36 );
+			model.add( camera );
+
+		},
 	},
 
 	// bitterli rooms
