@@ -380,14 +380,14 @@ export const MODEL_LIST = {
 
 	'Stelton Theo Teapot Set': {
 		url: './data/teapot.glb',
-		credit: 'Model from <a href="https://blendswap.com/blend/22379">Blendswap</a>.',
+		credit: 'Model by "blendswapisweird" on <a href="https://blendswap.com/blend/22379">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'Vestibule',
 	},
 
 	'Dining Room': {
 		url: './data/dining-room.glb',
-		credit: 'Model from <a href="https://blendswap.com/blend/18762">Blendswap</a>.',
+		credit: 'Model by "MaTTeSr" on <a href="https://blendswap.com/blend/18762">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
 
@@ -400,7 +400,7 @@ export const MODEL_LIST = {
 
 	'Dodge Challenger': {
 		url: './data/dodge-challenger.glb',
-		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
+		credit: 'Model by "kryptonmedia" on <a href="https://blendswap.com/blend/4046">Blendswap</a>.',
 		rotation: [ 0, Math.PI / 2, 0 ],
 
 		postProcess: model => {
@@ -422,7 +422,7 @@ export const MODEL_LIST = {
 
 	'Tropical Island': {
 		url: './data/tropical.glb',
-		credit: 'Model from <a href="https://blendswap.com/">Blendswap</a>.',
+		credit: 'Model by "ksyu3d" on <a href="https://blendswap.com/blend/29301">Blendswap</a>.',
 		stage: 'none',
 
 		// the source scene's beach environment, rendered out with its rotation and strength applied
