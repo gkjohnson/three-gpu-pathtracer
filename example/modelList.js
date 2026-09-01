@@ -94,10 +94,9 @@ function mecaBricksGoldCorrection( model ) {
 }
 
 // Replaces flat emissive quads with equivalent RectAreaLights so they can be importance
-// sampled. Curved emitters are left as emissive geometry. A converted quad is removed, so pass a
-// filter when the model has emissive detail meant to stay visible.
+// sampled. Curved emitters are left as emissive geometry.
 // TODO: sample a CDF over emissive triangles so all emissive surfaces can be importance sampled
-export function convertEmissivePlanesToLights( model, filter = () => true ) {
+export function convertEmissivePlanesToLights( model ) {
 
 	const FLAT_RATIO = 1e-3;
 	const size = new Vector3();
@@ -115,7 +114,7 @@ export function convertEmissivePlanesToLights( model, filter = () => true ) {
 	const meshes = [];
 	model.traverse( c => {
 
-		if ( c.isMesh && c.material.emissiveIntensity > 0 && c.material.emissive.getHex() !== 0 && filter( c ) ) {
+		if ( c.isMesh && c.material.emissiveIntensity > 0 && c.material.emissive.getHex() !== 0 ) {
 
 			meshes.push( c );
 
@@ -168,10 +167,8 @@ export function convertEmissivePlanesToLights( model, filter = () => true ) {
 
 		}
 
-		// the source emitters are single sided, emitting along the quad normal - the material's
-		// double sidedness only reflects how the surface shades so it is ignored here. The converter
-		// marks emitters that stand in for disk lights, which sample as circles of that diameter -
-		// everything else stays a plain RectAreaLight, which the rasterized view can render too.
+		// emitters are single sided, emitting along the quad normal. The converter marks disk
+		// lights by material name; everything else stays a RectAreaLight so the raster view works.
 		const material = mesh.material;
 		const isCircular = /_disk_emission$/.test( material.name );
 		let light;
@@ -302,7 +299,7 @@ export const MODEL_LIST = {
 	},
 
 	'Sasha Ring': {
-		url: './data/sasha.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/sasha.glb',
 		credit: 'Model by "saber7711" on <a href="https://blendswap.com/blend/29574">Blendswap</a>.',
 		rotation: [ 0, 0, Math.PI / 4 ],
 		stage: 'pedestal',
@@ -329,7 +326,7 @@ export const MODEL_LIST = {
 	},
 
 	'Magie Noire Perfume': {
-		url: './data/magie-noire.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/magie-noire.glb',
 		credit: 'Model by "Bagoule" on <a href="https://blendswap.com/blend/30512">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
@@ -341,7 +338,7 @@ export const MODEL_LIST = {
 	},
 
 	'Stormtrooper Fan Art': {
-		url: './data/stormtrooper.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/stormtrooper.glb',
 		credit: 'Fan art model by "ScottGraham" on <a href="https://blendswap.com/blend/13953">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
@@ -352,7 +349,7 @@ export const MODEL_LIST = {
 	},
 
 	'Monster Under The Bed': {
-		url: './data/monster.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blender-demo-files/monster.glb',
 		credit: 'Model by Metin Seven, based on 2D concept art by Blake Stevenson, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
 		stage: 'none',
 		envMap: 'none',
@@ -387,20 +384,20 @@ export const MODEL_LIST = {
 	},
 
 	'Lone Monk': {
-		url: './data/lone-monk.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blender-demo-files/lone-monk.glb',
 		credit: 'Model by Carlo Bergonzini / Monorender, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
 		stage: 'none',
 	},
 
 	'Stelton Theo Teapot Set': {
-		url: './data/teapot.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/teapot.glb',
 		credit: 'Model by "blendswapisweird" on <a href="https://blendswap.com/blend/22379">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'Vestibule',
 	},
 
 	'Dining Room': {
-		url: './data/dining-room.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/dining-room.glb',
 		credit: 'Model by "MaTTeSr" on <a href="https://blendswap.com/blend/18762">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
@@ -413,7 +410,7 @@ export const MODEL_LIST = {
 	},
 
 	'Dodge Challenger': {
-		url: './data/dodge-challenger.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/dodge-challenger.glb',
 		credit: 'Model by "kryptonmedia" on <a href="https://blendswap.com/blend/4046">Blendswap</a>.',
 		rotation: [ 0, Math.PI / 2, 0 ],
 
@@ -435,7 +432,7 @@ export const MODEL_LIST = {
 	},
 
 	'Tropical Island': {
-		url: './data/tropical.glb',
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/tropical.glb',
 		credit: 'Model by "ksyu3d" on <a href="https://blendswap.com/blend/29301">Blendswap</a>.',
 		stage: 'floor',
 
@@ -443,7 +440,7 @@ export const MODEL_LIST = {
 		rotation: [ 0, Math.PI, 0 ],
 
 		// the source scene's beach environment, rendered out with its rotation and strength applied
-		envMap: './data/tropical-beach.hdr',
+		envMap: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/tropical-beach.hdr',
 
 		postProcess: model => {
 

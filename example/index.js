@@ -699,7 +699,6 @@ function useModelCamera( sceneCamera ) {
 	const distance = Math.max( - forward.dot( perspectiveCamera.position ), 0.1 );
 	controls.target.copy( perspectiveCamera.position ).addScaledVector( forward, distance );
 
-	console.log( controls.target.distanceTo( perspectiveCamera.position ) );
 	controls.update();
 
 }
