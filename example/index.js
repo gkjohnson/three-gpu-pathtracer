@@ -628,7 +628,7 @@ function updateEnvMap() {
 	new HDRLoader()
 		.load( url, texture => {
 
-			// a different environment - or none - was selected while this one downloaded
+			// a different environment was selected while this one downloaded
 			if ( params.envMap !== url ) {
 
 				texture.dispose();
