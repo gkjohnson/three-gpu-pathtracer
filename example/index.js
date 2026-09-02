@@ -53,7 +53,7 @@ const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
 const DEFAULT_FOV = 45;
 
-// aperture diameter in millimetres, where zero is a pinhole and disables the effect entirely
+// aperture diameter in mm - zero disables depth of field
 const DEFAULT_BOKEH_SIZE = 0;
 
 // how far behind the model the backdrop's curve begins
@@ -251,7 +251,6 @@ async function init() {
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	// physical rather than perspective so models can bring a depth of field with them
 	perspectiveCamera = new PhysicalCamera( DEFAULT_FOV, aspect, 0.025, 500 );
 	perspectiveCamera.bokehSize = DEFAULT_BOKEH_SIZE;
 	perspectiveCamera.focusDistance = 1;
@@ -685,8 +684,6 @@ function useModelCamera( sceneCamera ) {
 
 }
 
-// depth of field is described per model since the focus distance only means anything relative to
-// the normalized model scale
 function updateDepthOfField() {
 
 	perspectiveCamera.bokehSize = params.bokehSize;
@@ -872,8 +869,7 @@ async function updateModel() {
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
 
-	// models that carry their own lighting can override the scene defaults, naming an environment
-	// from the list above rather than restating its url
+	// models that carry their own lighting can override the scene defaults
 	params.envMap = envMaps[ modelInfo.envMap ] ?? modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
 	params.lighting = modelInfo.lighting ?? 'none';
 	params.stage = modelInfo.stage ?? 'floor';
