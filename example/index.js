@@ -52,8 +52,6 @@ const DEVICE_LIMITS_REQUESTED = [
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
 const DEFAULT_FOV = 45;
-
-// aperture diameter in mm - zero disables depth of field
 const DEFAULT_BOKEH_SIZE = 0;
 
 // how far behind the model the backdrop's curve begins
