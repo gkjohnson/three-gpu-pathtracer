@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
@@ -330,11 +330,31 @@ export const MODEL_LIST = {
 		credit: 'Model by "Bagoule" on <a href="https://blendswap.com/blend/30512">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'none',
-		lighting: 'colored three point',
 
 		// aperture refit from the source scene's f/0.45 at 82mm to the normalized model scale
 		bokehSize: 28,
 		focusDistance: 0.536,
+
+		postProcess: model => {
+
+			// the scene's own rig - a white key with warm and cool accents, stated in the demo's
+			// normalized frame and mapped into model space so the normalization lands them back there
+			const sphere = new Box3().setFromObject( model ).getBoundingSphere( new Sphere() );
+			[
+				{ size: 0.19, position: [ 0.25, 0.06, 0.29 ], rotation: [ - 0.071, - 0.275, - 0.266 ], intensity: 25 * 2, color: 0xffffff },
+				{ size: 0.19, position: [ 0.59, 0.06, - 0.03 ], rotation: [ - 0.826, 1.176, - 0.452 ], intensity: 12.5 * 2, color: 0xe29e49 },
+				{ size: 0.19, position: [ 0.24, - 0.1, - 0.32 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 15 * 2, color: 0x8f70f3 },
+			].forEach( ( { size, position, rotation, intensity, color } ) => {
+
+				const width = size * sphere.radius;
+				const light = new RectAreaLight( color, intensity, width, width );
+				light.position.set( ...position ).multiplyScalar( sphere.radius ).add( sphere.center );
+				light.rotation.set( ...rotation );
+				model.add( light );
+
+			} );
+
+		},
 	},
 
 	'Stormtrooper Fan Art': {

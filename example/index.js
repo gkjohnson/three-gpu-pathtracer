@@ -17,7 +17,6 @@ import {
 	RectAreaLightNode,
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
-import { RectAreaLightHelper } from 'three/examples/jsm/helpers/RectAreaLightHelper.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
@@ -57,9 +56,6 @@ const DEFAULT_FOV = 45;
 // aperture diameter in millimetres, where zero is a pinhole and disables the effect entirely
 const DEFAULT_BOKEH_SIZE = 0;
 
-// "?lightHelpers=true" outlines the rect area lights so a rig can be positioned visually
-const SHOW_LIGHT_HELPERS = new URLSearchParams( window.location.search ).get( 'lightHelpers' ) === 'true';
-
 // how far behind the model the backdrop's curve begins
 const BACKDROP_DISTANCE = 1;
 
@@ -89,12 +85,6 @@ const LIGHT_RIGS = {
 		{ size: [ 1.65, 7.7 ], position: [ - 1.8, 0.6, - 2.8 ], rotation: [ 0, - Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
 		{ size: [ 1.65, 1.7 ], position: [ 2.25, 0.6, 0.2 ], rotation: [ 0, Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
 		{ size: [ 1.7, 2.8 ], position: [ 0.1, 1.15, 2.4 ], rotation: [ 0, 0, 0 ], intensity: 3, color: 0xffffff },
-	],
-	// taken from the Magie Noire scene - a white key with warm and cool accents
-	'colored three point': [
-		{ size: 0.19, position: [ 0.25, 0.06, 0.29 ], rotation: [ - 0.071, - 0.275, - 0.266 ], intensity: 25, color: 0xffffff },
-		{ size: 0.19, position: [ 0.59, 0.06, - 0.03 ], rotation: [ - 0.826, 1.176, - 0.452 ], intensity: 12.5, color: 0xe29e49 },
-		{ size: 0.19, position: [ 0.24, - 0.1, - 0.32 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 15, color: 0x8f70f3 },
 	],
 	'overhead strips': [
 		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
@@ -340,12 +330,6 @@ async function init() {
 			else light.lookAt( 0, 0.35, 0 );
 
 			rig.add( light );
-
-			if ( SHOW_LIGHT_HELPERS ) {
-
-				light.add( new RectAreaLightHelper( light ) );
-
-			}
 
 		} );
 
@@ -810,21 +794,6 @@ async function updateModel() {
 	if ( modelInfo.postProcess ) {
 
 		modelInfo.postProcess( model );
-
-	}
-
-	// lights that came out of the model rather than a rig need their own helpers
-	if ( SHOW_LIGHT_HELPERS ) {
-
-		model.traverse( c => {
-
-			if ( c.isRectAreaLight ) {
-
-				c.add( new RectAreaLightHelper( c ) );
-
-			}
-
-		} );
 
 	}
 
