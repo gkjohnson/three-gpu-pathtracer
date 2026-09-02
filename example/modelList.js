@@ -167,8 +167,7 @@ export function convertEmissivePlanesToLights( model ) {
 
 		}
 
-		// emitters are single sided, emitting along the quad normal. The converter marks disk
-		// lights by material name; everything else stays a RectAreaLight so the raster view works.
+		// emitters are single sided, emitting along the quad normal
 		const material = mesh.material;
 		const isCircular = /_disk_emission$/.test( material.name );
 		let light;
@@ -179,6 +178,7 @@ export function convertEmissivePlanesToLights( model ) {
 
 		} else {
 
+			// use a rect area light so the three.js rasterization path works
 			light = new RectAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
 
 		}
@@ -381,8 +381,6 @@ export const MODEL_LIST = {
 
 				if ( c.material && /^monster/.test( c.material.name ) ) {
 
-					// copied as a standard material because MeshPhysicalMaterial.copy reads physical
-					// only fields the source does not have
 					const material = new MeshPhysicalMaterial();
 					MeshStandardMaterial.prototype.copy.call( material, c.material );
 					material.transmission = 1;
@@ -435,7 +433,6 @@ export const MODEL_LIST = {
 
 		postProcess: model => {
 
-			// the body texture is a white/black tint mask, so this sets the paint colour
 			model.traverse( c => {
 
 				if ( c.material && c.material.name === 'paint_w_stripes' ) {
@@ -453,17 +450,14 @@ export const MODEL_LIST = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/tropical.glb',
 		credit: 'Model by "ksyu3d" on <a href="https://blendswap.com/blend/29301">Blendswap</a>.',
 		stage: 'floor',
-
-		// the hdr is rolled 180 degrees to keep the lighting aligned
 		rotation: [ 0, Math.PI, 0 ],
 
-		// the source scene's environment with its rotation and strength baked in
+		// the source scene's environment with the above rotation baked in
 		envMap: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/tropical-beach.hdr',
 
 		postProcess: model => {
 
-			// stand a camera in for the one dropped in conversion, aimed a little right of
-			// center so the island sits left of frame
+			// stand a camera in for the one dropped in conversion
 			const camera = new PerspectiveCamera( 45, 1 );
 			camera.position.set( 3.17, 3.11, - 2.62 );
 			camera.lookAt( - 0.52, 0, 0.36 );
