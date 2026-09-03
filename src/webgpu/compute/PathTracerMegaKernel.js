@@ -1,13 +1,13 @@
 import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_CHANNEL, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
-import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_CHANNEL_COUNT, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -142,6 +142,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
+				var dispersionChannel = min( u32( ${ rand1 }( ${ RNG_INDEX_DISPERSION_CHANNEL } ) * ${ DISPERSION_CHANNEL_COUNT }.0 ), ${ DISPERSION_CHANNEL_COUNT - 1 }u ) + ${ DISPERSION_CHANNEL_COUNT }u;
 
 				// one-sample NEE selects between the analytic lights and the environment -
 				// lightsDenom is the number of options
@@ -214,7 +215,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the ray at the hit point, advancing the rng but not the bounce count.
@@ -232,6 +233,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							transparentBounce ++;
 							bounce --;
 							continue;
+
+						}
+
+						let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+						if ( isDispersive ) {
+
+							let channel = dispersionChannel % ${ DISPERSION_CHANNEL_COUNT }u;
+							surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, channel );
+							if ( dispersionChannel >= ${ DISPERSION_CHANNEL_COUNT }u ) {
+
+								dispersionChannel = channel;
+								throughputColor *= ${ dispersionColorWeightFunc }( channel );
+
+							}
 
 						}
 
