@@ -526,6 +526,19 @@ export const specularBrdfFunc = wgslFn( /* wgsl */ `
 
 `, [ ggxSmithVisibilityFunc, ggxDistributionFunc ] );
 
+// PBRT-v4 treats matched media as perfect specular transmission because the rough dielectric
+// half-vector and its Jacobian are undefined when eta is one:
+// https://github.com/mmp/pbrt-v4/blob/master/src/pbrt/bxdfs.cpp
+export const isMatchedIorFunc = wgslFn( /* wgsl */ `
+
+	fn isMatchedIor( eta: f32 ) -> bool {
+
+		return abs( eta - 1.0 ) < EPSILON;
+
+	}
+
+`, [ constants ] );
+
 export const specularBtdfFunc = wgslFn( /* wgsl */`
 
 	fn specularBtdf( V: vec3f, L: vec3f, H: vec3f, alpha: vec2f, eta: f32 ) -> vec3f {
@@ -791,6 +804,15 @@ export const turquinIntegralFn = wgslTagFn/* wgsl */ `
 		globalId: vec3u,
 		layer: u32,
 	) -> void {
+
+		// The matched-IOR limit is a unit-energy delta transmission event, so it cannot
+		// be integrated with the rough BTDF below.
+		if ( includeRefraction && ${ isMatchedIorFunc }( eta ) ) {
+
+			textureStore( outputTarget, vec3( globalId.xy, layer ), vec4( 1.0 ) );
+			return;
+
+		}
 
 		// sample the brdf directions in a grid pattern
 		const GRID_SIZE = 64u;
