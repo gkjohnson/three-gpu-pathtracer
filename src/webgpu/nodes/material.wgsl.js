@@ -585,6 +585,54 @@ export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// KHR_materials_dispersion stores 20 / Abbe number and defines this RGB IOR approximation:
+// https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
+export const DISPERSION_CHANNEL_COUNT = 3;
+
+export const dispersionIorFunc = wgslFn( /* wgsl */ `
+
+	fn dispersionIor( ior: f32, dispersion: f32, channel: u32 ) -> f32 {
+
+		let halfSpread = ( ior - 1.0 ) * 0.025 * dispersion;
+		return max( 1.0, ior + ( f32( channel ) - 1.0 ) * halfSpread );
+
+	}
+
+` );
+
+export const applyDispersionFunc = wgslFn( /* wgsl */ `
+
+	fn applyDispersion( surf: SurfaceRecord, dispersion: f32, channel: u32 ) -> SurfaceRecord {
+
+		var result = surf;
+		result.ior = dispersionIor( result.ior, dispersion, channel );
+		result.eta = select( result.ior, 1.0 / result.ior, result.thinWall || result.frontFace );
+		result.f0 = iorToF0( result.eta );
+		return result;
+
+	}
+
+`, [ dispersionIorFunc, iorToF0Func, surfaceRecordStruct ] );
+
+// A path keeps one uniformly chosen RGB hero channel after its first dispersive interaction.
+// Multiplying by three accounts for the 1 / 3 channel-selection probability. This follows the
+// secondary-wavelength termination used by PBRT-v4 and the Hero Wavelength sampling method:
+// https://pbr-book.org/4ed/Textures_and_Materials/Material_Interface_and_Implementations.html#sec:dielectric-material
+// https://doi.org/10.1111/cgf.12419
+export const dispersionColorWeightFunc = wgslFn( /* wgsl */ `
+
+	fn dispersionColorWeight( channel: u32 ) -> vec3f {
+
+		return 3.0 * vec3f(
+			select( 0.0, 1.0, channel == 0u ),
+			select( 0.0, 1.0, channel == 1u ),
+			select( 0.0, 1.0, channel == 2u )
+		);
+
+	}
+
+` );
+
 // Dielectric layer fresnel operator that supports custom f0 color, specular weight.
 // Based on the specular color specification:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_specular

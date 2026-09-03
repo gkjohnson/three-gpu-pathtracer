@@ -716,8 +716,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
 			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
 			floatArray[ index ++ ] = getField( m, 'diffuseRoughness', 0.0 );
-			// vec3f alignment requirements
-			index ++;
+			floatArray[ index ++ ] = getField( m, 'dispersion', 0.0 );
 
 			// specular color - offset 36
 			if ( 'specularColor' in m ) {
