@@ -1,4 +1,5 @@
-import { Box3, MeshPhysicalMaterial, Quaternion, RectAreaLight, Vector3 } from 'three';
+import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
+import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -166,10 +167,22 @@ export function convertEmissivePlanesToLights( model ) {
 
 		}
 
-		// the source emitters are single sided, emitting along the quad normal - the material's
-		// double sidedness only reflects how the surface shades so it is ignored here
+		// emitters are single sided, emitting along the quad normal
 		const material = mesh.material;
-		const light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
+		const isCircular = /_disk_emission$/.test( material.name );
+		let light;
+		if ( isCircular ) {
+
+			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+			light.isCircular = true;
+
+		} else {
+
+			// use a rect area light so the three.js rasterization path works
+			light = new RectAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+
+		}
+
 		light.position.copy( position );
 		light.quaternion.copy( quaternion ).multiply( alignment );
 
@@ -283,6 +296,174 @@ export const MODEL_LIST = {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/porsche-911-stinger-gtr.glb',
 		credit: 'Model by "VTX" on <a href="https://sketchfab.com/VTX_car">Sketchfab</a>.',
 		rotation: [ 0, Math.PI, 0 ],
+	},
+
+	'Sasha Ring': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/sasha.glb',
+		credit: 'Model by "saber7711" on <a href="https://blendswap.com/blend/29574">Blendswap</a>.',
+		rotation: [ 0, 0, Math.PI / 4 ],
+		stage: 'pedestal',
+		envMap: 'Brown Photostudio 01',
+		lighting: 'light box',
+		postProcess: model => {
+
+			let mat = null;
+			model.traverse( c => {
+
+				if ( c.material && c.material.name === 'Material.002' ) {
+
+					mat = c.material;
+
+				}
+
+			} );
+
+			mat.roughness = 0.05;
+			mat.color.lerp( mat.color.clone().set( 0xC47258 ), 0.45 );
+
+
+		}
+	},
+
+	'Magie Noire Perfume': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/magie-noire.glb',
+		credit: 'Model by "Bagoule" on <a href="https://blendswap.com/blend/30512">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'none',
+
+		// aperture refit from the source scene's f/0.45 at 82mm to the normalized model scale
+		bokehSize: 28,
+		focusDistance: 0.536,
+
+		postProcess: model => {
+
+			// the scene's light rig, stated in the normalized frame the model is scaled into
+			const sphere = new Box3().setFromObject( model ).getBoundingSphere( new Sphere() );
+			[
+				{ size: 0.19, position: [ 0.25, 0.06, 0.29 ], rotation: [ - 0.071, - 0.275, - 0.266 ], intensity: 25, color: 0xffffff },
+				{ size: 0.19, position: [ 0.59, 0.06, - 0.03 ], rotation: [ - 0.826, 1.176, - 0.452 ], intensity: 12.5, color: 0xe29e49 },
+				{ size: 0.19, position: [ 0.24, - 0.1, - 0.32 ], rotation: [ Math.PI / 2, 0, 0 ], intensity: 15, color: 0x8f70f3 },
+			].forEach( ( { size, position, rotation, intensity, color } ) => {
+
+				const width = size * sphere.radius;
+				const light = new RectAreaLight( color, intensity, width, width );
+				light.position.set( ...position ).multiplyScalar( sphere.radius ).add( sphere.center );
+				light.rotation.set( ...rotation );
+				model.add( light );
+
+			} );
+
+		},
+	},
+
+	'Stormtrooper Fan Art': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/stormtrooper.glb',
+		credit: 'Fan art model by "ScottGraham" on <a href="https://blendswap.com/blend/13953">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'none',
+		background: 'black',
+		bokehSize: 10,
+		focusDistance: 0.55,
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Monster Under The Bed': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blender-demo-files/monster.glb',
+		credit: 'Model by Metin Seven, based on 2D concept art by Blake Stevenson, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
+		stage: 'none',
+		envMap: 'none',
+
+		postProcess: model => {
+
+			// the source scene renders the monster with subsurface scattering, which the path tracer
+			// has no equivalent for, so stand in a rough transmissive material
+			model.traverse( c => {
+
+				if ( c.material && /^monster/.test( c.material.name ) ) {
+
+					const material = new MeshPhysicalMaterial();
+					MeshStandardMaterial.prototype.copy.call( material, c.material );
+					material.transmission = 1;
+					material.roughness = 0.55;
+					material.ior = 1.4;
+					material.thickness = 0.15;
+					material.attenuationDistance = 0.25;
+					material.attenuationColor.copy( c.material.color );
+					c.material = material;
+
+				}
+
+			} );
+
+			convertEmissivePlanesToLights( model );
+
+		}
+	},
+
+	'Lone Monk': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blender-demo-files/lone-monk.glb',
+		credit: 'Model by Carlo Bergonzini / Monorender, from the <a href="https://www.blender.org/download/demo-files/">Blender demo files</a>.',
+		stage: 'none',
+	},
+
+	'Stelton Theo Teapot Set': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/teapot.glb',
+		credit: 'Model by "blendswapisweird" on <a href="https://blendswap.com/blend/22379">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'Vestibule',
+	},
+
+	'Dining Room': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/dining-room.glb',
+		credit: 'Model by "MaTTeSr" on <a href="https://blendswap.com/blend/18762">Blendswap</a>.',
+		stage: 'none',
+		envMap: 'none',
+
+		// aperture refit from the source scene's f/6 at 35mm to the normalized model scale
+		bokehSize: 1,
+		focusDistance: 0.74,
+
+		postProcess: convertEmissivePlanesToLights,
+	},
+
+	'Dodge Challenger': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/dodge-challenger.glb',
+		credit: 'Model by "kryptonmedia" on <a href="https://blendswap.com/blend/4046">Blendswap</a>.',
+		rotation: [ 0, Math.PI / 2, 0 ],
+
+		postProcess: model => {
+
+			model.traverse( c => {
+
+				if ( c.material && c.material.name === 'paint_w_stripes' ) {
+
+					c.material.color.set( 0x7a0c0c );
+
+				}
+
+			} );
+
+		},
+	},
+
+	'Tropical Island': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/tropical.glb',
+		credit: 'Model by "ksyu3d" on <a href="https://blendswap.com/blend/29301">Blendswap</a>.',
+		stage: 'floor',
+		rotation: [ 0, Math.PI, 0 ],
+
+		// the source scene's environment with the above rotation baked in
+		envMap: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/blendswap/tropical-beach.hdr',
+
+		postProcess: model => {
+
+			// stand a camera in for the one dropped in conversion
+			const camera = new PerspectiveCamera( 45, 1 );
+			camera.position.set( 3.17, 3.11, - 2.62 );
+			camera.lookAt( - 0.52, 0, 0.36 );
+			model.add( camera );
+
+		},
 	},
 
 	// bitterli rooms
