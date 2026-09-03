@@ -1,7 +1,10 @@
 import { searchForWorkspaceRoot } from 'vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import fs from 'fs';
 
-export default {
+export default ( { mode } ) => ( {
+
+	plugins: mode === 'ssl' ? [ basicSsl() ] : [],
 
 	root: './example/',
 	base: '',
@@ -23,7 +26,4 @@ export default {
 			],
 		},
 	},
-	optimizeDeps: {
-    	exclude: [ 'three-mesh-bvh' ],
-  	},
-};
+} );

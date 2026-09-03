@@ -9,6 +9,7 @@
       "import": "./src/index.js",
       "require": "./build/index.umd.cjs"
     },
+    "./webgpu": "./src/webgpu/index.js",
     "./src/*": "./src/*"
   },
   "type": "module",
@@ -39,28 +40,32 @@
   "devDependencies": {
     "@lookingglass/webxr": "^0.6.0",
     "@monogrid/gainmap-js": "^3.0.5",
+    "@pmndrs/upscaler": "^0.2.0",
     "@types/node": "^24.3.1",
-    "@types/three": "^0.181.0",
+    "@types/three": "^0.185.1",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
-    "canvas-capture": "^2.0.5",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@webgpu/types": "^0.1.72",
     "eslint": "^8.56.0",
     "eslint-config-mdcs": "^5.0.0",
+    "mediabunny": "^1.50.9",
     "node-fetch": "^3.2.9",
+    "oidn-web": "^0.4.0",
     "pixelmatch": "^5.3.0",
     "pngjs": "^6.0.0",
     "process": "^0.11.10",
-    "puppeteer": "^15.4.0",
+    "puppeteer": "^24.42.0",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
-    "three": "^0.181.1",
-    "three-mesh-bvh": "^0.9.5",
+    "three": "^0.185.1",
+    "three-mesh-bvh": "^0.9.13",
     "typescript": "^5.9.2",
-    "vite": "^6.2.2",
+    "vite": "^8.2.2",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
     "three": ">=0.180.0",
-    "three-mesh-bvh": ">=0.7.4",
+    "three-mesh-bvh": ">=0.9.9",
     "xatlas-web": "^0.1.0"
   },
   "scripts": {

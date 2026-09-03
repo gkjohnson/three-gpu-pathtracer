@@ -2,7 +2,7 @@ import {
 	ACESFilmicToneMapping,
 	NoToneMapping,
 	LoadingManager,
-	WebGLRenderer,
+	WebGPURenderer,
 	Scene,
 	PerspectiveCamera,
 	EquirectangularReflectionMapping,
@@ -10,35 +10,39 @@ import {
 	Group,
 	Sphere,
 	Box3,
-} from 'three';
+} from 'three/webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
-const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
-const BASE_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config/';
+const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
+const EXTRA_CONFIG_URL = new URL( './extraScenarios.json', import.meta.url ).toString();
+const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
 
 const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
-const scale = parseInt( urlParams.get( 'scale' ) ) || 1 / window.devicePixelRatio;
+const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
 
 const params = {
 
+	useMegakernel: false,
+	showAtlas: - 1,
+
 	enable: true,
-	bounces: 10,
-	transmissiveBounces: 10,
+	bounces: 15,
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	tiles: tiles,
 	scale: scale,
+
+	iterationsPerFrame: 1,
 
 	model: '',
 	checkerboardTransparency: true,
@@ -55,6 +59,10 @@ let pathTracer, renderer, camera, scene, controls;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
+let detailedSampleCount = null;
+
+// sample counts are measured asynchronously, so the average is kept for the completion checks
+let averageSamples = 0;
 
 init();
 
@@ -78,19 +86,7 @@ async function init() {
 
 	}
 
-	// renderer
-	renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
-	renderer.physicallyCorrectLights = true;
-	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.setClearAlpha( 0 );
-	containerEl.appendChild( renderer.domElement );
-
-	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.tiles.set( params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
+	await createRenderer();
 
 	// scene
 	scene = new Scene();
@@ -105,14 +101,51 @@ async function init() {
 	controls.addEventListener( 'change', () => pathTracer.updateCamera() );
 
 	// models
-	const { scenarios } = await fetch( CONFIG_URL ).then( res => res.json() );
+	const [ { scenarios }, extraScenarios ] = await Promise.all( [
+		fetch( CONFIG_URL ).then( res => res.json() ),
+		fetch( EXTRA_CONFIG_URL ).then( res => res.json() ),
+	] );
 	modelDatabase = {};
 	scenarios.forEach( s => modelDatabase[ s.name ] = s );
 
-	window.addEventListener( 'hashchange', onHashChange );
-	onHashChange();
+	// add local scenarios for any sample assets the fidelity repo does not cover
+	const covered = new Set( scenarios.map( getSampleAssetName ) );
+	extraScenarios.forEach( s => {
+
+		if ( ! covered.has( getSampleAssetName( s ) ) ) {
+
+			modelDatabase[ s.name ] = s;
+
+		}
+
+	} );
+
+	window.addEventListener( 'popstate', onModelChange );
+	onModelChange();
 
 	animate();
+
+}
+
+async function createRenderer() {
+
+	// renderer - WebGPU version
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+	await renderer.init();
+	renderer.toneMapping = ACESFilmicToneMapping;
+	renderer.setClearAlpha( 0 );
+	containerEl.appendChild( renderer.domElement );
+
+	// path tracer - WebGPU version
+	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.useMegakernel( params.useMegakernel );
+	if ( params.useMegakernel ) {
+
+		pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
+
+	}
+
+	detailedSampleCount = null;
 
 }
 
@@ -121,9 +154,20 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// if rendering has completed then don't render
-	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( averageSamples >= maxSamples && maxSamples !== - 1 ) {
 
 		return;
+
+	}
+
+	if ( pathTracer.getSampleCountsAsync ) {
+
+		pathTracer.getSampleCountsAsync().then( counts => {
+
+			averageSamples = counts.avg;
+			detailedSampleCount = { ...counts };
+
+		} );
 
 	}
 
@@ -139,15 +183,26 @@ function animate() {
 
 	}
 
+	// show a page of the packed texture atlas instead of the render for debugging
+	if ( params.showAtlas >= 0 ) {
+
+		pathTracer.renderTextureAtlas( params.showAtlas );
+		return;
+
+	}
+
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.enablePathTracing = params.enable;
-		pathTracer.pausePathTracing = params.pause || pathTracer.samples > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause || averageSamples > maxSamples && maxSamples !== - 1;
 
-		pathTracer.renderSample();
+		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
-	} else if ( delaySamples > 0 || ! params.enable ) {
+			pathTracer.renderSample();
+
+		}
+
+	} else if ( ( delaySamples > 0 || ! params.enable ) && renderer.initialized !== false ) {
 
 		delaySamples = Math.max( delaySamples - 1, 0 );
 		renderer.render( scene, camera );
@@ -155,29 +210,20 @@ function animate() {
 	}
 
 	// rendering has completed
-	if ( pathTracer.samples >= maxSamples && maxSamples !== - 1 ) {
+	if ( averageSamples >= maxSamples && maxSamples !== - 1 ) {
 
 		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	loader.setSamples( detailedSampleCount );
 
 }
 
-function onHashChange() {
+function onModelChange() {
 
-	params.model = Object.keys( modelDatabase )[ 0 ];
-	if ( window.location.hash ) {
-
-		const modelName = window.location.hash.substring( 1 ).replaceAll( '%20', ' ' );
-		if ( modelName in modelDatabase ) {
-
-			params.model = modelName;
-
-		}
-
-	}
+	const modelName = new URLSearchParams( window.location.search ).get( 'model' );
+	params.model = modelName in modelDatabase ? modelName : Object.keys( modelDatabase )[ 0 ];
 
 	updateModel();
 
@@ -203,12 +249,19 @@ function onParamsChange() {
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
-	pathTracer.transmissiveBounces = params.transmissiveBounces;
 	pathTracer.renderScale = params.scale;
 
 	const model = modelDatabase[ params.model ];
 	scene.background = model && model.renderSkybox ? scene.environment : null;
 	pathTracer.updateEnvironment();
+
+}
+
+// the sample asset folder a scenario points at
+function getSampleAssetName( scenario ) {
+
+	const match = ( scenario.model || '' ).match( /glTF-Sample-Assets\/Models\/([^/]+)\// );
+	return match ? match[ 1 ] : null;
 
 }
 
@@ -229,13 +282,40 @@ function buildGui() {
 	gui = new GUI();
 	gui.add( params, 'model', Object.keys( modelDatabase ) ).onChange( v => {
 
-		window.location.hash = v;
+		const url = new URL( window.location );
+		url.searchParams.set( 'model', v );
+		window.history.pushState( {}, '', url );
+		onModelChange();
 
 	} );
+
+	// build the atlas page dropdown dynamically from the current atlas
+	const atlasOptions = { hide: - 1 };
+	const pageCount = pathTracer.textureAtlas.pageCount;
+	for ( let i = 0; i < pageCount; i ++ ) {
+
+		atlasOptions[ `page ${ i }` ] = i;
+
+	}
+
+	// reset the selection if the previously selected page no longer exists
+	if ( params.showAtlas >= pageCount ) {
+
+		params.showAtlas = - 1;
+
+	}
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
+	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
+
+		pathTracer.useMegakernel( params.useMegakernel );
+		pathTracer.reset();
+		detailedSampleCount = null;
+
+	} );
+	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
 	pathTracingFolder.add( params, 'scale', 0.1, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
@@ -245,11 +325,17 @@ function buildGui() {
 	} );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
-		pathTracer.tiles.set( v, v );
+		const tiles = pathTracer.tiles ?? pathTracer._pathTracer.tiles;
+		if ( tiles ) {
+
+			tiles.set( v, v );
+
+		}
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'transmissiveBounces', 1, 20, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+
+	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 
 	const comparisonFolder = gui.addFolder( 'Comparison' );
 	comparisonFolder.add( params, 'displayImage' );
@@ -261,7 +347,9 @@ function buildGui() {
 		'gltf-sample-viewer',
 		'model-viewer',
 		'rhodonite',
-		'stellar'
+		'stellar',
+		'vray',
+		'blender-cycles',
 	] ).onChange( updateImage );
 	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
 	comparisonFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
@@ -315,7 +403,7 @@ async function updateModel() {
 	const modelInfo = modelDatabase[ params.model ];
 	const {
 		verticalFoV = 45,
-		lighting = '../../../shared-assets/environments/lightroom_14b.hdr',
+		lighting = '../../../environments/lightroom_14b.hdr',
 	} = modelInfo;
 
 	let {
@@ -351,6 +439,11 @@ async function updateModel() {
 					loader.setPercentage( 0.5 * progress.loaded / progress.total );
 
 				}
+
+			} ).then( value => {
+
+				loader.setPercentage( 1 );
+				return value;
 
 			} ),
 		new Promise( resolve => manager.onLoad = resolve ),
@@ -406,15 +499,11 @@ async function updateModel() {
 	camera.aspect = width / height;
 	camera.fov = verticalFoV;
 	camera.updateProjectionMatrix();
+
+	controls.target.set( 0, 0, 0 );
 	controls.update();
 
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => {
-
-			loader.setPercentage( 0.5 + 0.5 * v );
-
-		}
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';
@@ -428,6 +517,6 @@ async function updateModel() {
 
 function updateImage() {
 
-	imgEl.src = `https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
+	imgEl.src = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
 
 }

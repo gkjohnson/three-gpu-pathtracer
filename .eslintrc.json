@@ -1,6 +1,9 @@
 {
 	"root": true,
 	"extends": "./node_modules/eslint-config-mdcs/index.js",
+	"globals": {
+		"GPUTextureUsage": "readonly"
+	},
 	"rules": {
 		"no-throw-literal": [
 			"error"
@@ -13,7 +16,7 @@
 			}
 		],
 		"quotes": [ "error", "single" ],
-		"indent": [ "error", "tab" ],
+		"indent": [ "error", "tab", { "SwitchCase": 1 } ],
 		"no-var": [ "error" ]
 	},
     	"overrides": [

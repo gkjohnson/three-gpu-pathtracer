@@ -1,7 +1,7 @@
 import {
 	Scene,
 	EquirectangularReflectionMapping,
-	WebGLRenderer,
+	WebGPURenderer,
 	PerspectiveCamera,
 	Mesh,
 	PlaneGeometry,
@@ -10,18 +10,19 @@ import {
 	Color,
 	ACESFilmicToneMapping,
 	NoToneMapping,
-} from 'three';
+	HalfFloatType,
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
-import { LoaderElement } from './utils/LoaderElement.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
+import { LoaderElement } from './src/LoaderElement.js';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { HDRImageGenerator } from './utils/HDRImageGenerator.js';
+import { HDRImageGenerator } from './src/HDRImageGenerator.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/nasa-m2020/MER_static.glb';
@@ -33,11 +34,9 @@ const MAX_SAMPLES = 45;
 const params = {
 	pause: false,
 	hdr: true,
-	sdrToneMapping: false,
 	environmentIntensity: 15,
-	tiles: 3,
-	bounces: 5,
 	renderScale: 1,
+	downloadHDR: () => downloadImage(),
 
 	...getScaledSettings(),
 };
@@ -45,7 +44,9 @@ const params = {
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
-let activeImage = false;
+
+// sample counts are measured asynchronously, so the average is kept for the pause checks
+let averageSamples = 0;
 
 init();
 
@@ -54,21 +55,22 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
+
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	// outputType HalfFloatType configures the canvas for extended-range tone mapping, so the path
+	// tracer's linear values above 1.0 are displayed directly in HDR ( on a capable display ).
+	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType } );
+	renderer.init();
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.5;
-	pathTracer.bounces = params.bounces;
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// generator
-	hdrGenerator = new HDRImageGenerator( renderer, document.querySelector( 'img' ) );
+	hdrGenerator = new HDRImageGenerator( renderer );
 
 	// camera
 	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
@@ -85,16 +87,17 @@ async function init() {
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
-		resetHdr();
 
 	} );
 	controls.update();
 
 	// load the environment map and model
+	const dracoLoader = new DRACOLoader();
 	const [ gltf, envTexture ] = await Promise.all( [
-		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).loadAsync( MODEL_URL ),
+		new GLTFLoader().setMeshoptDecoder( MeshoptDecoder ).setDRACOLoader( dracoLoader ).loadAsync( MODEL_URL ),
 		new HDRLoader().loadAsync( ENV_URL ),
 	] );
+	dracoLoader.dispose();
 
 	envTexture.mapping = EquirectangularReflectionMapping;
 	scene.environment = envTexture;
@@ -121,51 +124,32 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => loader.setPercentage( v ),
-	} );
+	pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
+	loader.setPercentage( 1 );
 
 	const gui = new GUI();
-	gui.add( params, 'pause' ).onChange( () => {
+	gui.add( params, 'hdr' ).onChange( v => {
 
-		resetHdr();
-
-	} );
-	gui.add( params, 'hdr' );
-	gui.add( params, 'sdrToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
 
 	} );
+	gui.add( params, 'pause' );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
 		pathTracer.reset();
-		resetHdr();
-
-	} );
-	gui.add( params, 'bounces', 1, 10 ).onChange( v => {
-
-		pathTracer.bounces = v;
-		pathTracer.reset();
-		resetHdr();
-
-	} );
-	gui.add( params, 'tiles', 1, 6, 1 ).onChange( v => {
-
-		pathTracer.tiles.setScalar( v );
 
 	} );
 	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
 
 		scene.environmentIntensity = v;
 		pathTracer.updateEnvironment();
-		resetHdr();
 
 	} );
+	gui.add( params, 'downloadHDR' ).name( 'Download HDR' );
 
 	window.addEventListener( 'resize', onResize );
 
@@ -186,14 +170,39 @@ function onResize() {
 	// update camera
 	pathTracer.updateCamera();
 
-	resetHdr();
-
 }
 
-function resetHdr() {
+let downloading = false;
+async function downloadImage() {
 
-	hdrGenerator.reset();
-	activeImage = false;
+	// readback + gainmap encode takes a moment, so guard against overlapping downloads
+	if ( downloading ) {
+
+		return;
+
+	}
+
+	downloading = true;
+
+	try {
+
+		const blob = await hdrGenerator.generateBlob( pathTracer.target );
+		const url = URL.createObjectURL( blob );
+
+		const anchor = document.createElement( 'a' );
+		anchor.href = url;
+		anchor.download = 'pathtraced.jpg';
+		document.body.appendChild( anchor );
+		anchor.click();
+		anchor.remove();
+
+		URL.revokeObjectURL( url );
+
+	} finally {
+
+		downloading = false;
+
+	}
 
 }
 
@@ -201,33 +210,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const doPause = params.pause && pathTracer.samples >= 1;
-	pathTracer.pausePathTracing = pathTracer.samples >= MAX_SAMPLES || doPause;
+	const doPause = params.pause && averageSamples >= 1;
+	pathTracer.pause = averageSamples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
 
-	if (
-		! hdrGenerator.encoding &&
-		params.hdr &&
-		( pathTracer.samples === MAX_SAMPLES || doPause ) &&
-		! activeImage
-	) {
+	pathTracer.getSampleCountsAsync().then( counts => {
 
-		// NOTE: this can be called repeatedly but takes up to 200 ms
-		hdrGenerator.updateFrom( pathTracer.target );
-		activeImage = true;
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
 
-	}
-
-	if ( hdrGenerator.completeImage && params.hdr ) {
-
-		hdrGenerator.image.classList.add( 'show' );
-
-	} else {
-
-		hdrGenerator.image.classList.remove( 'show' );
-
-	}
-
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	} );
 
 }

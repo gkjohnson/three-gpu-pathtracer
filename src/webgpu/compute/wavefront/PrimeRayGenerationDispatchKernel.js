@@ -1,0 +1,95 @@
+import { Vector2, Vector3 } from 'three';
+import { StorageBufferAttribute } from 'three/webgpu';
+import { uniform, storage } from 'three/tsl';
+import { ComputeKernel } from '../ComputeKernel.js';
+import { rayQueueStruct, hitQueueStruct } from './structs.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+
+export class PrimeRayGenerationDispatchKernel extends ComputeKernel {
+
+	constructor() {
+
+		const params = {
+			rayWorkGroupSize: uniform( new Vector3() ),
+
+			tileSize: uniform( new Vector2() ),
+			tileCount: uniform( new Vector2() ),
+			tileOffset: uniform( 1 ),
+
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
+			hitQueue: storage( new StorageBufferAttribute( 1, 1 ), hitQueueStruct ),
+
+			outputTileIndex: storage( new StorageBufferAttribute( 2, 1 ), 'u32' ).setName( 'outputTileIndex' ),
+			outputDispatch: storage( new StorageBufferAttribute( 3, 1 ), 'u32' ).setName( 'outputDispatch' ),
+		};
+
+		const fn = wgslTagFn/* wgsl */`
+			fn compute(
+				rayWorkGroupSize: vec3u,
+
+				tileSize: vec2u,
+				tileCount: vec2u,
+				tileOffset: u32,
+			) -> void {
+
+				let rayQueue = &${ params.rayQueue };
+				let hitQueue = &${ params.hitQueue };
+
+				let outputTileIndex = &${ params.outputTileIndex };
+				let outputDispatch = &${ params.outputDispatch };
+
+				// reset hit queue size from previous iteration
+				hitQueue.start = 0u;
+				hitQueue.end = 0u;
+
+				// keep the queue index small
+			    let queueCapacity = arrayLength( &rayQueue.elements );
+				if ( rayQueue.start >= queueCapacity ) {
+
+					// uint division results in a floored value
+					let offset = rayQueue.start / queueCapacity;
+					rayQueue.start = rayQueue.start - queueCapacity * offset;
+					rayQueue.end = rayQueue.end - queueCapacity * offset;
+
+				}
+
+				// calculate the amount of elements in the queue
+			    var queueSize = rayQueue.end - rayQueue.start;
+
+				// calculate the overhead of space in the queue and how much space we need to run a new tile
+				let overhead = queueCapacity - queueSize;
+				let requiredSpace = tileSize.x * tileSize.y;
+
+				if ( overhead >= requiredSpace ) {
+
+					// calculate the necessary dispatch size to cover the tile
+					outputDispatch[ 0 ] = u32( ceil( f32( tileSize.x ) / f32( rayWorkGroupSize.x ) ) );
+					outputDispatch[ 1 ] = u32( ceil( f32( tileSize.y ) / f32( rayWorkGroupSize.y ) ) );
+					outputDispatch[ 2 ] = 1;
+
+					// calculate the tile index to generate rays for
+					let totalTiles = tileCount.x * tileCount.y;
+					let currentIndex = outputTileIndex[ 1 ] * tileCount.x + outputTileIndex[ 0 ];
+					let nextIndex = ( currentIndex + tileOffset ) % totalTiles;
+
+					outputTileIndex[ 0 ] = nextIndex % tileCount.x;
+					outputTileIndex[ 1 ] = nextIndex / tileCount.x;
+
+				} else {
+
+					outputDispatch[ 0 ] = 0;
+					outputDispatch[ 1 ] = 0;
+					outputDispatch[ 2 ] = 0;
+
+				}
+
+			}
+		`;
+
+		super( fn( params ) );
+
+		this.defineUniformAccessors( params );
+
+	}
+
+}

@@ -10,17 +10,16 @@ import {
 	MeshStandardMaterial,
 	PerspectiveCamera,
 	Scene,
-	WebGLRenderer,
-} from 'three';
+	WebGPURenderer,
+} from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { ParallelMeshBVHWorker } from 'three-mesh-bvh/worker';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/sd-macross-city-standoff-diorama/scene.glb';
@@ -33,9 +32,9 @@ let loader;
 const params = {
 
 	// path tracer settings
-	bounces: 5,
-	renderScale: 1 / window.devicePixelRatio,
-	filterGlossyFactor: 0.5,
+	bounces: 15,
+	renderScale: 1,
+	filterGlossyFactor: 1,
 	tiles: 1,
 	multipleImportanceSampling: true,
 
@@ -53,14 +52,14 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.setBVHWorker( new ParallelMeshBVHWorker() );
 
 	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -119,14 +118,9 @@ async function init() {
 	overlayScene.add( sampleMesh, sampleMesh2 );
 
 	// initialize scene
-	await pathTracer.setSceneAsync( scene, camera, {
-		onProgress: v => {
+	pathTracer.setScene( scene, camera );
 
-			loader.setPercentage( v );
-
-		}
-	} );
-
+	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 
 	// gui
@@ -137,8 +131,8 @@ async function init() {
 		pathTracer.tiles.set( value, value );
 
 	} );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'bounces', 1, 15, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
@@ -208,6 +202,6 @@ function animate() {
 	renderer.render( overlayScene, camera );
 	renderer.autoClear = originalAutoClear;
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

@@ -1,37 +1,104 @@
 import {
 	ACESFilmicToneMapping,
-	NoToneMapping,
 	Box3,
+	Group,
 	LoadingManager,
 	Sphere,
 	DoubleSide,
 	Mesh,
 	MeshStandardMaterial,
 	PlaneGeometry,
-	MeshPhysicalMaterial,
 	Scene,
-	PerspectiveCamera,
 	OrthographicCamera,
-	WebGLRenderer,
+	Vector3,
+	WebGPURenderer,
 	EquirectangularReflectionMapping,
-} from 'three';
+	RectAreaLight,
+	RectAreaLightNode,
+} from 'three/webgpu';
+import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
 import { LDrawLoader } from 'three/examples/jsm/loaders/LDrawLoader.js';
 import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import { GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
+import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
-import { ParallelMeshBVHWorker, GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
+import { Backdrop } from './src/Backdrop.js';
+import { MODEL_LIST } from './modelList.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 
+/**
+ * Limits requested by this application.
+ *
+ * Add required limits here.
+ *
+ */
+const DEVICE_LIMITS_REQUESTED = [
+	'maxBufferSize',
+	'maxStorageBufferBindingSize',
+];
+
+const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
+
+const DEFAULT_FOV = 45;
+const DEFAULT_BOKEH_SIZE = 0;
+
+// how far behind the model the backdrop's curve begins
+const BACKDROP_DISTANCE = 1;
+
+// stage lighting rigs built from rect area lights
+const LIGHT_RIGS = {
+	'three point': [
+		{ size: 2, position: [ 2, 1.6, 1.8 ], intensity: 6, color: 0xfff0dd },
+		{ size: 2.5, position: [ - 2.4, 0.8, 1.6 ], intensity: 1.5, color: 0xdfeaff },
+		{ size: 1.6, position: [ - 1.2, 1.8, - 2.2 ], intensity: 9, color: 0xffffff },
+	],
+	// taken from the Coffee Maker scene
+	softbox: [
+		{ size: [ 2.1, 2.5 ], position: [ - 1.55, 0.35, 0.9 ], intensity: 2, color: 0xffffff },
+		{ size: [ 2.5, 2 ], position: [ 1.8, 0.5, 0.25 ], intensity: 2, color: 0xffffff },
+		{ size: 2.55, position: [ 0, 1.9, 0.2 ], intensity: 2, color: 0xffffff },
+	],
+	overhead: [
+		{ size: 3, position: [ 0, 2.4, 0.4 ], intensity: 8, color: 0xffffff },
+	],
+	'side strips': [
+		{ size: [ 0.5, 3.2 ], position: [ - 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+		{ size: [ 0.5, 3.2 ], position: [ 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+	],
+	// taken from the Sasha ring scene
+	'light box': [
+		{ size: [ 3.55, 8.8 ], position: [ 0.65, 1.75, - 3.45 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 5, color: 0xffffff },
+		{ size: [ 1.65, 7.7 ], position: [ - 1.8, 0.6, - 2.8 ], rotation: [ 0, - Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
+		{ size: [ 1.65, 1.7 ], position: [ 2.25, 0.6, 0.2 ], rotation: [ 0, Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
+		{ size: [ 1.7, 2.8 ], position: [ 0.1, 1.15, 2.4 ], rotation: [ 0, 0, 0 ], intensity: 3, color: 0xffffff },
+	],
+	'overhead strips': [
+		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ - 0.3, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.3, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+		{ size: [ 0.35, 3.4 ], position: [ 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
+	],
+};
+
+const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
+
+// sentinel for models that light themselves and should not get an environment
+const NO_ENVIRONMENT = 'none';
+
 const envMaps = {
+	'none': NO_ENVIRONMENT,
 	'Royal Esplanade': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/royal_esplanade_1k.hdr',
 	'Moonless Golf': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/moonless_golf_1k.hdr',
 	'Overpass': 'https://raw.githubusercontent.com/mrdoob/three.js/r150/examples/textures/equirectangular/pedestrian_overpass_1k.hdr',
@@ -74,102 +141,125 @@ const envMaps = {
 const params = {
 
 	multipleImportanceSampling: true,
-	acesToneMapping: true,
-	renderScale: 1 / window.devicePixelRatio,
+	renderScale: 1,
 	tiles: 2,
 
 	model: '',
 
 	envMap: envMaps[ 'Aristea Wreck Puresky' ],
 
-	gradientTop: '#bfd8ff',
-	gradientBottom: '#ffffff',
-
-	environmentIntensity: 1.0,
-	environmentRotation: 0,
-
 	cameraProjection: 'Perspective',
 
-	backgroundType: 'Gradient',
-	bgGradientTop: '#111111',
-	bgGradientBottom: '#000000',
-	backgroundBlur: 0.0,
-	transparentBackground: false,
-	checkerboardTransparency: true,
+	stage: 'floor',
+
+	background: 'white',
+
+	lighting: 'none',
 
 	enable: true,
-	bounces: 5,
-	filterGlossyFactor: 0.5,
+	bounces: 15,
 	pause: false,
 
-	floorColor: '#111111',
-	floorOpacity: 1.0,
-	floorRoughness: 0.2,
-	floorMetalness: 0.2,
+	bokehSize: DEFAULT_BOKEH_SIZE,
+	focusDistance: 1,
 
 	...getScaledSettings(),
 
 };
 
-let floorPlane, gui, stats;
+let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
 let loader;
 let models;
 
+// a model loaded from a url or dropped file, which is displayed instead of a list entry
+let customModel = null;
+
+const dropZone = document.getElementById( 'drop-zone' );
+
+// sample counts are measured asynchronously, so the average is kept for the pause check
+let averageSamples = 0;
+
 const orthoWidth = 2;
+
+const _forward = new Vector3();
 
 init();
 
-async function waitFrame() {
+/**
+ * Returns required GPU limits according to DEVICE_LIMITS_REQUESTED.
+ *
+ * Only limits explicitly listed in DEVICE_LIMITS_REQUESTED will be requested.
+ * This avoids requesting all adapter limits and improves compatibility.
+ *
+ * Note: Limits should be set based on the specific requirements of the application.
+ * ensuring broader device compatibility and optimal resource usage.
+ *
+ * @param {GPUAdapter} adapter
+ * @returns {Record<string, number>}
+ */
+function getRequiredDeviceLimits( adapter ) {
 
-	return new Promise( resolve => requestAnimationFrame( resolve ) );
+	const limits = {};
+
+	for ( const limit of DEVICE_LIMITS_REQUESTED ) {
+
+		const value = adapter.limits[ limit ];
+
+		if ( typeof value === 'number' && Number.isFinite( value ) ) {
+
+			limits[ limit ] = value;
+
+		}
+
+	}
+
+	return limits;
 
 }
 
 async function init() {
 
-	// Wait for the models list to be available since vite doesn't guarantee execution order
-	// of module tags and we rely on the other script to define the set of models for display
-	// in this example. TODO: handle this more gracefully.
-	while ( ! window.MODEL_LIST ) {
-
-		await waitFrame();
-
-	}
-
-	models = window.MODEL_LIST || {};
+	models = { ...MODEL_LIST };
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
+	loader.setDescription( DESCRIPTION );
+
+	// adapter limits
+	const adapter = await navigator.gpu?.requestAdapter();
+	const requiredLimits = getRequiredDeviceLimits( adapter );
+
+	// ltc textures so rect area lights rasterize correctly in the preview
+	RectAreaLightTexturesLib.init();
+	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.setBVHWorker( new GenerateMeshBVHWorker() );
-	pathTracer.physicallyCorrectLights = true;
+	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.tiles.set( params.tiles, params.tiles );
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.transmissiveBounces = 10;
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	perspectiveCamera = new PerspectiveCamera( 60, aspect, 0.025, 500 );
-	perspectiveCamera.position.set( - 1, 0.25, 1 );
+	perspectiveCamera = new PhysicalCamera( DEFAULT_FOV, aspect, 0.025, 500 );
+	perspectiveCamera.bokehSize = DEFAULT_BOKEH_SIZE;
+	perspectiveCamera.focusDistance = 1;
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
-	orthoCamera.position.set( - 1, 0.25, 1 );
 
 	// background map
 	gradientMap = new GradientEquirectTexture();
-	gradientMap.topColor.set( params.bgGradientTop );
-	gradientMap.bottomColor.set( params.bgGradientBottom );
+	gradientMap.topColor.set( 0x111111 );
+	gradientMap.bottomColor.set( 0x000000 );
 	gradientMap.update();
 
 	// controls
@@ -179,6 +269,7 @@ async function init() {
 		pathTracer.updateCamera();
 
 	} );
+	resetCamera();
 
 	// scene
 	scene = new Scene();
@@ -200,18 +291,81 @@ async function init() {
 	floorPlane.rotation.x = - Math.PI / 2;
 	scene.add( floorPlane );
 
+	// a two tier cylinder for the model to sit on, with the top surface at the model's base
+	pedestalMaterial = new MeshStandardMaterial( { color: 0x1c1c1c, roughness: 0.35, metalness: 0 } );
+	pedestal = new Group();
+	const tiers = [ { radius: 0.9, height: 0.05 }, { radius: 0.92, height: 0.05 } ];
+	tiers.forEach( ( { radius, height }, i ) => {
+
+		// each tier sinks halfway into the one above it so the pair reads as a single piece with a
+		// ridge running around it rather than two stacked discs
+		const tier = new Mesh( createPedestalGeometry( radius, height ), pedestalMaterial );
+		tier.position.y = - height * ( 0.5 + i * 0.2 );
+		pedestal.add( tier );
+
+	} );
+	scene.add( pedestal );
+
+	// oriented once per model load, see alignBackdropToCamera
+	backdrop = new Backdrop();
+	scene.add( backdrop );
+
+	// one group per lighting rig
+	lightRigs = new Group();
+	for ( const name in LIGHT_RIGS ) {
+
+		const rig = new Group();
+		rig.name = name;
+		LIGHT_RIGS[ name ].forEach( ( { size, position, rotation, intensity, color } ) => {
+
+			const [ width, height ] = Array.isArray( size ) ? size : [ size, size ];
+			const light = new RectAreaLight( color, intensity, width, height );
+			light.position.set( ...position );
+
+			// lights aim at the model unless the rig fixes their orientation
+			if ( rotation ) light.rotation.set( ...rotation );
+			else light.lookAt( 0, 0.35, 0 );
+
+			rig.add( light );
+
+		} );
+
+		lightRigs.add( rig );
+
+	}
+
+	scene.add( lightRigs );
+
 	stats = new Stats();
 	document.body.appendChild( stats.dom );
 
 	updateCameraProjection( params.cameraProjection );
-	onHashChange();
+	updateStage();
+	updateLighting();
+	onModelChange();
 	updateEnvMap();
 	onResize();
 
 	animate();
 
 	window.addEventListener( 'resize', onResize );
-	window.addEventListener( 'hashchange', onHashChange );
+	window.addEventListener( 'popstate', onModelChange );
+	window.addEventListener( 'drop', onDrop );
+	window.addEventListener( 'dragover', e => {
+
+		e.preventDefault();
+		dropZone.classList.remove( 'hidden' );
+
+	} );
+	window.addEventListener( 'dragleave', e => {
+
+		if ( e.relatedTarget === null || e.relatedTarget === document.documentElement ) {
+
+			dropZone.classList.add( 'hidden' );
+
+		}
+
+	} );
 
 }
 
@@ -229,7 +383,7 @@ function animate() {
 
 	if ( params.enable ) {
 
-		if ( ! params.pause || pathTracer.samples < 1 ) {
+		if ( ! params.pause || averageSamples < 1 ) {
 
 			pathTracer.renderSample();
 
@@ -241,78 +395,150 @@ function animate() {
 
 	}
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		averageSamples = counts.avg;
+		loader.setSamples( counts );
+
+	} );
+
+}
+
+// A rounded box scaled into a disc. The corner radius is half the box width so the x / z profile
+// closes into a circle, and scaling y shrinks that same radius into a small bevel around the rim.
+function createPedestalGeometry( radius, height, bevel = 0.01, segments = 32 ) {
+
+	const geometry = new RoundedBoxGeometry( 2, height / bevel, 2, segments, 1 );
+	geometry.scale( radius, bevel, radius );
+
+	return geometry;
+
+}
+
+// the scenery objects are all present in the scene and swapped by toggling visibility, which only
+// requires the transforms to be re-uploaded rather than a full scene rebuild
+function updateStage() {
+
+	floorPlane.visible = params.stage === 'floor';
+	pedestal.visible = params.stage === 'pedestal';
+	backdrop.visible = params.stage === 'backdrop';
+
+	pathTracer.updateTransforms();
+
+}
+
+function updateLighting() {
+
+	lightRigs.children.forEach( rig => rig.visible = rig.name === params.lighting );
+
+	pathTracer.updateLights();
+
+}
+
+// Orients the backdrop and light rigs relative to the camera. Only run when the model changes so
+// they stay put while orbiting.
+function alignBackdropToCamera() {
+
+	const dx = activeCamera.position.x;
+	const dz = activeCamera.position.z;
+	const angle = Math.atan2( dx, dz );
+
+	backdrop.rotation.y = angle;
+	backdrop.position.x = - Math.sin( angle ) * BACKDROP_DISTANCE;
+	backdrop.position.z = - Math.cos( angle ) * BACKDROP_DISTANCE;
+
+	lightRigs.rotation.y = angle;
 
 }
 
 function onParamsChange() {
 
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.bounces = params.bounces;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.renderScale = params.renderScale;
 
-	floorPlane.material.color.set( params.floorColor );
-	floorPlane.material.roughness = params.floorRoughness;
-	floorPlane.material.metalness = params.floorMetalness;
-	floorPlane.material.opacity = params.floorOpacity;
-
-	scene.environmentIntensity = params.environmentIntensity;
-	scene.environmentRotation.y = params.environmentRotation;
-	scene.backgroundBlurriness = params.backgroundBlur;
-
-	if ( params.backgroundType === 'Gradient' ) {
-
-		gradientMap.topColor.set( params.bgGradientTop );
-		gradientMap.bottomColor.set( params.bgGradientBottom );
-		gradientMap.update();
-
-		scene.background = gradientMap;
-		scene.backgroundIntensity = 1;
-		scene.environmentRotation.y = 0;
-
-	} else {
-
-		scene.background = scene.environment;
-		scene.backgroundIntensity = params.environmentIntensity;
-		scene.backgroundRotation.y = params.environmentRotation;
-
-	}
-
-	if ( params.transparentBackground ) {
+	const transparent = params.background === 'transparent';
+	if ( transparent ) {
 
 		scene.background = null;
 		renderer.setClearAlpha( 0 );
 
+	} else {
+
+		const dark = params.background === 'black';
+		gradientMap.topColor.set( dark ? 0x111111 : 0xe0e0e0 );
+		gradientMap.bottomColor.set( dark ? 0x000000 : 0xc4c4c4 );
+		gradientMap.update();
+
+		scene.background = gradientMap;
+		renderer.setClearAlpha( 1 );
+
 	}
+
+	const light = params.background === 'white';
+	floorPlane.material.color.set( light ? 0xd2d2d2 : 0x111111 );
+	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
+	backdrop.material.color.set( light ? 0xc6c6c6 : 0x161616 );
+	backdrop.material.roughness = light ? 0.2 : 0.6;
+
+	document.body.classList.toggle( 'checkerboard', transparent );
+	document.body.classList.toggle( 'light-background', light );
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
+	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 }
 
-function onHashChange() {
+function onModelChange() {
 
-	let hashModel = '';
-	if ( window.location.hash ) {
+	const value = new URLSearchParams( window.location.search ).get( 'model' ) || '';
 
-		const modelName = decodeURI( window.location.hash.substring( 1 ) );
-		if ( modelName in models ) {
+	if ( /^https?:\/\//.test( value ) ) {
 
-			hashModel = modelName;
+		customModel = { url: value };
+		params.model = '';
 
-		}
+	} else if ( value in models ) {
+
+		customModel = null;
+		params.model = value;
+
+	} else {
+
+		customModel = null;
+		params.model = Object.keys( models )[ 0 ];
 
 	}
 
-	if ( ! ( hashModel in models ) ) {
-
-		hashModel = Object.keys( models )[ 0 ];
-
-	}
-
-	params.model = hashModel;
 	updateModel();
+
+}
+
+// loads dropped files without adding them to the model list
+async function onDrop( e ) {
+
+	e.preventDefault();
+	dropZone.classList.add( 'hidden' );
+
+	const files = [ ...e.dataTransfer.files ];
+	const rootFile = files.find( file => MODEL_FILE_REGEX.test( file.name ) );
+	if ( ! rootFile ) {
+
+		return;
+
+	}
+
+	// the root file is loaded by name so the extension is still available to pick a loader
+	const fileMap = new Map();
+	files.forEach( file => fileMap.set( file.name, URL.createObjectURL( file ) ) );
+
+	customModel = { url: rootFile.name, fileMap };
+	params.model = '';
+
+	await updateModel();
+
+	// the files are only needed while loading
+	fileMap.forEach( url => URL.revokeObjectURL( url ) );
 
 }
 
@@ -340,41 +566,30 @@ function onResize() {
 
 function buildGui() {
 
-	if ( gui ) {
-
-		gui.destroy();
-
-	}
-
 	gui = new GUI();
 
-	gui.add( params, 'model', Object.keys( models ).sort() ).onChange( v => {
+	// custom models are shown as an empty entry since they are not in the list
+	const modelOptions = customModel ? [ '', ...Object.keys( models ) ] : Object.keys( models );
+	gui.add( params, 'model', modelOptions ).onChange( v => {
 
-		window.location.hash = v;
+		const url = new URL( window.location );
+		url.searchParams.set( 'model', v );
+		window.history.pushState( {}, '', url );
+		onModelChange();
 
 	} );
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-
-	} );
-	pathTracingFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'filterGlossyFactor', 0, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( () => {
-
-		onParamsChange();
-
-	} );
+	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
 
 		pathTracer.tiles.set( v, v );
 
 	} );
+	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
@@ -382,38 +597,42 @@ function buildGui() {
 	} );
 	pathTracingFolder.open();
 
-	const environmentFolder = gui.addFolder( 'environment' );
-	environmentFolder.add( params, 'envMap', envMaps ).name( 'map' ).onChange( updateEnvMap );
-	environmentFolder.add( params, 'environmentIntensity', 0.0, 10.0 ).onChange( onParamsChange ).name( 'intensity' );
-	environmentFolder.add( params, 'environmentRotation', 0, 2 * Math.PI ).onChange( onParamsChange );
-	environmentFolder.open();
+	const cameraFolder = gui.addFolder( 'Camera' );
+	cameraFolder.add( params, 'bokehSize', 0, 100, 0.5 ).onChange( updateDepthOfField );
+	cameraFolder.add( params, 'focusDistance', 0.05, 10, 0.01 ).onChange( updateDepthOfField );
 
-	const backgroundFolder = gui.addFolder( 'background' );
-	backgroundFolder.add( params, 'backgroundType', [ 'Environment', 'Gradient' ] ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientTop' ).onChange( onParamsChange );
-	backgroundFolder.addColor( params, 'bgGradientBottom' ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'backgroundBlur', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'transparentBackground', 0, 1 ).onChange( onParamsChange );
-	backgroundFolder.add( params, 'checkerboardTransparency' ).onChange( v => {
-
-		if ( v ) document.body.classList.add( 'checkerboard' );
-		else document.body.classList.remove( 'checkerboard' );
-
-	} );
-
-	const floorFolder = gui.addFolder( 'floor' );
-	floorFolder.addColor( params, 'floorColor' ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorRoughness', 0, 1 ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorMetalness', 0, 1 ).onChange( onParamsChange );
-	floorFolder.add( params, 'floorOpacity', 0, 1 ).onChange( onParamsChange );
-	floorFolder.close();
+	const backdropFolder = gui.addFolder( 'Backdrop' );
+	backdropFolder.add( params, 'envMap', envMaps ).name( 'environment' ).onChange( updateEnvMap );
+	backdropFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'stage' ).onChange( updateStage );
+	backdropFolder.add( params, 'background', [ 'black', 'white', 'transparent' ] ).name( 'background' ).onChange( onParamsChange );
+	backdropFolder.add( params, 'lighting', [ 'none', ...Object.keys( LIGHT_RIGS ) ] ).name( 'lighting' ).onChange( updateLighting );
+	backdropFolder.open();
 
 }
 
 function updateEnvMap() {
 
+	if ( params.envMap === NO_ENVIRONMENT ) {
+
+		scene.environment?.dispose();
+		scene.environment = null;
+		pathTracer.updateEnvironment();
+		onParamsChange();
+		return;
+
+	}
+
+	const url = params.envMap;
 	new HDRLoader()
-		.load( params.envMap, texture => {
+		.load( url, texture => {
+
+			// a different environment was selected while this one downloaded
+			if ( params.envMap !== url ) {
+
+				texture.dispose();
+				return;
+
+			}
 
 			if ( scene.environment ) {
 
@@ -427,6 +646,47 @@ function updateEnvMap() {
 			onParamsChange();
 
 		} );
+
+}
+
+// models are normalized to a unit sphere at the origin so the framing is the same for all of them
+function resetCamera() {
+
+	perspectiveCamera.position.set( - 1, 0.35, 1 ).multiplyScalar( 1.7 );
+	perspectiveCamera.fov = DEFAULT_FOV;
+	perspectiveCamera.updateProjectionMatrix();
+	orthoCamera.position.set( - 1, 0.25, 1 );
+
+	controls.target.set( 0, 0, 0 );
+	controls.update();
+
+}
+
+// frame the view from the camera embedded in the model, keeping the screen aspect ratio
+function useModelCamera( sceneCamera ) {
+
+	scene.updateMatrixWorld( true );
+
+	sceneCamera.getWorldPosition( perspectiveCamera.position );
+	orthoCamera.position.copy( perspectiveCamera.position );
+
+	perspectiveCamera.fov = sceneCamera.fov;
+	perspectiveCamera.updateProjectionMatrix();
+
+	// adjust the controls target point
+	const forward = sceneCamera.getWorldDirection( _forward );
+	const distance = Math.max( - forward.dot( perspectiveCamera.position ), 0.1 );
+	controls.target.copy( perspectiveCamera.position ).addScaledVector( forward, distance );
+
+	controls.update();
+
+}
+
+function updateDepthOfField() {
+
+	perspectiveCamera.bokehSize = params.bokehSize;
+	perspectiveCamera.focusDistance = params.focusDistance;
+	pathTracer.updateCamera();
 
 }
 
@@ -458,75 +718,19 @@ function updateCameraProjection( cameraProjection ) {
 
 }
 
-function convertOpacityToTransmission( model, ior ) {
-
-	model.traverse( c => {
-
-		if ( c.material ) {
-
-			const material = c.material;
-			if ( material.opacity < 0.65 && material.opacity > 0.2 ) {
-
-				const newMaterial = new MeshPhysicalMaterial();
-				for ( const key in material ) {
-
-					if ( key in material ) {
-
-						if ( material[ key ] === null ) {
-
-							continue;
-
-						}
-
-						if ( material[ key ].isTexture ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						} else if ( material[ key ].copy && material[ key ].constructor === newMaterial[ key ].constructor ) {
-
-							newMaterial[ key ].copy( material[ key ] );
-
-						} else if ( ( typeof material[ key ] ) === 'number' ) {
-
-							newMaterial[ key ] = material[ key ];
-
-						}
-
-					}
-
-				}
-
-				newMaterial.opacity = 1.0;
-				newMaterial.transmission = 1.0;
-				newMaterial.ior = ior;
-
-				const hsl = {};
-				newMaterial.color.getHSL( hsl );
-				hsl.l = Math.max( hsl.l, 0.35 );
-				newMaterial.color.setHSL( hsl.h, hsl.s, hsl.l );
-
-				c.material = newMaterial;
-
-			}
-
-		}
-
-	} );
-
-}
-
 async function updateModel() {
 
 	if ( gui ) {
 
-		document.body.classList.remove( 'checkerboard' );
 		gui.destroy();
 		gui = null;
 
 	}
 
-	const modelInfo = models[ params.model ];
+	const modelInfo = customModel || models[ params.model ];
 
+	// hide the canvas and the transparency checkerboard while loading
+	document.body.classList.remove( 'checkerboard' );
 	renderer.domElement.style.visibility = 'hidden';
 	loader.setPercentage( 0 );
 
@@ -562,35 +766,12 @@ async function updateModel() {
 
 			loader.setPercentage( 0.5 * v );
 
-		} );
+		}, modelInfo.fileMap );
 
 	} catch ( err ) {
 
 		loader.setCredits( 'Failed to load model:' + err.message );
 		loader.setPercentage( 1 );
-
-	}
-
-	// update after model load
-	// TODO: clean up
-	if ( modelInfo.removeEmission ) {
-
-		model.traverse( c => {
-
-			if ( c.material ) {
-
-				c.material.emissiveMap = null;
-				c.material.emissiveIntensity = 0;
-
-			}
-
-		} );
-
-	}
-
-	if ( modelInfo.opacityToTransmission ) {
-
-		convertOpacityToTransmission( model, modelInfo.ior || 1.5 );
 
 	}
 
@@ -628,44 +809,98 @@ async function updateModel() {
 	const sphere = new Sphere();
 	box.getBoundingSphere( sphere );
 
-	model.scale.setScalar( 1 / sphere.radius );
-	model.position.multiplyScalar( 1 / sphere.radius );
-	box.setFromObject( model );
-	floorPlane.position.y = box.min.y;
+	const scale = 1 / sphere.radius;
+	model.scale.setScalar( scale );
+	model.position.multiplyScalar( scale );
+	box.setFromObject( model, true );
 
-	scene.add( model );
+	// attenuation and light dimensions are measured in world units and ignore the object
+	// hierarchy scale, so they must be scaled with the model
+	const scaledMaterials = new Set();
+	model.traverse( c => {
 
-	await pathTracer.setSceneAsync( scene, activeCamera, {
+		if ( c.material && ! scaledMaterials.has( c.material ) ) {
 
-		onProgress: v => loader.setPercentage( 0.5 + 0.5 * v ),
+			scaledMaterials.add( c.material );
+			c.material.attenuationDistance *= scale;
+
+		}
+
+		if ( c.isRectAreaLight ) {
+
+			c.width *= scale;
+			c.height *= scale;
+
+		}
 
 	} );
 
+	// rest the scenery on the bottom of the model
+	floorPlane.position.y = box.min.y - 1e-3;
+	pedestal.position.y = box.min.y - 1e-3;
+	backdrop.position.y = box.min.y - 1e-3;
+
+	scene.add( model );
+
+	// view the scene through the camera embedded in the model when one is present
+	let sceneCamera = null;
+	model.traverse( c => {
+
+		if ( ! sceneCamera && c.isPerspectiveCamera ) sceneCamera = c;
+
+	} );
+
+	if ( sceneCamera ) {
+
+		useModelCamera( sceneCamera );
+
+	} else {
+
+		resetCamera();
+
+	}
+
+	alignBackdropToCamera();
+
+	pathTracer.setScene( scene, activeCamera );
+
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
-	params.bounces = modelInfo.bounces || 5;
-	params.floorColor = modelInfo.floorColor || '#111111';
-	params.floorRoughness = modelInfo.floorRoughness || 0.2;
-	params.floorMetalness = modelInfo.floorMetalness || 0.2;
-	params.bgGradientTop = modelInfo.gradientTop || '#111111';
-	params.bgGradientBottom = modelInfo.gradientBot || '#000000';
+
+	// models that carry their own lighting can override the scene defaults
+	params.envMap = envMaps[ modelInfo.envMap ] ?? modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
+	params.lighting = modelInfo.lighting ?? 'none';
+	params.stage = modelInfo.stage ?? 'floor';
+	params.background = modelInfo.background ?? 'white';
+
+	params.bokehSize = modelInfo.bokehSize ?? DEFAULT_BOKEH_SIZE;
+	params.focusDistance = modelInfo.focusDistance ?? 1;
+
+	updateStage();
+	updateLighting();
+	updateEnvMap();
+	updateDepthOfField();
 
 	buildGui();
 	onParamsChange();
 
 	renderer.domElement.style.visibility = 'visible';
-	if ( params.checkerboardTransparency ) {
-
-		document.body.classList.add( 'checkerboard' );
-
-	}
 
 }
 
-async function loadModel( url, onProgress ) {
+async function loadModel( url, onProgress, fileMap = null ) {
 
 	// TODO: clean up
 	const manager = new LoadingManager();
+
+	// dropped files are loaded by name and resolved to their blob urls here so relative
+	// references between them still work
+	if ( fileMap ) {
+
+		manager.setURLModifier( url => fileMap.get( url.split( '/' ).pop() ) || url );
+
+	}
+
 	if ( /dae$/i.test( url ) ) {
 
 		const complete = new Promise( resolve => manager.onLoad = resolve );
@@ -703,16 +938,23 @@ async function loadModel( url, onProgress ) {
 
 	} else if ( /(gltf|glb)$/i.test( url ) ) {
 
+		const dracoLoader = new DRACOLoader();
+		const ktx2Loader = new KTX2Loader().detectSupport( renderer );
+
 		const complete = new Promise( resolve => manager.onLoad = resolve );
-		const gltf = await new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder ).loadAsync( url, progress => {
+		const gltf = await new GLTFLoader( manager )
+			.setMeshoptDecoder( MeshoptDecoder )
+			.setDRACOLoader( dracoLoader )
+			.setKTX2Loader( ktx2Loader )
+			.loadAsync( url, progress => {
 
-			if ( progress.total !== 0 && progress.total >= progress.loaded ) {
+				if ( progress.total !== 0 && progress.total >= progress.loaded ) {
 
-				onProgress( progress.loaded / progress.total );
+					onProgress( progress.loaded / progress.total );
 
-			}
+				}
 
-		} );
+			} );
 		await complete;
 
 		return gltf.scene;
