@@ -384,7 +384,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( ray.direction );
-									envMisWeight = ${ misHeuristicFn }( misPdf, envPdf );
+									envMisWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 								}
 
