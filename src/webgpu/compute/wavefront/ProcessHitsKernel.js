@@ -7,7 +7,7 @@ import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../../nodes/random.wgsl.js';
-import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_CHANNEL_COUNT, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -99,7 +99,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 				// The smallest pdf seen along the path for the glossy filter is tracked below
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
+				var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
 
 				// Stochastically pass through partially transparent surfaces by re-enqueueing
 				// the ray at the hit point, advancing the alpha depth but not the bounce count.
@@ -119,13 +119,29 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].minPdf = input.minPdf;
 					rayQueue.elements[ index ].alphaDepth = input.alphaDepth + 1u;
 					rayQueue.elements[ index ].bsdfPdf = input.bsdfPdf;
+					rayQueue.elements[ index ].dispersionChannel = input.dispersionChannel;
 					return;
 
 				}
 
-				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
-
 				var throughputColor = input.throughputColor;
+				var dispersionChannel = input.dispersionChannel;
+
+				let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+				if ( isDispersive ) {
+
+					let channel = dispersionChannel % ${ DISPERSION_CHANNEL_COUNT }u;
+					surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, channel );
+					if ( dispersionChannel >= ${ DISPERSION_CHANNEL_COUNT }u ) {
+
+						dispersionChannel = channel;
+						throughputColor *= ${ dispersionColorWeightFunc }( channel );
+
+					}
+
+				}
+
+				let scatterRec = ${ bsdfSampleFn }( input.view, surface );
 
 				// attenuate the light transmitted through the volume when exiting a backface
 				if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
@@ -197,6 +213,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 					rayQueue.elements[ index ].alphaDepth = input.alphaDepth;
+					rayQueue.elements[ index ].dispersionChannel = dispersionChannel;
 
 				}
 
