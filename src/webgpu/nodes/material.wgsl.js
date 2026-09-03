@@ -598,16 +598,20 @@ export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// KHR_materials_dispersion stores 20 / Abbe number and defines this RGB IOR approximation:
+// Cauchy IOR approximation at the Fraunhofer C, d, and F spectral lines:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
+// https://github.com/bsdorra/slang-pbr/blob/c12046ec3b9628bcfc384ed2c275c92d007e5d7e/src/models/enterprise/components/transmission.slang#L20-L27
 export const DISPERSION_CHANNEL_COUNT = 3;
 
 export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 	fn dispersionIor( ior: f32, dispersion: f32, channel: u32 ) -> f32 {
 
-		let halfSpread = ( ior - 1.0 ) * 0.025 * dispersion;
-		return max( 1.0, ior + ( f32( channel ) - 1.0 ) * halfSpread );
+		let nd = max( ior, 1.0 );
+		let scale = ( nd - 1.0 ) * max( dispersion, 0.0 ) / 20.0;
+		let red = nd + scale * ( 523655.0 / ( 656.27 * 656.27 ) - 1.5168 );
+		let blue = nd + scale * ( 523655.0 / ( 486.13 * 486.13 ) - 1.5168 );
+		return max( vec3f( red, nd, blue )[ channel ], 1.0 );
 
 	}
 
