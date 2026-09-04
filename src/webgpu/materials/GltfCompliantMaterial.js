@@ -1,7 +1,7 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
@@ -105,6 +105,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// handles specular reflection and transmission
 				if ( surf.transmission > 0.0 ) {
 
+					let matchedIor = ! surf.thinWall && ${ isMatchedIorFunc }( surf.eta );
+
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
@@ -121,6 +123,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						// thin wall halves are reflection-shaped so each is compensated with the conductor albedo at its own roughness.
 						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
 
+					} else if ( matchedIor ) {
+
+						glassBoost = 1.0;
+
 					} else {
 
 						// volumetric bsdf is scaled by its total reflected + refracted energy
@@ -132,7 +138,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						// TODO: transmitted light also crosses the iridescent thin film so it should be weighted by
 						// the iridescence-aware fresnel complement rather than the plain dielectric fresnel
-						var refraction: vec3f;
+						var refraction = vec3f( 0.0 );
 						if ( surf.thinWall ) {
 
 							// evaluate the flipped reflection, compensated at the remapped roughness
@@ -142,7 +148,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 							let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
 							refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha ) / thinWallEnergySS;
 
-						} else {
+						} else if ( ! matchedIor ) {
 
 							refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta ) * glassBoost;
 
@@ -309,6 +315,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				// TODO: see if we can clean up these flags so they're not necessary
 				var isTransmissionLobe = false;
+				var isDeltaTransmission = false;
 				var isDead = false;
 
 				if ( lobeSample <= cdfClearcoat ) {
@@ -395,6 +402,14 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						wi = - normalize( reflect( wo, wh ) );
 						wi = vec3f( wi.xy, - wi.z );
 
+					} else if ( ${ isMatchedIorFunc }( surf.eta ) ) {
+
+						// With no IOR boundary, rough refraction collapses to straight-through
+						// delta transmission independent of the sampled microfacet.
+						wi = - wo;
+						wh = vec3f( 0.0, 0.0, 1.0 );
+						isDeltaTransmission = true;
+
 					} else {
 
 						wi = refract( - wo, wh, surf.eta );
@@ -426,9 +441,23 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				}
 
-				// evaluate the shared eval / pdf function for the sampled direction so the sample
-				// and light-sampling paths can never disagree on color or pdf
-				result = ${ bsdfEvalPdfFn }( worldWo, normalize( surf.normalBasis * wi ), surf );
+				let worldWi = normalize( surf.normalBasis * wi );
+				if ( isDeltaTransmission ) {
+
+					// ScatterRecord stores f * abs(cos), so PBRT's unit delta BTDF reduces to
+					// the material transmission coefficient here.
+					result.color = ( 1.0 - surf.metalness ) * surf.transmission * surf.color;
+					result.direction = worldWi;
+					result.pdf = weights.transmission;
+					result.isTransmissive = dot( worldWi, surf.faceNormal ) < 0.0;
+
+				} else {
+
+					// evaluate the shared eval / pdf function for the sampled direction so the sample
+					// and light-sampling paths can never disagree on color or pdf
+					result = ${ bsdfEvalPdfFn }( worldWo, worldWi, surf );
+
+				}
 
 				// mismatched glass facets and reflection lobe samples that land below the
 				// hemisphere carry no energy - their loss is refunded by the compensation tables
@@ -469,6 +498,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
+				result.isTransmissive = false;
 				result.direction = worldWi;
 				result.pdf = 0.0;
 
@@ -477,6 +507,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
 				let isTransmission = wi.z < 0.0;
+				if ( isTransmission && ! surf.thinWall && ${ isMatchedIorFunc }( surf.eta ) ) {
+
+					// Delta transmission has no finite solid-angle BSDF or PDF. It is handled
+					// explicitly by bsdfSample, matching PBRT-v4's eta == 1 path.
+					return result;
+
+				}
 
 				// reconstruct the half vector bsdfSample would have used for this direction -
 				// reflections use the standard half vector while refractions use the generalized

@@ -1,13 +1,13 @@
 import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
-import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -142,6 +142,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
+				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
+				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
 				// one-sample NEE selects between the analytic lights and the environment -
 				// lightsDenom is the number of options
@@ -214,7 +216,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the ray at the hit point, advancing the rng but not the bounce count.
@@ -232,6 +234,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							transparentBounce ++;
 							bounce --;
 							continue;
+
+						}
+
+						let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+						if ( isDispersive ) {
+
+							let wavelength = abs( dispersionWavelength );
+							surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, wavelength );
+							if ( dispersionWavelength < 0.0 ) {
+
+								dispersionWavelength = wavelength;
+								throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
+
+							}
 
 						}
 
@@ -384,7 +400,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( ray.direction );
-									envMisWeight = ${ misHeuristicFn }( misPdf, envPdf );
+									envMisWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 								}
 

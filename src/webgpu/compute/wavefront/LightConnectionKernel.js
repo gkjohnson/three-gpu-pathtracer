@@ -8,7 +8,7 @@ import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/util
 import { rngInit, rand3, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
-import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
 
@@ -114,11 +114,24 @@ export class LightConnectionKernel extends ComputeKernel {
 				// NEE evaluation sees the same surface record
 				let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-				let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
+				var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, input.view, blurRoughness );
 
 				// attenuate the light transmitted through the volume when exiting a backface so the
 				// direct-light contribution matches the megakernel's ordering
 				var throughputColor = input.throughputColor;
+				let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+				if ( isDispersive ) {
+
+					let wavelength = abs( input.dispersionWavelength );
+					surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, wavelength );
+					if ( input.dispersionWavelength < 0.0 ) {
+
+						throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
+
+					}
+
+				}
+
 				if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
 					throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );

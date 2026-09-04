@@ -2,7 +2,8 @@ import { Vector2 } from 'three';
 import { IndirectStorageBufferAttribute, StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { uniform, storage, globalId, textureStore } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
+import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { rayQueueAtomicStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -99,6 +100,8 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].transmissiveRay = 1u;
 				rayQueue.elements[ index ].minPdf = 1.0;
 				rayQueue.elements[ index ].alphaDepth = 0u;
+				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
+				rayQueue.elements[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
 				// write the active params & dispatched flag
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );

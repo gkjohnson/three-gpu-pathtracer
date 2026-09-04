@@ -148,6 +148,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].minPdf = input.minPdf;
 					hitQueue.elements[ index ].alphaDepth = input.alphaDepth;
 					hitQueue.elements[ index ].bsdfPdf = input.bsdfPdf;
+					hitQueue.elements[ index ].dispersionWavelength = input.dispersionWavelength;
 
 				} else {
 
