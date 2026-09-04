@@ -8,7 +8,7 @@ import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/util
 import { rngInit, rand3, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
-import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_CHANNEL_COUNT, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
 
@@ -122,11 +122,11 @@ export class LightConnectionKernel extends ComputeKernel {
 				let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 				if ( isDispersive ) {
 
-					let channel = input.dispersionChannel % ${ DISPERSION_CHANNEL_COUNT }u;
-					surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, channel );
-					if ( input.dispersionChannel >= ${ DISPERSION_CHANNEL_COUNT }u ) {
+					let wavelength = abs( input.dispersionWavelength );
+					surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, wavelength );
+					if ( input.dispersionWavelength < 0.0 ) {
 
-						throughputColor *= ${ dispersionColorWeightFunc }( channel );
+						throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
 
 					}
 

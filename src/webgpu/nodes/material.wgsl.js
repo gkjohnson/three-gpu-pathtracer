@@ -598,20 +598,20 @@ export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// Cauchy IOR approximation at the Fraunhofer C, d, and F spectral lines:
+// Continuous Cauchy IOR approximation derived from the Fraunhofer C, d, and F spectral lines:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
 // https://github.com/bsdorra/slang-pbr/blob/c12046ec3b9628bcfc384ed2c275c92d007e5d7e/src/models/enterprise/components/transmission.slang#L20-L27
-export const DISPERSION_CHANNEL_COUNT = 3;
+export const DISPERSION_MIN_WAVELENGTH = 360;
+export const DISPERSION_MAX_WAVELENGTH = 830;
 
 export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
-	fn dispersionIor( ior: f32, dispersion: f32, channel: u32 ) -> f32 {
+	fn dispersionIor( ior: f32, dispersion: f32, wavelength: f32 ) -> f32 {
 
 		let nd = max( ior, 1.0 );
 		let scale = ( nd - 1.0 ) * max( dispersion, 0.0 ) / 20.0;
-		let red = nd + scale * ( 523655.0 / ( 656.27 * 656.27 ) - 1.5168 );
-		let blue = nd + scale * ( 523655.0 / ( 486.13 * 486.13 ) - 1.5168 );
-		return max( vec3f( red, nd, blue )[ channel ], 1.0 );
+		let lambda = clamp( wavelength, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+		return max( nd + scale * ( 523655.0 / ( lambda * lambda ) - 1.5168 ), 1.0 );
 
 	}
 
@@ -619,10 +619,10 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 export const applyDispersionFunc = wgslFn( /* wgsl */ `
 
-	fn applyDispersion( surf: SurfaceRecord, dispersion: f32, channel: u32 ) -> SurfaceRecord {
+	fn applyDispersion( surf: SurfaceRecord, dispersion: f32, wavelength: f32 ) -> SurfaceRecord {
 
 		var result = surf;
-		result.ior = dispersionIor( result.ior, dispersion, channel );
+		result.ior = dispersionIor( result.ior, dispersion, wavelength );
 		result.eta = select( result.ior, 1.0 / result.ior, result.thinWall || result.frontFace );
 		result.f0 = iorToF0( result.eta );
 		return result;
@@ -631,20 +631,41 @@ export const applyDispersionFunc = wgslFn( /* wgsl */ `
 
 `, [ dispersionIorFunc, iorToF0Func, surfaceRecordStruct ] );
 
-// A path keeps one uniformly chosen RGB hero channel after its first dispersive interaction.
-// Multiplying by three accounts for the 1 / 3 channel-selection probability. This follows the
-// secondary-wavelength termination used by PBRT-v4 and the Hero Wavelength sampling method:
+// A path keeps one uniformly sampled hero wavelength after its first dispersive interaction.
+// The CIE 1931 fit is converted to linear Rec. 709, clamped to the RGB gamut, and normalized so
+// every channel has an expected weight of one over the uniformly sampled wavelength interval.
+// This preserves the expected value of the renderer's existing RGB throughput while providing
+// continuous hues. The renderer still uses RGB material and light data rather than spectral data.
+// CIE fit: https://jcgt.org/published/0002/02/01/
+// Hero wavelength sampling:
 // https://pbr-book.org/4ed/Textures_and_Materials/Material_Interface_and_Implementations.html#sec:dielectric-material
 // https://doi.org/10.1111/cgf.12419
 export const dispersionColorWeightFunc = wgslFn( /* wgsl */ `
 
-	fn dispersionColorWeight( channel: u32 ) -> vec3f {
+	fn dispersionColorWeight( wavelength: f32 ) -> vec3f {
 
-		return 3.0 * vec3f(
-			select( 0.0, 1.0, channel == 0u ),
-			select( 0.0, 1.0, channel == 1u ),
-			select( 0.0, 1.0, channel == 2u )
-		);
+		let lambda = clamp( wavelength, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+
+		let x1 = ( lambda - 442.0 ) * select( 0.0374, 0.0624, lambda < 442.0 );
+		let x2 = ( lambda - 599.8 ) * select( 0.0323, 0.0264, lambda < 599.8 );
+		let x3 = ( lambda - 501.1 ) * select( 0.0382, 0.0490, lambda < 501.1 );
+		let x = 0.362 * exp( - 0.5 * x1 * x1 ) + 1.056 * exp( - 0.5 * x2 * x2 ) - 0.065 * exp( - 0.5 * x3 * x3 );
+
+		let y1 = ( lambda - 568.8 ) * select( 0.0247, 0.0213, lambda < 568.8 );
+		let y2 = ( lambda - 530.9 ) * select( 0.0322, 0.0613, lambda < 530.9 );
+		let y = 0.821 * exp( - 0.5 * y1 * y1 ) + 0.286 * exp( - 0.5 * y2 * y2 );
+
+		let z1 = ( lambda - 437.0 ) * select( 0.0278, 0.0845, lambda < 437.0 );
+		let z2 = ( lambda - 459.0 ) * select( 0.0725, 0.0385, lambda < 459.0 );
+		let z = 1.217 * exp( - 0.5 * z1 * z1 ) + 0.681 * exp( - 0.5 * z2 * z2 );
+
+		let linearRgb = max( vec3f(
+			3.2404542 * x - 1.5371385 * y - 0.4985314 * z,
+			- 0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
+			0.0556434 * x - 0.2040259 * y + 1.0572252 * z,
+		), vec3f( 0.0 ) );
+
+		return linearRgb * vec3f( 2.6699448, 4.0708066, 4.2980494 );
 
 	}
 
