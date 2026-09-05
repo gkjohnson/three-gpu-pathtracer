@@ -48,7 +48,7 @@ const params = {
 
 	displayVideo: false,
 
-	tiles: 2,
+	frameBudget: 250000,
 	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
@@ -78,7 +78,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
 
@@ -185,9 +185,9 @@ function rebuildGUI() {
 
 	// dynamic parameters
 	const renderFolder = gui.addFolder( 'rendering' );
-	renderFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	renderFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
 	renderFolder.add( params, 'samples', 1, 500, 1 );

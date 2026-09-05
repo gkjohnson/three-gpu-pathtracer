@@ -26,7 +26,7 @@ const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fid
 const urlParams = new URLSearchParams( window.location.search );
 const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
-const tiles = parseInt( urlParams.get( 'tiles' ) ) || 2;
+const frameBudget = parseInt( urlParams.get( 'frameBudget' ) ) || 250000;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
 
 const params = {
@@ -39,7 +39,7 @@ const params = {
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
-	tiles: tiles,
+	frameBudget: frameBudget,
 	scale: scale,
 
 	iterationsPerFrame: 1,
@@ -139,11 +139,7 @@ async function createRenderer() {
 	// path tracer - WebGPU version
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.useMegakernel( params.useMegakernel );
-	if ( params.useMegakernel ) {
-
-		pathTracer._pathTracer.tiles.set( params.tiles, params.tiles );
-
-	}
+	pathTracer.frameBudget = params.frameBudget;
 
 	detailedSampleCount = null;
 
@@ -231,11 +227,7 @@ function onModelChange() {
 
 function onParamsChange() {
 
-	if ( pathTracer.tiles !== 1.0 ) {
-
-		delaySamples = 1;
-
-	}
+	delaySamples = 1;
 
 	if ( params.checkerboardTransparency ) {
 
@@ -323,14 +315,9 @@ function buildGui() {
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
+	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
 
-		const tiles = pathTracer.tiles ?? pathTracer._pathTracer.tiles;
-		if ( tiles ) {
-
-			tiles.set( v, v );
-
-		}
+		pathTracer.frameBudget = v;
 
 	} );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );

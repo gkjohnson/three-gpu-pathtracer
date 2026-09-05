@@ -142,7 +142,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	renderScale: 1,
-	tiles: 2,
+	frameBudget: 250000,
 
 	model: '',
 
@@ -244,7 +244,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 	// camera
@@ -584,9 +584,9 @@ function buildGui() {
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'tiles', 1, 10, 1 ).onChange( v => {
+	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
 
-		pathTracer.tiles.set( v, v );
+		pathTracer.frameBudget = v;
 
 	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );

@@ -55,7 +55,7 @@ const params = {
 	enable: true,
 	bounces: 15,
 	renderScale: 1,
-	tiles: 2,
+	frameBudget: 250000,
 	iesProfile: 6,
 	...getScaledSettings(),
 };
@@ -77,7 +77,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -196,9 +196,9 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
 	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );

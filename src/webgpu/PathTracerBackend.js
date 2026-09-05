@@ -8,6 +8,10 @@ export class PathTracerBackend {
 
 		this.renderer = renderer;
 		this.bounces = 15;
+
+		// how much work a single update dispatches, in path slots. Lower values keep frames
+		// responsive on slower hardware; the unit is resolution independent.
+		this.frameBudget = 250000;
 		this.maxTransparentBounces = 15;
 		this.lowResMode = false;
 

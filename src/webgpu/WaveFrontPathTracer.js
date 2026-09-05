@@ -1,17 +1,17 @@
-import { Matrix4, IndirectStorageBufferAttribute, StorageBufferAttribute, Vector2 } from 'three/webgpu';
-import { PrimeRayGenerationDispatchKernel } from './compute/wavefront/PrimeRayGenerationDispatchKernel.js';
-import { RayGenerationKernel } from './compute/wavefront/RayGenerationKernel.js';
-import { RayIntersectionKernel } from './compute/wavefront/RayIntersectionKernel.js';
-import { UpdateRayQueueParamsKernel } from './compute/wavefront/UpdateRayQueueParamsKernel.js';
+import { Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { PopulatePixelIndicesKernel } from './compute/wavefront/PopulatePixelIndicesKernel.js';
+import { LogicKernel } from './compute/wavefront/LogicKernel.js';
+import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
+import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
+import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
+import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
-import { ProcessHitsKernel } from './compute/wavefront/ProcessHitsKernel.js';
-import { LightConnectionKernel } from './compute/wavefront/LightConnectionKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
-import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
+import { rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, rayQueueStruct, pixelQueueStruct } from './compute/wavefront/structs.js';
+import { PathTracerBackend } from './PathTracerBackend.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
-import { queuedHitStruct, queuedRayStruct, rayQueueStruct, hitQueueStruct } from './compute/wavefront/structs.js';
 import {
 	PrimeSampleCountersKernel,
 	TallySampleCountsKernel,
@@ -23,22 +23,16 @@ import {
 	SAMPLE_COUNTER_TOTAL_LO,
 	U32_RANGE,
 } from './compute/TallySampleCountsKernel.js';
-import { PathTracerBackend } from './PathTracerBackend.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
-const RAYS_TO_PROCESS = 250000;
 const MAX_BUFFER_SIZE = 134217728;
 
-// Both queues use the same element count so the hit queue can never overflow - every intersected
-// ray produces at most one hit, so hits are bounded by the ray queue capacity.
-// subtract 16 bytes for the queue's start/end cursor header that precedes the elements
-const MAX_RAY_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedRayStruct.getLength() * 4 ) );
-const MAX_HIT_COUNT = Math.floor( ( MAX_BUFFER_SIZE - 16 ) / ( queuedHitStruct.getLength() * 4 ) );
+// the persistent path-slot pool is sized off the ray data struct; every other per-slot buffer
+// ( queues, intersections ) is sized to the same count so a full pool can never overflow them
+const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
 
-// Make the buffer size as big as possible so the tile of rays can fit.
-// TODO: This should be adjusted so it can be smaller and arbitrary tile size cannot cause problems
-const MAX_QUEUE_COUNT = Math.min( MAX_RAY_COUNT, MAX_HIT_COUNT );
+const LOW_RES_ITERATIONS = 5;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -47,47 +41,53 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		super( renderer );
 
 		// options
-		this.tiles = new Vector2( 3, 3 );
+		this.seed = 0;
 		this.envInfo = new EquirectHdrInfoNode();
 		this.backgroundInfo = new EquirectBackgroundInfo();
 		this.lightsInfo = new LightsInfoNode();
 
-		const rayQueueSize = 4 + MAX_QUEUE_COUNT * queuedRayStruct.getLength();
-		this.rayQueue = new StorageBufferAttribute( new Float32Array( rayQueueSize ), rayQueueSize );
+		// persistent per-path state, one slot per in-flight path
+		this.rayDataStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, rayDataStruct.getLength() );
+		this.rayDataStorage.name = 'Ray Data';
+
+		// append-only trace queues, prefixed by an atomic length header
+		const queueSize = rayQueueStruct.getLength() + MAX_RAY_DATA_COUNT * traceQueuedRayStruct.getLength();
+		this.rayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
 		this.rayQueue.name = 'Ray Queue';
 
-		const hitQueueSize = 4 + MAX_QUEUE_COUNT * queuedHitStruct.getLength();
-		this.hitQueue = new StorageBufferAttribute( new Float32Array( hitQueueSize ), hitQueueSize );
-		this.hitQueue.name = 'Hit Queue';
+		this.shadowRayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
+		this.shadowRayQueue.name = 'Shadow Ray Queue';
+
+		// per-queue-slot trace results, indexed by the ray's position in its queue
+		this.rayIntersectionsStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
+		this.rayIntersectionsStorage.name = 'Ray Intersections';
+
+		this.shadowRayIntersectionsStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
+		this.shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
+
+		// overflow pixel indices waiting for a free path slot, lazily sized to the resolution
+		this.pixelQueue = null;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
-		this.sampleCounters = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
-		this.sampleCounters.name = 'Sample Counters';
+		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
+		this.sampleCountersStorage.name = 'Sample Counters';
 		this._samplesPromise = null;
 
-		// dispatches
-		this.tileIndexBuffer = new IndirectStorageBufferAttribute( 2, 1 );
-		this.rayGenerationDispatch = new IndirectStorageBufferAttribute( 3, 1 );
-		this.hitProcessDispatch = new IndirectStorageBufferAttribute( 3, 1 );
-
 		// kernels
-		this.primeRayGenerationDispatchKernel = new PrimeRayGenerationDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.enqueueRaysKernel = new RayGenerationKernel( ).setWorkgroupSize( 8, 8, 1 );
-		this.rayIntersectionKernel = new RayIntersectionKernel( ).setWorkgroupSize( 64, 1, 1 );
-		this.updateRayQueueParamsKernel = new UpdateRayQueueParamsKernel().setWorkgroupSize( 1, 1, 1 );
-		this.hitProcessKernel = new ProcessHitsKernel( ).setWorkgroupSize( 64, 1, 1 );
-		this.lightConnectionKernel = new LightConnectionKernel( ).setWorkgroupSize( 64, 1, 1 );
-		this.rayDispatchConverter = new QueueLengthToDispatchKernel( rayQueueStruct ).setWorkgroupSize( 1, 1, 1 );
-		this.hitDispatchConverter = new QueueLengthToDispatchKernel( hitQueueStruct ).setWorkgroupSize( 1, 1, 1 );
+		this.populatePixelIndicesKernel = new PopulatePixelIndicesKernel().setWorkgroupSize( 8, 8, 1 );
+		this.logicKernel = new LogicKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.materialKernel = new MaterialKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.traceRayKernel = new TraceRayKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.traceShadowRayKernel = new TraceShadowRayKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.rayDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
+		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
-		this.rayIntersectionKernel.envInfo = this.envInfo;
-		this.lightConnectionKernel.envInfo = this.envInfo;
-		this.rayIntersectionKernel.backgroundInfo = this.backgroundInfo;
-		this.rayIntersectionKernel.lightsInfo = this.lightsInfo;
-		this.lightConnectionKernel.lightsInfo = this.lightsInfo;
+		this.logicKernel.envInfo = this.envInfo;
+		this.logicKernel.backgroundInfo = this.backgroundInfo;
+		this.logicKernel.lightsInfo = this.lightsInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -99,48 +99,38 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	resetSeed() {
 
-		this.enqueueRaysKernel.seed = 0;
+		this.seed = 0;
 
 	}
 
 	setBVHData( bvhData ) {
 
-		this.enqueueRaysKernel.bvhData = bvhData;
+		this.materialKernel.bvhData = bvhData;
+		this.materialKernel.needsUpdate = true;
 
-		this.rayIntersectionKernel.bvhData = bvhData;
+		this.traceRayKernel.bvhData = bvhData;
+		this.traceRayKernel.needsUpdate = true;
 
-		this.hitProcessKernel.bvhData = bvhData;
+		this.traceShadowRayKernel.bvhData = bvhData;
+		this.traceShadowRayKernel.needsUpdate = true;
 
-		this.lightConnectionKernel.bvhData = bvhData;
-
-		this.rebuild();
-
-	}
-
-	rebuild() {
-
-		super.rebuild();
-		this.enqueueRaysKernel.needsUpdate = true;
-		this.rayIntersectionKernel.needsUpdate = true;
-		this.hitProcessKernel.needsUpdate = true;
-		this.lightConnectionKernel.needsUpdate = true;
 		this.reset();
 
 	}
 
 	setRandom( random ) {
 
-		this.enqueueRaysKernel.context.random = random;
-		this.enqueueRaysKernel.needsUpdate = true;
+		this.logicKernel.context.random = random;
+		this.logicKernel.needsUpdate = true;
 
-		this.rayIntersectionKernel.context.random = random;
-		this.rayIntersectionKernel.needsUpdate = true;
+		this.materialKernel.context.random = random;
+		this.materialKernel.needsUpdate = true;
 
-		this.hitProcessKernel.context.random = random;
-		this.hitProcessKernel.needsUpdate = true;
+		this.traceRayKernel.context.random = random;
+		this.traceRayKernel.needsUpdate = true;
 
-		this.lightConnectionKernel.context.random = random;
-		this.lightConnectionKernel.needsUpdate = true;
+		this.traceShadowRayKernel.context.random = random;
+		this.traceShadowRayKernel.needsUpdate = true;
 
 		this.reset();
 
@@ -148,11 +138,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setMaterial( material ) {
 
-		this.hitProcessKernel.material = material.getData();
-		this.hitProcessKernel.needsUpdate = true;
-
-		this.lightConnectionKernel.material = material.getData();
-		this.lightConnectionKernel.needsUpdate = true;
+		this.materialKernel.material = material.getData();
+		this.materialKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -160,21 +147,22 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setFilterGlossy( value ) {
 
 		// the kernel takes the inverted threshold, mirroring Cycles
-		const filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
-		this.hitProcessKernel.filterGlossy = filterGlossy;
-		this.lightConnectionKernel.filterGlossy = filterGlossy;
+		this.materialKernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
 		this.reset();
 
 	}
 
 	setClamping( direct, indirect ) {
 
-		this.rayIntersectionKernel.clampDirect = direct;
-		this.rayIntersectionKernel.clampIndirect = indirect;
-		this.hitProcessKernel.clampDirect = direct;
-		this.hitProcessKernel.clampIndirect = indirect;
-		this.lightConnectionKernel.clampDirect = direct;
-		this.lightConnectionKernel.clampIndirect = indirect;
+		this.logicKernel.clampDirect = direct;
+		this.logicKernel.clampIndirect = indirect;
+		this.reset();
+
+	}
+
+	setTransmissiveBackground( value ) {
+
+		this.logicKernel.transmissiveBackground = value;
 		this.reset();
 
 	}
@@ -203,9 +191,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setMultipleImportanceSampling( enabled ) {
 
-		const value = enabled ? 1 : 0;
-		this.rayIntersectionKernel.misEnabled = value;
-		this.lightConnectionKernel.misEnabled = value;
+		this.logicKernel.misEnabled = enabled ? 1 : 0;
 		this.reset();
 
 	}
@@ -232,27 +218,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setTransmissiveBackground( value ) {
-
-		this.rayIntersectionKernel.transmissiveBackground = value;
-		this.reset();
-
-	}
-
-	setTiles( tiles ) {
-
-		this.tiles.copy( tiles );
-
-	}
-
-	getTileSize( target ) {
-
-		this.getSize( target ).divide( this.tiles ).ceil();
-
-		return target;
-
-	}
-
 	dispose() {
 
 		super.dispose();
@@ -263,21 +228,43 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	// number of path slots dispatched per update, capped by the pool and the pixel count
+	getFrameBudget( width, height ) {
+
+		return Math.min( MAX_RAY_DATA_COUNT, width * height, Math.max( 1, Math.floor( this.frameBudget ) ) );
+
+	}
+
+	_updatePixelQueue( width, height ) {
+
+		const overflowCount = Math.max( 0, width * height - this.getFrameBudget( width, height ) );
+		const size = pixelQueueStruct.getLength() + Math.max( overflowCount, 1 );
+		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
+
+			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
+			this.pixelQueue.name = 'Pixel Queue';
+
+			// the queue buffer object changed, so kernels bound to it must rebuild
+			this.materialKernel.pixelQueue = this.pixelQueue;
+			this.materialKernel.needsUpdate = true;
+			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
+			this.populatePixelIndicesKernel.needsUpdate = true;
+
+		}
+
+	}
+
 	reset() {
 
 		const {
 			renderer,
 
-			sampleCountClearKernel,
 			zeroDispatchKernel,
+			populatePixelIndicesKernel,
 
-			sampleCountTarget,
-
-			hitProcessDispatch,
-			rayGenerationDispatch,
+			rayDataStorage,
 			rayQueue,
-			hitQueue,
-			tileIndexBuffer,
+			shadowRayQueue,
 		} = this;
 
 		if ( ! renderer.initialized ) {
@@ -288,29 +275,22 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.reset();
 
-		const { width, height } = sampleCountTarget;
-		const dispatchSize = sampleCountClearKernel.getDispatchSize( width, height );
-
-		// clear buffers
-		sampleCountClearKernel.target = sampleCountTarget;
-		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
-
-		// clear queue cursors — only the 2-cursor header at the head of each queue buffer needs zeroing
-		zeroDispatchKernel.target = hitQueue;
-		renderer.compute( zeroDispatchKernel.kernel, [ 2 ] );
-
+		// reset the trace queues — only the length header needs zeroing
 		zeroDispatchKernel.target = rayQueue;
-		renderer.compute( zeroDispatchKernel.kernel, [ 2 ] );
+		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
-		// clear dispatch sizes
-		zeroDispatchKernel.target = hitProcessDispatch;
-		renderer.compute( zeroDispatchKernel.kernel, [ hitProcessDispatch.count ] );
+		zeroDispatchKernel.target = shadowRayQueue;
+		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
-		zeroDispatchKernel.target = rayGenerationDispatch;
-		renderer.compute( zeroDispatchKernel.kernel, [ rayGenerationDispatch.count ] );
+		// assign every path slot a pixel and park the overflow pixels in the pixel queue
+		const { width, height } = this.sampleCountTarget;
+		this._updatePixelQueue( width, height );
 
-		zeroDispatchKernel.target = tileIndexBuffer;
-		renderer.compute( zeroDispatchKernel.kernel, [ tileIndexBuffer.count ] );
+		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
+		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
+		populatePixelIndicesKernel.frameBudget = this.getFrameBudget( width, height );
+		populatePixelIndicesKernel.targetDimensions.set( width, height );
+		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( width, height, 1 ) );
 
 	}
 
@@ -318,121 +298,90 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		const {
 			renderer,
-			bounces,
 			maxTransparentBounces,
 
-			tiles,
-			sampleCountTarget,
-
+			rayDataStorage,
 			rayQueue,
-			hitQueue,
-			rayGenerationDispatch,
-			// hitProcessDispatch,
-			tileIndexBuffer,
+			shadowRayQueue,
+			rayIntersectionsStorage,
+			shadowRayIntersectionsStorage,
 
-			primeRayGenerationDispatchKernel,
-			enqueueRaysKernel,
-			rayIntersectionKernel,
-			updateRayQueueParamsKernel,
-			hitProcessKernel,
-			lightConnectionKernel,
+			logicKernel,
+			materialKernel,
+			traceRayKernel,
+			traceShadowRayKernel,
 			rayDispatchConverter,
-			hitDispatchConverter,
-
-			lowResMode
+			shadowDispatchConverter,
+			zeroDispatchKernel,
 		} = this;
 
-		primeRayGenerationDispatchKernel.tileOffset = 0;
+		const targetDimensions = new Vector2();
 
 		// advance the sequence once per task so each render pass starts from fresh
 		// noise unless "stableNoise" has reset it
-		enqueueRaysKernel.seed ++;
-
-		const tileSize = new Vector2();
-		const iter = lowResMode ? 5 : 1;
+		this.seed ++;
 
 		while ( true ) {
 
+			// TODO: this only makes sense if we can cap the number rays per iteration to the full
+			// frame
+			const iter = this.lowResMode ? Math.min( this.bounces, LOW_RES_ITERATIONS ) : 1;
+
 			for ( let i = 0; i < iter; i ++ ) {
 
-				this.getTileSize( tileSize );
+				this.getSize( targetDimensions );
+				const rayCount = this.getFrameBudget( targetDimensions.x, targetDimensions.y );
 
 				// Swap targets to support devices without <rgba32float, read_write> textures
 				// Copy latest data to a new outputTarget to keep the appearance
 				renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
 				[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-				rayIntersectionKernel.prevOutputTarget = this.prevOutputTarget;
-				rayIntersectionKernel.outputTarget = this.outputTarget;
-				hitProcessKernel.prevOutputTarget = this.prevOutputTarget;
-				hitProcessKernel.outputTarget = this.outputTarget;
+				logicKernel.prevOutputTarget = this.prevOutputTarget;
+				logicKernel.outputTarget = this.outputTarget;
+				logicKernel.sampleCountTarget = this.sampleCountTarget;
 
-				// Step 1: Top up the ray queue
-				// set up the ray prime kernel
-				primeRayGenerationDispatchKernel.rayWorkGroupSize.set( 8, 8, 1 );
-				primeRayGenerationDispatchKernel.tileCount.copy( tiles );
-				primeRayGenerationDispatchKernel.tileSize.copy( tileSize );
-				primeRayGenerationDispatchKernel.rayQueue = rayQueue;
-				primeRayGenerationDispatchKernel.hitQueue = hitQueue;
-				primeRayGenerationDispatchKernel.outputTileIndex = tileIndexBuffer;
-				primeRayGenerationDispatchKernel.outputDispatch = rayGenerationDispatch;
+				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
+				// finished paths into the output, and pick the next NEE light for each live path
+				logicKernel.rayDataStorage = rayDataStorage;
+				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
+				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
+				logicKernel.bounces = this.bounces;
+				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-				// set up the ray generation kernel
-				enqueueRaysKernel.tileIndexBuffer = tileIndexBuffer;
-				enqueueRaysKernel.tileSize.copy( tileSize );
-				enqueueRaysKernel.rayQueue = rayQueue;
-				enqueueRaysKernel.sampleCountTarget = sampleCountTarget;
+				// Step 2: reset the trace queues for this frame's population
+				zeroDispatchKernel.target = rayQueue;
+				renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
-				// pixels at the limit generate no rays, so the queue drains on its own
-				enqueueRaysKernel.maxSamples = this.maxSamples;
+				zeroDispatchKernel.target = shadowRayQueue;
+				renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
-				for ( let i = 0; i < tiles.x * tiles.y; i ++ ) {
+				// Step 3: evaluate materials — spawn camera rays for freed slots, sample the bsdf, and
+				// enqueue this frame's bounce + shadow rays
+				materialKernel.rayDataStorage = rayDataStorage;
+				materialKernel.rayQueue = rayQueue;
+				materialKernel.shadowRayQueue = shadowRayQueue;
+				materialKernel.pixelQueue = this.pixelQueue;
+				materialKernel.sampleCountTarget = this.sampleCountTarget;
+				materialKernel.seed = this.seed;
+				materialKernel.maxSamples = this.maxSamples;
+				materialKernel.maxTransparentBounces = maxTransparentBounces;
+				materialKernel.targetDimensions.copy( targetDimensions );
+				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-					// TODO: skip rays that have converged
-					renderer.compute( primeRayGenerationDispatchKernel.kernel, [ 1, 1, 1 ] );
-					renderer.compute( enqueueRaysKernel.kernel, rayGenerationDispatch );
-					primeRayGenerationDispatchKernel.tileOffset = 1;
-
-				}
-
-				// Step 2: run intersections over a subset of the queued rays, add color for
-				// terminated rays, add material handling to a dedicated queue
+				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
 				rayDispatchConverter.queue = rayQueue;
-				rayDispatchConverter.maxCount = RAYS_TO_PROCESS;
 				renderer.compute( rayDispatchConverter.kernel, [ 1, 1, 1 ] );
 
-				rayIntersectionKernel.sampleCountTarget = sampleCountTarget;
-				rayIntersectionKernel.rayQueue = rayQueue;
-				rayIntersectionKernel.hitQueue = hitQueue;
-				renderer.compute( rayIntersectionKernel.kernel, rayDispatchConverter.outputDispatch );
+				traceRayKernel.rayQueue = rayQueue;
+				traceRayKernel.rayIntersectionsStorage = rayIntersectionsStorage;
+				renderer.compute( traceRayKernel.kernel, rayDispatchConverter.outputDispatch );
 
-				// mark the rays as consumed
-				updateRayQueueParamsKernel.rayQueue = rayQueue;
-				updateRayQueueParamsKernel.maxCount = RAYS_TO_PROCESS;
-				renderer.compute( updateRayQueueParamsKernel.kernel, [ 1, 1, 1 ] );
+				shadowDispatchConverter.queue = shadowRayQueue;
+				renderer.compute( shadowDispatchConverter.kernel, [ 1, 1, 1 ] );
 
-				// Step 3: convert the queued hit count into an indirect dispatch size
-				hitDispatchConverter.queue = hitQueue;
-				renderer.compute( hitDispatchConverter.kernel, [ 1, 1, 1 ] );
-
-				// Step 4: next event estimation - deposit the direct-light contribution into
-				// hitQueue.resultColor before ProcessHits consumes it
-				lightConnectionKernel.hitQueue = hitQueue;
-				renderer.compute( lightConnectionKernel.kernel, hitDispatchConverter.outputDispatch );
-
-				// Step 5: attenuate ray color, scatter, run russian roulette over exactly the queued hits
-				hitProcessKernel.sampleCountTarget = sampleCountTarget;
-				hitProcessKernel.bounces = bounces;
-				hitProcessKernel.maxTransparentBounces = maxTransparentBounces;
-				hitProcessKernel.rayQueue = rayQueue;
-				hitProcessKernel.hitQueue = hitQueue;
-				renderer.compute( hitProcessKernel.kernel, hitDispatchConverter.outputDispatch );
-				// Note: hit queue size ([2] and [3]) is reset at the top of the next iteration by PrimeRayGenerationDispatchKernel
-
-				// Future
-				// - track variance to skip rays
-				// - switch to rays pushing themselves onto the queue when terminating to avoid tiles once enough pixels have completed
-				// - separate "volume" step?
-				// - allow for simultaneous writes by queue pixel writes, sorting, and blending them in a single thread
+				traceShadowRayKernel.shadowRayQueue = shadowRayQueue;
+				traceShadowRayKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
+				renderer.compute( traceShadowRayKernel.kernel, shadowDispatchConverter.outputDispatch );
 
 			}
 
@@ -466,7 +415,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const {
 			renderer,
 			sampleCountTarget,
-			sampleCounters,
+			sampleCountersStorage,
 			primeSampleCountersKernel,
 			tallySampleCountsKernel,
 		} = this;
@@ -477,17 +426,17 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		}
 
-		primeSampleCountersKernel.counters = sampleCounters;
+		primeSampleCountersKernel.counters = sampleCountersStorage;
 		renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
 
-		tallySampleCountsKernel.counters = sampleCounters;
+		tallySampleCountsKernel.counters = sampleCountersStorage;
 		tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
 		renderer.compute(
 			tallySampleCountsKernel.kernel,
 			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
 		);
 
-		const buffer = await renderer.getArrayBufferAsync( sampleCounters );
+		const buffer = await renderer.getArrayBufferAsync( sampleCountersStorage );
 		const counters = new Uint32Array( buffer );
 		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
 

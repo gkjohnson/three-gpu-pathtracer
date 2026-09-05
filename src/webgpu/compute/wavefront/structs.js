@@ -26,85 +26,122 @@ class DependentStructTypeNode extends StructTypeNode {
 
 }
 
-export const queuedRayStruct = new StructTypeNode( {
-
-	origin: 'vec3f',
-	seed: 'uint',
-
-	direction: 'vec3f',
-	bsdfPdf: 'float',
+// Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
+// the previous frame's trace results and stage the next bounce.
+export const rayDataStruct = new StructTypeNode( {
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
 
-	pixel: 'vec2u',
-	transmissiveRay: 'uint',
-	minPdf: 'float',
-
 	resultColor: 'vec4f',
 
-	alphaDepth: 'uint',
+	emission: 'vec3f',
+	scatterPdf: 'float',
 
-}, 'QueuedRay' );
+	scatterColor: 'vec3f',
 
-export const queuedHitStruct = new StructTypeNode( {
+	// the smallest scatter pdf seen along the path, for the glossy filter
+	minPdf: 'float',
+
+	origin: 'vec3f',
+
+	// whether every scatter so far has been transmissive, for the background modes
+	isFullyTransmissive: 'uint',
+
+	direction: 'vec3f',
+	side: 'float',
+
+	normal: 'vec3f',
+	objectIndex: 'int',
+
+	barycoord: 'vec3f',
+	pixelIndex: 'uint',
 
 	indices: 'vec3u',
 	seed: 'uint',
 
-	barycoord: 'vec2f',
-	pixel_x: 'uint',
-	pixel_y: 'uint',
+	lightDirection: 'vec3f',
+	lightPdf: 'float',
 
-	view: 'vec3f',
+	lightEmission: 'vec3f',
+	lightDist: 'float',
+
+	lightBsdf: 'vec3f',
+	lightBsdfPdf: 'float',
+
+	rayIntersectionIndex: 'int',
+	shadowRayIntersectionIndex: 'int',
+	lightType: 'int',
+
+	// the traced segment length, for the transmission attenuation applied by MaterialKernel
+	dist: 'float',
+
+	// alpha test pass throughs, counted separately from the bounce count
+	alphaDepth: 'uint',
+
+}, 'RayData' );
+
+// A ray queued for BVH traversal by the trace kernels.
+export const traceQueuedRayStruct = new StructTypeNode( {
+
+	origin: 'vec3f',
+	pixelIndex: 'uint',
+
+	direction: 'vec3f',
 	currentBounce: 'uint',
 
-	throughputColor: 'vec3f',
-	objectIndex: 'uint',
+	seed: 'uint',
+	alphaDepth: 'uint',
+	_alignment0: 'uint',
+	_alignment1: 'uint',
+
+}, 'TraceQueuedRay' );
+
+// Compact trace result, written by the trace kernels at the ray's queue index and consumed by
+// LogicKernel the following frame. objectIndex < 0 encodes a miss.
+export const intersectionResultStruct = new StructTypeNode( {
+
+	barycoord: 'vec3f',
+	objectIndex: 'int',
+
+	position: 'vec3f',
+	dist: 'float',
 
 	normal: 'vec3f',
 	side: 'float',
 
-	dist: 'float',
-	transmissiveRay: 'uint',
-	minPdf: 'float',
-	alphaDepth: 'uint',
+	indices: 'vec3u',
+	_alignment0: 'uint',
 
-	resultColor: 'vec4f',
+}, 'TraceResult' );
 
-	// carried through so a ray that passes an alpha-tested surface keeps its MIS weight
-	bsdfPdf: 'float',
-
-}, 'QueuedHit' );
-
-// Queue wrappers that keep the read/write cursors (start/end) in a header ahead of the elements,
-// avoiding a separate queueSizes buffer.
+// Queue wrappers that keep an append-only length counter in a header ahead of the elements. The
+// atomic variant is bound where rays are pushed with atomicAdd; the plain one where the length is
+// only read or reset. getLength returns just the header since the trailing array is runtime-sized.
 export const rayQueueStruct = new DependentStructTypeNode( {
-	start: 'uint',
-	end: 'uint',
-	elements: `array<${ queuedRayStruct.name }>`,
-}, 'RayQueue', [ queuedRayStruct ] );
+	length: 'uint',
+	elements: `array<${ traceQueuedRayStruct.name }>`,
+}, 'RayQueue', [ traceQueuedRayStruct ] );
 rayQueueStruct.getLength = () => 4;
 
 export const rayQueueAtomicStruct = new DependentStructTypeNode( {
-	start: { type: 'uint', atomic: true },
-	end: { type: 'uint', atomic: true },
-	elements: `array<${ queuedRayStruct.name }>`,
-}, 'RayQueue', [ queuedRayStruct ] );
+	length: { type: 'uint', atomic: true },
+	elements: `array<${ traceQueuedRayStruct.name }>`,
+}, 'RayQueue', [ traceQueuedRayStruct ] );
 rayQueueAtomicStruct.getLength = () => 4;
 
-export const hitQueueStruct = new DependentStructTypeNode( {
-	start: 'uint',
-	end: 'uint',
-	_padding: 'array<u32, 2>',
-	elements: `array<${ queuedHitStruct.name }>`,
-}, 'HitQueue', [ queuedHitStruct ] );
-hitQueueStruct.getLength = () => 4;
+// Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
+// the ray data pool. The non-atomic variant is used for contention-free initialization.
+export const pixelQueueStruct = new DependentStructTypeNode( {
+	current: { type: 'uint', atomic: true },
+	elementCount: 'uint',
+	elements: 'array<atomic<u32>>',
+}, 'PixelQueue' );
+pixelQueueStruct.getLength = () => 2;
 
-export const hitQueueAtomicStruct = new DependentStructTypeNode( {
-	start: { type: 'uint', atomic: true },
-	end: { type: 'uint', atomic: true },
-	_padding: 'array<u32, 2>',
-	elements: `array<${ queuedHitStruct.name }>`,
-}, 'HitQueue', [ queuedHitStruct ] );
-hitQueueAtomicStruct.getLength = () => 4;
+export const pixelQueueNonAtomicStruct = new DependentStructTypeNode( {
+	current: 'uint',
+	elementCount: 'uint',
+	elements: 'array<u32>',
+}, 'PixelQueue' );
+pixelQueueNonAtomicStruct.getLength = () => 2;
