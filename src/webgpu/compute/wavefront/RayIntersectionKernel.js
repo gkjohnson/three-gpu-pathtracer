@@ -93,8 +93,8 @@ export class RayIntersectionKernel extends ComputeKernel {
 
 				}
 
-				// run intersection
-				let ray = Ray( input.origin, input.direction );
+				// run intersection, bounded by the ray's maximum trace distance
+				let ray = PathRay( input.origin, input.maxDist, input.direction );
 				var hitResult: ${ raycastOutput };
 				let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 				let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
@@ -148,6 +148,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 					hitQueue.elements[ index ].minPdf = input.minPdf;
 					hitQueue.elements[ index ].alphaDepth = input.alphaDepth;
 					hitQueue.elements[ index ].bsdfPdf = input.bsdfPdf;
+					hitQueue.elements[ index ].maxDist = input.maxDist;
 
 				} else {
 

@@ -1,7 +1,9 @@
 import { Matrix4 } from 'three';
 import { uniform, PI } from 'three/tsl';
-import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { EquirectCamera } from '../../objects/EquirectCamera.js';
+import { rayStruct } from '../nodes/structs.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from '../nodes/lights.wgsl.js';
 
 EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
@@ -15,9 +17,11 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			let sinPhi = sin( phi );
 			let direction = vec3f( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
 
-			// equirect ignores the projection - orient by the camera world matrix and place the origin
+			// equirect ignores the projection - orient by the camera world matrix and place the origin.
+			// there is no projection far plane, so the trace distance is unbounded
 			ray.origin = ( ${ cameraToWorld } * vec4f( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
 			ray.direction = ( ${ cameraToWorld } * vec4f( direction, 0.0 ) ).xyz;
+			ray.maxDist = ${ LIGHT_FAR_DISTANCE };
 			return true;
 
 		}

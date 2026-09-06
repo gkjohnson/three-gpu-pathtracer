@@ -1,7 +1,8 @@
 import { Matrix4, WebGPUCoordinateSystem } from 'three';
 import { uniform, PI } from 'three/tsl';
-import { wgslTagFn, rayStruct, ndcToCameraRay } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, ndcToCameraRay } from 'three-mesh-bvh/webgpu';
 import { rand3, RNG_INDEX_APERTURE_SAMPLE } from '../nodes/random.wgsl.js';
+import { rayStruct } from '../nodes/structs.wgsl.js';
 import { PhysicalCamera } from '../../objects/PhysicalCamera.js';
 
 // aperture sampling helpers
@@ -96,7 +97,13 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 			// base ray
 			let ndc = uv * 2.0 - vec2f( 1.0 );
-			*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+			let baseRay = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+			ray.origin = baseRay.origin;
+			ray.direction = baseRay.direction;
+
+			// distance to the far plane along this ray so hits beyond it are clipped
+			let farPoint = ${ invViewProjectionMatrix } * vec4f( ndc, 1.0, 1.0 );
+			ray.maxDist = distance( ray.origin, farPoint.xyz / farPoint.w );
 
 			// depth of field
 			// measure focus distance along the optical axis so the focal surface is a flat

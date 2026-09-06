@@ -1,6 +1,7 @@
 import { ArrayCamera, Matrix4, Vector4, WebGPUCoordinateSystem } from 'three';
 import { uniformArray, int } from 'three/tsl';
-import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { ndcToCameraRay, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { rayStruct } from '../nodes/structs.wgsl.js';
 
 ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
@@ -23,7 +24,13 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 					let cameraUv = ( pixel - viewport.xy ) / viewport.zw;
 					let ndc = cameraUv * 2.0 - vec2f( 1.0 );
-					*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrices }[ i ] );
+					let baseRay = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrices }[ i ] );
+					ray.origin = baseRay.origin;
+					ray.direction = baseRay.direction;
+
+					// distance to the far plane along this ray so hits beyond it are clipped
+					let farPoint = ${ invViewProjectionMatrices }[ i ] * vec4f( ndc, 1.0, 1.0 );
+					ray.maxDist = distance( ray.origin, farPoint.xyz / farPoint.w );
 					return true;
 
 				}

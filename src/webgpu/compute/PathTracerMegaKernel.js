@@ -3,9 +3,9 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
-import { lightRecordStruct } from '../nodes/structs.wgsl.js';
+import { lightRecordStruct, rayStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
@@ -125,7 +125,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				${ rngInit }( indexUV.xy, seed, 0 );
 
-				// scene ray
+				// scene ray, with the camera's maximum view distance for far plane clipping
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
@@ -279,11 +279,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										var shadowRay: ${ rayStruct };
 										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hitResult.normal );
 										shadowRay.direction = lightRec.direction;
+										shadowRay.maxDist = lightRec.dist - ${ LIGHT_EPSILON };
 
-										// opaque occlusion up to the light distance. A shadow-specific any hit traversal could support
-										// tinted shadows from transmissive and partially opaque objects
+										// opaque occlusion up to the light distance. A shadow-specific any hit
+										// traversal could support tinted shadows from transmissive and partially
+										// opaque objects
 										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - ${ LIGHT_EPSILON };
+										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
 											var lightPdf = lightRec.pdf;
@@ -344,6 +346,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
+						ray.maxDist = ${ LIGHT_FAR_DISTANCE };
 
 					} else {
 

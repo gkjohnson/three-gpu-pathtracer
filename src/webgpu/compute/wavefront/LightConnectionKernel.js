@@ -2,12 +2,12 @@ import { StorageBufferAttribute, DataTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, globalId, texture, sampler } from 'three/tsl';
 import { hitQueueStruct } from './structs.js';
-import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand3, RNG_INDEX_DIRECT_LIGHT_SAMPLE } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
-import { lightRecordStruct } from '../../nodes/structs.wgsl.js';
+import { lightRecordStruct, rayStruct } from '../../nodes/structs.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 
 export class LightConnectionKernel extends ComputeKernel {
@@ -154,11 +154,13 @@ export class LightConnectionKernel extends ComputeKernel {
 						var shadowRay: ${ rayStruct };
 						shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, input.normal );
 						shadowRay.direction = lightRec.direction;
+						shadowRay.maxDist = lightRec.dist - ${ LIGHT_EPSILON };
 
-						// opaque occlusion up to the light distance. A shadow-specific any hit traversal could support
-						// tinted shadows from transmissive and partially opaque objects
+						// opaque occlusion up to the light distance. A shadow-specific any hit
+						// traversal could support tinted shadows from transmissive and partially
+						// opaque objects
 						var shadowHit: ${ raycastOutput };
-						let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - ${ LIGHT_EPSILON };
+						let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
 						if ( ! occluded ) {
 
 							var lightPdf = lightRec.pdf;

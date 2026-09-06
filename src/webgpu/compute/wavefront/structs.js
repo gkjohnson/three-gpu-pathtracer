@@ -45,6 +45,9 @@ export const queuedRayStruct = new StructTypeNode( {
 
 	alphaDepth: 'uint',
 
+	// maximum trace distance, set from the camera far plane for primary rays
+	maxDist: 'float',
+
 }, 'QueuedRay' );
 
 export const queuedHitStruct = new StructTypeNode( {
@@ -74,6 +77,7 @@ export const queuedHitStruct = new StructTypeNode( {
 
 	// carried through so a ray that passes an alpha-tested surface keeps its MIS weight
 	bsdfPdf: 'float',
+	maxDist: 'float',
 
 }, 'QueuedHit' );
 

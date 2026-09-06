@@ -8,6 +8,7 @@ import { weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { rngInit, rand1, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_ALPHA_TEST } from '../../nodes/random.wgsl.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 
 export class ProcessHitsKernel extends ComputeKernel {
 
@@ -119,6 +120,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].minPdf = input.minPdf;
 					rayQueue.elements[ index ].alphaDepth = input.alphaDepth + 1u;
 					rayQueue.elements[ index ].bsdfPdf = input.bsdfPdf;
+					rayQueue.elements[ index ].maxDist = input.maxDist;
 					return;
 
 				}
@@ -197,6 +199,7 @@ export class ProcessHitsKernel extends ComputeKernel {
 					rayQueue.elements[ index ].transmissiveRay = select( 0u, input.transmissiveRay, scatterRec.isTransmissive );
 					rayQueue.elements[ index ].minPdf = min( scatterRec.pdf, input.minPdf );
 					rayQueue.elements[ index ].alphaDepth = input.alphaDepth;
+					rayQueue.elements[ index ].maxDist = ${ LIGHT_FAR_DISTANCE };
 
 				}
 

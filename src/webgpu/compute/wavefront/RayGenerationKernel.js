@@ -5,7 +5,8 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayQueueAtomicStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
-import { proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { rayStruct } from '../../nodes/structs.wgsl.js';
 
 export class RayGenerationKernel extends ComputeKernel {
 
@@ -75,7 +76,7 @@ export class RayGenerationKernel extends ComputeKernel {
 
 				${ rngInit }( indexUV.xy, seed + samples, 0 );
 
-				// write the ray data
+				// write the ray data, with the camera's maximum view distance for far plane clipping
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
@@ -99,6 +100,7 @@ export class RayGenerationKernel extends ComputeKernel {
 				rayQueue.elements[ index ].transmissiveRay = 1u;
 				rayQueue.elements[ index ].minPdf = 1.0;
 				rayQueue.elements[ index ].alphaDepth = 0u;
+				rayQueue.elements[ index ].maxDist = ray.maxDist;
 
 				// write the active params & dispatched flag
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
