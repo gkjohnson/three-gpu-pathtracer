@@ -6,9 +6,8 @@ import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.
 import { clampPathContributionFunc, isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 import {
-	rngInit, rand1, rand2, rand3,
+	rngInit, rand2, rand3,
 	RNG_INDEX_BACKGROUND_SAMPLE,
-	RNG_INDEX_RUSSIAN_ROULETTE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
@@ -133,22 +132,9 @@ export class LogicKernel extends ComputeKernel {
 				scatterRec.color = input.scatterColor;
 				scatterRec.pdf = input.scatterPdf;
 
+				// the bounce limit, russian roulette, and terminating scatter checks all ran in
+				// MaterialKernel, which stages a zeroed pdf and skips the bounce trace when they fire
 				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
-
-				// russian roulette early out:
-				// Matches Cycles path_state_continuation_probability in integrator/path_state.h
-				if ( ! isTerminated && input.currentBounce >= 3u ) {
-
-					let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-					let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
-					isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
-					if ( ! isTerminated ) {
-
-						throughputColor /= rrProb;
-
-					}
-
-				}
 
 				if ( ! isTerminated ) {
 

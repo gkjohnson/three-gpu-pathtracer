@@ -334,6 +334,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// Swap targets to support devices without <rgba32float, read_write> textures
 				// Copy latest data to a new outputTarget to keep the appearance
+				// TODO: this full resolution copy runs every frame - remove it by writing terminated
+				// samples to both targets or gating the swap on devices that support read_write
 				renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
 				[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
 				logicKernel.prevOutputTarget = this.prevOutputTarget;
@@ -365,6 +367,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
+				materialKernel.bounces = this.bounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 

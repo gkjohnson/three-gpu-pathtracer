@@ -3,11 +3,11 @@ import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
-import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
+import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -25,6 +25,7 @@ export class MaterialKernel extends ComputeKernel {
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
+			bounces: uniform( 5, 'uint' ),
 
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
@@ -50,6 +51,7 @@ export class MaterialKernel extends ComputeKernel {
 				maxSamples: u32,
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
+				bounces: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -224,37 +226,64 @@ export class MaterialKernel extends ComputeKernel {
 					// attenuate the light transmitted through the volume when exiting a backface. The
 					// staged throughput is read back by LogicKernel when this surface's emission and
 					// NEE contribution resolve, matching the megakernel's ordering.
+					var throughputColor = input.throughputColor;
 					if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
-						rayDataStorage[ index ].throughputColor = input.throughputColor * ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+						rayDataStorage[ index ].throughputColor = throughputColor;
 
 					}
 
 					// sample the next bounce direction and stage the scatter state for LogicKernel
-					let scatterRec = ${ bsdfSampleFn }( view, surface );
+					var scatterRec = ${ bsdfSampleFn }( view, surface );
+					let newBounce = input.currentBounce + 1u;
+
+					// decide termination now so finished paths skip the bounce trace entirely - a
+					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
+					// the surface's emission and NEE before freeing the slot
+					var isTerminated = newBounce >= bounces || all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
+
+					// russian roulette early out:
+					// Matches Cycles path_state_continuation_probability in integrator/path_state.h
+					if ( ! isTerminated && newBounce >= 3u ) {
+
+						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
+						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+						isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+						if ( ! isTerminated ) {
+
+							// fold the survival boost into the scatter color so LogicKernel's
+							// throughput update applies it without a separate division
+							scatterRec.color /= rrProb;
+
+						}
+
+					}
+
 					rayDataStorage[ index ].scatterColor = scatterRec.color;
-					rayDataStorage[ index ].scatterPdf = scatterRec.pdf;
+					rayDataStorage[ index ].scatterPdf = select( scatterRec.pdf, 0.0, isTerminated );
 					rayDataStorage[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
 					rayDataStorage[ index ].isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 					rayDataStorage[ index ].emission = surface.emission;
-
-					let newBounce = input.currentBounce + 1u;
-
-					// TODO: run the bounce limit, russian roulette, terminating scatter and zero
-					// throughput checks here and skip the enqueue when they fire. LogicKernel decides
-					// them a frame later, so every terminating path traces one segment for nothing
-					let rayIndex = atomicAdd( &rayQueue.length, 1u );
-					rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
-					rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
-					rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
-					rayQueue.elements[ rayIndex ].currentBounce = newBounce;
-					rayQueue.elements[ rayIndex ].seed = input.seed;
-					rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
-					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
-
-					rayDataStorage[ index ].origin = rayQueue.elements[ rayIndex ].origin;
-					rayDataStorage[ index ].direction = scatterRec.direction;
 					rayDataStorage[ index ].currentBounce = newBounce;
+
+					// the NEE shadow ray below still resolves the surface's direct light, so only
+					// the bounce segment is skipped for finished paths
+					if ( ! isTerminated ) {
+
+						let rayIndex = atomicAdd( &rayQueue.length, 1u );
+						rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
+						rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
+						rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
+						rayQueue.elements[ rayIndex ].currentBounce = newBounce;
+						rayQueue.elements[ rayIndex ].seed = input.seed;
+						rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
+						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
+
+						rayDataStorage[ index ].origin = rayQueue.elements[ rayIndex ].origin;
+						rayDataStorage[ index ].direction = scatterRec.direction;
+
+					}
 
 					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray
 					var lightPdf = input.lightPdf;
