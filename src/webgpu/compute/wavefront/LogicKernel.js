@@ -172,7 +172,7 @@ export class LogicKernel extends ComputeKernel {
 								if ( misEnabled != 0u ) {
 
 									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( input.scatterPdf,lightPdf );
+									misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf );
 
 								}
 
@@ -241,7 +241,7 @@ export class LogicKernel extends ComputeKernel {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
 								let envPdf = ${ getEnvDirPdf }( input.direction ) / lightsDenom;
-								misWeight = ${ misHeuristicFn }( input.scatterPdf,envPdf );
+								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 							}
 
@@ -272,7 +272,7 @@ export class LogicKernel extends ComputeKernel {
 								if ( misEnabled != 0u && envActive ) {
 
 									let envPdf = ${ getEnvDirPdf }( input.direction );
-									misWeight = ${ misHeuristicFn }( input.scatterPdf,envPdf );
+									misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 								}
 
