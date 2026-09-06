@@ -362,7 +362,7 @@ export class WebGPUPathTracer {
 		this.renderDelay = 500;
 		this.fadeDuration = 500;
 		this.dynamicLowRes = true;
-		this.lowResScale = 0.25;
+		this.lowResScale = 0.1;
 		this.renderScale = 1;
 		this.synchronizeRenderSize = true;
 		this.generateMissingAttributes = true;
