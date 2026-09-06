@@ -228,16 +228,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// number of path slots dispatched per update, capped by the pool and the pixel count
-	getFrameBudget( width, height ) {
+	_updatePixelQueue( width, height, rayCount ) {
 
-		return Math.min( MAX_RAY_DATA_COUNT, width * height, Math.max( 1, Math.floor( this.frameBudget ) ) );
-
-	}
-
-	_updatePixelQueue( width, height ) {
-
-		const overflowCount = Math.max( 0, width * height - this.getFrameBudget( width, height ) );
+		const overflowCount = Math.max( 0, width * height - rayCount );
 		const size = pixelQueueStruct.getLength() + Math.max( overflowCount, 1 );
 		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
@@ -256,15 +249,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	*createRenderTask() {
 
-		// a resize resets, recreating this task, so the dimensions, ray count, and pixel queue
-		// hold for its lifetime
-		const targetDimensions = new Vector2();
-		this.getSize( targetDimensions );
-		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
-		const rayCount = this.getFrameBudget( targetDimensions.x, targetDimensions.y );
-
 		const {
 			renderer,
+			frameBudget,
 			maxTransparentBounces,
 
 			rayDataStorage,
@@ -272,7 +259,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			shadowRayQueue,
 			rayIntersectionsStorage,
 			shadowRayIntersectionsStorage,
-			pixelQueue,
 
 			logicKernel,
 			materialKernel,
@@ -284,6 +270,17 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 		} = this;
 
+		// a resize resets, recreating this task, so the dimensions, ray count, and pixel queue
+		// hold for its lifetime
+		const targetDimensions = new Vector2();
+		this.getSize( targetDimensions );
+
+		// number of path slots dispatched per update, capped by the pool and the pixel count
+		const rayCount = Math.min( MAX_RAY_DATA_COUNT, targetDimensions.x * targetDimensions.y, Math.max( 1, Math.floor( frameBudget ) ) );
+
+		// referenced via "this" since the buffer may be replaced here
+		this._updatePixelQueue( targetDimensions.x, targetDimensions.y, rayCount );
+
 		// reset the trace queues — only the length header needs zeroing
 		zeroDispatchKernel.target = rayQueue;
 		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
@@ -293,7 +290,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// assign every path slot a pixel and park the overflow pixels in the pixel queue
 		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
-		populatePixelIndicesKernel.pixelQueue = pixelQueue;
+		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.frameBudget = rayCount;
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
@@ -340,7 +337,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayDataStorage = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
-				materialKernel.pixelQueue = pixelQueue;
+				materialKernel.pixelQueue = this.pixelQueue;
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
