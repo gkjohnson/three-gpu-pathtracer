@@ -9,7 +9,6 @@ import {
 	MeshStandardMaterial,
 	PlaneGeometry,
 	Scene,
-	PerspectiveCamera,
 	OrthographicCamera,
 	Vector3,
 	WebGPURenderer,
@@ -30,7 +29,7 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
-import { GradientEquirectTexture } from 'three-gpu-pathtracer';
+import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
@@ -53,6 +52,7 @@ const DEVICE_LIMITS_REQUESTED = [
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
 const DEFAULT_FOV = 45;
+const DEFAULT_BOKEH_SIZE = 0;
 
 // how far behind the model the backdrop's curve begins
 const BACKDROP_DISTANCE = 1;
@@ -76,6 +76,13 @@ const LIGHT_RIGS = {
 	'side strips': [
 		{ size: [ 0.5, 3.2 ], position: [ - 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
 		{ size: [ 0.5, 3.2 ], position: [ 2.2, 1, 0.4 ], intensity: 14, color: 0xffffff },
+	],
+	// taken from the Sasha ring scene
+	'light box': [
+		{ size: [ 3.55, 8.8 ], position: [ 0.65, 1.75, - 3.45 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 5, color: 0xffffff },
+		{ size: [ 1.65, 7.7 ], position: [ - 1.8, 0.6, - 2.8 ], rotation: [ 0, - Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
+		{ size: [ 1.65, 1.7 ], position: [ 2.25, 0.6, 0.2 ], rotation: [ 0, Math.PI / 2, 0 ], intensity: 3, color: 0xffffff },
+		{ size: [ 1.7, 2.8 ], position: [ 0.1, 1.15, 2.4 ], rotation: [ 0, 0, 0 ], intensity: 3, color: 0xffffff },
 	],
 	'overhead strips': [
 		{ size: [ 0.35, 3.4 ], position: [ - 0.9, 2.4, 0 ], rotation: [ - Math.PI / 2, 0, 0 ], intensity: 12, color: 0xffffff },
@@ -152,6 +159,9 @@ const params = {
 	enable: true,
 	bounces: 15,
 	pause: false,
+
+	bokehSize: DEFAULT_BOKEH_SIZE,
+	focusDistance: 1,
 
 	...getScaledSettings(),
 
@@ -239,7 +249,9 @@ async function init() {
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
-	perspectiveCamera = new PerspectiveCamera( DEFAULT_FOV, aspect, 0.025, 500 );
+	perspectiveCamera = new PhysicalCamera( DEFAULT_FOV, aspect, 0.025, 500 );
+	perspectiveCamera.bokehSize = DEFAULT_BOKEH_SIZE;
+	perspectiveCamera.focusDistance = 1;
 
 	const orthoHeight = orthoWidth / aspect;
 	orthoCamera = new OrthographicCamera( orthoWidth / - 2, orthoWidth / 2, orthoHeight / 2, orthoHeight / - 2, 0, 100 );
@@ -466,6 +478,7 @@ function onParamsChange() {
 	floorPlane.material.color.set( light ? 0xd2d2d2 : 0x111111 );
 	pedestalMaterial.color.set( light ? 0xdcdcdc : 0x1c1c1c );
 	backdrop.material.color.set( light ? 0xc6c6c6 : 0x161616 );
+	backdrop.material.roughness = light ? 0.2 : 0.6;
 
 	document.body.classList.toggle( 'checkerboard', transparent );
 	document.body.classList.toggle( 'light-background', light );
@@ -584,6 +597,10 @@ function buildGui() {
 	} );
 	pathTracingFolder.open();
 
+	const cameraFolder = gui.addFolder( 'Camera' );
+	cameraFolder.add( params, 'bokehSize', 0, 100, 0.5 ).onChange( updateDepthOfField );
+	cameraFolder.add( params, 'focusDistance', 0.05, 10, 0.01 ).onChange( updateDepthOfField );
+
 	const backdropFolder = gui.addFolder( 'Backdrop' );
 	backdropFolder.add( params, 'envMap', envMaps ).name( 'environment' ).onChange( updateEnvMap );
 	backdropFolder.add( params, 'stage', [ 'floor', 'pedestal', 'backdrop', 'none' ] ).name( 'stage' ).onChange( updateStage );
@@ -605,8 +622,17 @@ function updateEnvMap() {
 
 	}
 
+	const url = params.envMap;
 	new HDRLoader()
-		.load( params.envMap, texture => {
+		.load( url, texture => {
+
+			// a different environment was selected while this one downloaded
+			if ( params.envMap !== url ) {
+
+				texture.dispose();
+				return;
+
+			}
 
 			if ( scene.environment ) {
 
@@ -653,6 +679,14 @@ function useModelCamera( sceneCamera ) {
 	controls.target.copy( perspectiveCamera.position ).addScaledVector( forward, distance );
 
 	controls.update();
+
+}
+
+function updateDepthOfField() {
+
+	perspectiveCamera.bokehSize = params.bokehSize;
+	perspectiveCamera.focusDistance = params.focusDistance;
+	pathTracer.updateCamera();
 
 }
 
@@ -778,7 +812,7 @@ async function updateModel() {
 	const scale = 1 / sphere.radius;
 	model.scale.setScalar( scale );
 	model.position.multiplyScalar( scale );
-	box.setFromObject( model );
+	box.setFromObject( model, true );
 
 	// attenuation and light dimensions are measured in world units and ignore the object
 	// hierarchy scale, so they must be scaled with the model
@@ -834,14 +868,18 @@ async function updateModel() {
 	loader.setCredits( modelInfo.credit || '' );
 
 	// models that carry their own lighting can override the scene defaults
-	params.envMap = modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
+	params.envMap = envMaps[ modelInfo.envMap ] ?? modelInfo.envMap ?? envMaps[ 'Aristea Wreck Puresky' ];
 	params.lighting = modelInfo.lighting ?? 'none';
 	params.stage = modelInfo.stage ?? 'floor';
 	params.background = modelInfo.background ?? 'white';
 
+	params.bokehSize = modelInfo.bokehSize ?? DEFAULT_BOKEH_SIZE;
+	params.focusDistance = modelInfo.focusDistance ?? 1;
+
 	updateStage();
 	updateLighting();
 	updateEnvMap();
+	updateDepthOfField();
 
 	buildGui();
 	onParamsChange();

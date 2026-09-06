@@ -326,6 +326,10 @@ export class WebGPUPathTracer {
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this.setCamera( this.camera );
+
+		// the new tracer has default environment and background maps so apply the cached scene textures
+		this._pathTracer.setEnvironment( this._environmentCache.texture );
+		this._pathTracer.setBackground( this._backgroundCache.texture );
 		this.updateEnvironment();
 		this.updateLights();
 
