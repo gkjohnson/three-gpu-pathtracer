@@ -75,10 +75,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.populatePixelIndicesKernel = new PopulatePixelIndicesKernel().setWorkgroupSize( 8, 8, 1 );
-		this.logicKernel = new LogicKernel( ).setWorkgroupSize( 64, 1, 1 );
-		this.materialKernel = new MaterialKernel( ).setWorkgroupSize( 64, 1, 1 );
-		this.traceRayKernel = new TraceRayKernel( ).setWorkgroupSize( 64, 1, 1 );
-		this.traceShadowRayKernel = new TraceShadowRayKernel( ).setWorkgroupSize( 64, 1, 1 );
+		this.logicKernel = new LogicKernel().setWorkgroupSize( 64, 1, 1 );
+		this.materialKernel = new MaterialKernel().setWorkgroupSize( 64, 1, 1 );
+		this.traceRayKernel = new TraceRayKernel().setWorkgroupSize( 64, 1, 1 );
+		this.traceShadowRayKernel = new TraceShadowRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );

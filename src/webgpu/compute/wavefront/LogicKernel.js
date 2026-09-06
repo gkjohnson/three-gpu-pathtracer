@@ -46,14 +46,14 @@ export class LogicKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		// environment + background resources pulled off their providers ( embedded functions )
+		// environment + background resources pulled off their providers (embedded functions)
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
-		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
+		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
@@ -93,7 +93,7 @@ export class LogicKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
-				// one-sample NEE selection normalization ( lights + env ), matched with the megakernel
+				// one-sample NEE selection normalization (lights + env), matched with the megakernel
 				let envActive = ${ envTotalSumNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
@@ -106,7 +106,7 @@ export class LogicKernel extends ComputeKernel {
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
 
-				// resolve the previous surface's NEE shadow ray ( pre-scatter throughput )
+				// resolve the previous surface's NEE shadow ray (pre-scatter throughput)
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
 					let shadowHit = shadowRayIntersectionsStorage[ u32( input.shadowRayIntersectionIndex ) ];
@@ -123,7 +123,7 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
-				// emission gathered at the previous surface ( pre-scatter throughput )
+				// emission gathered at the previous surface (pre-scatter throughput)
 				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, input.currentBounce, clampDirect, clampIndirect );
 				resultColor += vec4f( emission, 0.0 );
 
