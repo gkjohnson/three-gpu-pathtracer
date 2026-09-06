@@ -79,6 +79,9 @@ export class MaterialKernel extends ComputeKernel {
 					var pixelIndex = input.pixelIndex;
 					if ( pixelQueue.elementCount > 0u ) {
 
+						// TODO: If we've pulled off a pixel that's already finished we currently just
+						// write a no-op ray, wasting a frame. It may be better to iterate over a few
+						// points in the queue to see if we can find one we can use.
 						let queueIndex = atomicAdd( &pixelQueue.current, 1u ) % pixelQueue.elementCount;
 						pixelIndex = atomicExchange( &pixelQueue.elements[ queueIndex ], pixelIndex );
 
@@ -108,6 +111,8 @@ export class MaterialKernel extends ComputeKernel {
 					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
 						// the camera declined the pixel, so leave the slot dormant for this round
+						// TODO: same as above - this work is a bit wasteful and leaves slots empty for
+						// a frame. Is it possible to quickly skip rays outside the mask or are finished?
 						rayDataStorage[ index ].pixelIndex = pixelIndex;
 						rayDataStorage[ index ].rayIntersectionIndex = - 1;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -223,9 +228,8 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// attenuate the light transmitted through the volume when exiting a backface. The
-					// staged throughput is read back by LogicKernel when this surface's emission and
-					// NEE contribution resolve, matching the megakernel's ordering.
+					// attenuate the light transmitted through the volume when exiting a backface so
+					// the surface's emission and NEE resolve against the attenuated throughput
 					var throughputColor = input.throughputColor;
 					if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
@@ -260,6 +264,8 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
+					// Write the ray storage content here since things like the emissive value is read
+					// in the logic kernel on the subsequent frame.
 					rayDataStorage[ index ].scatterColor = scatterRec.color;
 					rayDataStorage[ index ].scatterPdf = select( scatterRec.pdf, 0.0, isTerminated );
 					rayDataStorage[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
@@ -285,7 +291,8 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray
+					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray.
+					// the light pdf will be 0 if NEE is disabled.
 					var lightPdf = input.lightPdf;
 					if ( lightPdf > 0.0 ) {
 
