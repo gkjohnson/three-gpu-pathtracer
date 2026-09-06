@@ -1,17 +1,17 @@
 export function getScaledSettings() {
 
-	let tiles = 3;
+	let frameBudget = 250000;
 	let renderScale = 1;
 
 	// adjust performance parameters for mobile
 	const aspectRatio = window.innerWidth / window.innerHeight;
 	if ( aspectRatio < 0.65 ) {
 
-		tiles = 4;
+		frameBudget = 100000;
 		renderScale = 1 / window.devicePixelRatio;
 
 	}
 
-	return { tiles, renderScale };
+	return { frameBudget, renderScale };
 
 }
