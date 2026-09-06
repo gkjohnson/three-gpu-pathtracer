@@ -106,7 +106,8 @@ export class LogicKernel extends ComputeKernel {
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
 
-				// resolve the previous surface's NEE shadow ray (pre-scatter throughput)
+				// resolve the previous surface's NEE shadow ray (pre-scatter throughput). The index
+				// is negative when no shadow ray was enqueued last frame
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
 					let shadowHit = shadowRayIntersectionsStorage[ u32( input.shadowRayIntersectionIndex ) ];
