@@ -254,47 +254,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	reset() {
-
-		const {
-			renderer,
-
-			zeroDispatchKernel,
-			populatePixelIndicesKernel,
-
-			rayDataStorage,
-			rayQueue,
-			shadowRayQueue,
-		} = this;
-
-		if ( ! renderer.initialized ) {
-
-			return;
-
-		}
-
-		super.reset();
-
-		// reset the trace queues — only the length header needs zeroing
-		zeroDispatchKernel.target = rayQueue;
-		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
-
-		zeroDispatchKernel.target = shadowRayQueue;
-		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
-
-		// assign every path slot a pixel and park the overflow pixels in the pixel queue
-		const { width, height } = this.sampleCountTarget;
-		this._updatePixelQueue( width, height );
-
-		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
-		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-		populatePixelIndicesKernel.frameBudget = this.getFrameBudget( width, height );
-		populatePixelIndicesKernel.targetDimensions.set( width, height );
-		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( width, height, 1 ) );
-
-	}
-
 	*createRenderTask() {
+
+		// a resize resets, recreating this task, so the dimensions, ray count, and pixel queue
+		// hold for its lifetime
+		const targetDimensions = new Vector2();
+		this.getSize( targetDimensions );
+		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
+		const rayCount = this.getFrameBudget( targetDimensions.x, targetDimensions.y );
 
 		const {
 			renderer,
@@ -305,6 +272,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			shadowRayQueue,
 			rayIntersectionsStorage,
 			shadowRayIntersectionsStorage,
+			pixelQueue,
 
 			logicKernel,
 			materialKernel,
@@ -313,9 +281,22 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			rayDispatchConverter,
 			shadowDispatchConverter,
 			zeroDispatchKernel,
+			populatePixelIndicesKernel,
 		} = this;
 
-		const targetDimensions = new Vector2();
+		// reset the trace queues — only the length header needs zeroing
+		zeroDispatchKernel.target = rayQueue;
+		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
+
+		zeroDispatchKernel.target = shadowRayQueue;
+		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
+
+		// assign every path slot a pixel and park the overflow pixels in the pixel queue
+		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
+		populatePixelIndicesKernel.pixelQueue = pixelQueue;
+		populatePixelIndicesKernel.frameBudget = rayCount;
+		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
+		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
 		// advance the sequence once per task so each render pass starts from fresh
 		// noise unless "stableNoise" has reset it
@@ -328,9 +309,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			const iter = this.lowResMode ? Math.min( this.bounces, LOW_RES_ITERATIONS ) : 1;
 
 			for ( let i = 0; i < iter; i ++ ) {
-
-				this.getSize( targetDimensions );
-				const rayCount = this.getFrameBudget( targetDimensions.x, targetDimensions.y );
 
 				// Swap targets to support devices without <rgba32float, read_write> textures
 				// Copy latest data to a new outputTarget to keep the appearance
@@ -362,7 +340,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayDataStorage = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
-				materialKernel.pixelQueue = this.pixelQueue;
+				materialKernel.pixelQueue = pixelQueue;
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
