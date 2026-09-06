@@ -320,11 +320,9 @@ export class WebGPUPathTracer {
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this.setCamera( this.camera );
 
-		// the new tracer has default environment and background maps so force the caches
-		// to re-apply the scene textures
-		// TODO: clean this up so tracer recreation doesn't depend on manually invalidating the caches
-		this._environmentCache.hash = null;
-		this._backgroundCache.hash = null;
+		// the new tracer has default environment and background maps so apply the cached scene textures
+		this._pathTracer.setEnvironment( this._environmentCache.texture );
+		this._pathTracer.setBackground( this._backgroundCache.texture );
 		this.updateEnvironment();
 		this.updateLights();
 
