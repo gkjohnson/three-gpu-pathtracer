@@ -10,7 +10,7 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
@@ -111,7 +111,7 @@ export class LogicKernel extends ComputeKernel {
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
 					let shadowHit = shadowRayIntersectionsStorage[ u32( input.shadowRayIntersectionIndex ) ];
-					let occluded = shadowHit.objectIndex >= 0 && shadowHit.dist < input.lightDist - ${ LIGHT_EPSILON };
+					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
 						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight

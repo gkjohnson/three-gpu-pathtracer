@@ -41,7 +41,7 @@ export class TraceRayKernel extends ComputeKernel {
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, queuedRay.seed, queuedRay.currentBounce + queuedRay.alphaDepth );
 
-				let ray = Ray( queuedRay.origin, queuedRay.direction );
+				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
 				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 

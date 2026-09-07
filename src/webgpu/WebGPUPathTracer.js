@@ -522,7 +522,6 @@ export class WebGPUPathTracer {
 				fn: wgslTagFn/* wgsl */`
 					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
-						// the ray direction is normalized with "maxDist" set to the far plane distance
 						let ndc = uv * 2.0 - vec2f( 1.0 );
 						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 						return true;

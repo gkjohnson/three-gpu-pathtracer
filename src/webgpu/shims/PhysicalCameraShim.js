@@ -94,7 +94,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const fn = wgslTagFn/* wgsl */`
 		fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
-			// base ray, with "maxDist" at the far plane distance so hits beyond it are clipped
+			// base ray
 			let ndc = uv * 2.0 - vec2f( 1.0 );
 			*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 

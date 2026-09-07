@@ -21,7 +21,6 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 				let viewportMax = viewport.xy + viewport.zw;
 				if ( all( pixel >= viewport.xy ) && all( pixel < viewportMax ) ) {
 
-					// the ray direction is normalized with "maxDist" set to the far plane distance
 					let cameraUv = ( pixel - viewport.xy ) / viewport.zw;
 					let ndc = cameraUv * 2.0 - vec2f( 1.0 );
 					*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrices }[ i ] );

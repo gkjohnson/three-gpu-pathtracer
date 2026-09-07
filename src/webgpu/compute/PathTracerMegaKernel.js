@@ -125,7 +125,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				${ rngInit }( indexUV.xy, seed, 0 );
 
-				// scene ray, with the camera's maximum view distance for far plane clipping
+				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
@@ -346,8 +346,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
-						// zero means the bounce segment traces unbounded
-					ray.maxDist = 0.0;
+						ray.maxDist = 0.0;
 
 					} else {
 

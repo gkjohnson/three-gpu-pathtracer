@@ -8,6 +8,7 @@ import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
+import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -129,6 +130,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].currentBounce = 0u;
 					rayQueue.elements[ rayIndex ].seed = seed + samples;
 					rayQueue.elements[ rayIndex ].alphaDepth = 0u;
+					rayQueue.elements[ rayIndex ].maxDist = ray.maxDist;
 
 					rayDataStorage[ index ].origin = ray.origin;
 					rayDataStorage[ index ].direction = ray.direction;
@@ -144,6 +146,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
+					rayDataStorage[ index ].maxDist = ray.maxDist;
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 
@@ -213,6 +216,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
 						rayQueue.elements[ alphaIndex ].seed = input.seed;
 						rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
+						rayQueue.elements[ alphaIndex ].maxDist = input.maxDist;
 
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
@@ -284,6 +288,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue.elements[ rayIndex ].currentBounce = newBounce;
 						rayQueue.elements[ rayIndex ].seed = input.seed;
 						rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
+						rayQueue.elements[ rayIndex ].maxDist = 0.0;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
 						rayDataStorage[ index ].origin = rayQueue.elements[ rayIndex ].origin;
@@ -309,6 +314,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
 							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
+							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist - ${ LIGHT_EPSILON };
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {
