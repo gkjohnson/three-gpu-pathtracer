@@ -241,7 +241,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( isDispersive ) {
 
 							let wavelength = abs( dispersionWavelength );
-							surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, wavelength );
+							${ applyDispersionFunc }( &surface, materialInfo.dispersion, wavelength );
 							if ( dispersionWavelength < 0.0 ) {
 
 								dispersionWavelength = wavelength;

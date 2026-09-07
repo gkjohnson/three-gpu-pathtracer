@@ -617,19 +617,17 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-export const applyDispersionFunc = wgslFn( /* wgsl */ `
+export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: SurfaceRecord, dispersion: f32, wavelength: f32 ) -> SurfaceRecord {
+	fn applyDispersion( surf: ptr<function, ${ surfaceRecordStruct }>, dispersion: f32, wavelength: f32 ) -> void {
 
-		var result = surf;
-		result.ior = dispersionIor( result.ior, dispersion, wavelength );
-		result.eta = select( result.ior, 1.0 / result.ior, result.thinWall || result.frontFace );
-		result.f0 = iorToF0( result.eta );
-		return result;
+		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
+		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
+		surf.f0 = ${ iorToF0Func }( surf.eta );
 
 	}
 
-`, [ dispersionIorFunc, iorToF0Func, surfaceRecordStruct ] );
+`;
 
 // A path keeps one uniformly sampled hero wavelength after its first dispersive interaction.
 // The CIE 1931 fit is converted to linear Rec. 709, clamped to the RGB gamut, and normalized so

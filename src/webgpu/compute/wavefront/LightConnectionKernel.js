@@ -123,7 +123,7 @@ export class LightConnectionKernel extends ComputeKernel {
 				if ( isDispersive ) {
 
 					let wavelength = abs( input.dispersionWavelength );
-					surface = ${ applyDispersionFunc }( surface, materialInfo.dispersion, wavelength );
+					${ applyDispersionFunc }( &surface, materialInfo.dispersion, wavelength );
 					if ( input.dispersionWavelength < 0.0 ) {
 
 						throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
