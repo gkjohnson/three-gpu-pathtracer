@@ -197,8 +197,7 @@ export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 	fn isTerminatingScatter( scatterRec: ScatterRecord ) -> bool {
 
-		// A comparison with NaN is false, so this also rejects invalid PDFs.
-		return ! ( scatterRec.pdf > 0 );
+		return scatterRec.pdf <= 0;
 
 	}
 

@@ -105,7 +105,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// handles specular reflection and transmission
 				if ( surf.transmission > 0.0 ) {
 
-					let matchedIor = ! surf.thinWall && ${ isMatchedIorFunc }( surf.eta );
+					let matchedIor = ${ isMatchedIorFunc }( surf.eta );
 
 					// anisotropic roughness along tangent, bitangent
 					let alphaB = surf.roughness * surf.roughness;
@@ -118,14 +118,14 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// multiscatter compensation
 					var glassBoost = 0.0;
-					if ( surf.thinWall ) {
+					if ( matchedIor ) {
+
+						glassBoost = 1.0;
+
+					} else if ( surf.thinWall ) {
 
 						// thin wall halves are reflection-shaped so each is compensated with the conductor albedo at its own roughness.
 						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
-
-					} else if ( matchedIor ) {
-
-						glassBoost = 1.0;
 
 					} else {
 
@@ -139,7 +139,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						// TODO: transmitted light also crosses the iridescent thin film so it should be weighted by
 						// the iridescence-aware fresnel complement rather than the plain dielectric fresnel
 						var refraction = vec3f( 0.0 );
-						if ( surf.thinWall ) {
+						if ( surf.thinWall && ! matchedIor ) {
 
 							// evaluate the flipped reflection, compensated at the remapped roughness
 							let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
@@ -393,6 +393,14 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						wi = - normalize( reflect( wo, wh ) );
 
+					} else if ( ${ isMatchedIorFunc }( surf.eta ) ) {
+
+						// With no IOR boundary, rough transmission collapses to straight-through
+						// delta transmission independent of the sampled microfacet.
+						wi = - wo;
+						wh = vec3f( 0.0, 0.0, 1.0 );
+						isDeltaTransmission = true;
+
 					} else if ( surf.thinWall ) {
 
 						// model the double refraction as a single reflection flipped through the
@@ -401,14 +409,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						wh = ${ ggxDirectionFunc }( wo, thinWallAlpha, directionUV );
 						wi = - normalize( reflect( wo, wh ) );
 						wi = vec3f( wi.xy, - wi.z );
-
-					} else if ( ${ isMatchedIorFunc }( surf.eta ) ) {
-
-						// With no IOR boundary, rough refraction collapses to straight-through
-						// delta transmission independent of the sampled microfacet.
-						wi = - wo;
-						wh = vec3f( 0.0, 0.0, 1.0 );
-						isDeltaTransmission = true;
 
 					} else {
 
@@ -507,7 +507,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
 				let isTransmission = wi.z < 0.0;
-				if ( isTransmission && ! surf.thinWall && ${ isMatchedIorFunc }( surf.eta ) ) {
+				if ( isTransmission && ${ isMatchedIorFunc }( surf.eta ) ) {
 
 					// Delta transmission has no finite solid-angle BSDF or PDF. It is handled
 					// explicitly by bsdfSample, matching PBRT-v4's eta == 1 path.
