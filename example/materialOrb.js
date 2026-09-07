@@ -70,7 +70,7 @@ const params = {
 	bounces: 15,
 	renderScale: 1,
 	filterGlossyFactor: 1,
-	tiles: 3,
+	frameBudget: 250000,
 };
 
 // adjust performance parameters for mobile
@@ -78,7 +78,7 @@ const aspectRatio = window.innerWidth / window.innerHeight;
 if ( aspectRatio < 0.65 ) {
 
 	params.renderScale *= 0.5;
-	params.tiles = 2;
+	params.frameBudget = 100000;
 	params.multipleImportanceSampling = false;
 
 }
@@ -105,7 +105,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 
 	scene = new Scene();
 
@@ -173,9 +173,9 @@ async function init() {
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );

@@ -26,7 +26,7 @@ init();
 
 async function init() {
 
-	const { tiles, renderScale } = getScaledSettings();
+	const { frameBudget, renderScale } = getScaledSettings();
 
 	loader = new LoaderElement();
 	loader.attach( document.body );
@@ -40,7 +40,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.renderScale = renderScale;
-	pathTracer.tiles.set( tiles, tiles );
+	pathTracer.frameBudget = frameBudget;
 
 	// camera
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );

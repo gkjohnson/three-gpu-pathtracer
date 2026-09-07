@@ -67,7 +67,7 @@ const params = {
 
 	model: modelName in MODELS ? modelName : 'X-Wing',
 	renderScale: 1,
-	tiles: 5,
+	frameBudget: 100000,
 
 	pause: false,
 
@@ -123,7 +123,7 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
@@ -446,9 +446,9 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'tiles', 5, 10, 1 ).onChange( v => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
 
-		pathTracer.tiles.setScalar( v );
+		pathTracer.frameBudget = v;
 
 	} );
 
