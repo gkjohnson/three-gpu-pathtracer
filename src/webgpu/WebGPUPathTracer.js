@@ -1,8 +1,7 @@
 import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
-import { ndcToCameraRay, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayStruct } from './nodes/structs.wgsl.js';
+import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
@@ -516,14 +515,9 @@ export class WebGPUPathTracer {
 				fn: wgslTagFn/* wgsl */`
 					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
+						// the ray direction is normalized with "maxDist" set to the far plane distance
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						let baseRay = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
-						ray.origin = baseRay.origin;
-						ray.direction = baseRay.direction;
-
-						// distance to the far plane along this ray so hits beyond it are clipped
-						let farPoint = ${ invViewProjectionMatrix } * vec4f( ndc, 1.0, 1.0 );
-						ray.maxDist = distance( ray.origin, farPoint.xyz / farPoint.w );
+						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 						return true;
 
 					}

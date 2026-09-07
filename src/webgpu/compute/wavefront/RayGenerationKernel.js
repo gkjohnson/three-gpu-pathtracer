@@ -5,8 +5,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { rngInit, rand2, RNG_INDEX_RAY_JITTER } from '../../nodes/random.wgsl.js';
 import { rayQueueAtomicStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
-import { proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayStruct } from '../../nodes/structs.wgsl.js';
+import { proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class RayGenerationKernel extends ComputeKernel {
 

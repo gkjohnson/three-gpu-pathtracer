@@ -1,8 +1,8 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { storage, float, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
-import { materialStruct, rayStruct } from './structs.wgsl.js';
+import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
@@ -176,7 +176,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// the transparency raycast resolve to one textureInfo binding per pipeline
 		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
-		// raycast first hit, bounded by the ray's "maxDist"
+		// raycast first hit, bounded by the ray's "maxDist" - 0 means unbounded
 		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
@@ -221,7 +221,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						return 0u;
 
-					} else if ( dist * ${ scratchRayScalar } >= ray.maxDist ) {
+					} else if ( ray.maxDist > 0.0 && dist * ${ scratchRayScalar } >= ray.maxDist ) {
 
 						// the node sits entirely beyond the ray's maximum trace distance
 						return 0u;
@@ -243,7 +243,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
 
 					var didHit = false;
-					let bvhRay = Ray( ray.origin, ray.direction );
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
 						let i0 = ${ storage.index }[ ti * 3u ];
@@ -254,9 +253,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ storage.attributes }[ i1 ].position.xyz;
 						let c = ${ storage.attributes }[ i2 ].position.xyz;
 
-						var triResult = ${ intersectRayTriangle }( bvhRay, a, b, c, 0.0 );
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
-						if ( triResult.didHit && triResult.dist < ray.maxDist && ( ! result.didHit || triResult.dist < result.dist ) ) {
+						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 

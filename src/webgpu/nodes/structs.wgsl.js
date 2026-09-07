@@ -11,14 +11,6 @@ export const constants = wgsl( /* wgsl */ `
 
 ` );
 
-// traversal ray with a maximum trace distance - hits at or beyond "maxDist" are never recorded.
-// Named "PathRay" in WGSL to avoid colliding with the three-mesh-bvh "Ray" struct.
-export const rayStruct = new StructTypeNode( {
-	origin: 'vec3f',
-	maxDist: 'float',
-	direction: 'vec3f',
-}, 'PathRay' );
-
 export const scatterRecordStruct = new StructTypeNode( {
 	color: 'vec3f',
 	isTransmissive: 'bool',

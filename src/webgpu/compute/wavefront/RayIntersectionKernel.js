@@ -94,7 +94,7 @@ export class RayIntersectionKernel extends ComputeKernel {
 				}
 
 				// run intersection, bounded by the ray's maximum trace distance
-				let ray = PathRay( input.origin, input.maxDist, input.direction );
+				let ray = Ray( input.origin, input.direction, input.maxDist );
 				var hitResult: ${ raycastOutput };
 				let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 				let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
