@@ -23,7 +23,7 @@ let loader;
 const params = {
 
 	multipleImportanceSampling: true,
-	tiles: 2,
+	frameBudget: 250000,
 	renderScale: 1,
 
 	color: '#eeeeee',
@@ -53,7 +53,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -119,9 +119,9 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );

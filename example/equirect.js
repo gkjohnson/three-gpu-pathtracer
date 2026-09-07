@@ -28,7 +28,7 @@ const params = {
 
 	bounces: 15,
 	renderScale: 1,
-	tiles: 2,
+	frameBudget: 250000,
 	projection: 'Equirectangular',
 	...getScaledSettings(),
 
@@ -50,7 +50,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.dynamicLowRes = true;
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer.frameBudget = params.frameBudget;
 
 	// cameras, positioned once the scene's authored viewpoint is available
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -125,9 +125,9 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	gui.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	gui.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
 	gui.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );

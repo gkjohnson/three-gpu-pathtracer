@@ -6,6 +6,8 @@ import { LightsInfoNode } from './LightsInfoNode.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
+const _size = new Vector2();
+
 export class MegaKernelPathTracer extends PathTracerBackend {
 
 	constructor( renderer ) {
@@ -13,7 +15,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		super( renderer );
 
 		// options
-		this.tiles = new Vector2( 2, 2 );
 		this.envInfo = new EquirectHdrInfoNode();
 
 		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
@@ -171,12 +172,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setTiles( tiles ) {
-
-		this.tiles.copy( tiles );
-
-	}
-
 	*createRenderTask() {
 
 		const {
@@ -185,11 +180,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			bounces,
 			maxTransparentBounces,
 
-			tiles,
 			outputTarget,
 			sampleCountTarget,
 			lowResMode,
 		} = this;
+
+		const tiles = new Vector2();
 
 		// init parameters
 		kernel.outputTarget = outputTarget;
@@ -211,6 +207,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 				continue;
 
 			}
+
+			// split the frame into a near square grid of tiles no larger than the budget
+			this.getSize( _size );
+			const budgetTiles = Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
+			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
+			tiles.y = Math.ceil( budgetTiles / tiles.x );
 
 			// every pixel in a tile finishes its sample in a single dispatch, so the sample counts
 			// can be derived from how far through the tile cycle we are without reading anything back
