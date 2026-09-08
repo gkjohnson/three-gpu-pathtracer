@@ -82,6 +82,10 @@ export const rayDataStruct = new StructTypeNode( {
 	// the camera segment's maximum trace distance, carried across alpha pass throughs
 	maxDist: 'float',
 
+	// the path's hero wavelength, negative until its reconstruction weight is applied at the
+	// first dispersive interaction
+	dispersionWavelength: 'float',
+
 }, 'RayData' );
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.

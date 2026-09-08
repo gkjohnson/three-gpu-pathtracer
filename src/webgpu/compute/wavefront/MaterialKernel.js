@@ -3,10 +3,10 @@ import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
-import { transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
 
@@ -149,6 +149,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].maxDist = ray.maxDist;
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+					rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -190,7 +191,7 @@ export class MaterialKernel extends ComputeKernel {
 					// from the Cycles "filter glossy" approach in integrator/surface_shader.h
 					let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-					let surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, view, blurRoughness );
+					var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, view, blurRoughness );
 
 					// Stochastically pass through partially transparent surfaces by re-enqueueing
 					// the ray at the hit point, advancing the alpha depth but not the bounce count.
@@ -232,9 +233,26 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
+					// apply the hero wavelength to dispersive surfaces, folding the spectral weight
+					// into the throughput at the path's first dispersive interaction
+					var throughputColor = input.throughputColor;
+					let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+					if ( isDispersive ) {
+
+						let wavelength = abs( input.dispersionWavelength );
+						${ applyDispersionFunc }( &surface, materialInfo.dispersion, wavelength );
+						if ( input.dispersionWavelength < 0.0 ) {
+
+							rayDataStorage[ index ].dispersionWavelength = wavelength;
+							throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
+							rayDataStorage[ index ].throughputColor = throughputColor;
+
+						}
+
+					}
+
 					// attenuate the light transmitted through the volume when exiting a backface so
 					// the surface's emission and NEE resolve against the attenuated throughput
-					var throughputColor = input.throughputColor;
 					if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );

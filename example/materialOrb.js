@@ -35,6 +35,7 @@ function getDefaultMaterialProperties() {
 		diffuseRoughness: 0,
 		ior: 1.5,
 		transmission: 0.0,
+		dispersion: 0.0,
 		thinWall: false,
 		attenuationColor: '#ffffff',
 		attenuationDistance: 1.0,
@@ -192,6 +193,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'metalness', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'opacity', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'transmission', 0, 1 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'dispersion', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'thinWall', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.05, 2.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'attenuationColor' ).onChange( onParamsChange );
@@ -301,6 +303,7 @@ function onParamsChange() {
 	material.metalness = materialProperties.metalness;
 	material.roughness = materialProperties.roughness;
 	material.transmission = materialProperties.transmission;
+	material.dispersion = materialProperties.dispersion;
 	material.attenuationDistance = materialProperties.thinWall ? Infinity : materialProperties.attenuationDistance;
 	material.attenuationColor.set( materialProperties.attenuationColor );
 	material.ior = materialProperties.ior;

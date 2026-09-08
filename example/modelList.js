@@ -314,6 +314,10 @@ export const MODEL_LIST = {
 
 					mat = c.material;
 
+				} else if ( c.material && c.material.transmission === 1.0 ) {
+
+					c.material.dispersion = 1.0;
+
 				}
 
 			} );
