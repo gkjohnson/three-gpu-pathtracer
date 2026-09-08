@@ -79,6 +79,10 @@ export const rayDataStruct = new StructTypeNode( {
 	// alpha test pass throughs, counted separately from the bounce count
 	alphaDepth: 'uint',
 
+	// the path's hero wavelength, negative until its reconstruction weight is applied at the
+	// first dispersive interaction
+	dispersionWavelength: 'float',
+
 }, 'RayData' );
 
 // A ray queued for BVH traversal by the trace kernels.

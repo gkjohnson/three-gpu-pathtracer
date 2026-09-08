@@ -69,6 +69,7 @@ export const materialStruct = new StructTypeNode( {
 	iridescenceThicknessMinimum: 'float',
 	iridescenceThicknessMaximum: 'float',
 	diffuseRoughness: 'float',
+	dispersion: 'float',
 
 	// offset 36 floats
 	specularColor: 'vec3',
