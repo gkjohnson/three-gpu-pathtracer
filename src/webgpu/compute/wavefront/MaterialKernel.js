@@ -217,7 +217,9 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
 						rayQueue.elements[ alphaIndex ].seed = input.seed;
 						rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
-						rayQueue.elements[ alphaIndex ].maxDist = input.maxDist;
+						// the origin advanced to the hit point, so the remaining budget shrinks by the
+						// distance already traced
+						rayQueue.elements[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
 
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
