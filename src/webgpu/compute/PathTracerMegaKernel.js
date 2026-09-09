@@ -295,11 +295,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										var shadowRay: ${ rayStruct };
 										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hitResult.normal );
 										shadowRay.direction = lightRec.direction;
+										shadowRay.maxDist = lightRec.dist - ${ LIGHT_EPSILON };
 
-										// opaque occlusion up to the light distance. A shadow-specific any hit traversal could support
-										// tinted shadows from transmissive and partially opaque objects
+										// opaque occlusion up to the light distance. A shadow-specific any hit
+										// traversal could support tinted shadows from transmissive and partially
+										// opaque objects
 										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit ) && shadowHit.dist < lightRec.dist - ${ LIGHT_EPSILON };
+										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
 											var lightPdf = lightRec.pdf;
@@ -360,6 +362,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
+						ray.maxDist = 0.0;
 
 					} else {
 

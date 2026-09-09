@@ -176,7 +176,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// the transparency raycast resolve to one textureInfo binding per pipeline
 		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
-		// raycast first hit
+		// raycast first hit, bounded by the ray's "maxDist" - 0 means unbounded
 		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
@@ -221,6 +221,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						return 0u;
 
+					} else if ( ray.maxDist > 0.0 && dist * ${ scratchRayScalar } >= ray.maxDist ) {
+
+						return 0u;
+
 					} else if ( result.didHit && dist * ${ scratchRayScalar } >= result.dist ) {
 
 						return 0u;
@@ -250,7 +254,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
-						if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
+						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 

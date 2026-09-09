@@ -79,13 +79,16 @@ export const rayDataStruct = new StructTypeNode( {
 	// alpha test pass throughs, counted separately from the bounce count
 	alphaDepth: 'uint',
 
+	// the camera segment's maximum trace distance, carried across alpha pass throughs
+	maxDist: 'float',
+
 	// the path's hero wavelength, negative until its reconstruction weight is applied at the
 	// first dispersive interaction
 	dispersionWavelength: 'float',
 
 }, 'RayData' );
 
-// A ray queued for BVH traversal by the trace kernels.
+// A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
 
 	origin: 'vec3f',
@@ -96,8 +99,8 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	seed: 'uint',
 	alphaDepth: 'uint',
+	maxDist: 'float',
 	_alignment0: 'uint',
-	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
 
