@@ -20,7 +20,7 @@ import {
 	ggxRefractionAdjustedPDFFunc,
 	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
-import { constants, surfaceRecordStruct } from './structs.wgsl.js';
+import { constants, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
@@ -790,6 +790,73 @@ export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 	}
 
 `, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
+
+// Reflection and transmission coefficients for the transmissive dielectric layer. The scalar
+// branch probability follows Cycles: choose between the two colored coefficients by their mean
+// energy while retaining the full RGB coefficient in the path throughput.
+export const transmissionFresnelFunc = ( iridescentFresnel = iridescentFresnelFunc ) => wgslTagFn/* wgsl */ `
+
+	fn transmissionFresnel( cosTheta: f32, surf: ${ surfaceRecordStruct } ) -> ${ transmissionFresnelStruct } {
+
+		var result: ${ transmissionFresnelStruct };
+		let cosine = saturate( abs( cosTheta ) );
+		let matchedIor = ${ isMatchedIorFunc }( surf.eta );
+		let airIncident = surf.thinWall || surf.frontFace;
+		let dielectricF = ${ dielectricFresnelFunc }( cosine, surf.eta );
+
+		// Keep matched media transparent unless a real thin-film layer is present. This avoids
+		// introducing the non-physical Schlick F90 reflection produced by KHR_materials_specular
+		// when the substrate itself has no IOR boundary.
+		var reflectance = vec3f( 0.0 );
+		if ( ! matchedIor ) {
+
+			let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
+			let dielectricFr = select(
+				vec3f( dielectricF ),
+				${ schlickFresnelVecFunc }( cosine, dielectricF0, vec3f( 1.0 ) ),
+				airIncident,
+			);
+			reflectance = surf.specularIntensity * dielectricFr;
+
+		}
+
+		reflectance = clamp( reflectance, vec3f( 0.0 ), vec3f( 1.0 ) );
+		var transmittance = vec3f( 1.0 - dielectricF );
+
+		if ( surf.iridescence > 0.0 ) {
+
+			// The media on either side of the film are air outside and the volume interior as
+			// the base. Swap them on interior hits so film-interface TIR remains possible.
+			let outsideIor = select( surf.ior, 1.0, airIncident );
+			let filmBaseIor = select( 1.0, surf.ior, airIncident );
+			let filmReflectance = clamp( ${ iridescentFresnel }(
+				cosine,
+				vec3f( ${ iorToF0Func }( filmBaseIor ) ),
+				surf.iridescenceIor,
+				outsideIor,
+				surf.iridescenceThickness,
+			), vec3f( 0.0 ), vec3f( 1.0 ) );
+
+			reflectance = mix( reflectance, filmReflectance, surf.iridescence );
+			transmittance = mix( transmittance, vec3f( 1.0 ) - filmReflectance, surf.iridescence );
+
+		}
+
+		result.reflectance = reflectance;
+		result.transmittance = transmittance;
+
+		// Include the base-color tint in the transmission energy, as Cycles does when it
+		// computes the glass reflection probability from its two tinted coefficients.
+		let reflectEnergy = dot( reflectance, vec3f( 1.0 / 3.0 ) );
+		let transmitEnergy = dot( transmittance * surf.color, vec3f( 1.0 / 3.0 ) );
+		let totalEnergy = reflectEnergy + transmitEnergy;
+		result.reflectProbability = select( 0.0, reflectEnergy / max( totalEnergy, EPSILON ), totalEnergy > EPSILON );
+
+		return result;
+
+	}
+
+`;
 
 export const conductorFresnelFunc = wgslFn( /* wgsl */ `
 
