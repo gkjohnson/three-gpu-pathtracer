@@ -101,7 +101,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			// depth of field
 			// measure focus distance along the optical axis so the focal surface is a flat
 			// plane perpendicular to the camera forward vector rather than a sphere.
-			let rayDir = normalize( ray.direction );
+			let rayDir = ray.direction;
 			let forward = normalize( ( ${ cameraWorldMatrix } * vec4f( 0.0, 0.0, - 1.0, 0.0 ) ).xyz );
 			let focalPoint = ray.origin + rayDir * ( ${ focusDistance } / dot( rayDir, forward ) );
 

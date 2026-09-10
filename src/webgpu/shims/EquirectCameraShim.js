@@ -15,9 +15,11 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 			let sinPhi = sin( phi );
 			let direction = vec3f( sinPhi * cos( theta ), cos( phi ), sinPhi * sin( theta ) );
 
-			// equirect ignores the projection - orient by the camera world matrix and place the origin
+			// equirect ignores the projection - orient by the camera world matrix and place the origin.
+			// there is no projection far plane, so the trace distance is unbounded
 			ray.origin = ( ${ cameraToWorld } * vec4f( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
 			ray.direction = ( ${ cameraToWorld } * vec4f( direction, 0.0 ) ).xyz;
+			ray.maxDist = 0.0;
 			return true;
 
 		}
