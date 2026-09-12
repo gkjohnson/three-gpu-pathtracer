@@ -118,6 +118,17 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	rebuild() {
+
+		super.rebuild();
+
+		// MaterialKernel embeds the camera ray function off the bvh data, so swapping cameras
+		// has no effect until it recompiles
+		this.materialKernel.needsUpdate = true;
+		this.reset();
+
+	}
+
 	setRandom( random ) {
 
 		this.logicKernel.context.random = random;
