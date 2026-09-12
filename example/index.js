@@ -30,7 +30,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { initUNetFromURL } from 'oidn-web';
 import { Upscaler } from '@pmndrs/upscaler';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -94,6 +94,12 @@ const LIGHT_RIGS = {
 	],
 };
 
+const RANDOM_STRATEGIES = {
+	'Blue Dither': RANDOM_BLUE_DITHER,
+	'Sobol': RANDOM_SOBOL,
+	'PCG': RANDOM_PCG,
+};
+
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
 // sentinel for models that light themselves and should not get an environment
@@ -144,6 +150,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	renderScale: 1,
+	randomStrategy: 'Blue Dither',
 	frameBudget: 250000,
 
 	model: '',
@@ -618,6 +625,11 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
+
+		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
+
+	} );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
