@@ -5,14 +5,14 @@ import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
  * Runs Open Image Denoise over a path traced image. Pass one to
  * "WebGPUPathTracer.setDenoiser", or drive it directly with "denoise".
  *
- * "initUNetFromURL" and the weights are passed in rather than imported so neither "oidn-web"
- * nor the 1.8MB network files belong to this library.
+ * "initUNetFromURL" and the weights are passed in rather than imported so neither the library
+ * nor the network files become a dependency.
  *
  *     import { initUNetFromURL } from 'oidn-web';
  *     pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
  *
- * Weights come from the oidn-weights repository, where the "_small" and "_large" variants
- * trade quality against download size and per tile cost.
+ * Weights come from the oidn-weights repository, where the "_small" and "_large" variants trade
+ * quality against download size and per tile cost.
  */
 export class OIDNDenoiser {
 
@@ -50,15 +50,27 @@ export class OIDNDenoiser {
 	}
 
 	/**
+	 * Every field below can also be assigned after construction.
+	 *
 	 * @param {Object} options
 	 * @param {Function} options.initUNetFromURL
 	 * @param {string} options.auxWeightsUrl - Weights for the guided model.
 	 * @param {string} [options.colorWeightsUrl] - Weights for the color only model, needed only
 	 * when "useAuxiliaryBuffers" is off.
+	 * @param {boolean} [options.useAuxiliaryBuffers]
+	 * @param {?number} [options.maxTileSize]
+	 * @param {?boolean|Object} [options.dynamicTile]
 	 */
 	constructor( options = {} ) {
 
-		const { initUNetFromURL, auxWeightsUrl, colorWeightsUrl } = options;
+		const {
+			initUNetFromURL,
+			auxWeightsUrl,
+			colorWeightsUrl,
+			useAuxiliaryBuffers = true,
+			maxTileSize = null,
+			dynamicTile = null,
+		} = options;
 
 		if ( ! initUNetFromURL ) {
 
@@ -70,9 +82,12 @@ export class OIDNDenoiser {
 		this.auxWeightsUrl = auxWeightsUrl;
 		this.colorWeightsUrl = colorWeightsUrl;
 
-		// rasterize albedo and normal to guide the filter. Off falls back to the color only
-		// model, which is blurrier but skips a scene render
-		this.useAuxiliaryBuffers = true;
+		// off falls back to the color only model, which is blurrier but skips a scene render
+		this.useAuxiliaryBuffers = useAuxiliaryBuffers;
+
+		// tiling, passed through to oidn-web. Null keeps its defaults
+		this.maxTileSize = maxTileSize;
+		this.dynamicTile = dynamicTile;
 
 		this.renderer = null;
 		this.scene = null;
@@ -314,7 +329,11 @@ export class OIDNDenoiser {
 
 				}
 
-				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, { aux, hdr: true } );
+				const options = { aux, hdr: true };
+				if ( this.maxTileSize !== null ) options.maxTileSize = this.maxTileSize;
+				if ( this.dynamicTile !== null ) options.dynamicTile = this.dynamicTile;
+
+				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, options );
 
 			} )();
 

@@ -9,8 +9,7 @@ const MAX_INSTANCES = 2;
  * Upscales a path traced image to the drawing buffer size with FSR. Pass one to
  * "WebGPUPathTracer.setUpscaler".
  *
- * The "Upscaler" class is passed in rather than imported so "@pmndrs/upscaler" stays out of
- * this library's dependencies.
+ * The "Upscaler" class is passed in rather than imported so it does not become a dependency.
  *
  *     import { Upscaler } from '@pmndrs/upscaler';
  *     pathTracer.setUpscaler( new FSRUpscaler( { Upscaler } ) );
@@ -18,12 +17,16 @@ const MAX_INSTANCES = 2;
 export class FSRUpscaler {
 
 	/**
+	 * Every field below can also be assigned after construction.
+	 *
 	 * @param {Object} options
 	 * @param {Function} options.Upscaler
+	 * @param {number} [options.sharpness]
+	 * @param {string} [options.path]
 	 */
 	constructor( options = {} ) {
 
-		const { Upscaler } = options;
+		const { Upscaler, sharpness = 1, path = 'spatial' } = options;
 
 		if ( ! Upscaler ) {
 
@@ -34,10 +37,10 @@ export class FSRUpscaler {
 		this.Upscaler = Upscaler;
 
 		// edge sharpening applied after the upscale, in [0,1]
-		this.sharpness = 1;
+		this.sharpness = sharpness;
 
 		// the temporal paths need motion vectors the path tracer does not produce
-		this.path = 'spatial';
+		this.path = path;
 
 		this.renderer = null;
 
@@ -113,11 +116,9 @@ export class FSRUpscaler {
 
 	}
 
-	// The path tracer presents a full render and a low res preview, so each source resolution
-	// keeps its own upscaler rather than reconfiguring one back and forth every frame. Each one
-	// holds GPU timer query sets, so the pool is bounded to those two and evicts least recently
-	// used - changing the render scale walks through resolutions and would otherwise leak an
-	// upscaler per step until the device runs out.
+	// Each source resolution keeps its own upscaler rather than reconfiguring one back and forth
+	// every frame. They hold GPU timer query sets, so the pool is bounded and evicts least
+	// recently used: changing the render scale would otherwise leak one per step.
 	_getInstance( width, height ) {
 
 		const key = `${ width }x${ height }`;

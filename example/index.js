@@ -161,13 +161,11 @@ const params = {
 	enable: true,
 	bounces: 15,
 	pause: false,
+	maxSamples: 16,
 
-	// zero renders indefinitely, which never gives the denoiser a settled image to filter
-	maxSamples: 64,
+	denoise: true,
 
-	denoise: false,
-
-	upscale: false,
+	upscale: true,
 	sharpness: 1,
 
 	bokehSize: DEFAULT_BOKEH_SIZE,
@@ -262,10 +260,15 @@ async function init() {
 	denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
 		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
 	} );
 
 	upscaler = new FSRUpscaler( { Upscaler } );
 	upscaler.sharpness = params.sharpness;
+
+	pathTracer.setDenoiser( params.denoise ? denoiser : null );
+	pathTracer.setUpscaler( params.upscale ? upscaler : null );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
