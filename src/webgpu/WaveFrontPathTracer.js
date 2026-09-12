@@ -323,6 +323,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				logicKernel.bounces = this.bounces;
+				logicKernel.rayCount = rayCount;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// Step 2: reset the trace queues for this frame's population
@@ -341,6 +342,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
+				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.bounces = this.bounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
