@@ -1,16 +1,18 @@
-import { ExternalTexture } from 'three/webgpu';
-import { initUNetFromURL } from 'oidn-web';
-
-const WEIGHTS_AUX_URL = new URL( './rt_hdr_alb_nrm.tza', import.meta.url ).toString();
-const WEIGHTS_COLOR_URL = new URL( './rt_hdr.tza', import.meta.url ).toString();
+import { ExternalTexture, NearestFilter, NoToneMapping, RenderTarget, UnsignedByteType } from 'three/webgpu';
+import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
 
 /**
- * Runs Open Image Denoise over a path traced image.
+ * Runs Open Image Denoise over a path traced image. Pass one to
+ * "WebGPUPathTracer.setDenoiser", or drive it directly with "denoise".
  *
- *     const denoiser = new OIDNDenoiser( renderer );
+ * "initUNetFromURL" and the weights are passed in rather than imported so neither "oidn-web"
+ * nor the 1.8MB network files belong to this library.
  *
- *     denoiser.denoise( pathTracer.target, albedoTexture, normalTexture );
- *     quad.material.map = denoiser.texture ?? pathTracer.target;
+ *     import { initUNetFromURL } from 'oidn-web';
+ *     pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
+ *
+ * Weights come from the oidn-weights repository, where the "_small" and "_large" variants
+ * trade quality against download size and per tile cost.
  */
 export class OIDNDenoiser {
 
@@ -48,11 +50,33 @@ export class OIDNDenoiser {
 	}
 
 	/**
-	 * @param {WebGPURenderer} renderer
+	 * @param {Object} options
+	 * @param {Function} options.initUNetFromURL
+	 * @param {string} options.auxWeightsUrl - Weights for the guided model.
+	 * @param {string} [options.colorWeightsUrl] - Weights for the color only model, needed only
+	 * when "useAuxiliaryBuffers" is off.
 	 */
-	constructor( renderer ) {
+	constructor( options = {} ) {
 
-		this.renderer = renderer;
+		const { initUNetFromURL, auxWeightsUrl, colorWeightsUrl } = options;
+
+		if ( ! initUNetFromURL ) {
+
+			throw new Error( 'OIDNDenoiser: "initUNetFromURL" from "oidn-web" must be provided.' );
+
+		}
+
+		this.initUNetFromURL = initUNetFromURL;
+		this.auxWeightsUrl = auxWeightsUrl;
+		this.colorWeightsUrl = colorWeightsUrl;
+
+		// rasterize albedo and normal to guide the filter. Off falls back to the color only
+		// model, which is blurrier but skips a scene render
+		this.useAuxiliaryBuffers = true;
+
+		this.renderer = null;
+		this.scene = null;
+		this.camera = null;
 
 		this._texture = null;
 		this._running = false;
@@ -63,6 +87,54 @@ export class OIDNDenoiser {
 
 		this._resultPipeline = null;
 		this._rawTexture = null;
+		this._auxTarget = null;
+
+	}
+
+	/**
+	 * @param {WebGPURenderer} renderer
+	 */
+	init( renderer ) {
+
+		this.renderer = renderer;
+
+	}
+
+	/**
+	 * @param {Scene} scene
+	 * @param {Camera} camera
+	 */
+	setScene( scene, camera ) {
+
+		this.scene = scene;
+		this.camera = camera;
+
+	}
+
+	/**
+	 * Renders the auxiliary buffers and starts a pass. Safe to call every frame.
+	 *
+	 * @param {Texture} target - The path traced result, in linear HDR.
+	 * @returns {?Texture}
+	 */
+	update( target ) {
+
+		if ( ! this._complete && ! this._running ) {
+
+			if ( this.useAuxiliaryBuffers && this.scene && this.camera ) {
+
+				const auxTarget = this._renderAuxiliaryBuffers( target.width, target.height );
+				this.denoise( target, auxTarget.textures[ 0 ], auxTarget.textures[ 1 ] );
+
+			} else {
+
+				this.denoise( target );
+
+			}
+
+		}
+
+		return this._texture;
 
 	}
 
@@ -159,6 +231,9 @@ export class OIDNDenoiser {
 
 		this.reset();
 
+		this._auxTarget?.dispose();
+		this._auxTarget = null;
+
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
 
@@ -166,6 +241,59 @@ export class OIDNDenoiser {
 			this._unets[ key ] = null;
 
 		}
+
+	}
+
+	// Rasterizes the albedo and normal buffers that guide the filter. oidn-web takes normals
+	// mapped into [0,1], with (0.5, 0.5, 1) as a flat normal.
+	_renderAuxiliaryBuffers( width, height ) {
+
+		const { renderer, scene, camera } = this;
+
+		if ( ! this._auxTarget ) {
+
+			// Eight bits per channel since both buffers hold [0,1]. Multisampled so the rasterized
+			// silhouettes match the jittered path traced ones.
+			this._auxTarget = new RenderTarget( 1, 1, {
+				count: 2,
+				type: UnsignedByteType,
+				minFilter: NearestFilter,
+				magFilter: NearestFilter,
+				samples: 4,
+			} );
+
+			// the MRT keys are matched against these names
+			this._auxTarget.textures[ 0 ].name = 'output';
+			this._auxTarget.textures[ 1 ].name = 'normal';
+
+		}
+
+		const auxTarget = this._auxTarget;
+		if ( auxTarget.width !== width || auxTarget.height !== height ) {
+
+			auxTarget.setSize( width, height );
+
+		}
+
+		const originalTarget = renderer.getRenderTarget();
+		const originalMRT = renderer.getMRT();
+		const originalToneMapping = renderer.toneMapping;
+
+		// the buffers are data rather than an image, so they must not be tone mapped
+		renderer.toneMapping = NoToneMapping;
+		renderer.setRenderTarget( auxTarget );
+		renderer.setMRT( mrt( {
+			output: diffuseColor,
+			normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
+		} ) );
+
+		renderer.render( scene, camera );
+
+		renderer.setMRT( originalMRT );
+		renderer.setRenderTarget( originalTarget );
+		renderer.toneMapping = originalToneMapping;
+
+		return auxTarget;
 
 	}
 
@@ -178,9 +306,15 @@ export class OIDNDenoiser {
 			this._unets[ key ] = ( async () => {
 
 				const device = this.renderer.backend.device;
-				const url = aux ? WEIGHTS_AUX_URL : WEIGHTS_COLOR_URL;
+				const url = aux ? this.auxWeightsUrl : this.colorWeightsUrl;
 
-				return initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, { aux, hdr: true } );
+				if ( ! url ) {
+
+					throw new Error( `OIDNDenoiser: no ${ aux ? 'auxWeightsUrl' : 'colorWeightsUrl' } was provided.` );
+
+				}
+
+				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, { aux, hdr: true } );
 
 			} )();
 

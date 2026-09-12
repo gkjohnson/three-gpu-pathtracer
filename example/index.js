@@ -30,7 +30,9 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler } from 'three-gpu-pathtracer/webgpu';
+import { initUNetFromURL } from 'oidn-web';
+import { Upscaler } from '@pmndrs/upscaler';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -160,6 +162,14 @@ const params = {
 	bounces: 15,
 	pause: false,
 
+	// zero renders indefinitely, which never gives the denoiser a settled image to filter
+	maxSamples: 64,
+
+	denoise: false,
+
+	upscale: false,
+	sharpness: 1,
+
 	bokehSize: DEFAULT_BOKEH_SIZE,
 	focusDistance: 1,
 
@@ -167,7 +177,7 @@ const params = {
 
 };
 
-let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats;
+let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats, denoiser, upscaler;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -245,7 +255,17 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
+
+	// the library ships neither "oidn-web" nor the network weights, so the app provides both
+	denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+	} );
+
+	upscaler = new FSRUpscaler( { Upscaler } );
+	upscaler.sharpness = params.sharpness;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -589,6 +609,11 @@ function buildGui() {
 		pathTracer.frameBudget = v;
 
 	} );
+	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
@@ -596,6 +621,23 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.open();
+
+	const postFolder = gui.addFolder( 'Denoise / Upscale' );
+	postFolder.add( params, 'denoise' ).onChange( v => {
+
+		pathTracer.setDenoiser( v ? denoiser : null );
+
+	} );
+	postFolder.add( params, 'upscale' ).onChange( v => {
+
+		pathTracer.setUpscaler( v ? upscaler : null );
+
+	} );
+	postFolder.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
+
+		upscaler.sharpness = v;
+
+	} );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( params, 'bokehSize', 0, 100, 0.5 ).onChange( updateDepthOfField );
