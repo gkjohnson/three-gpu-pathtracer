@@ -19,12 +19,12 @@ function getFormat( channels ) {
 
 	switch ( channels ) {
 
-	case 1:
-		return RedFormat;
-	case 2:
-		return RGFormat;
-	default:
-		return RGBAFormat;
+		case 1:
+			return RedFormat;
+		case 2:
+			return RGFormat;
+		default:
+			return RGBAFormat;
 
 	}
 

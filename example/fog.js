@@ -6,14 +6,15 @@ import {
 	Group,
 	Mesh,
 	MeshStandardMaterial,
-	WebGLRenderer,
+	WebGPURenderer,
 	Color,
-} from 'three';
+} from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 let pathTracer, renderer, controls;
 let camera, scene, fogMaterial, spotLight;
@@ -22,8 +23,8 @@ let loader;
 const params = {
 
 	multipleImportanceSampling: true,
-	tiles: 2,
-	renderScale: 1 / window.devicePixelRatio,
+	frameBudget: 250000,
+	renderScale: 1,
 
 	color: '#eeeeee',
 	fog: true,
@@ -31,7 +32,7 @@ const params = {
 	lightIntensity: 500,
 	lightColor: '#ffffff',
 
-	bounces: 10,
+	bounces: 15,
 
 	...getScaledSettings(),
 
@@ -45,13 +46,14 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.frameBudget = params.frameBudget;
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -115,11 +117,11 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
@@ -171,7 +173,7 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 

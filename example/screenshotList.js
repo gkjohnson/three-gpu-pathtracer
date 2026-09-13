@@ -1,4 +1,4 @@
-const CONFIG_URL = 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json';
+const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
 const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer/commits?sha=screenshots';
 
 ( async () => {
@@ -51,7 +51,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 
 			} else {
 
-				url2 = `https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/goldens/${ name }/${ imageType }-golden.png`;
+				url2 = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ name }/${ imageType }-golden.png`;
 
 			}
 

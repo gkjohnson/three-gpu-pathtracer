@@ -5,6 +5,7 @@
 		"strictNullChecks":true,
 		"noImplicitAny": true,
 		"lib": [ "dom", "es2017" ],
+		"types": [],
 		"module": "node20"
 	},
 	"files": [

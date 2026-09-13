@@ -104,15 +104,15 @@ export class PrecisionMaterial extends MaterialBase {
 
 		switch ( v.toLowerCase() ) {
 
-		case 'float':
-			this.setDefine( 'MODE', 0 );
-			break;
-		case 'int':
-			this.setDefine( 'MODE', 1 );
-			break;
-		case 'uint':
-			this.setDefine( 'MODE', 2 );
-			break;
+			case 'float':
+				this.setDefine( 'MODE', 0 );
+				break;
+			case 'int':
+				this.setDefine( 'MODE', 1 );
+				break;
+			case 'uint':
+				this.setDefine( 'MODE', 2 );
+				break;
 
 		}
 

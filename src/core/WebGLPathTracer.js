@@ -524,4 +524,10 @@ export class WebGLPathTracer {
 
 	}
 
+	getRenderTime() {
+
+		return this._clock.getElapsedTime() * 1e3;
+
+	}
+
 }

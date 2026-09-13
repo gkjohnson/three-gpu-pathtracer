@@ -14,8 +14,6 @@ _More features and capabilities in progress!_
 
 # Examples
 
-[GLB Drag and Drop Viewer](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewer.html)
-
 **Setup**
 
 [Basic glTF Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
@@ -26,9 +24,7 @@ _More features and capabilities in progress!_
 
 [Physically Based Materials](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)
 
-[Lego Models](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/lego.html)
-
-[Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/interior.html)
+[Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/equirect.html)
 
 [Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/depthOfField.html)
 
@@ -46,21 +42,17 @@ _More features and capabilities in progress!_
 
 [Volumetric Fog Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/fog.html)
 
+[Denoising and Upscaling](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/denoise.html)
+
 **Test Scenes**
 
-[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html)
-
-[Transmission Preset Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialBall.html#transmission)
+[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialOrb.html)
 
 [Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html)
-
-[Physical Material Database](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialDatabase.html)
 
 **Tools**
 
 [Animation Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/renderVideo.html)
-
-[Ambient Occlusion Material](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/aoRender.html)
 
 ## Running examples locally
 
