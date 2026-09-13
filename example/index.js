@@ -30,7 +30,9 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
+import { initUNetFromURL } from 'oidn-web';
+import { Upscaler } from '@pmndrs/upscaler';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -92,6 +94,12 @@ const LIGHT_RIGS = {
 	],
 };
 
+const RANDOM_STRATEGIES = {
+	'Blue Dither': RANDOM_BLUE_DITHER,
+	'Sobol': RANDOM_SOBOL,
+	'PCG': RANDOM_PCG,
+};
+
 const MODEL_FILE_REGEX = /\.(gltf|glb|dae|mpd)$/i;
 
 // sentinel for models that light themselves and should not get an environment
@@ -142,6 +150,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	renderScale: 1,
+	randomStrategy: 'Blue Dither',
 	frameBudget: 250000,
 
 	model: '',
@@ -159,6 +168,12 @@ const params = {
 	enable: true,
 	bounces: 15,
 	pause: false,
+	maxSamples: 16,
+
+	denoise: true,
+
+	upscale: true,
+	sharpness: 1,
 
 	bokehSize: DEFAULT_BOKEH_SIZE,
 	focusDistance: 1,
@@ -167,7 +182,7 @@ const params = {
 
 };
 
-let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats;
+let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats, denoiser, upscaler;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -245,7 +260,22 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
+
+	// the library ships neither "oidn-web" nor the network weights, so the app provides both
+	denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+
+	upscaler = new FSRUpscaler( { Upscaler } );
+	upscaler.sharpness = params.sharpness;
+
+	pathTracer.setDenoiser( params.denoise ? denoiser : null );
+	pathTracer.setUpscaler( params.upscale ? upscaler : null );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -589,13 +619,40 @@ function buildGui() {
 		pathTracer.frameBudget = v;
 
 	} );
+	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
 	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
+
+		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
+
+	} );
 	pathTracingFolder.add( params, 'cameraProjection', [ 'Perspective', 'Orthographic' ] ).onChange( v => {
 
 		updateCameraProjection( v );
 
 	} );
 	pathTracingFolder.open();
+
+	const postFolder = gui.addFolder( 'Denoise / Upscale' );
+	postFolder.add( params, 'denoise' ).onChange( v => {
+
+		pathTracer.setDenoiser( v ? denoiser : null );
+
+	} );
+	postFolder.add( params, 'upscale' ).onChange( v => {
+
+		pathTracer.setUpscaler( v ? upscaler : null );
+
+	} );
+	postFolder.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
+
+		upscaler.sharpness = v;
+
+	} );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( params, 'bokehSize', 0, 100, 0.5 ).onChange( updateDepthOfField );
