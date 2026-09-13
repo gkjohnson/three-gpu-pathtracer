@@ -24,6 +24,7 @@ export class MaterialKernel extends ComputeKernel {
 			seed: uniform( 0, 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
+			rayCount: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			bounces: uniform( 5, 'uint' ),
@@ -50,6 +51,7 @@ export class MaterialKernel extends ComputeKernel {
 				seed: u32,
 				targetDimensions: vec2u,
 				maxSamples: u32,
+				rayCount: u32,
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				bounces: u32,
@@ -65,8 +67,10 @@ export class MaterialKernel extends ComputeKernel {
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
+				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
+				// workgroup size and those extra slots hold a zeroed pixel index
 				let index = globalId.x;
-				if ( index >= arrayLength( rayDataStorage ) ) {
+				if ( index >= rayCount ) {
 
 					return;
 
