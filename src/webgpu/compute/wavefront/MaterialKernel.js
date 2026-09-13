@@ -67,10 +67,8 @@ export class MaterialKernel extends ComputeKernel {
 				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
 				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
 
-				// "rayCount" rather than the pool length: the dispatch is rounded up to the
-				// workgroup size, and the slots past it were never assigned a pixel. Letting them
-				// run recycles their zeroed pixel index through the overflow queue, which both
-				// duplicates one pixel and drops the real one it swapped out
+				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
+				// workgroup size and those extra slots hold a zeroed pixel index
 				let index = globalId.x;
 				if ( index >= rayCount ) {
 

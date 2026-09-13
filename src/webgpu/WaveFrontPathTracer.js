@@ -122,8 +122,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 
-		// MaterialKernel embeds the camera ray function off the bvh data, so swapping cameras
-		// has no effect until it recompiles
+		// MaterialKernel bakes in the camera ray function, so a camera swap needs a recompile
 		this.materialKernel.needsUpdate = true;
 		this.reset();
 

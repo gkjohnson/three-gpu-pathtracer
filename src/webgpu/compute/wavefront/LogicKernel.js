@@ -77,8 +77,7 @@ export class LogicKernel extends ComputeKernel {
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 				let shadowRayIntersectionsStorage = &${ params.shadowRayIntersectionsStorage };
 
-				// "rayCount" rather than the pool length - the dispatch rounds up to the workgroup
-				// size and the slots past it were never assigned a pixel
+				// bound by "rayCount" rather than the pool length. See MaterialKernel
 				let index = globalId.x;
 				if ( index >= rayCount ) {
 
