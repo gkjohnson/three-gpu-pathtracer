@@ -118,6 +118,17 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	rebuild() {
+
+		super.rebuild();
+
+		// MaterialKernel embeds the camera ray function off the bvh data, so swapping cameras
+		// has no effect until it recompiles
+		this.materialKernel.needsUpdate = true;
+		this.reset();
+
+	}
+
 	setRandom( random ) {
 
 		this.logicKernel.context.random = random;
@@ -323,6 +334,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				logicKernel.bounces = this.bounces;
+				logicKernel.rayCount = rayCount;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// Step 2: reset the trace queues for this frame's population
@@ -341,6 +353,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
+				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.bounces = this.bounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
