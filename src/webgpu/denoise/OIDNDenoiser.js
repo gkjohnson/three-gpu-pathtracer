@@ -21,7 +21,7 @@ export class OIDNDenoiser {
 	/**
 	 * The denoised result, or null until the first tile has been produced.
 	 *
-	 * @type {?ExternalTexture}
+	 * @type {ExternalTexture|null}
 	 */
 	get texture() {
 
@@ -60,8 +60,8 @@ export class OIDNDenoiser {
 	 * @param {string} [options.colorWeightsUrl] - Weights for the color only model, needed only
 	 * when "useAuxiliaryBuffers" is off.
 	 * @param {boolean} [options.useAuxiliaryBuffers]
-	 * @param {?number} [options.maxTileSize]
-	 * @param {?boolean|Object} [options.dynamicTile]
+	 * @param {number|null} [options.maxTileSize]
+	 * @param {boolean|Object|null} [options.dynamicTile]
 	 */
 	constructor( options = {} ) {
 
@@ -132,24 +132,27 @@ export class OIDNDenoiser {
 	 * Renders the auxiliary buffers and starts a pass. Safe to call every frame.
 	 *
 	 * @param {Texture} target - The path traced result, in linear HDR.
-	 * @returns {?Texture}
+	 * @returns {Texture|null}
 	 */
 	update( target ) {
 
-		if ( ! this._complete && ! this._running ) {
+		if ( this._complete || this._running ) {
 
-			if ( this.useAuxiliaryBuffers && this.scene && this.camera ) {
-
-				const auxTarget = this._renderAuxiliaryBuffers( target.width, target.height );
-				this.denoise( target, auxTarget.textures[ 0 ], auxTarget.textures[ 1 ] );
-
-			} else {
-
-				this.denoise( target );
-
-			}
+			return this._texture;
 
 		}
+
+		let albedo = null;
+		let normal = null;
+		if ( this.useAuxiliaryBuffers ) {
+
+			const auxTarget = this._renderAuxiliaryBuffers( target.width, target.height );
+			albedo = auxTarget.textures[ 0 ];
+			normal = auxTarget.textures[ 1 ];
+
+		}
+
+		this.denoise( target, albedo, normal );
 
 		return this._texture;
 
@@ -161,8 +164,8 @@ export class OIDNDenoiser {
 	 * mapped so a flat normal is (0.5, 0.5, 1).
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {?Texture} albedo
-	 * @param {?Texture} normal
+	 * @param {Texture|null} albedo
+	 * @param {Texture|null} normal
 	 */
 	async denoise( color, albedo = null, normal = null ) {
 
@@ -176,7 +179,19 @@ export class OIDNDenoiser {
 
 		const useAux = Boolean( albedo && normal );
 		const requestId = ++ this._requestId;
-		const unet = await this._initUNet( useAux );
+
+		let unet;
+		try {
+
+			unet = await this._initUNet( useAux );
+
+		} catch ( error ) {
+
+			// leaving "running" set would stall every later pass
+			this._running = false;
+			throw error;
+
+		}
 
 		// bail if a reset or a newer call took over while the weights downloaded
 		if ( requestId !== this._requestId || ! this._running ) {
@@ -226,12 +241,8 @@ export class OIDNDenoiser {
 	 */
 	reset() {
 
-		if ( this._abort ) {
-
-			this._abort();
-			this._abort = null;
-
-		}
+		this._abort?.();
+		this._abort = null;
 
 		this._texture?.dispose();
 		this._texture = null;
@@ -286,11 +297,7 @@ export class OIDNDenoiser {
 		}
 
 		const auxTarget = this._auxTarget;
-		if ( auxTarget.width !== width || auxTarget.height !== height ) {
-
-			auxTarget.setSize( width, height );
-
-		}
+		auxTarget.setSize( width, height );
 
 		const originalTarget = renderer.getRenderTarget();
 		const originalMRT = renderer.getMRT();

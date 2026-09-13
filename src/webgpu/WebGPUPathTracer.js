@@ -414,7 +414,7 @@ export class WebGPUPathTracer {
 	 * Attaches a denoiser, run once the render settles and displayed in place of the raw image.
 	 * Settings live on the instance. Pass null to remove it.
 	 *
-	 * @param {?OIDNDenoiser} denoiser
+	 * @param {OIDNDenoiser|null} denoiser
 	 */
 	setDenoiser( denoiser ) {
 
@@ -436,7 +436,7 @@ export class WebGPUPathTracer {
 	 * Attaches an upscaler, run before the image is presented so the render can happen below the
 	 * canvas resolution. Settings live on the instance. Pass null to remove it.
 	 *
-	 * @param {?FSRUpscaler} upscaler
+	 * @param {FSRUpscaler|null} upscaler
 	 */
 	setUpscaler( upscaler ) {
 
@@ -516,7 +516,7 @@ export class WebGPUPathTracer {
 		this.updateLights();
 
 		// the denoiser rasterizes its own guide buffers, so it needs the scene too
-		this._denoiser?.setScene?.( scene, camera );
+		this._denoiser?.setScene( scene, camera );
 
 	}
 
@@ -795,14 +795,16 @@ export class WebGPUPathTracer {
 
 		}
 
-		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
-		// the check reads the last measurement rather than waiting on this one.
 		const denoiser = this._denoiser;
 		const upscaler = this._upscaler;
 
-		// the denoiser runs once the render stops, so the counts have to keep coming until it
-		// has something to work with. An uncapped render never stops and never denoises
+		// the denoiser runs once the render stops, so an uncapped render never denoises
+		// TODO: this only needs to know whether the render stopped, but measures the per pixel
+		// counts every frame. A count of the camera rays dispatched would answer it in one value
 		const awaitingDenoise = Boolean( denoiser ) && ! denoiser.complete && ! denoiser.running && maxSamples > 0;
+
+		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
+		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
 			if ( ( this._fadeState < 1 && minSamples > 0 ) || awaitingDenoise ) {
@@ -824,12 +826,12 @@ export class WebGPUPathTracer {
 		// render the content to the canvas
 		const opacity = ( lowResMode && dynamicLowRes ? 1.0 : this._fadeState );
 
-		// denoise once every pixel has stopped accumulating, then display the result in place of
-		// the raw image. The low res preview is never denoised, it is replaced moments later
+		// the low res preview is replaced moments later, so it is neither denoised nor upscaled
 		let texture = pathTracer.outputTarget;
 		if ( denoiser && ! lowResMode ) {
 
-			if ( awaitingDenoise && this._lastSampleCounts.avg >= maxSamples ) {
+			// "min" so every pixel has stopped, not just the average
+			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
 
 				denoiser.update( pathTracer.outputTarget );
 
@@ -839,8 +841,6 @@ export class WebGPUPathTracer {
 
 		}
 
-		// the low res preview shows upscaling artifacts and is replaced moments later, so it is
-		// left to the blit's own filtering
 		if ( upscaler && ! lowResMode ) {
 
 			texture = upscaler.upscale( texture, this.camera );
