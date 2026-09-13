@@ -3,8 +3,6 @@ import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-/** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
-/** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
 import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.js';
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
@@ -18,6 +16,8 @@ import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
+/** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
+/** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -425,8 +425,8 @@ export class WebGPUPathTracer {
 
 		if ( denoiser ) {
 
-			denoiser.init?.( this._renderer );
-			denoiser.setScene?.( this.scene, this.camera );
+			denoiser.init( this._renderer );
+			denoiser.setScene( this.scene, this.camera );
 
 		}
 
@@ -441,7 +441,12 @@ export class WebGPUPathTracer {
 	setUpscaler( upscaler ) {
 
 		this._upscaler = upscaler;
-		upscaler?.init?.( this._renderer );
+
+		if ( upscaler ) {
+
+			upscaler.init( this._renderer );
+
+		}
 
 	}
 
@@ -820,9 +825,8 @@ export class WebGPUPathTracer {
 		const opacity = ( lowResMode && dynamicLowRes ? 1.0 : this._fadeState );
 
 		// denoise once every pixel has stopped accumulating, then display the result in place of
-		// the raw image. The low res preview is never denoised - it is replaced moments later
+		// the raw image. The low res preview is never denoised, it is replaced moments later
 		let texture = pathTracer.outputTarget;
-		let fromTexture = lowResTarget;
 		if ( denoiser && ! lowResMode ) {
 
 			if ( awaitingDenoise && this._lastSampleCounts.avg >= maxSamples ) {
@@ -835,18 +839,13 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( upscaler ) {
+		// the low res preview shows upscaling artifacts and is replaced moments later, so it is
+		// left to the blit's own filtering
+		if ( upscaler && ! lowResMode ) {
 
 			texture = upscaler.upscale( texture, this.camera );
 
-			// the fade source is only sampled part way through the transition
-			if ( opacity < 1 ) {
-
-				fromTexture = upscaler.upscale( lowResTarget, this.camera );
-
-			}
-
-			// the passes above bind their own targets
+			// the pass above binds its own targets
 			renderer.setRenderTarget( originalTarget );
 
 		}
@@ -854,7 +853,7 @@ export class WebGPUPathTracer {
 		renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
 		blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
 		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
-		blitQuad.material.fromTexture = fromTexture;
+		blitQuad.material.fromTexture = lowResTarget;
 		blitQuad.material.texture = texture;
 		blitQuad.render( renderer );
 

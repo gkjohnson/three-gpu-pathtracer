@@ -8,8 +8,10 @@ import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
  * "initUNetFromURL" and the weights are passed in rather than imported so neither the library
  * nor the network files become a dependency.
  *
- *     import { initUNetFromURL } from 'oidn-web';
- *     pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
+ * ```js
+ * import { initUNetFromURL } from 'oidn-web';
+ * pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
+ * ```
  *
  * Weights come from the oidn-weights repository, where the "_small" and "_large" variants trade
  * quality against download size and per tile cost.
