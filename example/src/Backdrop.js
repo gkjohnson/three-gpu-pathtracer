@@ -55,6 +55,20 @@ function createGeometry( width, depth, curve, height, curvature, segments ) {
 	const uvs = new Float32Array( rows * 2 * 2 );
 	const indices = [];
 
+	// measure along the profile rather than stepping by row, and scale u to match, so a repeated
+	// texture keeps square evenly spaced cells
+	const distances = [ 0 ];
+	for ( let i = 1; i < rows; i ++ ) {
+
+		const [ z0, y0 ] = profile[ i - 1 ];
+		const [ z1, y1 ] = profile[ i ];
+		distances.push( distances[ i - 1 ] + Math.hypot( z1 - z0, y1 - y0 ) );
+
+	}
+
+	const length = distances[ rows - 1 ] || 1;
+	const uScale = width / length;
+
 	for ( let i = 0; i < rows; i ++ ) {
 
 		const [ z, y ] = profile[ i ];
@@ -65,8 +79,8 @@ function createGeometry( width, depth, curve, height, curvature, segments ) {
 			positions[ 3 * index + 1 ] = y;
 			positions[ 3 * index + 2 ] = z;
 
-			uvs[ 2 * index + 0 ] = j;
-			uvs[ 2 * index + 1 ] = i / ( rows - 1 );
+			uvs[ 2 * index + 0 ] = ( j - 0.5 ) * uScale + 0.5;
+			uvs[ 2 * index + 1 ] = distances[ i ] / length;
 
 		}
 

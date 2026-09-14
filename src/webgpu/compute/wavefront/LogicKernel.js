@@ -34,6 +34,7 @@ export class LogicKernel extends ComputeKernel {
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
+			rayCount: uniform( 0, 'uint' ),
 			bounces: uniform( 5, 'uint' ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
@@ -63,6 +64,7 @@ export class LogicKernel extends ComputeKernel {
 			fn compute(
 				// settings
 				misEnabled: u32,
+				rayCount: u32,
 				bounces: u32,
 				clampDirect: f32,
 				clampIndirect: f32,
@@ -75,8 +77,9 @@ export class LogicKernel extends ComputeKernel {
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 				let shadowRayIntersectionsStorage = &${ params.shadowRayIntersectionsStorage };
 
+				// bound by "rayCount" rather than the pool length. See MaterialKernel
 				let index = globalId.x;
-				if ( index >= arrayLength( rayDataStorage ) ) {
+				if ( index >= rayCount ) {
 
 					return;
 
