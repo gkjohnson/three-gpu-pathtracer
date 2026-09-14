@@ -26,7 +26,7 @@ let camera, equirectCamera, loader;
 
 const params = {
 
-	bounces: 15,
+	maxBounces: 15,
 	renderScale: 1,
 	frameBudget: 250000,
 	projection: 'Equirectangular',
@@ -130,7 +130,7 @@ async function init() {
 		pathTracer.frameBudget = value;
 
 	} );
-	gui.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	gui.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	gui.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
 
@@ -171,7 +171,7 @@ function onParamsChange() {
 
 	}
 
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.setScene( scene, activeCamera );

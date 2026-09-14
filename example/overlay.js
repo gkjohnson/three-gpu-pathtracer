@@ -32,7 +32,7 @@ let loader;
 const params = {
 
 	// path tracer settings
-	bounces: 15,
+	maxBounces: 15,
 	renderScale: 1,
 	filterGlossyFactor: 1,
 	frameBudget: 250000,
@@ -132,7 +132,7 @@ async function init() {
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.close();
@@ -148,7 +148,7 @@ async function init() {
 function onParamsChange() {
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 

@@ -147,15 +147,15 @@ export class WebGPUPathTracer {
 	 * @type {number}
 	 * @default 15
 	 */
-	get bounces() {
+	get maxBounces() {
 
-		return this._pathTracer.bounces;
+		return this._pathTracer.maxBounces;
 
 	}
 
-	set bounces( v ) {
+	set maxBounces( v ) {
 
-		this._pathTracer.bounces = v;
+		this._pathTracer.maxBounces = v;
 		this._pathTracer.reset();
 
 	}
@@ -180,7 +180,7 @@ export class WebGPUPathTracer {
 
 	/**
 	 * Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
-	 * {@link WebGPUPathTracer#bounces} so foliage and cutouts cannot exhaust the bounce budget.
+	 * {@link WebGPUPathTracer#maxBounces} so foliage and cutouts cannot exhaust the bounce budget.
 	 * @type {number}
 	 * @default 5
 	 */

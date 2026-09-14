@@ -37,8 +37,10 @@ let animationDuration = 0;
 let videoUrl = '';
 let loader;
 
-// sample counts are measured asynchronously, so the average is kept for the recording checks
+// Sample counts are measured asynchronously, so the average is kept for the recording checks. A
+// measurement requested before the latest reset is dropped so it cannot trigger a frame write
 let averageSamples = 0;
+let resetCount = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
 let recordingState = 'idle';
@@ -52,11 +54,11 @@ const params = {
 	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
-	samples: 20,
+	maxSamples: 20,
 	record: startRecording,
 	stop: finishRecording,
 
-	bounces: 15,
+	maxBounces: 15,
 	samplesPerFrame: 1,
 	renderScale: 1,
 	...getScaledSettings(),
@@ -81,6 +83,10 @@ async function init() {
 	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
+
+	// the tracer stops itself at the target, and without a fade a captured frame is never dimmed
+	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.fadeDuration = 0;
 
 	// scene
 	scene = new Scene();
@@ -190,9 +196,13 @@ function rebuildGUI() {
 		pathTracer.frameBudget = value;
 
 	} );
-	renderFolder.add( params, 'samples', 1, 500, 1 );
+	renderFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( value => {
+
+		pathTracer.maxSamples = value;
+
+	} );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'bounces', 1, 50, 1 ).onChange( regenerateScene );
+	renderFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( regenerateScene );
 
 }
 
@@ -218,8 +228,11 @@ function initializeSize() {
 function regenerateScene() {
 
 	pathTracer.renderScale = params.renderScale;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.setScene( scene, camera );
+
+	averageSamples = 0;
+	resetCount ++;
 
 }
 
@@ -356,10 +369,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	const measuredReset = resetCount;
 	pathTracer.getSampleCountsAsync().then( counts => {
 
-		averageSamples = counts.avg;
 		loader.setSamples( counts );
+		if ( measuredReset === resetCount ) {
+
+			averageSamples = counts.avg;
+
+		}
 
 	} );
 
@@ -376,12 +394,12 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; ! isWritingFrame && i < params.samplesPerFrame; i ++ ) {
+		for ( let i = 0; ! isWritingFrame && i < params.maxSamplesPerFrame; i ++ ) {
 
 			pathTracer.renderSample();
 
 			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && averageSamples >= params.samples ) {
+			if ( isRecording && averageSamples >= params.maxSamples ) {
 
 				break;
 
@@ -390,7 +408,7 @@ function animate() {
 		}
 
 		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && averageSamples >= params.samples ) {
+		if ( isRecording && ! isWritingFrame && averageSamples >= params.maxSamples ) {
 
 			writeVideoFrame();
 
@@ -403,7 +421,7 @@ function animate() {
 
 		const total = Math.ceil( params.frameRate * params.duration );
 		const percStride = 1 / total;
-		const samplesPerc = averageSamples / params.samples;
+		const samplesPerc = averageSamples / params.maxSamples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		loader.setPercentage( percentDone );
 

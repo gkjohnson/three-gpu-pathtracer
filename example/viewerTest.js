@@ -35,7 +35,7 @@ const params = {
 	showAtlas: - 1,
 
 	enable: true,
-	bounces: 15,
+	maxBounces: 15,
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
@@ -240,7 +240,7 @@ function onParamsChange() {
 	}
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.scale;
 
 	const model = modelDatabase[ params.model ];
@@ -320,7 +320,7 @@ function buildGui() {
 		pathTracer.frameBudget = v;
 
 	} );
-	pathTracingFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 

@@ -313,7 +313,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			// TODO: this only makes sense if we can cap the number rays per iteration to the full
 			// frame
-			const iter = this.lowResMode ? Math.min( this.bounces, LOW_RES_ITERATIONS ) : 1;
+			const iter = this.lowResMode ? Math.min( this.maxBounces, LOW_RES_ITERATIONS ) : 1;
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -332,7 +332,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.rayDataStorage = rayDataStorage;
 				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
-				logicKernel.bounces = this.bounces;
+				logicKernel.maxBounces = this.maxBounces;
 				logicKernel.rayCount = rayCount;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -354,7 +354,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
-				materialKernel.bounces = this.bounces;
+				materialKernel.maxBounces = this.maxBounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 

@@ -27,7 +27,7 @@ export class MaterialKernel extends ComputeKernel {
 			rayCount: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
-			bounces: uniform( 5, 'uint' ),
+			maxBounces: uniform( 5, 'uint' ),
 
 			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
 
@@ -54,7 +54,7 @@ export class MaterialKernel extends ComputeKernel {
 				rayCount: u32,
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
-				bounces: u32,
+				maxBounces: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -273,7 +273,7 @@ export class MaterialKernel extends ComputeKernel {
 					// decide termination now so finished paths skip the bounce trace entirely - a
 					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
 					// the surface's emission and NEE before freeing the slot
-					var isTerminated = newBounce >= bounces || all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
+					var isTerminated = newBounce >= maxBounces || all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
 
 					// russian roulette early out:
 					// Matches Cycles path_state_continuation_probability in integrator/path_state.h

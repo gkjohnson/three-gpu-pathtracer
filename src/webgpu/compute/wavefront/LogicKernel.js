@@ -35,7 +35,7 @@ export class LogicKernel extends ComputeKernel {
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
-			bounces: uniform( 5, 'uint' ),
+			maxBounces: uniform( 5, 'uint' ),
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
@@ -65,7 +65,7 @@ export class LogicKernel extends ComputeKernel {
 				// settings
 				misEnabled: u32,
 				rayCount: u32,
-				bounces: u32,
+				maxBounces: u32,
 				clampDirect: f32,
 				clampIndirect: f32,
 				transmissiveBackground: u32,
@@ -138,7 +138,7 @@ export class LogicKernel extends ComputeKernel {
 
 				// the bounce limit, russian roulette, and terminating scatter checks all ran in
 				// MaterialKernel, which stages a zeroed pdf and skips the bounce trace when they fire
-				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= bounces || ${ isTerminatingScatterFunc }( scatterRec );
+				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= maxBounces || ${ isTerminatingScatterFunc }( scatterRec );
 
 				if ( ! isTerminated ) {
 

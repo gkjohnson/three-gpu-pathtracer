@@ -32,7 +32,7 @@ const params = {
 	lightIntensity: 500,
 	lightColor: '#ffffff',
 
-	bounces: 15,
+	maxBounces: 15,
 
 	...getScaledSettings(),
 
@@ -117,7 +117,7 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
@@ -147,7 +147,7 @@ function onParamsChange() {
 	spotLight.color.set( params.lightColor );
 
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.updateLights();

@@ -27,7 +27,7 @@ const focusPoint = new Vector3();
 const params = {
 
 	enabled: true,
-	bounces: 7,
+	maxBounces: 7,
 	renderScale: 1,
 	filterGlossyFactor: 1,
 	autoFocus: true,
@@ -123,7 +123,7 @@ function buildGui( radius ) {
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enabled' );
-	ptFolder.add( params, 'bounces', 1, 20, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxBounces', 1, 20, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
@@ -237,7 +237,7 @@ function onResize() {
 function onParamsChange() {
 
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.updateCamera();

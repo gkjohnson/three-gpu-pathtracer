@@ -13,7 +13,7 @@ const options = {
 	useMegakernel: false,
 	multipleImportanceSampling: true,
 	whiteBackground: false,
-	bounces: 15,
+	maxBounces: 15,
 	xAxis: 'roughness',
 	yAxis: 'metalness',
 };
@@ -25,7 +25,7 @@ renderer.init();
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.useMegakernel( options.useMegakernel );
 pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
-pathTracer.bounces = options.bounces;
+pathTracer.maxBounces = options.maxBounces;
 
 document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
@@ -77,9 +77,9 @@ gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
 
 } );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
-gui.add( options, 'bounces', 1, 100, 1 ).onChange( () => {
+gui.add( options, 'maxBounces', 1, 100, 1 ).onChange( () => {
 
-	pathTracer.bounces = options.bounces;
+	pathTracer.maxBounces = options.maxBounces;
 	pathTracer.reset();
 
 } );
