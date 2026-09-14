@@ -1,7 +1,7 @@
 <!-- This file is generated automatically. Do not edit it directly. -->
 # three-gpu-pathtracer/webgpu
 
-## Constants
+## Transmissive Background Modes
 
 ### TRANSMISSIVE_BACKGROUND_ENVIRONMENT
 
@@ -82,6 +82,7 @@ pathTracer.setUpscaler( new FSRUpscaler( { Upscaler } ) );
 ```js
 constructor(
 	{
+		// The `Upscaler` class from `@pmndrs/upscaler`.
 		Upscaler: function,
 		sharpness?: number,
 	}
@@ -161,11 +162,14 @@ constructor(
 		auxWeightsUrl: string,
 
 		// Weights for the color only model, needed only when
-		// "useAuxiliaryBuffers" is off.
+		// `useAuxiliaryBuffers` is `false`.
 		colorWeightsUrl?: string,
 		useAuxiliaryBuffers?: boolean,
 		maxTileSize?: number | null,
-		dynamicTile?: boolean | Object | null,
+
+		// `false` pins every tile to `maxTileSize`. An object tunes
+		// the adaptive sizing.
+		dynamicTile?: DynamicTileSetting | null,
 	}
 )
 ```
@@ -222,8 +226,8 @@ the camera moves.
 
 ## WebGPUPathTracer
 
-Progressive path tracer running on WebGPU. Call `setScene` once, then
-`renderSample` every frame to accumulate samples into the canvas.
+Progressive path tracer running on WebGPU. Call [WebGPUPathTracer#setScene](WebGPUPathTracer#setScene) once,
+then [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) every frame to accumulate samples into the canvas.
 
 The scene is captured when `setScene` is called, so changes to geometry, materials, lights, or
 the environment afterward require the matching `update*` function. Any change that invalidates
@@ -246,8 +250,8 @@ resolve more indirect light at the cost of speed.
 frameBudget: number = 250000
 ```
 
-Number of path slots dispatched per `renderSample` call, independent
-of resolution. Raising it trades frame rate for convergence speed.
+Number of path slots dispatched per [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) call,
+independent of resolution. Raising it trades frame rate for convergence speed.
 
 
 ### .maxTransparentBounces
@@ -257,7 +261,7 @@ maxTransparentBounces: number = 5
 ```
 
 Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
-`bounces` so foliage and cutouts cannot exhaust the bounce budget.
+[WebGPUPathTracer#bounces](WebGPUPathTracer#bounces) so foliage and cutouts cannot exhaust the bounce budget.
 
 
 ### .maxSamples
@@ -352,7 +356,7 @@ Progress of the fade from the low resolution preview to the full render, from 0 
 readonly lowResTarget: Texture
 ```
 
-The low resolution preview rendered while `renderDelay` elapses.
+The low resolution preview rendered while [WebGPUPathTracer#renderDelay](WebGPUPathTracer#renderDelay) elapses.
 
 
 ### .lowResMode
@@ -434,8 +438,8 @@ converges faster at the cost of detail, and pairs with an upscaler.
 synchronizeRenderSize: boolean = true
 ```
 
-Whether to track the canvas size automatically. Turn it off to drive the render size
-with `setSize`.
+Whether to track the canvas size automatically. Set to `false` to drive the render
+size with [WebGPUPathTracer#setSize](WebGPUPathTracer#setSize).
 
 
 ### .generateMissingAttributes
@@ -444,7 +448,7 @@ with `setSize`.
 generateMissingAttributes: boolean = true
 ```
 
-Whether to generate the attributes in `commonAttributes` on
+Whether to generate the attributes in [WebGPUPathTracer#commonAttributes](WebGPUPathTracer#commonAttributes) on
 geometry that is missing them when the scene is set.
 
 
@@ -479,14 +483,13 @@ Whether to stop accumulating samples. The last image keeps being presented.
 ### .random
 
 ```js
-random: Object = RANDOM_BLUE_DITHER
+random: RandomGenerator = RANDOM_BLUE_DITHER
 ```
 
-Random number generator the kernels sample with. One of `RANDOM_BLUE_DITHER`,
-`RANDOM_SOBOL`, or `RANDOM_PCG`.
+Random number generator the kernels sample with.
 
 > [!NOTE]
-> Assign through `setRandom` so the kernels recompile.
+> Assign through [WebGPUPathTracer#setRandom](WebGPUPathTracer#setRandom) so the kernels recompile.
 
 ### .material
 
@@ -497,7 +500,7 @@ material: PathtracingMaterial
 Material model the kernels evaluate surfaces with.
 
 > [!NOTE]
-> Assign through `setMaterial` so the kernels recompile.
+> Assign through [WebGPUPathTracer#setMaterial](WebGPUPathTracer#setMaterial) so the kernels recompile.
 
 ### .constructor
 
@@ -585,7 +588,7 @@ Replaces the material model and recompiles the kernels.
 ### .setRandom
 
 ```js
-setRandom( random: Object ): void
+setRandom( random: RandomGenerator ): void
 ```
 
 Replaces the random number generator and recompiles the kernels.
@@ -620,7 +623,7 @@ updateTransforms(): void
 Re-reads the world matrices from the scene. Call after moving any object.
 
 > [!NOTE]
-> Changing geometry requires `setScene` instead, since the BVH
+> Changing geometry requires [WebGPUPathTracer#setScene](WebGPUPathTracer#setScene) instead, since the BVH
 >   must be rebuilt.
 
 ### .updateCamera
@@ -658,7 +661,7 @@ setSize( x: number, y: number ): void
 ```
 
 Sets the resolution the path tracer renders at. Only used when
-`synchronizeRenderSize` is off.
+[WebGPUPathTracer#synchronizeRenderSize](WebGPUPathTracer#synchronizeRenderSize) is `false`.
 
 
 ### .reset
@@ -742,6 +745,12 @@ getRenderTime(): number
 ```
 
 Milliseconds elapsed since the last reset.
+
+
+## RandomGenerator
+
+A random number generator implementation the kernels sample with. Use one of the `RANDOM_PCG`,
+`RANDOM_SOBOL`, or `RANDOM_BLUE_DITHER` modules rather than constructing one.
 
 
 ## SampleCounts

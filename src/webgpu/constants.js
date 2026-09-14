@@ -3,18 +3,21 @@
 
 /**
  * Sample the environment map, so glass shows what is behind it.
+ * @section Transmissive Background Modes
  * @type {number}
  */
 export const TRANSMISSIVE_BACKGROUND_ENVIRONMENT = 0;
 
 /**
  * Set the opacity from the transmitted light intensity, tinted by the environment lighting.
+ * @section Transmissive Background Modes
  * @type {number}
  */
 export const TRANSMISSIVE_BACKGROUND_OVERLAY = 1;
 
 /**
  * Attenuate the background by the transmitted light, so glass renders against transparency.
+ * @section Transmissive Background Modes
  * @type {number}
  */
 export const TRANSMISSIVE_BACKGROUND_TRANSPARENT = 2;

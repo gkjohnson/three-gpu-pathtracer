@@ -180,6 +180,8 @@ See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
 
 [knightcrawler25/GLSL-PathTracer](https://github.com/knightcrawler25/GLSL-PathTracer/)
 
-[DassaultSystemes-Technology/dspbr-pt](https://github.com/DassaultSystemes-Technology/dspbr-pt)
+[blender/cycles](https://github.com/blender/cycles)
+
+[AcademySoftwareFoundation/OpenPBR](https://github.com/AcademySoftwareFoundation/OpenPBR)
 
 
