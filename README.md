@@ -71,15 +71,16 @@ On Debian or Ubuntu, run `sudo apt install build-essential`.  It should just wor
 **Basic Renderer**
 
 ```js
-import * as THREE from 'three';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import * as THREE from 'three/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 
 // init scene, camera, controls, etc
 
-renderer = new THREE.WebGLRenderer();
+renderer = new THREE.WebGPURenderer();
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+await renderer.init();
 
-pathTracer = new WebGLPathTracer( renderer );
+pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.setScene( scene, camera );
 
 animate();
@@ -94,16 +95,19 @@ function animate() {
 
 **Blurred Environment Map**
 
-Using a pre blurred envioronment map can help improve frame convergence time at the cost of sharp environment reflections. If performance is concern then multiple importance sampling can be disabled and blurred environment map used.
+Using a pre blurred environment map can help improve frame convergence time at the cost of sharp environment reflections. If performance is a concern then multiple importance sampling can be disabled and a blurred environment map used.
 
 ```js
-import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer';
+import { BlurredEnvMapGenerator } from 'three-gpu-pathtracer/webgpu';
 
 // ...
 
-const envMap = await new HDRLoader().setDataType( THREE.FloatType ).loadAsync( envMapUrl );
+const envMap = await new HDRLoader().loadAsync( envMapUrl );
 const generator = new BlurredEnvMapGenerator( renderer );
-const blurredEnvMap = generator.generate( envMap, 0.35 );
+const blurredEnvMap = await generator.generate( envMap, 0.35 );
+generator.dispose();
+
+scene.environment = blurredEnvMap;
 
 // render!
 
