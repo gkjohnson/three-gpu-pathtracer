@@ -307,7 +307,6 @@ async function finishRecording() {
 		isWritingFrame = false;
 
 		pathTracer.minSamples = 1;
-		pathTracer.reset();
 		recordedFrames = 0;
 		rebuildGUI();
 

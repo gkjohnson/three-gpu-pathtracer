@@ -303,7 +303,6 @@ function buildGui() {
 	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
-		pathTracer.reset();
 		detailedSampleCount = null;
 
 	} );

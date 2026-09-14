@@ -31,7 +31,6 @@ document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
 renderer.setPixelRatio( devicePixelRatio );
 renderer.setAnimationLoop( animate );
-pathTracer.reset();
 
 // init scene
 const scene = new Scene();
@@ -68,7 +67,6 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
 	pathTracer.setScene( scene, camera );
-	pathTracer.reset();
 
 } );
 gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
@@ -80,7 +78,6 @@ gui.add( options, 'whiteBackground' ).onChange( updateBackground );
 gui.add( options, 'maxBounces', 1, 100, 1 ).onChange( () => {
 
 	pathTracer.maxBounces = options.maxBounces;
-	pathTracer.reset();
 
 } );
 gui.add( options, 'xAxis', AXIS_PROPERTIES ).onChange( rebuild );
@@ -90,7 +87,6 @@ function rebuild() {
 
 	buildGrid();
 	pathTracer.setScene( scene, camera );
-	pathTracer.reset();
 
 }
 

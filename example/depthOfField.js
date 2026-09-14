@@ -241,7 +241,6 @@ function onParamsChange() {
 	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.updateCamera();
-	pathTracer.reset();
 
 }
 
