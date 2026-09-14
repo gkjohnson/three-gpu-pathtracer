@@ -1,6 +1,8 @@
 import { ExternalTexture, NearestFilter, NoToneMapping, RenderTarget, UnsignedByteType } from 'three/webgpu';
 import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
 
+/** @import { DynamicTileSetting } from 'oidn-web' */
+
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
  * "WebGPUPathTracer.setDenoiser", or drive it directly with "denoise".
@@ -58,10 +60,11 @@ export class OIDNDenoiser {
 	 * @param {Function} options.initUNetFromURL
 	 * @param {string} options.auxWeightsUrl - Weights for the guided model.
 	 * @param {string} [options.colorWeightsUrl] - Weights for the color only model, needed only
-	 * when "useAuxiliaryBuffers" is off.
+	 * when `useAuxiliaryBuffers` is `false`.
 	 * @param {boolean} [options.useAuxiliaryBuffers]
 	 * @param {number|null} [options.maxTileSize]
-	 * @param {boolean|Object|null} [options.dynamicTile]
+	 * @param {DynamicTileSetting|null} [options.dynamicTile] - `false` pins every tile to
+	 * `maxTileSize`. An object tunes the adaptive sizing.
 	 */
 	constructor( options = {} ) {
 
@@ -84,7 +87,7 @@ export class OIDNDenoiser {
 		this.auxWeightsUrl = auxWeightsUrl;
 		this.colorWeightsUrl = colorWeightsUrl;
 
-		// off falls back to the color only model, which is blurrier but skips a scene render
+		// `false` falls back to the color only model, which is blurrier but skips a scene render
 		this.useAuxiliaryBuffers = useAuxiliaryBuffers;
 
 		// tiling, passed through to oidn-web. Null keeps its defaults

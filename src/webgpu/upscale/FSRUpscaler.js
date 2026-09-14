@@ -19,7 +19,7 @@ export class FSRUpscaler {
 	 * Every field below can also be assigned after construction.
 	 *
 	 * @param {Object} options
-	 * @param {Function} options.Upscaler
+	 * @param {Function} options.Upscaler - The `Upscaler` class from `@pmndrs/upscaler`.
 	 * @param {number} [options.sharpness]
 	 */
 	constructor( options = {} ) {

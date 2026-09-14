@@ -1,3 +1,4 @@
+/** @import { Texture, WebGPURenderer } from 'three/webgpu' */
 import {
 	RenderTarget,
 	FloatType,
@@ -27,10 +28,15 @@ const equirectUvToDirection = /*@__PURE__*/ Fn( ( [ coord ] ) => {
 
 } );
 
-// Produces a PMREM-prefiltered, optionally downsampled equirect copy of an environment map
-// that resolves faster in the path tracer.
+/**
+ * Produces a PMREM prefiltered, optionally downsampled equirectangular copy of an environment
+ * map. Blurring removes the small bright details that make an environment slow to converge.
+ */
 export class BlurredEnvMapGenerator {
 
+	/**
+	 * @param {WebGPURenderer} renderer
+	 */
 	constructor( renderer ) {
 
 		this.renderer = renderer;
@@ -48,6 +54,9 @@ export class BlurredEnvMapGenerator {
 
 	}
 
+	/**
+	 * Frees every GPU resource held by the generator.
+	 */
 	dispose() {
 
 		// disposes the node's internal PMREMGenerator and its prefiltering render targets
@@ -58,6 +67,16 @@ export class BlurredEnvMapGenerator {
 
 	}
 
+	/**
+	 * Renders a blurred copy of the given environment map. The source texture is left untouched.
+	 *
+	 * @param {Texture} texture - Equirectangular environment map to blur.
+	 * @param {number} [blur=0] - Blur amount, from 0 to 1.
+	 * @param {number} [width=null] - Output width. Defaults to the source width.
+	 * @param {number} [height=null] - Output height. Defaults to the source height.
+	 * @returns {Promise<Texture>}
+	 * @note The returned texture is owned by the caller and must be disposed.
+	 */
 	async generate( texture, blur = 0, width = null, height = null ) {
 
 		const { renderTarget, quad, renderer } = this;
