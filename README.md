@@ -115,11 +115,9 @@ See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
 
 # Gotchas
 
-- The project requires use of WebGL2.
-- All textures must use the same wrap and interpolation flags.
+- The project requires WebGPU.
 - SpotLights, DirectionalLights, and PointLights are only supported with MIS.
 - Only MeshStandardMaterial and MeshPhysicalMaterial are supported.
-- Instanced geometry and interleaved buffers are not supported.
 - Emissive materials are supported but do not take advantage of MIS.
 
 # Screenshots
