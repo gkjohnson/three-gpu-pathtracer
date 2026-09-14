@@ -576,51 +576,51 @@ Returns `pass === true` if the path tracer can run. If it cannot run then a mess
 # Screenshots
 
 <p align="center">
-<img src="./docs/rover.png" />
+<img src="./docs/rover.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/lit-stairway.png" />
+<img src="./docs/lit-stairway.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/kitchen.png" />
+<img src="./docs/kitchen.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/tropical-island.png" />
+<img src="./docs/tropical-island.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/coffee-maker.png" />
+<img src="./docs/coffee-maker.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/porsche.png" />
+<img src="./docs/porsche.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/insight.png" />
+<img src="./docs/insight.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/apollo-lego.png" />
+<img src="./docs/apollo-lego.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/stormtroopers.png" />
+<img src="./docs/stormtroopers.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/tea-set.png" />
+<img src="./docs/tea-set.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/octopus-tea.png" />
+<img src="./docs/octopus-tea.webp" />
 </p>
 
 <p align="center">
-<img src="./docs/sasha-ring.png" />
+<img src="./docs/sasha-ring.webp" />
 </p>
 
 ### Resources
