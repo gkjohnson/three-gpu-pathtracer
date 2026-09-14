@@ -22,12 +22,6 @@ import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 /** @import { PathtracingMaterial } from './materials/PathtracingMaterial.js' */
 
 /**
- * A random number generator implementation the kernels sample with. Use one of the `RANDOM_PCG`,
- * `RANDOM_SOBOL`, or `RANDOM_BLUE_DITHER` modules rather than constructing one.
- * @typedef {Object} RandomGenerator
- */
-
-/**
  * @typedef {Object} SampleCounts
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
@@ -571,9 +565,8 @@ export class WebGPUPathTracer {
 
 		/**
 		 * Random number generator the kernels sample with.
-		 * @type {RandomGenerator}
-		 * @default RANDOM_BLUE_DITHER
-		 * @note Assign through {@link WebGPUPathTracer#setRandom} so the kernels recompile.
+		 * @type {Object}
+		 * @private
 		 */
 		this.random = RANDOM_BLUE_DITHER;
 
@@ -754,7 +747,7 @@ export class WebGPUPathTracer {
 	/**
 	 * Replaces the random number generator and recompiles the kernels.
 	 *
-	 * @param {RandomGenerator} random
+	 * @param {Object} random - One of the Random Strategies constants, such as `RANDOM_BLUE_DITHER`.
 	 */
 	setRandom( random ) {
 
