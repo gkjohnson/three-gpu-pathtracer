@@ -1,6 +1,33 @@
 <!-- This file is generated automatically. Do not edit it directly. -->
 # three-gpu-pathtracer/webgpu
 
+## Random Strategies
+
+### RANDOM_PCG
+
+```js
+RANDOM_PCG: Object
+```
+
+Uncorrelated pseudo random samples. Converges slowest but never shows structured artifacts.
+
+### RANDOM_SOBOL
+
+```js
+RANDOM_SOBOL: Object
+```
+
+Sobol low discrepancy samples, scrambled per pixel. Converges faster than `RANDOM_PCG`.
+
+### RANDOM_BLUE_DITHER
+
+```js
+RANDOM_BLUE_DITHER: Object
+```
+
+The same Sobol sequence for every pixel, offset by a blue noise dither so early frames read as
+smooth grain rather than clumped noise. The default.
+
 ## Transmissive Background Modes
 
 ### TRANSMISSIVE_BACKGROUND_ENVIRONMENT
@@ -491,17 +518,6 @@ Random number generator the kernels sample with.
 > [!NOTE]
 > Assign through [WebGPUPathTracer#setRandom](WebGPUPathTracer#setRandom) so the kernels recompile.
 
-### .material
-
-```js
-material: PathtracingMaterial
-```
-
-Material model the kernels evaluate surfaces with.
-
-> [!NOTE]
-> Assign through [WebGPUPathTracer#setMaterial](WebGPUPathTracer#setMaterial) so the kernels recompile.
-
 ### .constructor
 
 ```js
@@ -519,16 +535,6 @@ Measures the per pixel sample counts. Use `min` for convergence checks and `avg`
 > [!NOTE]
 > The wavefront backend reduces the counts on the GPU and reads them back, so only call
 >   this when the numbers are needed.
-
-### .useMegakernel
-
-```js
-useMegakernel( value: boolean ): void
-```
-
-Switches between the two tracing backends and rebuilds the kernels. The wavefront backend is
-used by default and is faster on most scenes.
-
 
 ### .setMultipleImportanceSampling
 
@@ -568,22 +574,6 @@ against. Call this once, then use the `update*` functions for later changes.
 
 > [!NOTE]
 > Geometry BVHs are built synchronously, so this blocks for large scenes.
-
-### .getMaterial
-
-```js
-getMaterial(): PathtracingMaterial
-```
-
-
-### .setMaterial
-
-```js
-setMaterial( material: PathtracingMaterial ): void
-```
-
-Replaces the material model and recompiles the kernels.
-
 
 ### .setRandom
 

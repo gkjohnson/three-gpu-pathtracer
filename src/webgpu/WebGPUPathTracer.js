@@ -425,6 +425,7 @@ export class WebGPUPathTracer {
 	 * used by default and is faster on most scenes.
 	 *
 	 * @param {boolean} value - `true` for the megakernel, `false` for the wavefront tracer.
+	 * @private
 	 */
 	useMegakernel( value ) {
 
@@ -579,7 +580,7 @@ export class WebGPUPathTracer {
 		/**
 		 * Material model the kernels evaluate surfaces with.
 		 * @type {PathtracingMaterial}
-		 * @note Assign through {@link WebGPUPathTracer#setMaterial} so the kernels recompile.
+		 * @private
 		 */
 		this.material = new GltfCompliantMaterial();
 
@@ -727,6 +728,7 @@ export class WebGPUPathTracer {
 
 	/**
 	 * @returns {PathtracingMaterial}
+	 * @private
 	 */
 	// TODO: consider renaming these functions or removing them
 	getMaterial() {
@@ -739,6 +741,7 @@ export class WebGPUPathTracer {
 	 * Replaces the material model and recompiles the kernels.
 	 *
 	 * @param {PathtracingMaterial} material
+	 * @private
 	 */
 	setMaterial( material ) {
 
