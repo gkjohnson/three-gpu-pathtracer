@@ -54,7 +54,7 @@ const params = {
 	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
-	maxSamples: 20,
+	maxSamples: 10,
 	record: startRecording,
 	stop: finishRecording,
 
@@ -394,7 +394,7 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; ! isWritingFrame && i < params.maxSamplesPerFrame; i ++ ) {
+		for ( let i = 0; ! isWritingFrame && i < 1; i ++ ) {
 
 			pathTracer.renderSample();
 

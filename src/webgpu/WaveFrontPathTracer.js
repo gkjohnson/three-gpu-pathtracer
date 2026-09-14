@@ -103,6 +103,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	reset() {
+
+		super.reset();
+		this._samplesPromise = null;
+
+	}
+
 	setBVHData( bvhData ) {
 
 		this.materialKernel.bvhData = bvhData;
@@ -388,11 +395,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// share the in flight measurement rather than dispatching another
 		if ( this._samplesPromise === null ) {
 
-			this._samplesPromise = this._measureSampleCounts().finally( () => {
+			const promise = this._measureSampleCounts().finally( () => {
 
-				this._samplesPromise = null;
+				// a reset may have started a newer measurement in the meantime
+				if ( this._samplesPromise === promise ) {
+
+					this._samplesPromise = null;
+
+				}
 
 			} );
+
+			this._samplesPromise = promise;
 
 		}
 
