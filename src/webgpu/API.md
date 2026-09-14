@@ -261,10 +261,10 @@ the environment afterward require the matching `update*` function. Any change th
 the accumulated image restarts it.
 
 
-### .bounces
+### .maxBounces
 
 ```js
-bounces: number = 15
+maxBounces: number = 15
 ```
 
 Maximum number of times a ray can scatter before the path is terminated. Higher values
@@ -288,7 +288,7 @@ maxTransparentBounces: number = 5
 ```
 
 Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
-[WebGPUPathTracer#bounces](WebGPUPathTracer#bounces) so foliage and cutouts cannot exhaust the bounce budget.
+[WebGPUPathTracer#maxBounces](WebGPUPathTracer#maxBounces) so foliage and cutouts cannot exhaust the bounce budget.
 
 
 ### .maxSamples
@@ -507,17 +507,6 @@ pause: boolean = false
 Whether to stop accumulating samples. The last image keeps being presented.
 
 
-### .random
-
-```js
-random: RandomGenerator = RANDOM_BLUE_DITHER
-```
-
-Random number generator the kernels sample with.
-
-> [!NOTE]
-> Assign through [WebGPUPathTracer#setRandom](WebGPUPathTracer#setRandom) so the kernels recompile.
-
 ### .constructor
 
 ```js
@@ -578,7 +567,7 @@ against. Call this once, then use the `update*` functions for later changes.
 ### .setRandom
 
 ```js
-setRandom( random: RandomGenerator ): void
+setRandom( random: Object ): void
 ```
 
 Replaces the random number generator and recompiles the kernels.
@@ -735,12 +724,6 @@ getRenderTime(): number
 ```
 
 Milliseconds elapsed since the last reset.
-
-
-## RandomGenerator
-
-A random number generator implementation the kernels sample with. Use one of the `RANDOM_PCG`,
-`RANDOM_SOBOL`, or `RANDOM_BLUE_DITHER` modules rather than constructing one.
 
 
 ## SampleCounts

@@ -7,7 +7,7 @@ export class PathTracerBackend {
 	constructor( renderer ) {
 
 		this.renderer = renderer;
-		this.bounces = 15;
+		this.maxBounces = 15;
 
 		// how much work a single update dispatches, in path slots. Lower values keep frames
 		// responsive on slower hardware; the unit is resolution independent.

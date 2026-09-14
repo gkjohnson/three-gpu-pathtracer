@@ -13,7 +13,7 @@ const options = {
 	useMegakernel: false,
 	multipleImportanceSampling: true,
 	whiteBackground: false,
-	bounces: 15,
+	maxBounces: 15,
 	xAxis: 'roughness',
 	yAxis: 'metalness',
 };
@@ -25,13 +25,12 @@ renderer.init();
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.useMegakernel( options.useMegakernel );
 pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
-pathTracer.bounces = options.bounces;
+pathTracer.maxBounces = options.maxBounces;
 
 document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
 renderer.setPixelRatio( devicePixelRatio );
 renderer.setAnimationLoop( animate );
-pathTracer.reset();
 
 // init scene
 const scene = new Scene();
@@ -68,7 +67,6 @@ gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
 	pathTracer.setScene( scene, camera );
-	pathTracer.reset();
 
 } );
 gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
@@ -77,10 +75,9 @@ gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
 
 } );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
-gui.add( options, 'bounces', 1, 100, 1 ).onChange( () => {
+gui.add( options, 'maxBounces', 1, 100, 1 ).onChange( () => {
 
-	pathTracer.bounces = options.bounces;
-	pathTracer.reset();
+	pathTracer.maxBounces = options.maxBounces;
 
 } );
 gui.add( options, 'xAxis', AXIS_PROPERTIES ).onChange( rebuild );
@@ -90,7 +87,6 @@ function rebuild() {
 
 	buildGrid();
 	pathTracer.setScene( scene, camera );
-	pathTracer.reset();
 
 }
 
