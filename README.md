@@ -575,63 +575,52 @@ Returns `pass === true` if the path tracer can run. If it cannot run then a mess
 
 # Screenshots
 
-![](https://user-images.githubusercontent.com/734200/162584469-68e6df38-92da-4a13-b352-ca0bdea14548.png)
-
 <p align="center">
-<i>Sample materials</i>
+<img src="./docs/rover.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/163835927-be75d2c0-f27b-4e4b-a3eb-2371043fa5e1.png)
-
-![](https://user-images.githubusercontent.com/734200/163839431-ed75e64d-9ae4-4423-afca-55162a44873e.png)
-
 <p align="center">
-<i>"SD Macross City Standoff Diorama" scene by <a href="https://sketchfab.com/3d-models/sd-macross-city-standoff-diorama-b154220f7e7441799d6be2f7ff9658c7">tipatat</a></i>
+<img src="./docs/lit-stairway.png" />
 </p>
 
-![](./docs/interior-scene-cropped.png)
-
 <p align="center">
-<i>"Interior Scene" model by <a href="https://sketchfab.com/3d-models/interior-scene-45ddbbc4c2dc4f8ca9ed99da9a78326a">Allay Design</a></i>
+<img src="./docs/kitchen.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/161820794-df0da371-ee5c-4368-9e7b-5e7daf6cf3c7.png)
-
-![](https://user-images.githubusercontent.com/734200/162550315-3cdabf40-3dea-4d7d-bcfc-eb543eea2d93.png)
-
 <p align="center">
-<i>Perseverance Rover, Ingenuity Helicopter models by <a href="https://mars.nasa.gov/resources/25042/mars-perseverance-rover-3d-model/">NASA / JPL-Caltech</a></i>
+<img src="./docs/tropical-island.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/161877900-566652e4-c799-4940-bccb-0c8f4cea5387.png)
-
 <p align="center">
-<i>Gelatinous Cube model by <a href="https://sketchfab.com/3d-models/gelatinous-cube-e08385238f4d4b59b012233a9fbdca21">glenatron</a></i>
+<img src="./docs/coffee-maker.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/161822206-c27bf594-d648-4735-868e-4baf4e414802.png)
-
-![](https://user-images.githubusercontent.com/734200/161822214-eace4297-03c4-4adc-b472-efe29a862685.png)
-
 <p align="center">
-<i>Lego models courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository</a></i>
+<img src="./docs/porsche.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/161877196-7ae2769e-7e54-4694-9ca8-e8f5219d1c2d.png)
-
 <p align="center">
-<i>Octopus Tea model by <a href="https://sketchfab.com/3d-models/cartoon-octopus-takes-a-tea-bath-107260cf0fd24202a67eb037a6c760a5
-">AzTiZ</a></i>
+<img src="./docs/insight.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/173212652-de6a83e5-dd2c-49b5-8ed7-484ff8969b5b.png)
 <p align="center">
-<i>Botanists Study model by <a href="https://sketchfab.com/3d-models/the-botanists-study-8b7b5743b1c848ed8ea58f5518c44e7e">riikkakilpelainen</a></i>
+<img src="./docs/apollo-lego.png" />
 </p>
 
-![](https://user-images.githubusercontent.com/734200/173170459-849b9343-efe3-4635-8719-346511472965.png)
 <p align="center">
-<i>Japanese Bridge Garden model by <a href="https://sketchfab.com/3d-models/japanese-bridge-garden-d122e17593eb4012913cde927486d15a">kristenlee</a></i>
+<img src="./docs/stormtroopers.png" />
+</p>
+
+<p align="center">
+<img src="./docs/tea-set.png" />
+</p>
+
+<p align="center">
+<img src="./docs/octopus-tea.png" />
+</p>
+
+<p align="center">
+<img src="./docs/sasha-ring.png" />
 </p>
 
 ### Resources
