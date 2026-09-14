@@ -1,12 +1,22 @@
-// How rays that have only passed through transmissive surfaces treat the background on a miss
+// How rays that have only passed through transmissive surfaces treat the background on a miss.
+// Assign one to "WebGPUPathTracer.transmissiveBackground".
 
-// Sample the env map
+/**
+ * Sample the environment map, so glass shows what is behind it.
+ * @type {number}
+ */
 export const TRANSMISSIVE_BACKGROUND_ENVIRONMENT = 0;
 
-// Set the opacity based on transmitted light intensity with env lighting tint
+/**
+ * Set the opacity from the transmitted light intensity, tinted by the environment lighting.
+ * @type {number}
+ */
 export const TRANSMISSIVE_BACKGROUND_OVERLAY = 1;
 
-// Attenuate light based on transmitted
+/**
+ * Attenuate the background by the transmitted light, so glass renders against transparency.
+ * @type {number}
+ */
 export const TRANSMISSIVE_BACKGROUND_TRANSPARENT = 2;
 
 // Layout of the r32uint "sample count" target: two flag bits then a 30 bit count.
