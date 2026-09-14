@@ -126,8 +126,8 @@ class TextureCache {
 }
 
 /**
- * Progressive path tracer running on WebGPU. Call {@link WebGPUPathTracer#setScene} once, then
- * {@link WebGPUPathTracer#renderSample} every frame to accumulate samples into the canvas.
+ * Progressive path tracer running on WebGPU. Call `setScene` once, then
+ * `renderSample` every frame to accumulate samples into the canvas.
  *
  * The scene is captured when `setScene` is called, so changes to geometry, materials, lights, or
  * the environment afterward require the matching `update*` function. Any change that invalidates
@@ -155,7 +155,7 @@ export class WebGPUPathTracer {
 	}
 
 	/**
-	 * Number of path slots dispatched per {@link WebGPUPathTracer#renderSample} call, independent
+	 * Number of path slots dispatched per `renderSample` call, independent
 	 * of resolution. Raising it trades frame rate for convergence speed.
 	 * @type {number}
 	 * @default 250000
@@ -174,7 +174,7 @@ export class WebGPUPathTracer {
 
 	/**
 	 * Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
-	 * {@link WebGPUPathTracer#bounces} so foliage and cutouts cannot exhaust the bounce budget.
+	 * `bounces` so foliage and cutouts cannot exhaust the bounce budget.
 	 * @type {number}
 	 * @default 5
 	 */
@@ -382,7 +382,7 @@ export class WebGPUPathTracer {
 	}
 
 	/**
-	 * The low resolution preview rendered while {@link WebGPUPathTracer#renderDelay} elapses.
+	 * The low resolution preview rendered while `renderDelay` elapses.
 	 * @type {Texture}
 	 * @readonly
 	 */
@@ -520,14 +520,14 @@ export class WebGPUPathTracer {
 
 		/**
 		 * Whether to track the canvas size automatically. Turn it off to drive the render size
-		 * with {@link WebGPUPathTracer#setSize}.
+		 * with `setSize`.
 		 * @type {boolean}
 		 * @default true
 		 */
 		this.synchronizeRenderSize = true;
 
 		/**
-		 * Whether to generate the attributes in {@link WebGPUPathTracer#commonAttributes} on
+		 * Whether to generate the attributes in `commonAttributes` on
 		 * geometry that is missing them when the scene is set.
 		 * @type {boolean}
 		 * @default true
@@ -567,14 +567,14 @@ export class WebGPUPathTracer {
 		 * `RANDOM_SOBOL`, or `RANDOM_PCG`.
 		 * @type {Object}
 		 * @default RANDOM_BLUE_DITHER
-		 * @note Assign through {@link WebGPUPathTracer#setRandom} so the kernels recompile.
+		 * @note Assign through `setRandom` so the kernels recompile.
 		 */
 		this.random = RANDOM_BLUE_DITHER;
 
 		/**
 		 * Material model the kernels evaluate surfaces with.
 		 * @type {PathtracingMaterial}
-		 * @note Assign through {@link WebGPUPathTracer#setMaterial} so the kernels recompile.
+		 * @note Assign through `setMaterial` so the kernels recompile.
 		 */
 		this.material = new GltfCompliantMaterial();
 
@@ -826,7 +826,7 @@ export class WebGPUPathTracer {
 
 	/**
 	 * Re-reads the world matrices from the scene. Call after moving any object.
-	 * @note Changing geometry requires {@link WebGPUPathTracer#setScene} instead, since the BVH
+	 * @note Changing geometry requires `setScene` instead, since the BVH
 	 *   must be rebuilt.
 	 */
 	updateTransforms() {
@@ -911,7 +911,7 @@ export class WebGPUPathTracer {
 
 	/**
 	 * Sets the resolution the path tracer renders at. Only used when
-	 * {@link WebGPUPathTracer#synchronizeRenderSize} is off.
+	 * `synchronizeRenderSize` is off.
 	 *
 	 * @param {number} x
 	 * @param {number} y

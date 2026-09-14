@@ -109,6 +109,10 @@ const blurredEnvMap = generator.generate( envMap, 0.35 );
 
 ```
 
+# API
+
+See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
+
 # Gotchas
 
 - The project requires use of WebGL2.
