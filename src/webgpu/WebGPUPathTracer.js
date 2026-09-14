@@ -16,6 +16,8 @@ import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
+/** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
+/** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
 
 const _resolution = new Vector2();
 const _color = new Color();
@@ -164,6 +166,10 @@ export class WebGPUPathTracer {
 	set maxSamples( v ) {
 
 		this._pathTracer.maxSamples = v;
+
+		// the settle point moved, so a finished pass may need to run again against a longer
+		// render. The accumulated samples are still valid
+		this._denoiser?.reset();
 
 	}
 
@@ -357,6 +363,10 @@ export class WebGPUPathTracer {
 
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 
+		// optional post passes, attached with "setDenoiser" / "setUpscaler"
+		this._denoiser = null;
+		this._upscaler = null;
+
 		// options
 		this.minSamples = 1;
 		this.renderDelay = 500;
@@ -397,6 +407,46 @@ export class WebGPUPathTracer {
 		this._multipleImportanceSampling = value;
 		this._pathTracer.setMultipleImportanceSampling( value );
 		this.reset();
+
+	}
+
+	/**
+	 * Attaches a denoiser, run once the render settles and displayed in place of the raw image.
+	 * Settings live on the instance. Pass null to remove it.
+	 *
+	 * @param {OIDNDenoiser|null} denoiser
+	 */
+	setDenoiser( denoiser ) {
+
+		// a detached instance stops receiving resets, so clear it rather than let it hold a
+		// result from a camera position that has since moved
+		this._denoiser?.reset();
+		this._denoiser = denoiser;
+
+		if ( denoiser ) {
+
+			denoiser.init( this._renderer );
+			denoiser.setScene( this.scene, this.camera );
+
+		}
+
+	}
+
+	/**
+	 * Attaches an upscaler, run before the image is presented so the render can happen below the
+	 * canvas resolution. Settings live on the instance. Pass null to remove it.
+	 *
+	 * @param {FSRUpscaler|null} upscaler
+	 */
+	setUpscaler( upscaler ) {
+
+		this._upscaler = upscaler;
+
+		if ( upscaler ) {
+
+			upscaler.init( this._renderer );
+
+		}
 
 	}
 
@@ -464,6 +514,9 @@ export class WebGPUPathTracer {
 		this.setCamera( camera );
 		this.updateEnvironment();
 		this.updateLights();
+
+		// the denoiser rasterizes its own guide buffers, so it needs the scene too
+		this._denoiser?.setScene( scene, camera );
 
 	}
 
@@ -632,6 +685,7 @@ export class WebGPUPathTracer {
 	reset() {
 
 		this._pathTracer.reset();
+		this._denoiser?.reset();
 		this._resetTime = - 1;
 		this._fadeState = 0;
 		this._timer.update();
@@ -662,6 +716,7 @@ export class WebGPUPathTracer {
 			renderScale,
 			lowResScale,
 			minSamples,
+			maxSamples,
 		} = this;
 
 		timer.update();
@@ -740,11 +795,19 @@ export class WebGPUPathTracer {
 
 		}
 
+		const denoiser = this._denoiser;
+		const upscaler = this._upscaler;
+
+		// the denoiser runs once the render stops, so an uncapped render never denoises
+		// TODO: this only needs to know whether the render stopped, but measures the per pixel
+		// counts every frame. A count of the camera rays dispatched would answer it in one value
+		const awaitingDenoise = Boolean( denoiser ) && ! denoiser.complete && ! denoiser.running && maxSamples > 0;
+
 		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
 		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
-			if ( this._fadeState < 1 && minSamples > 0 ) {
+			if ( ( this._fadeState < 1 && minSamples > 0 ) || awaitingDenoise ) {
 
 				this.getSampleCountsAsync();
 
@@ -763,11 +826,35 @@ export class WebGPUPathTracer {
 		// render the content to the canvas
 		const opacity = ( lowResMode && dynamicLowRes ? 1.0 : this._fadeState );
 
+		// the low res preview is replaced moments later, so it is neither denoised nor upscaled
+		let texture = pathTracer.outputTarget;
+		if ( denoiser && ! lowResMode ) {
+
+			// "min" so every pixel has stopped, not just the average
+			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
+
+				denoiser.update( pathTracer.outputTarget );
+
+			}
+
+			texture = denoiser.texture ?? texture;
+
+		}
+
+		if ( upscaler && ! lowResMode ) {
+
+			texture = upscaler.upscale( texture, this.camera );
+
+			// the pass above binds its own targets
+			renderer.setRenderTarget( originalTarget );
+
+		}
+
 		renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
 		blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
 		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
 		blitQuad.material.fromTexture = lowResTarget;
-		blitQuad.material.texture = pathTracer.outputTarget;
+		blitQuad.material.texture = texture;
 		blitQuad.render( renderer );
 
 		// reset the renderer
@@ -918,6 +1005,8 @@ export class WebGPUPathTracer {
 	dispose() {
 
 		this._pathTracer.dispose();
+		this._denoiser?.dispose();
+		this._upscaler?.dispose();
 		this._bvhData.dispose();
 		this._bvhData.textureAtlas.dispose();
 		this._environmentCache.dispose();
