@@ -35,7 +35,7 @@ const params = {
 
 	// path tracer settings
 	enable: true,
-	bounces: 15,
+	maxBounces: 15,
 	renderScale: 1,
 	frameBudget: 250000,
 
@@ -131,7 +131,7 @@ async function init() {
 		pathTracer.frameBudget = value;
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.close();
 
@@ -160,7 +160,7 @@ function onParamsChange() {
 
 	} );
 
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.updateLights();

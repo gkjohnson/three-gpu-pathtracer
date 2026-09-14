@@ -103,6 +103,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	reset() {
+
+		super.reset();
+		this._samplesPromise = null;
+
+	}
+
 	setBVHData( bvhData ) {
 
 		this.materialKernel.bvhData = bvhData;
@@ -313,7 +320,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			// TODO: this only makes sense if we can cap the number rays per iteration to the full
 			// frame
-			const iter = this.lowResMode ? Math.min( this.bounces, LOW_RES_ITERATIONS ) : 1;
+			const iter = this.lowResMode ? Math.min( this.maxBounces, LOW_RES_ITERATIONS ) : 1;
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -332,7 +339,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.rayDataStorage = rayDataStorage;
 				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
-				logicKernel.bounces = this.bounces;
+				logicKernel.maxBounces = this.maxBounces;
 				logicKernel.rayCount = rayCount;
 				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -354,7 +361,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
-				materialKernel.bounces = this.bounces;
+				materialKernel.maxBounces = this.maxBounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -388,11 +395,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// share the in flight measurement rather than dispatching another
 		if ( this._samplesPromise === null ) {
 
-			this._samplesPromise = this._measureSampleCounts().finally( () => {
+			const promise = this._measureSampleCounts().finally( () => {
 
-				this._samplesPromise = null;
+				// a reset may have started a newer measurement in the meantime
+				if ( this._samplesPromise === promise ) {
+
+					this._samplesPromise = null;
+
+				}
 
 			} );
+
+			this._samplesPromise = promise;
 
 		}
 

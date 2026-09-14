@@ -177,7 +177,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		const {
 			renderer,
 			kernel,
-			bounces,
+			maxBounces,
 			maxTransparentBounces,
 
 			outputTarget,
@@ -191,7 +191,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.outputTarget = outputTarget;
 		kernel.sampleCountTarget = sampleCountTarget;
 
-		kernel.bounces = bounces;
+		kernel.maxBounces = maxBounces;
 		kernel.maxTransparentBounces = maxTransparentBounces;
 
 		// number of tile cycles that have finished, ie. the sample count every pixel has reached

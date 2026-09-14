@@ -31,7 +31,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			// settings
 			seed: uniform( 0 ),
-			bounces: uniform( 5 ),
+			maxBounces: uniform( 5 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
@@ -83,7 +83,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// settings
 				seed: u32,
-				bounces: u32,
+				maxBounces: u32,
 				maxTransparentBounces: u32,
 				misEnabled: u32,
 				maxSamples: u32,
@@ -156,7 +156,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				for ( var bounce = 0u; bounce < bounces; bounce ++ ) {
+				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
 					var hitResult: ${ raycastOutput };
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );

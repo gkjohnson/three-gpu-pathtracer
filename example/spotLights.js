@@ -53,7 +53,7 @@ let loader;
 // gui parameters
 const params = {
 	enable: true,
-	bounces: 15,
+	maxBounces: 15,
 	renderScale: 1,
 	frameBudget: 250000,
 	iesProfile: 6,
@@ -201,7 +201,7 @@ async function init() {
 		pathTracer.frameBudget = value;
 
 	} );
-	ptFolder.add( params, 'bounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
@@ -247,7 +247,7 @@ function onResize() {
 function onParamsChange() {
 
 	// pathTracer.renderScale = params.renderScale;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.updateLights();
 
 }

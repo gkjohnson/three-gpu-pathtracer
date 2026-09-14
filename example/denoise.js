@@ -1,29 +1,26 @@
 import {
 	ACESFilmicToneMapping,
-	NearestFilter,
-	NoToneMapping,
-	RenderTarget,
 	Scene,
-	UnsignedByteType,
 	WebGPURenderer,
 	PerspectiveCamera,
-	Vector2,
 	Vector3,
 	Box3,
 	EquirectangularReflectionMapping,
 } from 'three/webgpu';
-import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { Upscaler } from '@pmndrs/upscaler';
 import { LoaderElement } from './src/LoaderElement.js';
 import { Backdrop } from './src/Backdrop.js';
-import { OIDNDenoiser } from './src/denoise/OIDNDenoiser.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { WebGPUPathTracer, RenderToScreenNodeMaterial } from 'three-gpu-pathtracer/webgpu';
+import { initUNetFromURL } from 'oidn-web';
+import { Upscaler } from '@pmndrs/upscaler';
+import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler } from 'three-gpu-pathtracer/webgpu';
+
+// the library ships neither "oidn-web" nor the network weights, so the app provides both
+const WEIGHTS_AUX_URL = new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString();
+const WEIGHTS_COLOR_URL = new URL( './src/denoise/rt_hdr.tza', import.meta.url ).toString();
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/vehicles/toyota-supra-gt300.glb';
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/modern_buildings_2_2k.hdr';
@@ -40,15 +37,9 @@ const params = {
 	sharpness: 1,
 };
 
-let pathTracer, denoiser, renderer, controls;
+let pathTracer, denoiser, upscaler, renderer, controls;
 let camera, scene, environmentMap;
 let loader, gui;
-
-let auxTarget, presentQuad;
-let finalUpscaler, lowResUpscaler;
-
-const _size = new Vector2();
-let averageSamples = 0;
 
 init();
 
@@ -66,33 +57,19 @@ async function init() {
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.maxSamples = params.maxSamples;
 
-	denoiser = new OIDNDenoiser( renderer );
-
-	// Eight bits per channel since both buffers hold [0,1]. Multisampled so the rasterized
-	// silhouettes match the jittered path traced ones.
-	auxTarget = new RenderTarget( 1, 1, {
-		count: 2,
-		type: UnsignedByteType,
-		minFilter: NearestFilter,
-		magFilter: NearestFilter,
-		samples: 4,
+	// Denoising and upscaling are opt in - construct the instance, set anything it exposes, and
+	// hand it to the path tracer. It runs both as part of "renderSample".
+	denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: WEIGHTS_AUX_URL,
+		colorWeightsUrl: WEIGHTS_COLOR_URL,
 	} );
 
-	// the MRT keys are matched against these names
-	auxTarget.textures[ 0 ].name = 'output';
-	auxTarget.textures[ 1 ].name = 'normal';
+	upscaler = new FSRUpscaler( { Upscaler } );
+	upscaler.sharpness = params.sharpness;
 
-	// Upscalers
-	finalUpscaler = new Upscaler( { renderer } );
-	lowResUpscaler = new Upscaler( { renderer } );
-	for ( const upscaler of [ finalUpscaler, lowResUpscaler ] ) {
-
-		upscaler.init();
-		upscaler.settings.sharpness = params.sharpness;
-
-	}
-
-	presentQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+	pathTracer.setDenoiser( params.denoise ? denoiser : null );
+	pathTracer.setUpscaler( params.upscale ? upscaler : null );
 
 	camera = new PerspectiveCamera( 50, 1, 0.025, 500 );
 	camera.position.set( 0, 2, 4 ).multiplyScalar( 1.2 );
@@ -104,7 +81,6 @@ async function init() {
 	controls.addEventListener( 'change', () => {
 
 		pathTracer.updateCamera();
-		resetRender();
 
 	} );
 	controls.update();
@@ -148,29 +124,35 @@ async function init() {
 	ptFolder.add( params, 'transparentBackground' ).onChange( () => {
 
 		updateBackground();
-		resetRender();
 
 	} );
 	ptFolder.add( params, 'renderScale', 0.1, 1.0, 0.05 ).onChange( v => {
 
 		pathTracer.renderScale = v;
-		resetRender();
 
 	} );
 	ptFolder.add( params, 'maxSamples', 1, 50, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
-		resetRender();
 
 	} );
 
 	const settingsFolder = gui.addFolder( 'upscale settings' );
-	settingsFolder.add( params, 'denoise' );
-	settingsFolder.add( params, 'upscale' );
+	settingsFolder.add( params, 'denoise' ).onChange( v => {
+
+		pathTracer.setDenoiser( v ? denoiser : null );
+
+	} );
+	settingsFolder.add( params, 'upscale' ).onChange( v => {
+
+		pathTracer.setUpscaler( v ? upscaler : null );
+
+	} );
+
+	// per instance settings live on the instance
 	settingsFolder.add( params, 'sharpness', 0, 1, 0.01 ).onChange( v => {
 
-		finalUpscaler.settings.sharpness = v;
-		lowResUpscaler.settings.sharpness = v;
+		upscaler.sharpness = v;
 
 	} );
 
@@ -194,14 +176,6 @@ function updateBackground() {
 
 }
 
-// the image is starting over, so drop the stale denoised result and sample measurements
-function resetRender() {
-
-	denoiser.reset();
-	averageSamples = 0;
-
-}
-
 function onResize() {
 
 	renderer.setSize( window.innerWidth, window.innerHeight );
@@ -211,70 +185,6 @@ function onResize() {
 	camera.updateProjectionMatrix();
 
 	pathTracer.updateCamera();
-	resetRender();
-
-}
-
-// Rasterizes the albedo and normal buffers that guide the denoiser. oidn-web takes normals mapped
-// into [0,1], with (0.5, 0.5, 1) as a flat normal.
-function renderAux( width, height, auxTarget ) {
-
-	if ( auxTarget.width !== width || auxTarget.height !== height ) {
-
-		auxTarget.setSize( width, height );
-
-	}
-
-	const originalMRT = renderer.getMRT();
-	const originalToneMapping = renderer.toneMapping;
-
-	// the buffers are data rather than an image, so they must not be tone mapped
-	renderer.toneMapping = NoToneMapping;
-	renderer.setRenderTarget( auxTarget );
-	renderer.setMRT( mrt( {
-		output: diffuseColor,
-		normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
-	} ) );
-
-	renderer.render( scene, camera );
-
-	renderer.setMRT( originalMRT );
-	renderer.setRenderTarget( null );
-	renderer.toneMapping = originalToneMapping;
-
-}
-
-// the upscaler is told both resolutions up front, so they are re-checked every frame
-function upscale( upscaler, source ) {
-
-	// the upscaler reads the raw GPUTexture, which only exists once three has initialized it
-	renderer.initTexture( source );
-
-	renderer.getDrawingBufferSize( _size );
-
-	const displayWidth = Math.max( 1, Math.round( _size.x ) );
-	const displayHeight = Math.max( 1, Math.round( _size.y ) );
-
-	const matches =
-		upscaler.displayWidth === displayWidth &&
-		upscaler.displayHeight === displayHeight &&
-		upscaler.renderWidth === source.width &&
-		upscaler.renderHeight === source.height;
-
-	if ( ! matches ) {
-
-		upscaler.configure( {
-			displayWidth,
-			displayHeight,
-			renderWidth: source.width,
-			renderHeight: source.height,
-			path: 'spatial',
-		} );
-
-	}
-
-	upscaler.dispatch( { color: source }, camera );
-	return upscaler.outputTexture;
 
 }
 
@@ -290,46 +200,6 @@ function animate() {
 
 	pathTracer.renderSample();
 
-	// start a denoise pass once the path tracer has stopped at maxSamples
-	const target = pathTracer.target;
-	const settled = averageSamples >= params.maxSamples;
-	if ( params.denoise && settled && ! denoiser.running && ! denoiser.complete ) {
-
-		renderAux( target.width, target.height, auxTarget );
-		denoiser.denoise( target, auxTarget.textures[ 0 ], auxTarget.textures[ 1 ] );
-
-	}
-
-	// get the upscaled (and denoised if necessary) version of the final beauty textures
-	const final = params.denoise && denoiser.texture ? denoiser.texture : target;
-	presentQuad.material.texture = params.upscale ? upscale( finalUpscaler, final ) : final;
-
-	// While in low res mode "target" is the preview itself and there is nothing to fade from, so
-	// the transition is forced to 1. "lowResTarget" only holds content once the full render begins.
-	const fade = pathTracer.lowResMode ? 1 : pathTracer.fadeState;
-
-	// get the upscaled low res texture
-	if ( fade < 1 ) {
-
-		const lowRes = pathTracer.lowResTarget;
-		presentQuad.material.fromTexture = params.upscale ? upscale( lowResUpscaler, lowRes ) : lowRes;
-
-	}
-
-	// render
-	presentQuad.material.transition = fade;
-	presentQuad.render( renderer );
-
-	// measuring the sample counts costs a full resolution pass, so stop once the render settles
-	if ( ! settled ) {
-
-		pathTracer.getSampleCountsAsync().then( counts => {
-
-			averageSamples = counts.avg;
-			loader.setSamples( counts );
-
-		} );
-
-	}
+	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

@@ -140,7 +140,6 @@ async function init() {
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
-		pathTracer.reset();
 
 	} );
 	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
