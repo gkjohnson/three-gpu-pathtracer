@@ -87,7 +87,6 @@ let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, scene;
 
 // sample counts are measured asynchronously, so the average is kept for the frame
-let averageSamples = 0;
 const _translation = new Matrix4();
 const _size = new Vector2();
 
@@ -280,7 +279,6 @@ function animate() {
 
 	pathTracer.getSampleCountsAsync().then( counts => {
 
-		averageSamples = counts.avg;
 		loader.setSamples( counts );
 
 	} );
