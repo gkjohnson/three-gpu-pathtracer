@@ -1,7 +1,7 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { PathtracingMaterial } from './PathtracingMaterial';
-import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc } from '../nodes/material.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
@@ -12,6 +12,7 @@ import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
 
 const CLEARCOAT_IOR = float( 1.5 );
+const SINGULAR_EVENT_SCALE = float( 1e6 );
 
 export class GltfCompliantMaterial extends PathtracingMaterial {
 
@@ -37,6 +38,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		this.conductorFresnel = conductorFresnel;
 		this.fresnelCoat = fresnelCoat;
 		this.iridescentFresnel = iridescentFresnel;
+		this.transmissionFresnel = transmissionFresnelFunc( iridescentFresnel );
 
 	}
 
@@ -112,10 +114,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// a thin wall has no interior volume so air is the incident medium on both
-					// sides - only a true volume distinguishes entering from exiting hits
-					let airIncident = surf.thinWall || surf.frontFace;
-
 					// multiscatter compensation
 					var glassBoost = 0.0;
 					if ( matchedIor ) {
@@ -134,10 +132,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					}
 
+					let fresnelCosine = select( ctx.VdotH, NdotV, surf.thinWall );
+					let fresnel = ${ this.transmissionFresnel }( fresnelCosine, surf );
+
 					if ( NdotL < 0.0 ) {
 
-						// TODO: transmitted light also crosses the iridescent thin film so it should be weighted by
-						// the iridescence-aware fresnel complement rather than the plain dielectric fresnel
 						var refraction = vec3f( 0.0 );
 						if ( surf.thinWall && ! matchedIor ) {
 
@@ -145,12 +144,19 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 							let wiMirror = vec3f( ctx.L.xy, - ctx.L.z );
 							let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
 							let thinWallEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, sqrt( thinWallAlpha.x ) ), 1e-5 );
-							let F = ${ dielectricFresnelFunc }( saturate( ctx.VdotH ), surf.eta );
-							refraction = ( 1.0 - F ) * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha ) / thinWallEnergySS;
+							refraction = fresnel.transmittance * ${ this.specularBrdf }( ctx.V, wiMirror, ctx.H, thinWallAlpha ) / thinWallEnergySS;
 
 						} else if ( ! matchedIor ) {
 
-							refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta ) * glassBoost;
+							// The default BTDF contains the plain dielectric Fresnel complement. Replace it
+							// with the colored thin-film-aware coefficient shared by sampling and the PDF.
+							let dielectricTransmittance = 1.0 - ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta );
+							if ( dielectricTransmittance > EPSILON ) {
+
+								refraction = ${ this.specularBtdf }( ctx.V, ctx.L, ctx.H, alpha, surf.eta ) *
+									fresnel.transmittance / dielectricTransmittance * glassBoost;
+
+							}
 
 						}
 
@@ -164,39 +170,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 						let dielectricSpecular = specular * glassBoost;
 
-						// KHR_materials_specular: fold the specular color and intensity into the dielectric f0
-						let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
-
-						// air-incident hits use schlick so the tinted f0 applies - interior hits use
-						// the exact fresnel since schlick cannot represent TIR
-						// TODO: see if we can clean this up and make these branches more consistent
-						var dielectricFr: vec3f;
-						if ( airIncident ) {
-
-							dielectricFr = ${ schlickFresnelVecFunc }( ctx.VdotH, dielectricF0, vec3f( 1.0 ) );
-
-						} else {
-
-							dielectricFr = vec3f( ${ dielectricFresnelFunc }( abs( ctx.VdotH ), surf.eta ) );
-
-						}
-
-						var dielectricReflectance = surf.specularIntensity * dielectricFr;
-
-						// iridescence
-						if ( surf.iridescence > 0.0 ) {
-
-							// the media on either side of the film - air outside and the volume interior
-							// as the base, swapped on interior hits so TIR can take effect
-							let outsideIor = select( surf.ior, 1.0, airIncident );
-							let filmBaseIor = select( 1.0, surf.ior, airIncident );
-
-							let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-							dielectricReflectance = mix( dielectricReflectance, dielectricFilmFresnel, surf.iridescence );
-
-						}
-
-						let reflection = dielectricSpecular * dielectricReflectance;
+						let reflection = dielectricSpecular * fresnel.reflectance;
 
 						result += attenuation * ( 1.0 - surf.metalness ) * surf.transmission * reflection;
 
@@ -289,6 +263,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
+				result.isTransmissive = false;
 				result.direction = vec3f( 0.0 );
 				result.pdf = 0.0;
 
@@ -316,6 +291,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// TODO: see if we can clean up these flags so they're not necessary
 				var isTransmissionLobe = false;
 				var isDeltaTransmission = false;
+				var deltaTransmittance = vec3f( 1.0 );
+				var deltaProbability = 1.0;
 				var isDead = false;
 
 				if ( lobeSample <= cdfClearcoat ) {
@@ -376,19 +353,11 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					// fresnel to 1 so TIR facets always reflect with a matching pdf
 					wh = ${ ggxDirectionFunc }( wo, alpha, directionUV );
 
-					var F: f32;
-					if ( surf.thinWall ) {
-
-						F = ${ dielectricFresnelFunc }( wo.z, surf.eta );
-
-					} else {
-
-						F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
-
-					}
+					let fresnelCosine = select( dot( wo, wh ), wo.z, surf.thinWall );
+					let fresnel = ${ this.transmissionFresnel }( fresnelCosine, surf );
 
 					let fresnelSample = ( lobeSample - cdfSpecular ) / ( cdfTransmission - cdfSpecular );
-					let doReflect = fresnelSample < F;
+					let doReflect = fresnelSample < fresnel.reflectProbability;
 					if ( doReflect ) {
 
 						wi = - normalize( reflect( wo, wh ) );
@@ -400,6 +369,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 						wi = - wo;
 						wh = vec3f( 0.0, 0.0, 1.0 );
 						isDeltaTransmission = true;
+						deltaTransmittance = fresnel.transmittance;
+						deltaProbability = 1.0 - fresnel.reflectProbability;
 
 					} else if ( surf.thinWall ) {
 
@@ -444,11 +415,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				let worldWi = normalize( surf.normalBasis * wi );
 				if ( isDeltaTransmission ) {
 
-					// ScatterRecord stores f * abs(cos), so PBRT's unit delta BTDF reduces to
-					// the material transmission coefficient here.
-					result.color = ( 1.0 - surf.metalness ) * surf.transmission * surf.color;
+					// Cycles represents a singular event with a large matching BSDF and PDF. Their
+					// ratio preserves throughput while forward MIS correctly gives the event full weight.
+					result.color = ( 1.0 - surf.metalness ) * surf.transmission * surf.color *
+						deltaTransmittance * ${ SINGULAR_EVENT_SCALE };
 					result.direction = worldWi;
-					result.pdf = weights.transmission;
+					result.pdf = weights.transmission * deltaProbability * ${ SINGULAR_EVENT_SCALE };
 					result.isTransmissive = dot( worldWi, surf.faceNormal ) < 0.0;
 
 				} else {
@@ -580,30 +552,22 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// the glass lobe selects reflection or refraction by the facet fresnel so
 					// each side carries the corresponding share of the transmission pdf
-					var F: f32;
-					if ( surf.thinWall ) {
-
-						F = ${ dielectricFresnelFunc }( wo.z, surf.eta );
-
-					} else {
-
-						F = ${ dielectricFresnelFunc }( dot( wo, wh ), surf.eta );
-
-					}
+					let fresnelCosine = select( dot( wo, wh ), wo.z, surf.thinWall );
+					let fresnel = ${ this.transmissionFresnel }( fresnelCosine, surf );
 
 					if ( wi.z > 0.0 ) {
 
-						result.pdf += weights.transmission * F * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
+						result.pdf += weights.transmission * fresnel.reflectProbability * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, alpha );
 
 					} else if ( surf.thinWall ) {
 
 						// the flipped reflection shares the reflection pdf at the remapped roughness
 						let thinWallAlpha = vec2f( ${ thinWallTransmissionRoughnessFunc }( alphaB, surf.ior ) );
-						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
+						result.pdf += weights.transmission * ( 1.0 - fresnel.reflectProbability ) * ${ ggxReflectionAdjustedPDFFunc }( wo, wh, thinWallAlpha );
 
 					} else {
 
-						result.pdf += weights.transmission * ( 1.0 - F ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
+						result.pdf += weights.transmission * ( 1.0 - fresnel.reflectProbability ) * ${ ggxRefractionAdjustedPDFFunc }( wo, wi, wh, alpha, surf.eta );
 
 					}
 
