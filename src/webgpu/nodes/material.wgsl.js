@@ -5,9 +5,12 @@ import {
 	iorToF0Func,
 	schlickFresnelFunc,
 	schlickFresnelVecFunc,
+	iorToF0GeneralFunc,
 	fresnel0ToIorFunc,
+	iorToF0GeneralVecFunc,
 	dielectricFresnelFunc,
 	totalInternalReflectionFunc,
+	totalInternalReflectionVecFunc,
 } from './utils.wgsl.js';
 import {
 	ggxSmithVisibilityFunc,
@@ -692,11 +695,10 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 `, [ schlickFresnelVecFunc, iorToF0Func, totalInternalReflectionFunc ] );
 
-// TSL mat3 takes row-major coefficients, unlike the WGSL matrix constructor.
 const XYZ_TO_REC709 = mat3(
-	3.2404542, - 1.5371385, - 0.4985314,
-	- 0.9692660, 1.8760108, 0.0415560,
-	0.0556434, - 0.2040259, 1.0572252,
+	3.2404542, - 0.9692660, 0.0556434,
+	- 1.5371385, 1.8760108, - 0.2040259,
+	- 0.4985314, 0.0415560, 1.0572252,
 );
 
 const evalSensitivityFunc = wgslTagFn/* wgsl */`
@@ -712,92 +714,82 @@ const evalSensitivityFunc = wgslTagFn/* wgsl */`
 		xyz.x += 9.7470e-14 * sqrt(2.0 * ${ Math.PI } * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
 		xyz /= 1.0685e-7;
 
-		// Adapt the fitted equal-energy XYZ sensitivities to the Rec.709 D65 white point.
-		let rgb = ${ XYZ_TO_REC709 } * ( xyz * vec3f( 0.95047, 1.0, 1.08883 ) );
+		let rgb = ${ XYZ_TO_REC709 } * xyz;
 		return rgb;
 
 	}
 
 `;
 
-const polarizedFresnelAmplitudesFunc = wgslTagFn/* wgsl */`
-
-	fn polarizedFresnelAmplitudes( cosine: f32, eta: vec3f ) -> mat2x3f {
-
-		let sinThetaTSq = ( 1.0 - cosine * cosine ) / ( eta * eta );
-		let cosThetaT = sqrt( max( vec3f( 0.0 ), 1.0 - sinThetaTSq ) );
-		let etaCosI = eta * cosine;
-		let etaCosT = eta * cosThetaT;
-		let rs = ( cosine - etaCosT ) / max( cosine + etaCosT, vec3f( 1e-7 ) );
-		let rp = ( etaCosI - cosThetaT ) / max( etaCosI + cosThetaT, vec3f( 1e-7 ) );
-		let matched = eta == vec3f( 1.0 );
-		return mat2x3f( select( rs, vec3f( 0.0 ), matched ), select( rp, vec3f( 0.0 ), matched ) );
-
-	}
-
-`;
-
-// Belcour / Barla spectral integration, applied independently to the two polarizations.
-const polarizedIridescenceFunc = wgslTagFn/* wgsl */`
-
-	fn polarizedIridescence( r12: f32, r23: vec3f, opd: f32 ) -> vec3f {
-
-		let R12 = r12 * r12;
-		let R23 = r23 * r23;
-		let T12 = 1.0 - R12;
-		let R123 = R12 * R23;
-		let Rs = T12 * T12 * R23 / max( 1.0 - R123, vec3f( 1e-7 ) );
-		var reflectance = R12 + Rs;
-		var coefficient = Rs - T12;
-
-		// Signed amplitudes retain the phase reversal across Brewster's angle.
-		let roundTrip = - r12 * r23;
-		for ( var m = 1; m <= 3; m ++ ) {
-
-			coefficient *= roundTrip;
-			reflectance += 2.0 * coefficient * ${ evalSensitivityFunc }( f32( m ) * opd, vec3f( 0.0 ) );
-
-		}
-
-		return reflectance;
-
-	}
-
-`;
-
-export const iridescentFresnelFunc = wgslTagFn/* wgsl */`
+// Reference: Belcour/Barla, 2017
+// https://belcour.github.io/blog/research/publication/2017/05/01/brdf-thin-film.html
+// This is a simplified model that ignores light polarization and uses fresnel approximation
+export const iridescentFresnelFunc = wgslFn( /* wgsl */ `
 
 	fn iridescentFresnel(
 		cosTheta1: f32, baseF0: vec3f, iridescenceIor: f32,
 		outsideIor: f32, iridescenceThickness: f32,
 	) -> vec3f {
 
-		let cosine = saturate( abs( cosTheta1 ) );
-		let filmIor = mix( outsideIor, iridescenceIor, smoothstep( 0.0, 0.03, iridescenceThickness ) );
-		let eta12 = filmIor / outsideIor;
-		let sinTheta2Sq = ( 1.0 - cosine * cosine ) / ( eta12 * eta12 );
-		if ( sinTheta2Sq >= 1.0 && filmIor != outsideIor ) {
+		let sinTheta2Sq = pow( outsideIor / iridescenceIor, 2.0 ) * ( 1.0 - pow( cosTheta1, 2.0 ) );
+		let cosTheta2Sq = 1.0 - sinTheta2Sq;
 
-			return vec3f( 1.0 );
+		// Handle total internal reflection
+		if ( cosTheta2Sq < 0.0 ) {
+
+			return vec3( 1.0 );
 
 		}
 
-		let cosTheta2 = select( sqrt( max( 0.0, 1.0 - sinTheta2Sq ) ), cosine, filmIor == outsideIor );
-		let baseIor = ${ fresnel0ToIorFunc }( clamp( baseF0, vec3f( 0.0 ), vec3f( 0.9999 ) ) );
-		let r12 = ${ polarizedFresnelAmplitudesFunc }( cosine, vec3f( eta12 ) );
-		let r23 = ${ polarizedFresnelAmplitudesFunc }( cosTheta2, baseIor / filmIor );
-		let opd = 2.0 * filmIor * iridescenceThickness * cosTheta2;
-		let reflectedS = ${ polarizedIridescenceFunc }( r12[ 0 ].x, r23[ 0 ], opd );
-		let reflectedP = ${ polarizedIridescenceFunc }( r12[ 1 ].x, r23[ 1 ], opd );
-		let reflectance = 0.5 * ( reflectedS + reflectedP );
-		let tir = vec3f( filmIor * filmIor * sinTheta2Sq ) >= baseIor * baseIor;
-		let unmatchedTir = select( tir, vec3<bool>( false ), baseIor == vec3f( filmIor ) );
+		let cosTheta2 = sqrt( cosTheta2Sq );
 
-		return select( clamp( reflectance, vec3f( 0.0 ), vec3f( 1.0 ) ), vec3f( 1.0 ), unmatchedTir );
+		// First interface: air -> iridescent thin film
+		let R0 = iorToF0General( iridescenceIor, outsideIor );
+		let R12 = schlickFresnel( cosTheta1, R0 );
+		let R21 = R12;
+		let T121 = 1.0 - R12;
+		let phi12 = select( 0.0, PI, iridescenceIor < outsideIor );
+		let phi21 = PI - phi12;
+
+		// Second interface: iridescent thin film -> base material
+		let baseIor = fresnel0ToIor( clamp( baseF0, vec3( 0.0 ), vec3( 0.9999 ) ) ); // guard against 1.0
+		let R1 = iorToF0GeneralVec( baseIor, vec3( iridescenceIor ) );
+		var R23 = schlickFresnelVec( cosTheta2, R1, vec3( 1.0 ) );
+
+		// Handle total internal reflection at the film -> base interface
+		// NOTE: Added separately from the original implementation. Is this correct?
+		R23 = select( R23, vec3( 1.0 ), totalInternalReflectionVec( cosTheta2, vec3( iridescenceIor ) / baseIor ) );
+		let phi23 = select( vec3( 0.0 ), vec3( PI ), baseIor < vec3( iridescenceIor ) );
+
+		// Phase shift
+		let OPD = 2.0 * iridescenceIor * iridescenceThickness * cosTheta2;
+		let phi = vec3( phi21 ) + phi23;
+
+		// Analytical integration
+		// Compound terms
+		let R123 = clamp( R12 * R23, vec3( 1e-5 ), vec3( 0.9999 ) );
+		let r123 = sqrt( R123 );
+		let Rs = T121 * T121 * R23 / ( vec3( 1.0 ) - R123 );
+
+		// Reflectance term for m = 0 (DC term amplitude)
+		let C0 = R12 + Rs;
+		var I = C0;
+
+		// Reflectance term for m > 0 (pairs of diracs)
+		var Cm = Rs - T121;
+		for (var m = 1; m <= 2; m += 1) {
+
+			Cm *= r123;
+			let Sm = 2.0 * evalSensitivity( f32( m ) * OPD, f32( m ) * phi );
+			I += Cm * Sm;
+
+		}
+
+		return max( I, vec3(0.0) );
 
 	}
 
-`;
+`, [ iorToF0GeneralFunc, iorToF0GeneralVecFunc, schlickFresnelFunc, fresnel0ToIorFunc, evalSensitivityFunc, totalInternalReflectionVecFunc ] );
 
 // Reflection and transmission coefficients for the transmissive dielectric layer. The scalar
 // branch probability follows Cycles: choose between the two colored coefficients by their mean
