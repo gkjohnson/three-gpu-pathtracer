@@ -17,6 +17,7 @@ import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
 /** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
 /** @import { PathtracingMaterial } from './materials/PathtracingMaterial.js' */
