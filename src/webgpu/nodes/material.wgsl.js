@@ -802,7 +802,7 @@ export const transmissionFresnelFunc = ( iridescentFresnel = iridescentFresnelFu
 		let cosine = saturate( abs( cosTheta ) );
 		let matchedIor = ${ isMatchedIorFunc }( surf.eta );
 		let airIncident = surf.thinWall || surf.frontFace;
-		let dielectricF = ${ dielectricFresnelFunc }( cosine, surf.eta );
+		let dielectricFresnel = ${ dielectricFresnelFunc }( cosine, surf.eta );
 
 		// Keep matched media transparent unless a real thin-film layer is present. This avoids
 		// introducing the non-physical Schlick F90 reflection produced by KHR_materials_specular
@@ -810,18 +810,18 @@ export const transmissionFresnelFunc = ( iridescentFresnel = iridescentFresnelFu
 		var reflectance = vec3f( 0.0 );
 		if ( ! matchedIor ) {
 
-			let dielectricF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
-			let dielectricFr = select(
-				vec3f( dielectricF ),
-				${ schlickFresnelVecFunc }( cosine, dielectricF0, vec3f( 1.0 ) ),
+			let specularF0 = min( surf.f0 * surf.specularColor, vec3f( 1.0 ) );
+			let dielectricReflectance = select(
+				vec3f( dielectricFresnel ),
+				${ schlickFresnelVecFunc }( cosine, specularF0, vec3f( 1.0 ) ),
 				airIncident,
 			);
-			reflectance = surf.specularIntensity * dielectricFr;
+			reflectance = surf.specularIntensity * dielectricReflectance;
 
 		}
 
 		reflectance = clamp( reflectance, vec3f( 0.0 ), vec3f( 1.0 ) );
-		var transmittance = vec3f( 1.0 - dielectricF );
+		var transmittance = vec3f( 1.0 ) - reflectance;
 
 		if ( surf.iridescence > 0.0 ) {
 
