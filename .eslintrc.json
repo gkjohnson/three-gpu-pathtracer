@@ -42,7 +42,7 @@
 			"rules": {
 				"jsdoc/check-tag-names": [ "error", { "definedTags": [ "warn", "note", "section" ] } ],
 				"jsdoc/check-types": "error",
-				"jsdoc/no-undefined-types": "error",
+				"jsdoc/no-undefined-types": [ "error", { "definedTypes": [ "GPUAdapter" ] } ],
 				"jsdoc/require-param-type": "error",
 				"jsdoc/require-returns-type": "error",
 				"jsdoc/require-returns": "off",

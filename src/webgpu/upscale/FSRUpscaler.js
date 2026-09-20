@@ -1,4 +1,5 @@
 import { Vector2 } from 'three/webgpu';
+/** @import { Camera, Texture, WebGPURenderer } from 'three/webgpu' */
 
 const _size = /*@__PURE__*/ new Vector2();
 
