@@ -16,37 +16,37 @@ _More features and capabilities in progress!_
 
 **Setup**
 
-[Basic glTF Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/basic.html)
+[Basic glTF Setup Example](https://gkjohnson.github.io/three-gpu-pathtracer/basic.html)
 
-[Basic Primitive Geometry Example](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/primitives.html)
+[Basic Primitive Geometry Example](https://gkjohnson.github.io/three-gpu-pathtracer/primitives.html)
 
 **Beauty Demos**
 
-[Physically Based Materials](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/index.html)
+[Physically Based Materials](https://gkjohnson.github.io/three-gpu-pathtracer/index.html)
 
-[Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/equirect.html)
+[Interior Scene w/ Equirect Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/equirect.html)
 
-[Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/depthOfField.html)
+[Depth of Field](https://gkjohnson.github.io/three-gpu-pathtracer/depthOfField.html)
 
-[HDR Image](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/hdr.html)
+[HDR Image](https://gkjohnson.github.io/three-gpu-pathtracer/hdr.html)
 
 **Features**
 
-[Area Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/areaLight.html)
+[Area Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/areaLight.html)
 
-[Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/spotLights.html)
+[Spot Light Support](https://gkjohnson.github.io/three-gpu-pathtracer/spotLights.html)
 
-[Denoising and Upscaling](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/denoise.html)
+[Denoising and Upscaling](https://gkjohnson.github.io/three-gpu-pathtracer/denoise.html)
 
 **Test Scenes**
 
-[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/materialOrb.html)
+[Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/materialOrb.html)
 
-[Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/viewerTest.html)
+[Model Viewer Fidelity Scene Comparisons](https://gkjohnson.github.io/three-gpu-pathtracer/viewerTest.html)
 
 **Tools**
 
-[Animation Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/example/bundle/renderVideo.html)
+[Animation Rendering](https://gkjohnson.github.io/three-gpu-pathtracer/renderVideo.html)
 
 ## Running examples locally
 
