@@ -18,6 +18,12 @@ export const scatterRecordStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'ScatterRecord' );
 
+export const transmissionFresnelStruct = new StructTypeNode( {
+	reflectance: 'vec3f',
+	transmittance: 'vec3f',
+	reflectProbability: 'float',
+}, 'TransmissionFresnel' );
+
 // NOTE: all "*Map" fields are bit-packed integers of texture index & settings:
 // bits 0-22: texture index
 // bits 23-25: uv channel
