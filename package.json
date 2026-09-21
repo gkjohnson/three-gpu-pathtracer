@@ -10,6 +10,7 @@
       "require": "./build/index.umd.cjs"
     },
     "./webgpu": "./src/webgpu/index.js",
+    "./r3f": "./src/r3f/index.js",
     "./src/*": "./src/*"
   },
   "type": "module",
@@ -41,10 +42,13 @@
     "@lookingglass/webxr": "^0.6.0",
     "@monogrid/gainmap-js": "^3.0.5",
     "@pmndrs/upscaler": "^0.2.0",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
     "@types/node": "^24.3.1",
     "@types/three": "^0.185.1",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "@webgpu/types": "^0.1.72",
     "eslint": "^8.56.0",
     "eslint-config-mdcs": "^5.0.0",
@@ -57,6 +61,8 @@
     "pngjs": "^6.0.0",
     "process": "^0.11.10",
     "puppeteer": "^24.42.0",
+    "react": "19.2",
+    "react-dom": "19.2",
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.185.1",
@@ -66,9 +72,19 @@
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
+    "@react-three/fiber": "^9.0.0",
+    "react": "^19.0.0",
     "three": ">=0.180.0",
     "three-mesh-bvh": ">=0.9.15",
     "xatlas-web": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@react-three/fiber": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "scripts": {
     "start": "vite --config ./vite.config.js",
