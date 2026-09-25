@@ -205,12 +205,26 @@ export function mergeGeometries( geometries, options = {}, targetGeometry = new 
 			const attr = geometry.getAttribute( key );
  			if ( ! skip ) {
 
-				if ( key === 'color' && targetAttribute.itemSize !== attr.itemSize ) {
+				const isSameFormat =
+					targetAttribute.itemSize === attr.itemSize &&
+					targetAttribute.normalized === attr.normalized &&
+					targetAttribute.array.constructor === attr.array.constructor;
 
-					// make sure the color attribute is aligned with itemSize 3 to 4
-					for ( let index = offset, l = attr.count; index < l; index ++ ) {
+				if ( key === 'color' && ! isSameFormat ) {
 
-						attr.setXYZW( index, targetAttribute.getX( index ), targetAttribute.getY( index ), targetAttribute.getZ( index ), 1.0 );
+					// color attributes may be RGB or RGBA and of different array types across geometries (eg
+					// RGB vertex colors mixed with the RGBA default fill) so copy them element-wise, filling alpha
+					// with 1 when the source has none. A raw array copy is only valid for identical formats.
+					for ( let index = 0, l = attr.count; index < l; index ++ ) {
+
+						const targetIndex = offset + index;
+						targetAttribute.setXYZ( targetIndex, attr.getX( index ), attr.getY( index ), attr.getZ( index ) );
+						if ( targetAttribute.itemSize === 4 ) {
+
+							const alpha = attr.itemSize === 4 ? attr.getW( index ) : 1.0;
+							targetAttribute.setW( targetIndex, alpha );
+
+						}
 
 					}
 
