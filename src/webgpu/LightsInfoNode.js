@@ -55,6 +55,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		// resize the buffer to the exact light count, keeping the same binding node
 		if ( this.buffer.array.length !== capacity * stride ) {
 
+			this.buffer.dispose();
 			this.buffer = new StorageBufferAttribute( new Float32Array( capacity * stride ), stride );
 			this.bufferNode.value = this.buffer;
 
@@ -215,6 +216,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 	dispose() {
 
 		this.tex.dispose();
+		this.buffer.dispose();
 		this.iesAtlas.dispose();
 
 	}
