@@ -250,6 +250,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.sampleCountersStorage.dispose();
 		this.pixelQueue?.dispose();
 
+		// TODO: the dispatch converters own their indirect dispatch buffers, they should dispose of them themselves
+		this.rayDispatchConverter.outputDispatch.dispose();
+		this.shadowDispatchConverter.outputDispatch.dispose();
+
 	}
 
 	_updatePixelQueue( width, height, rayCount ) {
