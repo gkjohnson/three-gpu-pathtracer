@@ -108,9 +108,8 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// A slot without a pixel swapped its empty marker into the queue and took a real
-					// pixel, leaving a hole the next exchange fills. Pulling the marker back out
-					// means this round has nothing to render.
+					// a slot with no pixel has nothing to render this round. Only possible when the
+					// pool outgrew the pixel count, since new slots take a pixel from the queue
 					if ( pixelIndex == ${ PIXEL_INDEX_NONE }u ) {
 
 						rayDataStorage[ index ].pixelIndex = pixelIndex;

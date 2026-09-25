@@ -5,7 +5,7 @@ import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
 import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
-import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
+import { ResetSlotsKernel, RESET_SLOTS_RETURN, RESET_SLOTS_TAKE } from './compute/wavefront/ResetSlotsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
@@ -359,8 +359,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Idles the slots in [ start, end ), returning their pixels to the queue when asked
-	_resetSlots( start, end, returnPixels ) {
+	// Idles the slots in [ start, end ), returning their pixels to the queue or taking new ones
+	_resetSlots( start, end, mode ) {
 
 		const { renderer, resetSlotsKernel } = this;
 		if ( end <= start ) {
@@ -373,7 +373,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		resetSlotsKernel.pixelQueue = this.pixelQueue;
 		resetSlotsKernel.start = start;
 		resetSlotsKernel.end = end;
-		resetSlotsKernel.returnPixels = returnPixels ? 1 : 0;
+		resetSlotsKernel.mode = mode;
 		renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( end - start, 1, 1 ) );
 
 	}
@@ -397,7 +397,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			const previousCount = this.slotCount;
 			this._resizePool( requested, previousCount );
-			this._resetSlots( previousCount, requested, false );
+			this._resetSlots( previousCount, requested, RESET_SLOTS_TAKE );
 			this._spawnLimit = requested;
 			this._drainIterations = 0;
 
@@ -421,7 +421,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			if ( this._drainIterations === 0 && this._spawnLimit < this.slotCount ) {
 
-				this._resetSlots( this._spawnLimit, this.slotCount, true );
+				this._resetSlots( this._spawnLimit, this.slotCount, RESET_SLOTS_RETURN );
 				this._resizePool( this._spawnLimit, this._spawnLimit );
 
 			}
