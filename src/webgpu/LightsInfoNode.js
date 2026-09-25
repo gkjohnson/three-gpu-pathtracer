@@ -104,10 +104,13 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 					var spotAttenuation: f32;
 					if ( light.iesProfile >= 0 ) {
 
-						// tilt angle off the forward axis and twist angle around it, with the
-						// tilt axis clamped and the twist axis wrapped ( wrapS = 1, wrapT = 0 )
-						let tiltAngle = acos( cosTheta ) / PI;
-						let twistAngle = ( atan2( dot( result.direction, light.v ), dot( result.direction, light.u ) ) + PI ) / ( 2.0 * PI );
+						// half a texel of the profile's tile in the atlas
+						let profileInfo = ${ iesInfoNode }[ u32( light.iesProfile ) ];
+						let texelInset = 0.5 / vec2f( vec2u( profileInfo.y & 0xFFFFu, profileInfo.y >> 16u ) );
+
+						// tilt spans [ 0, 180 ]deg inset to the texel centers, twist covers [ 0, 359 ]deg and wraps
+						let tiltAngle = mix( texelInset.x, 1.0 - texelInset.x, acos( cosTheta ) / PI );
+						let twistAngle = ( atan2( dot( result.direction, light.v ), dot( result.direction, light.u ) ) + PI ) / ( 2.0 * PI ) + texelInset.y;
 						let packedProfile = ( 1 << 26 ) | light.iesProfile;
 						spotAttenuation = ${ sampleIesTexelFn }( vec2f( tiltAngle, twistAngle ), packedProfile, 0.0 ).r;
 
