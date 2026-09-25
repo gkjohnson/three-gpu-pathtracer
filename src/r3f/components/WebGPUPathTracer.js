@@ -34,7 +34,7 @@ export function usePathTracer() {
 export const WebGPUPathTracer = forwardRef( function WebGPUPathTracer( props, ref ) {
 
 	const { enabled = true, renderPriority = 1, children, ...options } = props;
-	const [ gl, scene, camera, controls ] = useThree( state => [ state.gl, state.scene, state.camera, state.controls ] );
+	const [ gl, scene, camera, controls, size ] = useThree( state => [ state.gl, state.scene, state.camera, state.controls, state.size ] );
 	const [ pathTracer, setPathTracer ] = useState( null );
 
 	// create the path tracer
@@ -64,6 +64,19 @@ export const WebGPUPathTracer = forwardRef( function WebGPUPathTracer( props, re
 		pathTracer.setScene( scene, camera );
 
 	}, [ pathTracer, scene, camera ] );
+
+	// fiber updates the camera projection on resize
+	useLayoutEffect( () => {
+
+		if ( pathTracer === null ) {
+
+			return;
+
+		}
+
+		pathTracer.updateCamera();
+
+	}, [ pathTracer, size ] );
 
 	// update the camera when the default controls change
 	useEffect( () => {
