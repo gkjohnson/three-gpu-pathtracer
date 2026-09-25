@@ -239,9 +239,16 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.dispose();
 
-		// TODO: dispose of all buffers
 		this.envInfo.dispose();
 		this.lightsInfo.dispose();
+
+		this.rayDataStorage.dispose();
+		this.rayQueue.dispose();
+		this.shadowRayQueue.dispose();
+		this.rayIntersectionsStorage.dispose();
+		this.shadowRayIntersectionsStorage.dispose();
+		this.sampleCountersStorage.dispose();
+		this.pixelQueue?.dispose();
 
 	}
 
@@ -251,6 +258,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const size = pixelQueueStruct.getLength() + Math.max( overflowCount, 1 );
 		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
+			this.pixelQueue?.dispose();
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
 			this.pixelQueue.name = 'Pixel Queue';
 

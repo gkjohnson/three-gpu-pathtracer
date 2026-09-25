@@ -303,8 +303,16 @@ export class GraphMaterial extends MeshBasicNodeMaterial {
 			}
 		`;
 
+		this._valuesAttribute?.dispose();
 		this._valuesAttribute = valuesAttribute;
 		this._valuesKernel = valuesFn( { globalId } ).computeKernel( [ 1, 1, 1 ] );
+
+	}
+
+	dispose() {
+
+		super.dispose();
+		this._valuesAttribute.dispose();
 
 	}
 
