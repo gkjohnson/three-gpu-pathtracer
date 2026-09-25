@@ -5,7 +5,9 @@ import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
 import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
+import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
+import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
@@ -34,6 +36,9 @@ const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLeng
 
 const LOW_RES_ITERATIONS = 5;
 
+// iterations a retiring slot is given to finish beyond its bounce limits before the pool shrinks
+const DRAIN_MARGIN = 2;
+
 export class WaveFrontPathTracer extends PathTracerBackend {
 
 	constructor( renderer ) {
@@ -46,27 +51,30 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.backgroundInfo = new EquirectBackgroundInfo();
 		this.lightsInfo = new LightsInfoNode();
 
+		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
+		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
+		// overflow them.
+		this.slotCount = 0;
+
 		// persistent per-path state, one slot per in-flight path
-		this.rayDataStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, rayDataStruct.getLength() );
-		this.rayDataStorage.name = 'Ray Data';
+		this.rayDataStorage = null;
 
 		// append-only trace queues, prefixed by an atomic length header
-		const queueSize = rayQueueStruct.getLength() + MAX_RAY_DATA_COUNT * traceQueuedRayStruct.getLength();
-		this.rayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
-		this.rayQueue.name = 'Ray Queue';
-
-		this.shadowRayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
-		this.shadowRayQueue.name = 'Shadow Ray Queue';
+		this.rayQueue = null;
+		this.shadowRayQueue = null;
 
 		// per-queue-slot trace results, indexed by the ray's position in its queue
-		this.rayIntersectionsStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
-		this.rayIntersectionsStorage.name = 'Ray Intersections';
+		this.rayIntersectionsStorage = null;
+		this.shadowRayIntersectionsStorage = null;
 
-		this.shadowRayIntersectionsStorage = new StorageBufferAttribute( MAX_RAY_DATA_COUNT, intersectionResultStruct.getLength() );
-		this.shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
-
-		// overflow pixel indices waiting for a free path slot, lazily sized to the resolution
+		// pixel indices waiting for a free path slot, sized to the resolution
 		this.pixelQueue = null;
+
+		// slots at or past this index finish their path and go idle, so a shrink can drain them
+		this._spawnLimit = 0;
+
+		// iterations left before every retiring slot is guaranteed idle and the pool can shrink
+		this._drainIterations = 0;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
@@ -83,6 +91,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
+
+		// pool resizing: carry live slots into a reallocated pool and idle the rest
+		this.resetSlotsKernel = new ResetSlotsKernel().setWorkgroupSize( 64, 1, 1 );
+		this.copyRayDataKernel = new CopyBufferKernel( rayDataStruct ).setWorkgroupSize( 64, 1, 1 );
+		this.copyIntersectionsKernel = new CopyBufferKernel( intersectionResultStruct ).setWorkgroupSize( 64, 1, 1 );
 
 		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
 		this.logicKernel.envInfo = this.envInfo;
@@ -242,11 +255,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.envInfo.dispose();
 		this.lightsInfo.dispose();
 
-		this.rayDataStorage.dispose();
-		this.rayQueue.dispose();
-		this.shadowRayQueue.dispose();
-		this.rayIntersectionsStorage.dispose();
-		this.shadowRayIntersectionsStorage.dispose();
+		this.rayDataStorage?.dispose();
+		this.rayQueue?.dispose();
+		this.shadowRayQueue?.dispose();
+		this.rayIntersectionsStorage?.dispose();
+		this.shadowRayIntersectionsStorage?.dispose();
 		this.sampleCountersStorage.dispose();
 		this.pixelQueue?.dispose();
 
@@ -256,10 +269,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	_updatePixelQueue( width, height, rayCount ) {
+	// The queue holds every pixel not owned by a slot. It is sized to the full pixel count so slots
+	// retired by a shrink can always return theirs.
+	_updatePixelQueue( width, height ) {
 
-		const overflowCount = Math.max( 0, width * height - rayCount );
-		const size = pixelQueueStruct.getLength() + Math.max( overflowCount, 1 );
+		const size = pixelQueueStruct.getLength() + Math.max( width * height, 1 );
 		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
 			this.pixelQueue?.dispose();
@@ -271,6 +285,146 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this.materialKernel.needsUpdate = true;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 			this.populatePixelIndicesKernel.needsUpdate = true;
+			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
+			this.resetSlotsKernel.needsUpdate = true;
+
+		}
+
+	}
+
+	// Reallocates the per slot buffers to "count" slots, carrying the first "copyCount" slots of
+	// ray data and trace results over. Trace results are indexed by queue position, and only live
+	// slots enqueue, so their used range never exceeds the live slot count.
+	_resizePool( count, copyCount ) {
+
+		const { renderer } = this;
+
+		const rayDataStorage = new StorageBufferAttribute( count, rayDataStruct.getLength() );
+		rayDataStorage.name = 'Ray Data';
+
+		const queueSize = rayQueueStruct.getLength() + count * traceQueuedRayStruct.getLength();
+		const rayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
+		rayQueue.name = 'Ray Queue';
+
+		const shadowRayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
+		shadowRayQueue.name = 'Shadow Ray Queue';
+
+		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
+		rayIntersectionsStorage.name = 'Ray Intersections';
+
+		const shadowRayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
+		shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
+
+		if ( copyCount > 0 ) {
+
+			const { copyRayDataKernel, copyIntersectionsKernel } = this;
+			const dispatchSize = copyRayDataKernel.getDispatchSize( copyCount, 1, 1 );
+
+			copyRayDataKernel.source = this.rayDataStorage;
+			copyRayDataKernel.target = rayDataStorage;
+			copyRayDataKernel.count = copyCount;
+			renderer.compute( copyRayDataKernel.kernel, dispatchSize );
+
+			copyIntersectionsKernel.source = this.rayIntersectionsStorage;
+			copyIntersectionsKernel.target = rayIntersectionsStorage;
+			copyIntersectionsKernel.count = copyCount;
+			renderer.compute( copyIntersectionsKernel.kernel, dispatchSize );
+
+			copyIntersectionsKernel.source = this.shadowRayIntersectionsStorage;
+			copyIntersectionsKernel.target = shadowRayIntersectionsStorage;
+			renderer.compute( copyIntersectionsKernel.kernel, dispatchSize );
+
+		}
+
+		this.rayDataStorage?.dispose();
+		this.rayQueue?.dispose();
+		this.shadowRayQueue?.dispose();
+		this.rayIntersectionsStorage?.dispose();
+		this.shadowRayIntersectionsStorage?.dispose();
+
+		this.rayDataStorage = rayDataStorage;
+		this.rayQueue = rayQueue;
+		this.shadowRayQueue = shadowRayQueue;
+		this.rayIntersectionsStorage = rayIntersectionsStorage;
+		this.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
+		this.slotCount = count;
+
+		// the buffer objects changed, so kernels bound to them must rebuild
+		this.logicKernel.needsUpdate = true;
+		this.materialKernel.needsUpdate = true;
+		this.traceRayKernel.needsUpdate = true;
+		this.traceShadowRayKernel.needsUpdate = true;
+		this.populatePixelIndicesKernel.needsUpdate = true;
+		this.resetSlotsKernel.needsUpdate = true;
+
+	}
+
+	// Idles the slots in [ start, end ), returning their pixels to the queue when asked
+	_resetSlots( start, end, returnPixels ) {
+
+		const { renderer, resetSlotsKernel } = this;
+		if ( end <= start ) {
+
+			return;
+
+		}
+
+		resetSlotsKernel.rayDataStorage = this.rayDataStorage;
+		resetSlotsKernel.pixelQueue = this.pixelQueue;
+		resetSlotsKernel.start = start;
+		resetSlotsKernel.end = end;
+		resetSlotsKernel.returnPixels = returnPixels ? 1 : 0;
+		renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( end - start, 1, 1 ) );
+
+	}
+
+	// The slot count the current budget asks for, capped by the pool limit and the pixel count
+	_getRequestedSlotCount( pixelCount ) {
+
+		return Math.min( MAX_RAY_DATA_COUNT, pixelCount, Math.max( 1, Math.floor( this.frameBudget ) ) );
+
+	}
+
+	// Applies a budget change between frames. Growing carries the live pool into a larger one and
+	// idles the new slots. Shrinking stops spawning past the new budget, waits until every retiring
+	// slot has had time to finish, then hands their pixels back and trims the pool.
+	_applyBudget( pixelCount ) {
+
+		const requested = this._getRequestedSlotCount( pixelCount );
+		const drainLength = this.maxBounces + this.maxTransparentBounces + DRAIN_MARGIN;
+
+		if ( requested > this.slotCount ) {
+
+			const previousCount = this.slotCount;
+			this._resizePool( requested, previousCount );
+			this._resetSlots( previousCount, requested, false );
+			this._spawnLimit = requested;
+			this._drainIterations = 0;
+
+		} else if ( requested < this._spawnLimit ) {
+
+			this._spawnLimit = requested;
+			this._drainIterations = drainLength;
+
+		} else if ( requested > this._spawnLimit ) {
+
+			// idle slots below the limit resume spawning with whatever pixel they held
+			this._spawnLimit = requested;
+
+		}
+
+		if ( this._drainIterations > 0 ) {
+
+			// a raised bounce limit could let a retiring path outlive the window, so restart it
+			this._drainIterations = Math.min( this._drainIterations, drainLength );
+			this._drainIterations --;
+
+			if ( this._drainIterations === 0 && this._spawnLimit < this.slotCount ) {
+
+				this._resetSlots( this._spawnLimit, this.slotCount, true );
+				this._resizePool( this._spawnLimit, this._spawnLimit );
+
+			}
 
 		}
 
@@ -280,14 +434,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		const {
 			renderer,
-			frameBudget,
-			maxTransparentBounces,
-
-			rayDataStorage,
-			rayQueue,
-			shadowRayQueue,
-			rayIntersectionsStorage,
-			shadowRayIntersectionsStorage,
 
 			logicKernel,
 			materialKernel,
@@ -299,26 +445,35 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 		} = this;
 
-		// a resize resets, recreating this task, so the dimensions, ray count, and pixel queue
-		// hold for its lifetime
+		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
+		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
 		const targetDimensions = new Vector2();
 		this.getSize( targetDimensions );
 
-		// number of path slots dispatched per update, capped by the pool and the pixel count
-		const rayCount = Math.min( MAX_RAY_DATA_COUNT, targetDimensions.x * targetDimensions.y, Math.max( 1, Math.floor( frameBudget ) ) );
+		const pixelCount = targetDimensions.x * targetDimensions.y;
+		const rayCount = this._getRequestedSlotCount( pixelCount );
+		if ( rayCount !== this.slotCount ) {
 
-		// referenced via "this" since the buffer may be replaced here
-		this._updatePixelQueue( targetDimensions.x, targetDimensions.y, rayCount );
+			// nothing is in flight at the start of a task, so no slots carry over
+			this._resizePool( rayCount, 0 );
+
+		}
+
+		this._spawnLimit = rayCount;
+		this._drainIterations = 0;
+
+		// referenced via "this" since the buffers may be replaced here and in the loop
+		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
 
 		// reset the trace queues — only the length header needs zeroing
-		zeroDispatchKernel.target = rayQueue;
+		zeroDispatchKernel.target = this.rayQueue;
 		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
-		zeroDispatchKernel.target = shadowRayQueue;
+		zeroDispatchKernel.target = this.shadowRayQueue;
 		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
 		// assign every path slot a pixel and park the overflow pixels in the pixel queue
-		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
+		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.frameBudget = rayCount;
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
@@ -336,6 +491,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			for ( let i = 0; i < iter; i ++ ) {
 
+				// Budget changes are applied at the top of the iteration, where no kernel is mid
+				// flight and the pending trace results still fit the live slot range.
+				this._applyBudget( pixelCount );
+
+				const {
+					rayDataStorage,
+					rayQueue,
+					shadowRayQueue,
+					rayIntersectionsStorage,
+					shadowRayIntersectionsStorage,
+					slotCount,
+					maxTransparentBounces,
+				} = this;
+
 				// Swap targets to support devices without <rgba32float, read_write> textures
 				// Copy latest data to a new outputTarget to keep the appearance
 				// TODO: this full resolution copy runs every frame - remove it by writing terminated
@@ -352,8 +521,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				logicKernel.maxBounces = this.maxBounces;
-				logicKernel.rayCount = rayCount;
-				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
+				logicKernel.rayCount = slotCount;
+				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( slotCount, 1, 1 ) );
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = rayQueue;
@@ -371,11 +540,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
-				materialKernel.rayCount = rayCount;
+				materialKernel.rayCount = slotCount;
+				materialKernel.spawnLimit = this._spawnLimit;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
-				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
+				renderer.compute( materialKernel.kernel, materialKernel.getDispatchSize( slotCount, 1, 1 ) );
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
 				rayDispatchConverter.queue = rayQueue;

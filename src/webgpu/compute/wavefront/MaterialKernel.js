@@ -4,7 +4,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
+import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct, PIXEL_INDEX_NONE } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -25,6 +25,10 @@ export class MaterialKernel extends ComputeKernel {
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
+
+			// slots at or past this index finish their path but do not start another, so a pool
+			// that is shrinking drains without dropping anything in flight
+			spawnLimit: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
@@ -52,6 +56,7 @@ export class MaterialKernel extends ComputeKernel {
 				targetDimensions: vec2u,
 				maxSamples: u32,
 				rayCount: u32,
+				spawnLimit: u32,
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
@@ -79,16 +84,39 @@ export class MaterialKernel extends ComputeKernel {
 				let input = rayDataStorage[ index ];
 				if ( input.objectIndex < 0 ) {
 
+					// a retiring slot keeps its pixel for ResetSlotsKernel to hand back once the pool
+					// shrinks, and stays idle until then
+					if ( index >= spawnLimit ) {
+
+						rayDataStorage[ index ].rayIntersectionIndex = - 1;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
 					// generate a fresh camera ray
 					var pixelIndex = input.pixelIndex;
-					if ( pixelQueue.elementCount > 0u ) {
+					let elementCount = atomicLoad( &pixelQueue.elementCount );
+					if ( elementCount > 0u ) {
 
 						// TODO: If we've pulled off a pixel that's already finished we currently just
 						// write a no-op ray, wasting a frame. It may be better to iterate over a few
 						// points in the queue to see if we can find one we can use.
-						let queueIndex = atomicAdd( &pixelQueue.current, 1u ) % pixelQueue.elementCount;
+						let queueIndex = atomicAdd( &pixelQueue.current, 1u ) % elementCount;
 						pixelIndex = atomicExchange( &pixelQueue.elements[ queueIndex ], pixelIndex );
+
+					}
+
+					// A slot without a pixel swapped its empty marker into the queue and took a real
+					// pixel, leaving a hole the next exchange fills. Pulling the marker back out
+					// means this round has nothing to render.
+					if ( pixelIndex == ${ PIXEL_INDEX_NONE }u ) {
+
+						rayDataStorage[ index ].pixelIndex = pixelIndex;
+						rayDataStorage[ index ].rayIntersectionIndex = - 1;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
 
 					}
 
