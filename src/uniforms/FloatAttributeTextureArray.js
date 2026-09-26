@@ -15,17 +15,17 @@ function copyArrayToArray( fromArray, fromStride, toArray, toStride, offset ) {
 	let maxValue = 1.0;
 	switch ( fromArray.constructor ) {
 
-	case Uint8Array:
-	case Uint16Array:
-	case Uint32Array:
-		maxValue = 2 ** bpe - 1;
-		break;
+		case Uint8Array:
+		case Uint16Array:
+		case Uint32Array:
+			maxValue = 2 ** bpe - 1;
+			break;
 
-	case Int8Array:
-	case Int16Array:
-	case Int32Array:
-		maxValue = 2 ** ( bpe - 1 ) - 1;
-		break;
+		case Int8Array:
+		case Int16Array:
+		case Int32Array:
+			maxValue = 2 ** ( bpe - 1 ) - 1;
+			break;
 
 	}
 

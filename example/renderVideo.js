@@ -1,6 +1,6 @@
 import {
 	Vector3,
-	WebGLRenderer,
+	WebGPURenderer,
 	ACESFilmicToneMapping,
 	Scene,
 	PerspectiveCamera,
@@ -9,25 +9,26 @@ import {
 	Mesh,
 	PlaneGeometry,
 	MeshStandardMaterial,
-} from 'three';
+} from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGLPathTracer } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { generateRadialFloorTexture } from './utils/generateRadialFloorTexture.js';
-import CanvasCapture from 'canvas-capture';
-import { getScaledSettings } from './utils/getScaledSettings.js';
-import { LoaderElement } from './utils/LoaderElement.js';
+import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
+import {
+	BufferTarget,
+	CanvasSource,
+	Output,
+	WebMOutputFormat,
+} from 'mediabunny';
+import { getScaledSettings } from './src/getScaledSettings.js';
+import { LoaderElement } from './src/LoaderElement.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/phalzer_forest_01_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bao-robot/bao-robot.glb';
 const CREDITS = 'Model by DailyArt on Sketchfab';
-
-// CCapture seems to replace the requestAnimationFrame callback which breaks the ability to render and
-// use CanvasCapture.
-const requestAnimationFrame = window.requestAnimationFrame;
 
 let pathTracer, renderer, controls, camera, scene, gui, mixer;
 let videoEl;
@@ -35,55 +36,29 @@ let recordedFrames = 0;
 let animationDuration = 0;
 let videoUrl = '';
 let loader;
+
+// Sample counts are measured asynchronously, so the average is kept for the recording checks. A
+// measurement requested before the latest reset is dropped so it cannot trigger a frame write
+let averageSamples = 0;
+let resetCount = 0;
+let videoOutput, videoSource;
+let isWritingFrame = false;
+let recordingState = 'idle';
 const UP_AXIS = new Vector3( 0, 1, 0 );
 
 const params = {
 
 	displayVideo: false,
 
-	tiles: 2,
+	frameBudget: 250000,
 	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
-	samples: 20,
-	record: () => {
+	maxSamples: 10,
+	record: startRecording,
+	stop: finishRecording,
 
-		// hide the video and revoke any existing blob on record stat
-		params.displayVideo = false;
-		URL.revokeObjectURL( videoUrl );
-
-		// begin recording
-		CanvasCapture.init( renderer.domElement );
-		CanvasCapture.beginVideoRecord( {
-			format: CanvasCapture.WEBM,
-			fps: params.frameRate,
-			onExport: blob => {
-
-				videoUrl = URL.createObjectURL( blob );
-				videoEl.src = videoUrl;
-				videoEl.play();
-
-				params.displayVideo = true;
-				rebuildGUI();
-
-			}
-		} );
-
-		// reinitialize recording variables
-		recordedFrames = 0;
-		regenerateScene();
-		rebuildGUI();
-
-	},
-	stop: () => {
-
-		CanvasCapture.stopRecord();
-		recordedFrames = 0;
-		rebuildGUI();
-
-	},
-
-	bounces: 5,
+	maxBounces: 15,
 	samplesPerFrame: 1,
 	renderScale: 1,
 	...getScaledSettings(),
@@ -98,16 +73,19 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+	renderer = new WebGPURenderer( { antialias: true } );
+	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
-	pathTracer = new WebGLPathTracer( renderer );
-	pathTracer.filterGlossyFactor = 0.25;
-	pathTracer.tiles.set( params.tiles, params.tiles );
+	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
+
+	// the tracer stops itself at the target, and without a fade a captured frame is never dimmed
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.fadeDuration = 0;
 
 	// scene
@@ -204,23 +182,27 @@ function rebuildGUI() {
 
 	// animation folder with parameters that are locked during animation
 	const animationFolder = gui.addFolder( 'animation' );
-	const recording = CanvasCapture.isRecording();
+	const recording = recordingState !== 'idle';
 	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
 	animationFolder.add( params, 'renderScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
-	animationFolder.add( params, recording ? 'stop' : 'record' );
+	animationFolder.add( params, recording ? 'stop' : 'record' ).disable( recordingState !== 'idle' && recordingState !== 'recording' );
 
 	// dynamic parameters
 	const renderFolder = gui.addFolder( 'rendering' );
-	renderFolder.add( params, 'tiles', 1, 4, 1 ).onChange( value => {
+	renderFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.tiles.set( value, value );
+		pathTracer.frameBudget = value;
 
 	} );
-	renderFolder.add( params, 'samples', 1, 500, 1 );
+	renderFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( value => {
+
+		pathTracer.maxSamples = value;
+
+	} );
 	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'bounces', 1, 10, 1 ).onChange( regenerateScene );
+	renderFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( regenerateScene );
 
 }
 
@@ -246,8 +228,139 @@ function initializeSize() {
 function regenerateScene() {
 
 	pathTracer.renderScale = params.renderScale;
-	pathTracer.bounces = params.bounces;
+	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.setScene( scene, camera );
+
+	averageSamples = 0;
+	resetCount ++;
+
+}
+
+async function startRecording() {
+
+	if ( recordingState !== 'idle' ) return;
+
+	params.displayVideo = false;
+	URL.revokeObjectURL( videoUrl );
+	videoUrl = '';
+	rebuildGUI();
+
+	try {
+
+		videoOutput = new Output( {
+			format: new WebMOutputFormat(),
+			target: new BufferTarget(),
+		} );
+
+		videoSource = new CanvasSource( renderer.domElement, {
+			codec: 'vp9',
+			bitrate: 1e7, // high bitrate
+			bitrateMode: 'constant',
+		} );
+
+		videoOutput.addVideoTrack( videoSource, { frameRate: params.frameRate } );
+		await videoOutput.start();
+
+		recordingState = 'recording';
+		pathTracer.minSamples = 0;
+		recordedFrames = 0;
+		regenerateScene();
+
+	} catch ( error ) {
+
+		recordingState = 'idle';
+		console.error( error );
+
+	}
+
+	rebuildGUI();
+
+}
+
+async function finishRecording() {
+
+	if ( recordingState !== 'recording' ) return;
+
+	rebuildGUI();
+
+	try {
+
+		// Explicitly close the source for optimized finalization
+		await videoSource.close();
+		await videoOutput.finalize();
+
+		const blob = new Blob( [ videoOutput.target.buffer ], { type: 'video/webm' } );
+		videoUrl = URL.createObjectURL( blob );
+		videoEl.src = videoUrl;
+		videoEl.play();
+		params.displayVideo = true;
+
+	} catch ( error ) {
+
+		console.error( error );
+
+	} finally {
+
+		recordingState = 'idle';
+		videoOutput = null;
+		videoSource = null;
+		isWritingFrame = false;
+
+		pathTracer.minSamples = 1;
+		recordedFrames = 0;
+		rebuildGUI();
+
+	}
+
+}
+
+function advanceAnimation() {
+
+	const totalFrames = Math.ceil( params.frameRate * params.duration );
+	const angle = params.rotation / totalFrames;
+	camera.position.applyAxisAngle( UP_AXIS, angle );
+	controls.update();
+	camera.updateMatrixWorld();
+
+	mixer.update( 1 / params.frameRate );
+	regenerateScene();
+
+}
+
+async function writeVideoFrame() {
+
+	isWritingFrame = true;
+	const frameDuration = 1 / params.frameRate;
+
+	try {
+
+		// Mediabunny automatically aligns timestamps given the current frame offset and duration
+		await videoSource.add( recordedFrames * frameDuration, frameDuration );
+		recordedFrames ++;
+
+		if ( recordingState !== 'recording' ) return;
+
+		const totalFrames = Math.ceil( params.frameRate * params.duration );
+		if ( recordedFrames >= totalFrames ) {
+
+			await finishRecording();
+
+		} else {
+
+			advanceAnimation();
+
+		}
+
+	} catch ( error ) {
+
+		console.error( error );
+		await finishRecording();
+
+	} finally {
+
+		isWritingFrame = false;
+
+	}
 
 }
 
@@ -255,7 +368,19 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const isRecording = CanvasCapture.isRecording();
+	const measuredReset = resetCount;
+	pathTracer.getSampleCountsAsync().then( counts => {
+
+		loader.setSamples( counts );
+		if ( measuredReset === resetCount ) {
+
+			averageSamples = counts.avg;
+
+		}
+
+	} );
+
+	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
 
@@ -264,40 +389,29 @@ function animate() {
 	} else {
 
 		videoEl.style.display = 'none';
-		controls.enabled = ! isRecording;
+		controls.enabled = recordingState === 'idle';
 
 		camera.updateMatrixWorld();
 
-		// if we're recording and we hit the target samples then record the frame step the animation forward
-		if ( isRecording && pathTracer.samples >= params.samples ) {
+		for ( let i = 0; ! isWritingFrame && i < 1; i ++ ) {
 
-			CanvasCapture.recordFrame();
-			recordedFrames ++;
+			pathTracer.renderSample();
 
-			//  stop recording if we've hit enough frames
-			if ( recordedFrames >= params.frameRate * params.duration ) {
+			// Break when reaching the target sample count to avoid extra samples
+			if ( isRecording && averageSamples >= params.maxSamples ) {
 
-				CanvasCapture.stopRecord();
-
-				recordedFrames = 0;
-				rebuildGUI();
+				break;
 
 			}
 
-			// update the camera transform and update the geometry
-			const angle = params.rotation / Math.ceil( params.frameRate * animationDuration );
-			camera.position.applyAxisAngle( UP_AXIS, angle );
-			controls.update();
-			camera.updateMatrixWorld();
-
-			const delta = 1 / params.frameRate;
-			mixer.update( delta );
-
-			regenerateScene();
-
 		}
 
-		pathTracer.renderSample();
+		// If recording and target samples are reached, write the video frame and advance the animation
+		if ( isRecording && ! isWritingFrame && averageSamples >= params.maxSamples ) {
+
+			writeVideoFrame();
+
+		}
 
 	}
 
@@ -306,14 +420,13 @@ function animate() {
 
 		const total = Math.ceil( params.frameRate * params.duration );
 		const percStride = 1 / total;
-		const samplesPerc = pathTracer.samples / params.samples;
+		const samplesPerc = averageSamples / params.maxSamples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		loader.setPercentage( percentDone );
 
 	} else {
 
 		loader.setPercentage( 1 );
-		loader.setSamples( pathTracer.samples, pathTracer.isCompiling );
 
 	}
 

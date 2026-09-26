@@ -1,5 +1,7 @@
 import { SpotLight } from 'three';
 
+// TODO: this should extend IESSpotLight, but the class is only exported from "three/webgpu" and
+// the node library resolves light nodes by exact constructor so a subclass would not rasterize
 export class PhysicalSpotLight extends SpotLight {
 
 	constructor( ...args ) {
