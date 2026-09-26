@@ -4,7 +4,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct, PIXEL_INDEX_NONE } from './structs.js';
+import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -90,17 +90,6 @@ export class MaterialKernel extends ComputeKernel {
 						// points in the queue to see if we can find one we can use.
 						let queueIndex = atomicAdd( &pixelQueue.current, 1u ) % elementCount;
 						pixelIndex = atomicExchange( &pixelQueue.elements[ queueIndex ], pixelIndex );
-
-					}
-
-					// a slot with no pixel has nothing to render this round. Only possible when the
-					// pool outgrew the pixel count, since new slots take a pixel from the queue
-					if ( pixelIndex == ${ PIXEL_INDEX_NONE }u ) {
-
-						rayDataStorage[ index ].pixelIndex = pixelIndex;
-						rayDataStorage[ index ].rayIntersectionIndex = - 1;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-						return;
 
 					}
 

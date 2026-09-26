@@ -5,7 +5,7 @@ import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
 import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
-import { ResetSlotsKernel, RESET_SLOTS_RETURN, RESET_SLOTS_TAKE } from './compute/wavefront/ResetSlotsKernel.js';
+import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
@@ -337,21 +337,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Idles the slots in [ start, end ), returning their pixels to the queue or taking new ones
-	_resetSlots( start, end, mode ) {
+	// Slots in [ start, end ) take a pixel from the queue or return theirs to it
+	_resetSlots( start, end, take ) {
 
 		const { renderer, resetSlotsKernel } = this;
-		if ( end <= start ) {
-
-			return;
-
-		}
-
 		resetSlotsKernel.rayDataStorage = this.rayDataStorage;
 		resetSlotsKernel.pixelQueue = this.pixelQueue;
 		resetSlotsKernel.start = start;
 		resetSlotsKernel.end = end;
-		resetSlotsKernel.mode = mode;
+		resetSlotsKernel.take = take;
 		renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( end - start, 1, 1 ) );
 
 	}
@@ -373,11 +367,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			const previousCount = this.slotCount;
 			this._resizePool( requested, previousCount );
-			this._resetSlots( previousCount, requested, RESET_SLOTS_TAKE );
+			this._resetSlots( previousCount, requested, true );
 
 		} else if ( requested < this.slotCount ) {
 
-			this._resetSlots( requested, this.slotCount, RESET_SLOTS_RETURN );
+			this._resetSlots( requested, this.slotCount, false );
 			this._resizePool( requested, requested );
 
 		}
