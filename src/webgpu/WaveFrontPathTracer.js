@@ -51,7 +51,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
 		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
 		// overflow them.
-		this.slotCount = 0;
+		this.rayCount = 0;
 
 		// persistent per-path state, one slot per in-flight path
 		this.rayDataStorage = null;
@@ -288,7 +288,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	_resizePool( count ) {
 
 		const { renderer, resetSlotsKernel, copyRayDataKernel } = this;
-		const previousCount = this.slotCount;
+		const previousCount = this.rayCount;
 
 		resetSlotsKernel.pixelQueue = this.pixelQueue;
 		if ( count < previousCount ) {
@@ -338,7 +338,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.shadowRayQueue = shadowRayQueue;
 		this.rayIntersectionsStorage = rayIntersectionsStorage;
 		this.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
-		this.slotCount = count;
+		this.rayCount = count;
 
 		// the buffer objects changed, so kernels bound to them must rebuild
 		this.logicKernel.needsUpdate = true;
@@ -371,7 +371,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	_applyBudget( pixelCount ) {
 
 		const requested = this._getRequestedSlotCount( pixelCount );
-		if ( requested !== this.slotCount ) {
+		if ( requested !== this.rayCount ) {
 
 			this._resizePool( requested );
 
@@ -414,7 +414,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			shadowRayQueue,
 			rayIntersectionsStorage,
 			shadowRayIntersectionsStorage,
-			slotCount: rayCount,
+			rayCount,
 		} = this;
 
 		// reset the trace queues — only the length header needs zeroing
@@ -470,7 +470,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 					shadowRayQueue,
 					rayIntersectionsStorage,
 					shadowRayIntersectionsStorage,
-					slotCount: rayCount,
+					rayCount,
 				} = this );
 
 				// Step 2: reset the trace queues for this frame's population
