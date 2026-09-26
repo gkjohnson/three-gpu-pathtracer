@@ -17,12 +17,12 @@ export class ResetSlotsKernel extends ComputeKernel {
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueStruct ),
 			start: uniform( 0, 'uint' ),
 			end: uniform( 0, 'uint' ),
-			take: uniform( 0, 'uint' ),
+			addingSlots: uniform( 0, 'uint' ),
 			globalId: globalId,
 		};
 
 		const fn = wgslTagFn/* wgsl */`
-			fn compute( start: u32, end: u32, take: u32, globalId: vec3u ) -> void {
+			fn compute( start: u32, end: u32, addingSlots: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let pixelQueue = &${ params.pixelQueue };
@@ -34,7 +34,8 @@ export class ResetSlotsKernel extends ComputeKernel {
 
 				}
 
-				if ( take == 0u ) {
+				// slots being removed hand their pixel back before the pool is discarded
+				if ( addingSlots == 0u ) {
 
 					let queueIndex = atomicAdd( &pixelQueue.elementCount, 1u );
 					atomicStore( &pixelQueue.elements[ queueIndex ], rayDataStorage[ index ].pixelIndex );

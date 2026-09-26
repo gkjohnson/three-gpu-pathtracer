@@ -337,15 +337,16 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Slots in [ start, end ) take a pixel from the queue or return theirs to it
-	_resetSlots( start, end, take ) {
+	// Slots in [ start, end ) are being added to the pool and take a pixel from the queue, or
+	// removed from it and return theirs
+	_resetSlots( start, end, addingSlots ) {
 
 		const { renderer, resetSlotsKernel } = this;
 		resetSlotsKernel.rayDataStorage = this.rayDataStorage;
 		resetSlotsKernel.pixelQueue = this.pixelQueue;
 		resetSlotsKernel.start = start;
 		resetSlotsKernel.end = end;
-		resetSlotsKernel.take = take;
+		resetSlotsKernel.addingSlots = addingSlots;
 		renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( end - start, 1, 1 ) );
 
 	}
