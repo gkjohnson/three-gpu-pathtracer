@@ -100,10 +100,13 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 			// depth of field
 			// measure focus distance along the optical axis so the focal surface is a flat
-			// plane perpendicular to the camera forward vector rather than a sphere.
+			// plane perpendicular to the camera forward vector rather than a sphere. The base ray
+			// starts on the near plane, so the lens position is used instead of its origin.
 			let rayDir = ray.direction;
 			let forward = normalize( ( ${ cameraWorldMatrix } * vec4f( 0.0, 0.0, - 1.0, 0.0 ) ).xyz );
-			let focalPoint = ray.origin + rayDir * ( ${ focusDistance } / dot( rayDir, forward ) );
+			let cameraOrigin = ( ${ cameraWorldMatrix } * vec4f( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
+			let focalPoint = cameraOrigin + rayDir * ( ${ focusDistance } / dot( rayDir, forward ) );
+			let nearDistance = dot( ray.origin - cameraOrigin, forward );
 
 			// sample the aperture shape
 			let shapeUVW = ${ rand3 }( ${ RNG_INDEX_APERTURE_SAMPLE } );
@@ -115,8 +118,10 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 				${ rotateVector }( apertureSample, ${ apertureRotation } )
 				* vec2f( ${ anamorphicRatio }, 1.0 / ${ anamorphicRatio } );
 
-			ray.origin += ( ${ cameraWorldMatrix } * vec4f( apertureSample, 0.0, 0.0 ) ).xyz;
-			ray.direction = focalPoint - ray.origin;
+			// aim from the aperture on the lens, then start on the near plane as the base ray does
+			ray.origin = cameraOrigin + ( ${ cameraWorldMatrix } * vec4f( apertureSample, 0.0, 0.0 ) ).xyz;
+			ray.direction = normalize( focalPoint - ray.origin );
+			ray.origin += ray.direction * ( nearDistance / dot( ray.direction, forward ) );
 
 			return true;
 
