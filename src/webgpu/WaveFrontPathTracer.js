@@ -400,34 +400,24 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const targetDimensions = new Vector2();
 		this.getSize( targetDimensions );
 
-		// referenced via "this" since the buffer may be replaced here
+		// referenced via "this" since the buffers may be replaced here and in the loop
 		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
 
 		// the populate pass below overwrites whatever the resize carried over
 		const pixelCount = targetDimensions.x * targetDimensions.y;
 		this._applyBudget( pixelCount );
 
-		// the pool buffers and ray count are replaced when the budget changes in the loop below
-		let {
-			rayDataStorage,
-			rayQueue,
-			shadowRayQueue,
-			rayIntersectionsStorage,
-			shadowRayIntersectionsStorage,
-			rayCount,
-		} = this;
-
 		// reset the trace queues — only the length header needs zeroing
-		zeroDispatchKernel.target = rayQueue;
+		zeroDispatchKernel.target = this.rayQueue;
 		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
-		zeroDispatchKernel.target = shadowRayQueue;
+		zeroDispatchKernel.target = this.shadowRayQueue;
 		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
 
 		// assign every path slot a pixel and park the overflow pixels in the pixel queue
-		populatePixelIndicesKernel.rayDataStorage = rayDataStorage;
+		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-		populatePixelIndicesKernel.frameBudget = rayCount;
+		populatePixelIndicesKernel.frameBudget = this.rayCount;
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		renderer.compute( populatePixelIndicesKernel.kernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
@@ -455,23 +445,24 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path
-				logicKernel.rayDataStorage = rayDataStorage;
-				logicKernel.rayIntersectionsStorage = rayIntersectionsStorage;
-				logicKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
+				logicKernel.rayDataStorage = this.rayDataStorage;
+				logicKernel.rayIntersectionsStorage = this.rayIntersectionsStorage;
+				logicKernel.shadowRayIntersectionsStorage = this.shadowRayIntersectionsStorage;
 				logicKernel.maxBounces = this.maxBounces;
-				logicKernel.rayCount = rayCount;
-				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( rayCount, 1, 1 ) );
+				logicKernel.rayCount = this.rayCount;
+				renderer.compute( logicKernel.kernel, logicKernel.getDispatchSize( this.rayCount, 1, 1 ) );
 
 				// the trace results are consumed, so only the slot state has to survive a resize
 				this._applyBudget( pixelCount );
-				( {
+
+				const {
 					rayDataStorage,
 					rayQueue,
 					shadowRayQueue,
 					rayIntersectionsStorage,
 					shadowRayIntersectionsStorage,
 					rayCount,
-				} = this );
+				} = this;
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = rayQueue;
