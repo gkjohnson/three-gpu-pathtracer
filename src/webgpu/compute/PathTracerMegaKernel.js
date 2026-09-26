@@ -52,6 +52,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastShadowHitFn = proxyFn( 'bvhData.value.fns.raycastShadowHit', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
@@ -301,7 +302,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										// traversal could support tinted shadows from transmissive and partially
 										// opaque objects
 										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
+										let occluded = ${ raycastShadowHitFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
 											var lightPdf = lightRec.pdf;

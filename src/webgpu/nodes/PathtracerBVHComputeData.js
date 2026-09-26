@@ -181,8 +181,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		fns.raycastFirstHit = this.getShapecastFn( {
-			name: 'raycastFirstHit',
+		// Single sided faces are culled relative to the ray direction. A shadow ray travels from the
+		// surface to the light, which is the reverse of the light path, so its side test is flipped
+		// so light passes through the back of single sided surfaces the same way a shadow map does.
+		const sideSignScalar = float( 1.0 ).toVar( 'bvh_sideSign' );
+
+		// A shadow ray only needs to know whether anything is in the way, so once a hit is found
+		// the rest of the traversal is rejected at the bounds test rather than searching for the
+		// closest hit.
+		const anyHitFlag = uint( 0 ).toVar( 'bvh_anyHit' );
+
+		const rayShapecastOptions = {
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
@@ -198,6 +207,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					// early-out if our object is completely transparent
 					if ( ${ baseOpacityScalar } == 0.0 ) {
+
+						return 0u;
+
+					}
+
+					// any hit will do, so skip everything once one is found
+					if ( ${ anyHitFlag } != 0u && result.didHit ) {
 
 						return 0u;
 
@@ -259,7 +275,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							if ( material.side != 0 && triResult.side != material.side ) {
+							if ( material.side != 0 && triResult.side * ${ sideSignScalar } != material.side ) {
 
 								continue;
 
@@ -334,6 +350,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							didHit = true;
 
+							if ( ${ anyHitFlag } != 0u ) {
+
+								return true;
+
+							}
+
 						}
 
 					}
@@ -386,6 +408,32 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 			`,
+		};
+
+		fns.raycastFirstHit = this.getShapecastFn( {
+			name: 'raycastFirstHit',
+			prefixFn: wgslTagFn/* wgsl */`
+				fn useRaySide() -> void {
+
+					${ sideSignScalar } = 1.0;
+					${ anyHitFlag } = 0u;
+
+				}
+			`,
+			...rayShapecastOptions,
+		} );
+
+		fns.raycastShadowHit = this.getShapecastFn( {
+			name: 'raycastShadowHit',
+			prefixFn: wgslTagFn/* wgsl */`
+				fn useLightSide() -> void {
+
+					${ sideSignScalar } = - 1.0;
+					${ anyHitFlag } = 1u;
+
+				}
+			`,
+			...rayShapecastOptions,
 		} );
 
 	}
