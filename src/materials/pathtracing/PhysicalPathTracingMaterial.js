@@ -478,7 +478,10 @@ export class PhysicalPathTracingMaterial extends MaterialBase {
 						// next event estimation
 						#if FEATURE_MIS
 
-						gl_FragColor.rgb += directLightContribution( - ray.direction, surf, state, hitPoint );
+						// light / environment samples are only taken above the surface (see directLightContribution), so offset the
+						// shadow ray origin to the front side rather than to the side of the sampled scatter direction
+						vec3 lightSampleOrigin = stepRayOrigin( ray.origin, ray.direction, surf.faceNormal, surfaceHit.dist );
+						gl_FragColor.rgb += directLightContribution( - ray.direction, surf, state, lightSampleOrigin );
 
 						#endif
 
