@@ -1,12 +1,12 @@
 import { Scene, SphereGeometry, MeshPhysicalMaterial, Mesh, PerspectiveCamera, WebGPURenderer, Color } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 // material properties that can be assigned to a grid axis
-const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
+const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specular intensity', 'specular color', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
 
 const options = {
 	enable: true,
@@ -23,6 +23,7 @@ const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } 
 renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
+pathTracer.setRandom( RANDOM_SOBOL );
 pathTracer.useMegakernel( options.useMegakernel );
 pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
 pathTracer.maxBounces = options.maxBounces;
@@ -193,6 +194,14 @@ function buildGrid() {
 		} else if ( field === 'diffuse roughness' ) {
 
 			material.diffuseRoughness = val;
+
+		} else if ( field === 'specular intensity' ) {
+
+			material.specularIntensity = val;
+
+		} else if ( field === 'specular color' ) {
+
+			material.specularColor.setRGB( val, val, val );
 
 		} else if ( field === 'iridescence' ) {
 
