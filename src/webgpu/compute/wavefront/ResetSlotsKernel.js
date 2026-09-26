@@ -34,24 +34,25 @@ export class ResetSlotsKernel extends ComputeKernel {
 
 				}
 
-				// slots being removed hand their pixel back before the pool is discarded
 				if ( addingSlots == 0u ) {
 
+					// slots being removed hand their pixel back before the pool is discarded
 					let queueIndex = atomicAdd( &pixelQueue.elementCount, 1u );
 					atomicStore( &pixelQueue.elements[ queueIndex ], rayDataStorage[ index ].pixelIndex );
-					return;
+
+				} else {
+
+					// the pool never exceeds the pixel count, so the queue holds enough for every new slot
+					let previousCount = atomicSub( &pixelQueue.elementCount, 1u );
+					rayDataStorage[ index ].pixelIndex = atomicLoad( &pixelQueue.elements[ previousCount - 1u ] );
+					rayDataStorage[ index ].resultColor = vec4f( 0.0 );
+					rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
+					rayDataStorage[ index ].objectIndex = - 1;
+					rayDataStorage[ index ].alphaDepth = 0u;
+					rayDataStorage[ index ].rayIntersectionIndex = - 1;
+					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 
 				}
-
-				// the pool never exceeds the pixel count, so the queue holds enough for every new slot
-				let previousCount = atomicSub( &pixelQueue.elementCount, 1u );
-				rayDataStorage[ index ].pixelIndex = atomicLoad( &pixelQueue.elements[ previousCount - 1u ] );
-				rayDataStorage[ index ].resultColor = vec4f( 0.0 );
-				rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
-				rayDataStorage[ index ].objectIndex = - 1;
-				rayDataStorage[ index ].alphaDepth = 0u;
-				rayDataStorage[ index ].rayIntersectionIndex = - 1;
-				rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 
 			}
 		`;
