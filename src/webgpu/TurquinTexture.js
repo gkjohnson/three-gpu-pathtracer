@@ -19,7 +19,6 @@ export class TurquinTexture extends Storage3DTexture {
 		// layer 21 - 30: transmissive total energy exiting
 		super( RESOLUTION, RESOLUTION, 31 );
 
-		// r32float: half float storage textures are an optional feature Firefox does not expose
 		this.type = FloatType;
 		this.format = RedFormat;
 		this.minFilter = LinearFilter;

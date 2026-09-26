@@ -883,8 +883,7 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 
 // GGX Multibounce compensation using Turquin's method. Bakes the directional albedo of the
 // reflection lobe, optionally fresnel-weighted, and optionally including the refraction lobe
-// for the full transmissive bsdf. "eta" is the incident over transmitted ior ratio. The output
-// storage texture is referenced as a global since Firefox rejects storing through a parameter.
+// for the full transmissive bsdf. "eta" is the incident over transmitted ior ratio.
 export const turquinIntegralFn = outputTarget => wgslTagFn/* wgsl */ `
 
 	fn albedo(
