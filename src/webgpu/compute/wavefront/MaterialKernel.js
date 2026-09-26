@@ -82,12 +82,13 @@ export class MaterialKernel extends ComputeKernel {
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
 					// generate a fresh camera ray
 					var pixelIndex = input.pixelIndex;
-					if ( pixelQueue.elementCount > 0u ) {
+					let elementCount = atomicLoad( &pixelQueue.elementCount );
+					if ( elementCount > 0u ) {
 
 						// TODO: If we've pulled off a pixel that's already finished we currently just
 						// write a no-op ray, wasting a frame. It may be better to iterate over a few
 						// points in the queue to see if we can find one we can use.
-						let queueIndex = atomicAdd( &pixelQueue.current, 1u ) % pixelQueue.elementCount;
+						let queueIndex = atomicAdd( &pixelQueue.current, 1u ) % elementCount;
 						pixelIndex = atomicExchange( &pixelQueue.elements[ queueIndex ], pixelIndex );
 
 					}

@@ -138,10 +138,11 @@ export const rayQueueAtomicStruct = new DependentStructTypeNode( {
 rayQueueAtomicStruct.getLength = () => 4;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
-// the ray data pool. The non-atomic variant is used for contention-free initialization.
+// the ray data pool. Sized to the pixel count so retiring slots can always return their pixel. The
+// non-atomic variant is used for contention-free initialization.
 export const pixelQueueStruct = new DependentStructTypeNode( {
 	current: { type: 'uint', atomic: true },
-	elementCount: 'uint',
+	elementCount: { type: 'uint', atomic: true },
 	elements: 'array<atomic<u32>>',
 }, 'PixelQueue' );
 pixelQueueStruct.getLength = () => 2;
