@@ -282,11 +282,24 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Reallocates the per slot buffers to "count" slots, carrying the first "copyCount" slots of ray
-	// data over. The queues and trace results only live within a frame, so they start empty.
-	_resizePool( count, copyCount ) {
+	// Reallocates the per slot buffers to "count" slots. Slots that survive carry their ray data
+	// over, dropped slots return their pixel to the queue, and added slots take one from it. The
+	// trace queues and results only live within a frame, so they start empty.
+	_resizePool( count ) {
 
-		const { renderer } = this;
+		const { renderer, resetSlotsKernel, copyRayDataKernel } = this;
+		const previousCount = this.slotCount;
+
+		resetSlotsKernel.pixelQueue = this.pixelQueue;
+		if ( count < previousCount ) {
+
+			resetSlotsKernel.rayDataStorage = this.rayDataStorage;
+			resetSlotsKernel.start = count;
+			resetSlotsKernel.end = previousCount;
+			resetSlotsKernel.addingSlots = false;
+			renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( previousCount - count, 1, 1 ) );
+
+		}
 
 		const rayDataStorage = new StorageBufferAttribute( count, rayDataStruct.getLength() );
 		rayDataStorage.name = 'Ray Data';
@@ -304,9 +317,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const shadowRayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
 
+		const copyCount = Math.min( count, previousCount );
 		if ( copyCount > 0 ) {
 
-			const { copyRayDataKernel } = this;
 			copyRayDataKernel.source = this.rayDataStorage;
 			copyRayDataKernel.target = rayDataStorage;
 			copyRayDataKernel.count = copyCount;
@@ -335,19 +348,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.populatePixelIndicesKernel.needsUpdate = true;
 		this.resetSlotsKernel.needsUpdate = true;
 
-	}
+		if ( count > previousCount ) {
 
-	// Slots in [ start, end ) are being added to the pool and take a pixel from the queue, or
-	// removed from it and return theirs
-	_resetSlots( start, end, addingSlots ) {
+			resetSlotsKernel.rayDataStorage = rayDataStorage;
+			resetSlotsKernel.start = previousCount;
+			resetSlotsKernel.end = count;
+			resetSlotsKernel.addingSlots = true;
+			renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( count - previousCount, 1, 1 ) );
 
-		const { renderer, resetSlotsKernel } = this;
-		resetSlotsKernel.rayDataStorage = this.rayDataStorage;
-		resetSlotsKernel.pixelQueue = this.pixelQueue;
-		resetSlotsKernel.start = start;
-		resetSlotsKernel.end = end;
-		resetSlotsKernel.addingSlots = addingSlots;
-		renderer.compute( resetSlotsKernel.kernel, resetSlotsKernel.getDispatchSize( end - start, 1, 1 ) );
+		}
 
 	}
 
@@ -358,22 +367,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Applies a budget change. Growing carries the live pool into a larger one and gives the new
-	// slots pixels. Shrinking drops the paths in flight past the new budget, hands their pixels
-	// back, and trims the pool.
+	// Resizes the pool when the budget changes. Paths in flight past a smaller budget are dropped.
 	_applyBudget( pixelCount ) {
 
 		const requested = this._getRequestedSlotCount( pixelCount );
-		if ( requested > this.slotCount ) {
+		if ( requested !== this.slotCount ) {
 
-			const previousCount = this.slotCount;
-			this._resizePool( requested, previousCount );
-			this._resetSlots( previousCount, requested, true );
-
-		} else if ( requested < this.slotCount ) {
-
-			this._resetSlots( requested, this.slotCount, false );
-			this._resizePool( requested, requested );
+			this._resizePool( requested );
 
 		}
 
@@ -399,17 +399,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const targetDimensions = new Vector2();
 		this.getSize( targetDimensions );
 
-		const pixelCount = targetDimensions.x * targetDimensions.y;
-		const rayCount = this._getRequestedSlotCount( pixelCount );
-		if ( rayCount !== this.slotCount ) {
-
-			// nothing is in flight at the start of a task, so no slots carry over
-			this._resizePool( rayCount, 0 );
-
-		}
-
 		// referenced via "this" since the buffers may be replaced here and in the loop
 		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
+
+		// the populate pass below overwrites whatever the resize carried over
+		const pixelCount = targetDimensions.x * targetDimensions.y;
+		const rayCount = this._getRequestedSlotCount( pixelCount );
+		this._applyBudget( pixelCount );
 
 		// reset the trace queues — only the length header needs zeroing
 		zeroDispatchKernel.target = this.rayQueue;
