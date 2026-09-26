@@ -6,7 +6,7 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 // material properties that can be assigned to a grid axis
-const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
+const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specular intensity', 'specular color', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
 
 const options = {
 	enable: true,
@@ -193,6 +193,15 @@ function buildGrid() {
 		} else if ( field === 'diffuse roughness' ) {
 
 			material.diffuseRoughness = val;
+
+		} else if ( field === 'specular intensity' ) {
+
+			material.specularIntensity = val;
+
+		} else if ( field === 'specular color' ) {
+
+			// from a pure red tint to no tint, so a per channel energy error shows as a color cast
+			material.specularColor.setRGB( 1.0, val, val );
 
 		} else if ( field === 'iridescence' ) {
 
