@@ -1,6 +1,6 @@
 import { Scene, SphereGeometry, MeshPhysicalMaterial, Mesh, PerspectiveCamera, WebGPURenderer, Color } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -23,6 +23,7 @@ const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } 
 renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
+pathTracer.setRandom( RANDOM_SOBOL );
 pathTracer.useMegakernel( options.useMegakernel );
 pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
 pathTracer.maxBounces = options.maxBounces;
@@ -200,8 +201,7 @@ function buildGrid() {
 
 		} else if ( field === 'specular color' ) {
 
-			// from a pure red tint to no tint, so a per channel energy error shows as a color cast
-			material.specularColor.setRGB( 1.0, val, val );
+			material.specularColor.setRGB( val, val, val );
 
 		} else if ( field === 'iridescence' ) {
 
