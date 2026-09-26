@@ -1,10 +1,11 @@
 import { searchForWorkspaceRoot } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import react from '@vitejs/plugin-react';
 import fs from 'fs';
 
 export default ( { mode } ) => ( {
 
-	plugins: mode === 'ssl' ? [ basicSsl() ] : [],
+	plugins: mode === 'ssl' ? [ basicSsl(), react() ] : [ react() ],
 
 	root: './example/',
 	base: '',
