@@ -127,13 +127,8 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
-				// The clamp depth follows Cycles: what a ray finds ( emission, a light, the background )
-				// is clamped at the depth of the path that found it, and next event light at the depth
-				// of the surface it lights plus one. A depth of one or less is direct, so light
-				// reaching the first surface is direct however it arrives.
-
-				// emission gathered at the previous surface (pre-scatter throughput), which was
-				// reached one segment earlier than the one being resolved now
+				// emission gathered at the previous surface (pre-scatter throughput). Found light clamps
+				// at the depth of the segment that found it, as in Cycles, so one less than the current
 				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, max( input.currentBounce, 1u ) - 1u, clampDirect, clampIndirect );
 				resultColor += vec4f( emission, 0.0 );
 

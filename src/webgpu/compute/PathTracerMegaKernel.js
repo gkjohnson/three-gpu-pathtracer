@@ -258,8 +258,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// emission, clamped at the depth of the path that found it, as in LogicKernel.
-						// Next event light below is clamped one deeper, at the surface it lights
+						// emission, clamped at the depth of the segment that found it, as in Cycles
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
