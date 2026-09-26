@@ -76,7 +76,7 @@ export class MaterialKernel extends ComputeKernel {
 
 				}
 
-				let input = rayDataStorage[ index ];
+				let input = ( *rayDataStorage )[ index ];
 				if ( input.objectIndex < 0 ) {
 
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
@@ -166,7 +166,7 @@ export class MaterialKernel extends ComputeKernel {
 					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
 					let objectInfo = transforms[ u32( input.objectIndex ) ];
-					var materialInfo = materials[ objectInfo.materialIndex ];
+					var materialInfo = ( *materials )[ objectInfo.materialIndex ];
 
 					// a matte surface hit by the camera ray renders as a fully transparent
 					let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;

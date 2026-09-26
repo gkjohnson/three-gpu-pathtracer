@@ -37,7 +37,7 @@ export class TraceRayKernel extends ComputeKernel {
 
 				}
 
-				let queuedRay = rayQueue.elements[ index ];
+				let queuedRay = ( *rayQueue ).elements[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, queuedRay.seed, queuedRay.currentBounce + queuedRay.alphaDepth );
 

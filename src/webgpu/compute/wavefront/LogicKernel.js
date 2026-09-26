@@ -86,7 +86,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				// skip slots that have never spawned a ray
-				let input = rayDataStorage[ index ];
+				let input = ( *rayDataStorage )[ index ];
 				if ( input.rayIntersectionIndex < 0 ) {
 
 					return;
@@ -113,7 +113,7 @@ export class LogicKernel extends ComputeKernel {
 				// is negative when no shadow ray was enqueued last frame
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
-					let shadowHit = shadowRayIntersectionsStorage[ u32( input.shadowRayIntersectionIndex ) ];
+					let shadowHit = ( *shadowRayIntersectionsStorage )[ u32( input.shadowRayIntersectionIndex ) ];
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
@@ -146,7 +146,7 @@ export class LogicKernel extends ComputeKernel {
 					// apply the scatter across the traced segment
 					throughputColor *= scatterRec.color / scatterRec.pdf;
 
-					let hitResult = rayIntersectionsStorage[ u32( input.rayIntersectionIndex ) ];
+					let hitResult = ( *rayIntersectionsStorage )[ u32( input.rayIntersectionIndex ) ];
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
