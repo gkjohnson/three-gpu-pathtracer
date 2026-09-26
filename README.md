@@ -6,7 +6,7 @@
 [![twitter](https://flat.badgen.net/badge/twitter/@garrettkjohnson/?icon&label)](https://twitter.com/garrettkjohnson)
 [![sponsors](https://img.shields.io/github/sponsors/gkjohnson?style=flat-square&color=1da1f2)](https://github.com/sponsors/gkjohnson/)
 
-![](./docs/banner.png)
+![](./docs/banner.webp)
 
 Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) and WebGPU compute shaders to accelerate high quality, physically based rendering on the GPU.
 
