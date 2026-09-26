@@ -25,10 +25,6 @@ export class MaterialKernel extends ComputeKernel {
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
-
-			// slots at or past this index finish their path but do not start another, so a pool
-			// that is shrinking drains without dropping anything in flight
-			spawnLimit: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
@@ -56,7 +52,6 @@ export class MaterialKernel extends ComputeKernel {
 				targetDimensions: vec2u,
 				maxSamples: u32,
 				rayCount: u32,
-				spawnLimit: u32,
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
@@ -83,16 +78,6 @@ export class MaterialKernel extends ComputeKernel {
 
 				let input = rayDataStorage[ index ];
 				if ( input.objectIndex < 0 ) {
-
-					// a retiring slot keeps its pixel for ResetSlotsKernel to hand back once the pool
-					// shrinks, and stays idle until then
-					if ( index >= spawnLimit ) {
-
-						rayDataStorage[ index ].rayIntersectionIndex = - 1;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-						return;
-
-					}
 
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
 					// generate a fresh camera ray

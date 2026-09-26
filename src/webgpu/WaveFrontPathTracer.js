@@ -36,9 +36,6 @@ const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLeng
 
 const LOW_RES_ITERATIONS = 5;
 
-// iterations a retiring slot is given to finish beyond its bounce limits before the pool shrinks
-const DRAIN_MARGIN = 2;
-
 export class WaveFrontPathTracer extends PathTracerBackend {
 
 	constructor( renderer ) {
@@ -69,12 +66,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// pixel indices waiting for a free path slot, sized to the resolution
 		this.pixelQueue = null;
-
-		// slots at or past this index finish their path and go idle, so a shrink can drain them
-		this._spawnLimit = 0;
-
-		// iterations left before every retiring slot is guaranteed idle and the pool can shrink
-		this._drainIterations = 0;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
@@ -373,8 +364,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	}
 
 	// Applies a budget change. Growing carries the live pool into a larger one and gives the new
-	// slots pixels. Shrinking stops spawning past the new budget, and once every retiring slot has
-	// had time to finish its path, hands their pixels back and trims the pool.
+	// slots pixels. Shrinking drops the paths in flight past the new budget, hands their pixels
+	// back, and trims the pool.
 	_applyBudget( pixelCount ) {
 
 		const requested = this._getRequestedSlotCount( pixelCount );
@@ -384,17 +375,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this._resizePool( requested, previousCount );
 			this._resetSlots( previousCount, requested, RESET_SLOTS_TAKE );
 
-		}
-
-		if ( requested < this._spawnLimit ) {
-
-			this._drainIterations = this.maxBounces + this.maxTransparentBounces + DRAIN_MARGIN;
-
-		}
-
-		this._spawnLimit = requested;
-
-		if ( this._drainIterations > 0 && -- this._drainIterations === 0 && requested < this.slotCount ) {
+		} else if ( requested < this.slotCount ) {
 
 			this._resetSlots( requested, this.slotCount, RESET_SLOTS_RETURN );
 			this._resizePool( requested, requested );
@@ -431,9 +412,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this._resizePool( rayCount, 0 );
 
 		}
-
-		this._spawnLimit = rayCount;
-		this._drainIterations = 0;
 
 		// referenced via "this" since the buffers may be replaced here and in the loop
 		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
@@ -513,7 +491,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.rayCount = slotCount;
-				materialKernel.spawnLimit = this._spawnLimit;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
