@@ -191,7 +191,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					if ( didHit ) {
 
 						let objectInfo = transforms[ hitResult.objectIndex ];
-						var materialInfo = materials[ objectInfo.materialIndex ];
+						var materialInfo = ( *materials )[ objectInfo.materialIndex ];
 
 						// a matte surface hit by the camera ray renders as a fully transparent
 						if ( materialInfo.matte != 0 && bounce == 0u ) {
