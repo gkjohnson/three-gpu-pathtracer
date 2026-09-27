@@ -49,6 +49,7 @@ export class LogicKernel extends ComputeKernel {
 
 		// environment + background resources pulled off their providers (embedded functions)
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
@@ -97,7 +98,7 @@ export class LogicKernel extends ComputeKernel {
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
 				// one-sample NEE selection normalization (lights + env), matched with the megakernel
-				let envActive = ${ envTotalSumNode } > 0.0;
+				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
 				if ( envActive ) {

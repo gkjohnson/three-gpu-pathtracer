@@ -60,6 +60,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
@@ -147,7 +148,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// one-sample NEE selects between the analytic lights and the environment -
 				// lightsDenom is the number of options
-				let envActive = ${ envTotalSumNode } > 0.0;
+				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
 				var lightsDenom = f32( lightsCount );
 				if ( envActive ) {
