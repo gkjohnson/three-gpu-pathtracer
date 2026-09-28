@@ -4,15 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.0.25] - 2026.09.28
 ### Added
 - WebGPUPathTracer, available from "three-gpu-pathtracer/webgpu".
 
 ### Changed
 - Minimum three.js version is now r185.
-
-### Deprecated
-- WebGLPathTracer. It will be removed in a future release.
+- Deprecated WebGLPathTracer. It will be removed in a future release.
 
 ## [0.0.24] - 2026.02.21
 ### Fixed
