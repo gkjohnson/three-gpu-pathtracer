@@ -14,7 +14,9 @@
   },
   "type": "module",
   "types": "src/index.d.ts",
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/webgpu/shims/*.js"
+  ],
   "files": [
     "src/*",
     "build/*"
