@@ -102,6 +102,8 @@ export class WebGLPathTracer {
 
 	constructor( renderer ) {
 
+		console.warn( 'WebGLPathTracer: This class has been deprecated and will be removed in a future release. Use "WebGPUPathTracer" instead.' );
+
 		// members
 		this._renderer = renderer;
 		this._generator = new PathTracingSceneGenerator();
@@ -521,6 +523,12 @@ export class WebGLPathTracer {
 			}
 
 		}
+
+	}
+
+	getRenderTime() {
+
+		return this._clock.getElapsedTime() * 1e3;
 
 	}
 

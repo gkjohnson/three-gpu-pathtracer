@@ -31,11 +31,16 @@ const argv = yargs( process.argv.slice( 2 ) )
 		type: 'boolean',
 		default: false
 	} )
+	.option( 'webgpu', {
+		describe: 'Whether to run WebGPUPathTracer.',
+		type: 'boolean',
+		default: false
+	} )
 	.argv;
 
 ( async () => {
 
-	const req = await fetch( 'https://raw.githubusercontent.com/google/model-viewer/master/packages/render-fidelity-tools/test/config.json' );
+	const req = await fetch( 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json' );
 	const { scenarios } = await req.json();
 	const folderPath = path.resolve( process.cwd(), argv[ 'output-path' ] );
 	console.log( `Saving to "${ folderPath }"\n` );
@@ -107,7 +112,7 @@ async function saveScreenshot( scenario, targetFolder ) {
 
 	const page = await browser.newPage();
 
-	await page.goto( `http://localhost:1234/viewerTest.html?hideUI=true&scale=1&tiles=4&samples=${ SAMPLES }#${ name }` );
+	await page.goto( `http://localhost:5173/viewerTest.html?hideUI=true&scale=1&tiles=4&isWebGPU=${ argv.webgpu }&samples=${ SAMPLES }#${ name }` );
 
 	try {
 

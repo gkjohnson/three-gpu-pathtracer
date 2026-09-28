@@ -1,7 +1,11 @@
 import { searchForWorkspaceRoot } from 'vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import fs from 'fs';
+import path from 'path';
 
-export default {
+export default ( { mode } ) => ( {
+
+	plugins: mode === 'ssl' ? [ basicSsl() ] : [],
 
 	root: './example/',
 	base: '',
@@ -12,7 +16,7 @@ export default {
 			input: fs
 				.readdirSync( './example/' )
 				.filter( p => /\.html$/.test( p ) )
-				.map( p => `./example/${ p }` ),
+				.map( p => path.resolve( './example/', p ) ),
 		},
 	},
 	server: {
@@ -23,7 +27,4 @@ export default {
 			],
 		},
 	},
-	optimizeDeps: {
-    	exclude: [ 'three-mesh-bvh' ],
-  	},
-};
+} );

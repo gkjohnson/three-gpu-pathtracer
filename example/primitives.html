@@ -7,12 +7,43 @@
 			html, body {
 				margin: 0;
 				padding: 0;
-				background-color: #eee;
+
+				/* transparent background checkerboard */
+				background-image: conic-gradient(#fff 25%, #eee 25%, #eee 50%, #fff 50%, #fff 75%, #eee 75%);
+				background-size: 20px 20px;
+			}
+
+			#info {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				font-family: 'Courier New', Courier, monospace;
+				color: white;
+				pointer-events: none;
+			}
+
+			#samples, #credits {
+
+				opacity: 0.5;
+				background-color: rgba( 0.0, 0.0, 0.0, 0.5 );
+				padding: 5px;
+				display: inline-block;
+
+			}
+
+			#corner-canvas {
+				position: fixed;
+				bottom: 0;
+				left: 0;
+				max-width: 500px;
+				max-height: 200px;
+				z-index: 1000;
 			}
 		</style>
 
 	</head>
 	<body>
+		<canvas id="corner-canvas" width="200" height="300"></canvas>
 		<script src="./primitives.js" type="module"></script>
 	</body>
 </html>

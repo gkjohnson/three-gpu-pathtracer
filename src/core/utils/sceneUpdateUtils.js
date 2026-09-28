@@ -72,20 +72,16 @@ export function getTextures( materials ) {
 export function getLights( scene ) {
 
 	const lights = [];
-	scene.traverse( c => {
+	scene.traverseVisible( c => {
 
-		if ( c.visible ) {
+		if (
+			c.isRectAreaLight ||
+			c.isSpotLight ||
+			c.isPointLight ||
+			c.isDirectionalLight
+		) {
 
-			if (
-				c.isRectAreaLight ||
-				c.isSpotLight ||
-				c.isPointLight ||
-				c.isDirectionalLight
-			) {
-
-				lights.push( c );
-
-			}
+			lights.push( c );
 
 		}
 

@@ -233,7 +233,6 @@ export const bsdf_functions = /* glsl */`
 		// See equation (1) in http://www.aconty.com/pdf/s2017_pbs_imageworks_sheen.pdf
 		vec3 color = surf.sheenColor;
 		color *= D * G / ( 4.0 * abs( cosThetaO * cosThetaI ) );
-		color *= wi.z;
 
 		return color;
 
