@@ -1,4 +1,4 @@
-import { Storage3DTexture, RedFormat, LinearFilter, FloatType, MathUtils } from 'three/webgpu';
+import { Storage3DTexture, RGBAFormat, LinearFilter, HalfFloatType, MathUtils } from 'three/webgpu';
 import { storageTexture3D, globalId, uniform, texture3D, sampler } from 'three/tsl';
 import { turquinIntegralFn } from './nodes/material.wgsl.js';
 import { ComputeKernel } from './compute/ComputeKernel.js';
@@ -19,8 +19,9 @@ export class TurquinTexture extends Storage3DTexture {
 		// layer 21 - 30: transmissive total energy exiting
 		super( RESOLUTION, RESOLUTION, 31 );
 
-		this.type = FloatType;
-		this.format = RedFormat;
+		// rgba16float is the one float format that is both storable and filterable everywhere
+		this.type = HalfFloatType;
+		this.format = RGBAFormat;
 		this.minFilter = LinearFilter;
 		this.magFilter = LinearFilter;
 
