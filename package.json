@@ -15,6 +15,7 @@
   "type": "module",
   "types": "src/index.d.ts",
   "sideEffects": [
+    "./src/webgpu/index.js",
     "./src/webgpu/shims/*.js"
   ],
   "files": [
