@@ -96,6 +96,8 @@ export class TurquinTexture extends Storage3DTexture {
 
 		}
 
+		kernel.dispose();
+
 		// fns
 		// function that maps the given value from range [a0, a1] to [b0, b1]
 		const mapLinearClampedFn = wgslTagFn/* wgsl */`

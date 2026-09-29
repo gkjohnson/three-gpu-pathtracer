@@ -73,8 +73,18 @@ export class ComputeKernel {
 
 		// forward the call parameters so they remain accessible via "computeNode.parameters"
 		node.parameters = this._fn.parameters;
+
+		// release the renderer's pipeline and bindings for the kernel being replaced
+		this.kernel?.dispose();
 		this.kernel = node.computeKernel( [ x, y, z ] );
 		return this;
+
+	}
+
+	dispose() {
+
+		this.kernel?.dispose();
+		this.kernel = null;
 
 	}
 

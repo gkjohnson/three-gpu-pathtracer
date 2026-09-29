@@ -208,6 +208,8 @@ export class PathTracerBackend {
 		this.outputTarget.dispose();
 		this.prevOutputTarget.dispose();
 		this.sampleCountTarget.dispose();
+		this.sampleCountClearKernel.dispose();
+		this.outputTargetClearKernel.dispose();
 
 		this._renderTask = null;
 

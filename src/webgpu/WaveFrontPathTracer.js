@@ -257,6 +257,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayDispatchConverter.outputDispatch.dispose();
 		this.shadowDispatchConverter.outputDispatch.dispose();
 
+		this.populatePixelIndicesKernel.dispose();
+		this.logicKernel.dispose();
+		this.materialKernel.dispose();
+		this.traceRayKernel.dispose();
+		this.traceShadowRayKernel.dispose();
+		this.rayDispatchConverter.dispose();
+		this.shadowDispatchConverter.dispose();
+		this.primeSampleCountersKernel.dispose();
+		this.tallySampleCountsKernel.dispose();
+		this.resetSlotsKernel.dispose();
+		this.copyRayDataKernel.dispose();
+		this.zeroDispatchKernel.dispose();
+
 	}
 
 	// The queue holds every pixel not owned by a slot. It is sized to the full pixel count so slots

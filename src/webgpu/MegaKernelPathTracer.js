@@ -271,6 +271,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
 		this.lightsInfo.dispose();
+		this.kernel.dispose();
 
 	}
 
