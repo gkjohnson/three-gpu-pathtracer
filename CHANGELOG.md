@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - WebGPUPathTracer rendering black after changing "maxBounces" or "maxTransparentBounces" once the render had settled.
 - Memory leak on every reset, scene change, and dispose from compute kernels never being released.
+- Path buffers being reallocated and kernels rebuilt on every reset for the low resolution preview.
 
 ## [0.0.26] - 2026.09.29
 ### Fixed
