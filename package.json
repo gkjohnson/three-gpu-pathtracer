@@ -51,6 +51,7 @@
     "@webgpu/types": "^0.1.72",
     "eslint": "^8.56.0",
     "eslint-config-mdcs": "^5.0.0",
+    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsdoc": "^50.8.0",
     "jsdoc": "^4.0.5",
     "mediabunny": "^1.50.9",
