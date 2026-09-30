@@ -269,13 +269,9 @@ export class OIDNDenoiser {
 
 		} catch ( error ) {
 
-			if ( requestId === this._requestId ) {
-
-				this._running = false;
-				this._abort = null;
-				this._error = error;
-
-			}
+			this._running = false;
+			this._abort = null;
+			this._error = error;
 
 			throw error;
 
