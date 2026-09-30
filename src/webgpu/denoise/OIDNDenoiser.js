@@ -199,79 +199,72 @@ export class OIDNDenoiser {
 		const useAux = Boolean( albedo && normal );
 		const requestId = ++ this._requestId;
 
-		let unet;
 		try {
 
-			unet = await this._initUNet( useAux );
+			const unet = await this._initUNet( useAux );
 
-		} catch ( error ) {
+			// bail if a reset or a newer call took over while the weights downloaded
+			if ( requestId !== this._requestId || ! this._running ) {
 
-			// leaving "running" set would stall every later pass
-			this._running = false;
-			this._error = error;
-			throw error;
+				return;
 
-		}
+			}
 
-		// bail if a reset or a newer call took over while the weights downloaded
-		if ( requestId !== this._requestId || ! this._running ) {
+			// three only holds a WebGPU texture for a three texture once it has been initialized
+			const { renderer } = this;
+			const backend = renderer.backend;
+			renderer.initTexture( color );
 
-			return;
+			const { width, height } = color;
+			const inputs = {
+				color: { data: backend.get( color ).texture, width, height },
 
-		}
+				// the output is seeded with the raw color, so copying per tile shows a progressive wipe
+				progress: output => {
 
-		// three only holds a WebGPU texture for a three texture once it has been initialized
-		const { renderer } = this;
-		const backend = renderer.backend;
-		renderer.initTexture( color );
+					if ( requestId === this._requestId && this._running ) {
 
-		const { width, height } = color;
-		const inputs = {
-			color: { data: backend.get( color ).texture, width, height },
+						this._copyOutputToTexture( output, width, height );
 
-			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-			progress: output => {
+					}
 
-				if ( requestId === this._requestId && this._running ) {
+				},
+				done: output => {
 
-					this._copyOutputToTexture( output, width, height );
+					if ( requestId === this._requestId && this._running ) {
 
-				}
+						this._copyOutputToTexture( output, width, height );
+						this._running = false;
+						this._complete = true;
+						this._abort = null;
 
-			},
-			done: output => {
+					}
 
-				if ( requestId === this._requestId && this._running ) {
+				},
+			};
 
-					this._copyOutputToTexture( output, width, height );
-					this._running = false;
-					this._complete = true;
-					this._abort = null;
+			// the guided model needs both buffers, and the color only model must not be given them
+			if ( useAux ) {
 
-				}
+				renderer.initTexture( albedo );
+				renderer.initTexture( normal );
+				inputs.albedo = { data: backend.get( albedo ).texture, width, height };
+				inputs.normal = { data: backend.get( normal ).texture, width, height };
 
-			},
-		};
-
-		// the guided model needs both buffers, and the color only model must not be given them
-		if ( useAux ) {
-
-			renderer.initTexture( albedo );
-			renderer.initTexture( normal );
-			inputs.albedo = { data: backend.get( albedo ).texture, width, height };
-			inputs.normal = { data: backend.get( normal ).texture, width, height };
-
-		}
-
-		try {
+			}
 
 			this._abort = unet.tileExecute( inputs );
 
 		} catch ( error ) {
 
-			this._running = false;
-			this._abort = null;
-			this._error = error;
+			// a failed load from before reset must not stop a newer pass
+			if ( requestId === this._requestId ) {
+
+				this._running = false;
+				this._abort = null;
+				this._error = error;
+
+			}
 
 			throw error;
 
@@ -312,7 +305,7 @@ export class OIDNDenoiser {
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
 
-			this._unets[ key ]?.then( unet => unet.dispose() );
+			this._unets[ key ]?.then( unet => unet.dispose(), () => {} );
 			this._unets[ key ] = null;
 
 		}
@@ -374,7 +367,7 @@ export class OIDNDenoiser {
 		const key = aux ? 'aux' : 'color';
 		if ( ! this._unets[ key ] ) {
 
-			this._unets[ key ] = ( async () => {
+			const promise = ( async () => {
 
 				const device = this.renderer.backend.device;
 				const url = aux ? this.auxWeightsUrl : this.colorWeightsUrl;
@@ -392,6 +385,18 @@ export class OIDNDenoiser {
 				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, options );
 
 			} )();
+			this._unets[ key ] = promise;
+
+			// cache successful loads, but allow retrying after a failed download
+			promise.catch( () => {
+
+				if ( this._unets[ key ] === promise ) {
+
+					this._unets[ key ] = null;
+
+				}
+
+			} );
 
 		}
 
