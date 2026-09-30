@@ -185,6 +185,11 @@ error: Error | null
 
 The last error thrown while starting or running a denoise pass. Null while healthy.
 
+After a failure, `update` stops starting passes until `reset` clears the error. Failed model
+loads are discarded so the next pass can retry. Calling `denoise` directly also retries and
+still rejects if that pass fails. Errors from passes invalidated by `reset` do not change the
+current error state.
+
 
 ### .constructor
 
