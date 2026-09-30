@@ -177,6 +177,14 @@ running: boolean
 
 Whether a pass is running. The work is spread over several frames.
 
+### .error
+
+```js
+error: Error | null
+```
+
+The last error thrown while starting or running a denoise pass. Null while healthy.
+
 
 ### .constructor
 
