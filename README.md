@@ -106,6 +106,8 @@ scene.environment = blurredEnvMap;
 
 See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
 
+The same documentation is also available on the [docs site](https://gkjohnson.github.io/tools/docs/three-gpu-pathtracer/).
+
 # Gotchas
 
 - The project requires WebGPU.
