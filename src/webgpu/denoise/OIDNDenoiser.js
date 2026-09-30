@@ -55,6 +55,22 @@ export class OIDNDenoiser {
 	}
 
 	/**
+	 * The last error thrown while starting or running a denoise pass. Null while healthy.
+	 *
+	 * After a failure, `update` stops starting passes until `reset` clears the error. Failed model
+	 * loads are discarded so the next pass can retry. Calling `denoise` directly also retries and
+	 * still rejects if that pass fails. Errors from passes invalidated by `reset` do not change the
+	 * current error state.
+	 *
+	 * @type {Error|null}
+	 */
+	get error() {
+
+		return this._error;
+
+	}
+
+	/**
 	 * Every field below can also be assigned after construction.
 	 *
 	 * @param {Object} options
@@ -102,6 +118,7 @@ export class OIDNDenoiser {
 		this._texture = null;
 		this._running = false;
 		this._complete = false;
+		this._error = null;
 		this._abort = null;
 		this._requestId = 0;
 		this._unets = { aux: null, color: null };
@@ -140,7 +157,7 @@ export class OIDNDenoiser {
 	 */
 	update( target ) {
 
-		if ( this._complete || this._running ) {
+		if ( this._complete || this._running || this._error ) {
 
 			return this._texture;
 
@@ -156,7 +173,9 @@ export class OIDNDenoiser {
 
 		}
 
-		this.denoise( target, albedo, normal );
+		// update is called from the render loop and cannot be awaited, so keep async failures local
+		// to the denoiser. Direct calls to denoise still receive the rejection.
+		this.denoise( target, albedo, normal ).catch( () => {} );
 
 		return this._texture;
 
@@ -180,62 +199,81 @@ export class OIDNDenoiser {
 		}
 
 		this._running = true;
+		this._error = null;
 
 		const useAux = Boolean( albedo && normal );
 		const requestId = ++ this._requestId;
 
-		let unet;
 		try {
 
-			unet = await this._initUNet( useAux );
+			const unet = await this._initUNet( useAux );
+
+			// bail if a reset or a newer call took over while the weights downloaded
+			if ( requestId !== this._requestId || ! this._running ) {
+
+				return;
+
+			}
+
+			// three only holds a WebGPU texture for a three texture once it has been initialized
+			const { renderer } = this;
+			const backend = renderer.backend;
+			renderer.initTexture( color );
+
+			const { width, height } = color;
+			const inputs = {
+				color: { data: backend.get( color ).texture, width, height },
+
+				// the output is seeded with the raw color, so copying per tile shows a progressive wipe
+				progress: output => {
+
+					if ( requestId === this._requestId && this._running ) {
+
+						this._copyOutputToTexture( output, width, height );
+
+					}
+
+				},
+				done: output => {
+
+					if ( requestId === this._requestId && this._running ) {
+
+						this._copyOutputToTexture( output, width, height );
+						this._running = false;
+						this._complete = true;
+						this._abort = null;
+
+					}
+
+				},
+			};
+
+			// the guided model needs both buffers, and the color only model must not be given them
+			if ( useAux ) {
+
+				renderer.initTexture( albedo );
+				renderer.initTexture( normal );
+				inputs.albedo = { data: backend.get( albedo ).texture, width, height };
+				inputs.normal = { data: backend.get( normal ).texture, width, height };
+
+			}
+
+			this._abort = unet.tileExecute( inputs );
 
 		} catch ( error ) {
 
-			// leaving "running" set would stall every later pass
-			this._running = false;
+			// a failed load from before reset must not stop a newer pass
+			if ( requestId === this._requestId ) {
+
+				this._running = false;
+				this._abort = null;
+				this._error = error;
+
+			}
+
 			throw error;
 
 		}
-
-		// bail if a reset or a newer call took over while the weights downloaded
-		if ( requestId !== this._requestId || ! this._running ) {
-
-			return;
-
-		}
-
-		// three only holds a WebGPU texture for a three texture once it has been initialized
-		const { renderer } = this;
-		const backend = renderer.backend;
-		renderer.initTexture( color );
-
-		const { width, height } = color;
-		const inputs = {
-			color: { data: backend.get( color ).texture, width, height },
-
-			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-			progress: output => this._copyOutputToTexture( output, width, height ),
-			done: output => {
-
-				this._copyOutputToTexture( output, width, height );
-				this._running = false;
-				this._complete = true;
-				this._abort = null;
-
-			},
-		};
-
-		// the guided model needs both buffers, and the color only model must not be given them
-		if ( useAux ) {
-
-			renderer.initTexture( albedo );
-			renderer.initTexture( normal );
-			inputs.albedo = { data: backend.get( albedo ).texture, width, height };
-			inputs.normal = { data: backend.get( normal ).texture, width, height };
-
-		}
-
-		this._abort = unet.tileExecute( inputs );
 
 	}
 
@@ -244,6 +282,8 @@ export class OIDNDenoiser {
 	 * the camera moves.
 	 */
 	reset() {
+
+		this._requestId ++;
 
 		this._abort?.();
 		this._abort = null;
@@ -256,6 +296,7 @@ export class OIDNDenoiser {
 
 		this._running = false;
 		this._complete = false;
+		this._error = null;
 
 	}
 
@@ -269,7 +310,7 @@ export class OIDNDenoiser {
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
 
-			this._unets[ key ]?.then( unet => unet.dispose() );
+			this._unets[ key ]?.then( unet => unet.dispose(), () => {} );
 			this._unets[ key ] = null;
 
 		}
@@ -331,7 +372,7 @@ export class OIDNDenoiser {
 		const key = aux ? 'aux' : 'color';
 		if ( ! this._unets[ key ] ) {
 
-			this._unets[ key ] = ( async () => {
+			const promise = ( async () => {
 
 				const device = this.renderer.backend.device;
 				const url = aux ? this.auxWeightsUrl : this.colorWeightsUrl;
@@ -349,6 +390,18 @@ export class OIDNDenoiser {
 				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, options );
 
 			} )();
+			this._unets[ key ] = promise;
+
+			// cache successful loads, but allow retrying after a failed download
+			promise.catch( () => {
+
+				if ( this._unets[ key ] === promise ) {
+
+					this._unets[ key ] = null;
+
+				}
+
+			} );
 
 		}
 
