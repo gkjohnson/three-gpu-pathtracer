@@ -55,6 +55,17 @@ export class OIDNDenoiser {
 	}
 
 	/**
+	 * The last error thrown while starting or running a denoise pass. Null while healthy.
+	 *
+	 * @type {Error|null}
+	 */
+	get error() {
+
+		return this._error;
+
+	}
+
+	/**
 	 * Every field below can also be assigned after construction.
 	 *
 	 * @param {Object} options
@@ -102,6 +113,7 @@ export class OIDNDenoiser {
 		this._texture = null;
 		this._running = false;
 		this._complete = false;
+		this._error = null;
 		this._abort = null;
 		this._requestId = 0;
 		this._unets = { aux: null, color: null };
@@ -140,7 +152,7 @@ export class OIDNDenoiser {
 	 */
 	update( target ) {
 
-		if ( this._complete || this._running ) {
+		if ( this._complete || this._running || this._error ) {
 
 			return this._texture;
 
@@ -156,7 +168,9 @@ export class OIDNDenoiser {
 
 		}
 
-		this.denoise( target, albedo, normal );
+		// update is called from the render loop and cannot be awaited, so keep async failures local
+		// to the denoiser. Direct calls to denoise still receive the rejection.
+		this.denoise( target, albedo, normal ).catch( () => {} );
 
 		return this._texture;
 
@@ -180,6 +194,7 @@ export class OIDNDenoiser {
 		}
 
 		this._running = true;
+		this._error = null;
 
 		const useAux = Boolean( albedo && normal );
 		const requestId = ++ this._requestId;
@@ -193,6 +208,7 @@ export class OIDNDenoiser {
 
 			// leaving "running" set would stall every later pass
 			this._running = false;
+			this._error = error;
 			throw error;
 
 		}
@@ -214,13 +230,25 @@ export class OIDNDenoiser {
 			color: { data: backend.get( color ).texture, width, height },
 
 			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-			progress: output => this._copyOutputToTexture( output, width, height ),
+			progress: output => {
+
+				if ( requestId === this._requestId && this._running ) {
+
+					this._copyOutputToTexture( output, width, height );
+
+				}
+
+			},
 			done: output => {
 
-				this._copyOutputToTexture( output, width, height );
-				this._running = false;
-				this._complete = true;
-				this._abort = null;
+				if ( requestId === this._requestId && this._running ) {
+
+					this._copyOutputToTexture( output, width, height );
+					this._running = false;
+					this._complete = true;
+					this._abort = null;
+
+				}
 
 			},
 		};
@@ -235,7 +263,23 @@ export class OIDNDenoiser {
 
 		}
 
-		this._abort = unet.tileExecute( inputs );
+		try {
+
+			this._abort = unet.tileExecute( inputs );
+
+		} catch ( error ) {
+
+			if ( requestId === this._requestId ) {
+
+				this._running = false;
+				this._abort = null;
+				this._error = error;
+
+			}
+
+			throw error;
+
+		}
 
 	}
 
@@ -244,6 +288,8 @@ export class OIDNDenoiser {
 	 * the camera moves.
 	 */
 	reset() {
+
+		this._requestId ++;
 
 		this._abort?.();
 		this._abort = null;
@@ -256,6 +302,7 @@ export class OIDNDenoiser {
 
 		this._running = false;
 		this._complete = false;
+		this._error = null;
 
 	}
 
