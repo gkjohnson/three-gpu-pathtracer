@@ -5,9 +5,9 @@ import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, intersectionResultStruct } from './structs.js';
 
-// Pure BVH traversal over the queued shadow rays. Uses the same first-hit traversal as the bounce
-// rays ( no dedicated any-hit traversal exists yet ); LogicKernel decides occlusion by comparing the
-// hit distance against the light distance.
+// Pure BVH traversal over the queued shadow rays. Uses the any-hit traversal with the side test
+// flipped to the light's view; LogicKernel decides occlusion by comparing the hit distance against
+// the light distance.
 export class TraceShadowRayKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -21,8 +21,8 @@ export class TraceShadowRayKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastOutput = proxy( 'bvhData.value.fns.raycastShadowHit.outputType', params );
+		const raycastShadowHitFn = proxy( 'bvhData.value.fns.raycastShadowHit', params );
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -44,7 +44,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
-				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
+				if ( ${ raycastShadowHitFn }( ray, &hitResult ) ) {
 
 					shadowRayIntersectionsStorage[ index ].objectIndex = i32( hitResult.objectIndex );
 					shadowRayIntersectionsStorage[ index ].dist = hitResult.dist;
