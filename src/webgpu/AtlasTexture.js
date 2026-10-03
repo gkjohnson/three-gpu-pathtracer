@@ -6,9 +6,11 @@ import {
 	NoBlending,
 	Color,
 	Vector4,
+	Matrix3,
 } from 'three/webgpu';
 
 const MAX_TEXTURE_SIZE = 4096;
+const IDENTITY_MATRIX = Object.freeze( new Matrix3() );
 const _prevClearColor = new Color();
 
 function getTextureHash( texture ) {
@@ -439,10 +441,14 @@ export class AtlasTexture {
 
 			const { x, y, w, h, page } = placements[ i ];
 
-			// Clone the source so we get an independent texture handle
-			const texture = textures[ i ].clone();
+			const texture = textures[ i ];
+
+			// save previous texture state
+			const prevMatrixAutoUpdate = texture.matrixAutoUpdate;
+			const prevMatrix = texture.matrix;
+
 			texture.matrixAutoUpdate = false;
-			texture.matrix.identity();
+			texture.matrix = IDENTITY_MATRIX;
 
 			quadMesh.material.map = texture;
 
@@ -452,7 +458,9 @@ export class AtlasTexture {
 			renderer.setRenderTarget( renderTarget, page );
 			quadMesh.render( renderer );
 
-			texture.dispose();
+			// restore texture state
+			texture.matrixAutoUpdate = prevMatrixAutoUpdate;
+			texture.matrix = prevMatrix;
 
 		}
 
