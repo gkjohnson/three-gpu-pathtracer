@@ -446,6 +446,12 @@ export class AtlasTexture {
 
 			quadMesh.material.map = texture;
 
+			if ( texture.isRenderTargetTexture ) {
+
+				renderer.copyTextureToTexture( textures[ i ], texture );
+
+			}
+
 			// three.js uses the render target viewport / scissor
 			renderTarget.viewport.set( x, y, w, h );
 			renderTarget.scissor.set( x, y, w, h );
