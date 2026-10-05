@@ -1,5 +1,5 @@
 import { Matrix3 } from 'three/webgpu';
-import { texture, sampler, uniform, wgslFn } from 'three/tsl';
+import { texture, sampler, uniform, wgslFn, PI } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { constants, environmentSampleStruct } from './nodes/structs.wgsl.js';
@@ -122,6 +122,16 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				}
 
 				return result;
+
+			}
+		`;
+
+		// the environment's average irradiance, for weighing it against the lights
+		this.getWeight = wgslTagFn/* wgsl */`
+			fn getEnvWeight() -> f32 {
+
+				let resolution = textureDimensions( ${ mapNode } );
+				return ${ intensityNode } * ${ PI } * ${ PI } * ${ totalSumNode } / ( 2.0 * f32( resolution.x * resolution.y ) );
 
 			}
 		`;

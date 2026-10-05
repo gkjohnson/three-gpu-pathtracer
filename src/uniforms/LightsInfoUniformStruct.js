@@ -2,6 +2,7 @@ import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quate
 import { bufferToHash } from '../utils/bufferToHash.js';
 
 const LIGHT_PIXELS = 6;
+const VISIBLE_TO_CAMERA_OFFSET = 11;
 const RECT_AREA_LIGHT = 0;
 const CIRC_AREA_LIGHT = 1;
 const SPOT_LIGHT = 2;
@@ -82,7 +83,7 @@ export class LightsInfoUniformStruct {
 
 				type = SPOT_LIGHT;
 
-			} else if ( l.isDirectionalLight ) {
+			} else if ( l.isDirectionalLight || l.isSunLight ) {
 
 				type = DIR_LIGHT;
 
@@ -207,7 +208,21 @@ export class LightsInfoUniformStruct {
 				floatArray[ baseIndex + ( index ++ ) ] = target.y;
 				floatArray[ baseIndex + ( index ++ ) ] = target.z;
 
+			} else if ( l.isSunLight ) {
+
+				// the sun has no target and shines from its position toward the origin
+				target.setFromMatrixPosition( l.matrixWorld ).normalize();
+
+				// sample 3
+				// u vector
+				floatArray[ baseIndex + ( index ++ ) ] = target.x;
+				floatArray[ baseIndex + ( index ++ ) ] = target.y;
+				floatArray[ baseIndex + ( index ++ ) ] = target.z;
+
 			}
+
+			// whether camera rays see the light
+			floatArray[ baseIndex + VISIBLE_TO_CAMERA_OFFSET ] = l.visibleToCamera ? 1 : 0;
 
 		}
 

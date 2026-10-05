@@ -52,6 +52,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastShadowFn = proxyFn( 'bvhData.value.fns.raycastShadow', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
@@ -64,12 +65,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
+		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
+		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
+		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -146,16 +152,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
-				// one-sample NEE selects between the analytic lights and the environment -
-				// lightsDenom is the number of options
+				// one-sample NEE chooses between the analytic lights and the environment
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				var lightsDenom = f32( lightsCount );
+				var envWeight = 0.0;
 				if ( envActive ) {
 
-					lightsDenom += 1.0;
+					envWeight = ${ getEnvWeight }();
 
 				}
+
+				// added last, since a camera ray miss overwrites the pixel with the background
+				var lightHits = vec3f( 0.0 );
+				var cameraHitLight = false;
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
@@ -163,27 +172,37 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward hits: a bsdf-sampled ray that lands on a area light. MIS-weighted
-					// only when NEE is also sampling the lights
-					if ( bounce > 0u ) {
+					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none
+					let isMISWeighted = misEnabled != 0u && bounce > 0u;
+					var lightTotalWeight = 0.0;
+					if ( isMISWeighted ) {
 
-						for ( var li = 0u; li < lightsCount; li ++ ) {
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
 
-							var lightRec: ${ lightRecordStruct };
-							if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+					}
 
-								var misWeight = 1.0;
-								if ( misEnabled != 0u ) {
+					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
+					for ( var li = 0u; li < lightsCount; li ++ ) {
 
-									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf );
+						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
 
-								}
+							continue;
 
-								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
-								resultColor += vec4f( lightHit, 0.0 );
+						}
+
+						var lightRec: ${ lightRecordStruct };
+						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+
+							var misWeight = 1.0;
+							if ( isMISWeighted ) {
+
+								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
+								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
 
 							}
+
+							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
+							cameraHitLight = cameraHitLight || bounce == 0u;
 
 						}
 
@@ -263,30 +282,31 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
-						// next event estimation: draw one light or the environment, each with
-						// probability 1 / lightsDenom
-						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
+						// next event estimation: choose one light or the environment by its estimated
+						// contribution
+						if ( misEnabled != 0u ) {
 
-							// pick one light or the environment with a single sample
-							// TODO: importance-sample the selection by light intensity and solid angle
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							var selectionPdf = 0.0;
+							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+								} else {
 
-							}
+									lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+
+								}
 
 								if ( lightRec.pdf > 0.0 ) {
 
@@ -302,14 +322,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										// traversal could support tinted shadows from transmissive and partially
 										// opaque objects
 										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
+										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
-											var lightPdf = lightRec.pdf;
-											lightPdf /= lightsDenom;
+											let lightPdf = lightRec.pdf * selectionPdf;
 
-											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight
-											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
+											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
+											// or when a bsdf ray could never reach the light
+											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked;
+											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
 											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
@@ -319,6 +340,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									}
 
 								}
+
+							}
 
 						}
 
@@ -370,10 +393,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							var misWeight = 1.0;
-							if ( misEnabled != 0u && envActive ) {
+							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( ray.direction ) / lightsDenom;
+								let envPdf = ${ getEnvDirPdf }( ray.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 							}
@@ -447,6 +470,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					${ rngNextBounce }();
+
+				}
+
+				// visible lights are opaque against a transparent background
+				resultColor += vec4f( lightHits, 0.0 );
+				if ( cameraHitLight ) {
+
+					resultColor.a = 1.0;
 
 				}
 

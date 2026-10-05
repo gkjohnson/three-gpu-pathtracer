@@ -676,6 +676,11 @@ export const MODEL_LIST = {
 		}
 	},
 
+	'Just a Girl': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/just-a-girl/scene.glb',
+		credit: 'Model by "腱鞘炎の人" on Sketchfab.',
+	},
+
 	'Halo Twist Ring': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/ring-twist-halo/scene.glb',
 		credit: 'Model credit NASA / JPL-Caltech',

@@ -78,7 +78,8 @@ export function getLights( scene ) {
 			c.isRectAreaLight ||
 			c.isSpotLight ||
 			c.isPointLight ||
-			c.isDirectionalLight
+			c.isDirectionalLight ||
+			c.isSunLight
 		) {
 
 			lights.push( c );
