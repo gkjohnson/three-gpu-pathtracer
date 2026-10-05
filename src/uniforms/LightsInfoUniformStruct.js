@@ -82,7 +82,7 @@ export class LightsInfoUniformStruct {
 
 				type = SPOT_LIGHT;
 
-			} else if ( l.isDirectionalLight ) {
+			} else if ( l.isDirectionalLight || l.isSunLight ) {
 
 				type = DIR_LIGHT;
 
@@ -200,6 +200,17 @@ export class LightsInfoUniformStruct {
 				const worldPosition = u.setFromMatrixPosition( l.matrixWorld );
 				const targetPosition = v.setFromMatrixPosition( l.target.matrixWorld );
 				target.subVectors( worldPosition, targetPosition ).normalize();
+
+				// sample 3
+				// u vector
+				floatArray[ baseIndex + ( index ++ ) ] = target.x;
+				floatArray[ baseIndex + ( index ++ ) ] = target.y;
+				floatArray[ baseIndex + ( index ++ ) ] = target.z;
+
+			} else if ( l.isSunLight ) {
+
+				// the sun has no target and shines from its position toward the origin
+				target.setFromMatrixPosition( l.matrixWorld ).normalize();
 
 				// sample 3
 				// u vector
