@@ -13,13 +13,13 @@ import {
 	DIR_LIGHT_TYPE,
 	POINT_LIGHT_TYPE,
 	LIGHT_FAR_DISTANCE,
-	LIGHT_SELECTION_UNIFORM_SHARE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
 	randomAreaLightSampleFn,
 	randomSpotLightSampleFn,
 	getSpotAttenuationFn,
 	getDistanceAttenuationFn,
+	getSpotLightNearestFn,
 	lightSelectionPdfFn,
 } from './nodes/lights.wgsl.js';
 
@@ -123,6 +123,22 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
+				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
+
+					// the most any point on the spot's disc lights the position. Ies profiles are not
+					// evaluated here
+					let nearest = ${ getSpotLightNearestFn }( light, position );
+					var attenuation = 1.0;
+					if ( light.iesProfile < 0 ) {
+
+						attenuation = ${ getSpotAttenuationFn }( light.coneCos, light.penumbraCos, nearest.x );
+
+					}
+
+					return power * attenuation * ${ getDistanceAttenuationFn }( nearest.y, light.distance, light.decay );
+
+				}
+
 				let toLight = light.position - position;
 				let distSq = dot( toLight, toLight );
 				if ( distSq == 0.0 ) {
@@ -133,19 +149,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				let normal = normalize( cross( light.u, light.v ) );
 				let cosTheta = dot( toLight, normal ) * inverseSqrt( distSq );
-				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
-
-					// ies profiles are not evaluated here
-					var attenuation = 1.0;
-					if ( light.iesProfile < 0 ) {
-
-						attenuation = ${ getSpotAttenuationFn }( light.coneCos, light.penumbraCos, cosTheta );
-
-					}
-
-					return power * attenuation * ${ getDistanceAttenuationFn }( sqrt( distSq ), light.distance, light.decay );
-
-				}
 
 				// area lights only emit from their front face, and the distance is held above the size
 				// of the light so positions on or near it do not dominate
@@ -170,8 +173,8 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		`;
 
 		// Chooses a light, or the environment when the returned index equals the light count, in
-		// proportion to the estimated weights with a uniform share mixed in. "optionCount" is the
-		// light count plus one when the environment can be chosen.
+		// proportion to the estimated weights. "optionCount" is the light count plus one when the
+		// environment can be chosen.
 		this.selectLight = wgslTagFn/* wgsl */`
 			fn selectLight( position: vec3f, envWeight: f32, optionCount: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
@@ -179,18 +182,26 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
 
 				var index = count;
-				if ( totalWeight <= 0.0 || r < ${ LIGHT_SELECTION_UNIFORM_SHARE } ) {
+				if ( totalWeight <= 0.0 ) {
 
-					let uniformR = select( r / ${ LIGHT_SELECTION_UNIFORM_SHARE }, r, totalWeight <= 0.0 );
-					index = min( u32( uniformR * optionCount ), u32( optionCount ) - 1u );
+					// no option contributes, so pick any
+					index = min( u32( r * optionCount ), u32( optionCount ) - 1u );
 
 				} else {
 
-					let targetWeight = ( r - ${ LIGHT_SELECTION_UNIFORM_SHARE } ) / ( 1.0 - ${ LIGHT_SELECTION_UNIFORM_SHARE } ) * totalWeight;
+					let targetWeight = r * totalWeight;
 					var accumulated = 0.0;
+					var lastWeighted = 0u;
 					for ( var i = 0u; i < count; i ++ ) {
 
-						accumulated += ${ this.getLightWeight }( i, position );
+						let lightWeight = ${ this.getLightWeight }( i, position );
+						accumulated += lightWeight;
+						if ( lightWeight > 0.0 ) {
+
+							lastWeighted = i;
+
+						}
+
 						if ( targetWeight < accumulated ) {
 
 							index = i;
@@ -203,7 +214,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 					// rounding can carry the target past the last light when there is no environment
 					if ( index == count && envWeight <= 0.0 ) {
 
-						index = count - 1u;
+						index = lastWeighted;
 
 					}
 
