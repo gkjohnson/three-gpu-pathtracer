@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, texture, uniformArray, uint } from 'three/tsl';
+import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -181,8 +181,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		fns.raycastFirstHit = this.getShapecastFn( {
-			name: 'raycastFirstHit',
+		// shadow rays are traced toward the light, against the direction light travels, so they cull
+		// the flipped side. "forwardBlocked" records a face passed that way, which would stop a bsdf
+		// ray along the same path
+		const cullSign = float( 1.0 ).toVar( 'bvh_cullSign' );
+		const forwardBlocked = bool( false ).toVar( 'bvh_forwardBlocked' );
+
+		const raycastOptions = {
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
 
@@ -259,8 +264,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							if ( material.side != 0 && triResult.side != material.side ) {
+							if ( material.side != 0 && triResult.side * ${ cullSign } != material.side ) {
 
+								${ forwardBlocked } = ${ forwardBlocked } || ${ cullSign } < 0.0;
 								continue;
 
 							}
@@ -386,7 +392,41 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 			`,
+		};
+
+		fns.raycastFirstHit = this.getShapecastFn( {
+			...raycastOptions,
+			name: 'raycastFirstHit',
+			prefixFn: wgslTagFn/* wgsl */`
+				fn initFirstHitCull() -> void {
+
+					${ cullSign } = 1.0;
+
+				}
+			`,
 		} );
+
+		fns.raycastShadow = this.getShapecastFn( {
+			...raycastOptions,
+			name: 'raycastShadow',
+			prefixFn: wgslTagFn/* wgsl */`
+				fn initShadowCull() -> void {
+
+					${ cullSign } = - 1.0;
+					${ forwardBlocked } = false;
+
+				}
+			`,
+		} );
+
+		// whether the last shadow raycast passed a face a bsdf ray would hit
+		fns.isShadowForwardBlocked = wgslTagFn/* wgsl */`
+			fn isShadowForwardBlocked() -> bool {
+
+				return ${ forwardBlocked };
+
+			}
+		`;
 
 	}
 

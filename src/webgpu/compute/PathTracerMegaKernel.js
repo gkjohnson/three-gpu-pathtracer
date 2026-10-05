@@ -52,6 +52,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastShadowFn = proxyFn( 'bvhData.value.fns.raycastShadow', params );
+		const isShadowForwardBlockedFn = proxyFn( 'bvhData.value.fns.isShadowForwardBlocked', params );
 		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
 		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
 		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
@@ -323,13 +325,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										// traversal could support tinted shadows from transmissive and partially
 										// opaque objects
 										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
+										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
 											let lightPdf = lightRec.pdf * selectionPdf;
 
-											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight
-											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
+											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
+											// as do paths a bsdf ray could never follow through a one sided surface
+											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! ${ isShadowForwardBlockedFn }();
+											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
 											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
