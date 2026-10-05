@@ -6,10 +6,12 @@ import {
 	NoBlending,
 	Color,
 	Vector4,
+	Matrix3,
 } from 'three/webgpu';
 
 const MAX_TEXTURE_SIZE = 4096;
 const _prevClearColor = new Color();
+const _prevMatrix = new Matrix3();
 
 function getTextureHash( texture ) {
 
@@ -438,21 +440,40 @@ export class AtlasTexture {
 		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
 			const { x, y, w, h, page } = placements[ i ];
-
-			// Clone the source so we get an independent texture handle
-			const texture = textures[ i ].clone();
-			texture.matrixAutoUpdate = false;
-			texture.matrix.identity();
-
-			quadMesh.material.map = texture;
+			const texture = textures[ i ];
 
 			// three.js uses the render target viewport / scissor
 			renderTarget.viewport.set( x, y, w, h );
 			renderTarget.scissor.set( x, y, w, h );
 			renderer.setRenderTarget( renderTarget, page );
-			quadMesh.render( renderer );
 
-			texture.dispose();
+			if ( texture.isRenderTargetTexture ) {
+
+				// a render target's content only lives on the GPU, so draw it directly
+				const prevAutoUpdate = texture.matrixAutoUpdate;
+				_prevMatrix.copy( texture.matrix );
+				texture.matrix.identity();
+				texture.matrixAutoUpdate = false;
+
+				quadMesh.material.map = texture;
+				quadMesh.render( renderer );
+
+				texture.matrixAutoUpdate = prevAutoUpdate;
+				texture.matrix.copy( _prevMatrix );
+
+			} else {
+
+				// Clone the source so we get an independent texture handle
+				const clone = texture.clone();
+				clone.matrixAutoUpdate = false;
+				clone.matrix.identity();
+
+				quadMesh.material.map = clone;
+				quadMesh.render( renderer );
+
+				clone.dispose();
+
+			}
 
 		}
 
