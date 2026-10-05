@@ -117,8 +117,7 @@ export class LogicKernel extends ComputeKernel {
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
 
-				// lights the traced segment passed, added at the end since an escaping camera segment
-				// overwrites the pixel with the background
+				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
@@ -174,8 +173,7 @@ export class LogicKernel extends ComputeKernel {
 
 					}
 
-					// forward hits: a segment that lands on an area light. The camera segment only sees
-					// lights marked visible to the camera, and takes them at full weight
+					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -333,7 +331,7 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
-				// a light the camera sees is opaque, so it shows against a transparent background
+				// visible lights are opaque against a transparent background
 				resultColor += vec4f( lightHits, 0.0 );
 				if ( cameraHitLight ) {
 
