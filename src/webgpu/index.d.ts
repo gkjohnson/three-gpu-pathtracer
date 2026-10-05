@@ -1,6 +1,38 @@
 import { Camera, Scene, Texture, ExternalTexture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 
+// three.js type augmentation
+
+declare module 'three' {
+
+	export interface Material {
+
+		matte?: boolean;
+		castShadow?: boolean;
+
+	}
+
+	export interface Light {
+
+		visibleToCamera?: boolean;
+
+	}
+
+	export interface SpotLight {
+
+		radius?: number;
+		iesMap?: Texture | null;
+
+	}
+
+	export interface RectAreaLight {
+
+		isCircular?: boolean;
+
+	}
+
+}
+
 // constants
 
 export type RandomStrategy = object;

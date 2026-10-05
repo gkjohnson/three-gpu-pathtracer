@@ -59,6 +59,7 @@ export class LogicKernel extends ComputeKernel {
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
+		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -110,6 +111,11 @@ export class LogicKernel extends ComputeKernel {
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
 
+				// lights the traced segment passed, added at the end since an escaping camera segment
+				// overwrites the pixel with the background
+				var lightHits = vec3f( 0.0 );
+				var cameraHitLight = false;
+
 				// resolve the previous surface's NEE shadow ray (pre-scatter throughput). The index
 				// is negative when no shadow ray was enqueued last frame
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
@@ -151,27 +157,29 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward hits: a bsdf-sampled segment that lands on a area light. MIS-weighted
-					// only when NEE is also sampling the lights. The camera segment is skipped.
-					if ( input.currentBounce > 0u ) {
+					// forward hits: a segment that lands on an area light. The camera segment only sees
+					// lights marked visible to the camera, and takes them at full weight
+					for ( var li = 0u; li < lightsCount; li ++ ) {
 
-						for ( var li = 0u; li < lightsCount; li ++ ) {
+						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
 
-							var lightRec: ${ lightRecordStruct };
-							if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+							continue;
 
-								var misWeight = 1.0;
-								if ( misEnabled != 0u ) {
+						}
 
-									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf );
+						var lightRec: ${ lightRecordStruct };
+						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
 
-								}
+							var misWeight = 1.0;
+							if ( misEnabled != 0u && input.currentBounce > 0u ) {
 
-								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, input.currentBounce, clampDirect, clampIndirect );
-								resultColor += vec4f( lightHit, 0.0 );
+								let lightPdf = lightRec.pdf / lightsDenom;
+								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf );
 
 							}
+
+							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, input.currentBounce, clampDirect, clampIndirect );
+							cameraHitLight = cameraHitLight || input.currentBounce == 0u;
 
 						}
 
@@ -305,6 +313,14 @@ export class LogicKernel extends ComputeKernel {
 						isTerminated = true;
 
 					}
+
+				}
+
+				// a light the camera sees is opaque, so it shows against a transparent background
+				resultColor += vec4f( lightHits, 0.0 );
+				if ( cameraHitLight ) {
+
+					resultColor.a = 1.0;
 
 				}
 
