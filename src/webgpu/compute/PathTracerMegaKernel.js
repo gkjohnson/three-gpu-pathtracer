@@ -329,7 +329,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 											let lightPdf = lightRec.pdf * selectionPdf;
 
 											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
-											// as do paths a bsdf ray could never follow through a one sided surface
+											// or when a bsdf ray could never reach the light
 											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! ${ isShadowForwardBlockedFn }();
 											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
 											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;

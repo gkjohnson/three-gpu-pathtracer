@@ -181,9 +181,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays are traced toward the light, against the direction light travels, so they cull
-		// the flipped side. "forwardBlocked" records a face passed that way, which would stop a bsdf
-		// ray along the same path
+		// shadow rays cull the flipped side. "forwardBlocked" marks a skipped face a bsdf ray would hit
 		const cullSign = float( 1.0 ).toVar( 'bvh_cullSign' );
 		const forwardBlocked = bool( false ).toVar( 'bvh_forwardBlocked' );
 
@@ -332,8 +330,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass their culled faces, but one left after the alpha test would stop a
-							// bsdf ray along the same path
+							// shadow rays pass their culled faces, but a bsdf ray would hit this one
 							if ( isCulled ) {
 
 								${ forwardBlocked } = true;
