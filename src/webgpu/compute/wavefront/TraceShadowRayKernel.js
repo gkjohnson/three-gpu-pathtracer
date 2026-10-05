@@ -23,7 +23,6 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
 		const raycastShadowFn = proxy( 'bvhData.value.fns.raycastShadow', params );
-		const isShadowForwardBlockedFn = proxy( 'bvhData.value.fns.isShadowForwardBlocked', params );
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -56,7 +55,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				}
 
-				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( ${ isShadowForwardBlockedFn }() );
+				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( hitResult.forwardBlocked );
 
 			}
 		`;

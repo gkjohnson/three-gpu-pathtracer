@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { storage, float, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -18,6 +18,18 @@ const transformStruct = new StructTypeNode( {
 	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
+
+// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a one sided face a bsdf ray would hit
+const intersectionResultStruct = new StructTypeNode( {
+	indices: 'vec4u',
+	normal: 'vec3f',
+	didHit: 'bool',
+	barycoord: 'vec3f',
+	objectIndex: 'uint',
+	side: 'float',
+	dist: 'float',
+	forwardBlocked: 'bool',
+}, 'PathTracerIntersectionResult' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
@@ -181,9 +193,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays cull the flipped side. "forwardBlocked" marks a skipped face a bsdf ray would hit
+		// shadow rays cull the flipped side
 		const cullSign = float( 1.0 ).toVar( 'bvh_cullSign' );
-		const forwardBlocked = bool( false ).toVar( 'bvh_forwardBlocked' );
 
 		const raycastOptions = {
 			shapeStruct: rayStruct,
@@ -333,7 +344,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// shadow rays pass their culled faces, but a bsdf ray would hit this one
 							if ( isCulled ) {
 
-								${ forwardBlocked } = true;
+								result.forwardBlocked = true;
 								continue;
 
 							}
@@ -420,20 +431,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				fn initShadowCull() -> void {
 
 					${ cullSign } = - 1.0;
-					${ forwardBlocked } = false;
 
 				}
 			`,
 		} );
-
-		// whether the last shadow raycast passed a face a bsdf ray would hit
-		fns.isShadowForwardBlocked = wgslTagFn/* wgsl */`
-			fn isShadowForwardBlocked() -> bool {
-
-				return ${ forwardBlocked };
-
-			}
-		`;
 
 	}
 
