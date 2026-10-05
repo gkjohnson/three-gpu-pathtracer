@@ -2,7 +2,7 @@ import { storage, uniform, uniformArray, texture } from 'three/tsl';
 import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
-import { LightsInfoUniformStruct, VISIBLE_TO_CAMERA_OFFSET } from '../uniforms/LightsInfoUniformStruct.js';
+import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
 import { sampleTexelFunc } from './nodes/utils.wgsl.js';
 import {
@@ -71,7 +71,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 			const base = i * stride;
 			intView[ base + 3 ] = Math.round( src[ base + 3 ] );
-			intView[ base + VISIBLE_TO_CAMERA_OFFSET ] = Math.round( src[ base + VISIBLE_TO_CAMERA_OFFSET ] );
+			intView[ base + 11 ] = Math.round( src[ base + 11 ] );
 			intView[ base + 21 ] = Math.round( src[ base + 21 ] );
 
 		}
