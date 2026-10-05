@@ -118,7 +118,9 @@ export const intersectionResultStruct = new StructTypeNode( {
 	side: 'float',
 
 	indices: 'vec3u',
-	_alignment0: 'uint',
+
+	// shadow rays only: a one sided face would block a bsdf ray
+	forwardBlocked: 'uint',
 
 }, 'TraceResult' );
 

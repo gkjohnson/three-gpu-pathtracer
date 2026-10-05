@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 - WebGPUPathTracer: Lights are chosen for sampling by their estimated contribution rather than uniformly, reducing noise in scenes with many lights.
+- WebGPUPathTracer: One sided surfaces block light based on the side facing the light, so inverted hull outlines no longer shadow the models they surround.
 
 ### Fixed
 - WebGPUPathTracer rendering black after changing "maxBounces" or "maxTransparentBounces" once the render had settled.
