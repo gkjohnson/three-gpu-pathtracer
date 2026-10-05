@@ -50,6 +50,7 @@ export class FSRUpscaler {
 	init( renderer ) {
 
 		this.renderer = renderer;
+		this._upscaler?.dispose();
 		this._upscaler = new this.Upscaler( { renderer } );
 		this._upscaler.init();
 
@@ -100,7 +101,7 @@ export class FSRUpscaler {
 
 	dispose() {
 
-		this._upscaler.dispose();
+		this._upscaler?.dispose();
 		this._upscaler = null;
 
 	}
