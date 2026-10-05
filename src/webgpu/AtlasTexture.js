@@ -6,10 +6,12 @@ import {
 	NoBlending,
 	Color,
 	Vector4,
+	Matrix3,
 } from 'three/webgpu';
 
 const MAX_TEXTURE_SIZE = 4096;
 const _prevClearColor = new Color();
+const _prevMatrix = new Matrix3();
 
 function getTextureHash( texture ) {
 
@@ -439,26 +441,45 @@ export class AtlasTexture {
 
 			const { x, y, w, h, page } = placements[ i ];
 
-			// Clone the source so we get an independent texture handle
-			const texture = textures[ i ].clone();
-			texture.matrixAutoUpdate = false;
-			texture.matrix.identity();
-
-			quadMesh.material.map = texture;
+			const texture = textures[ i ];
 
 			if ( texture.isRenderTargetTexture ) {
 
-				renderer.copyTextureToTexture( textures[ i ], texture );
+				const prevAutoUpdate = texture.matrixAutoUpdate;
+				_prevMatrix.copy( texture.matrix );
+				texture.matrixAutoUpdate = false;
+				texture.matrix.identity();
+
+				quadMesh.material.map = texture;
+
+				renderTarget.viewport.set( x, y, w, h );
+				renderTarget.scissor.set( x, y, w, h );
+				renderer.setRenderTarget( renderTarget, page );
+
+				quadMesh.render( renderer );
+
+				texture.matrixAutoUpdate = prevAutoUpdate;
+				texture.matrix.copy( _prevMatrix );
+
+			} else {
+
+				// Clone the source so we get an independent texture handle
+				const textureClone = texture.clone();
+				textureClone.matrixAutoUpdate = false;
+				textureClone.matrix.identity();
+
+				quadMesh.material.map = textureClone;
+
+				// three.js uses the render target viewport / scissor
+				renderTarget.viewport.set( x, y, w, h );
+				renderTarget.scissor.set( x, y, w, h );
+				renderer.setRenderTarget( renderTarget, page );
+
+				quadMesh.render( renderer );
+
+				textureClone.dispose();
 
 			}
-
-			// three.js uses the render target viewport / scissor
-			renderTarget.viewport.set( x, y, w, h );
-			renderTarget.scissor.set( x, y, w, h );
-			renderer.setRenderTarget( renderTarget, page );
-			quadMesh.render( renderer );
-
-			texture.dispose();
 
 		}
 
