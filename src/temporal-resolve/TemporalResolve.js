@@ -64,15 +64,19 @@ export class TemporalResolve {
 
 	initNewCamera( camera ) {
 
-		this.activeCamera = camera;
-
-		this.temporalResolvePass = new TemporalResolvePass(
+		const temporalResolvePass = new TemporalResolvePass(
 			this.ptRenderer,
 			this.scene,
 			camera
 		);
-		this.temporalResolvePass.fullscreenMaterial.samplesTexture = this.ptRenderer.target.texture;
-		this.fullscreenMaterial.temporalResolveTexture = this.temporalResolvePass.renderTarget.texture;
+		temporalResolvePass.fullscreenMaterial.samplesTexture = this.ptRenderer.target.texture;
+
+		const previousPass = this.temporalResolvePass;
+		this.temporalResolvePass = temporalResolvePass;
+		this.activeCamera = camera;
+		this.fullscreenMaterial.temporalResolveTexture = temporalResolvePass.renderTarget.texture;
+
+		if ( previousPass ) previousPass.dispose();
 
 	}
 
@@ -93,58 +97,67 @@ export class TemporalResolve {
 		// save original values
 		const origRenderTarget = renderer.getRenderTarget();
 
-		this.ptRenderer.stableTiles = false;
+		try {
 
-		const { camera } = this.ptRenderer;
-		if ( camera !== this.activeCamera ) {
+			this.ptRenderer.stableTiles = false;
 
-			this.initNewCamera( camera );
+			const { camera } = this.ptRenderer;
+			const cameraChanged = camera !== this.activeCamera;
+			if ( cameraChanged ) {
+
+				const weightTransform = this.weightTransform;
+				this.initNewCamera( camera );
+				this.weightTransform = weightTransform;
+
+			}
+
+			const { width, height } = this.ptRenderer.target;
+			// A replacement pass needs sizing even when the render target is unchanged.
+			if ( cameraChanged || width !== this.lastSize.width || height !== this.lastSize.height ) {
+
+				this.initNewSize( width, height );
+
+			}
+
+			// ensure that the scene's objects' matrices are updated for the VelocityPass
+			this.scene.updateMatrixWorld();
+
+			this.scene.traverse( ( c ) => {
+
+				// update the modelViewMatrix which is used by the VelocityPass
+				c.modelViewMatrix.multiplyMatrices(
+					this.activeCamera.matrixWorldInverse,
+					c.matrixWorld
+				);
+
+			} );
+
+			// keep uniforms updated
+			this.temporalResolvePass.fullscreenMaterial.samples =
+				this.ptRenderer.samples;
+
+			this.temporalResolvePass.fullscreenMaterial.temporalResolveMix =
+				this.temporalResolveMix;
+
+			this.temporalResolvePass.fullscreenMaterial.clampRadius =
+				parseInt( this.clampRadius );
+
+			this.temporalResolvePass.fullscreenMaterial.newSamplesSmoothing =
+				this.newSamplesSmoothing;
+
+			this.temporalResolvePass.fullscreenMaterial.newSamplesCorrection =
+				this.newSamplesCorrection;
+
+			this.temporalResolvePass.render( renderer );
+
+			renderer.setRenderTarget( this.renderTarget );
+			this.fsQuad.render( renderer );
+
+		} finally {
+
+			renderer.setRenderTarget( origRenderTarget );
 
 		}
-
-		const { width, height } = this.ptRenderer.target;
-		if ( width !== this.lastSize.width || height !== this.lastSize.height ) {
-
-			this.initNewSize( width, height );
-
-		}
-
-		// ensure that the scene's objects' matrices are updated for the VelocityPass
-		this.scene.updateMatrixWorld();
-
-		this.scene.traverse( ( c ) => {
-
-			// update the modelViewMatrix which is used by the VelocityPass
-			c.modelViewMatrix.multiplyMatrices(
-				this.activeCamera.matrixWorldInverse,
-				c.matrixWorld
-			);
-
-		} );
-
-		// keep uniforms updated
-		this.temporalResolvePass.fullscreenMaterial.samples =
-			this.ptRenderer.samples;
-
-		this.temporalResolvePass.fullscreenMaterial.temporalResolveMix =
-			this.temporalResolveMix;
-
-		this.temporalResolvePass.fullscreenMaterial.clampRadius =
-			parseInt( this.clampRadius );
-
-		this.temporalResolvePass.fullscreenMaterial.newSamplesSmoothing =
-			this.newSamplesSmoothing;
-
-		this.temporalResolvePass.fullscreenMaterial.newSamplesCorrection =
-			this.newSamplesCorrection;
-
-		this.temporalResolvePass.render( renderer );
-
-		renderer.setRenderTarget( this.renderTarget );
-		this.fsQuad.render( renderer );
-
-		// restore original values
-		renderer.setRenderTarget( origRenderTarget );
 
 	}
 

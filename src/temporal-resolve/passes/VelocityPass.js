@@ -14,6 +14,14 @@ import { VelocityShader } from '../materials/VelocityShader.js';
 const backgroundColor = new Color( 0 );
 const updateProperties = [ 'visible', 'wireframe', 'side' ];
 
+function disposeVelocityMaterial( material ) {
+
+	const boneTexture = material.uniforms.prevBoneTexture.value;
+	if ( boneTexture ) boneTexture.dispose();
+	material.dispose();
+
+}
+
 export class VelocityPass {
 
 	constructor( scene, camera ) {
@@ -22,6 +30,8 @@ export class VelocityPass {
 		this.camera = camera;
 
 		this.cachedMaterials = new WeakMap();
+		this.materialReplacements = new Map();
+		this.velocityMaterials = new Set();
 
 		this.renderTarget = new WebGLRenderTarget(
 			typeof window !== 'undefined' ? window.innerWidth : 2000,
@@ -37,22 +47,36 @@ export class VelocityPass {
 
 	setVelocityMaterialInScene() {
 
+		const replacements = this.materialReplacements = new Map();
 		this.scene.traverse( c => {
 
-			if ( c.material ) {
+			if ( c.material && ! replacements.has( c ) ) {
 
 				const originalMaterial = c.material;
 
 				// eslint-disable-next-line prefer-const
 				let [ cachedOriginalMaterial, velocityMaterial ] = this.cachedMaterials.get( c ) || [];
+				// Record before any swap so partial setup can restore this exact object.
+				const replacement = { originalMaterial, velocityMaterial };
+				replacements.set( c, replacement );
 
 				if ( originalMaterial !== cachedOriginalMaterial ) {
 
+					const previousVelocityMaterial = velocityMaterial;
 					velocityMaterial = new ShaderMaterial( {
 						uniforms: UniformsUtils.clone( VelocityShader.uniforms ),
 						vertexShader: VelocityShader.vertexShader,
 						fragmentShader: VelocityShader.fragmentShader
 					} );
+					replacement.velocityMaterial = velocityMaterial;
+					this.velocityMaterials.add( velocityMaterial );
+
+					if ( previousVelocityMaterial ) {
+
+						disposeVelocityMaterial( previousVelocityMaterial );
+						this.velocityMaterials.delete( previousVelocityMaterial );
+
+					}
 
 					c.material = velocityMaterial;
 
@@ -86,13 +110,13 @@ export class VelocityPass {
 
 	}
 
-	saveBoneTexture( object ) {
+	saveBoneTexture( object, material = object.material ) {
 
-		let boneTexture = object.material.uniforms.prevBoneTexture.value;
+		let boneTexture = material.uniforms.prevBoneTexture.value;
 
 		if ( boneTexture && boneTexture.image.width === object.skeleton.boneTexture.width ) {
 
-			boneTexture = object.material.uniforms.prevBoneTexture.value;
+			boneTexture = material.uniforms.prevBoneTexture.value;
 			boneTexture.image.data.set( object.skeleton.boneTexture.image.data );
 
 		} else {
@@ -103,7 +127,7 @@ export class VelocityPass {
 			const size = object.skeleton.boneTexture.image.width;
 
 			boneTexture = new DataTexture( boneMatrices, size, size, RGBAFormat, FloatType );
-			object.material.uniforms.prevBoneTexture.value = boneTexture;
+			material.uniforms.prevBoneTexture.value = boneTexture;
 
 			boneTexture.needsUpdate = true;
 
@@ -111,29 +135,45 @@ export class VelocityPass {
 
 	}
 
-	unsetVelocityMaterialInScene() {
+	unsetVelocityMaterialInScene( updateHistory = true ) {
 
-		this.scene.traverse( c => {
+		const replacements = this.materialReplacements;
+		try {
 
-			if ( c.material ) {
+			if ( updateHistory ) {
 
-				c.material.uniforms.prevVelocityMatrix.value.multiplyMatrices( this.camera.projectionMatrix, c.modelViewMatrix );
+				for ( const [ object, { velocityMaterial } ] of replacements ) {
 
-				if ( c.skeleton && c.skeleton.boneTexture ) this.saveBoneTexture( c );
+					velocityMaterial.uniforms.prevVelocityMatrix.value.multiplyMatrices( this.camera.projectionMatrix, object.modelViewMatrix );
+					if ( object.skeleton && object.skeleton.boneTexture ) this.saveBoneTexture( object, velocityMaterial );
 
-				const [ originalMaterial ] = this.cachedMaterials.get( c );
-
-				c.material = originalMaterial;
+				}
 
 			}
 
-		} );
+		} finally {
+
+			for ( const [ object, { originalMaterial } ] of replacements ) {
+
+				object.material = originalMaterial;
+
+			}
+			replacements.clear();
+
+		}
 
 	}
 
 	dispose() {
 
 		this.renderTarget.dispose();
+		for ( const material of this.velocityMaterials ) {
+
+			disposeVelocityMaterial( material );
+
+		}
+		this.velocityMaterials.clear();
+		this.cachedMaterials = new WeakMap();
 
 	}
 
@@ -145,18 +185,27 @@ export class VelocityPass {
 
 	render( renderer ) {
 
-		this.setVelocityMaterialInScene();
+		const { background, overrideMaterial } = this.scene;
+		let rendered = false;
+		try {
 
-		renderer.setRenderTarget( this.renderTarget );
-		renderer.clear();
-		const { background } = this.scene;
-		this.scene.background = backgroundColor;
+			this.setVelocityMaterialInScene();
 
-		renderer.render( this.scene, this.camera );
+			renderer.setRenderTarget( this.renderTarget );
+			renderer.clear();
+			this.scene.background = backgroundColor;
+			this.scene.overrideMaterial = null;
 
-		this.scene.background = background;
+			renderer.render( this.scene, this.camera );
+			rendered = true;
 
-		this.unsetVelocityMaterialInScene();
+		} finally {
+
+			this.scene.background = background;
+			this.scene.overrideMaterial = overrideMaterial;
+			this.unsetVelocityMaterialInScene( rendered );
+
+		}
 
 	}
 

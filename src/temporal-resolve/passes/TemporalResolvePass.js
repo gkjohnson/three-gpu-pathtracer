@@ -56,6 +56,8 @@ export class TemporalResolvePass {
 	dispose() {
 
 		this.renderTarget.dispose();
+		this.depthRenderTarget.dispose();
+		this.velocityPass.dispose();
 		this.accumulatedSamplesTexture.dispose();
 		this.lastDepthTexture.dispose();
 		this.fullscreenMaterial.dispose();
@@ -100,18 +102,23 @@ export class TemporalResolvePass {
 
 	render( renderer ) {
 
-		// render depth
-		this.scene.overrideMaterial = meshDepthMaterial;
-		renderer.setRenderTarget( this.depthRenderTarget );
-		renderer.clear();
+		// Restore the caller's scene state even if depth rendering fails.
+		const { background, overrideMaterial } = this.scene;
+		try {
 
-		const { background } = this.scene;
-		this.scene.background = blackColor;
+			this.scene.overrideMaterial = meshDepthMaterial;
+			renderer.setRenderTarget( this.depthRenderTarget );
+			renderer.clear();
+			this.scene.background = blackColor;
 
-		renderer.render( this.scene, this.camera );
+			renderer.render( this.scene, this.camera );
 
-		this.scene.background = background;
-		this.scene.overrideMaterial = null;
+		} finally {
+
+			this.scene.background = background;
+			this.scene.overrideMaterial = overrideMaterial;
+
+		}
 
 		// render velocity
 		this.velocityPass.render( renderer );
