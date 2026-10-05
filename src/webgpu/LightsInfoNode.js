@@ -110,8 +110,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				let light = ${ bufferNode }[ index ];
 				let power = ${ luminanceFn }( light.color * light.intensity );
-
-				var weight = 0.0;
 				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
 
 					// the most any point on the spot's disc lights the position. Ies profiles are not
@@ -124,35 +122,35 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 					}
 
-					weight = power * attenuation * ${ getDistanceAttenuationFn }( nearest.y, light.distance, light.decay );
+					return power * attenuation * ${ getDistanceAttenuationFn }( nearest.y, light.distance, light.decay );
 
 				} else if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
 
 					// the point light's world position is packed into the u slot
 					let dist = length( light.u - position );
-					weight = power * ${ getDistanceAttenuationFn }( dist, light.distance, light.decay );
+					return power * ${ getDistanceAttenuationFn }( dist, light.distance, light.decay );
 
 				} else if ( light.lightType == ${ DIR_LIGHT_TYPE } ) {
 
-					weight = power;
+					return power;
 
 				} else {
 
 					let toLight = light.position - position;
 					let distSq = dot( toLight, toLight );
-					if ( distSq > 0.0 ) {
+					if ( distSq == 0.0 ) {
 
-						// area lights only emit from their front face, and the distance is held above the
-						// size of the light so positions on or near it do not dominate
-						let normal = normalize( cross( light.u, light.v ) );
-						let cosTheta = dot( toLight, normal ) * inverseSqrt( distSq );
-						weight = power * light.area * max( cosTheta, 0.0 ) / max( distSq, light.area );
+						return 0.0;
 
 					}
 
-				}
+					// area lights only emit from their front face, and the distance is held above the size
+					// of the light so positions on or near it do not dominate
+					let normal = normalize( cross( light.u, light.v ) );
+					let cosTheta = dot( toLight, normal ) * inverseSqrt( distSq );
+					return power * light.area * max( cosTheta, 0.0 ) / max( distSq, light.area );
 
-				return weight;
+				}
 
 			}
 		`;
