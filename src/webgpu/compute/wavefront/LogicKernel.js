@@ -53,12 +53,16 @@ export class LogicKernel extends ComputeKernel {
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
+		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
+		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
+		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -98,13 +102,14 @@ export class LogicKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
-				// one-sample NEE selection normalization (lights + env), matched with the megakernel
+				// one-sample NEE chooses between the analytic lights and the environment, matched with
+				// the megakernel
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				var lightsDenom = f32( lightsCount );
+				var envWeight = 0.0;
 				if ( envActive ) {
 
-					lightsDenom += 1.0;
+					envWeight = ${ getEnvWeight }();
 
 				}
 
@@ -156,6 +161,15 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
+					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
+					var lightTotalWeight = 0.0;
+					if ( isMISWeighted ) {
+
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
+
+					}
+
 					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
@@ -169,10 +183,10 @@ export class LogicKernel extends ComputeKernel {
 						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
 
 							var misWeight = 1.0;
-							if ( misEnabled != 0u && input.currentBounce > 0u ) {
+							if ( isMISWeighted ) {
 
-								let lightPdf = lightRec.pdf / lightsDenom;
-								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf );
+								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
+								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
 
 							}
 
@@ -193,36 +207,40 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].objectIndex = hitResult.objectIndex;
 						rayDataStorage[ index ].dist = hitResult.dist;
 
-						// next event estimation: pick one light or the environment with a single sample.
-						// MaterialKernel evaluates the bsdf and enqueues the shadow ray.
-						// TODO: importance-sample the selection by light intensity and solid angle
+						// next event estimation: choose one light or the environment by its estimated
+						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
 						var lightPdf = 0.0;
-						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
+						if ( misEnabled != 0u ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							var selectionPdf = 0.0;
+							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+								} else {
+
+									lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+
+								}
+
+								lightPdf = lightRec.pdf * selectionPdf;
+								rayDataStorage[ index ].lightDirection = lightRec.direction;
+								rayDataStorage[ index ].lightEmission = lightRec.emission;
+								rayDataStorage[ index ].lightDist = lightRec.dist;
+								rayDataStorage[ index ].lightType = lightRec.lightType;
 
 							}
-
-							lightPdf = lightRec.pdf / lightsDenom;
-							rayDataStorage[ index ].lightDirection = lightRec.direction;
-							rayDataStorage[ index ].lightEmission = lightRec.emission;
-							rayDataStorage[ index ].lightDist = lightRec.dist;
-							rayDataStorage[ index ].lightType = lightRec.lightType;
 
 						}
 
@@ -235,10 +253,10 @@ export class LogicKernel extends ComputeKernel {
 						if ( input.currentBounce > 0u && input.isFullyTransmissive == 0u ) {
 
 							var misWeight = 1.0;
-							if ( misEnabled != 0u && envActive ) {
+							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) / lightsDenom;
+								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 							}

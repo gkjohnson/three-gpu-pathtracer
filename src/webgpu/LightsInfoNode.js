@@ -5,6 +5,7 @@ import { AtlasTexture } from './AtlasTexture.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
 import { sampleTexelFunc } from './nodes/utils.wgsl.js';
+import { luminanceFn } from './nodes/sampling.wgsl.js';
 import {
 	RECT_AREA_LIGHT_TYPE,
 	CIRC_AREA_LIGHT_TYPE,
@@ -17,6 +18,8 @@ import {
 	randomAreaLightSampleFn,
 	randomSpotLightSampleFn,
 	getSpotAttenuationFn,
+	getDistanceAttenuationFn,
+	getSpotLightNearestFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -85,7 +88,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, iesProfilesNode, iesInfoNode } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesInfoNode } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -98,7 +101,133 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// uniformly pick a light and sample it
+		// A cheap estimate of how much light reaches a position from a light, ignoring occlusion and
+		// the surface orientation, used to choose which light to sample.
+		// TODO: weigh lights below the surface's horizon to zero using its normal, skipped for
+		// transmissive surfaces. Forward hit MIS would then need the previous vertex's normal too.
+		this.getLightWeight = wgslTagFn/* wgsl */`
+			fn getLightWeight( index: u32, position: vec3f ) -> f32 {
+
+				let light = ${ bufferNode }[ index ];
+				let power = ${ luminanceFn }( light.color * light.intensity );
+				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
+
+					// the most any point on the spot's disc lights the position. Ies profiles are not
+					// evaluated here
+					let nearest = ${ getSpotLightNearestFn }( light, position );
+					var attenuation = 1.0;
+					if ( light.iesProfile < 0 ) {
+
+						attenuation = ${ getSpotAttenuationFn }( light.coneCos, light.penumbraCos, nearest.x );
+
+					}
+
+					return power * attenuation * ${ getDistanceAttenuationFn }( nearest.y, light.distance, light.decay );
+
+				} else if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
+
+					// the point light's world position is packed into the u slot
+					let dist = length( light.u - position );
+					return power * ${ getDistanceAttenuationFn }( dist, light.distance, light.decay );
+
+				} else if ( light.lightType == ${ DIR_LIGHT_TYPE } ) {
+
+					return power;
+
+				} else {
+
+					let toLight = light.position - position;
+					let distSq = dot( toLight, toLight );
+					if ( distSq == 0.0 ) {
+
+						return 0.0;
+
+					}
+
+					// area lights only emit from their front face, and the distance is held above the size
+					// of the light so positions on or near it do not dominate
+					let normal = normalize( cross( light.u, light.v ) );
+					let cosTheta = dot( toLight, normal ) * inverseSqrt( distSq );
+					return power * light.area * max( cosTheta, 0.0 ) / max( distSq, light.area );
+
+				}
+
+			}
+		`;
+
+		this.getLightsWeight = wgslTagFn/* wgsl */`
+			fn getLightsWeight( position: vec3f ) -> f32 {
+
+				var total = 0.0;
+				for ( var i = 0u; i < ${ countNode }; i ++ ) {
+
+					total += ${ this.getLightWeight }( i, position );
+
+				}
+
+				return total;
+
+			}
+		`;
+
+		// Chooses a light, or the environment when the returned index equals the light count, in
+		// proportion to the estimated weights. The pdf is zero when nothing can light the position.
+		this.selectLight = wgslTagFn/* wgsl */`
+			fn selectLight( position: vec3f, envWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+
+				let count = ${ countNode };
+				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
+				if ( totalWeight <= 0.0 ) {
+
+					*selectionPdf = 0.0;
+					return 0u;
+
+				}
+
+				let targetWeight = r * totalWeight;
+				var accumulated = 0.0;
+				var lastWeighted = 0u;
+				var index = count;
+				for ( var i = 0u; i < count; i ++ ) {
+
+					let lightWeight = ${ this.getLightWeight }( i, position );
+					accumulated += lightWeight;
+					if ( lightWeight > 0.0 ) {
+
+						lastWeighted = i;
+
+					}
+
+					if ( targetWeight < accumulated ) {
+
+						index = i;
+						break;
+
+					}
+
+				}
+
+				// rounding can carry the target past the last light when there is no environment
+				if ( index == count && envWeight <= 0.0 ) {
+
+					index = lastWeighted;
+
+				}
+
+				var weight = envWeight;
+				if ( index < count ) {
+
+					weight = ${ this.getLightWeight }( index, position );
+
+				}
+
+				*selectionPdf = weight / totalWeight;
+				return index;
+
+			}
+		`;
+
+		// sample the light at the given index
 		this.randomLightSample = wgslTagFn/* wgsl */`
 			fn randomLightSample( lightIndex: u32, rayOrigin: vec3f, ruv: vec2f ) -> ${ lightRecordStruct } {
 
