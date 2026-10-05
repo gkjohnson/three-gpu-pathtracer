@@ -440,22 +440,22 @@ export class AtlasTexture {
 		for ( let i = 0, l = textures.length; i < l; i ++ ) {
 
 			const { x, y, w, h, page } = placements[ i ];
-
 			const texture = textures[ i ];
+
+			// three.js uses the render target viewport / scissor
+			renderTarget.viewport.set( x, y, w, h );
+			renderTarget.scissor.set( x, y, w, h );
+			renderer.setRenderTarget( renderTarget, page );
 
 			if ( texture.isRenderTargetTexture ) {
 
+				// a render target's content only lives on the GPU, so draw it directly
 				const prevAutoUpdate = texture.matrixAutoUpdate;
 				_prevMatrix.copy( texture.matrix );
-				texture.matrixAutoUpdate = false;
 				texture.matrix.identity();
+				texture.matrixAutoUpdate = false;
 
 				quadMesh.material.map = texture;
-
-				renderTarget.viewport.set( x, y, w, h );
-				renderTarget.scissor.set( x, y, w, h );
-				renderer.setRenderTarget( renderTarget, page );
-
 				quadMesh.render( renderer );
 
 				texture.matrixAutoUpdate = prevAutoUpdate;
@@ -464,20 +464,14 @@ export class AtlasTexture {
 			} else {
 
 				// Clone the source so we get an independent texture handle
-				const textureClone = texture.clone();
-				textureClone.matrixAutoUpdate = false;
-				textureClone.matrix.identity();
+				const clone = texture.clone();
+				clone.matrixAutoUpdate = false;
+				clone.matrix.identity();
 
-				quadMesh.material.map = textureClone;
-
-				// three.js uses the render target viewport / scissor
-				renderTarget.viewport.set( x, y, w, h );
-				renderTarget.scissor.set( x, y, w, h );
-				renderer.setRenderTarget( renderTarget, page );
-
+				quadMesh.material.map = clone;
 				quadMesh.render( renderer );
 
-				textureClone.dispose();
+				clone.dispose();
 
 			}
 
