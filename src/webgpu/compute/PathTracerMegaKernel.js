@@ -283,29 +283,31 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution
-						if ( misEnabled != 0u && ( lightsCount > 0u || envActive ) ) {
+						if ( misEnabled != 0u ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
 							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+								} else {
 
-							}
+									lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
 
-								if ( lightRec.pdf > 0.0 && selectionPdf > 0.0 ) {
+								}
+
+								if ( lightRec.pdf > 0.0 ) {
 
 									let evalRec = ${ bsdfEvalPdfFn }( view, lightRec.direction, surface );
 									if ( evalRec.pdf > 0.0 ) {
@@ -335,6 +337,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									}
 
 								}
+
+							}
 
 						}
 

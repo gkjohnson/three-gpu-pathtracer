@@ -210,33 +210,37 @@ export class LogicKernel extends ComputeKernel {
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
 						var lightPdf = 0.0;
-						if ( misEnabled != 0u && ( lightsCount > 0u || envActive ) ) {
+						if ( misEnabled != 0u ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
 							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+								} else {
+
+									lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+
+								}
+
+								lightPdf = lightRec.pdf * selectionPdf;
+								rayDataStorage[ index ].lightDirection = lightRec.direction;
+								rayDataStorage[ index ].lightEmission = lightRec.emission;
+								rayDataStorage[ index ].lightDist = lightRec.dist;
+								rayDataStorage[ index ].lightType = lightRec.lightType;
 
 							}
-
-							lightPdf = lightRec.pdf * selectionPdf;
-							rayDataStorage[ index ].lightDirection = lightRec.direction;
-							rayDataStorage[ index ].lightEmission = lightRec.emission;
-							rayDataStorage[ index ].lightDist = lightRec.dist;
-							rayDataStorage[ index ].lightType = lightRec.lightType;
 
 						}
 
