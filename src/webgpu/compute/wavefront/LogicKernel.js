@@ -10,7 +10,7 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn, lightSelectionPdfFn } from '../../nodes/lights.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
@@ -106,7 +106,6 @@ export class LogicKernel extends ComputeKernel {
 				// the megakernel
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				let optionCount = f32( lightsCount ) + select( 0.0, 1.0, envActive );
 				var envWeight = 0.0;
 				if ( envActive ) {
 
@@ -117,8 +116,7 @@ export class LogicKernel extends ComputeKernel {
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
 
-				// lights the traced segment passed, added at the end since an escaping camera segment
-				// overwrites the pixel with the background
+				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
@@ -165,19 +163,16 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// the total selection weight NEE had at the vertex this segment left, for the MIS
-					// weights of the light and environment it may have found. The camera segment has no
-					// NEE before it
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
 					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
-					var prevTotalWeight = 0.0;
+					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						prevTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
 
 					}
 
-					// forward hits: a segment that lands on an area light. The camera segment only sees
-					// lights marked visible to the camera, and takes them at full weight
+					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -192,7 +187,7 @@ export class LogicKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ lightSelectionPdfFn }( ${ getLightWeightFn }( li, input.origin ), prevTotalWeight, optionCount );
+								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
 
 							}
@@ -217,33 +212,37 @@ export class LogicKernel extends ComputeKernel {
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
 						var lightPdf = 0.0;
-						if ( misEnabled != 0u && optionCount > 0.0 ) {
+						if ( misEnabled != 0u ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, optionCount, ruv.x, &selectionPdf );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+								} else {
+
+									lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+
+								}
+
+								lightPdf = lightRec.pdf * selectionPdf;
+								rayDataStorage[ index ].lightDirection = lightRec.direction;
+								rayDataStorage[ index ].lightEmission = lightRec.emission;
+								rayDataStorage[ index ].lightDist = lightRec.dist;
+								rayDataStorage[ index ].lightType = lightRec.lightType;
 
 							}
-
-							lightPdf = lightRec.pdf * selectionPdf;
-							rayDataStorage[ index ].lightDirection = lightRec.direction;
-							rayDataStorage[ index ].lightEmission = lightRec.emission;
-							rayDataStorage[ index ].lightDist = lightRec.dist;
-							rayDataStorage[ index ].lightType = lightRec.lightType;
 
 						}
 
@@ -259,7 +258,7 @@ export class LogicKernel extends ComputeKernel {
 							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) * ${ lightSelectionPdfFn }( envWeight, prevTotalWeight, optionCount );
+								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 							}
@@ -335,7 +334,7 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
-				// a light the camera sees is opaque, so it shows against a transparent background
+				// visible lights are opaque against a transparent background
 				resultColor += vec4f( lightHits, 0.0 );
 				if ( cameraHitLight ) {
 

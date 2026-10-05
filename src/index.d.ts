@@ -26,9 +26,9 @@ import { MeshBVH, MeshBVHOptions } from 'three-mesh-bvh';
 
 // three.js type augmentation
 
-declare module 'three' {
+declare module 'three/src/materials/MeshStandardMaterial' {
 
-	export interface Material {
+	export interface MeshStandardMaterial {
 
 		/**
 		 * Whether to render the object as completely transparent against the rest of the environment
@@ -36,32 +36,13 @@ declare module 'three' {
 		 *
 		 * Used by `WebGLPathTracer` from `three-gpu-pathtracer`.
 		 */
-		matte?: boolean;
+		matte: boolean;
 		/**
 		 * Whether the object should cast a shadow.
 		 *
 		 * Used by `WebGLPathTracer` from `three-gpu-pathtracer`.
 		 */
-		castShadow?: boolean;
-
-	}
-
-	export interface Light {
-
-		visibleToCamera?: boolean;
-
-	}
-
-	export interface SpotLight {
-
-		radius?: number;
-		iesMap?: Texture | null;
-
-	}
-
-	export interface RectAreaLight {
-
-		isCircular?: boolean;
+		castShadow: boolean;
 
 	}
 
@@ -201,7 +182,7 @@ export class EquirectCamera extends Camera {
 export class PhysicalSpotLight extends SpotLight {
 
 	radius: number;
-	iesMap: DataTexture | null;
+	iesTexture: DataTexture | null;
 
 }
 

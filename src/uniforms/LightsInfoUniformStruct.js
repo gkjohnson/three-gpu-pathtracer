@@ -2,7 +2,7 @@ import { DataTexture, RGBAFormat, ClampToEdgeWrapping, FloatType, Vector3, Quate
 import { bufferToHash } from '../utils/bufferToHash.js';
 
 const LIGHT_PIXELS = 6;
-export const VISIBLE_TO_CAMERA_OFFSET = 11;
+const VISIBLE_TO_CAMERA_OFFSET = 11;
 const RECT_AREA_LIGHT = 0;
 const CIRC_AREA_LIGHT = 1;
 const SPOT_LIGHT = 2;
@@ -221,7 +221,7 @@ export class LightsInfoUniformStruct {
 
 			}
 
-			// whether camera rays see the light, in the slot after the u vector
+			// whether camera rays see the light
 			floatArray[ baseIndex + VISIBLE_TO_CAMERA_OFFSET ] = l.visibleToCamera ? 1 : 0;
 
 		}

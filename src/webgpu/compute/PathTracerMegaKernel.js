@@ -6,7 +6,7 @@ import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js'
 import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn, lightSelectionPdfFn } from '../nodes/lights.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
@@ -156,7 +156,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// one-sample NEE chooses between the analytic lights and the environment
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				let optionCount = f32( lightsCount ) + select( 0.0, 1.0, envActive );
 				var envWeight = 0.0;
 				if ( envActive ) {
 
@@ -164,8 +163,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// lights the path passed, added at the end since an escaping camera ray overwrites the
-				// pixel with the background
+				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
@@ -175,18 +173,16 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// the total selection weight NEE had at the vertex this ray left, for the MIS weights
-					// of the light and environment it may find. The camera ray has no NEE before it
+					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none
 					let isMISWeighted = misEnabled != 0u && bounce > 0u;
-					var prevTotalWeight = 0.0;
+					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						prevTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
 
 					}
 
-					// forward hits: a ray that lands on an area light. The camera ray only sees lights
-					// marked visible to the camera, and takes them at full weight
+					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -201,7 +197,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ lightSelectionPdfFn }( ${ getLightWeightFn }( li, ray.origin ), prevTotalWeight, optionCount );
+								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
 
 							}
@@ -289,27 +285,29 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution
-						if ( misEnabled != 0u && optionCount > 0.0 ) {
+						if ( misEnabled != 0u ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, optionCount, ruv.x, &selectionPdf );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+								} else {
 
-							}
+									lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+
+								}
 
 								if ( lightRec.pdf > 0.0 ) {
 
@@ -343,6 +341,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									}
 
 								}
+
+							}
 
 						}
 
@@ -397,7 +397,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( ray.direction ) * ${ lightSelectionPdfFn }( envWeight, prevTotalWeight, optionCount );
+								let envPdf = ${ getEnvDirPdf }( ray.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 							}
@@ -474,7 +474,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// a light the camera sees is opaque, so it shows against a transparent background
+				// visible lights are opaque against a transparent background
 				resultColor += vec4f( lightHits, 0.0 );
 				if ( cameraHitLight ) {
 
