@@ -20,7 +20,6 @@ import {
 	getSpotAttenuationFn,
 	getDistanceAttenuationFn,
 	getSpotLightNearestFn,
-	lightSelectionPdfFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -175,50 +174,46 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		`;
 
 		// Chooses a light, or the environment when the returned index equals the light count, in
-		// proportion to the estimated weights. "optionCount" is the light count plus one when the
-		// environment can be chosen.
+		// proportion to the estimated weights. The pdf is zero when nothing can light the position.
 		this.selectLight = wgslTagFn/* wgsl */`
-			fn selectLight( position: vec3f, envWeight: f32, optionCount: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+			fn selectLight( position: vec3f, envWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
 				let count = ${ countNode };
 				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
-
-				var index = count;
 				if ( totalWeight <= 0.0 ) {
 
-					// no option contributes, so pick any
-					index = min( u32( r * optionCount ), u32( optionCount ) - 1u );
+					*selectionPdf = 0.0;
+					return 0u;
 
-				} else {
+				}
 
-					let targetWeight = r * totalWeight;
-					var accumulated = 0.0;
-					var lastWeighted = 0u;
-					for ( var i = 0u; i < count; i ++ ) {
+				let targetWeight = r * totalWeight;
+				var accumulated = 0.0;
+				var lastWeighted = 0u;
+				var index = count;
+				for ( var i = 0u; i < count; i ++ ) {
 
-						let lightWeight = ${ this.getLightWeight }( i, position );
-						accumulated += lightWeight;
-						if ( lightWeight > 0.0 ) {
+					let lightWeight = ${ this.getLightWeight }( i, position );
+					accumulated += lightWeight;
+					if ( lightWeight > 0.0 ) {
 
-							lastWeighted = i;
-
-						}
-
-						if ( targetWeight < accumulated ) {
-
-							index = i;
-							break;
-
-						}
+						lastWeighted = i;
 
 					}
 
-					// rounding can carry the target past the last light when there is no environment
-					if ( index == count && envWeight <= 0.0 ) {
+					if ( targetWeight < accumulated ) {
 
-						index = lastWeighted;
+						index = i;
+						break;
 
 					}
+
+				}
+
+				// rounding can carry the target past the last light when there is no environment
+				if ( index == count && envWeight <= 0.0 ) {
+
+					index = lastWeighted;
 
 				}
 
@@ -229,7 +224,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				*selectionPdf = ${ lightSelectionPdfFn }( weight, totalWeight, optionCount );
+				*selectionPdf = weight / totalWeight;
 				return index;
 
 			}

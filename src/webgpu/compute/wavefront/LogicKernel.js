@@ -10,7 +10,7 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn, lightSelectionPdfFn } from '../../nodes/lights.wgsl.js';
+import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
@@ -106,7 +106,6 @@ export class LogicKernel extends ComputeKernel {
 				// the megakernel
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				let optionCount = f32( lightsCount ) + select( 0.0, 1.0, envActive );
 				var envWeight = 0.0;
 				if ( envActive ) {
 
@@ -162,9 +161,7 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// the total selection weight NEE had at the vertex this segment left, for the MIS
-					// weights of the light and environment it may have found. The camera segment has no
-					// NEE before it
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
 					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
 					var prevTotalWeight = 0.0;
 					if ( isMISWeighted ) {
@@ -188,7 +185,7 @@ export class LogicKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ lightSelectionPdfFn }( ${ getLightWeightFn }( li, input.origin ), prevTotalWeight, optionCount );
+								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / prevTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
 
 							}
@@ -213,11 +210,11 @@ export class LogicKernel extends ComputeKernel {
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
 						var lightPdf = 0.0;
-						if ( misEnabled != 0u && optionCount > 0.0 ) {
+						if ( misEnabled != 0u && ( lightsCount > 0u || envActive ) ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, optionCount, ruv.x, &selectionPdf );
+							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
 							var lightRec: ${ lightRecordStruct };
 							if ( envActive && lightIndex == lightsCount ) {
 
@@ -255,7 +252,7 @@ export class LogicKernel extends ComputeKernel {
 							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) * ${ lightSelectionPdfFn }( envWeight, prevTotalWeight, optionCount );
+								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / prevTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 							}

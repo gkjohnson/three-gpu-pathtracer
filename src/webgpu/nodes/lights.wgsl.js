@@ -14,24 +14,6 @@ export const LIGHT_FAR_DISTANCE = 1e30;
 // tolerance for comparing a shadow hit distance to the sampled light distance
 export const LIGHT_EPSILON = 1e-5;
 
-// probability of choosing a light or the environment for next event estimation, given its weight,
-// the total weight of every option, and the number of options
-export const lightSelectionPdfFn = wgslFn( /* wgsl */ `
-
-	fn lightSelectionPdf( weight: f32, totalWeight: f32, optionCount: f32 ) -> f32 {
-
-		if ( totalWeight <= 0.0 ) {
-
-			return 1.0 / optionCount;
-
-		}
-
-		return weight / totalWeight;
-
-	}
-
-` );
-
 // light kinds that are also bsdf-sampled and so take MIS-weighted NEE - punctual lights take full weight
 export const isMISWeightLightFn = wgslFn( /* wgsl */ `
 
@@ -220,8 +202,8 @@ export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
 
 `, [ lightStruct, lightRecordStruct, constants, getDistanceAttenuationFn ] );
 
-// The cosine to the spot axis and the distance from a position to the point on the spot light's
-// disc nearest it across the axis, where the disc lights the position the most
+// The cosine to the spot axis and the distance from a position to the nearest point on the spot
+// light's disc, where the disc lights the position the most
 export const getSpotLightNearestFn = wgslFn( /* wgsl */ `
 
 	fn getSpotLightNearest( light: Light, position: vec3f ) -> vec2f {
@@ -230,8 +212,6 @@ export const getSpotLightNearestFn = wgslFn( /* wgsl */ `
 		let startDistance = light.radius / max( tan( acos( light.coneCos ) ), EPSILON );
 		let discCenter = light.position - normal * startDistance;
 
-		// every point on the disc is the same distance along the axis, so the nearest one across it
-		// gives the smallest angle and distance
 		let toPosition = position - discCenter;
 		let along = dot( toPosition, - normal );
 		let across = max( length( toPosition + normal * along ) - light.radius, 0.0 );
