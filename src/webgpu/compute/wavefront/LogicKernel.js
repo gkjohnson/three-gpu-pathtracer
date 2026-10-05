@@ -163,10 +163,10 @@ export class LogicKernel extends ComputeKernel {
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
 					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
-					var prevTotalWeight = 0.0;
+					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						prevTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
 
 					}
 
@@ -185,7 +185,7 @@ export class LogicKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / prevTotalWeight;
+								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
 
 							}
@@ -252,7 +252,7 @@ export class LogicKernel extends ComputeKernel {
 							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / prevTotalWeight;
+								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 							}

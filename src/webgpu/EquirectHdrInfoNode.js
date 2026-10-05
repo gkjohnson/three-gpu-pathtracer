@@ -126,9 +126,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 			}
 		`;
 
-		// The irradiance a surface would receive from the environment if its light were spread
-		// evenly over the sphere, used to weigh it against the lights when choosing one to sample.
-		// "totalSum" holds the luminance of every texel weighted by sin( theta ).
+		// the environment's average irradiance, for weighing it against the lights
 		this.getWeight = wgslTagFn/* wgsl */`
 			fn getEnvWeight() -> f32 {
 

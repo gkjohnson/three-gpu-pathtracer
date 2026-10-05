@@ -173,10 +173,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none
 					let isMISWeighted = misEnabled != 0u && bounce > 0u;
-					var prevTotalWeight = 0.0;
+					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						prevTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
 
 					}
 
@@ -195,7 +195,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / prevTotalWeight;
+								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
 
 							}
@@ -389,7 +389,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( ray.direction ) * envWeight / prevTotalWeight;
+								let envPdf = ${ getEnvDirPdf }( ray.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 							}
