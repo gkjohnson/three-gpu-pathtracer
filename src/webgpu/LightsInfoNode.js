@@ -104,6 +104,8 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		// A cheap estimate of how much light reaches a position from a light, ignoring occlusion and
 		// the surface orientation, used to choose which light to sample.
+		// TODO: weigh lights below the surface's horizon to zero using its normal, skipped for
+		// transmissive surfaces. Forward hit MIS would then need the previous vertex's normal too.
 		this.getLightWeight = wgslTagFn/* wgsl */`
 			fn getLightWeight( index: u32, position: vec3f ) -> f32 {
 
