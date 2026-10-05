@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - WebGPUPathTracer: Support for three.js' SunLight.
 - WebGPUPathTracer: Support for a "visibleToCamera" flag on area lights to make them visible to the camera.
+- WebGPUPathTracer: Support for render target textures.
 
 ### Changed
 - WebGPUPathTracer: Lights are chosen for sampling by their estimated contribution rather than uniformly, reducing noise in scenes with many lights.
