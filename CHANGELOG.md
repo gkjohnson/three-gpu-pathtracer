@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Added
 - WebGPUPathTracer: Support for three.js' SunLight.
+- WebGPUPathTracer: Support for a "visibleToCamera" flag on area lights to make them visible to the camera.
 
 ### Fixed
 - WebGPUPathTracer rendering black after changing "maxBounces" or "maxTransparentBounces" once the render had settled.

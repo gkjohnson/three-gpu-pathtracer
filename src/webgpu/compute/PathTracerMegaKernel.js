@@ -70,6 +70,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
+		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -157,33 +158,38 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
+				// added last, since a camera ray miss overwrites the pixel with the background
+				var lightHits = vec3f( 0.0 );
+				var cameraHitLight = false;
+
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
 					var hitResult: ${ raycastOutput };
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward hits: a bsdf-sampled ray that lands on a area light. MIS-weighted
-					// only when NEE is also sampling the lights
-					if ( bounce > 0u ) {
+					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
+					for ( var li = 0u; li < lightsCount; li ++ ) {
 
-						for ( var li = 0u; li < lightsCount; li ++ ) {
+						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
 
-							var lightRec: ${ lightRecordStruct };
-							if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+							continue;
 
-								var misWeight = 1.0;
-								if ( misEnabled != 0u ) {
+						}
 
-									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf );
+						var lightRec: ${ lightRecordStruct };
+						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
 
-								}
+							var misWeight = 1.0;
+							if ( misEnabled != 0u && bounce > 0u ) {
 
-								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
-								resultColor += vec4f( lightHit, 0.0 );
+								let lightPdf = lightRec.pdf / lightsDenom;
+								misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf );
 
 							}
+
+							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
+							cameraHitLight = cameraHitLight || bounce == 0u;
 
 						}
 
@@ -447,6 +453,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					${ rngNextBounce }();
+
+				}
+
+				// visible lights are opaque against a transparent background
+				resultColor += vec4f( lightHits, 0.0 );
+				if ( cameraHitLight ) {
+
+					resultColor.a = 1.0;
 
 				}
 

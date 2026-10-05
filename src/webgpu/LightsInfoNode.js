@@ -65,12 +65,13 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const src = this.tex.image.data;
 		this.buffer.array.set( src.subarray( 0, count * stride ) );
 
-		// rewrite the int fields ( lightType, iesProfile ) as i32 bits
+		// rewrite the int fields ( lightType, visibleToCamera, iesProfile ) as i32 bits
 		const intView = new Int32Array( this.buffer.array.buffer );
 		for ( let i = 0; i < count; i ++ ) {
 
 			const base = i * stride;
 			intView[ base + 3 ] = Math.round( src[ base + 3 ] );
+			intView[ base + 11 ] = Math.round( src[ base + 11 ] );
 			intView[ base + 21 ] = Math.round( src[ base + 21 ] );
 
 		}
@@ -88,6 +89,14 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
+
+		this.isLightVisibleToCamera = wgslTagFn/* wgsl */`
+			fn isLightVisibleToCamera( index: u32 ) -> bool {
+
+				return ${ bufferNode }[ index ].visibleToCamera != 0;
+
+			}
+		`;
 
 		// uniformly pick a light and sample it
 		this.randomLightSample = wgslTagFn/* wgsl */`
