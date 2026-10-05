@@ -264,9 +264,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							if ( material.side != 0 && triResult.side * ${ cullSign } != material.side ) {
+							// bounce rays skip their culled faces before the alpha test
+							let isCulled = material.side != 0 && triResult.side * ${ cullSign } != material.side;
+							if ( isCulled && ${ cullSign } > 0.0 ) {
 
-								${ forwardBlocked } = ${ forwardBlocked } || ${ cullSign } < 0.0;
 								continue;
 
 							}
@@ -328,6 +329,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 									continue;
 
 								}
+
+							}
+
+							// shadow rays pass their culled faces, but one left after the alpha test would stop a
+							// bsdf ray along the same path
+							if ( isCulled ) {
+
+								${ forwardBlocked } = true;
+								continue;
 
 							}
 
