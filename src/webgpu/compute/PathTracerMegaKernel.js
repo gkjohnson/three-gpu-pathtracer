@@ -158,8 +158,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// lights the path passed, added at the end since an escaping camera ray overwrites the
-				// pixel with the background
+				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
@@ -169,8 +168,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward hits: a ray that lands on an area light. The camera ray only sees lights
-					// marked visible to the camera, and takes them at full weight
+					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -458,7 +456,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// a light the camera sees is opaque, so it shows against a transparent background
+				// visible lights are opaque against a transparent background
 				resultColor += vec4f( lightHits, 0.0 );
 				if ( cameraHitLight ) {
 
