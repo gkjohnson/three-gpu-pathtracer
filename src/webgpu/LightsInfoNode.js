@@ -5,6 +5,7 @@ import { AtlasTexture } from './AtlasTexture.js';
 import { LightsInfoUniformStruct, VISIBLE_TO_CAMERA_OFFSET } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
 import { sampleTexelFunc } from './nodes/utils.wgsl.js';
+import { luminanceFn } from './nodes/sampling.wgsl.js';
 import {
 	RECT_AREA_LIGHT_TYPE,
 	CIRC_AREA_LIGHT_TYPE,
@@ -12,11 +13,14 @@ import {
 	DIR_LIGHT_TYPE,
 	POINT_LIGHT_TYPE,
 	LIGHT_FAR_DISTANCE,
+	LIGHT_SELECTION_UNIFORM_SHARE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
 	randomAreaLightSampleFn,
 	randomSpotLightSampleFn,
 	getSpotAttenuationFn,
+	getDistanceAttenuationFn,
+	lightSelectionPdfFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -85,7 +89,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, iesProfilesNode, iesInfoNode } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesInfoNode } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -98,7 +102,127 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// uniformly pick a light and sample it
+		// A cheap estimate of how much light reaches a position from a light, ignoring occlusion and
+		// the surface orientation, used to choose which light to sample.
+		this.getLightWeight = wgslTagFn/* wgsl */`
+			fn getLightWeight( index: u32, position: vec3f ) -> f32 {
+
+				let light = ${ bufferNode }[ index ];
+				let power = ${ luminanceFn }( light.color * light.intensity );
+				if ( light.lightType == ${ DIR_LIGHT_TYPE } ) {
+
+					return power;
+
+				}
+
+				if ( light.lightType == ${ POINT_LIGHT_TYPE } ) {
+
+					// the point light's world position is packed into the u slot
+					let dist = length( light.u - position );
+					return power * ${ getDistanceAttenuationFn }( dist, light.distance, light.decay );
+
+				}
+
+				let toLight = light.position - position;
+				let distSq = dot( toLight, toLight );
+				if ( distSq == 0.0 ) {
+
+					return 0.0;
+
+				}
+
+				let normal = normalize( cross( light.u, light.v ) );
+				let cosTheta = dot( toLight, normal ) * inverseSqrt( distSq );
+				if ( light.lightType == ${ SPOT_LIGHT_TYPE } ) {
+
+					// ies profiles are not evaluated here
+					var attenuation = 1.0;
+					if ( light.iesProfile < 0 ) {
+
+						attenuation = ${ getSpotAttenuationFn }( light.coneCos, light.penumbraCos, cosTheta );
+
+					}
+
+					return power * attenuation * ${ getDistanceAttenuationFn }( sqrt( distSq ), light.distance, light.decay );
+
+				}
+
+				// area lights only emit from their front face, and the distance is held above the size
+				// of the light so positions on or near it do not dominate
+				return power * light.area * max( cosTheta, 0.0 ) / max( distSq, light.area );
+
+			}
+		`;
+
+		this.getLightsWeight = wgslTagFn/* wgsl */`
+			fn getLightsWeight( position: vec3f ) -> f32 {
+
+				var total = 0.0;
+				for ( var i = 0u; i < ${ countNode }; i ++ ) {
+
+					total += ${ this.getLightWeight }( i, position );
+
+				}
+
+				return total;
+
+			}
+		`;
+
+		// Chooses a light, or the environment when the returned index equals the light count, in
+		// proportion to the estimated weights with a uniform share mixed in. "optionCount" is the
+		// light count plus one when the environment can be chosen.
+		this.selectLight = wgslTagFn/* wgsl */`
+			fn selectLight( position: vec3f, envWeight: f32, optionCount: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+
+				let count = ${ countNode };
+				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
+
+				var index = count;
+				if ( totalWeight <= 0.0 || r < ${ LIGHT_SELECTION_UNIFORM_SHARE } ) {
+
+					let uniformR = select( r / ${ LIGHT_SELECTION_UNIFORM_SHARE }, r, totalWeight <= 0.0 );
+					index = min( u32( uniformR * optionCount ), u32( optionCount ) - 1u );
+
+				} else {
+
+					let targetWeight = ( r - ${ LIGHT_SELECTION_UNIFORM_SHARE } ) / ( 1.0 - ${ LIGHT_SELECTION_UNIFORM_SHARE } ) * totalWeight;
+					var accumulated = 0.0;
+					for ( var i = 0u; i < count; i ++ ) {
+
+						accumulated += ${ this.getLightWeight }( i, position );
+						if ( targetWeight < accumulated ) {
+
+							index = i;
+							break;
+
+						}
+
+					}
+
+					// rounding can carry the target past the last light when there is no environment
+					if ( index == count && envWeight <= 0.0 ) {
+
+						index = count - 1u;
+
+					}
+
+				}
+
+				var weight = envWeight;
+				if ( index < count ) {
+
+					weight = ${ this.getLightWeight }( index, position );
+
+				}
+
+				*selectionPdf = ${ lightSelectionPdfFn }( weight, totalWeight, optionCount );
+				return index;
+
+			}
+		`;
+
+		// sample the light at the given index
 		this.randomLightSample = wgslTagFn/* wgsl */`
 			fn randomLightSample( lightIndex: u32, rayOrigin: vec3f, ruv: vec2f ) -> ${ lightRecordStruct } {
 

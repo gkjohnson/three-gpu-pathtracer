@@ -14,6 +14,28 @@ export const LIGHT_FAR_DISTANCE = 1e30;
 // tolerance for comparing a shadow hit distance to the sampled light distance
 export const LIGHT_EPSILON = 1e-5;
 
+// share of the next event estimation light choice made uniformly rather than by estimated
+// contribution, so a light whose contribution is underestimated is still sampled
+export const LIGHT_SELECTION_UNIFORM_SHARE = 0.1;
+
+// probability of choosing a light or the environment for next event estimation, given its weight,
+// the total weight of every option, and the number of options
+export const lightSelectionPdfFn = wgslFn( /* wgsl */ `
+
+	fn lightSelectionPdf( weight: f32, totalWeight: f32, optionCount: f32 ) -> f32 {
+
+		if ( totalWeight <= 0.0 ) {
+
+			return 1.0 / optionCount;
+
+		}
+
+		return ( 1.0 - ${ LIGHT_SELECTION_UNIFORM_SHARE } ) * weight / totalWeight + ${ LIGHT_SELECTION_UNIFORM_SHARE } / optionCount;
+
+	}
+
+` );
+
 // light kinds that are also bsdf-sampled and so take MIS-weighted NEE - punctual lights take full weight
 export const isMISWeightLightFn = wgslFn( /* wgsl */ `
 

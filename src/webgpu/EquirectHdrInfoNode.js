@@ -1,5 +1,5 @@
 import { Matrix3 } from 'three/webgpu';
-import { texture, sampler, uniform, wgslFn } from 'three/tsl';
+import { texture, sampler, uniform, wgslFn, PI } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { constants, environmentSampleStruct } from './nodes/structs.wgsl.js';
@@ -122,6 +122,18 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				}
 
 				return result;
+
+			}
+		`;
+
+		// The irradiance a surface would receive from the environment if its light were spread
+		// evenly over the sphere, used to weigh it against the lights when choosing one to sample.
+		// "totalSum" holds the luminance of every texel weighted by sin( theta ).
+		this.getWeight = wgslTagFn/* wgsl */`
+			fn getEnvWeight() -> f32 {
+
+				let resolution = textureDimensions( ${ mapNode } );
+				return ${ intensityNode } * ${ PI } * ${ PI } * ${ totalSumNode } / ( 2.0 * f32( resolution.x * resolution.y ) );
 
 			}
 		`;
