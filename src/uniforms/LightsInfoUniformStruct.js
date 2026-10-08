@@ -222,7 +222,7 @@ export class LightsInfoUniformStruct {
 			}
 
 			// whether camera rays see the light
-			floatArray[ baseIndex + VISIBLE_TO_CAMERA_OFFSET ] = l.visibleToCamera ? 1 : 0;
+			floatArray[ baseIndex + VISIBLE_TO_CAMERA_OFFSET ] = l.visibleToCameraRays ? 1 : 0;
 
 		}
 

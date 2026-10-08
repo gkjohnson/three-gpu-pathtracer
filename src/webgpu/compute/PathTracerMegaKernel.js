@@ -181,7 +181,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
+					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {

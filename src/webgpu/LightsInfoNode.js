@@ -68,7 +68,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		const src = this.tex.image.data;
 		this.buffer.array.set( src.subarray( 0, count * stride ) );
 
-		// rewrite the int fields ( lightType, visibleToCamera, iesProfile ) as i32 bits
+		// rewrite the int fields ( lightType, visibleToCameraRays, iesProfile ) as i32 bits
 		const intView = new Int32Array( this.buffer.array.buffer );
 		for ( let i = 0; i < count; i ++ ) {
 
@@ -96,7 +96,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.isLightVisibleToCamera = wgslTagFn/* wgsl */`
 			fn isLightVisibleToCamera( index: u32 ) -> bool {
 
-				return ${ bufferNode }[ index ].visibleToCamera != 0;
+				return ${ bufferNode }[ index ].visibleToCameraRays != 0;
 
 			}
 		`;

@@ -1,6 +1,6 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, texture, uniformArray, uint } from 'three/tsl';
+import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -14,12 +14,12 @@ const transformStruct = new StructTypeNode( {
 	inverseMatrixWorld: 'mat4x4f',
 	visible: 'uint',
 	materialIndex: 'uint',
+	visibleToShadowRays: 'uint',
 	_alignment0: 'uint',
-	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
-// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a one sided face a bsdf ray would hit
+// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a face a bsdf ray would hit
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
@@ -193,8 +193,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays cull the flipped side
-		const cullSign = float( 1.0 ).toVar( 'bvh_cullSign' );
+		// shadow rays hit both sides, and pass through the objects not visible to them
+		const isShadowRay = bool( false ).toVar( 'bvh_isShadowRay' );
+		const skipShadowObject = bool( false ).toVar( 'bvh_skipShadowObject' );
 
 		const raycastOptions = {
 			shapeStruct: rayStruct,
@@ -273,9 +274,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							// bounce rays skip their culled faces before the alpha test
-							let isCulled = material.side != 0 && triResult.side * ${ cullSign } != material.side;
-							if ( isCulled && ${ cullSign } > 0.0 ) {
+							// shadow rays hit both sides
+							if ( ! ${ isShadowRay } && material.side != 0 && triResult.side != material.side ) {
 
 								continue;
 
@@ -341,10 +341,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass their culled faces, but a bsdf ray would hit this one
-							if ( isCulled ) {
+							// shadow rays pass the objects not visible to them, but a bsdf ray would hit this face
+							if ( ${ skipShadowObject } ) {
 
-								result.forwardBlocked = true;
+								if ( material.side == 0 || triResult.side == material.side ) {
+
+									result.forwardBlocked = true;
+
+								}
+
 								continue;
 
 							}
@@ -391,6 +396,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					}
 
+					${ skipShadowObject } = ${ isShadowRay } && object.visibleToShadowRays == 0u;
+
 				}
 			`,
 			transformResultFn: wgslTagFn/* wgsl */`
@@ -418,7 +425,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			prefixFn: wgslTagFn/* wgsl */`
 				fn initFirstHitCull() -> void {
 
-					${ cullSign } = 1.0;
+					${ isShadowRay } = false;
 
 				}
 			`,
@@ -430,7 +437,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			prefixFn: wgslTagFn/* wgsl */`
 				fn initShadowCull() -> void {
 
-					${ cullSign } = - 1.0;
+					${ isShadowRay } = true;
 
 				}
 			`,
@@ -986,6 +993,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
 		this.writeMaterialData( info, writeOffset, targetBuffer );
+
+		// whether shadow rays see the object, in the slot after the material index
+		const transformBufferU32 = new Uint32Array( targetBuffer );
+		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 34 ] = info.object.visibleToShadowRays === false ? 0 : 1;
 
 	}
 
