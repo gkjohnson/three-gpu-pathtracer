@@ -7,12 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Added
 - WebGPUPathTracer: Support for three.js' SunLight.
-- WebGPUPathTracer: Support for a "visibleToCamera" flag on area lights to make them visible to the camera.
+- WebGPUPathTracer: Support for a "visibleToCameraRays" flag on area lights to make them visible to the camera.
 - WebGPUPathTracer: Support for render target textures.
 
 ### Changed
 - WebGPUPathTracer: Lights are chosen for sampling by their estimated contribution rather than uniformly, reducing noise in scenes with many lights.
-- WebGPUPathTracer: One sided surfaces block light based on the side facing the light, so inverted hull outlines no longer shadow the models they surround.
+- WebGPUPathTracer: One sided surfaces block light from both sides. Objects can opt out of casting shadows with a "visibleToShadowRays" flag.
 
 ### Fixed
 - WebGPUPathTracer rendering black after changing "maxBounces" or "maxTransparentBounces" once the render had settled.

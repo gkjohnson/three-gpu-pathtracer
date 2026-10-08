@@ -12,9 +12,15 @@ declare module 'three' {
 
 	}
 
+	export interface Object3D {
+
+		visibleToShadowRays?: boolean;
+
+	}
+
 	export interface Light {
 
-		visibleToCamera?: boolean;
+		visibleToCameraRays?: boolean;
 
 	}
 

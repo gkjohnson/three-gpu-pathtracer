@@ -679,6 +679,20 @@ export const MODEL_LIST = {
 	'Just a Girl': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/just-a-girl/scene.glb',
 		credit: 'Model by "腱鞘炎の人" on Sketchfab.',
+		postProcess( model ) {
+
+			// the inverted hull outlines must not shadow the body they wrap
+			model.traverse( c => {
+
+				if ( c.isMesh && c.material.name.endsWith( ' solid' ) ) {
+
+					c.visibleToShadowRays = false;
+
+				}
+
+			} );
+
+		},
 	},
 
 	'Halo Twist Ring': {
