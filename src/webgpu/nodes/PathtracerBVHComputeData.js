@@ -963,9 +963,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 
-		// save visible and materialIndex
 		const index = materialsMap.has( material ) ? materialsMap.get( material ) : - 1;
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 32 ] = index === - 1 ? 0 : 1;
+		if ( index === - 1 ) {
+
+			// hide the object when there is no material
+			transformBufferU32[ writeOffset * transformStruct.getLength() + 32 ] = 0;
+
+		}
+
+		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
 		// write color
