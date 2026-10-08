@@ -471,7 +471,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				if ( Array.isArray( o.material ) ) {
 
-					o.material.forEach( m => add( m ) );
+					o.material.forEach( m => m && add( m ) );
 
 				} else {
 
@@ -954,9 +954,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		}
 
-		// save the index
-		const index = materialsMap.get( material ) || 0;
 		const transformBufferU32 = new Uint32Array( targetBuffer );
+
+		// save visible and materialIndex
+		const index = materialsMap.has( material ) ? materialsMap.get( material ) : - 1;
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 32 ] = index === -1 ? 0 : 1;
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
 		// write color
