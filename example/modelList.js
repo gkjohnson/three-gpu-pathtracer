@@ -682,9 +682,13 @@ export const MODEL_LIST = {
 		postProcess( model ) {
 
 			// the inverted hull outlines must not shadow the body they wrap
-			[ 'Object_4', 'Object_5', 'Object_6' ].forEach( name => {
+			model.traverse( c => {
 
-				model.getObjectByName( name ).visibleToShadowRays = false;
+				if ( c.isMesh && c.material.name.endsWith( ' solid' ) ) {
+
+					c.visibleToShadowRays = false;
+
+				}
 
 			} );
 

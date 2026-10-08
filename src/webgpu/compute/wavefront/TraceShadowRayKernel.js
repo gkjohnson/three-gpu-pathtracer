@@ -55,6 +55,8 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				}
 
+				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( hitResult.forwardBlocked );
+
 			}
 		`;
 
