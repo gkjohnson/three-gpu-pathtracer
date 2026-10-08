@@ -453,6 +453,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.updateUvAttributesFromScene();
 
+		// the material indices are written with the transforms
+		this.updateMaterialsMap();
+
 		super.update();
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
