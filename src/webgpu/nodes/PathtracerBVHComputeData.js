@@ -1,5 +1,5 @@
 import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, rayIntersectionResultStruct as intersectionResultStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { storage, float, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { materialStruct } from './structs.wgsl.js';
@@ -14,22 +14,10 @@ const transformStruct = new StructTypeNode( {
 	inverseMatrixWorld: 'mat4x4f',
 	visible: 'uint',
 	materialIndex: 'uint',
-	_alignment0: 'uint',
+	visibleToShadowRays: 'uint',
 	_alignment1: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
-
-// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a one sided face a bsdf ray would hit
-const intersectionResultStruct = new StructTypeNode( {
-	indices: 'vec4u',
-	normal: 'vec3f',
-	didHit: 'bool',
-	barycoord: 'vec3f',
-	objectIndex: 'uint',
-	side: 'float',
-	dist: 'float',
-	forwardBlocked: 'bool',
-}, 'PathTracerIntersectionResult' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
@@ -193,8 +181,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays cull the flipped side
-		const cullSign = float( 1.0 ).toVar( 'bvh_cullSign' );
+		// shadow rays hit both sides, and skip the objects not visible to them
+		const isShadowRay = float( 0.0 ).toVar( 'bvh_isShadowRay' );
 
 		const raycastOptions = {
 			shapeStruct: rayStruct,
@@ -273,9 +261,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							// bounce rays skip their culled faces before the alpha test
-							let isCulled = material.side != 0 && triResult.side * ${ cullSign } != material.side;
-							if ( isCulled && ${ cullSign } > 0.0 ) {
+							// shadow rays hit both sides
+							if ( ${ isShadowRay } == 0.0 && material.side != 0 && triResult.side != material.side ) {
 
 								continue;
 
@@ -341,14 +328,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass their culled faces, but a bsdf ray would hit this one
-							if ( isCulled ) {
-
-								result.forwardBlocked = true;
-								continue;
-
-							}
-
 							result.didHit = true;
 							result.dist = triResult.dist;
 							result.normal = triResult.normal;
@@ -391,6 +370,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					}
 
+					if ( ${ isShadowRay } > 0.0 && object.visibleToShadowRays == 0u ) {
+
+						${ baseOpacityScalar } = 0.0;
+
+					}
+
 				}
 			`,
 			transformResultFn: wgslTagFn/* wgsl */`
@@ -418,7 +403,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			prefixFn: wgslTagFn/* wgsl */`
 				fn initFirstHitCull() -> void {
 
-					${ cullSign } = 1.0;
+					${ isShadowRay } = 0.0;
 
 				}
 			`,
@@ -430,7 +415,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			prefixFn: wgslTagFn/* wgsl */`
 				fn initShadowCull() -> void {
 
-					${ cullSign } = - 1.0;
+					${ isShadowRay } = 1.0;
 
 				}
 			`,
@@ -986,6 +971,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
 		this.writeMaterialData( info, writeOffset, targetBuffer );
+
+		// whether shadow rays see the object, in the slot after the material index
+		const transformBufferU32 = new Uint32Array( targetBuffer );
+		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 34 ] = info.object.visibleToShadowRays === false ? 0 : 1;
 
 	}
 

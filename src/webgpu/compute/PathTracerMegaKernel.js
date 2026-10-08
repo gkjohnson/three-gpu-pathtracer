@@ -181,7 +181,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCamera lights, at full weight
+					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -327,10 +327,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 											let lightPdf = lightRec.pdf * selectionPdf;
 
-											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
-											// or when a bsdf ray could never reach the light
-											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked;
-											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
+											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight
+											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
 											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
