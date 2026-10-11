@@ -217,7 +217,6 @@ export class OIDNDenoiser {
 			progress: output => this._copyOutputToTexture( output, width, height ),
 			done: output => {
 
-				this._copyOutputToTexture( output, width, height );
 				this._running = false;
 				this._complete = true;
 				this._abort = null;
