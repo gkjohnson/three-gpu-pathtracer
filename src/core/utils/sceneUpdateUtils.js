@@ -10,7 +10,7 @@ function uuidSort( a, b ) {
 // when rendering each texture to the texture array they must have a consistent color space.
 export function getTextureHash( t ) {
 
-	return `${ t.source.uuid }:${ t.colorSpace }`;
+	return `${ t.uuid }:${ t.colorSpace }`;
 
 }
 
