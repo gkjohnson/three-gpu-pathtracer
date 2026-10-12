@@ -116,6 +116,7 @@ export class OIDNDenoiser {
 	readonly texture: ExternalTexture | null;
 	readonly complete: boolean;
 	readonly running: boolean;
+	readonly error: Error | null;
 
 	init( renderer: WebGPURenderer ): void;
 	setScene( scene: Scene, camera: Camera ): void;
