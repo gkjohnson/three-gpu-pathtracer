@@ -13,9 +13,17 @@ const MAX_TEXTURE_SIZE = 4096;
 const _prevClearColor = new Color();
 const _prevMatrix = new Matrix3();
 
+// render target attachments are cloned from a single texture and share the same "source" even
+// though they hold different data so key them on the texture uuid, instead
+function getTextureId( texture ) {
+
+	return texture.isRenderTargetTexture ? texture.uuid : texture.source.uuid;
+
+}
+
 function getTextureHash( texture ) {
 
-	return `${ texture.source.uuid }:${ texture.source.version }`;
+	return `${ getTextureId( texture ) }:${ texture.source.version }`;
 
 }
 
@@ -232,7 +240,7 @@ export class AtlasTexture {
 		// set of textures changing. Pack in a uuid-stable order instead, and map the placements
 		// back to the caller's indices afterwards.
 		const order = textures.map( ( t, i ) => i );
-		order.sort( ( a, b ) => textures[ a ].source.uuid < textures[ b ].source.uuid ? - 1 : 1 );
+		order.sort( ( a, b ) => getTextureId( textures[ a ] ) < getTextureId( textures[ b ] ) ? - 1 : 1 );
 		textures = order.map( i => textures[ i ] );
 
 		// nothing to do if the set of textures is unchanged

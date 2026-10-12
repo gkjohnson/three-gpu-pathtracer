@@ -10,7 +10,10 @@ function uuidSort( a, b ) {
 // when rendering each texture to the texture array they must have a consistent color space.
 export function getTextureHash( t ) {
 
-	return `${ t.source.uuid }:${ t.colorSpace }`;
+	// render target attachments are cloned from a single texture and share the same "source" even
+	// though they hold different data so key them on the texture uuid, instead
+	const id = t.isRenderTargetTexture ? t.uuid : t.source.uuid;
+	return `${ id }:${ t.colorSpace }`;
 
 }
 
