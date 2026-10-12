@@ -392,6 +392,48 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	// Binds the current pool, queue, and target buffers to every kernel the render task dispatches
+	_bindKernelBuffers() {
+
+		const {
+			logicKernel,
+			materialKernel,
+			traceRayKernel,
+			traceShadowRayKernel,
+			rayDispatchConverter,
+			shadowDispatchConverter,
+			zeroDispatchKernel,
+			populatePixelIndicesKernel,
+		} = this;
+
+		logicKernel.prevOutputTarget = this.prevOutputTarget;
+		logicKernel.outputTarget = this.outputTarget;
+		logicKernel.sampleCountTarget = this.sampleCountTarget;
+		logicKernel.rayDataStorage = this.rayDataStorage;
+		logicKernel.rayIntersectionsStorage = this.rayIntersectionsStorage;
+		logicKernel.shadowRayIntersectionsStorage = this.shadowRayIntersectionsStorage;
+
+		materialKernel.rayDataStorage = this.rayDataStorage;
+		materialKernel.rayQueue = this.rayQueue;
+		materialKernel.shadowRayQueue = this.shadowRayQueue;
+		materialKernel.pixelQueue = this.pixelQueue;
+		materialKernel.sampleCountTarget = this.sampleCountTarget;
+
+		rayDispatchConverter.queue = this.rayQueue;
+		traceRayKernel.rayQueue = this.rayQueue;
+		traceRayKernel.rayIntersectionsStorage = this.rayIntersectionsStorage;
+
+		shadowDispatchConverter.queue = this.shadowRayQueue;
+		traceShadowRayKernel.shadowRayQueue = this.shadowRayQueue;
+		traceShadowRayKernel.shadowRayIntersectionsStorage = this.shadowRayIntersectionsStorage;
+
+		zeroDispatchKernel.target = this.rayQueue;
+
+		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
+		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
+
+	}
+
 	*createRenderTask() {
 
 		const {
@@ -419,6 +461,21 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the populate pass below overwrites whatever the resize carried over
 		const pixelCount = targetDimensions.x * targetDimensions.y;
 		this._applyBudget( pixelCount );
+
+		// compile the kernels before their first dispatch. The buffers are bound first because the
+		// generated shaders depend on them - a 1 element placeholder is emitted as a single struct
+		// rather than an array - so compiling against the placeholders would miss the real pipelines
+		this._bindKernelBuffers();
+		yield* this.compileKernels( [
+			logicKernel,
+			materialKernel,
+			traceRayKernel,
+			traceShadowRayKernel,
+			rayDispatchConverter,
+			shadowDispatchConverter,
+			zeroDispatchKernel,
+			populatePixelIndicesKernel,
+		] );
 
 		// reset the trace queues — only the length header needs zeroing
 		zeroDispatchKernel.target = this.rayQueue;

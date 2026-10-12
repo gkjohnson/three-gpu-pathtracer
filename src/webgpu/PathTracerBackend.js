@@ -19,6 +19,7 @@ export class PathTracerBackend {
 		this.maxSamples = 0;
 
 		this._renderTask = null;
+		this._compiledKernels = new WeakSet();
 
 		this.outputTarget = new StorageTexture( 1, 1, );
 		this.outputTarget.format = RGBAFormat;
@@ -87,6 +88,52 @@ export class PathTracerBackend {
 		backgroundRotation,
 		backgroundBlurriness,
 	) {
+
+	}
+
+	// Compiles the kernels' pipelines asynchronously and yields until they're ready, so the first
+	// dispatch doesn't block the main thread on a synchronous pipeline compile. Kernels compiled by an
+	// earlier render task are skipped so a reset doesn't wait a frame for nothing.
+	*compileKernels( kernels ) {
+
+		const { renderer, _compiledKernels } = this;
+
+		// three.js r185 has no async compute compile, so the pipelines compile on first dispatch
+		if ( ! renderer.compileComputeAsync ) {
+
+			return;
+
+		}
+
+		const computeNodes = kernels
+			.map( kernel => kernel.kernel )
+			.filter( computeNode => ! _compiledKernels.has( computeNode ) );
+
+		if ( computeNodes.length === 0 ) {
+
+			return;
+
+		}
+
+		let complete = false;
+		renderer.compileComputeAsync( computeNodes )
+			.catch( () => {
+
+				// a failed compile is retried, and reported, by the dispatch
+
+			} )
+			.finally( () => {
+
+				computeNodes.forEach( computeNode => _compiledKernels.add( computeNode ) );
+				complete = true;
+
+			} );
+
+		while ( ! complete ) {
+
+			yield;
+
+		}
 
 	}
 
