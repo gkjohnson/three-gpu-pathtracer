@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 - WebGPUPathTracer: Environment map importance sampling accuracy.
+- WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
 
 ## [0.0.27] - 2026.10.08
 ### Added
