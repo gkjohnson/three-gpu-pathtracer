@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 - WebGPUPathTracer: Environment map importance sampling accuracy.
+- WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
 
 ## [0.0.27] - 2026.10.08
 ### Added
