@@ -94,8 +94,14 @@ class TextureCache {
 
 		} else {
 
-			value = value.clone();
+			// hash the scene's texture rather than the clone, whose uuid is new on every call, so an
+			// unchanged texture isn't cloned and re-processed each time the environment is updated
 			hash = value.uuid + '_' + value.version;
+			if ( hash !== this.hash ) {
+
+				value = value.clone();
+
+			}
 
 		}
 
