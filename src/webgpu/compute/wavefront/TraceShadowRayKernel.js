@@ -5,7 +5,7 @@ import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, intersectionResultStruct } from './structs.js';
 
-// Pure BVH traversal over the queued shadow rays. Uses a first-hit traversal with flipped face culling
+// Pure BVH traversal over the queued shadow rays. Uses a first-hit traversal without face culling
 // ( no dedicated any-hit traversal exists yet ); LogicKernel decides occlusion by comparing the
 // hit distance against the light distance.
 export class TraceShadowRayKernel extends ComputeKernel {

@@ -339,7 +339,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
 							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
-							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist - ${ LIGHT_EPSILON };
+							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {

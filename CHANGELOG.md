@@ -5,19 +5,24 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+- WebGPUPathTracer: Environment map importance sampling accuracy.
+
+## [0.0.27] - 2026.10.08
 ### Added
 - WebGPUPathTracer: Support for three.js' SunLight.
-- WebGPUPathTracer: Support for a "visibleToCamera" flag on area lights to make them visible to the camera.
+- WebGPUPathTracer: Support for a "visibleToCameraRays" flag on area lights to make them visible to the camera.
+- WebGPUPathTracer: Support for render target textures.
 
 ### Changed
 - WebGPUPathTracer: Lights are chosen for sampling by their estimated contribution rather than uniformly, reducing noise in scenes with many lights.
-- WebGPUPathTracer: One sided surfaces block light based on the side facing the light, so inverted hull outlines no longer shadow the models they surround.
+- WebGPUPathTracer: One sided surfaces block light from both sides. Objects can opt out of casting shadows with a "visibleToShadowRays" flag.
 
 ### Fixed
 - WebGPUPathTracer rendering black after changing "maxBounces" or "maxTransparentBounces" once the render had settled.
 - Memory leak on every reset, scene change, and dispose from compute kernels never being released.
 - FSRUpscaler leaking GPU resources each time it was attached to the path tracer.
-- WebGPUPathTracer: Environment map importance sampling accuracy.
+- WebGPUPathTracer.dispose not disposing the materials of its full screen quads.
+- WebGPUPathTracer crashing on multi-material meshes with null material slots. The groups are now skipped.
 
 ## [0.0.26] - 2026.09.29
 ### Fixed

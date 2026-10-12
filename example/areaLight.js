@@ -29,7 +29,7 @@ const params = {
 
 	// area light settings
 	isCircular: false,
-	visibleToCamera: false,
+	visibleToCameraRays: false,
 	intensity: 10,
 	width: 0.15,
 	height: 1.5,
@@ -138,7 +138,7 @@ async function init() {
 
 	const areaLightFolder = gui.addFolder( 'Area Light' );
 	areaLightFolder.add( params, 'isCircular' ).name( 'isCircular' ).onChange( onParamsChange );
-	areaLightFolder.add( params, 'visibleToCamera' ).name( 'visibleToCamera' ).onChange( onParamsChange );
+	areaLightFolder.add( params, 'visibleToCameraRays' ).name( 'visibleToCameraRays' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'intensity', 0, 200 ).name( 'intensity' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'width', 0, 5 ).name( 'width' ).onChange( onParamsChange );
 	areaLightFolder.add( params, 'height', 0, 5 ).name( 'height' ).onChange( onParamsChange );
@@ -156,7 +156,7 @@ function onParamsChange() {
 	[ leftLight, rightLight ].forEach( light => {
 
 		light.isCircular = params.isCircular;
-		light.visibleToCamera = params.visibleToCamera;
+		light.visibleToCameraRays = params.visibleToCameraRays;
 		light.intensity = params.intensity;
 		light.width = params.width;
 		light.height = params.height;

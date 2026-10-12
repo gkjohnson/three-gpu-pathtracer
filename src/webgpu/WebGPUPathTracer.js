@@ -1275,14 +1275,20 @@ export class WebGPUPathTracer {
 		this._bvhData.textureAtlas.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
-		this._blitQuad.dispose();
 		this._lowResTarget.dispose();
+
+		// FullScreenQuad.dispose only disposes the shared geometry, not the material
+		this._blitQuad.dispose();
+		this._blitQuad.material.dispose();
 		this._atlasDebugQuad?.dispose();
+		this._atlasDebugQuad?.material.dispose();
 		this._sampleDensityQuad?.dispose();
+		this._sampleDensityQuad?.material.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 
 			this._debugBoundsQuad.dispose();
+			this._debugBoundsQuad.material.dispose();
 
 		}
 
