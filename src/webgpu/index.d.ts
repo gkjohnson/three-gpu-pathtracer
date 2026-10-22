@@ -1,4 +1,4 @@
-import { Camera, Scene, Texture, ExternalTexture } from 'three';
+import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 
 // three.js type augmentation
@@ -155,7 +155,13 @@ export interface DebugBoundsOptions {
 
 }
 
-export class WebGPUPathTracer {
+export interface WebGPUPathTracerEventMap {
+
+	'complete': {};
+
+}
+
+export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> {
 
 	constructor( renderer: WebGPURenderer );
 

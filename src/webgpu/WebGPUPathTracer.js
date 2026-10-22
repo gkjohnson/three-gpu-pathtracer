@@ -1,4 +1,4 @@
-import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -32,6 +32,9 @@ import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+
+// milliseconds between sample count readbacks while waiting for the render to complete
+const COMPLETE_CHECK_INTERVAL = 250;
 
 class TextureCache {
 
@@ -132,6 +135,14 @@ class TextureCache {
 
 }
 
+// WebGPUPathTracer Event Definitions
+
+/**
+ * Fired once every pixel has reached `maxSamples`. Fires again after a reset, or after
+ * `maxSamples` is raised, once the render has caught up.
+ * @event WebGPUPathTracer#complete
+ */
+
 /**
  * Progressive path tracer running on WebGPU. Call {@link WebGPUPathTracer#setScene} once,
  * then {@link WebGPUPathTracer#renderSample} every frame to accumulate samples into the canvas.
@@ -140,7 +151,7 @@ class TextureCache {
  * the environment afterward require the matching `update*` function. Any change that invalidates
  * the accumulated image restarts it.
  */
-export class WebGPUPathTracer {
+export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Maximum number of times a ray can scatter before the path is terminated. Higher values
@@ -235,6 +246,10 @@ export class WebGPUPathTracer {
 		const counts = this._lastSampleCounts;
 		const measured = await pathTracer.getSampleCountsAsync();
 
+		// "min" so the render only counts as complete once every pixel has stopped
+		const maxSamples = this.maxSamples;
+		const wasComplete = maxSamples > 0 && counts.min >= maxSamples;
+
 		counts.min = measured.min;
 		counts.max = measured.max;
 		counts.avg = measured.avg;
@@ -242,6 +257,14 @@ export class WebGPUPathTracer {
 		// averaged over the whole render, and idle time counts against it
 		const elapsed = this.getRenderTime() / 1000;
 		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+
+		// fires on the change. A measurement from before a reset does not count
+		const isComplete = maxSamples > 0 && counts.min >= maxSamples;
+		if ( counts === this._lastSampleCounts && isComplete && ! wasComplete ) {
+
+			this.dispatchEvent( { type: 'complete' } );
+
+		}
 
 		return { ...counts };
 
@@ -457,6 +480,8 @@ export class WebGPUPathTracer {
 	 */
 	constructor( renderer ) {
 
+		super();
+
 		// members
 		this._renderer = renderer;
 		this._timer = new Timer();
@@ -598,6 +623,9 @@ export class WebGPUPathTracer {
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
 		this._invViewProjectionMatrix = uniform( new Matrix4() );
 		this._cameraRayFnHandle = null;
+
+		// the render time of the last check for the render having stopped
+		this._lastCompleteCheck = 0;
 
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
@@ -957,6 +985,7 @@ export class WebGPUPathTracer {
 
 		// a fresh object rather than a clear, so measurements still in flight detach
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastCompleteCheck = 0;
 
 		if ( this.stableNoise ) {
 
@@ -1075,8 +1104,15 @@ export class WebGPUPathTracer {
 		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
-			if ( ( this._fadeState < 1 && minSamples > 0 ) || awaitingDenoise ) {
+			if ( this._fadeState < 1 && minSamples > 0 ) {
 
+				this.getSampleCountsAsync();
+
+			} else if ( maxSamples > 0 && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
+
+				// the readback stalls the gpu pipeline, so a capped render only measures a few times
+				// a second. The "complete" event and the denoiser both key off it
+				this._lastCompleteCheck = this._resetTime;
 				this.getSampleCountsAsync();
 
 			}

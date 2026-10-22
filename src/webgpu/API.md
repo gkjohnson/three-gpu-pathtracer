@@ -261,6 +261,14 @@ the environment afterward require the matching `update*` function. Any change th
 the accumulated image restarts it.
 
 
+### events
+
+```js
+// Fired once every pixel has reached `maxSamples`. Fires again after a reset, or after
+// `maxSamples` is raised, once the render has caught up.
+{ type: 'complete' }
+```
+
 ### .maxBounces
 
 ```js
@@ -467,6 +475,17 @@ synchronizeRenderSize: boolean = true
 
 Whether to track the canvas size automatically. Set to `false` to drive the render
 size with [WebGPUPathTracer#setSize](WebGPUPathTracer#setSize).
+
+
+### .renderToCanvas
+
+```js
+renderToCanvas: boolean = true
+```
+
+Whether [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) draws the result to the current render
+target, the canvas by default. Set to `false` to only accumulate, as when baking to a
+texture read through [WebGPUPathTracer#target](WebGPUPathTracer#target).
 
 
 ### .generateMissingAttributes
