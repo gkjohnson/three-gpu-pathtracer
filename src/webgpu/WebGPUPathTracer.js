@@ -535,6 +535,15 @@ export class WebGPUPathTracer {
 		this.synchronizeRenderSize = true;
 
 		/**
+		 * Whether {@link WebGPUPathTracer#renderSample} draws the result to the current render
+		 * target, the canvas by default. Set to `false` to only accumulate, as when baking to a
+		 * texture read through {@link WebGPUPathTracer#target}.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.renderToCanvas = true;
+
+		/**
 		 * Whether to generate the attributes in {@link WebGPUPathTracer#commonAttributes} on
 		 * geometry that is missing them when the scene is set.
 		 * @type {boolean}
@@ -1100,21 +1109,26 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( upscaler && ! lowResMode ) {
+		// the upscale and the draw only serve the display
+		if ( this.renderToCanvas ) {
 
-			texture = upscaler.upscale( texture, this.camera );
+			if ( upscaler && ! lowResMode ) {
 
-			// the pass above binds its own targets
-			renderer.setRenderTarget( originalTarget );
+				texture = upscaler.upscale( texture, this.camera );
+
+				// the pass above binds its own targets
+				renderer.setRenderTarget( originalTarget );
+
+			}
+
+			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
+			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
+			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+			blitQuad.material.fromTexture = lowResTarget;
+			blitQuad.material.texture = texture;
+			blitQuad.render( renderer );
 
 		}
-
-		renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
-		blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
-		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
-		blitQuad.material.fromTexture = lowResTarget;
-		blitQuad.material.texture = texture;
-		blitQuad.render( renderer );
 
 		// reset the renderer
 		renderer.autoClear = originalAutoClear;

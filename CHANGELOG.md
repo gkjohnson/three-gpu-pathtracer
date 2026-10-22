@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+- WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
 
