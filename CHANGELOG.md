@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 - WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
+- WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
 

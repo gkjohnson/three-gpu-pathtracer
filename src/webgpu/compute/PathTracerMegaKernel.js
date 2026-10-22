@@ -137,6 +137,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
+					// a declined pixel never takes a sample, so with a cap it counts as finished
+					if ( maxSamples != 0u ) {
+
+						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( maxSamples ) );
+
+					}
+
 					return;
 
 				}

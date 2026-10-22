@@ -116,9 +116,16 @@ export class MaterialKernel extends ComputeKernel {
 					var ray: ${ rayStruct };
 					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
-						// the camera declined the pixel, so leave the slot dormant for this round
+						// the camera declined the pixel, so leave the slot dormant for this round. With a
+						// sample cap the pixel counts as finished, since it will never take a sample
 						// TODO: same as above - this work is a bit wasteful and leaves slots empty for
 						// a frame. Is it possible to quickly skip rays outside the mask or are finished?
+						if ( maxSamples != 0u ) {
+
+							textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
+
+						}
+
 						rayDataStorage[ index ].pixelIndex = pixelIndex;
 						rayDataStorage[ index ].rayIntersectionIndex = - 1;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
