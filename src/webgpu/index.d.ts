@@ -176,6 +176,7 @@ export class WebGPUPathTracer {
 	lowResScale: number;
 	renderScale: number;
 	synchronizeRenderSize: boolean;
+	renderToCanvas: boolean;
 	generateMissingAttributes: boolean;
 	commonAttributes: Array<string>;
 	stableNoise: boolean;
