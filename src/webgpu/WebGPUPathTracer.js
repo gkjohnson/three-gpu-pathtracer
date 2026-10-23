@@ -102,7 +102,11 @@ class TextureCache {
 			hash = value.uuid + '_' + value.version;
 			if ( hash !== this.hash ) {
 
+				// a nearest filtered texture gets no sampler from TSL, which the equirect sampling
+				// needs, so the copy is always filtered
 				value = value.clone();
+				value.minFilter = LinearFilter;
+				value.magFilter = LinearFilter;
 
 			}
 
