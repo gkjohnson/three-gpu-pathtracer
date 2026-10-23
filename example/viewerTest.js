@@ -67,7 +67,6 @@ let gui, model, envMap;
 let pathTracer, renderer, camera, scene, controls, denoiser;
 let loadingModel = false;
 let delaySamples = 0;
-let renderCompleteDispatched = false;
 let modelDatabase;
 let detailedSampleCount = null;
 
@@ -159,6 +158,14 @@ async function createRenderer() {
 	} );
 	pathTracer.setDenoiser( params.denoise ? denoiser : null );
 
+	// forwarded for the screenshot tooling, with the final counts shown
+	pathTracer.addEventListener( 'complete', () => {
+
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+		window.dispatchEvent( new Event( 'render-complete' ) );
+
+	} );
+
 	detailedSampleCount = null;
 
 }
@@ -174,17 +181,8 @@ function animate() {
 	imgEl.style.width = renderer.domElement.style.width;
 	imgEl.style.height = renderer.domElement.style.height;
 
-	// if rendering has completed then don't render. Completion arrives from an async readback, so
-	// it is announced here rather than after the frame that found it
-	if ( renderComplete() ) {
-
-		if ( ! renderCompleteDispatched ) {
-
-			renderCompleteDispatched = true;
-			loader.setSamples( detailedSampleCount );
-			window.dispatchEvent( new Event( 'render-complete' ) );
-
-		}
+	// if rendering has completed then don't render
+	if ( pathTracer.complete ) {
 
 		return;
 
@@ -236,13 +234,6 @@ function animate() {
 
 }
 
-// every pixel has reached the sample cap and the denoised image, if any, has been produced
-function renderComplete() {
-
-	return pathTracer.complete;
-
-}
-
 function onModelChange() {
 
 	const modelName = new URLSearchParams( window.location.search ).get( 'model' );
@@ -255,8 +246,6 @@ function onModelChange() {
 function onParamsChange() {
 
 	delaySamples = 1;
-	renderCompleteDispatched = false;
-
 	if ( params.checkerboardTransparency ) {
 
 		containerEl.classList.add( 'checkerboard' );
@@ -351,20 +340,14 @@ function buildGui() {
 	pathTracingFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
-		renderCompleteDispatched = false;
-
 	} );
 	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
 
 		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
-		renderCompleteDispatched = false;
-
 	} );
 	pathTracingFolder.add( params, 'denoise' ).onChange( v => {
 
 		pathTracer.setDenoiser( v ? denoiser : null );
-		renderCompleteDispatched = false;
-
 	} );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
@@ -452,7 +435,6 @@ async function updateModel() {
 	orbit.radius = Math.max( orbit.radius, 1e-5 );
 
 	loadingModel = true;
-	renderCompleteDispatched = false;
 	containerEl.style.display = 'none';
 
 	// load assets
