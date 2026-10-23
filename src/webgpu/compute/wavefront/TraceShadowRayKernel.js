@@ -1,7 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
-import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, intersectionResultStruct } from './structs.js';
 
@@ -13,7 +13,6 @@ export class TraceShadowRayKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
 			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
@@ -21,8 +20,8 @@ export class TraceShadowRayKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastShadowFn = proxy( 'bvhData.value.fns.raycastShadow', params );
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastShadowFn = contextProxy( 'bvhData.fns.raycastShadow' );
 
 		const fn = wgslTagFn /* wgsl */`
 
