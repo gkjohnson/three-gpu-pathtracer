@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-- WebGPUPathTracer: A "complete" event once every pixel has reached "maxSamples".
+- WebGPUPathTracer: A "complete" event and flag once every pixel has reached "maxSamples" and the denoiser, if any, has run.
 - WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
 - WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
