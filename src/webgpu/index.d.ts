@@ -189,6 +189,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	pause: boolean;
 
 	readonly target: Texture | null;
+	readonly complete: boolean;
 	readonly fadeState: number;
 	readonly lowResTarget: Texture;
 	readonly lowResMode: boolean;

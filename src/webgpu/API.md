@@ -264,8 +264,8 @@ the accumulated image restarts it.
 ### events
 
 ```js
-// Fired once every pixel has reached `maxSamples`. Fires again after a reset, or after
-// `maxSamples` is raised, once the render has caught up.
+// Fired once every pixel has reached `maxSamples` and an attached denoiser has finished. Fires
+// again after a reset, or after `maxSamples` is raised, once the render has caught up.
 { type: 'complete' }
 ```
 
@@ -310,6 +310,16 @@ render has stopped, so it has no effect while this is `0`.
 
 > [!NOTE]
 > `0` renders indefinitely.
+
+### .complete
+
+```js
+complete: boolean
+```
+
+Whether every pixel has reached [WebGPUPathTracer#maxSamples](WebGPUPathTracer#maxSamples) and an attached denoiser
+has finished, as of the last measurement. Always false while rendering indefinitely.
+
 
 ### .transmissiveBackground
 

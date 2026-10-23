@@ -138,8 +138,8 @@ class TextureCache {
 // WebGPUPathTracer Event Definitions
 
 /**
- * Fired once every pixel has reached `maxSamples`. Fires again after a reset, or after
- * `maxSamples` is raised, once the render has caught up.
+ * Fired once every pixel has reached `maxSamples` and an attached denoiser has finished. Fires
+ * again after a reset, or after `maxSamples` is raised, once the render has caught up.
  * @event WebGPUPathTracer#complete
  */
 
@@ -233,6 +233,21 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Whether every pixel has reached {@link WebGPUPathTracer#maxSamples} and an attached denoiser
+	 * has finished, as of the last measurement. Always false while rendering indefinitely.
+	 * @type {boolean}
+	 */
+	get complete() {
+
+		const maxSamples = this.maxSamples;
+		const denoiser = this._denoiser;
+
+		// "min" so every pixel has stopped, not just the average
+		return maxSamples > 0 && this._lastSampleCounts.min >= maxSamples && ( ! denoiser || denoiser.complete );
+
+	}
+
+	/**
 	 * Measures the per pixel sample counts. Use `min` for convergence checks and `avg` to display.
 	 * @returns {Promise<SampleCounts>}
 	 * @note The wavefront backend reduces the counts on the GPU and reads them back, so only call
@@ -246,10 +261,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const counts = this._lastSampleCounts;
 		const measured = await pathTracer.getSampleCountsAsync();
 
-		// "min" so the render only counts as complete once every pixel has stopped
-		const maxSamples = this.maxSamples;
-		const wasComplete = maxSamples > 0 && counts.min >= maxSamples;
-
 		counts.min = measured.min;
 		counts.max = measured.max;
 		counts.avg = measured.avg;
@@ -257,14 +268,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// averaged over the whole render, and idle time counts against it
 		const elapsed = this.getRenderTime() / 1000;
 		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
-
-		// fires on the change. A measurement from before a reset does not count
-		const isComplete = maxSamples > 0 && counts.min >= maxSamples;
-		if ( counts === this._lastSampleCounts && isComplete && ! wasComplete ) {
-
-			this.dispatchEvent( { type: 'complete' } );
-
-		}
 
 		return { ...counts };
 
@@ -626,6 +629,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// the render time of the last check for the render having stopped
 		this._lastCompleteCheck = 0;
+		this._wasComplete = false;
 
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
@@ -986,6 +990,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// a fresh object rather than a clear, so measurements still in flight detach
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._lastCompleteCheck = 0;
+		this._wasComplete = false;
 
 		if ( this.stableNoise ) {
 
@@ -1144,6 +1149,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 			texture = denoiser.texture ?? texture;
 
 		}
+
+		// fires once the render, and the denoiser if one is attached, has finished
+		const complete = this.complete;
+		if ( complete && ! this._wasComplete ) {
+
+			this.dispatchEvent( { type: 'complete' } );
+
+		}
+
+		this._wasComplete = complete;
 
 		// the upscale and the draw only serve the display
 		if ( this.renderToCanvas ) {
