@@ -340,14 +340,17 @@ function buildGui() {
 	pathTracingFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
+
 	} );
 	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
 
 		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
+
 	} );
 	pathTracingFolder.add( params, 'denoise' ).onChange( v => {
 
 		pathTracer.setDenoiser( v ? denoiser : null );
+
 	} );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
