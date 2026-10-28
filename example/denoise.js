@@ -14,11 +14,11 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { Backdrop } from './src/Backdrop.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { initUNetFromURL } from 'oidn-web';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler } from '@pmndrs/upscaler';
 import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler } from 'three-gpu-pathtracer/webgpu';
 
-// the library ships neither "oidn-web" nor the network weights, so the app provides both
+// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 const WEIGHTS_AUX_URL = new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString();
 const WEIGHTS_COLOR_URL = new URL( './src/denoise/rt_hdr.tza', import.meta.url ).toString();
 

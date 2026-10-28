@@ -17,7 +17,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer, OIDNDenoiser, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { initUNetFromURL } from 'oidn-web';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { LoaderElement } from './src/LoaderElement.js';
 
 const RANDOM_STRATEGIES = {
@@ -149,7 +149,7 @@ async function createRenderer() {
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setRandom( RANDOM_STRATEGIES[ params.randomStrategy ] );
 
-	// the library ships neither "oidn-web" nor the network weights, so the app provides both
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
 		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
