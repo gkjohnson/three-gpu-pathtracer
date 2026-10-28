@@ -9,7 +9,6 @@ import {
 	Matrix3,
 } from 'three/webgpu';
 
-const MAX_TEXTURE_SIZE = 4096;
 const _prevClearColor = new Color();
 const _prevMatrix = new Matrix3();
 
@@ -243,9 +242,9 @@ export class AtlasTexture {
 
 		}
 
-		// calculate the maximum dimension of the atlas
+		// calculate the maximum dimension of the atlas, up to what the device allows
 		let maxDim = textures.reduce( ( v, t ) => Math.max( v, t.width, t.height ), 1 );
-		maxDim = Math.min( MAX_TEXTURE_SIZE, maxDim );
+		maxDim = Math.min( renderer.backend.device.limits.maxTextureDimension2D, maxDim );
 
 		const width = maxDim;
 		const height = maxDim;
