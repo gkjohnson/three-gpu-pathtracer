@@ -1,7 +1,6 @@
-import { ExternalTexture, NearestFilter, NoToneMapping, RenderTarget, UnsignedByteType } from 'three/webgpu';
-import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
+import { ExternalTexture } from 'three/webgpu';
 
-/** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { StorageBufferAttribute, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
 
 /**
@@ -88,7 +87,7 @@ export class OIDNDenoiser {
 		this.auxWeightsUrl = auxWeightsUrl;
 		this.colorWeightsUrl = colorWeightsUrl;
 
-		// `false` falls back to the color only model, which is blurrier but skips a scene render
+		// `false` falls back to the color only model, which is blurrier but needs no guides
 		this.useAuxiliaryBuffers = useAuxiliaryBuffers;
 
 		// tiling, passed through to oidn-webgpu. Null keeps its defaults
@@ -96,8 +95,6 @@ export class OIDNDenoiser {
 		this.dynamicTile = dynamicTile;
 
 		this.renderer = null;
-		this.scene = null;
-		this.camera = null;
 
 		this._texture = null;
 		this._running = false;
@@ -108,7 +105,9 @@ export class OIDNDenoiser {
 
 		this._resultPipeline = null;
 		this._rawTexture = null;
-		this._auxTarget = null;
+
+		this._resolvePipeline = null;
+		this._inputBuffers = null;
 
 	}
 
@@ -122,23 +121,14 @@ export class OIDNDenoiser {
 	}
 
 	/**
-	 * @param {Scene} scene
-	 * @param {Camera} camera
-	 */
-	setScene( scene, camera ) {
-
-		this.scene = scene;
-		this.camera = camera;
-
-	}
-
-	/**
-	 * Renders the auxiliary buffers and starts a pass. Safe to call every frame.
+	 * Starts a pass guided by the first hit albedo and normal the path tracer accumulates, two
+	 * vec4 per pixel, unless `useAuxiliaryBuffers` is off. Safe to call every frame.
 	 *
-	 * @param {Texture} target - The path traced result, in linear HDR.
+	 * @param {Texture} color - The path traced result, in linear HDR.
+	 * @param {StorageBufferAttribute|null} features
 	 * @returns {Texture|null}
 	 */
-	update( target ) {
+	update( color, features = null ) {
 
 		if ( this._complete || this._running ) {
 
@@ -146,17 +136,18 @@ export class OIDNDenoiser {
 
 		}
 
-		let albedo = null;
-		let normal = null;
-		if ( this.useAuxiliaryBuffers ) {
+		if ( this.useAuxiliaryBuffers && features ) {
 
-			const auxTarget = this._renderAuxiliaryBuffers( target.width, target.height );
-			albedo = auxTarget.textures[ 0 ];
-			normal = auxTarget.textures[ 1 ];
+			// oidn-webgpu reads every input the same way, so the color joins the guides as a buffer
+			const { width, height } = color;
+			const buffers = this._resolveInputs( color, features );
+			this._denoise( buffers.color, buffers.albedo, buffers.normal, width, height );
+
+		} else {
+
+			this.denoise( color );
 
 		}
-
-		this.denoise( target, albedo, normal );
 
 		return this._texture;
 
@@ -164,14 +155,22 @@ export class OIDNDenoiser {
 
 	/**
 	 * Runs a pass unless one is already running or finished. The optional albedo and normal
-	 * buffers guide the filter and select the guided model. Both hold [0,1] values, with normals
-	 * mapped so a flat normal is (0.5, 0.5, 1).
+	 * guides select the guided model. Both hold one vec4 of [0,1] values per pixel in the color's
+	 * row order, with normals mapped so a flat normal is (0.5, 0.5, 1).
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {Texture|null} albedo
-	 * @param {Texture|null} normal
+	 * @param {Texture|StorageBufferAttribute|null} albedo
+	 * @param {Texture|StorageBufferAttribute|null} normal
 	 */
 	async denoise( color, albedo = null, normal = null ) {
+
+		const { width, height } = color;
+		return this._denoise( color, albedo, normal, width, height );
+
+	}
+
+	// the inputs are three textures, storage attributes, or raw gpu buffers and textures
+	async _denoise( color, albedo, normal, width, height ) {
 
 		if ( this._complete || this._running ) {
 
@@ -204,14 +203,31 @@ export class OIDNDenoiser {
 
 		}
 
-		// three only holds a WebGPU texture for a three texture once it has been initialized
+		// three only holds a WebGPU texture for a three texture once it has been initialized. The
+		// guide buffers have been bound by the kernels that filled them
 		const { renderer } = this;
 		const backend = renderer.backend;
-		renderer.initTexture( color );
+		const getResource = value => {
 
-		const { width, height } = color;
+			if ( value instanceof GPUBuffer || value instanceof GPUTexture ) {
+
+				return value;
+
+			}
+
+			if ( value.isTexture ) {
+
+				renderer.initTexture( value );
+				return backend.get( value ).texture;
+
+			}
+
+			return backend.get( value ).buffer;
+
+		};
+
 		const inputs = {
-			color: { data: backend.get( color ).texture, width, height },
+			color: { data: getResource( color ), width, height },
 
 			// pace the tiles to display frames so the path tracer keeps rendering between them
 			scheduling: 'animation-frame',
@@ -227,13 +243,11 @@ export class OIDNDenoiser {
 			},
 		};
 
-		// the guided model needs both buffers, and the color only model must not be given them
+		// the guided model needs both guides, and the color only model must not be given them
 		if ( useAux ) {
 
-			renderer.initTexture( albedo );
-			renderer.initTexture( normal );
-			inputs.albedo = { data: backend.get( albedo ).texture, width, height };
-			inputs.normal = { data: backend.get( normal ).texture, width, height };
+			inputs.albedo = { data: getResource( albedo ), width, height };
+			inputs.normal = { data: getResource( normal ), width, height };
 
 		}
 
@@ -264,9 +278,7 @@ export class OIDNDenoiser {
 	dispose() {
 
 		this.reset();
-
-		this._auxTarget?.dispose();
-		this._auxTarget = null;
+		this._disposeInputBuffers();
 
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
@@ -278,52 +290,100 @@ export class OIDNDenoiser {
 
 	}
 
-	// Rasterizes the albedo and normal buffers that guide the filter. oidn-webgpu takes normals
-	// mapped into [0,1], with (0.5, 0.5, 1) as a flat normal.
-	_renderAuxiliaryBuffers( width, height ) {
+	// Writes the color and the two guides into buffers oidn-webgpu reads directly, since it takes
+	// every input as the same kind and the kernels keep the guides interleaved in one buffer
+	_resolveInputs( color, features ) {
 
-		const { renderer, scene, camera } = this;
+		const { renderer } = this;
+		const backend = renderer.backend;
+		const device = backend.device;
+		const { width, height } = color;
 
-		if ( ! this._auxTarget ) {
+		if ( ! this._resolvePipeline ) {
 
-			// Eight bits per channel since both buffers hold [0,1]. Multisampled so the rasterized
-			// silhouettes match the jittered path traced ones.
-			this._auxTarget = new RenderTarget( 1, 1, {
-				count: 2,
-				type: UnsignedByteType,
-				minFilter: NearestFilter,
-				magFilter: NearestFilter,
-				samples: 4,
+			const module = device.createShaderModule( {
+				code: /* wgsl */`
+					@group( 0 ) @binding( 0 ) var color : texture_2d<f32>;
+					@group( 0 ) @binding( 1 ) var<storage, read> features : array<vec4f>;
+					@group( 0 ) @binding( 2 ) var<storage, read_write> outColor : array<vec4f>;
+					@group( 0 ) @binding( 3 ) var<storage, read_write> outAlbedo : array<vec4f>;
+					@group( 0 ) @binding( 4 ) var<storage, read_write> outNormal : array<vec4f>;
+
+					@compute @workgroup_size( 8, 8 )
+					fn main( @builtin( global_invocation_id ) gid : vec3u ) {
+
+						let dims = textureDimensions( color );
+						if ( gid.x >= dims.x || gid.y >= dims.y ) {
+
+							return;
+
+						}
+
+						let i = gid.y * dims.x + gid.x;
+						outColor[ i ] = textureLoad( color, gid.xy, 0 );
+						outAlbedo[ i ] = features[ 2u * i ];
+						outNormal[ i ] = features[ 2u * i + 1u ];
+
+					}
+				`,
 			} );
 
-			// the MRT keys are matched against these names
-			this._auxTarget.textures[ 0 ].name = 'output';
-			this._auxTarget.textures[ 1 ].name = 'normal';
+			this._resolvePipeline = device.createComputePipeline( {
+				layout: 'auto',
+				compute: { module, entryPoint: 'main' },
+			} );
 
 		}
 
-		const auxTarget = this._auxTarget;
-		auxTarget.setSize( width, height );
+		let buffers = this._inputBuffers;
+		if ( ! buffers || buffers.width !== width || buffers.height !== height ) {
 
-		const originalTarget = renderer.getRenderTarget();
-		const originalMRT = renderer.getMRT();
-		const originalToneMapping = renderer.toneMapping;
+			this._disposeInputBuffers();
 
-		// the buffers are data rather than an image, so they must not be tone mapped
-		renderer.toneMapping = NoToneMapping;
-		renderer.setRenderTarget( auxTarget );
-		renderer.setMRT( mrt( {
-			output: diffuseColor,
-			normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
-		} ) );
+			const createBuffer = () => device.createBuffer( {
+				size: 16 * width * height,
+				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+			} );
+			buffers = { width, height, color: createBuffer(), albedo: createBuffer(), normal: createBuffer() };
+			this._inputBuffers = buffers;
 
-		renderer.render( scene, camera );
+		}
 
-		renderer.setMRT( originalMRT );
-		renderer.setRenderTarget( originalTarget );
-		renderer.toneMapping = originalToneMapping;
+		renderer.initTexture( color );
+		const bindGroup = device.createBindGroup( {
+			layout: this._resolvePipeline.getBindGroupLayout( 0 ),
+			entries: [
+				{ binding: 0, resource: backend.get( color ).texture.createView() },
+				{ binding: 1, resource: { buffer: backend.get( features ).buffer } },
+				{ binding: 2, resource: { buffer: buffers.color } },
+				{ binding: 3, resource: { buffer: buffers.albedo } },
+				{ binding: 4, resource: { buffer: buffers.normal } },
+			],
+		} );
 
-		return auxTarget;
+		const encoder = device.createCommandEncoder();
+		const pass = encoder.beginComputePass();
+		pass.setPipeline( this._resolvePipeline );
+		pass.setBindGroup( 0, bindGroup );
+		pass.dispatchWorkgroups( Math.ceil( width / 8 ), Math.ceil( height / 8 ) );
+		pass.end();
+		device.queue.submit( [ encoder.finish() ] );
+
+		return buffers;
+
+	}
+
+	_disposeInputBuffers() {
+
+		const buffers = this._inputBuffers;
+		if ( buffers ) {
+
+			buffers.color.destroy();
+			buffers.albedo.destroy();
+			buffers.normal.destroy();
+			this._inputBuffers = null;
+
+		}
 
 	}
 

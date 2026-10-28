@@ -1,5 +1,5 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
-import { uv, uniform, varying } from 'three/tsl';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, StorageBufferAttribute, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { uv, uniform, varying, storage } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -476,6 +476,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
+		this._pathTracer.setDenoisingFeatures( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
 
 		// the new tracer has default environment and background maps so apply the cached scene textures
@@ -660,7 +661,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Attaches a denoiser, run once the render settles and displayed in place of the raw image.
-	 * Settings live on the instance. Pass null to remove it.
+	 * Settings live on the instance. Pass null to remove it. The render restarts when the guide
+	 * buffers it needs are added or dropped.
 	 *
 	 * @param {OIDNDenoiser|null} denoiser
 	 */
@@ -674,9 +676,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( denoiser ) {
 
 			denoiser.init( this._renderer );
-			denoiser.setScene( this.scene, this.camera );
 
 		}
+
+		this._pathTracer.setDenoisingFeatures( Boolean( denoiser && denoiser.useAuxiliaryBuffers ) );
 
 	}
 
@@ -770,9 +773,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.setCamera( camera );
 		this.updateEnvironment();
 		this.updateLights();
-
-		// the denoiser rasterizes its own guide buffers, so it needs the scene too
-		this._denoiser?.setScene( scene, camera );
 
 	}
 
@@ -1225,7 +1225,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// "min" so every pixel has stopped, not just the average
 			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
 
-				denoiser.update( pathTracer.outputTarget );
+				denoiser.update( pathTracer.outputTarget, pathTracer.featureBuffer );
 
 			}
 
@@ -1418,6 +1418,69 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Draws one of the guides accumulated for the denoiser, for checking what it is given. Nothing
+	 * is drawn until a denoiser that uses them is attached.
+	 *
+	 * @param {'albedo'|'normal'} [guide='albedo']
+	 */
+	renderDenoisingFeatures( guide = 'albedo' ) {
+
+		const renderer = this._renderer;
+		const pathTracer = this._pathTracer;
+
+		if ( ! renderer._initialized || ! pathTracer.featureBuffer ) {
+
+			return;
+
+		}
+
+		if ( ! this._featureDebugQuad ) {
+
+			this._buildFeatureDebugQuad();
+
+		}
+
+		const uniforms = this._featureDebugUniforms;
+		uniforms.features.value = pathTracer.featureBuffer;
+		uniforms.guide.value = guide === 'normal' ? 1 : 0;
+		pathTracer.getSize( uniforms.size.value );
+
+		const originalToneMapping = renderer.toneMapping;
+		renderer.toneMapping = NoToneMapping;
+
+		renderer.setRenderTarget( null );
+		this._featureDebugQuad.render( renderer );
+
+		renderer.toneMapping = originalToneMapping;
+
+	}
+
+	_buildFeatureDebugQuad() {
+
+		// the guides are two vec4 per pixel, albedo then normal, in the row order of the output target
+		const features = storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ).toReadOnly();
+		const size = uniform( new Vector2() );
+		const guide = uniform( 0, 'uint' );
+		const featureDebug = wgslTagFn/* wgsl */`
+			fn featureDebug( uv: vec2f, size: vec2f, guide: u32 ) -> vec4f {
+
+				// the rows are stored top down, so the quad's bottom up uv is flipped
+				let coord = vec2u( vec2f( uv.x, 1.0 - uv.y ) * size );
+				let index = 2u * ( coord.y * u32( size.x ) + coord.x ) + guide;
+				return vec4f( ${ features }[ index ].rgb, 1.0 );
+
+			}
+		`;
+
+		const material = new MeshBasicNodeMaterial();
+		material.colorNode = featureDebug( varying( uv() ), size, guide );
+
+		this._featureDebugQuad = new FullScreenQuad( material );
+		this._featureDebugUniforms = { features, size, guide };
+
+	}
+
+	/**
 	 * Frees every GPU resource held by the tracer, including any attached denoiser and upscaler.
 	 */
 	dispose() {
@@ -1438,6 +1501,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._atlasDebugQuad?.material.dispose();
 		this._sampleDensityQuad?.dispose();
 		this._sampleDensityQuad?.material.dispose();
+		this._featureDebugQuad?.dispose();
+		this._featureDebugQuad?.material.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 

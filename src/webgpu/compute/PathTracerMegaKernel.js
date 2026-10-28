@@ -1,6 +1,6 @@
-import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Vector2, StorageTexture, StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { texture, sampler, uniform, globalId, textureStore, storage } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
@@ -41,6 +41,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
+			denoisingFeatures: uniform( 0, 'uint' ),
+
+			// the per pixel first hit albedo then normal, as running means like the color
+			featureStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -98,6 +102,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				clampIndirect: f32,
 
 				transmissiveBackground: u32,
+				denoisingFeatures: u32,
 
 			) -> void {
 
@@ -171,6 +176,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
+
+				// the first surface the path scatters off guides the denoiser
+				var featureRecorded = false;
+				var featureAlbedo = vec3f( 0.0 );
+				var featureNormal = vec3f( 0.0 );
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
@@ -352,6 +362,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
+
+						// a transmission looks through to the next surface
+						if ( ! featureRecorded && ! scatterRec.isTransmissive ) {
+
+							featureRecorded = true;
+							featureAlbedo = surface.color;
+							featureNormal = surface.normal;
+
+						}
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
@@ -495,6 +514,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
 				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+
+				// the denoiser guides are blended the same way, in the same row order
+				if ( denoisingFeatures != 0u ) {
+
+					let featureIndex = 2u * ( colorIndex.y * targetDimensions.x + colorIndex.x );
+					let weight = 1.0 / f32( nextSampleCount );
+					let albedo = vec4f( featureAlbedo, 1.0 );
+					let normal = vec4f( featureNormal * 0.5 + 0.5, 1.0 );
+					${ params.featureStorage }[ featureIndex ] = mix( ${ params.featureStorage }[ featureIndex ], albedo, weight );
+					${ params.featureStorage }[ featureIndex + 1u ] = mix( ${ params.featureStorage }[ featureIndex + 1u ], normal, weight );
+
+				}
 
 			}`;
 

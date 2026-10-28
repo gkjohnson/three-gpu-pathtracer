@@ -455,6 +455,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.prevOutputTarget = this.prevOutputTarget;
 				logicKernel.outputTarget = this.outputTarget;
 				logicKernel.sampleCountTarget = this.sampleCountTarget;
+				logicKernel.featureStorage = this.featureBuffer ?? this._featurePlaceholder;
+				logicKernel.denoisingFeatures = this.denoisingFeatures ? 1 : 0;
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path

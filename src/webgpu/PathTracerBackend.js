@@ -1,5 +1,5 @@
 import { ColorManagement, FloatType, RGBAFormat } from 'three';
-import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
+import { RedIntegerFormat, StorageBufferAttribute, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 
 export class PathTracerBackend {
@@ -42,6 +42,27 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
+
+		// the per pixel first hit albedo and normal, two vec4 per pixel, accumulated as denoiser
+		// guides only while asked for. The kernels bind the placeholder otherwise.
+		this.denoisingFeatures = false;
+		this.featureBuffer = null;
+		this._featurePlaceholder = new StorageBufferAttribute( 2, 4 );
+
+	}
+
+	// The guides start over with the render, so the render restarts with them
+	setDenoisingFeatures( value ) {
+
+		if ( this.denoisingFeatures === value ) {
+
+			return;
+
+		}
+
+		this.denoisingFeatures = value;
+		this._updateFeatureBuffers();
+		this.reset();
 
 	}
 
@@ -120,6 +141,7 @@ export class PathTracerBackend {
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
+		this._updateFeatureBuffers();
 
 		this.reset();
 		return true;
@@ -199,7 +221,40 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
+		// the guides are only rewritten as paths finish, so stale values would show until then. The
+		// buffer only exists on the device once a kernel has bound it, and starts out zeroed.
+		if ( this.featureBuffer ) {
+
+			const buffer = renderer.backend.get( this.featureBuffer ).buffer;
+			if ( buffer ) {
+
+				const device = renderer.backend.device;
+				const encoder = device.createCommandEncoder();
+				encoder.clearBuffer( buffer );
+				device.queue.submit( [ encoder.finish() ] );
+
+			}
+
+		}
+
 		this._renderTask = null;
+
+	}
+
+	// Allocates the guide buffer for the current size, or drops it. The first sample of every
+	// pixel overwrites it, so it needs no clearing.
+	_updateFeatureBuffers() {
+
+		this.featureBuffer?.dispose();
+		this.featureBuffer = null;
+
+		if ( this.denoisingFeatures ) {
+
+			const { width, height } = this.outputTarget;
+			this.featureBuffer = new StorageBufferAttribute( 2 * width * height, 4 );
+			this.featureBuffer.name = 'Denoising Features';
+
+		}
 
 	}
 
@@ -210,6 +265,8 @@ export class PathTracerBackend {
 		this.sampleCountTarget.dispose();
 		this.sampleCountClearKernel.dispose();
 		this.outputTargetClearKernel.dispose();
+		this.featureBuffer?.dispose();
+		this._featurePlaceholder.dispose();
 
 		this._renderTask = null;
 

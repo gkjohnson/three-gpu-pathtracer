@@ -1,5 +1,5 @@
 import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
-import { WebGPURenderer } from 'three/webgpu';
+import { StorageBufferAttribute, WebGPURenderer } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -119,9 +119,8 @@ export class OIDNDenoiser {
 	readonly running: boolean;
 
 	init( renderer: WebGPURenderer ): void;
-	setScene( scene: Scene, camera: Camera ): void;
-	update( target: Texture ): Texture | null;
-	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null ): Promise<void>;
+	update( color: Texture, features?: StorageBufferAttribute | null ): Texture | null;
+	denoise( color: Texture, albedo?: Texture | StorageBufferAttribute | null, normal?: Texture | StorageBufferAttribute | null ): Promise<void>;
 	reset(): void;
 	dispose(): void;
 
@@ -219,6 +218,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	renderDebugBounds( options?: DebugBoundsOptions ): void;
 	renderTextureAtlas( layer?: number ): void;
 	renderSampleDensity(): void;
+	renderDenoisingFeatures( guide?: 'albedo' | 'normal' ): void;
 	getRenderTime(): number;
 	dispose(): void;
 

@@ -201,6 +201,8 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			// skip the tile loop entirely once every pixel is finished
 			kernel.maxSamples = this.maxSamples;
+			kernel.featureStorage = this.featureBuffer ?? this._featurePlaceholder;
+			kernel.denoisingFeatures = this.denoisingFeatures ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
 				yield;

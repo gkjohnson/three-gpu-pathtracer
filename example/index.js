@@ -172,6 +172,7 @@ const params = {
 	maxSamples: 16,
 
 	denoise: true,
+	guideView: 'none',
 
 	upscale: true,
 	sharpness: 1,
@@ -421,6 +422,13 @@ function animate() {
 
 		}
 
+		// draws the denoiser guide over the render
+		if ( params.guideView !== 'none' ) {
+
+			pathTracer.renderDenoisingFeatures( params.guideView );
+
+		}
+
 	} else {
 
 		renderer.render( scene, activeCamera );
@@ -645,6 +653,7 @@ function buildGui() {
 		pathTracer.setDenoiser( v ? denoiser : null );
 
 	} );
+	postFolder.add( params, 'guideView', [ 'none', 'albedo', 'normal' ] );
 	postFolder.add( params, 'upscale' ).onChange( v => {
 
 		pathTracer.setUpscaler( v ? upscaler : null );
