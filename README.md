@@ -114,7 +114,6 @@ The same documentation is also available as markdown in [API.md](./src/webgpu/AP
 - SpotLights, DirectionalLights, and PointLights are only supported with MIS.
 - Only MeshStandardMaterial and MeshPhysicalMaterial are supported.
 - Emissive materials are supported but do not take advantage of MIS.
-- "Upscaling" does not currently work with a transparent background.
 
 # Screenshots
 
