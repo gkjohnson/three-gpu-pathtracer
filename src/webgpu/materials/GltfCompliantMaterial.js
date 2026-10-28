@@ -290,7 +290,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 				// TODO: see if we can clean up these flags so they're not necessary
 				var isTransmissionLobe = false;
-				var isDiffuseLobe = false;
 				var isDeltaTransmission = false;
 				var deltaTransmittance = vec3f( 1.0 );
 				var deltaProbability = 1.0;
@@ -397,7 +396,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// diffuse
 					// all diffuse BRDF variants share the EON sampling proposal
-					isDiffuseLobe = true;
 					wi = ${ eonDirectionFunc }( wo, surf.diffuseRoughness, directionUV );
 					wh = normalize( wi + wo );
 
@@ -437,7 +435,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 				// hemisphere carry no energy - their loss is refunded by the compensation tables
 				let invalid = isDead || ( ! isTransmissionLobe && wi.z <= 0.0 );
 				result.color *= select( 1.0, 0.0, invalid );
-				result.isDiffuse = isDiffuseLobe;
 
 				return result;
 

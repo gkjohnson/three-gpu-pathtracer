@@ -14,7 +14,6 @@ export const constants = wgsl( /* wgsl */ `
 export const scatterRecordStruct = new StructTypeNode( {
 	color: 'vec3f',
 	isTransmissive: 'bool',
-	isDiffuse: 'bool',
 	direction: 'vec3f',
 	pdf: 'float',
 }, 'ScatterRecord' );
@@ -162,12 +161,7 @@ export const materialStruct = new StructTypeNode( {
 	// the volume's single scatter albedo and phase anisotropy, from "KHR_materials_scatter"
 	scatterAlbedo: 'vec3',
 	scatterAnisotropy: 'float',
-
-	// offset 280 floats
-	// the volume's multi scatter albedo, which shades it as diffuse after a diffuse bounce
-	scatterColor: 'vec3',
-	_alignment0: 'float',
-	// total size = 284
+	// total size = 280
 }, 'Material' );
 
 export const surfaceRecordStruct = new StructTypeNode( {

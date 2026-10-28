@@ -250,6 +250,16 @@ async function init() {
 
 }
 
+// the multi scatter albedo for a single scatter albedo and phase anisotropy, inverting the
+// "KHR_materials_scatter" mapping
+function getMultiscatterAlbedo( singleScatterAlbedo, anisotropy ) {
+
+	const s = Math.sqrt( ( 1 - singleScatterAlbedo ) / ( 1 - anisotropy * singleScatterAlbedo ) );
+	const k = 4.09712 - s;
+	return Math.min( Math.max( ( k * k - 9.59217 ) / ( 41.6808 - 2 * 4.20863 * k ), 0 ), 1 );
+
+}
+
 // copy a physicallybased.info entry into the material properties so the manual controls stay in
 // sync and can be used to tweak the preset afterward
 function applyDatabaseMaterial( info ) {
@@ -278,14 +288,33 @@ function applyDatabaseMaterial( info ) {
 
 	}
 
-	// A subsurface material becomes a scattering volume: light refracts in, scatters with the database
-	// color as the multi scatter albedo, and the per channel radius sets the mean free path. The radius is
-	// in centimeters, the units of the orb scene, and is scaled by 1 / 4π as Cycles' random walk does. The
-	// attenuation distance is the smallest radius so the attenuation color keeps its precision through the
-	// hex color.
-	if ( info.subsurfaceRadius ) {
+	// A material with volume coefficients is a glass surface over a scattering volume, as in
+	// "KHR_materials_scatter" and the database's Cycles renders. The coefficients are per centimeter, the
+	// units of the orb scene. Extinction is absorption plus scattering, and scattering over extinction is
+	// the single scatter albedo. The phase anisotropy is a single value, so the per channel values are
+	// averaged. The attenuation distance is the shortest mean free path so the attenuation color keeps
+	// its precision through the hex color.
+	if ( info.volumeCoefficients ) {
 
-		const radius = info.subsurfaceRadius.map( r => r * 0.25 / Math.PI );
+		const { absorption, scattering, anisotropy } = info.volumeCoefficients;
+		const g = anisotropy ? anisotropy[ 0 ].color.reduce( ( a, b ) => a + b ) / 3 : 0;
+		const extinction = absorption[ 0 ].color.map( ( a, i ) => a + scattering[ 0 ].color[ i ] );
+		const albedo = extinction.map( ( e, i ) => e > 0 ? scattering[ 0 ].color[ i ] / e : 0 );
+		const distance = 1 / Math.max( ...extinction );
+		materialProperties.transmission = 1;
+		materialProperties.scatterStrength = 1;
+		materialProperties.scatterAnisotropy = g;
+		materialProperties.attenuationDistance = distance;
+		materialProperties.attenuationColor = toHex( extinction.map( e => Math.exp( - e * distance ) ) );
+		materialProperties.multiscatterColor = toHex( albedo.map( a => getMultiscatterAlbedo( a, g ) ) );
+
+	} else if ( info.subsurfaceRadius ) {
+
+		// A subsurface material becomes a scattering volume: light refracts in, scatters with the database
+		// color as the multi scatter albedo, and the per channel radius sets the mean free path. The radius is
+		// in centimeters, the units of the orb scene. The attenuation distance is the smallest radius so the
+		// attenuation color keeps its precision through the hex color.
+		const radius = info.subsurfaceRadius;
 		const distance = Math.min( ...radius );
 		materialProperties.transmission = 1;
 		materialProperties.scatterStrength = 1;

@@ -3,7 +3,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, sampleHemisphereFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from '../nodes/sampling.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
@@ -205,9 +205,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
 				var mediumScattered = false;
-
-				// As in Cycles, after a diffuse bounce scattering materials shade as diffuse instead of walking
-				var diffuseAncestor = false;
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
@@ -419,27 +416,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// As in Cycles, the walk ends the first time it reaches its own object's surface and leaves
-					// as a diffuse transmission, with no reflection back inside. Other objects shade as usual.
-					if ( didHit && segmentInMedium && hitResult.objectIndex == mediumObject ) {
-
-						inMedium = false;
-
-						let hitPosition = ray.origin + ray.direction * hitResult.dist;
-						let outward = normalize( hitResult.normal ) * sign( dot( hitResult.normal, ray.direction ) );
-						ray.direction = ${ sampleHemisphereFn }( outward, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
-						ray.origin = ${ offsetRayOriginFunc }( hitPosition, ray.direction, hitResult.normal );
-						ray.maxDist = 0.0;
-
-						// no light is sampled at the exit, so whatever the next segment reaches takes full weight
-						mediumScattered = true;
-						isFullyTransmissive = false;
-						diffuseAncestor = true;
-
-						${ rngNextBounce }();
-						continue;
-
-					}
 
 					if ( didHit ) {
 
@@ -470,12 +446,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
-						if ( diffuseAncestor && ! surface.thinWall && any( materialInfo.scatterColor > vec3f( 0.0 ) ) ) {
-
-							surface.transmission = 0.0;
-							surface.color = materialInfo.scatterColor;
-
-						}
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the ray at the hit point, advancing the rng but not the bounce count.
@@ -617,11 +587,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						throughputColor /= scatterRec.pdf;
 						bsdfPdf = scatterRec.pdf;
 						mediumScattered = false;
-						diffuseAncestor = diffuseAncestor || scatterRec.isDiffuse;
 
 						// a direction from the bsdf isn't guided
 						segmentGuidable = false;
 						segmentGuided = false;
+
+						// As in "KHR_materials_scatter", the medium's surface bsdf is its boundary: the walk ends when
+						// light refracts out through it, and continues inside when it reflects back
+						if ( segmentInMedium && hitResult.objectIndex == mediumObject && hitResult.side < 0.0 && scatterRec.isTransmissive ) {
+
+							inMedium = false;
+
+						}
 
 						// Refracting into a front face of a scattering material starts a random walk inside it. As in
 						// Cycles the walk enters along the rough refracted direction.
