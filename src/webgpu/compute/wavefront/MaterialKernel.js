@@ -1,6 +1,7 @@
 import { Vector2 } from 'three';
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
+import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
@@ -28,9 +29,11 @@ export class MaterialKernel extends ComputeKernel {
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
-			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
+			// storage buffer as an array, in r187
+			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueStruct ),

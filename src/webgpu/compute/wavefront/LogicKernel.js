@@ -1,5 +1,6 @@
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
+import { createOutputTarget, createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -28,9 +29,9 @@ export class LogicKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
@@ -41,9 +42,11 @@ export class LogicKernel extends ComputeKernel {
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			auxBuffers: uniform( 0, 'uint' ),
 
-			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			// TODO: two elements so the placeholders compile as arrays. Remove once three declares every
+			// storage buffer as an array, in r187
+			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
 
 			// the per pixel first hit albedo then normal, as running means like the color
 			auxStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),

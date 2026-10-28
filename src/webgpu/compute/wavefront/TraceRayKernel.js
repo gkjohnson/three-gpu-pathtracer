@@ -14,7 +14,9 @@ export class TraceRayKernel extends ComputeKernel {
 		const params = {
 
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
-			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
+			// storage buffer as an array, in r187
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};

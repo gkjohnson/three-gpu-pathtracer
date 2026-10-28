@@ -194,6 +194,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.maxBounces = maxBounces;
 		kernel.maxTransparentBounces = maxTransparentBounces;
 
+		// compile the kernel before its first dispatch
+		yield* this.compileKernels( [ kernel ] );
+
 		// number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
 

@@ -1,6 +1,10 @@
-import { ColorManagement, FloatType, RGBAFormat } from 'three';
-import { RedIntegerFormat, StorageBufferAttribute, StorageTexture, UnsignedIntType } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { createOutputTarget, createSampleCountTarget } from './compute/targets.js';
+
+// the async compile state of a compute node. A node with no state has not been requested.
+const COMPILE_STARTED = 0;
+const COMPILE_COMPLETE = 1;
 
 export class PathTracerBackend {
 
@@ -18,27 +22,18 @@ export class PathTracerBackend {
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
+		// whether kernels compile asynchronously before their first dispatch rather than on it
+		this.asyncCompile = false;
+
+		// whether the render task is waiting on its kernels to compile, during which nothing renders
+		this.compiling = false;
+
 		this._renderTask = null;
+		this._compileState = new WeakMap();
 
-		this.outputTarget = new StorageTexture( 1, 1, );
-		this.outputTarget.format = RGBAFormat;
-		this.outputTarget.type = FloatType;
-		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.outputTarget.name = 'Output #0';
-		this.outputTarget.generateMipmaps = false;
-
-		this.prevOutputTarget = new StorageTexture( 1, 1, );
-		this.prevOutputTarget.format = RGBAFormat;
-		this.prevOutputTarget.type = FloatType;
-		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.prevOutputTarget.name = 'Output #1';
-		this.prevOutputTarget.generateMipmaps = false;
-
-		this.sampleCountTarget = new StorageTexture( 1, 1, );
-		this.sampleCountTarget.format = RedIntegerFormat;
-		this.sampleCountTarget.type = UnsignedIntType;
-		this.sampleCountTarget.name = 'Sample Count';
-		this.sampleCountTarget.generateMipmaps = false;
+		this.outputTarget = createOutputTarget( 'Output #0' );
+		this.prevOutputTarget = createOutputTarget( 'Output #1' );
+		this.sampleCountTarget = createSampleCountTarget( 'Sample Count' );
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
@@ -108,6 +103,52 @@ export class PathTracerBackend {
 		backgroundRotation,
 		backgroundBlurriness,
 	) {
+
+	}
+
+	// Compiles the kernels asynchronously and yields until they're ready so the first dispatch doesn't
+	// block on a synchronous compile. A kernel is only requested once, so a render task started by a
+	// reset waits on a compile already in flight rather than dispatching before its pipeline exists.
+	*compileKernels( kernels ) {
+
+		const { renderer, _compileState } = this;
+
+		// three.js <= r185 has no async compute compile
+		if ( ! this.asyncCompile || ! renderer.compileComputeAsync ) {
+
+			return;
+
+		}
+
+		// TODO: three.js resolves a second "compileComputeAsync" call for a pipeline still compiling
+		// immediately. If it returned the pending compile instead, this state tracking could be removed.
+		const computeNodes = kernels.map( kernel => kernel.kernel );
+		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
+		if ( requested.length > 0 ) {
+
+			requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_STARTED ) );
+			renderer.compileComputeAsync( requested )
+				.catch( () => {
+
+					// a failed compile is retried, and reported, by the dispatch
+
+				} )
+				.finally( () => {
+
+					requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_COMPLETE ) );
+
+				} );
+
+		}
+
+		while ( computeNodes.some( computeNode => _compileState.get( computeNode ) !== COMPILE_COMPLETE ) ) {
+
+			this.compiling = true;
+			yield;
+
+		}
+
+		this.compiling = false;
 
 	}
 
