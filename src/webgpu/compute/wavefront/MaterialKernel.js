@@ -2,7 +2,7 @@ import { Vector2 } from 'three';
 import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
-import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
@@ -18,7 +18,6 @@ export class MaterialKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 			material: { value: null },
 
 			seed: uniform( 0, 'uint' ),
@@ -39,9 +38,9 @@ export class MaterialKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
-		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
-		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
+		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
+		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
+		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
@@ -64,8 +63,8 @@ export class MaterialKernel extends ComputeKernel {
 				let shadowRayQueue = &${ params.shadowRayQueue };
 				let pixelQueue = &${ params.pixelQueue };
 
-				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
-				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
+				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
+				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
 
 				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
 				// workgroup size and those extra slots hold a zeroed pixel index
@@ -116,9 +115,16 @@ export class MaterialKernel extends ComputeKernel {
 					var ray: ${ rayStruct };
 					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
-						// the camera declined the pixel, so leave the slot dormant for this round
+						// the camera declined the pixel, so leave the slot dormant for this round. With a
+						// sample cap the pixel counts as finished, since it will never take a sample
 						// TODO: same as above - this work is a bit wasteful and leaves slots empty for
 						// a frame. Is it possible to quickly skip rays outside the mask or are finished?
+						if ( maxSamples != 0u ) {
+
+							textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
+
+						}
+
 						rayDataStorage[ index ].pixelIndex = pixelIndex;
 						rayDataStorage[ index ].rayIntersectionIndex = - 1;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;

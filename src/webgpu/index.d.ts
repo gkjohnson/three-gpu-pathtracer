@@ -1,5 +1,6 @@
-import { Camera, Scene, Texture, ExternalTexture } from 'three';
+import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
+import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
 
@@ -155,7 +156,13 @@ export interface DebugBoundsOptions {
 
 }
 
-export class WebGPUPathTracer {
+export interface WebGPUPathTracerEventMap {
+
+	'complete': {};
+
+}
+
+export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> {
 
 	constructor( renderer: WebGPURenderer );
 
@@ -176,12 +183,14 @@ export class WebGPUPathTracer {
 	lowResScale: number;
 	renderScale: number;
 	synchronizeRenderSize: boolean;
+	renderToCanvas: boolean;
 	generateMissingAttributes: boolean;
 	commonAttributes: Array<string>;
 	stableNoise: boolean;
 	pause: boolean;
 
 	readonly target: Texture | null;
+	readonly complete: boolean;
 	readonly fadeState: number;
 	readonly lowResTarget: Texture;
 	readonly lowResMode: boolean;
@@ -193,6 +202,8 @@ export class WebGPUPathTracer {
 	setUpscaler( upscaler: FSRUpscaler | null ): void;
 
 	setScene( scene: Scene, camera: Camera ): void;
+	setBVHWorker( WorkerConstructor: new () => BVHWorker & { dispose(): void } ): void;
+	setSceneAsync( scene: Scene, camera: Camera ): Promise<void>;
 	setRandom( random: RandomStrategy ): void;
 	setCamera( camera: Camera ): void;
 	setSize( x: number, y: number ): void;

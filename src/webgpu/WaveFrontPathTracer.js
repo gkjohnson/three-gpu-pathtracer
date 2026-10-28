@@ -115,13 +115,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setBVHData( bvhData ) {
 
-		this.materialKernel.bvhData = bvhData;
+		this.materialKernel.context.bvhData = bvhData;
 		this.materialKernel.needsUpdate = true;
 
-		this.traceRayKernel.bvhData = bvhData;
+		this.traceRayKernel.context.bvhData = bvhData;
 		this.traceRayKernel.needsUpdate = true;
 
-		this.traceShadowRayKernel.bvhData = bvhData;
+		this.traceShadowRayKernel.context.bvhData = bvhData;
 		this.traceShadowRayKernel.needsUpdate = true;
 
 		this.reset();

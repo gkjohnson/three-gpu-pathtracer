@@ -1,4 +1,4 @@
-import { Box3, DataTexture, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -32,6 +32,13 @@ import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+
+// milliseconds between sample count readbacks while waiting for the render to complete
+const COMPLETE_CHECK_INTERVAL = 250;
+
+// the options the mesh geometry bvhs are built with and how many workers build them at once
+const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
+const MAX_BVH_WORKERS = 4;
 
 class TextureCache {
 
@@ -94,8 +101,18 @@ class TextureCache {
 
 		} else {
 
-			value = value.clone();
+			// hash the scene's texture rather than the clone, whose uuid is new on every call, so an
+			// unchanged texture isn't cloned and re-processed each time the environment is updated
 			hash = value.uuid + '_' + value.version;
+			if ( hash !== this.hash ) {
+
+				// a nearest filtered texture gets no sampler from TSL, which the equirect sampling
+				// needs, so the copy is always filtered
+				value = value.clone();
+				value.minFilter = LinearFilter;
+				value.magFilter = LinearFilter;
+
+			}
 
 		}
 
@@ -126,6 +143,14 @@ class TextureCache {
 
 }
 
+// WebGPUPathTracer Event Definitions
+
+/**
+ * Fired once every pixel has reached `maxSamples` and an attached denoiser has finished. Fires
+ * again after a reset, or after `maxSamples` is raised, once the render has caught up.
+ * @event WebGPUPathTracer#complete
+ */
+
 /**
  * Progressive path tracer running on WebGPU. Call {@link WebGPUPathTracer#setScene} once,
  * then {@link WebGPUPathTracer#renderSample} every frame to accumulate samples into the canvas.
@@ -134,7 +159,7 @@ class TextureCache {
  * the environment afterward require the matching `update*` function. Any change that invalidates
  * the accumulated image restarts it.
  */
-export class WebGPUPathTracer {
+export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Maximum number of times a ray can scatter before the path is terminated. Higher values
@@ -212,6 +237,21 @@ export class WebGPUPathTracer {
 		// the settle point moved, so a finished pass may need to run again against a longer
 		// render. The accumulated samples are still valid
 		this._denoiser?.reset();
+
+	}
+
+	/**
+	 * Whether every pixel has reached {@link WebGPUPathTracer#maxSamples} and an attached denoiser
+	 * has finished, as of the last measurement. Always false while rendering indefinitely.
+	 * @type {boolean}
+	 */
+	get complete() {
+
+		const maxSamples = this.maxSamples;
+		const denoiser = this._denoiser;
+
+		// "min" so every pixel has stopped, not just the average
+		return maxSamples > 0 && this._lastSampleCounts.min >= maxSamples && ( ! denoiser || denoiser.complete );
 
 	}
 
@@ -451,6 +491,8 @@ export class WebGPUPathTracer {
 	 */
 	constructor( renderer ) {
 
+		super();
+
 		// members
 		this._renderer = renderer;
 		this._timer = new Timer();
@@ -529,6 +571,15 @@ export class WebGPUPathTracer {
 		this.synchronizeRenderSize = true;
 
 		/**
+		 * Whether {@link WebGPUPathTracer#renderSample} draws the result to the current render
+		 * target, the canvas by default. Set to `false` to only accumulate, as when baking to a
+		 * texture read through {@link WebGPUPathTracer#target}.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.renderToCanvas = true;
+
+		/**
 		 * Whether to generate the attributes in {@link WebGPUPathTracer#commonAttributes} on
 		 * geometry that is missing them when the scene is set.
 		 * @type {boolean}
@@ -583,6 +634,11 @@ export class WebGPUPathTracer {
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
 		this._invViewProjectionMatrix = uniform( new Matrix4() );
 		this._cameraRayFnHandle = null;
+		this._BVHWorker = null;
+
+		// the render time of the last check for the render having stopped
+		this._lastCompleteCheck = 0;
+		this._wasComplete = false;
 
 		// initialize the scene so it doesn't fail
 		this.setMaterial( this.material );
@@ -688,7 +744,7 @@ export class WebGPUPathTracer {
 
 				if ( ! child.geometry.boundsTree ) {
 
-					child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, targetLeafSize: 5 } );
+					child.geometry.boundsTree = new MeshBVH( child.geometry, MESH_BVH_OPTIONS );
 
 				}
 
@@ -717,6 +773,80 @@ export class WebGPUPathTracer {
 
 		// the denoiser rasterizes its own guide buffers, so it needs the scene too
 		this._denoiser?.setScene( scene, camera );
+
+	}
+
+	/**
+	 * Sets the worker class {@link WebGPUPathTracer#setSceneAsync} builds the mesh geometry BVHs
+	 * with, such as `GenerateMeshBVHWorker` from three-mesh-bvh. Several are created and disposed
+	 * per call so geometries build in parallel.
+	 *
+	 * @param {Function} WorkerConstructor
+	 */
+	setBVHWorker( WorkerConstructor ) {
+
+		this._BVHWorker = WorkerConstructor;
+
+	}
+
+	/**
+	 * Like {@link WebGPUPathTracer#setScene} but builds the mesh geometry BVHs in the workers set
+	 * with {@link WebGPUPathTracer#setBVHWorker} so the page is not blocked. Skinned meshes are
+	 * still built synchronously.
+	 *
+	 * @param {Scene} scene
+	 * @param {Camera} camera
+	 * @returns {Promise<void>}
+	 */
+	async setSceneAsync( scene, camera ) {
+
+		const WorkerConstructor = this._BVHWorker;
+		if ( ! WorkerConstructor ) {
+
+			throw new Error( 'WebGPUPathTracer: "setBVHWorker" must be called before "setSceneAsync" can be called.' );
+
+		}
+
+		const geometries = new Set();
+		scene.traverse( child => {
+
+			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
+
+				geometries.add( child.geometry );
+
+			}
+
+		} );
+
+		// each worker runs one job at a time so they pull from a shared queue
+		const queue = Array.from( geometries );
+		const workers = [];
+		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
+
+			workers.push( new WorkerConstructor() );
+
+		}
+
+		try {
+
+			await Promise.all( workers.map( async worker => {
+
+				while ( queue.length > 0 ) {
+
+					const geometry = queue.shift();
+					geometry.boundsTree = await worker.generate( geometry, MESH_BVH_OPTIONS );
+
+				}
+
+			} ) );
+
+		} finally {
+
+			workers.forEach( worker => worker.dispose() );
+
+		}
+
+		this.setScene( scene, camera );
 
 	}
 
@@ -942,6 +1072,8 @@ export class WebGPUPathTracer {
 
 		// a fresh object rather than a clear, so measurements still in flight detach
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastCompleteCheck = 0;
+		this._wasComplete = false;
 
 		if ( this.stableNoise ) {
 
@@ -1060,8 +1192,15 @@ export class WebGPUPathTracer {
 		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
-			if ( ( this._fadeState < 1 && minSamples > 0 ) || awaitingDenoise ) {
+			if ( this._fadeState < 1 && minSamples > 0 ) {
 
+				this.getSampleCountsAsync();
+
+			} else if ( maxSamples > 0 && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
+
+				// the readback stalls the gpu pipeline, so a capped render only measures a few times
+				// a second. The "complete" event and the denoiser both key off it
+				this._lastCompleteCheck = this._resetTime;
 				this.getSampleCountsAsync();
 
 			}
@@ -1094,21 +1233,36 @@ export class WebGPUPathTracer {
 
 		}
 
-		if ( upscaler && ! lowResMode ) {
+		// fires once the render, and the denoiser if one is attached, has finished
+		const complete = this.complete;
+		if ( complete && ! this._wasComplete ) {
 
-			texture = upscaler.upscale( texture, this.camera );
-
-			// the pass above binds its own targets
-			renderer.setRenderTarget( originalTarget );
+			this.dispatchEvent( { type: 'complete' } );
 
 		}
 
-		renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
-		blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
-		blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
-		blitQuad.material.fromTexture = lowResTarget;
-		blitQuad.material.texture = texture;
-		blitQuad.render( renderer );
+		this._wasComplete = complete;
+
+		// the upscale and the draw only serve the display
+		if ( this.renderToCanvas ) {
+
+			if ( upscaler && ! lowResMode ) {
+
+				texture = upscaler.upscale( texture, this.camera );
+
+				// the pass above binds its own targets
+				renderer.setRenderTarget( originalTarget );
+
+			}
+
+			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
+			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
+			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+			blitQuad.material.fromTexture = lowResTarget;
+			blitQuad.material.texture = texture;
+			blitQuad.render( renderer );
+
+		}
 
 		// reset the renderer
 		renderer.autoClear = originalAutoClear;

@@ -3,7 +3,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
@@ -15,7 +15,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 			material: { value: null },
 			envInfo: { value: null },
 			lightsInfo: { value: null },
@@ -50,12 +49,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
-		const raycastShadowFn = proxyFn( 'bvhData.value.fns.raycastShadow', params );
-		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
-		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
-		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
+		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
+		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
+		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
+		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
@@ -102,8 +101,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			) -> void {
 
-				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
-				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
+				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
+				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
 
 				// make sure we don't bleed over the edge of our tile
 				if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -136,6 +135,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+					// a declined pixel never takes a sample, so with a cap it counts as finished
+					if ( maxSamples != 0u ) {
+
+						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( maxSamples ) );
+
+					}
 
 					return;
 

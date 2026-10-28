@@ -69,7 +69,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setBVHData( bvhData ) {
 
-		this.kernel.bvhData = bvhData;
+		this.kernel.context.bvhData = bvhData;
 		this.rebuild();
 
 	}
