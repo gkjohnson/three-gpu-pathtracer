@@ -222,7 +222,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
 	 * @type {number}
 	 * @default 256
-	 * @note Only the megakernel renders scattering volumes.
 	 */
 	get maxVolumeSteps() {
 
