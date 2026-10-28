@@ -86,9 +86,9 @@ export const rayDataStruct = new StructTypeNode( {
 	// first dispersive interaction
 	dispersionWavelength: 'float',
 
-	// the first hit's albedo and normal, 8 bits per channel, for the denoiser guides
-	featureAlbedo: 'uint',
-	featureNormal: 'uint',
+	// the first scatter's albedo and normal, 8 bits per channel, for the denoiser's auxiliary buffers
+	auxAlbedo: 'uint',
+	auxNormal: 'uint',
 
 }, 'RayData' );
 

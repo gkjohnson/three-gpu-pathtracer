@@ -39,14 +39,14 @@ export class LogicKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
-			denoisingFeatures: uniform( 0, 'uint' ),
+			auxBuffers: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			// the per pixel first hit albedo then normal, as running means like the color
-			featureStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
+			auxStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
 
 			globalId: globalId,
 		};
@@ -79,7 +79,7 @@ export class LogicKernel extends ComputeKernel {
 				clampDirect: f32,
 				clampIndirect: f32,
 				transmissiveBackground: u32,
-				denoisingFeatures: u32,
+				auxBuffers: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -360,15 +360,15 @@ export class LogicKernel extends ComputeKernel {
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
-					// the denoiser guides are blended the same way, in the same row order
-					if ( denoisingFeatures != 0u ) {
+					// the auxiliary buffers are blended the same way, in the same row order
+					if ( auxBuffers != 0u ) {
 
-						let featureIndex = 2u * ( colorIndex.y * textureDimensions( ${ params.outputTarget } ).x + colorIndex.x );
+						let auxIndex = 2u * ( colorIndex.y * textureDimensions( ${ params.outputTarget } ).x + colorIndex.x );
 						let weight = 1.0 / f32( sampleCount );
-						let albedo = vec4f( unpack4x8unorm( input.featureAlbedo ).rgb, 1.0 );
-						let normal = vec4f( unpack4x8snorm( input.featureNormal ).xyz * 0.5 + 0.5, 1.0 );
-						${ params.featureStorage }[ featureIndex ] = mix( ${ params.featureStorage }[ featureIndex ], albedo, weight );
-						${ params.featureStorage }[ featureIndex + 1u ] = mix( ${ params.featureStorage }[ featureIndex + 1u ], normal, weight );
+						let albedo = vec4f( unpack4x8unorm( input.auxAlbedo ).rgb, 1.0 );
+						let normal = vec4f( unpack4x8snorm( input.auxNormal ).xyz * 0.5 + 0.5, 1.0 );
+						${ params.auxStorage }[ auxIndex ] = mix( ${ params.auxStorage }[ auxIndex ], albedo, weight );
+						${ params.auxStorage }[ auxIndex + 1u ] = mix( ${ params.auxStorage }[ auxIndex + 1u ], normal, weight );
 
 					}
 

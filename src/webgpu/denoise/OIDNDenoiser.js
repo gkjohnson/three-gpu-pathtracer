@@ -87,7 +87,7 @@ export class OIDNDenoiser {
 		this.auxWeightsUrl = auxWeightsUrl;
 		this.colorWeightsUrl = colorWeightsUrl;
 
-		// `false` falls back to the color only model, which is blurrier but needs no guides
+		// `false` falls back to the color only model, which is blurrier but needs no auxiliary buffers
 		this.useAuxiliaryBuffers = useAuxiliaryBuffers;
 
 		// tiling, passed through to oidn-webgpu. Null keeps its defaults
@@ -125,10 +125,10 @@ export class OIDNDenoiser {
 	 * vec4 per pixel, unless `useAuxiliaryBuffers` is off. Safe to call every frame.
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {StorageBufferAttribute|null} features
+	 * @param {StorageBufferAttribute|null} aux
 	 * @returns {Texture|null}
 	 */
-	update( color, features = null ) {
+	update( color, aux = null ) {
 
 		if ( this._complete || this._running ) {
 
@@ -136,11 +136,11 @@ export class OIDNDenoiser {
 
 		}
 
-		if ( this.useAuxiliaryBuffers && features ) {
+		if ( this.useAuxiliaryBuffers && aux ) {
 
-			// oidn-webgpu reads every input the same way, so the color joins the guides as a buffer
+			// oidn-webgpu reads every input the same way, so the color joins the auxiliary buffers as one
 			const { width, height } = color;
-			const buffers = this._resolveInputs( color, features );
+			const buffers = this._resolveInputs( color, aux );
 			this._denoise( buffers.color, buffers.albedo, buffers.normal, width, height );
 
 		} else {
@@ -155,8 +155,8 @@ export class OIDNDenoiser {
 
 	/**
 	 * Runs a pass unless one is already running or finished. The optional albedo and normal
-	 * guides select the guided model. Both hold one vec4 of [0,1] values per pixel in the color's
-	 * row order, with normals mapped so a flat normal is (0.5, 0.5, 1).
+	 * auxiliary buffers select the guided model. Both hold one vec4 of [0,1] values per pixel in
+	 * the color's row order, with normals mapped so a flat normal is (0.5, 0.5, 1).
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
 	 * @param {Texture|StorageBufferAttribute|null} albedo
@@ -204,7 +204,7 @@ export class OIDNDenoiser {
 		}
 
 		// three only holds a WebGPU texture for a three texture once it has been initialized. The
-		// guide buffers have been bound by the kernels that filled them
+		// auxiliary buffers have been bound by the kernels that filled them
 		const { renderer } = this;
 		const backend = renderer.backend;
 		const getResource = value => {
@@ -243,7 +243,7 @@ export class OIDNDenoiser {
 			},
 		};
 
-		// the guided model needs both guides, and the color only model must not be given them
+		// the guided model needs both auxiliary buffers, and the color only model must not be given them
 		if ( useAux ) {
 
 			inputs.albedo = { data: getResource( albedo ), width, height };
@@ -290,9 +290,9 @@ export class OIDNDenoiser {
 
 	}
 
-	// Writes the color and the two guides into buffers oidn-webgpu reads directly, since it takes
-	// every input as the same kind and the kernels keep the guides interleaved in one buffer
-	_resolveInputs( color, features ) {
+	// Writes the color, albedo, and normal into buffers oidn-webgpu reads directly, since it takes
+	// every input as the same kind and the kernels keep the auxiliary buffers interleaved in one
+	_resolveInputs( color, aux ) {
 
 		const { renderer } = this;
 		const backend = renderer.backend;
@@ -304,7 +304,7 @@ export class OIDNDenoiser {
 			const module = device.createShaderModule( {
 				code: /* wgsl */`
 					@group( 0 ) @binding( 0 ) var color : texture_2d<f32>;
-					@group( 0 ) @binding( 1 ) var<storage, read> features : array<vec4f>;
+					@group( 0 ) @binding( 1 ) var<storage, read> aux : array<vec4f>;
 					@group( 0 ) @binding( 2 ) var<storage, read_write> outColor : array<vec4f>;
 					@group( 0 ) @binding( 3 ) var<storage, read_write> outAlbedo : array<vec4f>;
 					@group( 0 ) @binding( 4 ) var<storage, read_write> outNormal : array<vec4f>;
@@ -321,8 +321,8 @@ export class OIDNDenoiser {
 
 						let i = gid.y * dims.x + gid.x;
 						outColor[ i ] = textureLoad( color, gid.xy, 0 );
-						outAlbedo[ i ] = features[ 2u * i ];
-						outNormal[ i ] = features[ 2u * i + 1u ];
+						outAlbedo[ i ] = aux[ 2u * i ];
+						outNormal[ i ] = aux[ 2u * i + 1u ];
 
 					}
 				`,
@@ -354,7 +354,7 @@ export class OIDNDenoiser {
 			layout: this._resolvePipeline.getBindGroupLayout( 0 ),
 			entries: [
 				{ binding: 0, resource: backend.get( color ).texture.createView() },
-				{ binding: 1, resource: { buffer: backend.get( features ).buffer } },
+				{ binding: 1, resource: { buffer: backend.get( aux ).buffer } },
 				{ binding: 2, resource: { buffer: buffers.color } },
 				{ binding: 3, resource: { buffer: buffers.albedo } },
 				{ binding: 4, resource: { buffer: buffers.normal } },

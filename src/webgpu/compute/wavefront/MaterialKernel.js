@@ -161,8 +161,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
-					rayDataStorage[ index ].featureAlbedo = 0u;
-					rayDataStorage[ index ].featureNormal = 0u;
+					rayDataStorage[ index ].auxAlbedo = 0u;
+					rayDataStorage[ index ].auxNormal = 0u;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -279,12 +279,12 @@ export class MaterialKernel extends ComputeKernel {
 					var scatterRec = ${ bsdfSampleFn }( view, surface );
 					let newBounce = input.currentBounce + 1u;
 
-					// the first surface the path scatters off guides the denoiser, so a transmission
-					// looks through to the next one. The packed albedo's alpha marks a written guide.
-					if ( input.featureAlbedo == 0u && ! scatterRec.isTransmissive ) {
+					// the first surface the path scatters off fills the denoiser's auxiliary buffers, so a
+					// transmission looks through to the next one. The packed albedo's alpha marks it written.
+					if ( input.auxAlbedo == 0u && ! scatterRec.isTransmissive ) {
 
-						rayDataStorage[ index ].featureAlbedo = pack4x8unorm( vec4f( surface.color, 1.0 ) );
-						rayDataStorage[ index ].featureNormal = pack4x8snorm( vec4f( surface.normal, 0.0 ) );
+						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, 1.0 ) );
+						rayDataStorage[ index ].auxNormal = pack4x8snorm( vec4f( surface.normal, 0.0 ) );
 
 					}
 

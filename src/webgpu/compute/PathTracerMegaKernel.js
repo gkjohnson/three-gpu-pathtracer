@@ -41,10 +41,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
-			denoisingFeatures: uniform( 0, 'uint' ),
+			auxBuffers: uniform( 0, 'uint' ),
 
 			// the per pixel first hit albedo then normal, as running means like the color
-			featureStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
+			auxStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -102,7 +102,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				clampIndirect: f32,
 
 				transmissiveBackground: u32,
-				denoisingFeatures: u32,
+				auxBuffers: u32,
 
 			) -> void {
 
@@ -177,10 +177,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
-				// the first surface the path scatters off guides the denoiser
-				var featureRecorded = false;
-				var featureAlbedo = vec3f( 0.0 );
-				var featureNormal = vec3f( 0.0 );
+				// the first surface the path scatters off fills the denoiser's auxiliary buffers
+				var auxRecorded = false;
+				var auxAlbedo = vec3f( 0.0 );
+				var auxNormal = vec3f( 0.0 );
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
@@ -364,11 +364,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						// a transmission looks through to the next surface
-						if ( ! featureRecorded && ! scatterRec.isTransmissive ) {
+						if ( ! auxRecorded && ! scatterRec.isTransmissive ) {
 
-							featureRecorded = true;
-							featureAlbedo = surface.color;
-							featureNormal = surface.normal;
+							auxRecorded = true;
+							auxAlbedo = surface.color;
+							auxNormal = surface.normal;
 
 						}
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
@@ -515,15 +515,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
 				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
-				// the denoiser guides are blended the same way, in the same row order
-				if ( denoisingFeatures != 0u ) {
+				// the auxiliary buffers are blended the same way, in the same row order
+				if ( auxBuffers != 0u ) {
 
-					let featureIndex = 2u * ( colorIndex.y * targetDimensions.x + colorIndex.x );
+					let auxIndex = 2u * ( colorIndex.y * targetDimensions.x + colorIndex.x );
 					let weight = 1.0 / f32( nextSampleCount );
-					let albedo = vec4f( featureAlbedo, 1.0 );
-					let normal = vec4f( featureNormal * 0.5 + 0.5, 1.0 );
-					${ params.featureStorage }[ featureIndex ] = mix( ${ params.featureStorage }[ featureIndex ], albedo, weight );
-					${ params.featureStorage }[ featureIndex + 1u ] = mix( ${ params.featureStorage }[ featureIndex + 1u ], normal, weight );
+					let albedo = vec4f( auxAlbedo, 1.0 );
+					let normal = vec4f( auxNormal * 0.5 + 0.5, 1.0 );
+					${ params.auxStorage }[ auxIndex ] = mix( ${ params.auxStorage }[ auxIndex ], albedo, weight );
+					${ params.auxStorage }[ auxIndex + 1u ] = mix( ${ params.auxStorage }[ auxIndex + 1u ], normal, weight );
 
 				}
 

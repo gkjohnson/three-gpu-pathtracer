@@ -172,7 +172,7 @@ const params = {
 	maxSamples: 16,
 
 	denoise: true,
-	guideView: 'none',
+	auxView: 'none',
 
 	upscale: true,
 	sharpness: 1,
@@ -422,10 +422,10 @@ function animate() {
 
 		}
 
-		// draws the denoiser guide over the render
-		if ( params.guideView !== 'none' ) {
+		// draws the denoiser's auxiliary buffer over the render
+		if ( params.auxView !== 'none' ) {
 
-			pathTracer.renderDenoisingFeatures( params.guideView );
+			pathTracer.renderAuxBuffer( params.auxView );
 
 		}
 
@@ -653,7 +653,7 @@ function buildGui() {
 		pathTracer.setDenoiser( v ? denoiser : null );
 
 	} );
-	postFolder.add( params, 'guideView', [ 'none', 'albedo', 'normal' ] );
+	postFolder.add( params, 'auxView', [ 'none', 'albedo', 'normal' ] );
 	postFolder.add( params, 'upscale' ).onChange( v => {
 
 		pathTracer.setUpscaler( v ? upscaler : null );

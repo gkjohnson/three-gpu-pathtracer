@@ -43,25 +43,25 @@ export class PathTracerBackend {
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 
-		// the per pixel first hit albedo and normal, two vec4 per pixel, accumulated as denoiser
-		// guides only while asked for. The kernels bind the placeholder otherwise.
-		this.denoisingFeatures = false;
-		this.featureBuffer = null;
-		this._featurePlaceholder = new StorageBufferAttribute( 2, 4 );
+		// the per pixel first hit albedo and normal, two vec4 per pixel, accumulated as the denoiser's
+		// auxiliary buffers only while asked for. The kernels bind the placeholder otherwise.
+		this.auxBuffers = false;
+		this.auxBuffer = null;
+		this._auxPlaceholder = new StorageBufferAttribute( 2, 4 );
 
 	}
 
-	// The guides start over with the render, so the render restarts with them
-	setDenoisingFeatures( value ) {
+	// The auxiliary buffers start over with the render, so the render restarts with them
+	setAuxBuffers( value ) {
 
-		if ( this.denoisingFeatures === value ) {
+		if ( this.auxBuffers === value ) {
 
 			return;
 
 		}
 
-		this.denoisingFeatures = value;
-		this._updateFeatureBuffers();
+		this.auxBuffers = value;
+		this._updateAuxBuffer();
 		this.reset();
 
 	}
@@ -141,7 +141,7 @@ export class PathTracerBackend {
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
-		this._updateFeatureBuffers();
+		this._updateAuxBuffer();
 
 		this.reset();
 		return true;
@@ -221,11 +221,11 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		// the guides are only rewritten as paths finish, so stale values would show until then. The
-		// buffer only exists on the device once a kernel has bound it, and starts out zeroed.
-		if ( this.featureBuffer ) {
+		// the auxiliary buffers are only rewritten as paths finish, so stale values would show until
+		// then. The buffer only exists on the device once a kernel has bound it, and starts out zeroed.
+		if ( this.auxBuffer ) {
 
-			const buffer = renderer.backend.get( this.featureBuffer ).buffer;
+			const buffer = renderer.backend.get( this.auxBuffer ).buffer;
 			if ( buffer ) {
 
 				const device = renderer.backend.device;
@@ -241,18 +241,18 @@ export class PathTracerBackend {
 
 	}
 
-	// Allocates the guide buffer for the current size, or drops it. The first sample of every
+	// Allocates the auxiliary buffer for the current size, or drops it. The first sample of every
 	// pixel overwrites it, so it needs no clearing.
-	_updateFeatureBuffers() {
+	_updateAuxBuffer() {
 
-		this.featureBuffer?.dispose();
-		this.featureBuffer = null;
+		this.auxBuffer?.dispose();
+		this.auxBuffer = null;
 
-		if ( this.denoisingFeatures ) {
+		if ( this.auxBuffers ) {
 
 			const { width, height } = this.outputTarget;
-			this.featureBuffer = new StorageBufferAttribute( 2 * width * height, 4 );
-			this.featureBuffer.name = 'Denoising Features';
+			this.auxBuffer = new StorageBufferAttribute( 2 * width * height, 4 );
+			this.auxBuffer.name = 'Auxiliary Buffers';
 
 		}
 
@@ -265,8 +265,8 @@ export class PathTracerBackend {
 		this.sampleCountTarget.dispose();
 		this.sampleCountClearKernel.dispose();
 		this.outputTargetClearKernel.dispose();
-		this.featureBuffer?.dispose();
-		this._featurePlaceholder.dispose();
+		this.auxBuffer?.dispose();
+		this._auxPlaceholder.dispose();
 
 		this._renderTask = null;
 

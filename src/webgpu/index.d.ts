@@ -119,7 +119,7 @@ export class OIDNDenoiser {
 	readonly running: boolean;
 
 	init( renderer: WebGPURenderer ): void;
-	update( color: Texture, features?: StorageBufferAttribute | null ): Texture | null;
+	update( color: Texture, aux?: StorageBufferAttribute | null ): Texture | null;
 	denoise( color: Texture, albedo?: Texture | StorageBufferAttribute | null, normal?: Texture | StorageBufferAttribute | null ): Promise<void>;
 	reset(): void;
 	dispose(): void;
@@ -218,7 +218,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	renderDebugBounds( options?: DebugBoundsOptions ): void;
 	renderTextureAtlas( layer?: number ): void;
 	renderSampleDensity(): void;
-	renderDenoisingFeatures( guide?: 'albedo' | 'normal' ): void;
+	renderAuxBuffer( buffer?: 'albedo' | 'normal' ): void;
 	getRenderTime(): number;
 	dispose(): void;
 
