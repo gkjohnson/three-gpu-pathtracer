@@ -283,13 +283,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
 			this.pixelQueue.name = 'Pixel Queue';
 
-			// the queue buffer object changed, so kernels bound to it must rebuild
+			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
 			this.materialKernel.pixelQueue = this.pixelQueue;
-			this.materialKernel.needsUpdate = true;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-			this.populatePixelIndicesKernel.needsUpdate = true;
 			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
-			this.resetSlotsKernel.needsUpdate = true;
 
 		}
 
@@ -352,14 +349,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionsStorage = rayIntersectionsStorage;
 		this.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 		this.rayCount = count;
-
-		// the buffer objects changed, so kernels bound to them must rebuild
-		this.logicKernel.needsUpdate = true;
-		this.materialKernel.needsUpdate = true;
-		this.traceRayKernel.needsUpdate = true;
-		this.traceShadowRayKernel.needsUpdate = true;
-		this.populatePixelIndicesKernel.needsUpdate = true;
-		this.resetSlotsKernel.needsUpdate = true;
 
 		if ( count > previousCount ) {
 
