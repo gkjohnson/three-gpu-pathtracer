@@ -74,25 +74,16 @@ export class PathTracerBackend {
 
 	}
 
-	// Compiles the kernels' pipelines asynchronously and yields until they're ready, so the first
-	// dispatch doesn't block the main thread on a synchronous pipeline compile. Kernels compiled by an
-	// earlier render task are skipped so a reset doesn't wait a frame for nothing.
+	// Compiles the kernels asynchronously and yields until they're ready so the first dispatch doesn't
+	// block on a synchronous compile. Kernels compiled by an earlier render task are skipped so a reset
+	// doesn't wait a frame.
 	*compileKernels( kernels ) {
 
 		const { renderer, _compiledKernels } = this;
+		const computeNodes = kernels.map( kernel => kernel.kernel ).filter( computeNode => ! _compiledKernels.has( computeNode ) );
 
-		// three.js r185 has no async compute compile, so the pipelines compile on first dispatch
-		if ( ! renderer.compileComputeAsync ) {
-
-			return;
-
-		}
-
-		const computeNodes = kernels
-			.map( kernel => kernel.kernel )
-			.filter( computeNode => ! _compiledKernels.has( computeNode ) );
-
-		if ( computeNodes.length === 0 ) {
+		// three.js <= r185 has no async compute compile
+		if ( computeNodes.length === 0 || ! renderer.compileComputeAsync ) {
 
 			return;
 
