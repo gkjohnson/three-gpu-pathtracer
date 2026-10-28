@@ -593,6 +593,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.renderToCanvas = true;
 
 		/**
+		 * Whether to compile the kernels asynchronously so a compile doesn't stall the page. Nothing
+		 * new renders while {@link WebGPUPathTracer#compiling} is true. Requires three.js r186.
+		 * @type {boolean}
+		 * @default false
+		 */
+		this.asyncCompile = false;
+
+		/**
 		 * Whether to generate the attributes in {@link WebGPUPathTracer#commonAttributes} on
 		 * geometry that is missing them when the scene is set.
 		 * @type {boolean}
@@ -1189,6 +1197,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
+			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 
 			// nothing renders while the kernels compile, so hold the reset timer for the low res preview

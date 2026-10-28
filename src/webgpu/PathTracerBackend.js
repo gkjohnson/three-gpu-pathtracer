@@ -21,6 +21,9 @@ export class PathTracerBackend {
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
+		// whether kernels compile asynchronously before their first dispatch rather than on it
+		this.asyncCompile = false;
+
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
@@ -89,7 +92,7 @@ export class PathTracerBackend {
 		const { renderer, _compileState } = this;
 
 		// three.js <= r185 has no async compute compile
-		if ( ! renderer.compileComputeAsync ) {
+		if ( ! this.asyncCompile || ! renderer.compileComputeAsync ) {
 
 			return;
 

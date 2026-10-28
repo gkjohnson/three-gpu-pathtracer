@@ -261,6 +261,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
+	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
