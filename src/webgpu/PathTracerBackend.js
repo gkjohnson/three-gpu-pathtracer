@@ -1,6 +1,10 @@
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 
+// the async compile state of a compute node. A node with no state has not been requested.
+const COMPILE_STARTED = 0;
+const COMPILE_COMPLETE = 1;
+
 export class PathTracerBackend {
 
 	constructor( renderer ) {
@@ -18,7 +22,7 @@ export class PathTracerBackend {
 		this.maxSamples = 0;
 
 		this._renderTask = null;
-		this._compiledKernels = new WeakSet();
+		this._compileState = new WeakMap();
 
 		this.outputTarget = createOutputTarget( 'Output #0' );
 		this.prevOutputTarget = createOutputTarget( 'Output #1' );
@@ -75,35 +79,41 @@ export class PathTracerBackend {
 	}
 
 	// Compiles the kernels asynchronously and yields until they're ready so the first dispatch doesn't
-	// block on a synchronous compile. Kernels compiled by an earlier render task are skipped so a reset
-	// doesn't wait a frame.
+	// block on a synchronous compile. A kernel is only requested once, so a render task started by a
+	// reset waits on a compile already in flight rather than dispatching before its pipeline exists.
 	*compileKernels( kernels ) {
 
-		const { renderer, _compiledKernels } = this;
-		const computeNodes = kernels.map( kernel => kernel.kernel ).filter( computeNode => ! _compiledKernels.has( computeNode ) );
+		const { renderer, _compileState } = this;
 
 		// three.js <= r185 has no async compute compile
-		if ( computeNodes.length === 0 || ! renderer.compileComputeAsync ) {
+		if ( ! renderer.compileComputeAsync ) {
 
 			return;
 
 		}
 
-		let complete = false;
-		renderer.compileComputeAsync( computeNodes )
-			.catch( () => {
+		// TODO: three.js resolves a second "compileComputeAsync" call for a pipeline still compiling
+		// immediately. If it returned the pending compile instead, this state tracking could be removed.
+		const computeNodes = kernels.map( kernel => kernel.kernel );
+		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
+		if ( requested.length > 0 ) {
 
-				// a failed compile is retried, and reported, by the dispatch
+			requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_STARTED ) );
+			renderer.compileComputeAsync( requested )
+				.catch( () => {
 
-			} )
-			.finally( () => {
+					// a failed compile is retried, and reported, by the dispatch
 
-				computeNodes.forEach( computeNode => _compiledKernels.add( computeNode ) );
-				complete = true;
+				} )
+				.finally( () => {
 
-			} );
+					requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_COMPLETE ) );
 
-		while ( ! complete ) {
+				} );
+
+		}
+
+		while ( computeNodes.some( computeNode => _compileState.get( computeNode ) !== COMPILE_COMPLETE ) ) {
 
 			yield;
 
