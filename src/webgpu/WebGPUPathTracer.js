@@ -218,6 +218,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Maximum number of scatter events a path can take inside a scattering volume. Counted separately
+	 * from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
+	 * @type {number}
+	 * @default 256
+	 * @note Only the megakernel renders scattering volumes.
+	 */
+	get maxVolumeSteps() {
+
+		return this._pathTracer.maxVolumeSteps;
+
+	}
+
+	set maxVolumeSteps( v ) {
+
+		this._pathTracer.maxVolumeSteps = v;
+		this.reset();
+
+	}
+
+	/**
 	 * Stops accumulating once every pixel reaches this many samples. A denoiser only runs once the
 	 * render has stopped, so it has no effect while this is `0`.
 	 * @type {number}

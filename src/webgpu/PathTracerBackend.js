@@ -16,6 +16,7 @@ export class PathTracerBackend {
 		// responsive on slower hardware; the unit is resolution independent.
 		this.frameBudget = 250000;
 		this.maxTransparentBounces = 15;
+		this.maxVolumeSteps = 256;
 		this.lowResMode = false;
 
 		// stop taking samples once a pixel reaches this count. zero means no limit.

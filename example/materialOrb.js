@@ -75,6 +75,7 @@ const params = {
 	useMegakernel: new URLSearchParams( window.location.search ).get( 'megakernel' ) === 'true',
 	multipleImportanceSampling: true,
 	maxBounces: 15,
+	maxVolumeSteps: 256,
 	renderScale: 0.5,
 	filterGlossyFactor: 1,
 	frameBudget: 250000,
@@ -216,6 +217,7 @@ async function init() {
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxVolumeSteps', 1, 1024, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.close();
 
@@ -460,6 +462,7 @@ function onParamsChange() {
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.maxBounces = params.maxBounces;
+	pathTracer.maxVolumeSteps = params.maxVolumeSteps;
 	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
