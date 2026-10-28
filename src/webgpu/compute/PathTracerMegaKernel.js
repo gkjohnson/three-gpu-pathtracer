@@ -2,14 +2,23 @@ import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, sampleHemisphereFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
+
+// scatter events a path may take inside a medium, which don't count against the bounce limit
+const MEDIUM_MAX_STEPS = 256;
+
+// the smallest attenuation color used to derive a medium's extinction, keeping the log finite
+const MEDIUM_MIN_ATTENUATION = 1e-6;
+
+// the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
+const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -156,6 +165,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
+
+				// the scattering volume the path is inside of, entered by refracting into a material with
+				// "KHR_materials_scatter" volume parameters. Media don't nest
+				var inMedium = false;
+				var mediumExtinction = vec3f( 0.0 );
+				var mediumAlbedo = vec3f( 0.0 );
+				var mediumAnisotropy = 0.0;
+				var mediumSteps = 0u;
+				var mediumObject = 0u;
+
+				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
+				var mediumScattered = false;
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
@@ -179,8 +200,85 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none
-					let isMISWeighted = misEnabled != 0u && bounce > 0u;
+					// Inside a medium, sample a scatter event before the next surface. As in Cycles, following
+					// Chiang et al. 2016, the channel is chosen in proportion to throughput times single scatter
+					// albedo, and the three channels' distance pdfs are combined with the balance heuristic.
+					let segmentInMedium = inMedium;
+					if ( inMedium ) {
+
+						let channelWeights = abs( throughputColor * mediumAlbedo );
+						let channelWeightSum = channelWeights.r + channelWeights.g + channelWeights.b;
+						var channelPdf = vec3f( 1.0 / 3.0 );
+						if ( channelWeightSum > 0.0 ) {
+
+							channelPdf = channelWeights / channelWeightSum;
+
+						}
+
+						let distanceSample = ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } );
+						var channel = 2u;
+						if ( distanceSample.x < channelPdf.r ) {
+
+							channel = 0u;
+
+						} else if ( distanceSample.x < channelPdf.r + channelPdf.g ) {
+
+							channel = 1u;
+
+						}
+
+						let scatterDist = - log( 1.0 - distanceSample.y ) / mediumExtinction[ channel ];
+						if ( scatterDist < surfaceDist ) {
+
+							let transmittance = exp( - mediumExtinction * scatterDist );
+							let distancePdf = dot( channelPdf, mediumExtinction * transmittance );
+							if ( distancePdf <= 0.0 ) {
+
+								break;
+
+							}
+
+							throughputColor *= mediumAlbedo * mediumExtinction * transmittance / distancePdf;
+
+							// continue from the scatter event in a direction drawn from the phase function
+							ray.origin += ray.direction * scatterDist;
+							ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, mediumAnisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+							ray.maxDist = 0.0;
+							mediumScattered = true;
+							isFullyTransmissive = false;
+
+							// the walk doesn't count against the bounce limit, but is capped, and ends once its
+							// throughput is negligible
+							mediumSteps ++;
+							let maxThroughput = max( max( throughputColor.r, throughputColor.g ), throughputColor.b );
+							if ( mediumSteps >= ${ MEDIUM_MAX_STEPS }u || maxThroughput < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+
+								break;
+
+							}
+
+							${ rngNextBounce }();
+							bounce --;
+							continue;
+
+						}
+
+						// reaching the surface, weighted by the probability of no scatter event before it
+						let transmittance = exp( - mediumExtinction * surfaceDist );
+						let passPdf = dot( channelPdf, transmittance );
+						if ( passPdf <= 0.0 ) {
+
+							break;
+
+						}
+
+						throughputColor *= transmittance / passPdf;
+
+					}
+
+					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none, and
+					// neither do scatter events in a medium
+					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
@@ -212,6 +310,27 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							cameraHitLight = cameraHitLight || bounce == 0u;
 
 						}
+
+					}
+
+					// As in Cycles, the walk ends the first time it reaches its own object's surface and leaves
+					// as a diffuse transmission, with no reflection back inside. Other objects shade as usual.
+					if ( didHit && segmentInMedium && hitResult.objectIndex == mediumObject ) {
+
+						inMedium = false;
+
+						let hitPosition = ray.origin + ray.direction * hitResult.dist;
+						let outward = normalize( hitResult.normal ) * sign( dot( hitResult.normal, ray.direction ) );
+						ray.direction = ${ sampleHemisphereFn }( outward, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+						ray.origin = ${ offsetRayOriginFunc }( hitPosition, ray.direction, hitResult.normal );
+						ray.maxDist = 0.0;
+
+						// no light is sampled at the exit, so whatever the next segment reaches takes full weight
+						mediumScattered = true;
+						isFullyTransmissive = false;
+
+						${ rngNextBounce }();
+						continue;
 
 					}
 
@@ -278,8 +397,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// attenuate the light transmitted through the volume when exiting a backface
-						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 ) {
+						// attenuate the light transmitted through the volume when exiting a backface. A scattering
+						// medium has already applied its transmittance above
+						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
 							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
 
@@ -383,6 +503,29 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						throughputColor *= scatterRec.color;
 						throughputColor /= scatterRec.pdf;
 						bsdfPdf = scatterRec.pdf;
+						mediumScattered = false;
+
+						// Refracting into a front face of a scattering material starts a random walk inside it. As in
+						// Cycles the walk enters diffusely rather than along the refracted direction.
+						var scatterDirection = scatterRec.direction;
+						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
+
+							let attenuation = max( materialInfo.attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) );
+							let extinction = - log( attenuation ) / materialInfo.attenuationDistance;
+							if ( any( materialInfo.scatterAlbedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) ) ) {
+
+								inMedium = true;
+								mediumObject = hitResult.objectIndex;
+								mediumExtinction = extinction;
+								mediumAlbedo = materialInfo.scatterAlbedo;
+								mediumAnisotropy = materialInfo.scatterAnisotropy;
+
+								let inward = normalize( hitResult.normal ) * sign( dot( hitResult.normal, ray.direction ) );
+								scatterDirection = ${ sampleHemisphereFn }( inward, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+
+							}
+
+						}
 
 						// exit if our throughput is 0.0
 						if ( all( throughputColor == vec3f( 0.0 ) ) ) {
@@ -391,8 +534,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
-						ray.direction = scatterRec.direction;
+						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterDirection, hitResult.normal );
+						ray.direction = scatterDirection;
 						ray.maxDist = 0.0;
 
 					} else {

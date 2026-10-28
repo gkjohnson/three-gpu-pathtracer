@@ -8,7 +8,7 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
@@ -51,6 +51,9 @@ function getDefaultMaterialProperties() {
 		specularIntensity: 1.0,
 		anisotropy: 0.0,
 		anisotropyRotation: 0.0,
+		scatterStrength: 0.0,
+		multiscatterColor: '#ffffff',
+		scatterAnisotropy: 0.0,
 		matte: false,
 		flatShading: false,
 		castShadow: true,
@@ -67,12 +70,25 @@ const params = {
 	enable: true,
 	displaySampleDensity: false,
 	overlayReference: false,
+
+	// volume scattering is only supported by the megakernel so far
+	useMegakernel: new URLSearchParams( window.location.search ).get( 'megakernel' ) === 'true',
 	multipleImportanceSampling: true,
 	maxBounces: 15,
-	renderScale: 1,
+	renderScale: 0.5,
 	filterGlossyFactor: 1,
 	frameBudget: 250000,
 };
+
+// The megakernel renders a tile per frame, and a scattering volume makes every pixel slow, so it
+// renders tiny tiles to keep the page responsive
+const MEGAKERNEL_FRAME_BUDGET = 10000;
+
+function getFrameBudget() {
+
+	return params.useMegakernel ? MEGAKERNEL_FRAME_BUDGET : params.frameBudget;
+
+}
 
 // adjust performance parameters for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
@@ -106,7 +122,9 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.useMegakernel( params.useMegakernel );
+	pathTracer.setRandom( RANDOM_SOBOL );
+	pathTracer.frameBudget = getFrameBudget();
 
 	scene = new Scene();
 
@@ -172,11 +190,22 @@ async function init() {
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'useMegakernel' ).onChange( v => {
+
+		pathTracer.useMegakernel( v );
+		pathTracer.frameBudget = getFrameBudget();
+
+		// reflect the backend in the url
+		const search = new URLSearchParams( window.location.search );
+		search.set( 'megakernel', v );
+		history.replaceState( null, '', `?${ search }` );
+
+	} );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( () => {
 
-		pathTracer.frameBudget = value;
+		pathTracer.frameBudget = getFrameBudget();
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
@@ -195,7 +224,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'transmission', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'dispersion', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'thinWall', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.05, 2.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.001, 2.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'attenuationColor' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'ior', 0.9, 3.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'clearcoat', 0, 1 ).onChange( onParamsChange );
@@ -209,6 +238,9 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'specularIntensity', 0.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'anisotropy', 0.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'anisotropyRotation', 0.0, 2.0 * Math.PI ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'scatterStrength', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'multiscatterColor' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 0.99, 0.99 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
@@ -246,8 +278,23 @@ function applyDatabaseMaterial( info ) {
 
 	}
 
-	// a transmissive material tints by attenuation rather than base color
-	if ( materialProperties.transmission ) {
+	// A subsurface material becomes a scattering volume: light refracts in, scatters with the database
+	// color as the multi scatter albedo, and the per channel radius sets the mean free path. The radius is
+	// in centimeters, the units of the orb scene. The attenuation distance is the smallest radius so the
+	// attenuation color keeps its precision through the hex color.
+	if ( info.subsurfaceRadius ) {
+
+		const radius = info.subsurfaceRadius;
+		const distance = Math.min( ...radius );
+		materialProperties.transmission = 1;
+		materialProperties.scatterStrength = 1;
+		materialProperties.attenuationDistance = distance;
+		materialProperties.attenuationColor = toHex( radius.map( r => Math.exp( - distance / r ) ) );
+		if ( info.color ) materialProperties.multiscatterColor = toHex( info.color[ 0 ].color );
+
+	} else if ( materialProperties.transmission ) {
+
+		// a transmissive material tints by attenuation rather than base color
 
 		if ( info.color ) materialProperties.attenuationColor = toHex( info.color[ 0 ].color );
 		materialProperties.attenuationDistance = info.transmissionDepth ?? 1;
@@ -331,6 +378,11 @@ function onParamsChange() {
 	material.diffuseRoughness = materialProperties.diffuseRoughness;
 	material.matte = materialProperties.matte;
 	material.castShadow = materialProperties.castShadow;
+
+	// volume scattering, following the "KHR_materials_scatter" proposal
+	material.scatterStrength = materialProperties.scatterStrength;
+	material.multiscatterColor = ( material.multiscatterColor ?? new Color() ).set( materialProperties.multiscatterColor );
+	material.scatterAnisotropy = materialProperties.scatterAnisotropy;
 
 	pathTracer.updateMaterials();
 

@@ -9,6 +9,23 @@ import { getSurfaceRecordFunc } from './material.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 
 const _colorVec = new Vector4();
+
+// The single scatter albedo of one channel of a volume from its perceived multi scatter albedo and
+// phase anisotropy, using the inversion from "KHR_materials_scatter" (after Kulla and Conty 2017).
+function getSingleScatterAlbedo( multiScatterAlbedo, anisotropy ) {
+
+	if ( multiScatterAlbedo <= 0 ) {
+
+		return 0;
+
+	}
+
+	const a = multiScatterAlbedo;
+	const s = Math.min( Math.max( 4.09712 + 4.20863 * a - Math.sqrt( 9.59217 + 41.6808 * a + 17.7126 * a * a ), 0 ), 1 );
+	return ( 1 - s * s ) / ( 1 - anisotropy * s * s );
+
+}
+
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -942,6 +959,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			// anisotropyMap transform - offset 264
 			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
+
+			// scattering volume - offset 276. "scatterStrength" scales the multi scatter albedo
+			const scatterStrength = getField( m, 'scatterStrength', 0.0 );
+			const scatterAnisotropy = getField( m, 'scatterAnisotropy', 0.0 );
+			const multiscatterColor = getField( m, 'multiscatterColor', null );
+			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.r : 1.0 ) * scatterStrength, scatterAnisotropy );
+			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.g : 1.0 ) * scatterStrength, scatterAnisotropy );
+			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.b : 1.0 ) * scatterStrength, scatterAnisotropy );
+			floatArray[ index ++ ] = scatterAnisotropy;
 
 		}
 

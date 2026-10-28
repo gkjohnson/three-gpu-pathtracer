@@ -1,4 +1,4 @@
-import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
+import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
@@ -10,6 +10,15 @@ declare module 'three' {
 
 		matte?: boolean;
 		castShadow?: boolean;
+
+	}
+
+	// volume scattering from "KHR_materials_scatter"
+	export interface MeshPhysicalMaterial {
+
+		scatterStrength?: number;
+		multiscatterColor?: Color;
+		scatterAnisotropy?: number;
 
 	}
 

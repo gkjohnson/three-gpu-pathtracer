@@ -156,7 +156,12 @@ export const materialStruct = new StructTypeNode( {
 
 	// offset 264 floats
 	anisotropyMapTransform: 'mat3',
-	// total size = 276
+
+	// offset 276 floats
+	// the volume's single scatter albedo and phase anisotropy, from "KHR_materials_scatter"
+	scatterAlbedo: 'vec3',
+	scatterAnisotropy: 'float',
+	// total size = 280
 }, 'Material' );
 
 export const surfaceRecordStruct = new StructTypeNode( {
