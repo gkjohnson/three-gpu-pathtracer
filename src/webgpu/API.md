@@ -593,6 +593,28 @@ against. Call this once, then use the `update*` functions for later changes.
 > [!NOTE]
 > Geometry BVHs are built synchronously, so this blocks for large scenes.
 
+### .setBVHWorker
+
+```js
+setBVHWorker( WorkerConstructor: function ): void
+```
+
+Sets the worker class [WebGPUPathTracer#setSceneAsync](WebGPUPathTracer#setSceneAsync) builds the mesh geometry BVHs
+with, such as `GenerateMeshBVHWorker` from three-mesh-bvh. Several are created and disposed
+per call so geometries build in parallel.
+
+
+### .setSceneAsync
+
+```js
+async setSceneAsync( scene: Scene, camera: Camera ): Promise<void>
+```
+
+Like [WebGPUPathTracer#setScene](WebGPUPathTracer#setScene) but builds the mesh geometry BVHs in the workers set
+with [WebGPUPathTracer#setBVHWorker](WebGPUPathTracer#setBVHWorker) so the page is not blocked. Skinned meshes are
+still built synchronously.
+
+
 ### .setRandom
 
 ```js
