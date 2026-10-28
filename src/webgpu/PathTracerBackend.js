@@ -21,6 +21,9 @@ export class PathTracerBackend {
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
+		// whether the render task is waiting on its kernels to compile, during which nothing renders
+		this.compiling = false;
+
 		this._renderTask = null;
 		this._compileState = new WeakMap();
 
@@ -115,9 +118,12 @@ export class PathTracerBackend {
 
 		while ( computeNodes.some( computeNode => _compileState.get( computeNode ) !== COMPILE_COMPLETE ) ) {
 
+			this.compiling = true;
 			yield;
 
 		}
+
+		this.compiling = false;
 
 	}
 

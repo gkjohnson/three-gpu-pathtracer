@@ -445,6 +445,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Whether the kernels are compiling, such as after the scene or material changes. Nothing new
+	 * renders until they finish and the canvas keeps the last frame, so an app may draw its own
+	 * preview in the meantime.
+	 * @type {boolean}
+	 * @readonly
+	 */
+	get compiling() {
+
+		return this._pathTracer.compiling;
+
+	}
+
+	/**
 	 * The atlas every scene texture is packed into for the kernels to sample.
 	 * @type {AtlasTexture}
 	 * @readonly
@@ -1177,6 +1190,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.update();
+
+			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
+			// and leave the last frame on screen
+			if ( pathTracer.compiling ) {
+
+				this._resetTime -= delta;
+				return;
+
+			}
 
 		}
 
