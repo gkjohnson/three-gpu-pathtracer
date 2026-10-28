@@ -2,7 +2,7 @@ import { ExternalTexture, NearestFilter, NoToneMapping, RenderTarget, UnsignedBy
 import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
 
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
-/** @import { DynamicTileSetting } from 'oidn-web' */
+/** @import { DynamicTileSetting } from 'oidn-webgpu' */
 
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
@@ -12,7 +12,7 @@ import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
  * nor the network files become a dependency.
  *
  * ```js
- * import { initUNetFromURL } from 'oidn-web';
+ * import { initUNetFromURL } from 'oidn-webgpu';
  * pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
  * ```
  *
@@ -80,7 +80,7 @@ export class OIDNDenoiser {
 
 		if ( ! initUNetFromURL ) {
 
-			throw new Error( 'OIDNDenoiser: "initUNetFromURL" from "oidn-web" must be provided.' );
+			throw new Error( 'OIDNDenoiser: "initUNetFromURL" from "oidn-webgpu" must be provided.' );
 
 		}
 
@@ -91,7 +91,7 @@ export class OIDNDenoiser {
 		// `false` falls back to the color only model, which is blurrier but skips a scene render
 		this.useAuxiliaryBuffers = useAuxiliaryBuffers;
 
-		// tiling, passed through to oidn-web. Null keeps its defaults
+		// tiling, passed through to oidn-webgpu. Null keeps its defaults
 		this.maxTileSize = maxTileSize;
 		this.dynamicTile = dynamicTile;
 
@@ -213,6 +213,9 @@ export class OIDNDenoiser {
 		const inputs = {
 			color: { data: backend.get( color ).texture, width, height },
 
+			// pace the tiles to display frames so the path tracer keeps rendering between them
+			scheduling: 'animation-frame',
+
 			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
 			progress: output => this._copyOutputToTexture( output, width, height ),
 			done: output => {
@@ -275,7 +278,7 @@ export class OIDNDenoiser {
 
 	}
 
-	// Rasterizes the albedo and normal buffers that guide the filter. oidn-web takes normals
+	// Rasterizes the albedo and normal buffers that guide the filter. oidn-webgpu takes normals
 	// mapped into [0,1], with (0.5, 0.5, 1) as a flat normal.
 	_renderAuxiliaryBuffers( width, height ) {
 
@@ -345,7 +348,7 @@ export class OIDNDenoiser {
 				if ( this.maxTileSize !== null ) options.maxTileSize = this.maxTileSize;
 				if ( this.dynamicTile !== null ) options.dynamicTile = this.dynamicTile;
 
-				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, options );
+				return this.initUNetFromURL( url, { device }, options );
 
 			} )();
 
@@ -357,7 +360,7 @@ export class OIDNDenoiser {
 
 	// Copies the denoiser's packed output buffer into a sampleable texture, using a compute pass
 	// since copyBufferToTexture requires 256 byte row alignment.
-	// TODO: remove the copy once oidn-web can write into a caller-provided storage texture.
+	// TODO: remove the copy once oidn-webgpu can write into a caller-provided storage texture.
 	_copyOutputToTexture( output, width, height ) {
 
 		const device = this.renderer.backend.device;

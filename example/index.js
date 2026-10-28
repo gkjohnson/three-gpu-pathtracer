@@ -32,7 +32,7 @@ import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js'
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
-import { initUNetFromURL } from 'oidn-web';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler } from '@pmndrs/upscaler';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
@@ -265,7 +265,7 @@ async function init() {
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
-	// the library ships neither "oidn-web" nor the network weights, so the app provides both
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
 		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),

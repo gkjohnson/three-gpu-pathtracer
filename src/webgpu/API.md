@@ -143,7 +143,7 @@ Runs Open Image Denoise over a path traced image. Pass one to
 nor the network files become a dependency.
 
 ```js
-import { initUNetFromURL } from 'oidn-web';
+import { initUNetFromURL } from 'oidn-webgpu';
 pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
 ```
 
