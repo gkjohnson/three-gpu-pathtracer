@@ -1,5 +1,6 @@
-import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
+import { createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
@@ -20,9 +21,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// tiles
 			offset: uniform( new Vector2() ),

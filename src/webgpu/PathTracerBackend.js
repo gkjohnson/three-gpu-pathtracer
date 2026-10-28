@@ -1,6 +1,5 @@
-import { ColorManagement, FloatType, RGBAFormat } from 'three';
-import { RedIntegerFormat, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 
 export class PathTracerBackend {
 
@@ -21,25 +20,9 @@ export class PathTracerBackend {
 		this._renderTask = null;
 		this._compiledKernels = new WeakSet();
 
-		this.outputTarget = new StorageTexture( 1, 1, );
-		this.outputTarget.format = RGBAFormat;
-		this.outputTarget.type = FloatType;
-		this.outputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.outputTarget.name = 'Output #0';
-		this.outputTarget.generateMipmaps = false;
-
-		this.prevOutputTarget = new StorageTexture( 1, 1, );
-		this.prevOutputTarget.format = RGBAFormat;
-		this.prevOutputTarget.type = FloatType;
-		this.prevOutputTarget.colorSpace = ColorManagement.workingColorSpace;
-		this.prevOutputTarget.name = 'Output #1';
-		this.prevOutputTarget.generateMipmaps = false;
-
-		this.sampleCountTarget = new StorageTexture( 1, 1, );
-		this.sampleCountTarget.format = RedIntegerFormat;
-		this.sampleCountTarget.type = UnsignedIntType;
-		this.sampleCountTarget.name = 'Sample Count';
-		this.sampleCountTarget.generateMipmaps = false;
+		this.outputTarget = createOutputTarget( 'Output #0' );
+		this.prevOutputTarget = createOutputTarget( 'Output #1' );
+		this.sampleCountTarget = createSampleCountTarget( 'Sample Count' );
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );

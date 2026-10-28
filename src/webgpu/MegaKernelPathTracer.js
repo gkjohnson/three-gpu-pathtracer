@@ -188,7 +188,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		const tiles = new Vector2();
 
 		// init parameters
-		kernel.prevOutputTarget = this.prevOutputTarget;
 		kernel.outputTarget = outputTarget;
 		kernel.sampleCountTarget = sampleCountTarget;
 
