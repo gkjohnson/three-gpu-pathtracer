@@ -184,6 +184,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// Dwivedi guiding, as in Cycles' subsurface_random_walk.h: with the guided fraction, scatter
 				// directions and distances are drawn to steer the walk back toward the entry surface, or toward
 				// the opposite interface the first segment found, and combined with classic sampling by MIS
+				// TODO: consider removing - Cycles only guides subsurface walks that end at the first surface
+				// hit, while here the walk can reflect back inside at the surface bsdf, so it may help less
 				var mediumEntryPosition = vec3f( 0.0 );
 				var mediumEntryNormal = vec3f( 0.0 );
 				var mediumDiffusionLength = 0.0;

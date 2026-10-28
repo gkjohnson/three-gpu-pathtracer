@@ -84,6 +84,12 @@ const params = {
 // renders tiny tiles to keep the page responsive
 const MEGAKERNEL_FRAME_BUDGET = 10000;
 
+// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
+const DIPOLE_MIN_ALBEDO = 1e-4;
+const DIPOLE_MAX_ALBEDO = 0.995;
+const DIPOLE_MAX_ALPHA_PRIME = 0.999999;
+const DIPOLE_ITERATIONS = 12;
+
 function getFrameBudget() {
 
 	return params.useMegakernel ? MEGAKERNEL_FRAME_BUDGET : params.frameBudget;
@@ -260,6 +266,56 @@ function getMultiscatterAlbedo( singleScatterAlbedo, anisotropy ) {
 
 }
 
+// the mean free path for a subsurface radius, from Cycles' "Random Walk (Skin)" setup in
+// bssrdf_setup_radius, which the database's subsurface renders use. The radius is scaled by the
+// dipole albedo found for the surface albedo and IOR.
+function getSkinMeanFreePath( radius, albedo, ior ) {
+
+	const invEta = 1 / ior;
+	const fdr = invEta * ( - 1.440 * invEta + 0.710 ) + 0.668 + 0.0636 * ior;
+	const fourThirdsA = ( 4 / 3 ) * ( 1 + fdr ) / ( 1 - fdr );
+	const getRd = alphaPrime => {
+
+		const s = Math.sqrt( 3 * ( 1 - alphaPrime ) );
+		return 0.5 * alphaPrime * ( 1 + Math.exp( - fourThirdsA * s ) ) * Math.exp( - s );
+
+	};
+
+	// Cycles' bisection for the albedo whose dipole reflectance is "albedo"
+	let alphaPrime;
+	if ( albedo < DIPOLE_MIN_ALBEDO ) {
+
+		alphaPrime = 0;
+
+	} else if ( albedo >= DIPOLE_MAX_ALBEDO ) {
+
+		alphaPrime = DIPOLE_MAX_ALPHA_PRIME;
+
+	} else {
+
+		let x0 = 0;
+		let x1 = 1;
+		for ( let i = 0; i < DIPOLE_ITERATIONS; i ++ ) {
+
+			alphaPrime = 0.5 * ( x0 + x1 );
+			if ( getRd( alphaPrime ) < albedo ) {
+
+				x0 = alphaPrime;
+
+			} else {
+
+				x1 = alphaPrime;
+
+			}
+
+		}
+
+	}
+
+	return radius * Math.sqrt( 3 * ( 1 - alphaPrime ) );
+
+}
+
 // copy a physicallybased.info entry into the material properties so the manual controls stay in
 // sync and can be used to tweak the preset afterward
 function applyDatabaseMaterial( info ) {
@@ -311,10 +367,12 @@ function applyDatabaseMaterial( info ) {
 	} else if ( info.subsurfaceRadius ) {
 
 		// A subsurface material becomes a scattering volume: light refracts in, scatters with the database
-		// color as the multi scatter albedo, and the per channel radius sets the mean free path. The radius is
-		// in centimeters, the units of the orb scene. The attenuation distance is the smallest radius so the
-		// attenuation color keeps its precision through the hex color.
-		const radius = info.subsurfaceRadius;
+		// color as the multi scatter albedo, and the per channel radius sets the mean free path as in Cycles'
+		// "Random Walk (Skin)". The radius is in centimeters, the units of the orb scene. The attenuation
+		// distance is the smallest mean free path so the attenuation color keeps its precision through the
+		// hex color.
+		const albedo = info.color ? info.color[ 0 ].color : [ 1, 1, 1 ];
+		const radius = info.subsurfaceRadius.map( ( r, i ) => getSkinMeanFreePath( r, albedo[ i ], materialProperties.ior ) );
 		const distance = Math.min( ...radius );
 		materialProperties.transmission = 1;
 		materialProperties.scatterStrength = 1;
