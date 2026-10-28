@@ -445,6 +445,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Whether the kernels are compiling, such as after the scene or material changes. Nothing new
+	 * renders until they finish and the canvas keeps the last frame, so an app may draw its own
+	 * preview in the meantime.
+	 * @type {boolean}
+	 * @readonly
+	 */
+	get compiling() {
+
+		return this._pathTracer.compiling;
+
+	}
+
+	/**
 	 * The atlas every scene texture is packed into for the kernels to sample.
 	 * @type {AtlasTexture}
 	 * @readonly
@@ -578,6 +591,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @default true
 		 */
 		this.renderToCanvas = true;
+
+		/**
+		 * Whether to compile the kernels asynchronously so a compile doesn't stall the page. Nothing
+		 * new renders while {@link WebGPUPathTracer#compiling} is true. Requires three.js r186.
+		 * @type {boolean}
+		 * @default false
+		 */
+		this.asyncCompile = false;
 
 		/**
 		 * Whether to generate the attributes in {@link WebGPUPathTracer#commonAttributes} on
@@ -1176,7 +1197,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
+			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
+
+			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
+			// and leave the last frame on screen
+			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
+			// camera moves, and a rasterized preview compiles its own materials
+			if ( pathTracer.compiling ) {
+
+				this._resetTime -= delta;
+				return;
+
+			}
 
 		}
 

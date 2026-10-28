@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
 - AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.
 - WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
+- WebGPUPathTracer: Environment map importance sampling accuracy.
+- WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
 
 ### Fixed

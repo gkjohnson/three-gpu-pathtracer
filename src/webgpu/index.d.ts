@@ -184,6 +184,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	renderScale: number;
 	synchronizeRenderSize: boolean;
 	renderToCanvas: boolean;
+	asyncCompile: boolean;
 	generateMissingAttributes: boolean;
 	commonAttributes: Array<string>;
 	stableNoise: boolean;
@@ -194,6 +195,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	readonly fadeState: number;
 	readonly lowResTarget: Texture;
 	readonly lowResMode: boolean;
+	readonly compiling: boolean;
 	readonly textureAtlas: AtlasTexture;
 
 	getSampleCountsAsync(): Promise<SampleCounts>;
