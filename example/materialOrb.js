@@ -76,7 +76,7 @@ const params = {
 	multipleImportanceSampling: true,
 	maxBounces: 15,
 	maxVolumeSteps: 256,
-	renderScale: 0.5,
+	renderScale: 1,
 	filterGlossyFactor: 1,
 	frameBudget: 250000,
 };
@@ -84,12 +84,6 @@ const params = {
 // The megakernel renders a tile per frame, and a scattering volume makes every pixel slow, so it
 // renders tiny tiles to keep the page responsive
 const MEGAKERNEL_FRAME_BUDGET = 10000;
-
-// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
-const DIPOLE_MIN_ALBEDO = 1e-4;
-const DIPOLE_MAX_ALBEDO = 0.995;
-const DIPOLE_MAX_ALPHA_PRIME = 0.999999;
-const DIPOLE_ITERATIONS = 12;
 
 function getFrameBudget() {
 
@@ -272,6 +266,12 @@ function getMultiscatterAlbedo( singleScatterAlbedo, anisotropy ) {
 // bssrdf_setup_radius, which the database's subsurface renders use. The radius is scaled by the
 // dipole albedo found for the surface albedo and IOR.
 function getSkinMeanFreePath( radius, albedo, ior ) {
+
+	// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
+	const DIPOLE_MIN_ALBEDO = 1e-4;
+	const DIPOLE_MAX_ALBEDO = 0.995;
+	const DIPOLE_MAX_ALPHA_PRIME = 0.999999;
+	const DIPOLE_ITERATIONS = 12;
 
 	const invEta = 1 / ior;
 	const fdr = invEta * ( - 1.440 * invEta + 0.710 ) + 0.668 + 0.0636 * ior;
