@@ -1202,6 +1202,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
 			// and leave the last frame on screen
+			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
+			// camera moves, and a rasterized preview compiles its own materials
 			if ( pathTracer.compiling ) {
 
 				this._resetTime -= delta;
