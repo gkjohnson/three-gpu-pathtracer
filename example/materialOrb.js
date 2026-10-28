@@ -280,11 +280,12 @@ function applyDatabaseMaterial( info ) {
 
 	// A subsurface material becomes a scattering volume: light refracts in, scatters with the database
 	// color as the multi scatter albedo, and the per channel radius sets the mean free path. The radius is
-	// in centimeters, the units of the orb scene. The attenuation distance is the smallest radius so the
-	// attenuation color keeps its precision through the hex color.
+	// in centimeters, the units of the orb scene, and is scaled by 1 / 4π as Cycles' random walk does. The
+	// attenuation distance is the smallest radius so the attenuation color keeps its precision through the
+	// hex color.
 	if ( info.subsurfaceRadius ) {
 
-		const radius = info.subsurfaceRadius;
+		const radius = info.subsurfaceRadius.map( r => r * 0.25 / Math.PI );
 		const distance = Math.min( ...radius );
 		materialProperties.transmission = 1;
 		materialProperties.scatterStrength = 1;

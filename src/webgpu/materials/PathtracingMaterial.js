@@ -36,6 +36,7 @@ export class PathtracingMaterial {
 				record.color = surf.color * max( wi.z, 0.0 );
 				record.pdf = max( wi.z, 0.0 ) / PI;
 				record.direction = normalize( surf.normalBasis * wi );
+				record.isDiffuse = true;
 
 				return record;
 

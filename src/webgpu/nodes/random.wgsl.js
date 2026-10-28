@@ -8,6 +8,7 @@ export const RNG_INDEX_RUSSIAN_ROULETTE = 6;
 export const RNG_INDEX_DISPERSION_WAVELENGTH = 7;
 export const RNG_INDEX_MEDIUM_DISTANCE = 8;
 export const RNG_INDEX_MEDIUM_DIRECTION = 9;
+export const RNG_INDEX_MEDIUM_GUIDE = 10;
 export const RNG_INDEX_ALPHA_TEST = 50;
 import { contextProxyFn } from 'three-mesh-bvh/webgpu';
 import * as sobol from './rand/sobol.wgsl.js';

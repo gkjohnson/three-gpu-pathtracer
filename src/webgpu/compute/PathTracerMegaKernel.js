@@ -2,8 +2,8 @@ import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, sampleHemisphereFn } from '../nodes/sampling.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, sampleHemisphereFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
@@ -19,6 +19,12 @@ const MEDIUM_MIN_ATTENUATION = 1e-6;
 
 // the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
 const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
+
+// the largest single scatter albedo used for the guiding diffusion length, which is infinite at one, as in Cycles
+const MEDIUM_MAX_GUIDING_ALBEDO = 0.999999;
+
+// how many of the shortest mean free paths the first segment looks for the opposite interface, as in Cycles
+const MEDIUM_OPPOSITE_SEARCH_PATHS = 10;
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -175,8 +181,33 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var mediumSteps = 0u;
 				var mediumObject = 0u;
 
+				// Dwivedi guiding, as in Cycles' subsurface_random_walk.h: with the guided fraction, scatter
+				// directions and distances are drawn to steer the walk back toward the entry surface, or toward
+				// the opposite interface the first segment found, and combined with classic sampling by MIS
+				var mediumEntryPosition = vec3f( 0.0 );
+				var mediumEntryNormal = vec3f( 0.0 );
+				var mediumDiffusionLength = 0.0;
+				var mediumPhaseLog = 0.0;
+				var mediumGuidedFraction = 0.0;
+				var mediumFirstSegment = false;
+				var mediumHasOpposite = false;
+				var mediumOppositeDistance = 0.0;
+
+				// the guided pdf terms of the current segment, whose direction was drawn at a scatter event
+				var segmentGuidable = false;
+				var segmentGuided = false;
+				var segmentBackward = false;
+				var segmentBackwardFraction = 0.0;
+				var segmentForwardFactor = 0.0;
+				var segmentBackwardFactor = 0.0;
+				var segmentForwardStretch = 1.0;
+				var segmentBackwardStretch = 1.0;
+
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
 				var mediumScattered = false;
+
+				// As in Cycles, after a diffuse bounce scattering materials shade as diffuse instead of walking
+				var diffuseAncestor = false;
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
@@ -227,22 +258,105 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let scatterDist = - log( 1.0 - distanceSample.y ) / mediumExtinction[ channel ];
-						if ( scatterDist < surfaceDist ) {
+						// a guided segment samples its distance with the extinction stretched along its direction
+						var sampleExtinction = mediumExtinction[ channel ];
+						if ( segmentGuided ) {
 
-							let transmittance = exp( - mediumExtinction * scatterDist );
-							let distancePdf = dot( channelPdf, mediumExtinction * transmittance );
-							if ( distancePdf <= 0.0 ) {
+							sampleExtinction *= select( segmentForwardStretch, segmentBackwardStretch, segmentBackward );
 
-								break;
+						}
+
+						let scatterDist = - log( 1.0 - distanceSample.y ) / sampleExtinction;
+
+						// the first segment looks for the walk's own surface on the far side, for backward guiding
+						if ( mediumFirstSegment ) {
+
+							mediumFirstSegment = false;
+
+							let minExtinction = min( min( mediumExtinction.r, mediumExtinction.g ), mediumExtinction.b );
+							let searchDist = max( scatterDist, ${ MEDIUM_OPPOSITE_SEARCH_PATHS }.0 / minExtinction );
+							if ( didHit && hitResult.objectIndex == mediumObject && hitResult.dist <= searchDist ) {
+
+								mediumHasOpposite = true;
+								mediumOppositeDistance = dot( ray.origin + ray.direction * hitResult.dist - mediumEntryPosition, - mediumEntryNormal );
 
 							}
 
-							throughputColor *= mediumAlbedo * mediumExtinction * transmittance / distancePdf;
+						}
 
-							// continue from the scatter event in a direction drawn from the phase function
+						// the segment pdf, a scatter event's density or the probability of passing to the surface.
+						// The classic and guided strategies are combined with the balance heuristic, as in Cycles
+						let scattered = scatterDist < surfaceDist;
+						let segmentDist = select( surfaceDist, scatterDist, scattered );
+						let transmittance = exp( - mediumExtinction * segmentDist );
+						var segmentPdf = select( transmittance, mediumExtinction * transmittance, scattered );
+						if ( segmentGuidable ) {
+
+							let forwardExtinction = segmentForwardStretch * mediumExtinction;
+							let forwardTransmittance = exp( - forwardExtinction * segmentDist );
+							let forwardPdf = select( forwardTransmittance, forwardExtinction * forwardTransmittance, scattered );
+
+							let backwardExtinction = segmentBackwardStretch * mediumExtinction;
+							let backwardTransmittance = exp( - backwardExtinction * segmentDist );
+							let backwardPdf = select( backwardTransmittance, backwardExtinction * backwardTransmittance, scattered );
+
+							let guidedPdf = mix( forwardPdf * segmentForwardFactor, backwardPdf * segmentBackwardFactor, segmentBackwardFraction );
+							segmentPdf = mix( segmentPdf, guidedPdf, mediumGuidedFraction );
+
+						}
+
+						let distancePdf = dot( channelPdf, segmentPdf );
+						if ( distancePdf <= 0.0 ) {
+
+							break;
+
+						}
+
+						if ( scattered ) {
+
+							throughputColor *= mediumAlbedo * mediumExtinction * transmittance / distancePdf;
 							ray.origin += ray.direction * scatterDist;
-							ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, mediumAnisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+
+							// Continue from the scatter event in a direction drawn from the phase function or, with
+							// the guided fraction, from Dwivedi's distribution around the entry normal. Backward
+							// guiding mirrors it, more often the deeper the walk is toward the opposite interface
+							let guideSample = ${ rand2 }( ${ RNG_INDEX_MEDIUM_GUIDE } );
+							let directionSample = ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } );
+							segmentGuided = guideSample.x < mediumGuidedFraction;
+							segmentBackwardFraction = 0.0;
+							if ( mediumHasOpposite ) {
+
+								let depth = clamp( dot( ray.origin - mediumEntryPosition, - mediumEntryNormal ), 0.0, mediumOppositeDistance );
+								segmentBackwardFraction = 1.0 / ( 1.0 + exp( ( mediumOppositeDistance - 2.0 * depth ) / mediumDiffusionLength ) );
+
+							}
+
+							segmentBackward = guideSample.y < segmentBackwardFraction;
+
+							var newDirection: vec3f;
+							var cosTheta: f32;
+							if ( segmentGuided ) {
+
+								cosTheta = ${ sampleDwivediPhaseFn }( mediumDiffusionLength, mediumPhaseLog, directionSample.x );
+								cosTheta = select( cosTheta, - cosTheta, segmentBackward );
+								newDirection = ${ directionFromCosineFn }( mediumEntryNormal, cosTheta, directionSample.y );
+
+							} else {
+
+								newDirection = ${ sampleHenyeyGreensteinFn }( ray.direction, mediumAnisotropy, directionSample );
+								cosTheta = dot( newDirection, mediumEntryNormal );
+
+							}
+
+							// the guided direction pdfs relative to the phase function, which cancels in the estimator
+							let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, newDirection ), mediumAnisotropy );
+							segmentForwardFactor = ${ dwivediPhasePdfFn }( mediumDiffusionLength, mediumPhaseLog, cosTheta ) / phasePdf;
+							segmentBackwardFactor = ${ dwivediPhasePdfFn }( mediumDiffusionLength, mediumPhaseLog, - cosTheta ) / phasePdf;
+							segmentForwardStretch = 1.0 - cosTheta / mediumDiffusionLength;
+							segmentBackwardStretch = 1.0 + cosTheta / mediumDiffusionLength;
+							segmentGuidable = mediumGuidedFraction > 0.0;
+
+							ray.direction = newDirection;
 							ray.maxDist = 0.0;
 							mediumScattered = true;
 							isFullyTransmissive = false;
@@ -264,15 +378,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// reaching the surface, weighted by the probability of no scatter event before it
-						let transmittance = exp( - mediumExtinction * surfaceDist );
-						let passPdf = dot( channelPdf, transmittance );
-						if ( passPdf <= 0.0 ) {
-
-							break;
-
-						}
-
-						throughputColor *= transmittance / passPdf;
+						throughputColor *= transmittance / distancePdf;
 
 					}
 
@@ -328,6 +434,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// no light is sampled at the exit, so whatever the next segment reaches takes full weight
 						mediumScattered = true;
 						isFullyTransmissive = false;
+						diffuseAncestor = true;
 
 						${ rngNextBounce }();
 						continue;
@@ -363,6 +470,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						if ( diffuseAncestor && ! surface.thinWall && any( materialInfo.scatterColor > vec3f( 0.0 ) ) ) {
+
+							surface.transmission = 0.0;
+							surface.color = materialInfo.scatterColor;
+
+						}
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the ray at the hit point, advancing the rng but not the bounce count.
@@ -504,10 +617,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						throughputColor /= scatterRec.pdf;
 						bsdfPdf = scatterRec.pdf;
 						mediumScattered = false;
+						diffuseAncestor = diffuseAncestor || scatterRec.isDiffuse;
+
+						// a direction from the bsdf isn't guided
+						segmentGuidable = false;
+						segmentGuided = false;
 
 						// Refracting into a front face of a scattering material starts a random walk inside it. As in
-						// Cycles the walk enters diffusely rather than along the refracted direction.
-						var scatterDirection = scatterRec.direction;
+						// Cycles the walk enters along the rough refracted direction.
 						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
 
 							let attenuation = max( materialInfo.attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) );
@@ -520,8 +637,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								mediumAlbedo = materialInfo.scatterAlbedo;
 								mediumAnisotropy = materialInfo.scatterAnisotropy;
 
-								let inward = normalize( hitResult.normal ) * sign( dot( hitResult.normal, ray.direction ) );
-								scatterDirection = ${ sampleHemisphereFn }( inward, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+								// As in Cycles, the guiding diffusion length comes from the highest albedo (eq. 67 of
+								// "Zero-Variance Theory for Efficient Subsurface Scattering", d'Eon and Křivánek 2020),
+								// and anisotropic media are guided less
+								let maxAlbedo = min( max( max( mediumAlbedo.r, mediumAlbedo.g ), mediumAlbedo.b ), ${ MEDIUM_MAX_GUIDING_ALBEDO } );
+								mediumDiffusionLength = 1.0 / sqrt( 1.0 - pow( maxAlbedo, 2.44294 - 0.0215813 * maxAlbedo + 0.578637 / maxAlbedo ) );
+								mediumPhaseLog = log( ( mediumDiffusionLength + 1.0 ) / ( mediumDiffusionLength - 1.0 ) );
+								mediumGuidedFraction = 1.0 - max( 0.5, pow( abs( mediumAnisotropy ), 0.125 ) );
+
+								// at low albedo the length reaches one and the guided distribution degenerates
+								if ( mediumDiffusionLength <= 1.0 ) {
+
+									mediumGuidedFraction = 0.0;
+
+								}
+
+								mediumEntryPosition = vertexData.position.xyz;
+								mediumEntryNormal = surface.normal;
+								mediumFirstSegment = true;
+								mediumHasOpposite = false;
 
 							}
 
@@ -534,8 +668,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterDirection, hitResult.normal );
-						ray.direction = scatterDirection;
+						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
+						ray.direction = scatterRec.direction;
 						ray.maxDist = 0.0;
 
 					} else {

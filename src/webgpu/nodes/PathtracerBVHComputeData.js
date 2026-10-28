@@ -969,6 +969,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.b : 1.0 ) * scatterStrength, scatterAnisotropy );
 			floatArray[ index ++ ] = scatterAnisotropy;
 
+			// scattering volume color - offset 280
+			floatArray[ index ++ ] = ( multiscatterColor ? multiscatterColor.r : 1.0 ) * scatterStrength;
+			floatArray[ index ++ ] = ( multiscatterColor ? multiscatterColor.g : 1.0 ) * scatterStrength;
+			floatArray[ index ++ ] = ( multiscatterColor ? multiscatterColor.b : 1.0 ) * scatterStrength;
+			index ++;
+
 		}
 
 		return { materialData: intArray, textures };
