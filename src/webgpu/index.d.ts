@@ -1,5 +1,6 @@
 import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
+import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
 
@@ -201,6 +202,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	setUpscaler( upscaler: FSRUpscaler | null ): void;
 
 	setScene( scene: Scene, camera: Camera ): void;
+	setBVHWorker( WorkerConstructor: new () => BVHWorker & { dispose(): void } ): void;
+	setSceneAsync( scene: Scene, camera: Camera ): Promise<void>;
 	setRandom( random: RandomStrategy ): void;
 	setCamera( camera: Camera ): void;
 	setSize( x: number, y: number ): void;

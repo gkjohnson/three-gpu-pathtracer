@@ -36,6 +36,10 @@ const _color = new Color();
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
 
+// the options the mesh geometry bvhs are built with and how many workers build them at once
+const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
+const MAX_BVH_WORKERS = 4;
+
 class TextureCache {
 
 	constructor( renderer, key ) {
@@ -630,6 +634,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
 		this._invViewProjectionMatrix = uniform( new Matrix4() );
 		this._cameraRayFnHandle = null;
+		this._BVHWorker = null;
 
 		// the render time of the last check for the render having stopped
 		this._lastCompleteCheck = 0;
@@ -739,7 +744,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				if ( ! child.geometry.boundsTree ) {
 
-					child.geometry.boundsTree = new MeshBVH( child.geometry, { strategy: SAH, targetLeafSize: 5 } );
+					child.geometry.boundsTree = new MeshBVH( child.geometry, MESH_BVH_OPTIONS );
 
 				}
 
@@ -768,6 +773,80 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// the denoiser rasterizes its own guide buffers, so it needs the scene too
 		this._denoiser?.setScene( scene, camera );
+
+	}
+
+	/**
+	 * Sets the worker class {@link WebGPUPathTracer#setSceneAsync} builds the mesh geometry BVHs
+	 * with, such as `GenerateMeshBVHWorker` from three-mesh-bvh. Several are created and disposed
+	 * per call so geometries build in parallel.
+	 *
+	 * @param {Function} WorkerConstructor
+	 */
+	setBVHWorker( WorkerConstructor ) {
+
+		this._BVHWorker = WorkerConstructor;
+
+	}
+
+	/**
+	 * Like {@link WebGPUPathTracer#setScene} but builds the mesh geometry BVHs in the workers set
+	 * with {@link WebGPUPathTracer#setBVHWorker} so the page is not blocked. Skinned meshes are
+	 * still built synchronously.
+	 *
+	 * @param {Scene} scene
+	 * @param {Camera} camera
+	 * @returns {Promise<void>}
+	 */
+	async setSceneAsync( scene, camera ) {
+
+		const WorkerConstructor = this._BVHWorker;
+		if ( ! WorkerConstructor ) {
+
+			throw new Error( 'WebGPUPathTracer: "setBVHWorker" must be called before "setSceneAsync" can be called.' );
+
+		}
+
+		const geometries = new Set();
+		scene.traverse( child => {
+
+			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
+
+				geometries.add( child.geometry );
+
+			}
+
+		} );
+
+		// each worker runs one job at a time so they pull from a shared queue
+		const queue = Array.from( geometries );
+		const workers = [];
+		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
+
+			workers.push( new WorkerConstructor() );
+
+		}
+
+		try {
+
+			await Promise.all( workers.map( async worker => {
+
+				while ( queue.length > 0 ) {
+
+					const geometry = queue.shift();
+					geometry.boundsTree = await worker.generate( geometry, MESH_BVH_OPTIONS );
+
+				}
+
+			} ) );
+
+		} finally {
+
+			workers.forEach( worker => worker.dispose() );
+
+		}
+
+		this.setScene( scene, camera );
 
 	}
 
