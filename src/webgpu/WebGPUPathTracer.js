@@ -41,6 +41,48 @@ const COMPLETE_CHECK_INTERVAL = 250;
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
 const MAX_BVH_WORKERS = 4;
 
+// Builds a geometry's BVH in a worker without giving up its buffers. The workers transfer the position and
+// index buffers, which neuters them for every other array viewing them, such as the attributes of other
+// meshes in a glTF. So the worker gets copies, the original arrays are restored, and the reordered index
+// is written back into the original. Shared array buffers aren't transferred, so they're sent as is.
+// TODO: this is imperfect, and depends on how the worker transfers. Remove once three-mesh-bvh's worker
+// has an option not to transfer
+async function generateBVHInWorker( worker, geometry, options ) {
+
+	const getCopy = array => {
+
+		const isShared = typeof SharedArrayBuffer !== 'undefined' && array.buffer instanceof SharedArrayBuffer;
+		return isShared ? array : array.slice();
+
+	};
+
+	const { position } = geometry.attributes;
+	const { index } = geometry;
+	const positionArray = position.array;
+	const indexArray = index ? index.array : null;
+
+	position.array = getCopy( positionArray );
+	if ( index ) {
+
+		index.array = getCopy( indexArray );
+
+	}
+
+	const bvh = await worker.generate( geometry, options );
+
+	position.array = positionArray;
+	if ( index ) {
+
+		indexArray.set( index.array );
+		index.array = indexArray;
+		index.needsUpdate = true;
+
+	}
+
+	return bvh;
+
+}
+
 class TextureCache {
 
 	constructor( renderer, key ) {
@@ -856,7 +898,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					geometry.boundsTree = await worker.generate( geometry, MESH_BVH_OPTIONS );
+					geometry.boundsTree = await generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
 
 				}
 
