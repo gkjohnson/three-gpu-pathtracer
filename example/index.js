@@ -443,7 +443,6 @@ function animate() {
 	pathTracer.getSampleCountsAsync().then( counts => {
 
 		averageSamples = counts.avg;
-		counts.frameTime = pathTracer.frameTime;
 		loader.setSamples( counts );
 
 		// shows the budget the tracer has adapted to
