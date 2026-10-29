@@ -1,6 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { blendAuxFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -33,6 +34,9 @@ export class LogicKernel extends ComputeKernel {
 			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
+			// the per pixel first hit albedo and normal, as running means like the color
+			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
+
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
@@ -40,6 +44,7 @@ export class LogicKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
+			accumulateAux: uniform( 0, 'uint' ),
 
 			// TODO: two elements so the placeholders compile as arrays. Remove once three declares every
 			// storage buffer as an array, in r187
@@ -78,6 +83,7 @@ export class LogicKernel extends ComputeKernel {
 				clampDirect: f32,
 				clampIndirect: f32,
 				transmissiveBackground: u32,
+				accumulateAux: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -357,6 +363,27 @@ export class LogicKernel extends ComputeKernel {
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+
+					// the auxiliary images are blended the same way, in the same row order
+					if ( accumulateAux != 0u ) {
+
+						var auxPacked: vec3u;
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							auxPacked[ layer ] = textureLoad( ${ params.auxTarget }, colorIndex, layer ).r;
+
+						}
+
+						let albedo = unpack4x8unorm( input.auxAlbedo ).rgb;
+						let normal = unpack4x8snorm( input.auxNormal ).xyz;
+						auxPacked = ${ blendAuxFn }( auxPacked, albedo, normal, 1.0 / f32( sampleCount ) );
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
+
+						}
+
+					}
 
 					rayDataStorage[ index ].objectIndex = - 1;
 

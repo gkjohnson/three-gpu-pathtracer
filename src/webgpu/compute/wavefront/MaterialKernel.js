@@ -10,6 +10,7 @@ import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '.
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
+import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -164,6 +165,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
+					rayDataStorage[ index ].auxAlbedo = 0u;
+					rayDataStorage[ index ].auxNormal = 0u;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -279,6 +282,18 @@ export class MaterialKernel extends ComputeKernel {
 					// sample the next bounce direction and stage the scatter state for LogicKernel
 					var scatterRec = ${ bsdfSampleFn }( view, surface );
 					let newBounce = input.currentBounce + 1u;
+
+					// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
+					// found the last mirror or transmission hit stands in, for paths that reach the environment.
+					// The packed albedo's alpha marks the surface found
+					let auxFound = unpack4x8unorm( input.auxAlbedo ).a != 0.0;
+					if ( ! auxFound ) {
+
+						let isAuxSurface = ${ isAuxSurfaceFn }( surface, scatterRec );
+						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, select( 0.0, 1.0, isAuxSurface ) ) );
+						rayDataStorage[ index ].auxNormal = pack4x8snorm( vec4f( surface.normal, 0.0 ) );
+
+					}
 
 					// decide termination now so finished paths skip the bounce trace entirely - a
 					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
