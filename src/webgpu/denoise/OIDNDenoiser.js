@@ -5,17 +5,6 @@ import { createAuxImageTarget } from '../compute/targets.js';
 /** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
 
-// a texture the compute passes write and three or oidn-webgpu read
-function createTexture( device, width, height ) {
-
-	return device.createTexture( {
-		size: [ width, height ],
-		format: 'rgba16float',
-		usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
-	} );
-
-}
-
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
  * "WebGPUPathTracer.setDenoiser", or drive it directly with "denoise".
@@ -116,14 +105,13 @@ export class OIDNDenoiser {
 		this._requestId = 0;
 		this._unets = { aux: null, color: null };
 
-		this._resultPipelines = {};
+		this._resultPipeline = null;
 		this._rawTexture = null;
 
-		// the inputs of the current pass
+		// the albedo and normal unpacked from the path tracer's auxiliary target for a pass
 		this._unpackAuxKernel = new UnpackAuxKernel().setWorkgroupSize( 8, 8, 1 );
 		this._albedoTarget = createAuxImageTarget( 'Denoiser Albedo' );
 		this._normalTarget = createAuxImageTarget( 'Denoiser Normal' );
-		this._alphaTexture = null;
 
 	}
 
@@ -137,15 +125,14 @@ export class OIDNDenoiser {
 	}
 
 	/**
-	 * Starts a pass guided by the first hit albedo and normal the path tracer accumulates, unless
-	 * `useAuxiliaryBuffers` is off. Safe to call every frame.
+	 * Unpacks the auxiliary buffers the path tracer accumulated and starts a pass. Safe to call
+	 * every frame.
 	 *
-	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {StorageArrayTexture|null} aux - The packed auxiliary images, see "aux.wgsl.js".
-	 * @param {boolean} [denoiseAlpha] - Also denoises the alpha, in a second network pass.
+	 * @param {Texture} target - The path traced result, in linear HDR.
+	 * @param {StorageArrayTexture|null} aux - The packed auxiliary buffers, see "aux.wgsl.js".
 	 * @returns {Texture|null}
 	 */
-	update( color, aux = null, denoiseAlpha = false ) {
+	update( target, aux = null ) {
 
 		if ( this._complete || this._running ) {
 
@@ -153,18 +140,19 @@ export class OIDNDenoiser {
 
 		}
 
+		// TODO: denoise the alpha for transparent backgrounds. oidn-webgpu's "denoiseAlpha" runs as a
+		// second pass, but its "_updatePasses" doesn't rebuild its shaders when the option changes
+		let albedo = null;
+		let normal = null;
 		if ( this.useAuxiliaryBuffers && aux ) {
 
-			// oidn-webgpu reads every input as the same kind, so the auxiliary images are unpacked into
-			// textures like the color
 			this._unpackAux( aux );
-			this.denoise( color, this._albedoTarget, this._normalTarget, denoiseAlpha );
-
-		} else {
-
-			this.denoise( color, null, null, denoiseAlpha );
+			albedo = this._albedoTarget;
+			normal = this._normalTarget;
 
 		}
+
+		this.denoise( target, albedo, normal );
 
 		return this._texture;
 
@@ -172,15 +160,14 @@ export class OIDNDenoiser {
 
 	/**
 	 * Runs a pass unless one is already running or finished. The optional albedo and normal
-	 * textures select the guided model. Both hold [0,1] values in the color's row order, with
-	 * normals mapped so a flat normal is (0.5, 0.5, 1).
+	 * buffers guide the filter and select the guided model. Both hold [0,1] values, with normals
+	 * mapped so a flat normal is (0.5, 0.5, 1).
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
 	 * @param {Texture|null} albedo
 	 * @param {Texture|null} normal
-	 * @param {boolean} [denoiseAlpha] - Also denoises the alpha, in a second network pass.
 	 */
-	async denoise( color, albedo = null, normal = null, denoiseAlpha = false ) {
+	async denoise( color, albedo = null, normal = null ) {
 
 		if ( this._complete || this._running ) {
 
@@ -215,66 +202,39 @@ export class OIDNDenoiser {
 
 		// three only holds a WebGPU texture for a three texture once it has been initialized
 		const { renderer } = this;
-		const getTexture = value => {
-
-			renderer.initTexture( value );
-			return renderer.backend.get( value ).texture;
-
-		};
+		const backend = renderer.backend;
+		renderer.initTexture( color );
 
 		const { width, height } = color;
 		const inputs = {
-			color: { data: getTexture( color ), width, height },
+			color: { data: backend.get( color ).texture, width, height },
 
 			// pace the tiles to display frames so the path tracer keeps rendering between them
 			scheduling: 'animation-frame',
+
+			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
+			progress: output => this._copyOutputToTexture( output, width, height ),
+			done: output => {
+
+				this._running = false;
+				this._complete = true;
+				this._abort = null;
+				this._disposeAuxImages();
+
+			},
 		};
 
-		// the guided model needs both auxiliary images, and the color only model must not be given them
+		// the guided model needs both buffers, and the color only model must not be given them
 		if ( useAux ) {
 
-			inputs.albedo = { data: getTexture( albedo ), width, height };
-			inputs.normal = { data: getTexture( normal ), width, height };
+			renderer.initTexture( albedo );
+			renderer.initTexture( normal );
+			inputs.albedo = { data: backend.get( albedo ).texture, width, height };
+			inputs.normal = { data: backend.get( normal ).texture, width, height };
 
 		}
 
-		// A pass denoises either the color or the alpha and passes the other through, so the alpha
-		// runs first and the color pass takes its alpha from the result
-		// TODO: this doesn't work yet. oidn-webgpu's "_updatePasses" only rebuilds its shaders when the
-		// input kind changes, not "denoiseAlpha", so both passes run whichever shaders were built first.
-		// Needs a fix upstream, or a separate network instance for the alpha pass
-		if ( denoiseAlpha ) {
-
-			const output = await this._execute( unet, { ...inputs, denoiseAlpha: true } );
-			if ( requestId !== this._requestId || ! this._running ) {
-
-				return;
-
-			}
-
-			this._copyAlphaToTexture( output, width, height );
-
-		}
-
-		// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-		const progress = output => this._copyOutputToTexture( output, width, height, denoiseAlpha );
-		await this._execute( unet, inputs, progress );
-
-		this._running = false;
-		this._complete = true;
-		this._abort = null;
-		this._disposeInputs();
-
-	}
-
-	// Runs the network over every tile, resolving with the output. An aborted pass never resolves
-	_execute( unet, inputs, progress = () => {} ) {
-
-		return new Promise( resolve => {
-
-			this._abort = unet.tileExecute( { ...inputs, progress, done: resolve } );
-
-		} );
+		this._abort = unet.tileExecute( inputs );
 
 	}
 
@@ -293,7 +253,7 @@ export class OIDNDenoiser {
 		this._rawTexture?.destroy();
 		this._rawTexture = null;
 
-		this._disposeInputs();
+		this._disposeAuxImages();
 
 		this._running = false;
 		this._complete = false;
@@ -315,8 +275,8 @@ export class OIDNDenoiser {
 
 	}
 
-	// Unpacks the path tracer's packed auxiliary images into albedo and normal textures, the input kind
-	// oidn-webgpu reads alongside the color texture
+	// Unpacks the path tracer's auxiliary target into albedo and normal textures, since oidn-webgpu
+	// reads every input as the same kind as the color texture
 	_unpackAux( aux ) {
 
 		const { renderer, _unpackAuxKernel, _albedoTarget, _normalTarget } = this;
@@ -332,13 +292,11 @@ export class OIDNDenoiser {
 
 	}
 
-	// Frees the unpacked auxiliary images and the denoised alpha, which only live for a pass
-	_disposeInputs() {
+	// the unpacked images only live for a pass
+	_disposeAuxImages() {
 
 		this._albedoTarget.dispose();
 		this._normalTarget.dispose();
-		this._alphaTexture?.destroy();
-		this._alphaTexture = null;
 
 	}
 
@@ -374,76 +332,18 @@ export class OIDNDenoiser {
 	}
 
 	// Copies the denoiser's packed output buffer into a sampleable texture, using a compute pass
-	// since copyBufferToTexture requires 256 byte row alignment. With "useAlpha" the alpha comes from
-	// the alpha pass instead.
+	// since copyBufferToTexture requires 256 byte row alignment.
 	// TODO: remove the copy once oidn-webgpu can write into a caller-provided storage texture.
-	_copyOutputToTexture( output, width, height, useAlpha ) {
+	_copyOutputToTexture( output, width, height ) {
 
 		const device = this.renderer.backend.device;
 
-		if ( ! this._rawTexture || this._rawTexture.width !== width || this._rawTexture.height !== height ) {
-
-			this._rawTexture?.destroy();
-			this._rawTexture = createTexture( device, width, height );
-
-			// ExternalTexture lets three sample a gpu texture it did not create. It has no image
-			// behind it, so its size is set explicitly or "texture.width" reports zero.
-			this._texture?.dispose();
-			this._texture = new ExternalTexture( this._rawTexture );
-			this._texture.image = { width, height };
-
-		}
-
-		const entries = [
-			{ binding: 0, resource: { buffer: output.data } },
-			{ binding: 1, resource: this._rawTexture.createView() },
-		];
-
-		if ( useAlpha ) {
-
-			entries.push( { binding: 2, resource: this._alphaTexture.createView() } );
-			this._runCopyPass( 'colorWithAlpha', /* wgsl */`
-				@group( 0 ) @binding( 2 ) var alpha : texture_2d<f32>;
-			`, /* wgsl */`
-				vec4f( src[ i ].rgb, textureLoad( alpha, gid.xy, 0 ).a )
-			`, entries, width, height );
-
-		} else {
-
-			this._runCopyPass( 'color', '', 'src[ i ]', entries, width, height );
-
-		}
-
-	}
-
-	// Keeps the alpha pass's denoised alpha for the color pass that follows, since both passes write the
-	// same output buffer
-	_copyAlphaToTexture( output, width, height ) {
-
-		this._alphaTexture?.destroy();
-		this._alphaTexture = createTexture( this.renderer.backend.device, width, height );
-
-		const entries = [
-			{ binding: 0, resource: { buffer: output.data } },
-			{ binding: 1, resource: this._alphaTexture.createView() },
-		];
-
-		this._runCopyPass( 'alpha', '', 'vec4f( src[ i ].a )', entries, width, height );
-
-	}
-
-	// Writes "value", an expression of the output buffer "src" at index "i", into the "dst" texture
-	_runCopyPass( key, bindings, value, entries, width, height ) {
-
-		const device = this.renderer.backend.device;
-
-		if ( ! this._resultPipelines[ key ] ) {
+		if ( ! this._resultPipeline ) {
 
 			const module = device.createShaderModule( {
 				code: /* wgsl */`
 					@group( 0 ) @binding( 0 ) var<storage, read> src : array<vec4f>;
 					@group( 0 ) @binding( 1 ) var dst : texture_storage_2d<rgba16float, write>;
-					${ bindings }
 
 					@compute @workgroup_size( 8, 8 )
 					fn main( @builtin( global_invocation_id ) gid : vec3u ) {
@@ -455,29 +355,47 @@ export class OIDNDenoiser {
 
 						}
 
-						let i = gid.y * dims.x + gid.x;
-						textureStore( dst, gid.xy, ${ value } );
+						textureStore( dst, gid.xy, src[ gid.y * dims.x + gid.x ] );
 
 					}
 				`,
 			} );
 
-			this._resultPipelines[ key ] = device.createComputePipeline( {
+			this._resultPipeline = device.createComputePipeline( {
 				layout: 'auto',
 				compute: { module, entryPoint: 'main' },
 			} );
 
 		}
 
-		const pipeline = this._resultPipelines[ key ];
+		if ( ! this._rawTexture || this._rawTexture.width !== width || this._rawTexture.height !== height ) {
+
+			this._rawTexture?.destroy();
+			this._rawTexture = device.createTexture( {
+				size: [ width, height ],
+				format: 'rgba16float',
+				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+			} );
+
+			// ExternalTexture lets three sample a gpu texture it did not create. It has no image
+			// behind it, so its size is set explicitly or "texture.width" reports zero.
+			this._texture?.dispose();
+			this._texture = new ExternalTexture( this._rawTexture );
+			this._texture.image = { width, height };
+
+		}
+
 		const bindGroup = device.createBindGroup( {
-			layout: pipeline.getBindGroupLayout( 0 ),
-			entries,
+			layout: this._resultPipeline.getBindGroupLayout( 0 ),
+			entries: [
+				{ binding: 0, resource: { buffer: output.data } },
+				{ binding: 1, resource: this._rawTexture.createView() },
+			],
 		} );
 
 		const encoder = device.createCommandEncoder();
 		const pass = encoder.beginComputePass();
-		pass.setPipeline( pipeline );
+		pass.setPipeline( this._resultPipeline );
 		pass.setBindGroup( 0, bindGroup );
 		pass.dispatchWorkgroups( Math.ceil( width / 8 ), Math.ceil( height / 8 ) );
 		pass.end();

@@ -1,5 +1,5 @@
 import { Box3, DataTexture, EventDispatcher, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
-import { uv, uniform, varying, texture } from 'three/tsl';
+import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
@@ -11,12 +11,11 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
+import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
-import { createAuxTarget } from './compute/targets.js';
-import { unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from './nodes/aux.wgsl.js';
 import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
@@ -51,9 +50,6 @@ class TextureCache {
 		this.texture = null;
 		this.hash = null;
 
-		// whether the scene value is unset and the renderer clears to a transparent color
-		this.transparent = false;
-
 		const colorTex = new DataTexture( new Uint8Array( [ 255, 255, 255, 255 ] ), 1, 1 );
 		colorTex.minFilter = LinearFilter;
 		colorTex.magFilter = LinearFilter;
@@ -74,7 +70,6 @@ class TextureCache {
 		let value = scene[ key ];
 		let hash = '';
 
-		this.transparent = ! value && renderer.getClearAlpha() < 1;
 		if ( ! value ) {
 
 			const clearAlpha = renderer.getClearAlpha();
@@ -1264,8 +1259,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// "min" so every pixel has stopped, not just the average
 			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
 
-				// the alpha only needs denoising when the background shows through
-				denoiser.update( pathTracer.outputTarget, pathTracer.auxTarget, this._backgroundCache.transparent );
+				denoiser.update( pathTracer.outputTarget, pathTracer.auxTarget );
 
 			}
 
@@ -1476,53 +1470,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		if ( ! this._auxDebugQuad ) {
 
-			this._buildAuxDebugQuad();
+			this._auxDebugQuad = new FullScreenQuad( new AuxDebugMaterial() );
 
 		}
-
-		const uniforms = this._auxDebugUniforms;
-		uniforms.aux.value = pathTracer.auxTarget;
-		uniforms.bufferIndex.value = buffer === 'normal' ? 1 : 0;
 
 		const originalToneMapping = renderer.toneMapping;
 		renderer.toneMapping = NoToneMapping;
 
+		const quad = this._auxDebugQuad;
+		quad.material.texture = pathTracer.auxTarget;
+		quad.material.showNormal = buffer === 'normal';
 		renderer.setRenderTarget( null );
-		this._auxDebugQuad.render( renderer );
+		quad.render( renderer );
 
 		renderer.toneMapping = originalToneMapping;
-
-	}
-
-	_buildAuxDebugQuad() {
-
-		// the auxiliary images are halves packed into the layers, in the row order of the output target
-		const aux = texture( createAuxTarget() );
-		const bufferIndex = uniform( 0, 'uint' );
-		const auxDebug = wgslTagFn/* wgsl */`
-			fn auxDebug( tex: texture_2d_array<u32>, uv: vec2f, bufferIndex: u32 ) -> vec4f {
-
-				// the rows are stored top down, so the quad's bottom up uv is flipped
-				let coord = vec2u( vec2f( uv.x, 1.0 - uv.y ) * vec2f( textureDimensions( tex, 0 ) ) );
-				var packed: vec3u;
-				for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
-
-					packed[ layer ] = textureLoad( tex, coord, layer, 0 ).r;
-
-				}
-
-				let albedo = ${ unpackAuxAlbedoFn }( packed );
-				let normal = ${ unpackAuxNormalFn }( packed );
-				return vec4f( select( albedo, normal, bufferIndex == 1u ), 1.0 );
-
-			}
-		`;
-
-		const material = new MeshBasicNodeMaterial();
-		material.colorNode = auxDebug( aux, varying( uv() ), bufferIndex );
-
-		this._auxDebugQuad = new FullScreenQuad( material );
-		this._auxDebugUniforms = { aux, bufferIndex };
 
 	}
 

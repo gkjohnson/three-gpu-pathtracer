@@ -119,8 +119,8 @@ export class OIDNDenoiser {
 	readonly running: boolean;
 
 	init( renderer: WebGPURenderer ): void;
-	update( color: Texture, aux?: StorageArrayTexture | null, denoiseAlpha?: boolean ): Texture | null;
-	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null, denoiseAlpha?: boolean ): Promise<void>;
+	update( target: Texture, aux?: StorageArrayTexture | null ): Texture | null;
+	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null ): Promise<void>;
 	reset(): void;
 	dispose(): void;
 
