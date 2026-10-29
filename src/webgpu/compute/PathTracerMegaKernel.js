@@ -166,9 +166,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the scattering volume the path is inside of, entered by refracting into a material with
-				// "KHR_materials_scatter" volume parameters, and how its current segment was sampled. Media
-				// don't nest
+				// the scattering volume the path is in. Media don't nest
 				var medium: ${ mediumStruct };
 				var segment: ${ mediumSegmentStruct };
 				var volumeSteps = 0u;
@@ -241,8 +239,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							mediumScattered = true;
 							isFullyTransmissive = false;
 
-							// the walk doesn't count against the bounce limit, but is capped, and ends once its
-							// throughput is negligible
+							// volume steps are capped separately from bounces
 							volumeSteps ++;
 							let maxThroughput = max( max( throughputColor.r, throughputColor.g ), throughputColor.b );
 							if ( volumeSteps >= maxVolumeSteps || maxThroughput < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
