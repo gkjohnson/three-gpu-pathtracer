@@ -368,7 +368,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	// The slot count the current budget asks for, capped by the pool limit
 	_getRequestedSlotCount() {
 
-		return Math.min( MAX_RAY_DATA_COUNT, Math.floor( this.frameBudget ) );
+		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ) );
 
 	}
 
