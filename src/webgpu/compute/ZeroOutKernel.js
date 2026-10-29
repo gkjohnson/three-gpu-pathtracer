@@ -5,15 +5,15 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 export class ZeroOutKernel extends ComputeKernel {
 
-	// "target" sets the format the kernel is compiled for. An array texture is cleared a layer per z
-	constructor( target = new StorageTexture( 1, 1 ) ) {
+	constructor() {
 
 		const params = {
 			globalId: globalId,
-			outputTarget: textureStore( target ).toWriteOnly(),
+			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
 		};
 
-		const coord = target.isArrayTexture ? 'globalId.xy, globalId.z' : 'globalId.xy';
+		// resolved when the shader is built, so an array texture target is cleared a layer per z
+		const coord = () => params.outputTarget.value.isArrayTexture ? 'globalId.xy, globalId.z' : 'globalId.xy';
 		const fn = wgslTagFn/* wgsl */`
 			fn compute( globalId: vec3u ) -> void {
 

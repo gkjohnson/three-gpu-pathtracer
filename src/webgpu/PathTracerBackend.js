@@ -37,7 +37,7 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
-		this.auxTargetClearKernel = new ZeroOutKernel( createAuxTarget() ).setWorkgroupSize( 8, 8, 1 );
+		this.auxTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// the per pixel first hit albedo and normal, accumulated as the denoiser's auxiliary images only
 		// while asked for. The kernels bind the placeholder otherwise.
