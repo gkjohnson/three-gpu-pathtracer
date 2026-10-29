@@ -262,6 +262,7 @@ export class OIDNDenoiser {
 		this._running = false;
 		this._complete = true;
 		this._abort = null;
+		this._disposeInputs();
 
 	}
 
@@ -296,6 +297,8 @@ export class OIDNDenoiser {
 		this._rawTexture?.destroy();
 		this._rawTexture = null;
 
+		this._disposeInputs();
+
 		this._running = false;
 		this._complete = false;
 
@@ -304,9 +307,6 @@ export class OIDNDenoiser {
 	dispose() {
 
 		this.reset();
-		this._disposeAuxTextures();
-		this._alphaTexture?.destroy();
-		this._alphaTexture = null;
 
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
@@ -372,7 +372,7 @@ export class OIDNDenoiser {
 		let textures = this._auxTextures;
 		if ( ! textures || textures.width !== width || textures.height !== height ) {
 
-			this._disposeAuxTextures();
+			this._disposeInputs();
 
 			const createTexture = () => device.createTexture( {
 				size: [ width, height ],
@@ -405,7 +405,8 @@ export class OIDNDenoiser {
 
 	}
 
-	_disposeAuxTextures() {
+	// Frees the unpacked auxiliary images and the denoised alpha, which only live for a pass
+	_disposeInputs() {
 
 		const textures = this._auxTextures;
 		if ( textures ) {
@@ -415,6 +416,9 @@ export class OIDNDenoiser {
 			this._auxTextures = null;
 
 		}
+
+		this._alphaTexture?.destroy();
+		this._alphaTexture = null;
 
 	}
 

@@ -1,4 +1,5 @@
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
+import { ZeroOutArrayKernel } from './compute/ZeroOutArrayKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
 
@@ -37,6 +38,7 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
+		this.auxTargetClearKernel = new ZeroOutArrayKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// the per pixel first hit albedo and normal, accumulated as the denoiser's auxiliary images only
 		// while asked for. The kernels bind the placeholder otherwise.
@@ -262,12 +264,20 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
+		// pixels that never take another sample, such as ones the camera declines, would keep stale values
+		if ( this.auxTarget ) {
+
+			const { auxTargetClearKernel } = this;
+			auxTargetClearKernel.target = this.auxTarget;
+			renderer.compute( auxTargetClearKernel.kernel, auxTargetClearKernel.getDispatchSize( width, height, AUX_LAYERS ) );
+
+		}
+
 		this._renderTask = null;
 
 	}
 
-	// Allocates the auxiliary images for the current size, or drops them. The first sample of every
-	// pixel overwrites them, so they need no clearing.
+	// Allocates the auxiliary images for the current size, or drops them
 	_updateAuxTarget() {
 
 		this.auxTarget?.dispose();
@@ -290,6 +300,7 @@ export class PathTracerBackend {
 		this.sampleCountTarget.dispose();
 		this.sampleCountClearKernel.dispose();
 		this.outputTargetClearKernel.dispose();
+		this.auxTargetClearKernel.dispose();
 		this.auxTarget?.dispose();
 		this._auxPlaceholder.dispose();
 
