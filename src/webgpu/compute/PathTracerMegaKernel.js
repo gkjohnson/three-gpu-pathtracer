@@ -43,7 +43,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
-			auxBuffers: uniform( 0, 'uint' ),
+			accumulateAux: uniform( 0, 'uint' ),
 
 			// the per pixel first hit albedo and normal, as running means like the color
 			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
@@ -104,7 +104,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				clampIndirect: f32,
 
 				transmissiveBackground: u32,
-				auxBuffers: u32,
+				accumulateAux: u32,
 
 			) -> void {
 
@@ -179,8 +179,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
-				// the first surface the path scatters off fills the denoiser's auxiliary buffers
-				var auxRecorded = false;
+				// the first surface the path scatters off fills the denoiser's auxiliary images
 				var auxAlbedo = vec3f( 0.0 );
 				var auxNormal = vec3f( 0.0 );
 
@@ -366,13 +365,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
 						// a transmission looks through to the next surface
-						if ( ! auxRecorded && ! scatterRec.isTransmissive ) {
+						if ( isFullyTransmissive && ! scatterRec.isTransmissive ) {
 
-							auxRecorded = true;
 							auxAlbedo = surface.color;
 							auxNormal = surface.normal;
 
 						}
+
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
@@ -518,7 +517,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				// the auxiliary images are blended the same way, in the same row order
-				if ( auxBuffers != 0u ) {
+				if ( accumulateAux != 0u ) {
 
 					var auxPacked: vec3u;
 					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {

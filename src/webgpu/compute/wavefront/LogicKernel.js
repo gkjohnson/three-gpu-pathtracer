@@ -44,7 +44,7 @@ export class LogicKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
-			auxBuffers: uniform( 0, 'uint' ),
+			accumulateAux: uniform( 0, 'uint' ),
 
 			// TODO: two elements so the placeholders compile as arrays. Remove once three declares every
 			// storage buffer as an array, in r187
@@ -83,7 +83,7 @@ export class LogicKernel extends ComputeKernel {
 				clampDirect: f32,
 				clampIndirect: f32,
 				transmissiveBackground: u32,
-				auxBuffers: u32,
+				accumulateAux: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -365,7 +365,7 @@ export class LogicKernel extends ComputeKernel {
 					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
 					// the auxiliary images are blended the same way, in the same row order
-					if ( auxBuffers != 0u ) {
+					if ( accumulateAux != 0u ) {
 
 						var auxPacked: vec3u;
 						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {

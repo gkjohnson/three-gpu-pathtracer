@@ -495,7 +495,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
-		this._pathTracer.setAuxBuffers( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
+		this._pathTracer.setAccumulateAux( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
 
 		// the new tracer has default environment and background maps so apply the cached scene textures
@@ -706,7 +706,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._pathTracer.setAuxBuffers( Boolean( denoiser && denoiser.useAuxiliaryBuffers ) );
+		this._pathTracer.setAccumulateAux( Boolean( denoiser && denoiser.useAuxiliaryBuffers ) );
 
 	}
 

@@ -282,11 +282,11 @@ export class MaterialKernel extends ComputeKernel {
 					var scatterRec = ${ bsdfSampleFn }( view, surface );
 					let newBounce = input.currentBounce + 1u;
 
-					// the first surface the path scatters off fills the denoiser's auxiliary buffers, so a
-					// transmission looks through to the next one. The packed albedo's alpha marks it written.
-					if ( input.auxAlbedo == 0u && ! scatterRec.isTransmissive ) {
+					// the first surface the path scatters off fills the denoiser's auxiliary images, so a
+					// transmission looks through to the next one
+					if ( input.isFullyTransmissive != 0u && ! scatterRec.isTransmissive ) {
 
-						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, 1.0 ) );
+						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, 0.0 ) );
 						rayDataStorage[ index ].auxNormal = pack4x8snorm( vec4f( surface.normal, 0.0 ) );
 
 					}

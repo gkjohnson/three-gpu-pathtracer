@@ -1,5 +1,4 @@
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { ZeroOutArrayKernel } from './compute/ZeroOutArrayKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
 
@@ -38,7 +37,7 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
-		this.auxTargetClearKernel = new ZeroOutArrayKernel().setWorkgroupSize( 8, 8, 1 );
+		this.auxTargetClearKernel = new ZeroOutKernel( createAuxTarget() ).setWorkgroupSize( 8, 8, 1 );
 
 		// the per pixel first hit albedo and normal, accumulated as the denoiser's auxiliary images only
 		// while asked for. The kernels bind the placeholder otherwise.
@@ -48,7 +47,7 @@ export class PathTracerBackend {
 	}
 
 	// The auxiliary images start over with the render, so the render restarts with them
-	setAuxBuffers( value ) {
+	setAccumulateAux( value ) {
 
 		if ( Boolean( this.auxTarget ) === value ) {
 
