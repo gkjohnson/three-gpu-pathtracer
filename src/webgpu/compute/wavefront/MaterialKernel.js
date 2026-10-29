@@ -5,7 +5,7 @@ import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct, mediumQueueStruct } from './structs.js';
+import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { mediumSegmentStruct, enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
@@ -38,7 +38,6 @@ export class MaterialKernel extends ComputeKernel {
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueStruct ),
-			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), mediumQueueStruct ),
 
 			globalId: globalId,
 		};
@@ -67,7 +66,6 @@ export class MaterialKernel extends ComputeKernel {
 				let rayQueue = &${ params.rayQueue };
 				let shadowRayQueue = &${ params.shadowRayQueue };
 				let pixelQueue = &${ params.pixelQueue };
-				let mediumQueue = &${ params.mediumQueue };
 
 				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
 				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
@@ -175,15 +173,10 @@ export class MaterialKernel extends ComputeKernel {
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
 
-				} else if ( input.walkPending != 0u ) {
+				} else if ( input.walkPending == 0u ) {
 
-					// the path's medium walk continues in MediumKernel
-					let mediumIndex = atomicAdd( &mediumQueue.length, 1u );
-					mediumQueue.elements[ mediumIndex ] = index;
-
-				} else {
-
-					// evaluate the surface staged by LogicKernel
+					// evaluate the surface staged by LogicKernel. A path still walking a medium has none, and
+					// its walk continues in MediumKernel
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
 
@@ -241,16 +234,27 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						let alphaIndex = atomicAdd( &rayQueue.length, 1u );
-						rayQueue.elements[ alphaIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
-						rayQueue.elements[ alphaIndex ].direction = input.direction;
-						rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
-						rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
-						rayQueue.elements[ alphaIndex ].seed = input.seed;
-						rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
-						// the origin advanced to the hit point, so the remaining budget shrinks by the
-						// distance already traced
-						rayQueue.elements[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
+						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
+						if ( segmentInMedium ) {
+
+							// inside a medium, MediumKernel walks on past the surface
+							rayDataStorage[ index ].walkPending = 1u;
+
+						} else {
+
+							let alphaIndex = atomicAdd( &rayQueue.length, 1u );
+							rayQueue.elements[ alphaIndex ].origin = alphaOrigin;
+							rayQueue.elements[ alphaIndex ].direction = input.direction;
+							rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
+							rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
+							rayQueue.elements[ alphaIndex ].seed = input.seed;
+							rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
+							// the origin advanced to the hit point, so the remaining budget shrinks by the
+							// distance already traced
+							rayQueue.elements[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
+							rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
+
+						}
 
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
@@ -259,8 +263,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
-						rayDataStorage[ index ].origin = rayQueue.elements[ alphaIndex ].origin;
-						rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
+						rayDataStorage[ index ].origin = alphaOrigin;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
@@ -366,8 +369,7 @@ export class MaterialKernel extends ComputeKernel {
 					// walks the segment instead of the trace kernel
 					if ( ! isTerminated && medium.inside ) {
 
-						let mediumIndex = atomicAdd( &mediumQueue.length, 1u );
-						mediumQueue.elements[ mediumIndex ] = index;
+						rayDataStorage[ index ].walkPending = 1u;
 						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 						rayDataStorage[ index ].direction = scatterRec.direction;
 

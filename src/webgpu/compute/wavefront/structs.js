@@ -90,7 +90,8 @@ const rayDataMembers = {
 	// scatter events taken inside media, counted separately from the bounce count
 	volumeSteps: 'uint',
 
-	// whether the path's medium walk continues in MediumKernel's next pass
+	// whether the path's next segment is walked through a medium by MediumKernel, which clears it once
+	// the walk reaches a surface or ends
 	walkPending: 'uint',
 
 	// whether the staged segment leaves a medium scatter event, where no light is sampled

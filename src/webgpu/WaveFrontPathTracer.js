@@ -5,6 +5,7 @@ import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
 import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
 import { MediumKernel } from './compute/wavefront/MediumKernel.js';
+import { QueueMediumWalksKernel } from './compute/wavefront/QueueMediumWalksKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
@@ -88,6 +89,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceRayKernel = new TraceRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.traceShadowRayKernel = new TraceShadowRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.mediumKernel = new MediumKernel().setWorkgroupSize( 64, 1, 1 );
+		this.queueMediumWalksKernel = new QueueMediumWalksKernel().setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.mediumDispatchConverter = new QueueLengthToDispatchKernel( mediumQueueStruct ).setWorkgroupSize( 1, 1, 1 );
@@ -279,6 +281,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceRayKernel.dispose();
 		this.traceShadowRayKernel.dispose();
 		this.mediumKernel.dispose();
+		this.queueMediumWalksKernel.dispose();
 		this.rayDispatchConverter.dispose();
 		this.shadowDispatchConverter.dispose();
 		this.mediumDispatchConverter.dispose();
@@ -416,6 +419,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			traceRayKernel,
 			traceShadowRayKernel,
 			mediumKernel,
+			queueMediumWalksKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
 			mediumDispatchConverter,
@@ -442,6 +446,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			traceRayKernel,
 			traceShadowRayKernel,
 			mediumKernel,
+			queueMediumWalksKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
 			mediumDispatchConverter,
@@ -523,7 +528,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
 				materialKernel.pixelQueue = this.pixelQueue;
-				materialKernel.mediumQueue = mediumQueue;
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
@@ -549,6 +553,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				renderer.compute( traceShadowRayKernel.kernel, shadowDispatchConverter.outputDispatch );
 
 				// Step 5: walk the paths inside media for a capped number of steps
+				queueMediumWalksKernel.rayDataStorage = rayDataStorage;
+				queueMediumWalksKernel.mediumQueue = mediumQueue;
+				queueMediumWalksKernel.rayCount = rayCount;
+				renderer.compute( queueMediumWalksKernel.kernel, queueMediumWalksKernel.getDispatchSize( rayCount, 1, 1 ) );
+
 				mediumDispatchConverter.queue = mediumQueue;
 				renderer.compute( mediumDispatchConverter.kernel, [ 1, 1, 1 ] );
 
