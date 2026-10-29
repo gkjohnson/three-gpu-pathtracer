@@ -1,6 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { packAuxFn, unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -33,6 +34,9 @@ export class LogicKernel extends ComputeKernel {
 			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
+			// the per pixel first hit albedo and normal, as running means like the color
+			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
+
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
@@ -47,9 +51,6 @@ export class LogicKernel extends ComputeKernel {
 			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
 			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
-
-			// the per pixel first hit albedo then normal, as running means like the color
-			auxStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
 
 			globalId: globalId,
 		};
@@ -363,15 +364,25 @@ export class LogicKernel extends ComputeKernel {
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
-					// the auxiliary buffers are blended the same way, in the same row order
+					// the auxiliary images are blended the same way, in the same row order
 					if ( auxBuffers != 0u ) {
 
-						let auxIndex = 2u * ( colorIndex.y * textureDimensions( ${ params.outputTarget } ).x + colorIndex.x );
+						var auxPacked: vec3u;
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							auxPacked[ layer ] = textureLoad( ${ params.auxTarget }, colorIndex, layer ).r;
+
+						}
+
 						let weight = 1.0 / f32( sampleCount );
-						let albedo = vec4f( unpack4x8unorm( input.auxAlbedo ).rgb, 1.0 );
-						let normal = vec4f( unpack4x8snorm( input.auxNormal ).xyz * 0.5 + 0.5, 1.0 );
-						${ params.auxStorage }[ auxIndex ] = mix( ${ params.auxStorage }[ auxIndex ], albedo, weight );
-						${ params.auxStorage }[ auxIndex + 1u ] = mix( ${ params.auxStorage }[ auxIndex + 1u ], normal, weight );
+						let albedo = mix( ${ unpackAuxAlbedoFn }( auxPacked ), unpack4x8unorm( input.auxAlbedo ).rgb, weight );
+						let normal = mix( ${ unpackAuxNormalFn }( auxPacked ), unpack4x8snorm( input.auxNormal ).xyz * 0.5 + 0.5, weight );
+						auxPacked = ${ packAuxFn }( albedo, normal );
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
+
+						}
 
 					}
 

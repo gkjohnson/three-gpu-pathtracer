@@ -1,7 +1,8 @@
-import { DataTexture, Vector2, StorageBufferAttribute } from 'three/webgpu';
+import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { createOutputTarget, createSampleCountTarget } from './targets.js';
-import { texture, sampler, uniform, globalId, textureStore, storage } from 'three/tsl';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
+import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { packAuxFn, unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
@@ -44,8 +45,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			auxBuffers: uniform( 0, 'uint' ),
 
-			// the per pixel first hit albedo then normal, as running means like the color
-			auxStorage: storage( new StorageBufferAttribute( 2, 4 ), 'vec4' ),
+			// the per pixel first hit albedo and normal, as running means like the color
+			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -516,15 +517,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
 				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
 
-				// the auxiliary buffers are blended the same way, in the same row order
+				// the auxiliary images are blended the same way, in the same row order
 				if ( auxBuffers != 0u ) {
 
-					let auxIndex = 2u * ( colorIndex.y * targetDimensions.x + colorIndex.x );
+					var auxPacked: vec3u;
+					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+						auxPacked[ layer ] = textureLoad( ${ params.auxTarget }, colorIndex, layer ).r;
+
+					}
+
 					let weight = 1.0 / f32( nextSampleCount );
-					let albedo = vec4f( auxAlbedo, 1.0 );
-					let normal = vec4f( auxNormal * 0.5 + 0.5, 1.0 );
-					${ params.auxStorage }[ auxIndex ] = mix( ${ params.auxStorage }[ auxIndex ], albedo, weight );
-					${ params.auxStorage }[ auxIndex + 1u ] = mix( ${ params.auxStorage }[ auxIndex + 1u ], normal, weight );
+					let albedo = mix( ${ unpackAuxAlbedoFn }( auxPacked ), auxAlbedo, weight );
+					let normal = mix( ${ unpackAuxNormalFn }( auxPacked ), auxNormal * 0.5 + 0.5, weight );
+					auxPacked = ${ packAuxFn }( albedo, normal );
+					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+						textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
+
+					}
 
 				}
 

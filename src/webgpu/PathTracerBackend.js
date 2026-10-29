@@ -1,6 +1,6 @@
-import { StorageBufferAttribute } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { createOutputTarget, createSampleCountTarget } from './compute/targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
+import { AUX_LAYERS } from './nodes/aux.wgsl.js';
 
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;
@@ -38,11 +38,11 @@ export class PathTracerBackend {
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 
-		// the per pixel first hit albedo and normal, two vec4 per pixel, accumulated as the denoiser's
-		// auxiliary buffers only while asked for. The kernels bind the placeholder otherwise.
+		// the per pixel first hit albedo and normal, accumulated as the denoiser's auxiliary images only
+		// while asked for. The kernels bind the placeholder otherwise.
 		this.auxBuffers = false;
-		this.auxBuffer = null;
-		this._auxPlaceholder = new StorageBufferAttribute( 2, 4 );
+		this.auxTarget = null;
+		this._auxPlaceholder = createAuxTarget();
 
 	}
 
@@ -56,7 +56,7 @@ export class PathTracerBackend {
 		}
 
 		this.auxBuffers = value;
-		this._updateAuxBuffer();
+		this._updateAuxTarget();
 		this.reset();
 
 	}
@@ -182,7 +182,7 @@ export class PathTracerBackend {
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
-		this._updateAuxBuffer();
+		this._updateAuxTarget();
 
 		this.reset();
 		return true;
@@ -262,38 +262,22 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
-		// the auxiliary buffers are only rewritten as paths finish, so stale values would show until
-		// then. The buffer only exists on the device once a kernel has bound it, and starts out zeroed.
-		if ( this.auxBuffer ) {
-
-			const buffer = renderer.backend.get( this.auxBuffer ).buffer;
-			if ( buffer ) {
-
-				const device = renderer.backend.device;
-				const encoder = device.createCommandEncoder();
-				encoder.clearBuffer( buffer );
-				device.queue.submit( [ encoder.finish() ] );
-
-			}
-
-		}
-
 		this._renderTask = null;
 
 	}
 
-	// Allocates the auxiliary buffer for the current size, or drops it. The first sample of every
-	// pixel overwrites it, so it needs no clearing.
-	_updateAuxBuffer() {
+	// Allocates the auxiliary images for the current size, or drops them. The first sample of every
+	// pixel overwrites them, so they need no clearing.
+	_updateAuxTarget() {
 
-		this.auxBuffer?.dispose();
-		this.auxBuffer = null;
+		this.auxTarget?.dispose();
+		this.auxTarget = null;
 
 		if ( this.auxBuffers ) {
 
 			const { width, height } = this.outputTarget;
-			this.auxBuffer = new StorageBufferAttribute( 2 * width * height, 4 );
-			this.auxBuffer.name = 'Auxiliary Buffers';
+			this.auxTarget = createAuxTarget( 'Auxiliary Images' );
+			this.auxTarget.setSize( width, height, AUX_LAYERS );
 
 		}
 
@@ -306,7 +290,7 @@ export class PathTracerBackend {
 		this.sampleCountTarget.dispose();
 		this.sampleCountClearKernel.dispose();
 		this.outputTargetClearKernel.dispose();
-		this.auxBuffer?.dispose();
+		this.auxTarget?.dispose();
 		this._auxPlaceholder.dispose();
 
 		this._renderTask = null;

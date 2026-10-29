@@ -1,6 +1,7 @@
 import { ExternalTexture } from 'three/webgpu';
+import { UNPACK_AUX_ALBEDO_WGSL, UNPACK_AUX_NORMAL_WGSL, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 
-/** @import { StorageBufferAttribute, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
 
 /**
@@ -103,11 +104,12 @@ export class OIDNDenoiser {
 		this._requestId = 0;
 		this._unets = { aux: null, color: null };
 
-		this._resultPipeline = null;
+		this._resultPipelines = {};
 		this._rawTexture = null;
+		this._alphaTexture = null;
 
-		this._resolvePipeline = null;
-		this._inputBuffers = null;
+		this._unpackPipeline = null;
+		this._auxTextures = null;
 
 	}
 
@@ -121,14 +123,15 @@ export class OIDNDenoiser {
 	}
 
 	/**
-	 * Starts a pass guided by the first hit albedo and normal the path tracer accumulates, two
-	 * vec4 per pixel, unless `useAuxiliaryBuffers` is off. Safe to call every frame.
+	 * Starts a pass guided by the first hit albedo and normal the path tracer accumulates, unless
+	 * `useAuxiliaryBuffers` is off. Safe to call every frame.
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {StorageBufferAttribute|null} aux
+	 * @param {StorageArrayTexture|null} aux - The packed auxiliary images, see "aux.wgsl.js".
+	 * @param {boolean} [denoiseAlpha] - Also denoises the alpha, in a second network pass.
 	 * @returns {Texture|null}
 	 */
-	update( color, aux = null ) {
+	update( color, aux = null, denoiseAlpha = false ) {
 
 		if ( this._complete || this._running ) {
 
@@ -138,14 +141,14 @@ export class OIDNDenoiser {
 
 		if ( this.useAuxiliaryBuffers && aux ) {
 
-			// oidn-webgpu reads every input the same way, so the color joins the auxiliary buffers as one
-			const { width, height } = color;
-			const buffers = this._resolveInputs( color, aux );
-			this._denoise( buffers.color, buffers.albedo, buffers.normal, width, height );
+			// oidn-webgpu reads every input as the same kind, so the auxiliary images are unpacked into
+			// textures alongside the color
+			const { albedo, normal } = this._unpackAux( aux );
+			this._denoise( color, albedo, normal, denoiseAlpha );
 
 		} else {
 
-			this.denoise( color );
+			this._denoise( color, null, null, denoiseAlpha );
 
 		}
 
@@ -155,22 +158,22 @@ export class OIDNDenoiser {
 
 	/**
 	 * Runs a pass unless one is already running or finished. The optional albedo and normal
-	 * auxiliary buffers select the guided model. Both hold one vec4 of [0,1] values per pixel in
-	 * the color's row order, with normals mapped so a flat normal is (0.5, 0.5, 1).
+	 * textures select the guided model. Both hold [0,1] values in the color's row order, with
+	 * normals mapped so a flat normal is (0.5, 0.5, 1).
 	 *
 	 * @param {Texture} color - The path traced result, in linear HDR.
-	 * @param {Texture|StorageBufferAttribute|null} albedo
-	 * @param {Texture|StorageBufferAttribute|null} normal
+	 * @param {Texture|null} albedo
+	 * @param {Texture|null} normal
+	 * @param {boolean} [denoiseAlpha] - Also denoises the alpha, in a second network pass.
 	 */
-	async denoise( color, albedo = null, normal = null ) {
+	async denoise( color, albedo = null, normal = null, denoiseAlpha = false ) {
 
-		const { width, height } = color;
-		return this._denoise( color, albedo, normal, width, height );
+		return this._denoise( color, albedo, normal, denoiseAlpha );
 
 	}
 
-	// the inputs are three textures, storage attributes, or raw gpu buffers and textures
-	async _denoise( color, albedo, normal, width, height ) {
+	// the inputs are three textures, or raw gpu textures
+	async _denoise( color, albedo, normal, denoiseAlpha ) {
 
 		if ( this._complete || this._running ) {
 
@@ -203,55 +206,78 @@ export class OIDNDenoiser {
 
 		}
 
-		// three only holds a WebGPU texture for a three texture once it has been initialized. The
-		// auxiliary buffers have been bound by the kernels that filled them
+		// three only holds a WebGPU texture for a three texture once it has been initialized
 		const { renderer } = this;
-		const backend = renderer.backend;
-		const getResource = value => {
+		const getTexture = value => {
 
-			if ( value instanceof GPUBuffer || value instanceof GPUTexture ) {
+			if ( value instanceof GPUTexture ) {
 
 				return value;
 
 			}
 
-			if ( value.isTexture ) {
-
-				renderer.initTexture( value );
-				return backend.get( value ).texture;
-
-			}
-
-			return backend.get( value ).buffer;
+			renderer.initTexture( value );
+			return renderer.backend.get( value ).texture;
 
 		};
 
+		const { width, height } = color;
 		const inputs = {
-			color: { data: getResource( color ), width, height },
+			color: { data: getTexture( color ), width, height },
 
 			// pace the tiles to display frames so the path tracer keeps rendering between them
 			scheduling: 'animation-frame',
-
-			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-			progress: output => this._copyOutputToTexture( output, width, height ),
-			done: output => {
-
-				this._running = false;
-				this._complete = true;
-				this._abort = null;
-
-			},
 		};
 
-		// the guided model needs both auxiliary buffers, and the color only model must not be given them
+		// the guided model needs both auxiliary images, and the color only model must not be given them
 		if ( useAux ) {
 
-			inputs.albedo = { data: getResource( albedo ), width, height };
-			inputs.normal = { data: getResource( normal ), width, height };
+			inputs.albedo = { data: getTexture( albedo ), width, height };
+			inputs.normal = { data: getTexture( normal ), width, height };
 
 		}
 
-		this._abort = unet.tileExecute( inputs );
+		// A pass denoises either the color or the alpha and passes the other through, so the alpha
+		// runs first and the color pass takes its alpha from the result
+		// TODO: this doesn't work yet. oidn-webgpu's "_updatePasses" only rebuilds its shaders when the
+		// input kind changes, not "denoiseAlpha", so both passes run whichever shaders were built first.
+		// Needs a fix upstream, or a separate network instance for the alpha pass
+		if ( denoiseAlpha ) {
+
+			const output = await this._execute( unet, { ...inputs, denoiseAlpha: true } );
+			if ( requestId !== this._requestId || ! this._running ) {
+
+				return;
+
+			}
+
+			this._copyAlphaToTexture( output, width, height );
+
+		}
+
+		// the output is seeded with the raw color, so copying per tile shows a progressive wipe
+		const progress = output => this._copyOutputToTexture( output, width, height, denoiseAlpha );
+		await this._execute( unet, inputs, progress );
+
+		this._running = false;
+		this._complete = true;
+		this._abort = null;
+
+	}
+
+	// Runs the network over every tile, resolving with the output once the last one is done. An aborted
+	// pass never resolves
+	_execute( unet, inputs, progress = null ) {
+
+		return new Promise( resolve => {
+
+			this._abort = unet.tileExecute( {
+				...inputs,
+				progress: progress ?? ( () => {} ),
+				done: resolve,
+			} );
+
+		} );
 
 	}
 
@@ -278,7 +304,9 @@ export class OIDNDenoiser {
 	dispose() {
 
 		this.reset();
-		this._disposeInputBuffers();
+		this._disposeAuxTextures();
+		this._alphaTexture?.destroy();
+		this._alphaTexture = null;
 
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
@@ -290,98 +318,101 @@ export class OIDNDenoiser {
 
 	}
 
-	// Writes the color, albedo, and normal into buffers oidn-webgpu reads directly, since it takes
-	// every input as the same kind and the kernels keep the auxiliary buffers interleaved in one
-	_resolveInputs( color, aux ) {
+	// Unpacks the path tracer's packed auxiliary images into albedo and normal textures, the input kind
+	// oidn-webgpu reads alongside the color texture
+	_unpackAux( aux ) {
 
 		const { renderer } = this;
 		const backend = renderer.backend;
 		const device = backend.device;
-		const { width, height } = color;
+		const { width, height } = aux.image;
 
-		if ( ! this._resolvePipeline ) {
+		if ( ! this._unpackPipeline ) {
 
 			const module = device.createShaderModule( {
 				code: /* wgsl */`
-					@group( 0 ) @binding( 0 ) var color : texture_2d<f32>;
-					@group( 0 ) @binding( 1 ) var<storage, read> aux : array<vec4f>;
-					@group( 0 ) @binding( 2 ) var<storage, read_write> outColor : array<vec4f>;
-					@group( 0 ) @binding( 3 ) var<storage, read_write> outAlbedo : array<vec4f>;
-					@group( 0 ) @binding( 4 ) var<storage, read_write> outNormal : array<vec4f>;
+					@group( 0 ) @binding( 0 ) var aux : texture_2d_array<u32>;
+					@group( 0 ) @binding( 1 ) var outAlbedo : texture_storage_2d<rgba16float, write>;
+					@group( 0 ) @binding( 2 ) var outNormal : texture_storage_2d<rgba16float, write>;
+
+					${ UNPACK_AUX_ALBEDO_WGSL }
+					${ UNPACK_AUX_NORMAL_WGSL }
 
 					@compute @workgroup_size( 8, 8 )
 					fn main( @builtin( global_invocation_id ) gid : vec3u ) {
 
-						let dims = textureDimensions( color );
+						let dims = textureDimensions( aux );
 						if ( gid.x >= dims.x || gid.y >= dims.y ) {
 
 							return;
 
 						}
 
-						let i = gid.y * dims.x + gid.x;
-						outColor[ i ] = textureLoad( color, gid.xy, 0 );
-						outAlbedo[ i ] = aux[ 2u * i ];
-						outNormal[ i ] = aux[ 2u * i + 1u ];
+						var packed: vec3u;
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							packed[ layer ] = textureLoad( aux, gid.xy, layer, 0 ).r;
+
+						}
+
+						textureStore( outAlbedo, gid.xy, vec4f( unpackAuxAlbedo( packed ), 1.0 ) );
+						textureStore( outNormal, gid.xy, vec4f( unpackAuxNormal( packed ), 1.0 ) );
 
 					}
 				`,
 			} );
 
-			this._resolvePipeline = device.createComputePipeline( {
+			this._unpackPipeline = device.createComputePipeline( {
 				layout: 'auto',
 				compute: { module, entryPoint: 'main' },
 			} );
 
 		}
 
-		let buffers = this._inputBuffers;
-		if ( ! buffers || buffers.width !== width || buffers.height !== height ) {
+		let textures = this._auxTextures;
+		if ( ! textures || textures.width !== width || textures.height !== height ) {
 
-			this._disposeInputBuffers();
+			this._disposeAuxTextures();
 
-			const createBuffer = () => device.createBuffer( {
-				size: 16 * width * height,
-				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+			const createTexture = () => device.createTexture( {
+				size: [ width, height ],
+				format: 'rgba16float',
+				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
 			} );
-			buffers = { width, height, color: createBuffer(), albedo: createBuffer(), normal: createBuffer() };
-			this._inputBuffers = buffers;
+			textures = { width, height, albedo: createTexture(), normal: createTexture() };
+			this._auxTextures = textures;
 
 		}
 
-		renderer.initTexture( color );
 		const bindGroup = device.createBindGroup( {
-			layout: this._resolvePipeline.getBindGroupLayout( 0 ),
+			layout: this._unpackPipeline.getBindGroupLayout( 0 ),
 			entries: [
-				{ binding: 0, resource: backend.get( color ).texture.createView() },
-				{ binding: 1, resource: { buffer: backend.get( aux ).buffer } },
-				{ binding: 2, resource: { buffer: buffers.color } },
-				{ binding: 3, resource: { buffer: buffers.albedo } },
-				{ binding: 4, resource: { buffer: buffers.normal } },
+				{ binding: 0, resource: backend.get( aux ).texture.createView( { dimension: '2d-array' } ) },
+				{ binding: 1, resource: textures.albedo.createView() },
+				{ binding: 2, resource: textures.normal.createView() },
 			],
 		} );
 
 		const encoder = device.createCommandEncoder();
 		const pass = encoder.beginComputePass();
-		pass.setPipeline( this._resolvePipeline );
+		pass.setPipeline( this._unpackPipeline );
 		pass.setBindGroup( 0, bindGroup );
 		pass.dispatchWorkgroups( Math.ceil( width / 8 ), Math.ceil( height / 8 ) );
 		pass.end();
 		device.queue.submit( [ encoder.finish() ] );
 
-		return buffers;
+		return textures;
 
 	}
 
-	_disposeInputBuffers() {
+	_disposeAuxTextures() {
 
-		const buffers = this._inputBuffers;
-		if ( buffers ) {
+		const textures = this._auxTextures;
+		if ( textures ) {
 
-			buffers.color.destroy();
-			buffers.albedo.destroy();
-			buffers.normal.destroy();
-			this._inputBuffers = null;
+			textures.albedo.destroy();
+			textures.normal.destroy();
+			this._auxTextures = null;
 
 		}
 
@@ -419,41 +450,12 @@ export class OIDNDenoiser {
 	}
 
 	// Copies the denoiser's packed output buffer into a sampleable texture, using a compute pass
-	// since copyBufferToTexture requires 256 byte row alignment.
+	// since copyBufferToTexture requires 256 byte row alignment. With "useAlpha" the alpha comes from
+	// the alpha pass instead.
 	// TODO: remove the copy once oidn-webgpu can write into a caller-provided storage texture.
-	_copyOutputToTexture( output, width, height ) {
+	_copyOutputToTexture( output, width, height, useAlpha ) {
 
 		const device = this.renderer.backend.device;
-
-		if ( ! this._resultPipeline ) {
-
-			const module = device.createShaderModule( {
-				code: /* wgsl */`
-					@group( 0 ) @binding( 0 ) var<storage, read> src : array<vec4f>;
-					@group( 0 ) @binding( 1 ) var dst : texture_storage_2d<rgba16float, write>;
-
-					@compute @workgroup_size( 8, 8 )
-					fn main( @builtin( global_invocation_id ) gid : vec3u ) {
-
-						let dims = textureDimensions( dst );
-						if ( gid.x >= dims.x || gid.y >= dims.y ) {
-
-							return;
-
-						}
-
-						textureStore( dst, gid.xy, src[ gid.y * dims.x + gid.x ] );
-
-					}
-				`,
-			} );
-
-			this._resultPipeline = device.createComputePipeline( {
-				layout: 'auto',
-				compute: { module, entryPoint: 'main' },
-			} );
-
-		}
 
 		if ( ! this._rawTexture || this._rawTexture.width !== width || this._rawTexture.height !== height ) {
 
@@ -472,17 +474,100 @@ export class OIDNDenoiser {
 
 		}
 
+		const entries = [
+			{ binding: 0, resource: { buffer: output.data } },
+			{ binding: 1, resource: this._rawTexture.createView() },
+		];
+
+		if ( useAlpha ) {
+
+			entries.push( { binding: 2, resource: this._alphaTexture.createView() } );
+			this._runCopyPass( 'colorWithAlpha', /* wgsl */`
+				@group( 0 ) @binding( 2 ) var alpha : texture_2d<f32>;
+			`, /* wgsl */`
+				vec4f( src[ i ].rgb, textureLoad( alpha, gid.xy, 0 ).a )
+			`, entries, width, height );
+
+		} else {
+
+			this._runCopyPass( 'color', '', 'src[ i ]', entries, width, height );
+
+		}
+
+	}
+
+	// Keeps the alpha pass's denoised alpha for the color pass that follows, since both passes write the
+	// same output buffer
+	_copyAlphaToTexture( output, width, height ) {
+
+		const device = this.renderer.backend.device;
+
+		if ( ! this._alphaTexture || this._alphaTexture.width !== width || this._alphaTexture.height !== height ) {
+
+			this._alphaTexture?.destroy();
+			this._alphaTexture = device.createTexture( {
+				size: [ width, height ],
+				format: 'rgba16float',
+				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+			} );
+
+		}
+
+		const entries = [
+			{ binding: 0, resource: { buffer: output.data } },
+			{ binding: 1, resource: this._alphaTexture.createView() },
+		];
+
+		this._runCopyPass( 'alpha', '', 'vec4f( src[ i ].a )', entries, width, height );
+
+	}
+
+	// Writes "value", an expression of the output buffer "src" at index "i", into the "dst" texture
+	_runCopyPass( key, bindings, value, entries, width, height ) {
+
+		const device = this.renderer.backend.device;
+
+		if ( ! this._resultPipelines[ key ] ) {
+
+			const module = device.createShaderModule( {
+				code: /* wgsl */`
+					@group( 0 ) @binding( 0 ) var<storage, read> src : array<vec4f>;
+					@group( 0 ) @binding( 1 ) var dst : texture_storage_2d<rgba16float, write>;
+					${ bindings }
+
+					@compute @workgroup_size( 8, 8 )
+					fn main( @builtin( global_invocation_id ) gid : vec3u ) {
+
+						let dims = textureDimensions( dst );
+						if ( gid.x >= dims.x || gid.y >= dims.y ) {
+
+							return;
+
+						}
+
+						let i = gid.y * dims.x + gid.x;
+						textureStore( dst, gid.xy, ${ value } );
+
+					}
+				`,
+			} );
+
+			this._resultPipelines[ key ] = device.createComputePipeline( {
+				layout: 'auto',
+				compute: { module, entryPoint: 'main' },
+			} );
+
+		}
+
+		const pipeline = this._resultPipelines[ key ];
 		const bindGroup = device.createBindGroup( {
-			layout: this._resultPipeline.getBindGroupLayout( 0 ),
-			entries: [
-				{ binding: 0, resource: { buffer: output.data } },
-				{ binding: 1, resource: this._rawTexture.createView() },
-			],
+			layout: pipeline.getBindGroupLayout( 0 ),
+			entries,
 		} );
 
 		const encoder = device.createCommandEncoder();
 		const pass = encoder.beginComputePass();
-		pass.setPipeline( this._resultPipeline );
+		pass.setPipeline( pipeline );
 		pass.setBindGroup( 0, bindGroup );
 		pass.dispatchWorkgroups( Math.ceil( width / 8 ), Math.ceil( height / 8 ) );
 		pass.end();

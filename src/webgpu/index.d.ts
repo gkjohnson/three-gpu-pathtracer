@@ -1,5 +1,5 @@
 import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
-import { StorageBufferAttribute, WebGPURenderer } from 'three/webgpu';
+import { StorageArrayTexture, WebGPURenderer } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -119,8 +119,8 @@ export class OIDNDenoiser {
 	readonly running: boolean;
 
 	init( renderer: WebGPURenderer ): void;
-	update( color: Texture, aux?: StorageBufferAttribute | null ): Texture | null;
-	denoise( color: Texture, albedo?: Texture | StorageBufferAttribute | null, normal?: Texture | StorageBufferAttribute | null ): Promise<void>;
+	update( color: Texture, aux?: StorageArrayTexture | null, denoiseAlpha?: boolean ): Texture | null;
+	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null, denoiseAlpha?: boolean ): Promise<void>;
 	reset(): void;
 	dispose(): void;
 
