@@ -11,6 +11,7 @@ import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
+import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
@@ -39,6 +40,48 @@ const COMPLETE_CHECK_INTERVAL = 250;
 // the options the mesh geometry bvhs are built with and how many workers build them at once
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
 const MAX_BVH_WORKERS = 4;
+
+// Builds a geometry's BVH in a worker without giving up its buffers. The workers transfer the position and
+// index buffers, which neuters them for every other array viewing them, such as the attributes of other
+// meshes in a glTF. So the worker gets copies, the original arrays are restored, and the reordered index
+// is written back into the original. Shared array buffers aren't transferred, so they're sent as is.
+// TODO: this is imperfect, and depends on how the worker transfers. Remove once three-mesh-bvh's worker
+// has an option not to transfer
+async function generateBVHInWorker( worker, geometry, options ) {
+
+	const getCopy = array => {
+
+		const isShared = typeof SharedArrayBuffer !== 'undefined' && array.buffer instanceof SharedArrayBuffer;
+		return isShared ? array : array.slice();
+
+	};
+
+	const { position } = geometry.attributes;
+	const { index } = geometry;
+	const positionArray = position.array;
+	const indexArray = index ? index.array : null;
+
+	position.array = getCopy( positionArray );
+	if ( index ) {
+
+		index.array = getCopy( indexArray );
+
+	}
+
+	const bvh = await worker.generate( geometry, options );
+
+	position.array = positionArray;
+	if ( index ) {
+
+		indexArray.set( index.array );
+		index.array = indexArray;
+		index.needsUpdate = true;
+
+	}
+
+	return bvh;
+
+}
 
 class TextureCache {
 
@@ -509,6 +552,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
+		this._pathTracer.setAccumulateAux( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
 
 		// the new tracer has default environment and background maps so apply the cached scene textures
@@ -701,7 +745,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Attaches a denoiser, run once the render settles and displayed in place of the raw image.
-	 * Settings live on the instance. Pass null to remove it.
+	 * Settings live on the instance. Pass null to remove it. The render restarts when the auxiliary
+	 * buffers it needs are added or dropped.
 	 *
 	 * @param {OIDNDenoiser|null} denoiser
 	 */
@@ -715,9 +760,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( denoiser ) {
 
 			denoiser.init( this._renderer );
-			denoiser.setScene( this.scene, this.camera );
 
 		}
+
+		this._pathTracer.setAccumulateAux( Boolean( denoiser && denoiser.useAuxiliaryBuffers ) );
 
 	}
 
@@ -812,9 +858,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.updateEnvironment();
 		this.updateLights();
 
-		// the denoiser rasterizes its own guide buffers, so it needs the scene too
-		this._denoiser?.setScene( scene, camera );
-
 	}
 
 	/**
@@ -875,7 +918,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					geometry.boundsTree = await worker.generate( geometry, MESH_BVH_OPTIONS );
+					geometry.boundsTree = await generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
 
 				}
 
@@ -1278,7 +1321,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// "min" so every pixel has stopped, not just the average
 			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
 
-				denoiser.update( pathTracer.outputTarget );
+				denoiser.update( pathTracer.outputTarget, pathTracer.auxTarget );
 
 			}
 
@@ -1471,6 +1514,42 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Draws the albedo or normal auxiliary buffer accumulated for the denoiser, for checking what
+	 * it is given. Nothing is drawn until a denoiser that uses them is attached.
+	 *
+	 * @param {'albedo'|'normal'} [buffer='albedo']
+	 */
+	renderAuxBuffer( buffer = 'albedo' ) {
+
+		const renderer = this._renderer;
+		const pathTracer = this._pathTracer;
+
+		if ( ! renderer._initialized || ! pathTracer.auxTarget ) {
+
+			return;
+
+		}
+
+		if ( ! this._auxDebugQuad ) {
+
+			this._auxDebugQuad = new FullScreenQuad( new AuxDebugMaterial() );
+
+		}
+
+		const originalToneMapping = renderer.toneMapping;
+		renderer.toneMapping = NoToneMapping;
+
+		const quad = this._auxDebugQuad;
+		quad.material.texture = pathTracer.auxTarget;
+		quad.material.showNormal = buffer === 'normal';
+		renderer.setRenderTarget( null );
+		quad.render( renderer );
+
+		renderer.toneMapping = originalToneMapping;
+
+	}
+
+	/**
 	 * Frees every GPU resource held by the tracer, including any attached denoiser and upscaler.
 	 */
 	dispose() {
@@ -1491,6 +1570,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._atlasDebugQuad?.material.dispose();
 		this._sampleDensityQuad?.dispose();
 		this._sampleDensityQuad?.material.dispose();
+		this._auxDebugQuad?.dispose();
+		this._auxDebugQuad?.material.dispose();
 
 		if ( this._debugBoundsQuad !== undefined ) {
 

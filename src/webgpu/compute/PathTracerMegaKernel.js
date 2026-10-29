@@ -1,7 +1,8 @@
 import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { createOutputTarget, createSampleCountTarget } from './targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { mediumStruct, mediumSegmentStruct, enterMediumFn, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn } from '../nodes/medium.wgsl.js';
@@ -47,6 +48,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
+			accumulateAux: uniform( 0, 'uint' ),
+
+			// the per pixel first hit albedo and normal, as running means like the color
+			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -105,6 +110,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				clampIndirect: f32,
 
 				transmissiveBackground: u32,
+				accumulateAux: u32,
 
 			) -> void {
 
@@ -188,6 +194,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
+
+				// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is found
+				// the last mirror or transmission hit stands in, for paths that reach the environment
+				var auxFound = false;
+				var auxAlbedo = vec3f( 0.0 );
+				var auxNormal = vec3f( 0.0 );
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
@@ -426,6 +438,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
+
+						if ( ! auxFound ) {
+
+							auxFound = ${ isAuxSurfaceFn }( surface, scatterRec );
+							auxAlbedo = surface.color;
+							auxNormal = surface.normal;
+
+						}
+
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
@@ -597,6 +618,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
 				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+
+				// the auxiliary images are blended the same way, in the same row order
+				if ( accumulateAux != 0u ) {
+
+					var auxPacked: vec3u;
+					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+						auxPacked[ layer ] = textureLoad( ${ params.auxTarget }, colorIndex, layer ).r;
+
+					}
+
+					auxPacked = ${ blendAuxFn }( auxPacked, auxAlbedo, auxNormal, 1.0 / f32( nextSampleCount ) );
+					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+						textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
+
+					}
+
+				}
 
 			}`;
 

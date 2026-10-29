@@ -172,6 +172,7 @@ const params = {
 	maxSamples: 16,
 
 	denoise: true,
+	auxView: 'none',
 
 	upscale: true,
 	sharpness: 1,
@@ -422,6 +423,13 @@ function animate() {
 
 		}
 
+		// draws the denoiser's auxiliary buffer over the render
+		if ( params.auxView !== 'none' ) {
+
+			pathTracer.renderAuxBuffer( params.auxView );
+
+		}
+
 	} else {
 
 		renderer.render( scene, activeCamera );
@@ -646,6 +654,7 @@ function buildGui() {
 		pathTracer.setDenoiser( v ? denoiser : null );
 
 	} );
+	postFolder.add( params, 'auxView', [ 'none', 'albedo', 'normal' ] );
 	postFolder.add( params, 'upscale' ).onChange( v => {
 
 		pathTracer.setUpscaler( v ? upscaler : null );
