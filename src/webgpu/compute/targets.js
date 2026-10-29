@@ -1,4 +1,4 @@
-import { ColorManagement, FloatType, HalfFloatType, NearestFilter, RGBAFormat } from 'three';
+import { ColorManagement, FloatType, HalfFloatType, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageArrayTexture, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { AUX_LAYERS } from '../nodes/aux.wgsl.js';
 
@@ -36,8 +36,6 @@ export function createAuxTarget( name = '' ) {
 	const target = new StorageArrayTexture( 1, 1, AUX_LAYERS );
 	target.format = RedIntegerFormat;
 	target.type = UnsignedIntType;
-	target.minFilter = NearestFilter;
-	target.magFilter = NearestFilter;
 	target.name = name;
 	target.generateMipmaps = false;
 	return target;
