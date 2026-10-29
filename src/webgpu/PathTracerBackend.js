@@ -1,3 +1,4 @@
+import { FrameTimer } from './FrameTimer.js';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
@@ -30,6 +31,10 @@ export class PathTracerBackend {
 
 		this._renderTask = null;
 		this._compileState = new WeakMap();
+
+		// the pending "getFrameTimeAsync" request, resolved by the next update that renders
+		this._frameTimer = new FrameTimer( renderer );
+		this._frameTimeRequest = null;
 
 		this.outputTarget = createOutputTarget( 'Output #0' );
 		this.prevOutputTarget = createOutputTarget( 'Output #1' );
@@ -223,7 +228,32 @@ export class PathTracerBackend {
 
 		}
 
+		const { _frameTimer, _frameTimeRequest } = this;
+		const timed = Boolean( _frameTimeRequest ) && ! _frameTimer.running;
+		if ( timed ) {
+
+			_frameTimer.begin();
+
+		}
+
 		this._renderTask.next();
+
+		if ( timed ) {
+
+			// an update spent waiting on kernels to compile dispatches nothing, so the next one is timed
+			const compiling = this.compiling;
+			_frameTimer.end().then( time => {
+
+				if ( ! compiling ) {
+
+					this._frameTimeRequest = null;
+					_frameTimeRequest.resolve( time );
+
+				}
+
+			} );
+
+		}
 
 	}
 
@@ -236,6 +266,22 @@ export class PathTracerBackend {
 	async getSampleCountsAsync() {
 
 		return { min: 0, max: 0, avg: 0 };
+
+	}
+
+	// Measures the gpu time of the next update that renders, in milliseconds. Concurrent calls share
+	// the same measurement.
+	getFrameTimeAsync() {
+
+		if ( ! this._frameTimeRequest ) {
+
+			let resolve;
+			const promise = new Promise( r => resolve = r );
+			this._frameTimeRequest = { promise, resolve };
+
+		}
+
+		return this._frameTimeRequest.promise;
 
 	}
 
@@ -294,6 +340,7 @@ export class PathTracerBackend {
 		this.auxTargetClearKernel.dispose();
 		this.auxTarget?.dispose();
 		this._auxPlaceholder.dispose();
+		this._frameTimer.dispose();
 
 		this._renderTask = null;
 
