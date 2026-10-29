@@ -165,7 +165,7 @@ export class LoaderElement {
 
 	setSamples( samples ) {
 
-		const { min = 0, max = 0, avg = 0, samplesPerSecond = 0 } = samples ?? {};
+		const { min = 0, max = 0, avg = 0, samplesPerSecond = 0, frameTime = 0 } = samples ?? {};
 
 		// per-pixel sample counts vary across the image, so the headline figure is the average and
 		// the spread across the image follows in brackets
@@ -174,6 +174,12 @@ export class LoaderElement {
 		if ( samplesPerSecond ) {
 
 			this._samples.innerText += `, ${ samplesPerSecond.toFixed( 1 ) } samples/sec`;
+
+		}
+
+		if ( frameTime ) {
+
+			this._samples.innerText += `, ${ frameTime.toFixed( 1 ) } ms/frame`;
 
 		}
 

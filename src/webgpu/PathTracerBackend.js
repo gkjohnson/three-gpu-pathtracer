@@ -1,4 +1,4 @@
-import { TimestampQuery } from 'three/webgpu';
+import { MathUtils, TimestampQuery } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
@@ -6,6 +6,15 @@ import { AUX_LAYERS } from './nodes/aux.wgsl.js';
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;
 const COMPILE_COMPLETE = 1;
+
+// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered once
+// a window of measurements has been taken at it, and only changes when their average is off the target
+// by the threshold ratio, since a wavefront budget change reallocates the path buffers. It moves at most
+// the step ratio per window.
+const BUDGET_WINDOW = 16;
+const BUDGET_CHANGE_THRESHOLD = 1.15;
+const BUDGET_MAX_STEP = 2;
+const MIN_FRAME_BUDGET = 4096;
 
 export class PathTracerBackend {
 
@@ -17,6 +26,12 @@ export class PathTracerBackend {
 		// how much work a single update dispatches, in path slots. Lower values keep frames
 		// responsive on slower hardware; the unit is resolution independent.
 		this.frameBudget = 250000;
+
+		// whether "frameBudget" is adjusted to keep each update near "targetFrameTime" milliseconds of gpu
+		// time. Needs a renderer created with "trackTimestamp".
+		this.adaptiveFrameBudget = true;
+		this.targetFrameTime = 16;
+
 		this.maxTransparentBounces = 15;
 		this.lowResMode = false;
 
@@ -40,6 +55,12 @@ export class PathTracerBackend {
 		// still reading back
 		this._timestampUIDs = null;
 		this._timingFrame = false;
+
+		// the sum and count of the frame times measured at the current budget that the adaptive budget
+		// is set from
+		this._frameTimeTotal = 0;
+		this._frameTimeCount = 0;
+		this._warnedTimestamps = false;
 
 		this.outputTarget = createOutputTarget( 'Output #0' );
 		this.prevOutputTarget = createOutputTarget( 'Output #1' );
@@ -233,14 +254,23 @@ export class PathTracerBackend {
 
 		}
 
-		const timed = renderer.backend.trackTimestamp && ! this._timingFrame;
+		const { trackTimestamp } = renderer.backend;
+		if ( this.adaptiveFrameBudget && ! trackTimestamp && ! this._warnedTimestamps ) {
+
+			console.warn( 'PathTracerBackend: "adaptiveFrameBudget" needs timestamp queries. Create the renderer with "trackTimestamp: true" on a device that supports them.' );
+			this._warnedTimestamps = true;
+
+		}
+
+		const timed = trackTimestamp && ! this._timingFrame;
+		const budget = this.frameBudget;
 		this._timestampUIDs = timed ? [] : null;
 		this._renderTask.next();
 
 		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
 		if ( timed && this._timestampUIDs.length > 0 ) {
 
-			this._measureFrameTime( this._timestampUIDs );
+			this._measureFrameTime( this._timestampUIDs, budget );
 
 		}
 
@@ -257,21 +287,72 @@ export class PathTracerBackend {
 
 	}
 
-	async _measureFrameTime( uids ) {
+	async _measureFrameTime( uids, budget ) {
 
 		const { renderer } = this;
 		const { backend } = renderer;
+		const lowResMode = this.lowResMode;
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
 		this._timingFrame = false;
 
 		// a resolve already in flight when the update dispatched won't hold its queries
-		if ( uids.every( uid => backend.hasTimestampQuery( uid ) ) ) {
+		if ( ! uids.every( uid => backend.hasTimestampQuery( uid ) ) ) {
 
-			this.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
+			return;
 
 		}
+
+		this.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
+
+		// the low res preview traces too few pixels to say what a full update costs
+		if ( this.adaptiveFrameBudget && ! lowResMode ) {
+
+			this._adaptFrameBudget( this.frameTime, budget );
+
+		}
+
+	}
+
+	// Moves "frameBudget" toward the slot count that would take "targetFrameTime"
+	_adaptFrameBudget( frameTime, budget ) {
+
+		// a measurement from before the budget changed doesn't describe the current one
+		if ( budget !== this.frameBudget ) {
+
+			this._frameTimeTotal = 0;
+			this._frameTimeCount = 0;
+			return;
+
+		}
+
+		this._frameTimeTotal += frameTime;
+		this._frameTimeCount ++;
+		if ( this._frameTimeCount < BUDGET_WINDOW ) {
+
+			return;
+
+		}
+
+		const { targetFrameTime } = this;
+		const average = this._frameTimeTotal / this._frameTimeCount;
+		this._frameTimeTotal = 0;
+		this._frameTimeCount = 0;
+
+		const ratio = average / targetFrameTime;
+		if ( ratio < BUDGET_CHANGE_THRESHOLD && ratio > 1 / BUDGET_CHANGE_THRESHOLD ) {
+
+			return;
+
+		}
+
+		// a budget past the pixel count does no more work, so it is capped there
+		const { width, height } = this.outputTarget;
+		const msPerSlot = average / Math.min( budget, width * height );
+		let next = targetFrameTime / msPerSlot;
+		next = MathUtils.clamp( next, budget / BUDGET_MAX_STEP, budget * BUDGET_MAX_STEP );
+		this.frameBudget = MathUtils.clamp( Math.round( next ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, width * height ) );
 
 	}
 
@@ -329,6 +410,8 @@ export class PathTracerBackend {
 		}
 
 		this._renderTask = null;
+		this._frameTimeTotal = 0;
+		this._frameTimeCount = 0;
 
 	}
 
