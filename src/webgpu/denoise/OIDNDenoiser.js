@@ -1,5 +1,6 @@
 import { ExternalTexture } from 'three/webgpu';
-import { UNPACK_AUX_ALBEDO_WGSL, UNPACK_AUX_NORMAL_WGSL, AUX_LAYERS } from '../nodes/aux.wgsl.js';
+import { UnpackAuxKernel } from '../compute/UnpackAuxKernel.js';
+import { createAuxImageTarget } from '../compute/targets.js';
 
 /** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
@@ -119,9 +120,9 @@ export class OIDNDenoiser {
 		this._rawTexture = null;
 
 		// the inputs of the current pass
-		this._unpackPipeline = null;
-		this._albedoTexture = null;
-		this._normalTexture = null;
+		this._unpackAuxKernel = new UnpackAuxKernel().setWorkgroupSize( 8, 8, 1 );
+		this._albedoTarget = createAuxImageTarget( 'Denoiser Albedo' );
+		this._normalTarget = createAuxImageTarget( 'Denoiser Normal' );
 		this._alphaTexture = null;
 
 	}
@@ -157,7 +158,7 @@ export class OIDNDenoiser {
 			// oidn-webgpu reads every input as the same kind, so the auxiliary images are unpacked into
 			// textures like the color
 			this._unpackAux( aux );
-			this.denoise( color, this._albedoTexture, this._normalTexture, denoiseAlpha );
+			this.denoise( color, this._albedoTarget, this._normalTarget, denoiseAlpha );
 
 		} else {
 
@@ -212,16 +213,9 @@ export class OIDNDenoiser {
 
 		}
 
-		// Three only holds a WebGPU texture for a three texture once it has been initialized. The unpacked
-		// auxiliary images are WebGPU textures already
+		// three only holds a WebGPU texture for a three texture once it has been initialized
 		const { renderer } = this;
 		const getTexture = value => {
-
-			if ( value instanceof GPUTexture ) {
-
-				return value;
-
-			}
 
 			renderer.initTexture( value );
 			return renderer.backend.get( value ).texture;
@@ -309,6 +303,7 @@ export class OIDNDenoiser {
 	dispose() {
 
 		this.reset();
+		this._unpackAuxKernel.dispose();
 
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
@@ -324,85 +319,25 @@ export class OIDNDenoiser {
 	// oidn-webgpu reads alongside the color texture
 	_unpackAux( aux ) {
 
-		const { renderer } = this;
-		const backend = renderer.backend;
-		const device = backend.device;
+		const { renderer, _unpackAuxKernel, _albedoTarget, _normalTarget } = this;
 		const { width, height } = aux.image;
 
-		if ( ! this._unpackPipeline ) {
+		_albedoTarget.setSize( width, height );
+		_normalTarget.setSize( width, height );
 
-			const module = device.createShaderModule( {
-				code: /* wgsl */`
-					@group( 0 ) @binding( 0 ) var aux : texture_2d_array<u32>;
-					@group( 0 ) @binding( 1 ) var outAlbedo : texture_storage_2d<rgba16float, write>;
-					@group( 0 ) @binding( 2 ) var outNormal : texture_storage_2d<rgba16float, write>;
-
-					${ UNPACK_AUX_ALBEDO_WGSL }
-					${ UNPACK_AUX_NORMAL_WGSL }
-
-					@compute @workgroup_size( 8, 8 )
-					fn main( @builtin( global_invocation_id ) gid : vec3u ) {
-
-						let dims = textureDimensions( aux );
-						if ( gid.x >= dims.x || gid.y >= dims.y ) {
-
-							return;
-
-						}
-
-						var packed: vec3u;
-						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
-
-							packed[ layer ] = textureLoad( aux, gid.xy, layer, 0 ).r;
-
-						}
-
-						textureStore( outAlbedo, gid.xy, vec4f( unpackAuxAlbedo( packed ), 1.0 ) );
-						textureStore( outNormal, gid.xy, vec4f( unpackAuxNormal( packed ), 1.0 ) );
-
-					}
-				`,
-			} );
-
-			this._unpackPipeline = device.createComputePipeline( {
-				layout: 'auto',
-				compute: { module, entryPoint: 'main' },
-			} );
-
-		}
-
-		this._disposeInputs();
-		this._albedoTexture = createTexture( device, width, height );
-		this._normalTexture = createTexture( device, width, height );
-
-		const bindGroup = device.createBindGroup( {
-			layout: this._unpackPipeline.getBindGroupLayout( 0 ),
-			entries: [
-				{ binding: 0, resource: backend.get( aux ).texture.createView( { dimension: '2d-array' } ) },
-				{ binding: 1, resource: this._albedoTexture.createView() },
-				{ binding: 2, resource: this._normalTexture.createView() },
-			],
-		} );
-
-		const encoder = device.createCommandEncoder();
-		const pass = encoder.beginComputePass();
-		pass.setPipeline( this._unpackPipeline );
-		pass.setBindGroup( 0, bindGroup );
-		pass.dispatchWorkgroups( Math.ceil( width / 8 ), Math.ceil( height / 8 ) );
-		pass.end();
-		device.queue.submit( [ encoder.finish() ] );
+		_unpackAuxKernel.auxTarget = aux;
+		_unpackAuxKernel.albedoTarget = _albedoTarget;
+		_unpackAuxKernel.normalTarget = _normalTarget;
+		renderer.compute( _unpackAuxKernel.kernel, _unpackAuxKernel.getDispatchSize( width, height ) );
 
 	}
 
 	// Frees the unpacked auxiliary images and the denoised alpha, which only live for a pass
 	_disposeInputs() {
 
-		this._albedoTexture?.destroy();
-		this._normalTexture?.destroy();
+		this._albedoTarget.dispose();
+		this._normalTarget.dispose();
 		this._alphaTexture?.destroy();
-
-		this._albedoTexture = null;
-		this._normalTexture = null;
 		this._alphaTexture = null;
 
 	}

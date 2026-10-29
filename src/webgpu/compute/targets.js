@@ -1,4 +1,4 @@
-import { ColorManagement, FloatType, NearestFilter, RGBAFormat } from 'three';
+import { ColorManagement, FloatType, HalfFloatType, NearestFilter, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageArrayTexture, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { AUX_LAYERS } from '../nodes/aux.wgsl.js';
 
@@ -38,6 +38,18 @@ export function createAuxTarget( name = '' ) {
 	target.type = UnsignedIntType;
 	target.minFilter = NearestFilter;
 	target.magFilter = NearestFilter;
+	target.name = name;
+	target.generateMipmaps = false;
+	return target;
+
+}
+
+// an albedo or normal image unpacked from the auxiliary target, for the denoiser
+export function createAuxImageTarget( name = '' ) {
+
+	const target = new StorageTexture( 1, 1 );
+	target.format = RGBAFormat;
+	target.type = HalfFloatType;
 	target.name = name;
 	target.generateMipmaps = false;
 	return target;

@@ -42,23 +42,31 @@ export class PathTracerBackend {
 
 		// the per pixel first hit albedo and normal, accumulated as the denoiser's auxiliary images only
 		// while asked for. The kernels bind the placeholder otherwise.
-		this.auxBuffers = false;
 		this.auxTarget = null;
 		this._auxPlaceholder = createAuxTarget();
 
 	}
 
-	// The auxiliary buffers start over with the render, so the render restarts with them
+	// The auxiliary images start over with the render, so the render restarts with them
 	setAuxBuffers( value ) {
 
-		if ( this.auxBuffers === value ) {
+		if ( Boolean( this.auxTarget ) === value ) {
 
 			return;
 
 		}
 
-		this.auxBuffers = value;
-		this._updateAuxTarget();
+		this.auxTarget?.dispose();
+		this.auxTarget = null;
+
+		if ( value ) {
+
+			const { width, height } = this.outputTarget;
+			this.auxTarget = createAuxTarget( 'Auxiliary Images' );
+			this.auxTarget.setSize( width, height, AUX_LAYERS );
+
+		}
+
 		this.reset();
 
 	}
@@ -184,7 +192,7 @@ export class PathTracerBackend {
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
-		this._updateAuxTarget();
+		this.auxTarget?.setSize( w, h, AUX_LAYERS );
 
 		this.reset();
 		return true;
@@ -274,22 +282,6 @@ export class PathTracerBackend {
 		}
 
 		this._renderTask = null;
-
-	}
-
-	// Allocates the auxiliary images for the current size, or drops them
-	_updateAuxTarget() {
-
-		this.auxTarget?.dispose();
-		this.auxTarget = null;
-
-		if ( this.auxBuffers ) {
-
-			const { width, height } = this.outputTarget;
-			this.auxTarget = createAuxTarget( 'Auxiliary Images' );
-			this.auxTarget.setSize( width, height, AUX_LAYERS );
-
-		}
 
 	}
 
