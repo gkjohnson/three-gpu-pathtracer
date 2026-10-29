@@ -250,7 +250,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 				for ( let y = 0; y < tiles.y; y ++ ) {
 
 					kernel.offset.set( x, y ).multiply( tileSize );
-					renderer.compute( kernel.kernel, dispatchSize );
+					this.dispatch( kernel, dispatchSize );
 
 					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );

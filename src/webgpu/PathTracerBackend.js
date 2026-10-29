@@ -1,4 +1,4 @@
-import { FrameTimer } from './FrameTimer.js';
+import { TimestampQuery } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
@@ -29,12 +29,17 @@ export class PathTracerBackend {
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
+		// the gpu time of the last timed update, in milliseconds, from three's timestamp queries. Only
+		// measured when the renderer is created with "trackTimestamp".
+		this.frameTime = 0;
+
 		this._renderTask = null;
 		this._compileState = new WeakMap();
 
-		// the pending "getFrameTimeAsync" request, resolved by the next update that renders
-		this._frameTimer = new FrameTimer( renderer );
-		this._frameTimeRequest = null;
+		// the timestamp ids of the dispatches in the update being timed, and whether a measurement is
+		// still reading back
+		this._timestampUIDs = null;
+		this._timingFrame = false;
 
 		this.outputTarget = createOutputTarget( 'Output #0' );
 		this.prevOutputTarget = createOutputTarget( 'Output #1' );
@@ -228,30 +233,43 @@ export class PathTracerBackend {
 
 		}
 
-		const { _frameTimer, _frameTimeRequest } = this;
-		const timed = Boolean( _frameTimeRequest ) && ! _frameTimer.running;
-		if ( timed ) {
+		const timed = renderer.backend.trackTimestamp && ! this._timingFrame;
+		this._timestampUIDs = timed ? [] : null;
+		this._renderTask.next();
 
-			_frameTimer.begin();
+		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
+		if ( timed && this._timestampUIDs.length > 0 ) {
+
+			this._measureFrameTime( this._timestampUIDs );
 
 		}
 
-		this._renderTask.next();
+		this._timestampUIDs = null;
 
-		if ( timed ) {
+	}
 
-			// an update spent waiting on kernels to compile dispatches nothing, so the next one is timed
-			const compiling = this.compiling;
-			_frameTimer.end().then( time => {
+	// Dispatches a kernel, recording its timestamp id while the update is being timed
+	dispatch( kernel, dispatchSize ) {
 
-				if ( ! compiling ) {
+		const { renderer } = this;
+		renderer.compute( kernel.kernel, dispatchSize );
+		this._timestampUIDs?.push( renderer.backend.getTimestampUID( kernel.kernel ) );
 
-					this._frameTimeRequest = null;
-					_frameTimeRequest.resolve( time );
+	}
 
-				}
+	async _measureFrameTime( uids ) {
 
-			} );
+		const { renderer } = this;
+		const { backend } = renderer;
+
+		this._timingFrame = true;
+		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
+		this._timingFrame = false;
+
+		// a resolve already in flight when the update dispatched won't hold its queries
+		if ( uids.every( uid => backend.hasTimestampQuery( uid ) ) ) {
+
+			this.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
 
 		}
 
@@ -266,22 +284,6 @@ export class PathTracerBackend {
 	async getSampleCountsAsync() {
 
 		return { min: 0, max: 0, avg: 0 };
-
-	}
-
-	// Measures the gpu time of the next update that renders, in milliseconds. Concurrent calls share
-	// the same measurement.
-	getFrameTimeAsync() {
-
-		if ( ! this._frameTimeRequest ) {
-
-			let resolve;
-			const promise = new Promise( r => resolve = r );
-			this._frameTimeRequest = { promise, resolve };
-
-		}
-
-		return this._frameTimeRequest.promise;
 
 	}
 
@@ -340,7 +342,6 @@ export class PathTracerBackend {
 		this.auxTargetClearKernel.dispose();
 		this.auxTarget?.dispose();
 		this._auxPlaceholder.dispose();
-		this._frameTimer.dispose();
 
 		this._renderTask = null;
 

@@ -2,9 +2,7 @@
 	"root": true,
 	"extends": "./node_modules/eslint-config-mdcs/index.js",
 	"globals": {
-		"GPUTextureUsage": "readonly",
-		"GPUBufferUsage": "readonly",
-		"GPUMapMode": "readonly"
+		"GPUTextureUsage": "readonly"
 	},
 	"rules": {
 		"no-throw-literal": [
