@@ -176,6 +176,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 
 	maxBounces: number;
 	frameBudget: number;
+	adaptiveFrameBudget: boolean;
+	targetFrameTime: number;
 	maxTransparentBounces: number;
 	maxVolumeSteps: number;
 	maxSamples: number;
@@ -200,6 +202,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	pause: boolean;
 
 	readonly target: Texture | null;
+	readonly frameTime: number;
 	readonly complete: boolean;
 	readonly fadeState: number;
 	readonly lowResTarget: Texture;

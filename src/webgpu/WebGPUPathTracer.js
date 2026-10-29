@@ -242,6 +242,55 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Whether {@link WebGPUPathTracer#frameBudget} is adjusted to keep each
+	 * {@link WebGPUPathTracer#renderSample} call near {@link WebGPUPathTracer#targetFrameTime} of
+	 * GPU time. Requires a renderer created with `trackTimestamp: true`.
+	 * @type {boolean}
+	 * @default true
+	 */
+	get adaptiveFrameBudget() {
+
+		return this._pathTracer.adaptiveFrameBudget;
+
+	}
+
+	set adaptiveFrameBudget( v ) {
+
+		this._pathTracer.adaptiveFrameBudget = v;
+
+	}
+
+	/**
+	 * GPU time in milliseconds each {@link WebGPUPathTracer#renderSample} call is tuned toward when
+	 * {@link WebGPUPathTracer#adaptiveFrameBudget} is enabled.
+	 * @type {number}
+	 * @default 16
+	 */
+	get targetFrameTime() {
+
+		return this._pathTracer.targetFrameTime;
+
+	}
+
+	set targetFrameTime( v ) {
+
+		this._pathTracer.targetFrameTime = v;
+
+	}
+
+	/**
+	 * GPU time in milliseconds of a recent {@link WebGPUPathTracer#renderSample} call. Only measured
+	 * when the renderer is created with `trackTimestamp: true`.
+	 * @type {number}
+	 * @readonly
+	 */
+	get frameTime() {
+
+		return this._pathTracer.frameTime;
+
+	}
+
+	/**
 	 * Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
 	 * {@link WebGPUPathTracer#maxBounces} so foliage and cutouts cannot exhaust the bounce budget.
 	 * @type {number}
@@ -1255,8 +1304,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// update the samples
-		if ( ! this.pause && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
+		// update the samples, stopping once every pixel has reached "maxSamples"
+		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
+		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;

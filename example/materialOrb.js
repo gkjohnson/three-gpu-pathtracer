@@ -8,7 +8,7 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
@@ -81,8 +81,7 @@ const params = {
 	frameBudget: 250000,
 };
 
-// The megakernel renders a tile per frame, and a scattering volume makes every pixel slow, so it
-// renders tiny tiles to keep the page responsive
+// scattering volumes are slow in the megakernel, so it renders small tiles
 const MEGAKERNEL_FRAME_BUDGET = 10000;
 
 function getFrameBudget() {
@@ -124,7 +123,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.useMegakernel( params.useMegakernel );
-	pathTracer.setRandom( RANDOM_SOBOL );
 	pathTracer.frameBudget = getFrameBudget();
 
 	scene = new Scene();
@@ -262,9 +260,7 @@ function getMultiscatterAlbedo( singleScatterAlbedo, anisotropy ) {
 
 }
 
-// the mean free path for a subsurface radius, from Cycles' "Random Walk (Skin)" setup in
-// bssrdf_setup_radius, which the database's subsurface renders use. The radius is scaled by the
-// dipole albedo found for the surface albedo and IOR.
+// the mean free path for a subsurface radius, as in Cycles' bssrdf_setup_radius
 function getSkinMeanFreePath( radius, albedo, ior ) {
 
 	// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
@@ -346,12 +342,7 @@ function applyDatabaseMaterial( info ) {
 
 	}
 
-	// A material with volume coefficients is a glass surface over a scattering volume, as in
-	// "KHR_materials_scatter" and the database's Cycles renders. The coefficients are per centimeter, the
-	// units of the orb scene. Extinction is absorption plus scattering, and scattering over extinction is
-	// the single scatter albedo. The phase anisotropy is a single value, so the per channel values are
-	// averaged. The attenuation distance is the shortest mean free path so the attenuation color keeps
-	// its precision through the hex color.
+	// a glass surface over a scattering volume, with coefficients per centimeter
 	if ( info.volumeCoefficients ) {
 
 		const { absorption, scattering, anisotropy } = info.volumeCoefficients;
@@ -368,11 +359,7 @@ function applyDatabaseMaterial( info ) {
 
 	} else if ( info.subsurfaceRadius ) {
 
-		// A subsurface material becomes a scattering volume: light refracts in, scatters with the database
-		// color as the multi scatter albedo, and the per channel radius sets the mean free path as in Cycles'
-		// "Random Walk (Skin)". The radius is in centimeters, the units of the orb scene. The attenuation
-		// distance is the smallest mean free path so the attenuation color keeps its precision through the
-		// hex color.
+		// a subsurface material becomes a scattering volume, using Cycles' "Random Walk (Skin)" radius
 		const albedo = info.color ? info.color[ 0 ].color : [ 1, 1, 1 ];
 		const radius = info.subsurfaceRadius.map( ( r, i ) => getSkinMeanFreePath( r, albedo[ i ], materialProperties.ior ) );
 		const distance = Math.min( ...radius );

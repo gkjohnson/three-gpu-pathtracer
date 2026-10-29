@@ -153,6 +153,8 @@ const params = {
 	renderScale: 1,
 	randomStrategy: 'Blue Dither',
 	frameBudget: 250000,
+	adaptiveFrameBudget: true,
+	targetFrameTime: 16,
 
 	model: '',
 
@@ -198,6 +200,9 @@ const dropZone = document.getElementById( 'drop-zone' );
 
 // sample counts are measured asynchronously, so the average is kept for the pause check
 let averageSamples = 0;
+
+// whether a model is loading, during which the canvas is hidden
+let loading = false;
 
 const orthoWidth = 2;
 
@@ -254,7 +259,7 @@ async function init() {
 	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
+	renderer = new WebGPURenderer( { antialias: true, requiredLimits, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -264,6 +269,8 @@ async function init() {
 	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.adaptiveFrameBudget = params.adaptiveFrameBudget;
+	pathTracer.targetFrameTime = params.targetFrameTime;
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
@@ -436,10 +443,16 @@ function animate() {
 
 	}
 
+	// hide the canvas while loading and while the kernels compile
+	renderer.domElement.style.visibility = loading || pathTracer.compiling ? 'hidden' : 'visible';
+
 	pathTracer.getSampleCountsAsync().then( counts => {
 
 		averageSamples = counts.avg;
 		loader.setSamples( counts );
+
+		// shows the budget the tracer has adapted to
+		params.frameBudget = pathTracer.frameBudget;
 
 	} );
 
@@ -625,9 +638,20 @@ function buildGui() {
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
+	const frameBudgetController = pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
 
 		pathTracer.frameBudget = v;
+
+	} ).listen().disable( params.adaptiveFrameBudget );
+	pathTracingFolder.add( params, 'adaptiveFrameBudget' ).onChange( v => {
+
+		pathTracer.adaptiveFrameBudget = v;
+		frameBudgetController.enable( ! v );
+
+	} );
+	pathTracingFolder.add( params, 'targetFrameTime', 4, 100, 1 ).onChange( v => {
+
+		pathTracer.targetFrameTime = v;
 
 	} );
 	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
@@ -801,6 +825,7 @@ async function updateModel() {
 	// hide the canvas and the transparency checkerboard while loading
 	document.body.classList.remove( 'checkerboard' );
 	renderer.domElement.style.visibility = 'hidden';
+	loading = true;
 	loader.setPercentage( 0 );
 
 	if ( model ) {
@@ -953,7 +978,7 @@ async function updateModel() {
 	buildGui();
 	onParamsChange();
 
-	renderer.domElement.style.visibility = 'visible';
+	loading = false;
 
 }
 

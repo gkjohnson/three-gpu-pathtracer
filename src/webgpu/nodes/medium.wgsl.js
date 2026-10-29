@@ -2,11 +2,8 @@ import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from './sampling.wgsl.js';
 
-// Random walks through homogeneous "KHR_materials_scatter" volumes, following Cycles' subsurface_random_walk.h:
-// channel selection and balance heuristic MIS from Chiang et al. 2016, and Dwivedi guiding that steers walks
-// back toward the entry surface or toward the opposite interface.
-// TODO: consider removing the guiding - Cycles only guides subsurface walks that end at the first surface
-// hit, while here the walk can reflect back inside at the surface bsdf, so it may help less
+// Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
+// TODO: consider removing the Dwivedi guiding, which may help less here than in Cycles
 
 // the smallest attenuation color used to derive a medium's extinction, keeping the log finite
 const MEDIUM_MIN_ATTENUATION = 1e-6;
@@ -270,8 +267,7 @@ export const findMediumOppositeFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Per channel pdf of a segment: the density of scattering at "dist", or the probability of passing to the surface
-// there. The classic and guided strategies are combined with the balance heuristic
+// Per channel pdf of a segment, combining the classic and guided strategies
 const distancePdfFn = wgslTagFn/* wgsl */`
 
 	fn distancePdf( extinction: vec3f, dist: f32, scattered: bool ) -> vec3f {
@@ -303,9 +299,7 @@ export const mediumSegmentPdfFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Samples the direction after a scatter event from the phase function or, with the guided fraction, from
-// Dwivedi's distribution around the entry normal. Backward guiding mirrors it, more often the deeper the walk
-// is toward the opposite interface. Writes the terms the next segment's pdf needs.
+// Samples the direction after a scatter event from the phase function or Dwivedi guiding
 export const sampleMediumDirectionFn = wgslTagFn/* wgsl */`
 
 	fn sampleMediumDirection(
