@@ -1,5 +1,6 @@
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { createOutputTarget, createSampleCountTarget } from './compute/targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
+import { AUX_LAYERS } from './nodes/aux.wgsl.js';
 
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;
@@ -37,6 +38,36 @@ export class PathTracerBackend {
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
 		this.outputTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
+		this.auxTargetClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
+
+		// the per pixel first hit albedo and normal, accumulated as the denoiser's auxiliary images only
+		// while asked for. The kernels bind the placeholder otherwise.
+		this.auxTarget = null;
+		this._auxPlaceholder = createAuxTarget();
+
+	}
+
+	// The auxiliary images start over with the render, so the render restarts with them
+	setAccumulateAux( value ) {
+
+		if ( Boolean( this.auxTarget ) === value ) {
+
+			return;
+
+		}
+
+		this.auxTarget?.dispose();
+		this.auxTarget = null;
+
+		if ( value ) {
+
+			const { width, height } = this.outputTarget;
+			this.auxTarget = createAuxTarget( 'Auxiliary Images' );
+			this.auxTarget.setSize( width, height, AUX_LAYERS );
+
+		}
+
+		this.reset();
 
 	}
 
@@ -161,6 +192,7 @@ export class PathTracerBackend {
 		this.outputTarget.setSize( w, h );
 		this.prevOutputTarget.setSize( w, h );
 		this.sampleCountTarget.setSize( w, h );
+		this.auxTarget?.setSize( w, h, AUX_LAYERS );
 
 		this.reset();
 		return true;
@@ -240,6 +272,15 @@ export class PathTracerBackend {
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
 
+		// pixels that never take another sample, such as ones the camera declines, would keep stale values
+		if ( this.auxTarget ) {
+
+			const { auxTargetClearKernel } = this;
+			auxTargetClearKernel.target = this.auxTarget;
+			renderer.compute( auxTargetClearKernel.kernel, auxTargetClearKernel.getDispatchSize( width, height, AUX_LAYERS ) );
+
+		}
+
 		this._renderTask = null;
 
 	}
@@ -251,6 +292,9 @@ export class PathTracerBackend {
 		this.sampleCountTarget.dispose();
 		this.sampleCountClearKernel.dispose();
 		this.outputTargetClearKernel.dispose();
+		this.auxTargetClearKernel.dispose();
+		this.auxTarget?.dispose();
+		this._auxPlaceholder.dispose();
 
 		this._renderTask = null;
 

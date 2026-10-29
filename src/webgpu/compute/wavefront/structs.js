@@ -87,6 +87,10 @@ const rayDataMembers = {
 	// first dispersive interaction
 	dispersionWavelength: 'float',
 
+	// the first scatter's albedo and normal, 8 bits per channel, for the denoiser's auxiliary buffers
+	auxAlbedo: 'uint',
+	auxNormal: 'uint',
+
 	// scatter events taken inside media, counted separately from the bounce count
 	volumeSteps: 'uint',
 
