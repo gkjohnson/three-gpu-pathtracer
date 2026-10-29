@@ -17,13 +17,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - OIDNDenoiser: The albedo and normal auxiliary buffers are accumulated by the path tracer from the first scatter of every sample instead of rasterized, so they match the image under depth of field and transparency. "setScene" is gone and "update" takes the auxiliary buffer.
 - AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.
 - WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
-- WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
 
 ### Fixed
 - WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
+- WebGPUPathTracer: "setSceneAsync" no longer leaves geometry unusable when its attributes share a buffer, as in glTF files.
 
 ## [0.0.27] - 2026.10.08
 ### Added
