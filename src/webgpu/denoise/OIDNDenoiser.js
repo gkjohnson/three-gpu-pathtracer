@@ -4,6 +4,17 @@ import { UNPACK_AUX_ALBEDO_WGSL, UNPACK_AUX_NORMAL_WGSL, AUX_LAYERS } from '../n
 /** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
 
+// a texture the compute passes write and three or oidn-webgpu read
+function createTexture( device, width, height ) {
+
+	return device.createTexture( {
+		size: [ width, height ],
+		format: 'rgba16float',
+		usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+	} );
+
+}
+
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
  * "WebGPUPathTracer.setDenoiser", or drive it directly with "denoise".
@@ -106,10 +117,12 @@ export class OIDNDenoiser {
 
 		this._resultPipelines = {};
 		this._rawTexture = null;
-		this._alphaTexture = null;
 
+		// the inputs of the current pass
 		this._unpackPipeline = null;
-		this._auxTextures = null;
+		this._albedoTexture = null;
+		this._normalTexture = null;
+		this._alphaTexture = null;
 
 	}
 
@@ -142,13 +155,13 @@ export class OIDNDenoiser {
 		if ( this.useAuxiliaryBuffers && aux ) {
 
 			// oidn-webgpu reads every input as the same kind, so the auxiliary images are unpacked into
-			// textures alongside the color
-			const { albedo, normal } = this._unpackAux( aux );
-			this._denoise( color, albedo, normal, denoiseAlpha );
+			// textures like the color
+			this._unpackAux( aux );
+			this.denoise( color, this._albedoTexture, this._normalTexture, denoiseAlpha );
 
 		} else {
 
-			this._denoise( color, null, null, denoiseAlpha );
+			this.denoise( color, null, null, denoiseAlpha );
 
 		}
 
@@ -167,13 +180,6 @@ export class OIDNDenoiser {
 	 * @param {boolean} [denoiseAlpha] - Also denoises the alpha, in a second network pass.
 	 */
 	async denoise( color, albedo = null, normal = null, denoiseAlpha = false ) {
-
-		return this._denoise( color, albedo, normal, denoiseAlpha );
-
-	}
-
-	// the inputs are three textures, or raw gpu textures
-	async _denoise( color, albedo, normal, denoiseAlpha ) {
 
 		if ( this._complete || this._running ) {
 
@@ -206,7 +212,8 @@ export class OIDNDenoiser {
 
 		}
 
-		// three only holds a WebGPU texture for a three texture once it has been initialized
+		// Three only holds a WebGPU texture for a three texture once it has been initialized. The unpacked
+		// auxiliary images are WebGPU textures already
 		const { renderer } = this;
 		const getTexture = value => {
 
@@ -266,17 +273,12 @@ export class OIDNDenoiser {
 
 	}
 
-	// Runs the network over every tile, resolving with the output once the last one is done. An aborted
-	// pass never resolves
-	_execute( unet, inputs, progress = null ) {
+	// Runs the network over every tile, resolving with the output. An aborted pass never resolves
+	_execute( unet, inputs, progress = () => {} ) {
 
 		return new Promise( resolve => {
 
-			this._abort = unet.tileExecute( {
-				...inputs,
-				progress: progress ?? ( () => {} ),
-				done: resolve,
-			} );
+			this._abort = unet.tileExecute( { ...inputs, progress, done: resolve } );
 
 		} );
 
@@ -369,27 +371,16 @@ export class OIDNDenoiser {
 
 		}
 
-		let textures = this._auxTextures;
-		if ( ! textures || textures.width !== width || textures.height !== height ) {
-
-			this._disposeInputs();
-
-			const createTexture = () => device.createTexture( {
-				size: [ width, height ],
-				format: 'rgba16float',
-				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
-			} );
-			textures = { width, height, albedo: createTexture(), normal: createTexture() };
-			this._auxTextures = textures;
-
-		}
+		this._disposeInputs();
+		this._albedoTexture = createTexture( device, width, height );
+		this._normalTexture = createTexture( device, width, height );
 
 		const bindGroup = device.createBindGroup( {
 			layout: this._unpackPipeline.getBindGroupLayout( 0 ),
 			entries: [
 				{ binding: 0, resource: backend.get( aux ).texture.createView( { dimension: '2d-array' } ) },
-				{ binding: 1, resource: textures.albedo.createView() },
-				{ binding: 2, resource: textures.normal.createView() },
+				{ binding: 1, resource: this._albedoTexture.createView() },
+				{ binding: 2, resource: this._normalTexture.createView() },
 			],
 		} );
 
@@ -401,23 +392,17 @@ export class OIDNDenoiser {
 		pass.end();
 		device.queue.submit( [ encoder.finish() ] );
 
-		return textures;
-
 	}
 
 	// Frees the unpacked auxiliary images and the denoised alpha, which only live for a pass
 	_disposeInputs() {
 
-		const textures = this._auxTextures;
-		if ( textures ) {
-
-			textures.albedo.destroy();
-			textures.normal.destroy();
-			this._auxTextures = null;
-
-		}
-
+		this._albedoTexture?.destroy();
+		this._normalTexture?.destroy();
 		this._alphaTexture?.destroy();
+
+		this._albedoTexture = null;
+		this._normalTexture = null;
 		this._alphaTexture = null;
 
 	}
@@ -464,11 +449,7 @@ export class OIDNDenoiser {
 		if ( ! this._rawTexture || this._rawTexture.width !== width || this._rawTexture.height !== height ) {
 
 			this._rawTexture?.destroy();
-			this._rawTexture = device.createTexture( {
-				size: [ width, height ],
-				format: 'rgba16float',
-				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
-			} );
+			this._rawTexture = createTexture( device, width, height );
 
 			// ExternalTexture lets three sample a gpu texture it did not create. It has no image
 			// behind it, so its size is set explicitly or "texture.width" reports zero.
@@ -504,18 +485,8 @@ export class OIDNDenoiser {
 	// same output buffer
 	_copyAlphaToTexture( output, width, height ) {
 
-		const device = this.renderer.backend.device;
-
-		if ( ! this._alphaTexture || this._alphaTexture.width !== width || this._alphaTexture.height !== height ) {
-
-			this._alphaTexture?.destroy();
-			this._alphaTexture = device.createTexture( {
-				size: [ width, height ],
-				format: 'rgba16float',
-				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
-			} );
-
-		}
+		this._alphaTexture?.destroy();
+		this._alphaTexture = createTexture( this.renderer.backend.device, width, height );
 
 		const entries = [
 			{ binding: 0, resource: { buffer: output.data } },

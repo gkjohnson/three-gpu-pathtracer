@@ -3,8 +3,6 @@
 	"extends": "./node_modules/eslint-config-mdcs/index.js",
 	"globals": {
 		"GPUTextureUsage": "readonly",
-		"GPUBufferUsage": "readonly",
-		"GPUBuffer": "readonly",
 		"GPUTexture": "readonly"
 	},
 	"rules": {

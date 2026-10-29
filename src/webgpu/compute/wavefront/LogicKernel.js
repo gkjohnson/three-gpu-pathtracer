@@ -1,7 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
-import { packAuxFn, unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
+import { blendAuxFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -374,10 +374,9 @@ export class LogicKernel extends ComputeKernel {
 
 						}
 
-						let weight = 1.0 / f32( sampleCount );
-						let albedo = mix( ${ unpackAuxAlbedoFn }( auxPacked ), unpack4x8unorm( input.auxAlbedo ).rgb, weight );
-						let normal = mix( ${ unpackAuxNormalFn }( auxPacked ), unpack4x8snorm( input.auxNormal ).xyz * 0.5 + 0.5, weight );
-						auxPacked = ${ packAuxFn }( albedo, normal );
+						let albedo = unpack4x8unorm( input.auxAlbedo ).rgb;
+						let normal = unpack4x8snorm( input.auxNormal ).xyz;
+						auxPacked = ${ blendAuxFn }( auxPacked, albedo, normal, 1.0 / f32( sampleCount ) );
 						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
 
 							textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
