@@ -51,16 +51,16 @@ export class PathTracerBackend {
 		this._renderTask = null;
 		this._compileState = new WeakMap();
 
-		// the timestamp ids of the dispatches in the update being timed, and whether a measurement is
-		// still reading back
+		// the timestamp ids of the dispatches in the update being timed, whether a measurement is
+		// still reading back, and whether the missing timestamp warning has been logged
 		this._timestampUIDs = null;
 		this._timingFrame = false;
+		this._warnedTimestamps = false;
 
 		// the sum and count of the frame times measured at the current budget that the adaptive budget
 		// is set from
 		this._frameTimeTotal = 0;
 		this._frameTimeCount = 0;
-		this._warnedTimestamps = false;
 
 		this.outputTarget = createOutputTarget( 'Output #0' );
 		this.prevOutputTarget = createOutputTarget( 'Output #1' );
@@ -262,6 +262,7 @@ export class PathTracerBackend {
 
 		}
 
+		// time this update unless the last measurement is still reading back
 		const timed = trackTimestamp && ! this._timingFrame;
 		const budget = this.frameBudget;
 		this._timestampUIDs = timed ? [] : null;
@@ -287,6 +288,7 @@ export class PathTracerBackend {
 
 	}
 
+	// Reads back the gpu time of an update's dispatches into "frameTime" and adapts the budget to it
 	async _measureFrameTime( uids, budget ) {
 
 		const { renderer } = this;
@@ -340,6 +342,7 @@ export class PathTracerBackend {
 		this._frameTimeTotal = 0;
 		this._frameTimeCount = 0;
 
+		// leave the budget alone while it's close enough to the target
 		const ratio = average / targetFrameTime;
 		if ( ratio < BUDGET_CHANGE_THRESHOLD && ratio > 1 / BUDGET_CHANGE_THRESHOLD ) {
 
@@ -347,12 +350,13 @@ export class PathTracerBackend {
 
 		}
 
-		// a budget past the pixel count does no more work, so it is capped there
+		// scale the work done to land the average on the target. A budget past the pixel count does no
+		// more work, so it is capped there.
 		const { width, height } = this.outputTarget;
-		const msPerSlot = average / Math.min( budget, width * height );
-		let next = targetFrameTime / msPerSlot;
-		next = MathUtils.clamp( next, budget / BUDGET_MAX_STEP, budget * BUDGET_MAX_STEP );
-		this.frameBudget = MathUtils.clamp( Math.round( next ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, width * height ) );
+		const pixelCount = width * height;
+		const next = Math.min( budget, pixelCount ) * targetFrameTime / average;
+		const stepped = MathUtils.clamp( next, budget / BUDGET_MAX_STEP, budget * BUDGET_MAX_STEP );
+		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, pixelCount ) );
 
 	}
 
