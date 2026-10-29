@@ -17,6 +17,17 @@ const MEDIUM_MAX_GUIDING_ALBEDO = 0.999999;
 // how many of the shortest mean free paths the first segment looks for the opposite interface, as in Cycles
 const MEDIUM_OPPOSITE_SEARCH_PATHS = 10;
 
+// the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
+export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
+
+// the bit flags of the stored medium and segment
+const MEDIUM_INSIDE = 1;
+const MEDIUM_FIRST_SEGMENT = 2;
+const MEDIUM_HAS_OPPOSITE = 4;
+const SEGMENT_GUIDABLE = 1;
+const SEGMENT_GUIDED = 2;
+const SEGMENT_BACKWARD = 4;
+
 export const mediumStruct = new StructTypeNode( {
 	inside: 'bool',
 	object: 'uint',
@@ -46,6 +57,112 @@ export const mediumSegmentStruct = new StructTypeNode( {
 	forwardStretch: 'float',
 	backwardStretch: 'float',
 }, 'MediumSegment' );
+
+// a medium and its segment in a storage buffer, which can't hold bools, for walks that span passes
+export const mediumStateStruct = new StructTypeNode( {
+	extinction: 'vec3f',
+	object: 'uint',
+
+	albedo: 'vec3f',
+	anisotropy: 'float',
+
+	entryPosition: 'vec3f',
+	diffusionLength: 'float',
+
+	entryNormal: 'vec3f',
+	phaseLog: 'float',
+
+	guidedFraction: 'float',
+	oppositeDistance: 'float',
+	flags: 'uint',
+	segmentFlags: 'uint',
+
+	backwardFraction: 'float',
+	forwardFactor: 'float',
+	backwardFactor: 'float',
+	forwardStretch: 'float',
+
+	backwardStretch: 'float',
+}, 'MediumState' );
+
+export const storeMediumFn = wgslTagFn/* wgsl */`
+
+	fn storeMedium( medium: ${ mediumStruct }, segment: ${ mediumSegmentStruct } ) -> ${ mediumStateStruct } {
+
+		var state: ${ mediumStateStruct };
+		state.extinction = medium.extinction;
+		state.object = medium.object;
+		state.albedo = medium.albedo;
+		state.anisotropy = medium.anisotropy;
+		state.entryPosition = medium.entryPosition;
+		state.diffusionLength = medium.diffusionLength;
+		state.entryNormal = medium.entryNormal;
+		state.phaseLog = medium.phaseLog;
+		state.guidedFraction = medium.guidedFraction;
+		state.oppositeDistance = medium.oppositeDistance;
+		state.flags =
+			select( 0u, ${ MEDIUM_INSIDE }u, medium.inside ) |
+			select( 0u, ${ MEDIUM_FIRST_SEGMENT }u, medium.firstSegment ) |
+			select( 0u, ${ MEDIUM_HAS_OPPOSITE }u, medium.hasOpposite );
+
+		state.segmentFlags =
+			select( 0u, ${ SEGMENT_GUIDABLE }u, segment.guidable ) |
+			select( 0u, ${ SEGMENT_GUIDED }u, segment.guided ) |
+			select( 0u, ${ SEGMENT_BACKWARD }u, segment.backward );
+
+		state.backwardFraction = segment.backwardFraction;
+		state.forwardFactor = segment.forwardFactor;
+		state.backwardFactor = segment.backwardFactor;
+		state.forwardStretch = segment.forwardStretch;
+		state.backwardStretch = segment.backwardStretch;
+		return state;
+
+	}
+
+`;
+
+export const loadMediumFn = wgslTagFn/* wgsl */`
+
+	fn loadMedium( state: ${ mediumStateStruct } ) -> ${ mediumStruct } {
+
+		var medium: ${ mediumStruct };
+		medium.inside = ( state.flags & ${ MEDIUM_INSIDE }u ) != 0u;
+		medium.object = state.object;
+		medium.extinction = state.extinction;
+		medium.albedo = state.albedo;
+		medium.anisotropy = state.anisotropy;
+		medium.entryPosition = state.entryPosition;
+		medium.entryNormal = state.entryNormal;
+		medium.diffusionLength = state.diffusionLength;
+		medium.phaseLog = state.phaseLog;
+		medium.guidedFraction = state.guidedFraction;
+		medium.firstSegment = ( state.flags & ${ MEDIUM_FIRST_SEGMENT }u ) != 0u;
+		medium.hasOpposite = ( state.flags & ${ MEDIUM_HAS_OPPOSITE }u ) != 0u;
+		medium.oppositeDistance = state.oppositeDistance;
+		return medium;
+
+	}
+
+`;
+
+export const loadMediumSegmentFn = wgslTagFn/* wgsl */`
+
+	fn loadMediumSegment( state: ${ mediumStateStruct } ) -> ${ mediumSegmentStruct } {
+
+		var segment: ${ mediumSegmentStruct };
+		segment.guidable = ( state.segmentFlags & ${ SEGMENT_GUIDABLE }u ) != 0u;
+		segment.guided = ( state.segmentFlags & ${ SEGMENT_GUIDED }u ) != 0u;
+		segment.backward = ( state.segmentFlags & ${ SEGMENT_BACKWARD }u ) != 0u;
+		segment.backwardFraction = state.backwardFraction;
+		segment.forwardFactor = state.forwardFactor;
+		segment.backwardFactor = state.backwardFactor;
+		segment.forwardStretch = state.forwardStretch;
+		segment.backwardStretch = state.backwardStretch;
+		return segment;
+
+	}
+
+`;
 
 // The medium entered by refracting into a material, not "inside" if the material doesn't scatter
 export const enterMediumFn = wgslTagFn/* wgsl */`

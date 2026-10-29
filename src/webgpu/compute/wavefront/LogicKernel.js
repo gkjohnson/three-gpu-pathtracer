@@ -103,7 +103,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
 
 				// one-sample NEE chooses between the analytic lights and the environment, matched with
 				// the megakernel
@@ -157,17 +157,33 @@ export class LogicKernel extends ComputeKernel {
 				// MaterialKernel, which stages a zeroed pdf and skips the bounce trace when they fire
 				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= maxBounces || ${ isTerminatingScatterFunc }( scatterRec );
 
+				// apply the scatter across the traced segment, including the weight of a medium walk
 				if ( ! isTerminated ) {
 
-					// apply the scatter across the traced segment
 					throughputColor *= scatterRec.color / scatterRec.pdf;
+
+				}
+
+				let isWalking = ! isTerminated && input.walkPending != 0u;
+				if ( isWalking ) {
+
+					// the medium walk hasn't reached a surface yet, so there is no hit to stage. Clear what
+					// was just resolved, and let MediumKernel accumulate the walk's weight afresh
+					rayDataStorage[ index ].emission = vec3f( 0.0 );
+					rayDataStorage[ index ].lightPdf = 0.0;
+					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+					rayDataStorage[ index ].scatterColor = vec3f( 1.0 );
+					rayDataStorage[ index ].scatterPdf = 1.0;
+
+				} else if ( ! isTerminated ) {
 
 					let hitResult = ( *rayIntersectionsStorage )[ u32( input.rayIntersectionIndex ) ];
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
-					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
+					// and neither do scatter events in a medium
+					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u && input.mediumScattered == 0u;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 

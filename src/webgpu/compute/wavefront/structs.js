@@ -1,4 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
+import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
 
 // StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
 // a type string, so we build each dependency first, which registers its definition ahead of this struct.
@@ -28,7 +29,7 @@ class DependentStructTypeNode extends StructTypeNode {
 
 // Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
 // the previous frame's trace results and stage the next bounce.
-export const rayDataStruct = new StructTypeNode( {
+const rayDataMembers = {
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
@@ -86,7 +87,26 @@ export const rayDataStruct = new StructTypeNode( {
 	// first dispersive interaction
 	dispersionWavelength: 'float',
 
-}, 'RayData' );
+	// scatter events taken inside media, counted separately from the bounce count
+	volumeSteps: 'uint',
+
+	// whether the path's medium walk continues in MediumKernel's next pass
+	walkPending: 'uint',
+
+	// whether the staged segment leaves a medium scatter event, where no light is sampled
+	mediumScattered: 'uint',
+
+};
+
+// The medium the path is inside of is nested at the end. It shares the ray data buffer to stay within
+// the kernels' storage buffer limit, and is sized separately since nested structs aren't.
+export const rayDataStruct = new DependentStructTypeNode( {
+	...rayDataMembers,
+	medium: mediumStateStruct.name,
+}, 'RayData', [ mediumStateStruct ] );
+
+const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
+rayDataStruct.getLength = () => rayDataLength + mediumStateStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
@@ -138,6 +158,13 @@ export const rayQueueAtomicStruct = new DependentStructTypeNode( {
 	elements: `array<${ traceQueuedRayStruct.name }>`,
 }, 'RayQueue', [ traceQueuedRayStruct ] );
 rayQueueAtomicStruct.getLength = () => 4;
+
+// The path slots walking through a medium this pass, for MediumKernel
+export const mediumQueueStruct = new DependentStructTypeNode( {
+	length: { type: 'uint', atomic: true },
+	elements: 'array<u32>',
+}, 'MediumQueue' );
+mediumQueueStruct.getLength = () => 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool. Sized to the pixel count so retiring slots can always return their pixel. The
