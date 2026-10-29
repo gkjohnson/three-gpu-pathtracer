@@ -17,6 +17,9 @@ const MEDIUM_MAX_GUIDING_ALBEDO = 0.999999;
 // how many of the shortest mean free paths the first segment looks for the opposite interface, as in Cycles
 const MEDIUM_OPPOSITE_SEARCH_PATHS = 10;
 
+// the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
+export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
+
 export const mediumStruct = new StructTypeNode( {
 	inside: 'bool',
 	object: 'uint',

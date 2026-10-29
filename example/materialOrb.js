@@ -8,7 +8,7 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
@@ -85,12 +85,6 @@ const params = {
 // renders tiny tiles to keep the page responsive
 const MEGAKERNEL_FRAME_BUDGET = 10000;
 
-// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
-const DIPOLE_MIN_ALBEDO = 1e-4;
-const DIPOLE_MAX_ALBEDO = 0.995;
-const DIPOLE_MAX_ALPHA_PRIME = 0.999999;
-const DIPOLE_ITERATIONS = 12;
-
 function getFrameBudget() {
 
 	return params.useMegakernel ? MEGAKERNEL_FRAME_BUDGET : params.frameBudget;
@@ -130,7 +124,6 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.useMegakernel( params.useMegakernel );
-	pathTracer.setRandom( RANDOM_SOBOL );
 	pathTracer.frameBudget = getFrameBudget();
 
 	scene = new Scene();
@@ -272,6 +265,12 @@ function getMultiscatterAlbedo( singleScatterAlbedo, anisotropy ) {
 // bssrdf_setup_radius, which the database's subsurface renders use. The radius is scaled by the
 // dipole albedo found for the surface albedo and IOR.
 function getSkinMeanFreePath( radius, albedo, ior ) {
+
+	// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
+	const DIPOLE_MIN_ALBEDO = 1e-4;
+	const DIPOLE_MAX_ALBEDO = 0.995;
+	const DIPOLE_MAX_ALPHA_PRIME = 0.999999;
+	const DIPOLE_ITERATIONS = 12;
 
 	const invEta = 1 / ior;
 	const fdr = invEta * ( - 1.440 * invEta + 0.710 ) + 0.668 + 0.0636 * ior;
