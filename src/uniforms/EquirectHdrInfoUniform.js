@@ -311,6 +311,8 @@ export class EquirectHdrInfoUniform {
 
 		this.totalSum = totalSumValue;
 		this.map = map;
+		this.cdfMarginal = cdfMarginal;
+		this.cdfConditional = cdfConditional;
 
 	}
 

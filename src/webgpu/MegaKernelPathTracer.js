@@ -69,7 +69,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setBVHData( bvhData ) {
 
-		this.kernel.bvhData = bvhData;
+		this.kernel.context.bvhData = bvhData;
 		this.rebuild();
 
 	}
@@ -194,6 +194,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.maxBounces = maxBounces;
 		kernel.maxTransparentBounces = maxTransparentBounces;
 
+		// compile the kernel before its first dispatch
+		yield* this.compileKernels( [ kernel ] );
+
 		// number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
 
@@ -201,6 +204,8 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			// skip the tile loop entirely once every pixel is finished
 			kernel.maxSamples = this.maxSamples;
+			kernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
+			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
 				yield;

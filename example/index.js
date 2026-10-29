@@ -31,7 +31,8 @@ import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
-import { initUNetFromURL } from 'oidn-web';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler } from '@pmndrs/upscaler';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
@@ -171,6 +172,7 @@ const params = {
 	maxSamples: 16,
 
 	denoise: true,
+	auxView: 'none',
 
 	upscale: true,
 	sharpness: 1,
@@ -259,11 +261,13 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
+	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
-	// the library ships neither "oidn-web" nor the network weights, so the app provides both
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
 		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
@@ -416,6 +420,13 @@ function animate() {
 		if ( ! params.pause || averageSamples < 1 ) {
 
 			pathTracer.renderSample();
+
+		}
+
+		// draws the denoiser's auxiliary buffer over the render
+		if ( params.auxView !== 'none' ) {
+
+			pathTracer.renderAuxBuffer( params.auxView );
 
 		}
 
@@ -643,6 +654,7 @@ function buildGui() {
 		pathTracer.setDenoiser( v ? denoiser : null );
 
 	} );
+	postFolder.add( params, 'auxView', [ 'none', 'albedo', 'normal' ] );
 	postFolder.add( params, 'upscale' ).onChange( v => {
 
 		pathTracer.setUpscaler( v ? upscaler : null );
@@ -919,7 +931,7 @@ async function updateModel() {
 
 	alignBackdropToCamera();
 
-	pathTracer.setScene( scene, activeCamera );
+	await pathTracer.setSceneAsync( scene, activeCamera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );

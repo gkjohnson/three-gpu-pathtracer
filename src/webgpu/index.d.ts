@@ -1,5 +1,44 @@
-import { Camera, Scene, Texture, ExternalTexture } from 'three';
-import { WebGPURenderer } from 'three/webgpu';
+import { Camera, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
+import { StorageArrayTexture, WebGPURenderer } from 'three/webgpu';
+import { BVHWorker } from '../index.js';
+
+// three.js type augmentation
+
+declare module 'three' {
+
+	export interface Material {
+
+		matte?: boolean;
+		castShadow?: boolean;
+
+	}
+
+	export interface Object3D {
+
+		visibleToShadowRays?: boolean;
+
+	}
+
+	export interface Light {
+
+		visibleToCameraRays?: boolean;
+
+	}
+
+	export interface SpotLight {
+
+		radius?: number;
+		iesMap?: Texture | null;
+
+	}
+
+	export interface RectAreaLight {
+
+		isCircular?: boolean;
+
+	}
+
+}
 
 // constants
 
@@ -80,8 +119,7 @@ export class OIDNDenoiser {
 	readonly running: boolean;
 
 	init( renderer: WebGPURenderer ): void;
-	setScene( scene: Scene, camera: Camera ): void;
-	update( target: Texture ): Texture | null;
+	update( target: Texture, aux?: StorageArrayTexture | null ): Texture | null;
 	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null ): Promise<void>;
 	reset(): void;
 	dispose(): void;
@@ -117,7 +155,13 @@ export interface DebugBoundsOptions {
 
 }
 
-export class WebGPUPathTracer {
+export interface WebGPUPathTracerEventMap {
+
+	'complete': {};
+
+}
+
+export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> {
 
 	constructor( renderer: WebGPURenderer );
 
@@ -138,15 +182,19 @@ export class WebGPUPathTracer {
 	lowResScale: number;
 	renderScale: number;
 	synchronizeRenderSize: boolean;
+	renderToCanvas: boolean;
+	asyncCompile: boolean;
 	generateMissingAttributes: boolean;
 	commonAttributes: Array<string>;
 	stableNoise: boolean;
 	pause: boolean;
 
 	readonly target: Texture | null;
+	readonly complete: boolean;
 	readonly fadeState: number;
 	readonly lowResTarget: Texture;
 	readonly lowResMode: boolean;
+	readonly compiling: boolean;
 	readonly textureAtlas: AtlasTexture;
 
 	getSampleCountsAsync(): Promise<SampleCounts>;
@@ -155,6 +203,8 @@ export class WebGPUPathTracer {
 	setUpscaler( upscaler: FSRUpscaler | null ): void;
 
 	setScene( scene: Scene, camera: Camera ): void;
+	setBVHWorker( WorkerConstructor: new () => BVHWorker & { dispose(): void } ): void;
+	setSceneAsync( scene: Scene, camera: Camera ): Promise<void>;
 	setRandom( random: RandomStrategy ): void;
 	setCamera( camera: Camera ): void;
 	setSize( x: number, y: number ): void;
@@ -170,6 +220,7 @@ export class WebGPUPathTracer {
 	renderDebugBounds( options?: DebugBoundsOptions ): void;
 	renderTextureAtlas( layer?: number ): void;
 	renderSampleDensity(): void;
+	renderAuxBuffer( buffer?: 'albedo' | 'normal' ): void;
 	getRenderTime(): number;
 	dispose(): void;
 

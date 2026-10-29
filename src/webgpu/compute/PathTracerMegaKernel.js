@@ -1,9 +1,11 @@
-import { DataTexture, Vector2, StorageTexture } from 'three/webgpu';
+import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
+import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { proxy, proxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
@@ -15,15 +17,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 			material: { value: null },
 			envInfo: { value: null },
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// tiles
 			offset: uniform( new Vector2() ),
@@ -42,6 +43,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
+			accumulateAux: uniform( 0, 'uint' ),
+
+			// the per pixel first hit albedo and normal, as running means like the color
+			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
 
 			textures: texture( new DataTexture() ),
 			textureSampler: sampler( new DataTexture() ),
@@ -50,11 +55,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxyFn( 'bvhData.value.fns.raycastFirstHit', params );
-		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
-		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
-		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
+		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
+		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
+		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
+		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
@@ -64,12 +70,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
+		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
+		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
+		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -93,11 +104,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				clampIndirect: f32,
 
 				transmissiveBackground: u32,
+				accumulateAux: u32,
 
 			) -> void {
 
-				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
-				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
+				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
+				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
 
 				// make sure we don't bleed over the edge of our tile
 				if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -131,6 +143,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
+					// a declined pixel never takes a sample, so with a cap it counts as finished
+					if ( maxSamples != 0u ) {
+
+						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( maxSamples ) );
+
+					}
+
 					return;
 
 				}
@@ -146,16 +165,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
-				// one-sample NEE selects between the analytic lights and the environment -
-				// lightsDenom is the number of options
+				// one-sample NEE chooses between the analytic lights and the environment
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				var lightsDenom = f32( lightsCount );
+				var envWeight = 0.0;
 				if ( envActive ) {
 
-					lightsDenom += 1.0;
+					envWeight = ${ getEnvWeight }();
 
 				}
+
+				// added last, since a camera ray miss overwrites the pixel with the background
+				var lightHits = vec3f( 0.0 );
+				var cameraHitLight = false;
+
+				// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is found
+				// the last mirror or transmission hit stands in, for paths that reach the environment
+				var auxFound = false;
+				var auxAlbedo = vec3f( 0.0 );
+				var auxNormal = vec3f( 0.0 );
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
@@ -163,27 +191,37 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward hits: a bsdf-sampled ray that lands on a area light. MIS-weighted
-					// only when NEE is also sampling the lights
-					if ( bounce > 0u ) {
+					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none
+					let isMISWeighted = misEnabled != 0u && bounce > 0u;
+					var lightTotalWeight = 0.0;
+					if ( isMISWeighted ) {
 
-						for ( var li = 0u; li < lightsCount; li ++ ) {
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
 
-							var lightRec: ${ lightRecordStruct };
-							if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+					}
 
-								var misWeight = 1.0;
-								if ( misEnabled != 0u ) {
+					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					for ( var li = 0u; li < lightsCount; li ++ ) {
 
-									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf );
+						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
 
-								}
+							continue;
 
-								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
-								resultColor += vec4f( lightHit, 0.0 );
+						}
+
+						var lightRec: ${ lightRecordStruct };
+						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+
+							var misWeight = 1.0;
+							if ( isMISWeighted ) {
+
+								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
+								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
 
 							}
+
+							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
+							cameraHitLight = cameraHitLight || bounce == 0u;
 
 						}
 
@@ -263,30 +301,31 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
-						// next event estimation: draw one light or the environment, each with
-						// probability 1 / lightsDenom
-						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
+						// next event estimation: choose one light or the environment by its estimated
+						// contribution
+						if ( misEnabled != 0u ) {
 
-							// pick one light or the environment with a single sample
-							// TODO: importance-sample the selection by light intensity and solid angle
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							var selectionPdf = 0.0;
+							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+								} else {
 
-							}
+									lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+
+								}
 
 								if ( lightRec.pdf > 0.0 ) {
 
@@ -296,20 +335,21 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										var shadowRay: ${ rayStruct };
 										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hitResult.normal );
 										shadowRay.direction = lightRec.direction;
-										shadowRay.maxDist = lightRec.dist - ${ LIGHT_EPSILON };
+										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
 										// opaque occlusion up to the light distance. A shadow-specific any hit
 										// traversal could support tinted shadows from transmissive and partially
 										// opaque objects
 										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastFirstHitFn }( shadowRay, &shadowHit );
+										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
-											var lightPdf = lightRec.pdf;
-											lightPdf /= lightsDenom;
+											let lightPdf = lightRec.pdf * selectionPdf;
 
-											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight
-											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), ${ isMISWeightLightFn }( lightRec.lightType ) );
+											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
+											// or when a bsdf ray could never reach the light
+											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked;
+											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
 											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
@@ -320,9 +360,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								}
 
+							}
+
 						}
 
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
+
+						if ( ! auxFound ) {
+
+							auxFound = ${ isAuxSurfaceFn }( surface, scatterRec );
+							auxAlbedo = surface.color;
+							auxNormal = surface.normal;
+
+						}
+
 						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
 
 							break;
@@ -370,10 +421,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							var misWeight = 1.0;
-							if ( misEnabled != 0u && envActive ) {
+							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( ray.direction ) / lightsDenom;
+								let envPdf = ${ getEnvDirPdf }( ray.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
 
 							}
@@ -450,6 +501,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
+				// visible lights are opaque against a transparent background
+				resultColor += vec4f( lightHits, 0.0 );
+				if ( cameraHitLight ) {
+
+					resultColor.a = 1.0;
+
+				}
+
 				let nextSampleCount = sampleCount + 1;
 				// store the color rows top down to match a rasterized render target
 				let colorIndex = vec2u( indexUV.x, targetDimensions.y - 1u - indexUV.y );
@@ -458,6 +517,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
 				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+
+				// the auxiliary images are blended the same way, in the same row order
+				if ( accumulateAux != 0u ) {
+
+					var auxPacked: vec3u;
+					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+						auxPacked[ layer ] = textureLoad( ${ params.auxTarget }, colorIndex, layer ).r;
+
+					}
+
+					auxPacked = ${ blendAuxFn }( auxPacked, auxAlbedo, auxNormal, 1.0 / f32( nextSampleCount ) );
+					for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+						textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
+
+					}
+
+				}
 
 			}`;
 

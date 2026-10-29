@@ -15,16 +15,22 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { LoaderElement } from './src/LoaderElement.js';
+
+const RANDOM_STRATEGIES = {
+	'Sobol': RANDOM_SOBOL,
+	'Blue Dither': RANDOM_BLUE_DITHER,
+	'PCG': RANDOM_PCG,
+};
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
 const EXTRA_CONFIG_URL = new URL( './extraScenarios.json', import.meta.url ).toString();
 const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/renderers/three-gpu-pathtracer/';
 
 const urlParams = new URLSearchParams( window.location.search );
-const maxSamples = parseInt( urlParams.get( 'samples' ) ) || - 1;
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
 const frameBudget = parseInt( urlParams.get( 'frameBudget' ) ) || 250000;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
@@ -36,11 +42,14 @@ const params = {
 
 	enable: true,
 	maxBounces: 15,
+	maxSamples: parseInt( urlParams.get( 'samples' ) ) || 25,
 	pause: false,
 	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	frameBudget: frameBudget,
 	scale: scale,
+	randomStrategy: 'Sobol',
+	denoise: urlParams.get( 'denoise' ) !== '0',
 
 	iterationsPerFrame: 1,
 
@@ -55,14 +64,11 @@ const params = {
 
 let containerEl, imgEl, loader;
 let gui, model, envMap;
-let pathTracer, renderer, camera, scene, controls;
+let pathTracer, renderer, camera, scene, controls, denoiser;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
 let detailedSampleCount = null;
-
-// sample counts are measured asynchronously, so the average is kept for the completion checks
-let averageSamples = 0;
 
 init();
 
@@ -140,6 +146,25 @@ async function createRenderer() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.useMegakernel( params.useMegakernel );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.setRandom( RANDOM_STRATEGIES[ params.randomStrategy ] );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( params.denoise ? denoiser : null );
+
+	// forwarded for the screenshot tooling, with the final counts shown
+	pathTracer.addEventListener( 'complete', () => {
+
+		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+		window.dispatchEvent( new Event( 'render-complete' ) );
+
+	} );
 
 	detailedSampleCount = null;
 
@@ -149,8 +174,15 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
+	// the comparison image follows the settings whether or not the render is still going
+	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
+	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
+	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
+	imgEl.style.width = renderer.domElement.style.width;
+	imgEl.style.height = renderer.domElement.style.height;
+
 	// if rendering has completed then don't render
-	if ( averageSamples >= maxSamples && maxSamples !== - 1 ) {
+	if ( pathTracer.complete ) {
 
 		return;
 
@@ -160,18 +192,11 @@ function animate() {
 
 		pathTracer.getSampleCountsAsync().then( counts => {
 
-			averageSamples = counts.avg;
 			detailedSampleCount = { ...counts };
 
 		} );
 
 	}
-
-	imgEl.style.display = ! params.displayImage ? 'none' : 'inline-block';
-	imgEl.style.opacity = params.imageMode === 'side-by-side' ? 1.0 : params.imageOpacity;
-	imgEl.style.position = params.imageMode === 'side-by-side' ? 'initial' : 'absolute';
-	imgEl.style.width = renderer.domElement.style.width;
-	imgEl.style.height = renderer.domElement.style.height;
 
 	if ( loadingModel ) {
 
@@ -190,7 +215,7 @@ function animate() {
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.pause = params.pause || averageSamples > maxSamples && maxSamples !== - 1;
+		pathTracer.pause = params.pause;
 
 		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
 
@@ -202,13 +227,6 @@ function animate() {
 
 		delaySamples = Math.max( delaySamples - 1, 0 );
 		renderer.render( scene, camera );
-
-	}
-
-	// rendering has completed
-	if ( averageSamples >= maxSamples && maxSamples !== - 1 ) {
-
-		requestAnimationFrame( () => window.dispatchEvent( new Event( 'render-complete' ) ) );
 
 	}
 
@@ -228,7 +246,6 @@ function onModelChange() {
 function onParamsChange() {
 
 	delaySamples = 1;
-
 	if ( params.checkerboardTransparency ) {
 
 		containerEl.classList.add( 'checkerboard' );
@@ -320,6 +337,21 @@ function buildGui() {
 
 	} );
 	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
+
+		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
+
+	} );
+	pathTracingFolder.add( params, 'denoise' ).onChange( v => {
+
+		pathTracer.setDenoiser( v ? denoiser : null );
+
+	} );
 
 	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
 

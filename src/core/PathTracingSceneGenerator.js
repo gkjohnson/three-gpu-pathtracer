@@ -177,7 +177,7 @@ export class PathTracingSceneGenerator {
 		// generate the geometry
 		const result = staticGeometryGenerator.generate( geometry );
 		const materials = result.materials;
-		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || this._materialUuids === null || this._materialUuids.length !== length;
+		let needsMaterialIndexUpdate = result.changeType !== NO_CHANGE || this._materialUuids === null || this._materialUuids.length !== materials.length;
 		if ( ! needsMaterialIndexUpdate ) {
 
 			for ( let i = 0, length = materials.length; i < length; i ++ ) {

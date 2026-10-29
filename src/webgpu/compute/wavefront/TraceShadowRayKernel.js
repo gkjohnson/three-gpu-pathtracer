@@ -1,28 +1,29 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
-import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { rayQueueStruct, intersectionResultStruct } from './structs.js';
 
-// Pure BVH traversal over the queued shadow rays. Uses the same first-hit traversal as the bounce
-// rays ( no dedicated any-hit traversal exists yet ); LogicKernel decides occlusion by comparing the
+// Pure BVH traversal over the queued shadow rays. Uses a first-hit traversal without face culling
+// ( no dedicated any-hit traversal exists yet ); LogicKernel decides occlusion by comparing the
 // hit distance against the light distance.
 export class TraceShadowRayKernel extends ComputeKernel {
 
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
+			// storage buffer as an array, in r187
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastShadowFn = contextProxy( 'bvhData.fns.raycastShadow' );
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -44,7 +45,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
-				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
+				if ( ${ raycastShadowFn }( ray, &hitResult ) ) {
 
 					shadowRayIntersectionsStorage[ index ].objectIndex = i32( hitResult.objectIndex );
 					shadowRayIntersectionsStorage[ index ].dist = hitResult.dist;
@@ -54,6 +55,8 @@ export class TraceShadowRayKernel extends ComputeKernel {
 					shadowRayIntersectionsStorage[ index ].objectIndex = - 1;
 
 				}
+
+				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( hitResult.forwardBlocked );
 
 			}
 		`;

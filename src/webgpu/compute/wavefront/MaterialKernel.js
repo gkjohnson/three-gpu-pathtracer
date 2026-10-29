@@ -1,14 +1,16 @@
 import { Vector2 } from 'three';
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
+import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
-import { proxy, proxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
+import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -18,7 +20,6 @@ export class MaterialKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 			material: { value: null },
 
 			seed: uniform( 0, 'uint' ),
@@ -29,9 +30,11 @@ export class MaterialKernel extends ComputeKernel {
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
-			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
+			// storage buffer as an array, in r187
+			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueAtomicStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueStruct ),
@@ -39,9 +42,9 @@ export class MaterialKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const getCameraRayFn = proxyFn( 'bvhData.value.fns.getCameraRay', params );
-		const sampleTrianglePointFn = proxyFn( 'bvhData.value.fns.sampleTrianglePoint', params );
-		const getSurfaceRecordFn = proxyFn( 'bvhData.value.fns.getSurfaceRecord', params );
+		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
+		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
+		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
@@ -64,8 +67,8 @@ export class MaterialKernel extends ComputeKernel {
 				let shadowRayQueue = &${ params.shadowRayQueue };
 				let pixelQueue = &${ params.pixelQueue };
 
-				let materials = &${ proxy( 'bvhData.value.storage.materials', params ) };
-				let transforms = &${ proxy( 'bvhData.value.storage.transforms', params ) };
+				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
+				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
 
 				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
 				// workgroup size and those extra slots hold a zeroed pixel index
@@ -116,9 +119,16 @@ export class MaterialKernel extends ComputeKernel {
 					var ray: ${ rayStruct };
 					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
-						// the camera declined the pixel, so leave the slot dormant for this round
+						// the camera declined the pixel, so leave the slot dormant for this round. With a
+						// sample cap the pixel counts as finished, since it will never take a sample
 						// TODO: same as above - this work is a bit wasteful and leaves slots empty for
 						// a frame. Is it possible to quickly skip rays outside the mask or are finished?
+						if ( maxSamples != 0u ) {
+
+							textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
+
+						}
+
 						rayDataStorage[ index ].pixelIndex = pixelIndex;
 						rayDataStorage[ index ].rayIntersectionIndex = - 1;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -155,6 +165,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
+					rayDataStorage[ index ].auxAlbedo = 0u;
+					rayDataStorage[ index ].auxNormal = 0u;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -271,6 +283,18 @@ export class MaterialKernel extends ComputeKernel {
 					var scatterRec = ${ bsdfSampleFn }( view, surface );
 					let newBounce = input.currentBounce + 1u;
 
+					// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
+					// found the last mirror or transmission hit stands in, for paths that reach the environment.
+					// The packed albedo's alpha marks the surface found
+					let auxFound = unpack4x8unorm( input.auxAlbedo ).a != 0.0;
+					if ( ! auxFound ) {
+
+						let isAuxSurface = ${ isAuxSurfaceFn }( surface, scatterRec );
+						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, select( 0.0, 1.0, isAuxSurface ) ) );
+						rayDataStorage[ index ].auxNormal = pack4x8snorm( vec4f( surface.normal, 0.0 ) );
+
+					}
+
 					// decide termination now so finished paths skip the bounce trace entirely - a
 					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
 					// the surface's emission and NEE before freeing the slot
@@ -339,7 +363,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
 							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
-							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist - ${ LIGHT_EPSILON };
+							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {

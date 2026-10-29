@@ -2,6 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/three-gpu-pathtracer.svg?style=flat-square)](https://www.npmjs.com/package/three-gpu-pathtracer)
 [![build](https://img.shields.io/github/actions/workflow/status/gkjohnson/three-gpu-pathtracer/node.js.yml?style=flat-square&label=build&branch=main)](https://github.com/gkjohnson/three-gpu-pathtracer/actions)
+[![docs](https://img.shields.io/badge/docs-API-blue?style=flat-square)](https://gkjohnson.github.io/tools/docs/three-gpu-pathtracer/)
 [![github](https://flat.badgen.net/badge/icon/github?icon=github&label)](https://github.com/gkjohnson/three-gpu-pathtracer/)
 [![twitter](https://flat.badgen.net/badge/twitter/@garrettkjohnson/?icon&label)](https://twitter.com/garrettkjohnson)
 [![sponsors](https://img.shields.io/github/sponsors/gkjohnson?style=flat-square&color=1da1f2)](https://github.com/sponsors/gkjohnson/)
@@ -103,7 +104,9 @@ scene.environment = blurredEnvMap;
 
 # API
 
-See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
+See the [docs site](https://gkjohnson.github.io/tools/docs/three-gpu-pathtracer/) for the WebGPU API documentation.
+
+The same documentation is also available as markdown in [API.md](./src/webgpu/API.md).
 
 # Gotchas
 
@@ -111,7 +114,6 @@ See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
 - SpotLights, DirectionalLights, and PointLights are only supported with MIS.
 - Only MeshStandardMaterial and MeshPhysicalMaterial are supported.
 - Emissive materials are supported but do not take advantage of MIS.
-- "Upscaling" does not currently work with a transparent background.
 
 # Screenshots
 

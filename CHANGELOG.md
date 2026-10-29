@@ -5,10 +5,43 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- WebGPUPathTracer: "setBVHWorker" and "setSceneAsync" to build the mesh BVHs in workers without blocking the page.
+- WebGPUPathTracer: A "complete" event and flag once every pixel has reached "maxSamples" and the denoiser, if any, has run.
+- WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
+- WebGPUPathTracer: The scene data is available to kernels and camera ray functions through the TSL context as "bvhData".
+- WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
+
+### Changed
+- OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
+- OIDNDenoiser: The albedo and normal auxiliary buffers are accumulated by the path tracer from the first scatter of every sample instead of rasterized, so they match the image under depth of field and transparency. "setScene" is gone and "update" takes the auxiliary buffer.
+- AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.
+- WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
+- WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
+- WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
+
+### Fixed
+- WebGPUPathTracer: Environment map importance sampling accuracy.
+- WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
+- WebGPUPathTracer: "setSceneAsync" no longer leaves geometry unusable when its attributes share a buffer, as in glTF files.
+- WebGPUPathTracer: Path buffers being reallocated on every reset for the low resolution preview.
+
+## [0.0.27] - 2026.10.08
+### Added
+- WebGPUPathTracer: Support for three.js' SunLight.
+- WebGPUPathTracer: Support for a "visibleToCameraRays" flag on area lights to make them visible to the camera.
+- WebGPUPathTracer: Support for render target textures.
+
+### Changed
+- WebGPUPathTracer: Lights are chosen for sampling by their estimated contribution rather than uniformly, reducing noise in scenes with many lights.
+- WebGPUPathTracer: One sided surfaces block light from both sides. Objects can opt out of casting shadows with a "visibleToShadowRays" flag.
+
 ### Fixed
 - WebGPUPathTracer rendering black after changing "maxBounces" or "maxTransparentBounces" once the render had settled.
 - Memory leak on every reset, scene change, and dispose from compute kernels never being released.
-- Path buffers being reallocated and kernels rebuilt on every reset for the low resolution preview.
+- FSRUpscaler leaking GPU resources each time it was attached to the path tracer.
+- WebGPUPathTracer.dispose not disposing the materials of its full screen quads.
+- WebGPUPathTracer crashing on multi-material meshes with null material slots. The groups are now skipped.
 
 ## [0.0.26] - 2026.09.29
 ### Fixed

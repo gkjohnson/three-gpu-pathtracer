@@ -234,6 +234,7 @@ export const lightStruct = new StructTypeNode( {
 	color: 'vec3f',
 	intensity: 'float',
 	u: 'vec3f',
+	visibleToCameraRays: 'int',
 	v: 'vec3f',
 	area: 'float',
 	radius: 'float',

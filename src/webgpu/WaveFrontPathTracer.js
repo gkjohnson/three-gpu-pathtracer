@@ -115,13 +115,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setBVHData( bvhData ) {
 
-		this.materialKernel.bvhData = bvhData;
+		this.materialKernel.context.bvhData = bvhData;
 		this.materialKernel.needsUpdate = true;
 
-		this.traceRayKernel.bvhData = bvhData;
+		this.traceRayKernel.context.bvhData = bvhData;
 		this.traceRayKernel.needsUpdate = true;
 
-		this.traceShadowRayKernel.bvhData = bvhData;
+		this.traceShadowRayKernel.context.bvhData = bvhData;
 		this.traceShadowRayKernel.needsUpdate = true;
 
 		this.reset();
@@ -283,13 +283,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
 			this.pixelQueue.name = 'Pixel Queue';
 
-			// the queue buffer object changed, so kernels bound to it must rebuild
+			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
 			this.materialKernel.pixelQueue = this.pixelQueue;
-			this.materialKernel.needsUpdate = true;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-			this.populatePixelIndicesKernel.needsUpdate = true;
 			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
-			this.resetSlotsKernel.needsUpdate = true;
 
 		}
 
@@ -356,14 +353,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 		this.rayCount = count;
 
-		// the buffer objects changed, so kernels bound to them must rebuild
-		this.logicKernel.needsUpdate = true;
-		this.materialKernel.needsUpdate = true;
-		this.traceRayKernel.needsUpdate = true;
-		this.traceShadowRayKernel.needsUpdate = true;
-		this.populatePixelIndicesKernel.needsUpdate = true;
-		this.resetSlotsKernel.needsUpdate = true;
-
 		if ( active > previousActive ) {
 
 			resetSlotsKernel.rayDataStorage = rayDataStorage;
@@ -423,6 +412,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const pixelCount = targetDimensions.x * targetDimensions.y;
 		this._applyBudget( pixelCount );
 
+		// compile the kernels before their first dispatch
+		yield* this.compileKernels( [
+			logicKernel,
+			materialKernel,
+			traceRayKernel,
+			traceShadowRayKernel,
+			rayDispatchConverter,
+			shadowDispatchConverter,
+			zeroDispatchKernel,
+			populatePixelIndicesKernel,
+		] );
+
 		// reset the trace queues — only the length header needs zeroing
 		zeroDispatchKernel.target = this.rayQueue;
 		renderer.compute( zeroDispatchKernel.kernel, [ 1 ] );
@@ -458,6 +459,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.prevOutputTarget = this.prevOutputTarget;
 				logicKernel.outputTarget = this.outputTarget;
 				logicKernel.sampleCountTarget = this.sampleCountTarget;
+				logicKernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
+				logicKernel.accumulateAux = this.auxTarget ? 1 : 0;
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path

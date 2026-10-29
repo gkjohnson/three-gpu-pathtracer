@@ -1,5 +1,7 @@
-import { StorageBufferAttribute, StorageTexture } from 'three/webgpu';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { blendAuxFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -28,9 +30,12 @@ export class LogicKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
-			outputTarget: textureStore( new StorageTexture( 1, 1 ) ).toWriteOnly(),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadWrite(),
+			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
+
+			// the per pixel first hit albedo and normal, as running means like the color
+			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
 
 			// settings
 			misEnabled: uniform( 1, 'uint' ),
@@ -39,10 +44,13 @@ export class LogicKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
+			accumulateAux: uniform( 0, 'uint' ),
 
-			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			// TODO: two elements so the placeholders compile as arrays. Remove once three declares every
+			// storage buffer as an array, in r187
+			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
@@ -53,12 +61,17 @@ export class LogicKernel extends ComputeKernel {
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
+		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
 		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
+		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
+		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -70,6 +83,7 @@ export class LogicKernel extends ComputeKernel {
 				clampDirect: f32,
 				clampIndirect: f32,
 				transmissiveBackground: u32,
+				accumulateAux: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -97,18 +111,23 @@ export class LogicKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
 
-				// one-sample NEE selection normalization (lights + env), matched with the megakernel
+				// one-sample NEE chooses between the analytic lights and the environment, matched with
+				// the megakernel
 				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				var lightsDenom = f32( lightsCount );
+				var envWeight = 0.0;
 				if ( envActive ) {
 
-					lightsDenom += 1.0;
+					envWeight = ${ getEnvWeight }();
 
 				}
 
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
+
+				// added last, since a camera ray miss overwrites the pixel with the background
+				var lightHits = vec3f( 0.0 );
+				var cameraHitLight = false;
 
 				// resolve the previous surface's NEE shadow ray (pre-scatter throughput). The index
 				// is negative when no shadow ray was enqueued last frame
@@ -118,8 +137,10 @@ export class LogicKernel extends ComputeKernel {
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
-						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight
-						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), ${ isMISWeightLightFn }( input.lightType ) );
+						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight,
+						// or when a bsdf ray could never reach the light
+						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && shadowHit.forwardBlocked == 0u;
+						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), isMISWeighted );
 						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
@@ -151,27 +172,37 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// forward hits: a bsdf-sampled segment that lands on a area light. MIS-weighted
-					// only when NEE is also sampling the lights. The camera segment is skipped.
-					if ( input.currentBounce > 0u ) {
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
+					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
+					var lightTotalWeight = 0.0;
+					if ( isMISWeighted ) {
 
-						for ( var li = 0u; li < lightsCount; li ++ ) {
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
 
-							var lightRec: ${ lightRecordStruct };
-							if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+					}
 
-								var misWeight = 1.0;
-								if ( misEnabled != 0u ) {
+					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					for ( var li = 0u; li < lightsCount; li ++ ) {
 
-									let lightPdf = lightRec.pdf / lightsDenom;
-									misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf );
+						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
 
-								}
+							continue;
 
-								let lightHit = ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, input.currentBounce, clampDirect, clampIndirect );
-								resultColor += vec4f( lightHit, 0.0 );
+						}
+
+						var lightRec: ${ lightRecordStruct };
+						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+
+							var misWeight = 1.0;
+							if ( isMISWeighted ) {
+
+								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
+								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
 
 							}
+
+							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, input.currentBounce, clampDirect, clampIndirect );
+							cameraHitLight = cameraHitLight || input.currentBounce == 0u;
 
 						}
 
@@ -187,36 +218,40 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].objectIndex = hitResult.objectIndex;
 						rayDataStorage[ index ].dist = hitResult.dist;
 
-						// next event estimation: pick one light or the environment with a single sample.
-						// MaterialKernel evaluates the bsdf and enqueues the shadow ray.
-						// TODO: importance-sample the selection by light intensity and solid angle
+						// next event estimation: choose one light or the environment by its estimated
+						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
 						var lightPdf = 0.0;
-						if ( misEnabled != 0u && lightsDenom > 0.0 ) {
+						if ( misEnabled != 0u ) {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							let lightIndex = min( u32( ruv.x * lightsDenom ), u32( lightsDenom ) - 1u );
-							var lightRec: ${ lightRecordStruct };
-							if ( envActive && lightIndex == lightsCount ) {
+							var selectionPdf = 0.0;
+							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
 
-								// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-								let envSample = ${ sampleEnvDir }( ruv.yz );
-								lightRec.direction = envSample.direction;
-								lightRec.emission = envSample.color;
-								lightRec.pdf = envSample.pdf;
-								lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-								lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
 
-							} else {
+									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
 
-								lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+								} else {
+
+									lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
+
+								}
+
+								lightPdf = lightRec.pdf * selectionPdf;
+								rayDataStorage[ index ].lightDirection = lightRec.direction;
+								rayDataStorage[ index ].lightEmission = lightRec.emission;
+								rayDataStorage[ index ].lightDist = lightRec.dist;
+								rayDataStorage[ index ].lightType = lightRec.lightType;
 
 							}
-
-							lightPdf = lightRec.pdf / lightsDenom;
-							rayDataStorage[ index ].lightDirection = lightRec.direction;
-							rayDataStorage[ index ].lightEmission = lightRec.emission;
-							rayDataStorage[ index ].lightDist = lightRec.dist;
-							rayDataStorage[ index ].lightType = lightRec.lightType;
 
 						}
 
@@ -229,10 +264,10 @@ export class LogicKernel extends ComputeKernel {
 						if ( input.currentBounce > 0u && input.isFullyTransmissive == 0u ) {
 
 							var misWeight = 1.0;
-							if ( misEnabled != 0u && envActive ) {
+							if ( isMISWeighted && envActive ) {
 
 								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) / lightsDenom;
+								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / lightTotalWeight;
 								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
 
 							}
@@ -308,6 +343,14 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
+				// visible lights are opaque against a transparent background
+				resultColor += vec4f( lightHits, 0.0 );
+				if ( cameraHitLight ) {
+
+					resultColor.a = 1.0;
+
+				}
+
 				// the color rows are stored top down to match a rasterized render target
 				let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
 				let storedSamples = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u;
@@ -320,6 +363,27 @@ export class LogicKernel extends ComputeKernel {
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+
+					// the auxiliary images are blended the same way, in the same row order
+					if ( accumulateAux != 0u ) {
+
+						var auxPacked: vec3u;
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							auxPacked[ layer ] = textureLoad( ${ params.auxTarget }, colorIndex, layer ).r;
+
+						}
+
+						let albedo = unpack4x8unorm( input.auxAlbedo ).rgb;
+						let normal = unpack4x8snorm( input.auxNormal ).xyz;
+						auxPacked = ${ blendAuxFn }( auxPacked, albedo, normal, 1.0 / f32( sampleCount ) );
+						for ( var layer = 0u; layer < ${ AUX_LAYERS }u; layer ++ ) {
+
+							textureStore( ${ params.auxTarget }, colorIndex, layer, vec4u( auxPacked[ layer ] ) );
+
+						}
+
+					}
 
 					rayDataStorage[ index ].objectIndex = - 1;
 
