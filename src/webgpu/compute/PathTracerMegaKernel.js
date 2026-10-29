@@ -2,7 +2,7 @@ import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { blendAuxFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
+import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
@@ -179,7 +179,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
-				// the first surface the path scatters off fills the denoiser's auxiliary images
+				// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is found
+				// the last mirror or transmission hit stands in, for paths that reach the environment
+				var auxFound = false;
 				var auxAlbedo = vec3f( 0.0 );
 				var auxNormal = vec3f( 0.0 );
 
@@ -364,9 +366,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let scatterRec = ${ bsdfSampleFn }( view, surface );
 
-						// a transmission looks through to the next surface
-						if ( isFullyTransmissive && ! scatterRec.isTransmissive ) {
+						if ( ! auxFound ) {
 
+							auxFound = ${ isAuxSurfaceFn }( surface, scatterRec );
 							auxAlbedo = surface.color;
 							auxNormal = surface.normal;
 

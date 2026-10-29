@@ -10,6 +10,7 @@ import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '.
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
+import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -282,11 +283,14 @@ export class MaterialKernel extends ComputeKernel {
 					var scatterRec = ${ bsdfSampleFn }( view, surface );
 					let newBounce = input.currentBounce + 1u;
 
-					// the first surface the path scatters off fills the denoiser's auxiliary images, so a
-					// transmission looks through to the next one
-					if ( input.isFullyTransmissive != 0u && ! scatterRec.isTransmissive ) {
+					// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
+					// found the last mirror or transmission hit stands in, for paths that reach the environment.
+					// The packed albedo's alpha marks the surface found
+					let auxFound = unpack4x8unorm( input.auxAlbedo ).a != 0.0;
+					if ( ! auxFound ) {
 
-						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, 0.0 ) );
+						let isAuxSurface = ${ isAuxSurfaceFn }( surface, scatterRec );
+						rayDataStorage[ index ].auxAlbedo = pack4x8unorm( vec4f( surface.color, select( 0.0, 1.0, isAuxSurface ) ) );
 						rayDataStorage[ index ].auxNormal = pack4x8snorm( vec4f( surface.normal, 0.0 ) );
 
 					}
