@@ -180,7 +180,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var cameraHitLight = false;
 
 				// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is found
-				// the last mirror or transmission hit stands in, for paths that reach the environment
+				// the last mirror or transmission hit stands in, for paths that reach the environment. The albedo
+				// is tinted by the throughput of the surfaces looked past to reach it
 				var auxFound = false;
 				var auxAlbedo = vec3f( 0.0 );
 				var auxNormal = vec3f( 0.0 );
@@ -369,7 +370,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( ! auxFound ) {
 
 							auxFound = ${ isAuxSurfaceFn }( surface, scatterRec );
-							auxAlbedo = surface.color;
+							auxAlbedo = saturate( throughputColor * surface.color );
 							auxNormal = surface.normal;
 
 						}

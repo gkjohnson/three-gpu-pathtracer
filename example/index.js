@@ -201,6 +201,9 @@ const dropZone = document.getElementById( 'drop-zone' );
 // sample counts are measured asynchronously, so the average is kept for the pause check
 let averageSamples = 0;
 
+// whether a model is loading, during which the canvas is hidden
+let loading = false;
+
 const orthoWidth = 2;
 
 const _forward = new Vector3();
@@ -439,6 +442,9 @@ function animate() {
 		renderer.render( scene, activeCamera );
 
 	}
+
+	// hide the canvas while loading and while the kernels compile
+	renderer.domElement.style.visibility = loading || pathTracer.compiling ? 'hidden' : 'visible';
 
 	pathTracer.getSampleCountsAsync().then( counts => {
 
@@ -819,6 +825,7 @@ async function updateModel() {
 	// hide the canvas and the transparency checkerboard while loading
 	document.body.classList.remove( 'checkerboard' );
 	renderer.domElement.style.visibility = 'hidden';
+	loading = true;
 	loader.setPercentage( 0 );
 
 	if ( model ) {
@@ -971,7 +978,7 @@ async function updateModel() {
 	buildGui();
 	onParamsChange();
 
-	renderer.domElement.style.visibility = 'visible';
+	loading = false;
 
 }
 
