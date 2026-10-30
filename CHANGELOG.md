@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: NaN pixels next to thin area lights.
 - WebGPUPathTracer: Diffuse surfaces losing indirect light when viewed almost head-on.
 - WebGPUPathTracer: Area and environment light being lost at the last bounce.
+- WebGPUPathTracer: Transmissive volumes being tinted by the square of their color, now matching Blender.
 
 ## [0.0.27] - 2026.10.08
 ### Added
