@@ -6,7 +6,7 @@ import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MED
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { sampleHenyeyGreensteinFn } from '../../nodes/sampling.wgsl.js';
 import {
-	loadMediumFn, storeMediumFn,
+	loadMediumFn,
 	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
