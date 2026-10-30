@@ -10,8 +10,8 @@ import {
 	Color,
 } from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PhysicalCamera, PhysicalSpotLight, FogVolumeMaterial } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { PhysicalCamera, PhysicalSpotLight } from 'three-gpu-pathtracer';
+import { WebGPUPathTracer, FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -73,7 +73,7 @@ async function init() {
 	scene = new Scene();
 	scene.background = new Color( 0 );
 
-	fogMaterial = new FogVolumeMaterial();
+	fogMaterial = new FogVolumeNodeMaterial();
 
 	const material = new MeshStandardMaterial( { color: 0x999999, roughness: 1, metalness: 0 } );
 	const fogMesh = new Mesh( new BoxGeometry( 8, 4.05, 8 ), fogMaterial );

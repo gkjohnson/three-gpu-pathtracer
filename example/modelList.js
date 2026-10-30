@@ -1,5 +1,6 @@
 import { Box3, Color, CylinderGeometry, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
-import { ShapedAreaLight, FogVolumeMaterial } from 'three-gpu-pathtracer';
+import { ShapedAreaLight } from 'three-gpu-pathtracer';
+import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -802,7 +803,7 @@ export const MODEL_LIST = {
 
 			// a cylinder of fog around the whole diorama
 			const box = new Box3().setFromObject( model );
-			const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeMaterial( {
+			const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeNodeMaterial( {
 				color: 0xaaaaaa,
 				density: 1,
 			} ) );

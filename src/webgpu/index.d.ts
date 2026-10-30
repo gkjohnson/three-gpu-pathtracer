@@ -1,5 +1,5 @@
 import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
-import { StorageArrayTexture, WebGPURenderer } from 'three/webgpu';
+import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -74,6 +74,18 @@ export class BlurredEnvMapGenerator {
 
 	generate( texture: Texture, blur?: number, width?: number | null, height?: number | null ): Promise<Texture>;
 	dispose(): void;
+
+}
+
+// materials
+
+export class FogVolumeNodeMaterial extends MeshBasicNodeMaterial {
+
+	constructor( parameters?: MeshBasicNodeMaterialParameters & { density?: number, scatterAnisotropy?: number } );
+
+	readonly isFogVolumeMaterial: true;
+	density: number;
+	scatterAnisotropy: number;
 
 }
 
