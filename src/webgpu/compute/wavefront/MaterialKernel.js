@@ -171,7 +171,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].volumeSteps = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
-					rayDataStorage[ index ].medium.flags = 0u;
+					rayDataStorage[ index ].medium.inside = 0u;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
