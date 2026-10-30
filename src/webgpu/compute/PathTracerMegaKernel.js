@@ -1,16 +1,16 @@
-import { DataTexture, Vector2 } from 'three/webgpu';
+import { DataTexture, Vector2, Vector4 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { mediumStruct, mediumSegmentStruct, enterMediumFn, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
-import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -42,6 +42,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 
+			// the media the camera is inside of
+			cameraMediumStack: uniform( new Vector4().setScalar( MEDIUM_STACK_EMPTY ), 'uvec4' ),
+
 			backgroundInfo: { value: null },
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
@@ -65,6 +68,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
+
+		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
+		const materialsNode = contextProxy( 'bvhData.storage.materials' );
+		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
+		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -105,6 +113,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				filterGlossy: f32,
 				clampDirect: f32,
 				clampIndirect: f32,
+				cameraMediumStack: vec4u,
 
 				transmissiveBackground: u32,
 				accumulateAux: u32,
@@ -166,8 +175,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the scattering volume the path is in. Media don't nest
-				var medium: ${ mediumStruct };
+				// the media the path is inside of, starting from those around the camera
+				var medium = ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction );
 				var segment: ${ mediumSegmentStruct };
 				var volumeSteps = 0u;
 
@@ -296,6 +305,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					if ( didHit ) {
 
+						// a medium that doesn't scatter only absorbs the light reaching the surface. One that
+						// does has already applied its transmittance above
+						if ( ! segmentInMedium ) {
+
+							throughputColor *= exp( - medium.extinction * hitResult.dist );
+
+						}
+
 						let objectInfo = transforms[ hitResult.objectIndex ];
 						var materialInfo = ( *materials )[ objectInfo.materialIndex ];
 
@@ -354,14 +371,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
 
 							}
-
-						}
-
-						// attenuate the light transmitted through the volume when exiting a backface. A scattering
-						// medium has already applied its transmittance above
-						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
-
-							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
 
 						}
 
@@ -477,25 +486,24 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// a direction from the bsdf isn't guided
 						segment = ${ mediumSegmentStruct }();
 
-						// As in "KHR_materials_scatter", the medium's surface bsdf is its boundary: the walk ends when
-						// light refracts out through it, and continues inside when it reflects back
-						if ( segmentInMedium && hitResult.objectIndex == medium.object && hitResult.side < 0.0 && scatterRec.isTransmissive ) {
+						// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
+						// through it enters the volume and out through it leaves, while light reflecting stays
+						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
-							medium.inside = false;
+							var stack: vec4u;
+							if ( hitResult.side > 0.0 ) {
 
-						}
+								stack = ${ mediumStackEnterFn }( medium.stack, hitResult.objectIndex );
 
-						// refracting into a front face of a scattering material starts a random walk inside it
-						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
+							} else {
 
-							let entered = ${ enterMediumFn }(
-								materialInfo.attenuationColor, materialInfo.attenuationDistance, materialInfo.scatterAlbedo, materialInfo.scatterAnisotropy,
-								hitResult.objectIndex, vertexData.position.xyz, surface.normal,
-							);
+								stack = ${ mediumStackExitFn }( medium.stack, hitResult.objectIndex );
 
-							if ( entered.inside ) {
+							}
 
-								medium = entered;
+							if ( any( stack != medium.stack ) ) {
+
+								medium = ${ stackMediumFn }( stack, hitResult.objectIndex, vertexData.position.xyz, surface.normal );
 
 							}
 

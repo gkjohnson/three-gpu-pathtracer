@@ -587,17 +587,6 @@ export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
-export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
-
-	fn transmissionAttenuation( dist: f32, attColor: vec3f, attDist: f32 ) -> vec3f {
-
-		return pow( attColor, vec3f( dist / attDist ) );
-
-	}
-
-` );
-
 // Continuous Cauchy IOR approximation derived from the Fraunhofer C, d, and F spectral lines:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
 // https://github.com/bsdorra/slang-pbr/blob/c12046ec3b9628bcfc384ed2c275c92d007e5d7e/src/models/enterprise/components/transmission.slang#L20-L27
