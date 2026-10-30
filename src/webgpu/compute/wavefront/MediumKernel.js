@@ -2,11 +2,12 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, uniform, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE, RNG_INDEX_VOLUME_LIGHT_POINT } from '../../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_VOLUME_LIGHT_POINT } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
+import { sampleHenyeyGreensteinFn } from '../../nodes/sampling.wgsl.js';
 import {
-	loadMediumFn, loadMediumSegmentFn, storeMediumFn,
-	mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, sampleVolumeLightPointFn,
+	loadMediumFn,
+	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, sampleVolumeLightPointFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, mediumQueueStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
@@ -52,8 +53,7 @@ export class MediumKernel extends ComputeKernel {
 
 				let index = mediumQueue.elements[ globalId.x ];
 				let input = ( *rayDataStorage )[ index ];
-				var medium = ${ loadMediumFn }( input.medium );
-				var segment = ${ loadMediumSegmentFn }( input.medium );
+				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
@@ -72,17 +72,11 @@ export class MediumKernel extends ComputeKernel {
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
 					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
-					let scatterDist = ${ sampleMediumDistanceFn }( medium, segment, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
-					if ( medium.firstSegment ) {
-
-						${ findMediumOppositeFn }( &medium, ray.origin, ray.direction, scatterDist, didHit && hitResult.objectIndex == medium.object, hitResult.dist );
-
-					}
-
+					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 					let scattered = scatterDist < surfaceDist;
 					let segmentDist = select( surfaceDist, scatterDist, scattered );
 					let transmittance = exp( - medium.extinction * segmentDist );
-					let distancePdf = dot( channelPdf, ${ mediumSegmentPdfFn }( medium, segment, segmentDist, scattered ) );
+					let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
 					if ( distancePdf <= 0.0 ) {
 
 						isTerminated = true;
@@ -144,7 +138,7 @@ export class MediumKernel extends ComputeKernel {
 					}
 
 					ray.origin += ray.direction * scatterDist;
-					ray.direction = ${ sampleMediumDirectionFn }( medium, ray.origin, ray.direction, ${ rand2 }( ${ RNG_INDEX_MEDIUM_GUIDE } ), ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ), &segment );
+					ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 					hasScattered = true;
 
 					// the walk doesn't count against the bounce limit, but is capped, and ends once its
@@ -175,8 +169,6 @@ export class MediumKernel extends ComputeKernel {
 					rayDataStorage[ index ].isFullyTransmissive = 0u;
 
 				}
-
-				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, segment );
 
 			}
 		`;

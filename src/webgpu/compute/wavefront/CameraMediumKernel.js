@@ -3,7 +3,7 @@ import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { mediumSegmentStruct, mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct } from './structs.js';
 
 // Finds the volumes each new camera ray starts inside of by tracing from the ray's own origin, and starts its
@@ -54,8 +54,8 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin ), ${ MEDIUM_STACK_EMPTY }u, input.origin, - input.direction );
-				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, ${ mediumSegmentStruct }() );
+				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin ), ${ MEDIUM_STACK_EMPTY }u );
+				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 				// the walk hands its hit back in the slot's own result entry
 				if ( medium.inside ) {

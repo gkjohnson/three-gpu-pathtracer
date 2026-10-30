@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
-import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
@@ -184,10 +184,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].mediumVertex = 0u;
 
 					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
-					rayDataStorage[ index ].medium = ${ storeMediumFn }(
-						${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ), ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction ),
-						${ mediumSegmentStruct }(),
-					);
+					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ), ${ MEDIUM_STACK_EMPTY }u ) );
 					rayDataStorage[ index ].lightPoint = vec4f( 0.0 );
 					rayDataStorage[ index ].volumePointWeight = vec3f( 0.0 );
 					rayDataStorage[ index ].volumeLightColor = vec3f( 0.0 );
@@ -258,7 +255,6 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].currentBounce = newBounce;
 						rayDataStorage[ index ].mediumScattered = 0u;
 						rayDataStorage[ index ].mediumVertex = 0u;
-						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, ${ mediumSegmentStruct }() );
 
 						// the next segment is walked through the fog by MediumKernel
 						if ( ! isTerminated ) {
@@ -356,8 +352,8 @@ export class MaterialKernel extends ComputeKernel {
 
 							if ( any( stack != medium.stack ) ) {
 
-								medium = ${ stackMediumFn }( stack, u32( input.objectIndex ), vertexData.position.xyz, surface.normal );
-								rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, ${ mediumSegmentStruct }() );
+								medium = ${ stackMediumFn }( stack, u32( input.objectIndex ) );
+								rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 							}
 
@@ -485,17 +481,17 @@ export class MaterialKernel extends ComputeKernel {
 
 						if ( any( stack != medium.stack ) ) {
 
-							medium = ${ stackMediumFn }( stack, u32( input.objectIndex ), vertexData.position.xyz, surface.normal );
+							medium = ${ stackMediumFn }( stack, u32( input.objectIndex ) );
 							mediumChanged = true;
 
 						}
 
 					}
 
-					// a direction from the bsdf isn't guided
-					if ( segmentInMedium || medium.inside || mediumChanged ) {
+					// keep the medium the path left or entered
+					if ( mediumChanged ) {
 
-						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, ${ mediumSegmentStruct }() );
+						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 					}
 
