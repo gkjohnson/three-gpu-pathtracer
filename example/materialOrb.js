@@ -72,23 +72,14 @@ const params = {
 	overlayReference: false,
 
 	// volume scattering is only supported by the megakernel so far
-	useMegakernel: new URLSearchParams( window.location.search ).get( 'megakernel' ) === 'true',
+	useMegakernel: false,
 	multipleImportanceSampling: true,
 	maxBounces: 15,
 	maxVolumeSteps: 256,
-	renderScale: 0.5,
+	renderScale: 1,
 	filterGlossyFactor: 1,
 	frameBudget: 250000,
 };
-
-// scattering volumes are slow in the megakernel, so it renders small tiles
-const MEGAKERNEL_FRAME_BUDGET = 10000;
-
-function getFrameBudget() {
-
-	return params.useMegakernel ? MEGAKERNEL_FRAME_BUDGET : params.frameBudget;
-
-}
 
 // adjust performance parameters for mobile
 const aspectRatio = window.innerWidth / window.innerHeight;
@@ -123,7 +114,7 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.useMegakernel( params.useMegakernel );
-	pathTracer.frameBudget = getFrameBudget();
+	pathTracer.frameBudget = params.frameBudget;
 
 	scene = new Scene();
 
@@ -192,19 +183,13 @@ async function init() {
 	ptFolder.add( params, 'useMegakernel' ).onChange( v => {
 
 		pathTracer.useMegakernel( v );
-		pathTracer.frameBudget = getFrameBudget();
-
-		// reflect the backend in the url
-		const search = new URLSearchParams( window.location.search );
-		search.set( 'megakernel', v );
-		history.replaceState( null, '', `?${ search }` );
 
 	} );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( () => {
+	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
 
-		pathTracer.frameBudget = getFrameBudget();
+		pathTracer.frameBudget = value;
 
 	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
