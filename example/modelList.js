@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
+import { Box3, Color, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
@@ -755,6 +755,42 @@ export const MODEL_LIST = {
 				if ( c.material ) c.material = material;
 
 			} );
+
+		}
+	},
+
+	'Happy Buddha': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/happy-buddha/buddha.glb',
+		credit: 'Model from the <a href="http://graphics.stanford.edu/data/3Dscanrep/">Stanford 3D Scanning Repository</a>, via <a href="https://casual-effects.com/data/">Morgan McGuire\'s Computer Graphics Archive</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+		postProcess( model ) {
+
+			// the scattering distance is a fraction of the model size rather than a fixed distance
+			const size = new Box3().setFromObject( model ).getSize( new Vector3() );
+
+			// red wax - red travels furthest before scattering so thin areas glow
+			const material = new MeshPhysicalMaterial();
+			material.roughness = 0.35;
+			material.metalness = 0;
+			material.transmission = 1;
+			material.ior = 1.45;
+			material.thickness = 1;
+			material.scatterStrength = 1;
+			material.multiscatterColor = new Color().setRGB( 0.4, 0.025, 0.015 );
+			material.attenuationDistance = 0.005 * Math.max( size.x, size.y, size.z );
+			material.attenuationColor.setRGB( Math.exp( - 1 ), Math.exp( - 1 / 0.25 ), Math.exp( - 1 / 0.17 ) );
+
+			model.traverse( c => {
+
+				if ( c.material ) c.material = material;
+
+			} );
+
+			// the viewer's default view pulled back a little, in model space before the rotation above
+			const camera = new PerspectiveCamera( 45, 1 );
+			camera.position.set( 1.29, 0.5, - 1.29 );
+			camera.lookAt( 0.02, 0.05, - 0.02 );
+			model.add( camera );
 
 		}
 	},
