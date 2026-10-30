@@ -805,6 +805,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._pathTracer.setAccumulateAux( Boolean( denoiser && denoiser.useAuxiliaryBuffers ) );
+		this.reset();
 
 	}
 
