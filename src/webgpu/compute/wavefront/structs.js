@@ -120,12 +120,15 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	pixelIndex: 'uint',
 
 	direction: 'vec3f',
-	currentBounce: 'uint',
+
+	// the random sequence index the traversal samples at, counting bounces, alpha pass throughs and
+	// volume steps as the megakernel does
+	rngIndex: 'uint',
 
 	seed: 'uint',
-	alphaDepth: 'uint',
 	maxDist: 'float',
 	_alignment0: 'uint',
+	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
 

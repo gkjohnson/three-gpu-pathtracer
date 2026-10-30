@@ -143,9 +143,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].origin = ray.origin;
 					rayQueue.elements[ rayIndex ].direction = ray.direction;
 					rayQueue.elements[ rayIndex ].pixelIndex = pixelIndex;
-					rayQueue.elements[ rayIndex ].currentBounce = 0u;
+					rayQueue.elements[ rayIndex ].rngIndex = 0u;
 					rayQueue.elements[ rayIndex ].seed = seed + samples;
-					rayQueue.elements[ rayIndex ].alphaDepth = 0u;
 					rayQueue.elements[ rayIndex ].maxDist = ray.maxDist;
 
 					rayDataStorage[ index ].origin = ray.origin;
@@ -249,9 +248,8 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue.elements[ alphaIndex ].origin = alphaOrigin;
 							rayQueue.elements[ alphaIndex ].direction = input.direction;
 							rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
+							rayQueue.elements[ alphaIndex ].rngIndex = input.currentBounce + input.alphaDepth + 1u + input.volumeSteps;
 							rayQueue.elements[ alphaIndex ].seed = input.seed;
-							rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
 							rayQueue.elements[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
@@ -392,9 +390,8 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 						rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
 						rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
-						rayQueue.elements[ rayIndex ].currentBounce = newBounce;
+						rayQueue.elements[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.volumeSteps;
 						rayQueue.elements[ rayIndex ].seed = input.seed;
-						rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
 						rayQueue.elements[ rayIndex ].maxDist = 0.0;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
@@ -418,9 +415,8 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.normal );
 							shadowRayQueue.elements[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
+							shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.volumeSteps;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
-							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
 							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
