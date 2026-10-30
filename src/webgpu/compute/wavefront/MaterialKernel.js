@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
-import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -180,10 +180,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].volumeSteps = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
-					rayDataStorage[ index ].medium = ${ storeMediumFn }(
-						${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction ),
-						${ mediumSegmentStruct }(),
-					);
+					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u ) );
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -380,17 +377,17 @@ export class MaterialKernel extends ComputeKernel {
 
 						if ( any( stack != medium.stack ) ) {
 
-							medium = ${ stackMediumFn }( stack, u32( input.objectIndex ), vertexData.position.xyz, surface.normal );
+							medium = ${ stackMediumFn }( stack, u32( input.objectIndex ) );
 							mediumChanged = true;
 
 						}
 
 					}
 
-					// a direction from the bsdf isn't guided
-					if ( segmentInMedium || medium.inside || mediumChanged ) {
+					// keep the medium the path left or entered
+					if ( mediumChanged ) {
 
-						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, ${ mediumSegmentStruct }() );
+						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 					}
 

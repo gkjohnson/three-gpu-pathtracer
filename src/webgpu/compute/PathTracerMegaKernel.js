@@ -3,9 +3,9 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
@@ -176,8 +176,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var transparentBounce = 0u;
 
 				// the media the path is inside of, starting from those around the camera
-				var medium = ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction );
-				var segment: ${ mediumSegmentStruct };
+				var medium = ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u );
 				var volumeSteps = 0u;
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
@@ -217,17 +216,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					if ( medium.inside ) {
 
 						let channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
-						let scatterDist = ${ sampleMediumDistanceFn }( medium, segment, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
-						if ( medium.firstSegment ) {
-
-							${ findMediumOppositeFn }( &medium, ray.origin, ray.direction, scatterDist, didHit && hitResult.objectIndex == medium.object, hitResult.dist );
-
-						}
-
+						let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 						let scattered = scatterDist < surfaceDist;
 						let segmentDist = select( surfaceDist, scatterDist, scattered );
 						let transmittance = exp( - medium.extinction * segmentDist );
-						let distancePdf = dot( channelPdf, ${ mediumSegmentPdfFn }( medium, segment, segmentDist, scattered ) );
+						let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
 						if ( distancePdf <= 0.0 ) {
 
 							break;
@@ -243,7 +236,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							throughputColor *= medium.albedo * medium.extinction * transmittance / distancePdf;
 							ray.origin += ray.direction * scatterDist;
-							ray.direction = ${ sampleMediumDirectionFn }( medium, ray.origin, ray.direction, ${ rand2 }( ${ RNG_INDEX_MEDIUM_GUIDE } ), ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ), &segment );
+							ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 							ray.maxDist = 0.0;
 							mediumScattered = true;
 							isFullyTransmissive = false;
@@ -301,7 +294,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 					}
-
 
 					if ( didHit ) {
 
@@ -483,9 +475,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						bsdfPdf = scatterRec.pdf;
 						mediumScattered = false;
 
-						// a direction from the bsdf isn't guided
-						segment = ${ mediumSegmentStruct }();
-
 						// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
 						// through it enters the volume and out through it leaves, while light reflecting stays
 						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
@@ -503,7 +492,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							if ( any( stack != medium.stack ) ) {
 
-								medium = ${ stackMediumFn }( stack, hitResult.objectIndex, vertexData.position.xyz, surface.normal );
+								medium = ${ stackMediumFn }( stack, hitResult.objectIndex );
 
 							}
 
