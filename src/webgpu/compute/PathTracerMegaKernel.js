@@ -348,8 +348,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 											let lightPdf = lightRec.pdf * selectionPdf;
 
 											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
-											// or when a bsdf ray could never reach the light
-											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked;
+											// or when a bsdf ray could never reach the light or isn't traced past the bounce limit
+											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked && bounce + 1u < maxBounces;
 											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
 											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
