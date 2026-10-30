@@ -20,6 +20,22 @@ export const mediumStruct = new StructTypeNode( {
 	anisotropy: 'float',
 }, 'Medium' );
 
+// The single scatter albedo of a volume from its perceived multi scatter albedo and phase anisotropy, using the
+// inversion from "KHR_materials_scatter" (after Kulla and Conty 2017). A zero multi scatter albedo maps to exactly zero
+// https://github.com/KhronosGroup/glTF/pull/2579
+const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
+
+	fn singleScatterAlbedo( multiscatterAlbedo: vec3f, anisotropy: f32 ) -> vec3f {
+
+		let a = multiscatterAlbedo;
+		let s = clamp( 4.09712 + 4.20863 * a - sqrt( 9.59217 + 41.6808 * a + 17.7126 * a * a ), vec3f( 0.0 ), vec3f( 1.0 ) );
+		let s2 = select( s * s, vec3f( 1.0 ), a <= vec3f( 0.0 ) );
+		return ( 1.0 - s2 ) / ( 1.0 - anisotropy * s2 );
+
+	}
+
+`;
+
 // The medium entered by refracting into a material, not "inside" if the material doesn't scatter
 export const enterMediumFn = wgslTagFn/* wgsl */`
 
@@ -27,9 +43,9 @@ export const enterMediumFn = wgslTagFn/* wgsl */`
 
 		var medium: ${ mediumStruct };
 		medium.extinction = - log( max( material.attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) ) ) / material.attenuationDistance;
-		medium.inside = any( material.scatterAlbedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) );
+		medium.albedo = ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, material.scatterAnisotropy );
+		medium.inside = any( medium.albedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) );
 		medium.object = object;
-		medium.albedo = material.scatterAlbedo;
 		medium.anisotropy = material.scatterAnisotropy;
 		return medium;
 
