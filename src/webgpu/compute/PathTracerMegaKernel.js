@@ -1,11 +1,11 @@
-import { DataTexture, Vector2, Vector4 } from 'three/webgpu';
+import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE, RNG_INDEX_VOLUME_LIGHT_POINT, RNG_INDEX_VOLUME_DIRECT_LIGHT } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
-import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, mediumShadowTransmittanceFunc, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
+import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, mediumShadowTransmittanceFunc, originMediumStackFunc, sampleVolumeLightPointFn, getLightPointFn, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
@@ -42,8 +42,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 
-			// the media the camera is inside of
-			cameraMediumStack: uniform( new Vector4().setScalar( MEDIUM_STACK_EMPTY ), 'uvec4' ),
+			// whether the scene has volumes, which camera rays then trace for the ones they start inside of
+			hasVolumes: uniform( 0, 'uint' ),
 
 			backgroundInfo: { value: null },
 
@@ -76,6 +76,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
 		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
 		const mediumShadowTransmittanceFn = mediumShadowTransmittanceFunc( raycastShadowFn, raycastOutput, offsetRayOriginFunc, transformsNode, materialsNode, mediumStackEnterFn, mediumStackExitFn );
+		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, offsetRayOriginFunc, transformsNode, materialsNode, mediumStackEnterFn );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -94,6 +95,33 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
 		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
+
+		// The point a light sampled from a surface the path passes through reaches, for the fog segment after it
+		// to draw equiangular samples toward, matching the light the wavefront kernels sample at every hit
+		const sampleLightPointFn = wgslTagFn/* wgsl */`
+
+			fn sampleLightPoint( position: vec3f, envWeight: f32, ruv: vec3f, current: vec4f ) -> vec4f {
+
+				var selectionPdf = 0.0;
+				let lightIndex = ${ selectLightFn }( position, envWeight, ruv.x, &selectionPdf );
+				if ( selectionPdf <= 0.0 ) {
+
+					return current;
+
+				}
+
+				if ( lightIndex >= ${ lightsCountNode } ) {
+
+					return vec4f( 0.0 );
+
+				}
+
+				let lightRec = ${ randomLightSampleFn }( lightIndex, position, ruv.yz );
+				return select( current, ${ getLightPointFn }( position, lightRec ), lightRec.pdf > 0.0 );
+
+			}
+
+		`;
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -116,7 +144,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				filterGlossy: f32,
 				clampDirect: f32,
 				clampIndirect: f32,
-				cameraMediumStack: vec4u,
+				hasVolumes: u32,
 
 				transmissiveBackground: u32,
 				accumulateAux: u32,
@@ -178,10 +206,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the media the path is inside of, starting from those around the camera
-				var medium = ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction );
+				// the media the path is inside of, starting from those around the ray's origin
+				var originStack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+				if ( hasVolumes != 0u ) {
+
+					originStack = ${ originMediumStackFn }( ray.origin );
+
+				}
+
+				var medium = ${ stackMediumFn }( originStack, ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction );
 				var segment: ${ mediumSegmentStruct };
 				var volumeSteps = 0u;
+
+				// the point the last light sample reached, which fog segments draw equiangular samples toward
+				var lightPoint = vec4f( 0.0 );
 
 				// no light is sampled at a subsurface scatter event, so whatever the next segment reaches takes full weight
 				var mediumScattered = false;
@@ -236,6 +274,71 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( distancePdf <= 0.0 ) {
 
 							break;
+
+						}
+
+						// light scattered toward the path from a point on a fog segment, sampled at the point
+						if ( medium.fog && misEnabled != 0u ) {
+
+							var pointDist = 0.0;
+							let pointWeight = ${ sampleVolumeLightPointFn }(
+								medium, channelPdf, scatterDist, surfaceDist, ray.origin, ray.direction, lightPoint,
+								${ rand2 }( ${ RNG_INDEX_VOLUME_LIGHT_POINT } ), &pointDist,
+							);
+
+							if ( any( pointWeight > vec3f( 0.0 ) ) ) {
+
+								let position = ray.origin + ray.direction * pointDist;
+								let ruv = ${ rand3 }( ${ RNG_INDEX_VOLUME_DIRECT_LIGHT } );
+								var selectionPdf = 0.0;
+								let lightIndex = ${ selectLightFn }( position, envWeight, ruv.x, &selectionPdf );
+								if ( selectionPdf > 0.0 ) {
+
+									var lightRec: ${ lightRecordStruct };
+									if ( envActive && lightIndex == lightsCount ) {
+
+										let envSample = ${ sampleEnvDir }( ruv.yz );
+										lightRec.direction = envSample.direction;
+										lightRec.emission = envSample.color;
+										lightRec.pdf = envSample.pdf;
+										lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+										lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+									} else {
+
+										lightRec = ${ randomLightSampleFn }( lightIndex, position, ruv.yz );
+
+									}
+
+									if ( lightRec.pdf > 0.0 ) {
+
+										lightPoint = ${ getLightPointFn }( position, lightRec );
+
+										var shadowRay: ${ rayStruct };
+										shadowRay.origin = position;
+										shadowRay.direction = lightRec.direction;
+										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
+
+										var forwardBlocked = false;
+										let lightTransmittance = ${ mediumShadowTransmittanceFn }( shadowRay, medium.stack, &forwardBlocked );
+										if ( any( lightTransmittance > vec3f( 0.0 ) ) ) {
+
+											// the phase function is its own pdf
+											let lightPdf = lightRec.pdf * selectionPdf;
+											let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
+											let isMISWeightedLight = ${ isMISWeightLightFn }( lightRec.lightType ) && ! forwardBlocked;
+											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, phasePdf ), isMISWeightedLight );
+											let directLight = throughputColor * pointWeight * lightRec.emission * lightTransmittance * phasePdf * misWeight / lightPdf;
+											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+											resultColor += vec4f( contribution, 0.0 );
+
+										}
+
+									}
+
+								}
+
+							}
 
 						}
 
@@ -315,63 +418,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// A scatter event in fog is a path vertex like a surface, counted as a bounce, where light is
-					// sampled through the phase function
+					// A scatter event in fog is a path vertex like a surface, counted as a bounce. Its light was
+					// sampled with the segment's above
 					if ( fogScatter ) {
 
 						ray.origin += ray.direction * segmentEnd;
 						ray.maxDist = 0.0;
-
-						if ( misEnabled != 0u ) {
-
-							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( ray.origin, envWeight, ruv.x, &selectionPdf );
-							if ( selectionPdf > 0.0 ) {
-
-								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
-
-									let envSample = ${ sampleEnvDir }( ruv.yz );
-									lightRec.direction = envSample.direction;
-									lightRec.emission = envSample.color;
-									lightRec.pdf = envSample.pdf;
-									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
-
-								} else {
-
-									lightRec = ${ randomLightSampleFn }( lightIndex, ray.origin, ruv.yz );
-
-								}
-
-								if ( lightRec.pdf > 0.0 ) {
-
-									var shadowRay: ${ rayStruct };
-									shadowRay.origin = ray.origin;
-									shadowRay.direction = lightRec.direction;
-									shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
-
-									var forwardBlocked = false;
-									let lightTransmittance = ${ mediumShadowTransmittanceFn }( shadowRay, medium.stack, &forwardBlocked );
-									if ( any( lightTransmittance > vec3f( 0.0 ) ) ) {
-
-										// the phase function is its own pdf
-										let lightPdf = lightRec.pdf * selectionPdf;
-										let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
-										let isMISWeightedLight = ${ isMISWeightLightFn }( lightRec.lightType ) && ! forwardBlocked;
-										let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, phasePdf ), isMISWeightedLight );
-										let directLight = throughputColor * lightRec.emission * lightTransmittance * phasePdf * misWeight / lightPdf;
-										let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
-										resultColor += vec4f( contribution, 0.0 );
-
-									}
-
-								}
-
-							}
-
-						}
 
 						// russian roulette, as at a surface. The phase function's sample weight is one
 						if ( bounce >= 3u ) {
@@ -443,8 +495,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let isFogBoundary = materialInfo.fogVolume != 0;
 						if ( isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
-							// stop once the transparent bounces run out
-							if ( transparentBounce >= maxTransparentBounces ) {
+							// stop once the transparent bounces run out. Fog boundaries count as volume steps
+							// instead, as Cycles counts them apart from transparent bounces
+							if ( isFogBoundary ) {
+
+								volumeSteps ++;
+
+							} else {
+
+								transparentBounce ++;
+
+							}
+
+							if ( transparentBounce > maxTransparentBounces || volumeSteps > maxVolumeSteps ) {
 
 								break;
 
@@ -472,9 +535,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
+							if ( misEnabled != 0u ) {
+
+								lightPoint = ${ sampleLightPointFn }( vertexData.position.xyz, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ), lightPoint );
+
+							}
+
 							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
 							${ rngNextBounce }();
-							transparentBounce ++;
 							bounce --;
 							continue;
 
@@ -525,6 +593,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								}
 
 								if ( lightRec.pdf > 0.0 ) {
+
+									lightPoint = ${ getLightPointFn }( vertexData.position.xyz, lightRec );
 
 									let evalRec = ${ bsdfEvalPdfFn }( view, lightRec.direction, surface );
 									if ( evalRec.pdf > 0.0 ) {

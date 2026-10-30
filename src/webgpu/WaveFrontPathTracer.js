@@ -6,6 +6,7 @@ import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
 import { MediumKernel } from './compute/wavefront/MediumKernel.js';
 import { QueueMediumWalksKernel } from './compute/wavefront/QueueMediumWalksKernel.js';
+import { CameraMediumKernel } from './compute/wavefront/CameraMediumKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
@@ -90,6 +91,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel = new TraceShadowRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.mediumKernel = new MediumKernel().setWorkgroupSize( 64, 1, 1 );
 		this.queueMediumWalksKernel = new QueueMediumWalksKernel().setWorkgroupSize( 64, 1, 1 );
+		this.cameraMediumKernel = new CameraMediumKernel().setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
 		this.mediumDispatchConverter = new QueueLengthToDispatchKernel( mediumQueueStruct ).setWorkgroupSize( 1, 1, 1 );
@@ -136,6 +138,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.mediumKernel.context.bvhData = bvhData;
 		this.mediumKernel.needsUpdate = true;
+
+		this.cameraMediumKernel.context.bvhData = bvhData;
+		this.cameraMediumKernel.needsUpdate = true;
 
 		this.reset();
 
@@ -282,6 +287,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.dispose();
 		this.mediumKernel.dispose();
 		this.queueMediumWalksKernel.dispose();
+		this.cameraMediumKernel.dispose();
 		this.rayDispatchConverter.dispose();
 		this.shadowDispatchConverter.dispose();
 		this.mediumDispatchConverter.dispose();
@@ -342,13 +348,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const rayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
 		rayQueue.name = 'Ray Queue';
 
-		const shadowRayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
+		// a slot can trace a surface's shadow ray and a fog segment's in the same frame
+		const shadowQueueSize = rayQueueStruct.getLength() + 2 * count * traceQueuedRayStruct.getLength();
+		const shadowRayQueue = new StorageBufferAttribute( new Float32Array( shadowQueueSize ), shadowQueueSize );
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
 		const rayIntersectionsStorage = new StorageBufferAttribute( 2 * count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
 
-		const shadowRayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
+		const shadowRayIntersectionsStorage = new StorageBufferAttribute( 2 * count, intersectionResultStruct.getLength() );
 		shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
 
 		const mediumQueueSize = mediumQueueStruct.getLength() + count;
@@ -423,6 +431,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			traceShadowRayKernel,
 			mediumKernel,
 			queueMediumWalksKernel,
+			cameraMediumKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
 			mediumDispatchConverter,
@@ -450,6 +459,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			traceShadowRayKernel,
 			mediumKernel,
 			queueMediumWalksKernel,
+			cameraMediumKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
 			mediumDispatchConverter,
@@ -541,9 +551,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
-				materialKernel.cameraMediumStack = this.cameraMediumStack;
+				materialKernel.maxVolumeSteps = this.maxVolumeSteps;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
+
+				// find the volumes the new camera rays start inside of
+				if ( this.hasVolumes ) {
+
+					cameraMediumKernel.rayDataStorage = rayDataStorage;
+					cameraMediumKernel.rayCount = rayCount;
+					this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
+
+				}
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
 				rayDispatchConverter.queue = rayQueue;

@@ -1,4 +1,4 @@
-import { Vector2, Vector4 } from 'three';
+import { Vector2 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
@@ -31,9 +31,7 @@ export class MaterialKernel extends ComputeKernel {
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
-
-			// the media the camera is inside of
-			cameraMediumStack: uniform( new Vector4().setScalar( MEDIUM_STACK_EMPTY ), 'uvec4' ),
+			maxVolumeSteps: uniform( 256, 'uint' ),
 
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
@@ -70,7 +68,7 @@ export class MaterialKernel extends ComputeKernel {
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
-				cameraMediumStack: vec4u,
+				maxVolumeSteps: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -151,22 +149,14 @@ export class MaterialKernel extends ComputeKernel {
 
 					ray.direction = normalize( ray.direction );
 
-					// a camera inside a scattering volume has its first segment walked by MediumKernel, which
-					// hands its hit back in the slot's own result entry
-					let cameraMedium = ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction );
-					var rayIndex = rayCount + index;
-					if ( ! cameraMedium.inside ) {
-
-						rayIndex = atomicAdd( &rayQueue.length, 1u );
-						rayQueue.elements[ rayIndex ].origin = ray.origin;
-						rayQueue.elements[ rayIndex ].direction = ray.direction;
-						rayQueue.elements[ rayIndex ].pixelIndex = pixelIndex;
-						rayQueue.elements[ rayIndex ].currentBounce = 0u;
-						rayQueue.elements[ rayIndex ].seed = seed + samples;
-						rayQueue.elements[ rayIndex ].alphaDepth = 0u;
-						rayQueue.elements[ rayIndex ].maxDist = ray.maxDist;
-
-					}
+					let rayIndex = atomicAdd( &rayQueue.length, 1u );
+					rayQueue.elements[ rayIndex ].origin = ray.origin;
+					rayQueue.elements[ rayIndex ].direction = ray.direction;
+					rayQueue.elements[ rayIndex ].pixelIndex = pixelIndex;
+					rayQueue.elements[ rayIndex ].currentBounce = 0u;
+					rayQueue.elements[ rayIndex ].seed = seed + samples;
+					rayQueue.elements[ rayIndex ].alphaDepth = 0u;
+					rayQueue.elements[ rayIndex ].maxDist = ray.maxDist;
 
 					rayDataStorage[ index ].origin = ray.origin;
 					rayDataStorage[ index ].direction = ray.direction;
@@ -189,11 +179,19 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].auxAlbedo = 0u;
 					rayDataStorage[ index ].auxNormal = 0u;
 					rayDataStorage[ index ].volumeSteps = 0u;
-					rayDataStorage[ index ].walkPending = select( 0u, 1u, cameraMedium.inside );
-					rayDataStorage[ index ].objectIndex = select( - 1, 0, cameraMedium.inside );
+					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
 					rayDataStorage[ index ].mediumVertex = 0u;
-					rayDataStorage[ index ].medium = ${ storeMediumFn }( cameraMedium, ${ mediumSegmentStruct }() );
+
+					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
+					rayDataStorage[ index ].medium = ${ storeMediumFn }(
+						${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ), ${ MEDIUM_STACK_EMPTY }u, ray.origin, - ray.direction ),
+						${ mediumSegmentStruct }(),
+					);
+					rayDataStorage[ index ].lightPoint = vec4f( 0.0 );
+					rayDataStorage[ index ].volumePointWeight = vec3f( 0.0 );
+					rayDataStorage[ index ].volumeLightColor = vec3f( 0.0 );
+					rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -209,8 +207,28 @@ export class MaterialKernel extends ComputeKernel {
 					var medium = ${ loadMediumFn }( input.medium );
 					let segmentInMedium = medium.inside;
 
+					// the shadow ray of the light LogicKernel sampled from a point on the fog segment just walked
+					if ( any( input.volumeLightColor > vec3f( 0.0 ) ) ) {
+
+						let shadowIndex = atomicAdd( &shadowRayQueue.length, 1u );
+						shadowRayQueue.elements[ shadowIndex ].origin = input.volumeLightPosition;
+						shadowRayQueue.elements[ shadowIndex ].direction = input.volumeLightDirection;
+						shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
+						shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
+						shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
+						shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
+						shadowRayQueue.elements[ shadowIndex ].maxDist = input.volumeLightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+						shadowRayQueue.elements[ shadowIndex ].mediumStack = medium.stack;
+						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = i32( shadowIndex );
+
+					} else {
+
+						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
+
+					}
+
 					// A scatter event in fog, staged at "origin" by LogicKernel, is a path vertex like a surface,
-					// counted as a bounce, where light is sampled through the phase function
+					// counted as a bounce, that continues through the phase function
 					if ( input.mediumVertex != 0u ) {
 
 						let newBounce = input.currentBounce + 1u;
@@ -250,31 +268,9 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						// the shadow ray toward the light LogicKernel selected
-						if ( input.lightPdf > 0.0 ) {
-
-							let lightPhasePdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
-							rayDataStorage[ index ].lightBsdf = vec3f( lightPhasePdf );
-							rayDataStorage[ index ].lightBsdfPdf = lightPhasePdf;
-
-							let shadowIndex = atomicAdd( &shadowRayQueue.length, 1u );
-							shadowRayQueue.elements[ shadowIndex ].origin = input.origin;
-							shadowRayQueue.elements[ shadowIndex ].direction = input.lightDirection;
-							shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
-							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
-							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
-							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
-							shadowRayQueue.elements[ shadowIndex ].mediumStack = medium.stack;
-							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
-
-						} else {
-
-							rayDataStorage[ index ].lightPdf = 0.0;
-							rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-
-						}
-
+						// its light was sampled with its segment's
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
 					}
@@ -331,8 +327,11 @@ export class MaterialKernel extends ComputeKernel {
 					if ( passesThrough ) {
 
 						// out of transparent bounces, so stop rather than shading a surface that
-						// should be invisible. A zeroed throughput terminates in LogicKernel.
-						if ( input.alphaDepth >= maxTransparentBounces ) {
+						// should be invisible. A zeroed throughput terminates in LogicKernel. Fog
+						// boundaries count as volume steps instead, as Cycles counts them apart
+						let alphaDepth = input.alphaDepth + select( 1u, 0u, isFogBoundary );
+						let volumeSteps = input.volumeSteps + select( 0u, 1u, isFogBoundary );
+						if ( alphaDepth > maxTransparentBounces || volumeSteps > maxVolumeSteps ) {
 
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
@@ -378,7 +377,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
 							rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
 							rayQueue.elements[ alphaIndex ].seed = input.seed;
-							rayQueue.elements[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
+							rayQueue.elements[ alphaIndex ].alphaDepth = alphaDepth;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
 							rayQueue.elements[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
@@ -389,7 +388,8 @@ export class MaterialKernel extends ComputeKernel {
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
-						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
+						rayDataStorage[ index ].alphaDepth = alphaDepth;
+						rayDataStorage[ index ].volumeSteps = volumeSteps;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;

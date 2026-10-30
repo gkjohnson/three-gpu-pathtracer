@@ -1,7 +1,8 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
-import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from './sampling.wgsl.js';
-import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
+import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn, misHeuristicFn } from './sampling.wgsl.js';
+import { LIGHT_FAR_DISTANCE, DIR_LIGHT_TYPE, ENVIRONMENT_LIGHT_TYPE } from './lights.wgsl.js';
+import { lightRecordStruct } from './structs.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // TODO: consider removing the Dwivedi guiding, which may help less here than in Cycles
@@ -25,6 +26,13 @@ export const MEDIUM_STACK_SIZE = 4;
 
 // how many fog volume boundaries a shadow ray passes before it counts as occluded
 const MEDIUM_SHADOW_MAX_BOUNDARIES = 8;
+
+// how many surfaces the ray finding the volumes a camera ray starts in passes
+const MEDIUM_ORIGIN_MAX_HITS = 16;
+
+// the smallest distance from a segment to the light point its equiangular samples are drawn toward, keeping
+// their pdf finite
+const MEDIUM_EQUIANGULAR_MIN_DISTANCE = 1e-4;
 
 // the bit flags of the stored medium and segment
 const MEDIUM_INSIDE = 1;
@@ -349,6 +357,61 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 `;
 
+// The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray traced
+// from the origin meets the boundaries of the volumes around it, and one whose back face comes before any of its
+// front faces contains the origin. Like Cycles, it relies on closed volumes with outward facing normals
+export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, offsetRayOrigin, transforms, materials, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
+
+	fn originMediumStack( origin: vec3f ) -> vec4u {
+
+		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+
+		// the volumes whose front face was met first, so the origin is outside of them
+		var outside = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		var outsideCount = 0u;
+
+		var ray: ${ rayStruct };
+		ray.origin = origin;
+		ray.direction = vec3f( 0.0, 0.0, 1.0 );
+		ray.maxDist = 0.0;
+		for ( var i = 0u; i < ${ MEDIUM_ORIGIN_MAX_HITS }u; i ++ ) {
+
+			var hit: ${ raycastOutput };
+			if ( ! ${ raycastFirstHit }( ray, &hit ) ) {
+
+				break;
+
+			}
+
+			let material = ${ materials }[ ${ transforms }[ hit.objectIndex ].materialIndex ];
+			let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
+			if ( isVolume ) {
+
+				let id = ${ transforms }[ hit.objectIndex ].mediumId;
+				let isOutside = any( outside == vec4u( id ) );
+				if ( hit.side > 0.0 && ! isOutside && outsideCount < ${ MEDIUM_STACK_SIZE }u ) {
+
+					outside[ outsideCount ] = id;
+					outsideCount ++;
+
+				} else if ( hit.side < 0.0 && ! isOutside ) {
+
+					stack = ${ mediumStackEnterFn }( stack, hit.objectIndex );
+
+				}
+
+			}
+
+			ray.origin = ${ offsetRayOrigin }( ray.origin + ray.direction * hit.dist, ray.direction, hit.normal );
+
+		}
+
+		return stack;
+
+	}
+
+`;
+
 // The stack a surface's shadow ray starts in. A light on the far side of a volume's boundary is reached through
 // it, entering or leaving the volume
 export const shadowMediumStackFunc = ( mediumStackEnterFn, mediumStackExitFn ) => wgslTagFn/* wgsl */`
@@ -470,6 +533,83 @@ export const mediumShadowTransmittanceFunc = ( raycastShadow, raycastOutput, off
 	`;
 
 };
+
+// The point a light sample reaches, which equiangular sampling draws toward. Distant lights have none
+export const getLightPointFn = wgslTagFn/* wgsl */`
+
+	fn getLightPoint( position: vec3f, lightRec: ${ lightRecordStruct } ) -> vec4f {
+
+		let isDistant = lightRec.lightType == ${ DIR_LIGHT_TYPE } || lightRec.lightType == ${ ENVIRONMENT_LIGHT_TYPE };
+		return select( vec4f( position + lightRec.direction * lightRec.dist, 1.0 ), vec4f( 0.0 ), isDistant );
+
+	}
+
+`;
+
+// The point on a fog segment where light is sampled. As in Cycles it is chosen apart from the distance sample
+// that continues the path, between that sample and an equiangular one toward the last sampled light point
+// ("Importance Sampling Techniques for Path Tracing in Participating Media", Kulla and Fajardo 2012), weighted
+// by one sample MIS. The light point is any one chosen independently of the segment, "w" zero for none.
+// Returns the point's scattering and transmittance over its pdf with the MIS weight, zero when the chosen
+// strategy has no point
+export const sampleVolumeLightPointFn = wgslTagFn/* wgsl */`
+
+	fn sampleVolumeLightPoint(
+		medium: ${ mediumStruct }, channelPdf: vec3f, scatterDist: f32, segmentLength: f32,
+		origin: vec3f, direction: vec3f, lightPoint: vec4f, u: vec2f, dist: ptr<function, f32>,
+	) -> vec3f {
+
+		let scattering = medium.albedo * medium.extinction;
+		let scattered = scatterDist < segmentLength;
+
+		// the equiangular distribution over the segment, from the angles to the light point's projection on it
+		let toLight = lightPoint.xyz - origin;
+		let delta = dot( toLight, direction );
+		let height = max( length( toLight - direction * delta ), ${ MEDIUM_EQUIANGULAR_MIN_DISTANCE } );
+		let thetaA = atan2( - delta, height );
+		let thetaB = atan2( segmentLength - delta, height );
+		let hasEquiangular = lightPoint.w != 0.0 && thetaB > thetaA;
+
+		// the distance sample alone, when there is no light point to sample toward
+		if ( ! hasEquiangular ) {
+
+			if ( ! scattered ) {
+
+				return vec3f( 0.0 );
+
+			}
+
+			*dist = scatterDist;
+			let transmittance = exp( - medium.extinction * scatterDist );
+			return scattering * transmittance / dot( channelPdf, medium.extinction * transmittance );
+
+		}
+
+		let isEquiangular = u.x < 0.5;
+		var t = scatterDist;
+		if ( isEquiangular ) {
+
+			t = clamp( delta + height * tan( mix( thetaA, thetaB, u.y ) ), 0.0, segmentLength );
+
+		} else if ( ! scattered ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		let transmittance = exp( - medium.extinction * t );
+		let distancePdf = select( 0.0, dot( channelPdf, medium.extinction * transmittance ), t < segmentLength );
+		let offset = t - delta;
+		let equiangularPdf = height / ( ( thetaB - thetaA ) * ( height * height + offset * offset ) );
+
+		let pdf = select( distancePdf, equiangularPdf, isEquiangular );
+		let misWeight = ${ misHeuristicFn }( pdf, select( equiangularPdf, distancePdf, isEquiangular ) );
+		*dist = t;
+		return scattering * transmittance * misWeight / ( 0.5 * pdf );
+
+	}
+
+`;
 
 // The probability of sampling each color channel's distance, in proportion to throughput times albedo
 export const mediumChannelPdfFn = wgslTagFn/* wgsl */`

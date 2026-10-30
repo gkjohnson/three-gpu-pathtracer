@@ -2,11 +2,11 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, uniform, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE, RNG_INDEX_VOLUME_LIGHT_POINT } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import {
 	loadMediumFn, loadMediumSegmentFn, storeMediumFn,
-	mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn,
+	mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, sampleVolumeLightPointFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, mediumQueueStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
@@ -87,6 +87,20 @@ export class MediumKernel extends ComputeKernel {
 
 						isTerminated = true;
 						break;
+
+					}
+
+					// the point on a fog segment where light is sampled, weighted from the segment's start
+					if ( medium.fog ) {
+
+						var pointDist = 0.0;
+						let pointWeight = ${ sampleVolumeLightPointFn }(
+							medium, channelPdf, scatterDist, surfaceDist, ray.origin, ray.direction, input.lightPoint,
+							${ rand2 }( ${ RNG_INDEX_VOLUME_LIGHT_POINT } ), &pointDist,
+						);
+
+						rayDataStorage[ index ].volumeLightPosition = ray.origin + ray.direction * pointDist;
+						rayDataStorage[ index ].volumePointWeight = weight * pointWeight;
 
 					}
 
