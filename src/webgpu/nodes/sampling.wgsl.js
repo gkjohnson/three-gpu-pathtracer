@@ -161,51 +161,6 @@ export const henyeyGreensteinPdfFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
-// Returns the direction at the given cosine from "n", rotated around it by the fraction "u" of a turn
-export const directionFromCosineFn = wgslFn( /* wgsl */ `
-
-	fn directionFromCosine( n: vec3f, cosTheta: f32, u: f32 ) -> vec3f {
-
-		// orthonormal basis around "n", from https://graphics.pixar.com/library/OrthonormalB/paper.pdf
-		let sign = select( sign( n.z ), 1.0, n.z == 0.0 );
-		let a = - 1.0 / ( sign + n.z );
-		let b = n.x * n.y * a;
-		let b1 = vec3( 1.0 + sign * n.x * n.x * a, sign * b, - sign * n.x );
-		let b2 = vec3( b, sign + n.y * n.y * a, - n.y );
-
-		let sinTheta = sqrt( max( 0.0, 1.0 - cosTheta * cosTheta ) );
-		let phi = 2.0 * PI * u;
-		return normalize( sinTheta * cos( phi ) * b1 + sinTheta * sin( phi ) * b2 + cosTheta * n );
-
-	}
-
-`, [ constants ] );
-
-// Dwivedi's guided phase function from "Improving the Dwivedi Sampling Scheme" (Meng et al. 2016), as
-// in Cycles' subsurface_random_walk.h. "v" is the diffusion length and "phaseLog" is log( ( v + 1 ) / ( v - 1 ) ).
-// The pdf is per solid angle, including the uniform azimuth.
-// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L149
-export const dwivediPhasePdfFn = wgslFn( /* wgsl */ `
-
-	fn dwivediPhasePdf( v: f32, phaseLog: f32, cosTheta: f32 ) -> f32 {
-
-		return 1.0 / ( 2.0 * PI * ( v - cosTheta ) * phaseLog );
-
-	}
-
-`, [ constants ] );
-
-// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L157
-export const sampleDwivediPhaseFn = wgslFn( /* wgsl */ `
-
-	fn sampleDwivediPhase( v: f32, phaseLog: f32, u: f32 ) -> f32 {
-
-		return v - ( v + 1.0 ) * exp( - u * phaseLog );
-
-	}
-
-` );
-
 // power heuristic for multiple importance sampling
 export const misHeuristicFn = wgslFn( /* wgsl */ `
 
