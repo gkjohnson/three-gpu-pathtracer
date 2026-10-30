@@ -661,7 +661,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		/**
 		 * Resolution of the low resolution preview, as a fraction of the render size. The minimum when
-		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set.
+		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set. The preview never has more pixels than
+		 * {@link WebGPUPathTracer#frameBudget}.
 		 * @type {number}
 		 * @default 0.1
 		 */
@@ -1395,8 +1396,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 			let scale = lowResScale;
 			if ( adaptiveDynamicRes && this._lowResPixelTime > 0 ) {
 
-				// the pixels that fit in "targetFrameTime", at most the frame budget since that's the wavefront path count
-				const pixels = Math.min( this.targetFrameTime / this._lowResPixelTime, this.frameBudget );
+				// the pixels that fit in "targetFrameTime"
+				const pixels = this.targetFrameTime / this._lowResPixelTime;
 				const fitScale = Math.min( Math.max( Math.sqrt( pixels / ( width * height ) ), lowResScale ), 1 );
 
 				// only resize as a preview starts so it isn't restarted
@@ -1410,8 +1411,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
-			width = Math.ceil( scale * width );
-			height = Math.ceil( scale * height );
+			// at most the frame budget's pixels, checked every frame since the budget adapts separately.
+			// The wavefront traces that many paths, and pixels past them are never reached in a preview
+			scale = Math.min( scale, Math.sqrt( this.frameBudget / ( width * height ) ) );
+			width = Math.max( 1, Math.floor( scale * width ) );
+			height = Math.max( 1, Math.floor( scale * height ) );
 
 		}
 
