@@ -142,25 +142,6 @@ export const sampleHenyeyGreensteinFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
-// Evaluates the Henyey-Greenstein phase function for the cosine between the propagation and scattered directions
-// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume_util.h#L27
-export const henyeyGreensteinPdfFn = wgslFn( /* wgsl */ `
-
-	fn henyeyGreensteinPdf( cosTheta: f32, g: f32 ) -> f32 {
-
-		if ( abs( g ) <= ${ HG_ISOTROPIC_EPSILON } ) {
-
-			return 1.0 / ( 4.0 * PI );
-
-		}
-
-		let denom = 1.0 + g * g - 2.0 * g * cosTheta;
-		return ( 1.0 - g * g ) / ( 4.0 * PI * denom * sqrt( denom ) );
-
-	}
-
-`, [ constants ] );
-
 // power heuristic for multiple importance sampling
 export const misHeuristicFn = wgslFn( /* wgsl */ `
 

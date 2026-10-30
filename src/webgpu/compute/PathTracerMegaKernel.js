@@ -181,6 +181,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
 				var mediumScattered = false;
+
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 

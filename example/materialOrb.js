@@ -70,12 +70,8 @@ const params = {
 	enable: true,
 	displaySampleDensity: false,
 	overlayReference: false,
-
-	// volume scattering is only supported by the megakernel so far
-	useMegakernel: false,
 	multipleImportanceSampling: true,
 	maxBounces: 15,
-	maxVolumeSteps: 256,
 	renderScale: 1,
 	filterGlossyFactor: 1,
 	frameBudget: 250000,
@@ -113,7 +109,6 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.useMegakernel( params.useMegakernel );
 	pathTracer.frameBudget = params.frameBudget;
 
 	scene = new Scene();
@@ -180,16 +175,10 @@ async function init() {
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'useMegakernel' ).onChange( v => {
-
-		pathTracer.useMegakernel( v );
-
-	} );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'maxVolumeSteps', 1, 1024, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.close();
 
@@ -429,7 +418,6 @@ function onParamsChange() {
 	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
 	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.maxVolumeSteps = params.maxVolumeSteps;
 	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
