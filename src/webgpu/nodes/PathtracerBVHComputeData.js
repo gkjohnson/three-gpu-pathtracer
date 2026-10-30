@@ -31,22 +31,6 @@ function hasMedium( material ) {
 
 }
 
-// The single scatter albedo of one channel of a volume from its perceived multi scatter albedo and
-// phase anisotropy, using the inversion from "KHR_materials_scatter" (after Kulla and Conty 2017).
-function getSingleScatterAlbedo( multiScatterAlbedo, anisotropy ) {
-
-	if ( multiScatterAlbedo <= 0 ) {
-
-		return 0;
-
-	}
-
-	const a = multiScatterAlbedo;
-	const s = Math.min( Math.max( 4.09712 + 4.20863 * a - Math.sqrt( 9.59217 + 41.6808 * a + 17.7126 * a * a ), 0 ), 1 );
-	return ( 1 - s * s ) / ( 1 - anisotropy * s * s );
-
-}
-
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -967,26 +951,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			// anisotropyMap transform - offset 264
 			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
-			// scattering volume - offset 276. "scatterStrength" scales the multi scatter albedo, while a fog
-			// volume's color is its single scatter albedo
-			const scatterStrength = getField( m, 'scatterStrength', 0.0 );
-			const scatterAnisotropy = getField( m, 'scatterAnisotropy', 0.0 );
-			const multiscatterColor = getField( m, 'multiscatterColor', null );
-			if ( isFogVolume ) {
+			// scattering volume - offset 276. A fog volume's color is its single scatter albedo, used as is
+			const multiscatterColor = isFogVolume ? m.color : getField( m, 'multiscatterColor', null );
+			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
+			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
+			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;
+			floatArray[ index ++ ] = getField( m, 'scatterStrength', 0.0 );
+			floatArray[ index ++ ] = getField( m, 'scatterAnisotropy', 0.0 );
 
-				floatArray[ index ++ ] = m.color.r;
-				floatArray[ index ++ ] = m.color.g;
-				floatArray[ index ++ ] = m.color.b;
-
-			} else {
-
-				floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.r : 1.0 ) * scatterStrength, scatterAnisotropy );
-				floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.g : 1.0 ) * scatterStrength, scatterAnisotropy );
-				floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.b : 1.0 ) * scatterStrength, scatterAnisotropy );
-
-			}
-
-			floatArray[ index ++ ] = scatterAnisotropy;
+			// padding to the struct's 16 byte alignment
+			index += 3;
 
 		}
 

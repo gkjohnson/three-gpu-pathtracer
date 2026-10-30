@@ -91,6 +91,22 @@ export const loadMediumFn = wgslTagFn/* wgsl */`
 
 `;
 
+// The single scatter albedo of a volume from its perceived multi scatter albedo and phase anisotropy, using the
+// inversion from "KHR_materials_scatter" (after Kulla and Conty 2017). A zero multi scatter albedo maps to exactly zero
+// https://github.com/KhronosGroup/glTF/pull/2579
+const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
+
+	fn singleScatterAlbedo( multiscatterAlbedo: vec3f, anisotropy: f32 ) -> vec3f {
+
+		let a = multiscatterAlbedo;
+		let s = clamp( 4.09712 + 4.20863 * a - sqrt( 9.59217 + 41.6808 * a + 17.7126 * a * a ), vec3f( 0.0 ), vec3f( 1.0 ) );
+		let s2 = select( s * s, vec3f( 1.0 ), a <= vec3f( 0.0 ) );
+		return ( 1.0 - s2 ) / ( 1.0 - anisotropy * s2 );
+
+	}
+
+`;
+
 // A material's extinction from its glTF attenuation, zero for one without a volume
 const materialExtinctionFn = wgslTagFn/* wgsl */`
 
@@ -188,14 +204,17 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
 			let entryExtinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-			let entryScattering = material.scatterAlbedo * entryExtinction;
+			// a fog volume's color is its single scatter albedo already
+			let isFog = material.fogVolume != 0;
+			let entryAlbedo = select( ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, material.scatterAnisotropy ), material.multiscatterColor, isFog );
+			let entryScattering = entryAlbedo * entryExtinction;
 			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
 			extinction += entryExtinction;
 			scattering += entryScattering;
-			maxAlbedo = max( maxAlbedo, material.scatterAlbedo );
+			maxAlbedo = max( maxAlbedo, entryAlbedo );
 			anisotropy += material.scatterAnisotropy * weight;
 			anisotropyWeight += weight;
-			fog = fog || material.fogVolume != 0;
+			fog = fog || isFog;
 
 		}
 
