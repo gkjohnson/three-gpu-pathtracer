@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
-import { mediumSegmentStruct, enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -361,11 +361,7 @@ export class MaterialKernel extends ComputeKernel {
 					// refracting into a front face of a scattering material starts a random walk inside it
 					if ( scatterRec.isTransmissive && ! surface.thinWall && input.side > 0.0 ) {
 
-						let entered = ${ enterMediumFn }(
-							materialInfo.attenuationColor, materialInfo.attenuationDistance, materialInfo.scatterAlbedo, materialInfo.scatterAnisotropy,
-							u32( input.objectIndex ), vertexData.position.xyz, surface.normal,
-						);
-
+						let entered = ${ enterMediumFn }( materialInfo, u32( input.objectIndex ) );
 						if ( entered.inside ) {
 
 							medium = entered;
@@ -374,10 +370,10 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// a direction from the bsdf isn't guided
+					// keep the medium the path left or entered
 					if ( segmentInMedium || medium.inside ) {
 
-						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium, ${ mediumSegmentStruct }() );
+						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 					}
 
