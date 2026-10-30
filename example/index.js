@@ -10,6 +10,7 @@ import {
 	PlaneGeometry,
 	Scene,
 	OrthographicCamera,
+	Vector2,
 	Vector3,
 	WebGPURenderer,
 	EquirectangularReflectionMapping,
@@ -156,6 +157,9 @@ const params = {
 	adaptiveFrameBudget: true,
 	targetFrameTime: 16,
 
+	// read only: the resolution traced as a percent of the render size, which the low res preview adapts
+	resolution: '',
+
 	model: '',
 
 	envMap: envMaps[ 'Aristea Wreck Puresky' ],
@@ -203,6 +207,10 @@ let averageSamples = 0;
 
 // whether a model is loading, during which the canvas is hidden
 let loading = false;
+
+// the traced resolution percent the readout last showed
+let shownPercent = - 1;
+const _bufferSize = /* @__PURE__ */ new Vector2();
 
 const orthoWidth = 2;
 
@@ -430,6 +438,16 @@ function animate() {
 
 		}
 
+		// the traced resolution as a percent of the render size, the text only rebuilt when it changes
+		renderer.getDrawingBufferSize( _bufferSize );
+		const percent = Math.round( 100 * pathTracer.target.width / Math.floor( params.renderScale * _bufferSize.x ) );
+		if ( percent !== shownPercent ) {
+
+			shownPercent = percent;
+			params.resolution = `${ percent }%`;
+
+		}
+
 		// draws the denoiser's auxiliary buffer over the render
 		if ( params.auxView !== 'none' ) {
 
@@ -654,6 +672,7 @@ function buildGui() {
 		pathTracer.targetFrameTime = v;
 
 	} );
+	pathTracingFolder.add( params, 'resolution' ).listen().disable();
 	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;

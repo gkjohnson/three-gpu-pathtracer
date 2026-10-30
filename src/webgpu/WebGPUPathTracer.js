@@ -37,6 +37,10 @@ const _color = new Color();
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
 
+// how far the adaptive low res preview's pixel count can drift from what its measured time allows before
+// it's resized
+const LOW_RES_CHANGE_THRESHOLD = 1.15;
+
 // the options the mesh geometry bvhs are built with and how many workers build them at once
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
 const MAX_BVH_WORKERS = 4;
@@ -262,7 +266,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * GPU time in milliseconds each {@link WebGPUPathTracer#renderSample} call is tuned toward when
-	 * {@link WebGPUPathTracer#adaptiveFrameBudget} is enabled.
+	 * {@link WebGPUPathTracer#adaptiveFrameBudget} is enabled, and each low resolution preview frame when
+	 * {@link WebGPUPathTracer#adaptiveDynamicRes} is.
 	 * @type {number}
 	 * @default 16
 	 */
@@ -610,6 +615,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._fadeState = 0;
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
+
+		// the pixel count the adaptive low res preview is sized to, zero until its time is measured
+		this._lowResPixels = 0;
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// avoid mipmap gen on copy, not always supported with float type
@@ -662,8 +670,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.lowResScale = 0.1;
 
 		/**
-		 * Whether the low resolution preview traces as many pixels as the frame budget covers, between
-		 * {@link WebGPUPathTracer#lowResScale} and the full render size.
+		 * Whether the low resolution preview is sized from its measured gpu time to take about
+		 * {@link WebGPUPathTracer#targetFrameTime} per frame, between {@link WebGPUPathTracer#lowResScale}
+		 * and the full render size. Needs a renderer created with `trackTimestamp`.
 		 * @type {boolean}
 		 * @default true
 		 */
@@ -1271,10 +1280,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
+			// the adaptive preview follows its measured time, resizing only once it's off by the threshold
+			// since a resize restarts the preview
 			let scale = lowResScale;
 			if ( adaptiveDynamicRes ) {
 
-				scale = Math.min( Math.max( Math.sqrt( pathTracer.lowResPixelBudget / ( width * height ) ), lowResScale ), 1 );
+				const pixels = pathTracer.lowResPixelCount;
+				const ratio = pixels / this._lowResPixels;
+				if ( ! ( ratio < LOW_RES_CHANGE_THRESHOLD && ratio > 1 / LOW_RES_CHANGE_THRESHOLD ) ) {
+
+					this._lowResPixels = pixels;
+
+				}
+
+				scale = Math.min( Math.max( Math.sqrt( this._lowResPixels / ( width * height ) ), lowResScale ), 1 );
 
 			}
 
@@ -1307,7 +1326,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
-			pathTracer.lowResBudgeted = adaptiveDynamicRes;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 

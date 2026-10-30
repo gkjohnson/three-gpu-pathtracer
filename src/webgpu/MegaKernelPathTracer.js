@@ -213,9 +213,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			}
 
-			// split the frame into a near square grid of tiles no larger than the budget
+			// split the frame into a near square grid of tiles no larger than the budget. The low res preview
+			// is sized from its own time and traced in one
 			this.getSize( _size );
-			const budgetTiles = Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
+			const budgetTiles = lowResMode ? 1 : Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
 			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
 			tiles.y = Math.ceil( budgetTiles / tiles.x );
 
@@ -256,6 +257,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					const tileWidth = MathUtils.clamp( _size.x - kernel.offset.x, 0, tileSize.x );
 					const tileHeight = MathUtils.clamp( _size.y - kernel.offset.y, 0, tileSize.y );
 					this._updateWork += tileWidth * tileHeight;
+					this._updatePixels += tileWidth * tileHeight;
 
 					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );
