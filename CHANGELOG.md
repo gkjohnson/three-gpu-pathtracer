@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
 - WebGPUPathTracer: "setSceneAsync" no longer leaves geometry unusable when its attributes share a buffer, as in glTF files.
 - WebGPUPathTracer: Path buffers being reallocated on every reset for the low resolution preview.
+- WebGPUPathTracer: NaN pixels next to thin area lights.
+- WebGPUPathTracer: Diffuse surfaces losing indirect light when viewed almost head-on.
 
 ## [0.0.27] - 2026.10.08
 ### Added
