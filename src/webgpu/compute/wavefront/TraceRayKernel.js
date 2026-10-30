@@ -3,7 +3,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
-import { rayQueueStruct, intersectionResultStruct } from './structs.js';
+import { traceQueuedRayStruct, intersectionResultStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
 // Pure BVH traversal over the queued bounce rays: one thread per queued ray, writing a compact
 // intersection result at the ray's queue index for LogicKernel to consume next frame.
@@ -13,7 +13,8 @@ export class TraceRayKernel extends ComputeKernel {
 
 		const params = {
 
-			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
+			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
 			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
 			// storage buffer as an array, in r187
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
@@ -29,16 +30,17 @@ export class TraceRayKernel extends ComputeKernel {
 			fn compute( globalId: vec3u ) -> void {
 
 				let rayQueue = &${ params.rayQueue };
+				let queueCounters = &${ params.queueCounters };
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 
 				let index = globalId.x;
-				if ( index >= rayQueue.length ) {
+				if ( index >= queueCounters[ ${ RAY_QUEUE_LENGTH }u ] ) {
 
 					return;
 
 				}
 
-				let queuedRay = ( *rayQueue ).elements[ index ];
+				let queuedRay = rayQueue[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, queuedRay.seed, queuedRay.currentBounce + queuedRay.alphaDepth );
 
