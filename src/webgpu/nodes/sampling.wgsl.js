@@ -114,6 +114,7 @@ const HG_ISOTROPIC_EPSILON = 1e-3;
 
 // Samples a new direction from the Henyey-Greenstein phase function around the propagation direction
 // "d". Positive "g" scatters forward. The sample is exact, so the phase function over its pdf is one.
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume_util.h#L36
 export const sampleHenyeyGreensteinFn = wgslFn( /* wgsl */ `
 
 	fn sampleHenyeyGreenstein( d: vec3f, g: f32, uv: vec2f ) -> vec3f {
@@ -142,6 +143,7 @@ export const sampleHenyeyGreensteinFn = wgslFn( /* wgsl */ `
 `, [ constants ] );
 
 // Evaluates the Henyey-Greenstein phase function for the cosine between the propagation and scattered directions
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume_util.h#L27
 export const henyeyGreensteinPdfFn = wgslFn( /* wgsl */ `
 
 	fn henyeyGreensteinPdf( cosTheta: f32, g: f32 ) -> f32 {
@@ -182,6 +184,7 @@ export const directionFromCosineFn = wgslFn( /* wgsl */ `
 // Dwivedi's guided phase function from "Improving the Dwivedi Sampling Scheme" (Meng et al. 2016), as
 // in Cycles' subsurface_random_walk.h. "v" is the diffusion length and "phaseLog" is log( ( v + 1 ) / ( v - 1 ) ).
 // The pdf is per solid angle, including the uniform azimuth.
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L149
 export const dwivediPhasePdfFn = wgslFn( /* wgsl */ `
 
 	fn dwivediPhasePdf( v: f32, phaseLog: f32, cosTheta: f32 ) -> f32 {
@@ -192,6 +195,7 @@ export const dwivediPhasePdfFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L157
 export const sampleDwivediPhaseFn = wgslFn( /* wgsl */ `
 
 	fn sampleDwivediPhase( v: f32, phaseLog: f32, u: f32 ) -> f32 {

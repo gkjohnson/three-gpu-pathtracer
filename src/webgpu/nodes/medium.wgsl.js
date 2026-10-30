@@ -4,15 +4,18 @@ import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn,
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
 // TODO: consider removing the Dwivedi guiding, which may help less here than in Cycles
 
 // the smallest attenuation color used to derive a medium's extinction, keeping the log finite
 const MEDIUM_MIN_ATTENUATION = 1e-6;
 
 // the largest single scatter albedo used for the guiding diffusion length, which is infinite at one, as in Cycles
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L91
 const MEDIUM_MAX_GUIDING_ALBEDO = 0.999999;
 
 // how many of the shortest mean free paths the first segment looks for the opposite interface, as in Cycles
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L408
 const MEDIUM_OPPOSITE_SEARCH_PATHS = 10;
 
 // the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
@@ -68,6 +71,8 @@ export const enterMediumFn = wgslTagFn/* wgsl */`
 
 		// The diffusion length comes from the highest albedo (eq. 67 of "Zero-Variance Theory for Efficient
 		// Subsurface Scattering", d'Eon and Křivánek 2020), and anisotropic media are guided less
+		// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L167
+		// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L285
 		let maxAlbedo = min( max( max( albedo.r, albedo.g ), albedo.b ), ${ MEDIUM_MAX_GUIDING_ALBEDO } );
 		medium.diffusionLength = 1.0 / sqrt( 1.0 - pow( maxAlbedo, 2.44294 - 0.0215813 * maxAlbedo + 0.578637 / maxAlbedo ) );
 		medium.phaseLog = log( ( medium.diffusionLength + 1.0 ) / ( medium.diffusionLength - 1.0 ) );
@@ -87,6 +92,7 @@ export const enterMediumFn = wgslTagFn/* wgsl */`
 `;
 
 // The probability of sampling each color channel's distance, in proportion to throughput times albedo
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume.h#L157
 export const mediumChannelPdfFn = wgslTagFn/* wgsl */`
 
 	fn mediumChannelPdf( throughput: vec3f, albedo: vec3f ) -> vec3f {
@@ -206,6 +212,8 @@ export const sampleMediumDirectionFn = wgslTagFn/* wgsl */`
 		segment.backwardFraction = 0.0;
 		if ( medium.hasOpposite ) {
 
+			// the chance to guide toward the opposite interface
+			// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L351
 			let depth = clamp( dot( position - medium.entryPosition, - medium.entryNormal ), 0.0, medium.oppositeDistance );
 			segment.backwardFraction = 1.0 / ( 1.0 + exp( ( medium.oppositeDistance - 2.0 * depth ) / v ) );
 
@@ -232,6 +240,9 @@ export const sampleMediumDirectionFn = wgslTagFn/* wgsl */`
 		let phasePdf = ${ henyeyGreensteinPdfFn }( dot( direction, newDirection ), medium.anisotropy );
 		segment.forwardFactor = ${ dwivediPhasePdfFn }( v, medium.phaseLog, cosTheta ) / phasePdf;
 		segment.backwardFactor = ${ dwivediPhasePdfFn }( v, medium.phaseLog, - cosTheta ) / phasePdf;
+
+		// the stretched extinction for the guided distance
+		// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h#L393
 		segment.forwardStretch = 1.0 - cosTheta / v;
 		segment.backwardStretch = 1.0 + cosTheta / v;
 		segment.guidable = medium.guidedFraction > 0.0;
