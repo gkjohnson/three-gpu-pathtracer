@@ -30,9 +30,7 @@ export class PathTracerBackend {
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
-		// The last timed update, from three's timestamp queries, which only measure when the renderer is
-		// created with "trackTimestamp": its gpu time in milliseconds and the budget, mode and pixel count it
-		// ran with. "count" goes up with each measurement, which arrives a few frames after its update
+		// the gpu time of the last timed update and what it ran with. "count" increments per measurement
 		this.timing = { count: 0, frameTime: 0, frameBudget: 0, lowResMode: false, pixelCount: 0 };
 
 		this._renderTask = null;
@@ -262,7 +260,7 @@ export class PathTracerBackend {
 
 	}
 
-	// Reads back the gpu time of an update's dispatches into "timing" with what the update ran with
+	// Reads back the gpu time of an update's dispatches into "timing"
 	async _measureFrameTime( uids, frameBudget, lowResMode, pixelCount ) {
 
 		const { renderer, timing } = this;

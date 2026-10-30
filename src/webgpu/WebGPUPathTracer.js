@@ -48,7 +48,7 @@ const BUDGET_CHANGE_THRESHOLD = 1.15;
 const BUDGET_MAX_STEP = 2;
 const MIN_FRAME_BUDGET = 4096;
 
-// how much the adaptive low res preview's scale has to change before it's resized, since a resize restarts it
+// how much the adaptive preview scale must change before it's resized
 const LOW_RES_SCALE_CHANGE = 0.05;
 
 // the options the mesh geometry bvhs are built with and how many workers build them at once
@@ -590,9 +590,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._size = new Vector2();
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
-		// The adaptive budget and preview, set from the tracer's gpu time measurements: the last measurement
-		// read, the frame times summed toward the budget's next change, the preview's time per pixel and
-		// scale, and whether the missing timestamp warning has been logged
+		// adaptive frame budget and preview state
 		this._timingCount = 0;
 		this._frameTimeTotal = 0;
 		this._frameTimeCount = 0;
@@ -642,17 +640,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.dynamicLowRes = true;
 
 		/**
-		 * Resolution of the low resolution preview, as a fraction of the render size. The smallest
-		 * it gets when {@link WebGPUPathTracer#adaptiveDynamicRes} is set.
+		 * Resolution of the low resolution preview, as a fraction of the render size. The minimum when
+		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set.
 		 * @type {number}
 		 * @default 0.1
 		 */
 		this.lowResScale = 0.1;
 
 		/**
-		 * Whether the low resolution preview is sized from its measured gpu time to take about
-		 * {@link WebGPUPathTracer#targetFrameTime} per frame, between {@link WebGPUPathTracer#lowResScale}
-		 * and the full render size. Needs a renderer created with `trackTimestamp`.
+		 * Whether the low resolution preview is sized to take {@link WebGPUPathTracer#targetFrameTime} per
+		 * frame. Requires a renderer created with `trackTimestamp: true`.
 		 * @type {boolean}
 		 * @default true
 		 */
@@ -668,9 +665,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.adaptiveFrameBudget = true;
 
 		/**
-		 * GPU time in milliseconds each {@link WebGPUPathTracer#renderSample} call is tuned toward when
-		 * {@link WebGPUPathTracer#adaptiveFrameBudget} is enabled, and each low resolution preview frame when
-		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is.
+		 * GPU time in milliseconds per frame targeted by {@link WebGPUPathTracer#adaptiveFrameBudget} and
+		 * {@link WebGPUPathTracer#adaptiveDynamicRes}.
 		 * @type {number}
 		 * @default 16
 		 */
@@ -1214,8 +1210,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// Adapts the frame budget, or the low res preview's time per pixel, to the tracer's latest gpu time
-	// measurement, which arrives a few frames after its update
+	// Adapts the frame budget and preview to the tracer's latest gpu time measurement
 	_readTiming() {
 
 		const { timing } = this._pathTracer;
@@ -1235,7 +1230,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._timingCount = timing.count;
 
-		// the low res preview traces every pixel each update, and is sized from its own time
+		// preview measurements only size the preview
 		if ( timing.lowResMode ) {
 
 			this._lowResPixelTime = timing.frameTime / timing.pixelCount;
@@ -1352,11 +1347,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 			let scale = lowResScale;
 			if ( adaptiveDynamicRes && this._lowResPixelTime > 0 ) {
 
-				// the scale whose preview takes "targetFrameTime", from the time per pixel the last one took. It
-				// traces at most the frame budget's pixels, which is how many paths the wavefront tracer holds
+				// the pixels that fit in "targetFrameTime", at most the frame budget since that's the wavefront path count
 				const pixels = Math.min( this.targetFrameTime / this._lowResPixelTime, this.frameBudget );
 				const fitScale = Math.min( Math.max( Math.sqrt( pixels / ( width * height ) ), lowResScale ), 1 );
-				// only changed as a preview starts, so one already showing isn't restarted
+
+				// only resize as a preview starts so it isn't restarted
 				if ( firstFrame && Math.abs( fitScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE ) {
 
 					this._lowResScale = fitScale;
