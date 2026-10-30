@@ -1,4 +1,4 @@
-import { MathUtils, TimestampQuery, Vector4 } from 'three/webgpu';
+import { TimestampQuery, Vector4 } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
@@ -7,15 +7,6 @@ import { MEDIUM_STACK_EMPTY } from './nodes/medium.wgsl.js';
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;
 const COMPILE_COMPLETE = 1;
-
-// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered once
-// a window of measurements has been taken at it, and only changes when their average is off the target
-// by the threshold ratio, since a wavefront budget change reallocates the path buffers. It moves at most
-// the step ratio per window.
-const BUDGET_WINDOW = 16;
-const BUDGET_CHANGE_THRESHOLD = 1.15;
-const BUDGET_MAX_STEP = 2;
-const MIN_FRAME_BUDGET = 4096;
 
 export class PathTracerBackend {
 
@@ -27,11 +18,6 @@ export class PathTracerBackend {
 		// how much work a single update dispatches, in path slots. Lower values keep frames
 		// responsive on slower hardware; the unit is resolution independent.
 		this.frameBudget = 250000;
-
-		// whether "frameBudget" is adjusted to keep each update near "targetFrameTime" milliseconds of gpu
-		// time. Needs a renderer created with "trackTimestamp".
-		this.adaptiveFrameBudget = true;
-		this.targetFrameTime = 16;
 
 		this.maxTransparentBounces = 15;
 		this.maxVolumeSteps = 256;
@@ -49,23 +35,16 @@ export class PathTracerBackend {
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
-		// the gpu time of the last timed update, in milliseconds, from three's timestamp queries. Only
-		// measured when the renderer is created with "trackTimestamp".
-		this.frameTime = 0;
+		// the gpu time of the last timed update and what it ran with. "count" increments per measurement
+		this.timing = { count: 0, frameTime: 0, frameBudget: 0, lowResMode: false, pixelCount: 0 };
 
 		this._renderTask = null;
 		this._compileState = new WeakMap();
 
-		// the timestamp ids of the dispatches in the update being timed, whether a measurement is
-		// still reading back, and whether the missing timestamp warning has been logged
+		// the timestamp ids of the dispatches in the update being timed, and whether a measurement is
+		// still reading back
 		this._timestampUIDs = null;
 		this._timingFrame = false;
-		this._warnedTimestamps = false;
-
-		// the sum and count of the frame times measured at the current budget that the adaptive budget
-		// is set from
-		this._frameTimeTotal = 0;
-		this._frameTimeCount = 0;
 
 		this.outputTarget = createOutputTarget( 'Output #0' );
 		this.prevOutputTarget = createOutputTarget( 'Output #1' );
@@ -259,24 +238,15 @@ export class PathTracerBackend {
 
 		}
 
-		const { trackTimestamp } = renderer.backend;
-		if ( this.adaptiveFrameBudget && ! trackTimestamp && ! this._warnedTimestamps ) {
-
-			console.warn( 'PathTracerBackend: "adaptiveFrameBudget" needs timestamp queries. Create the renderer with "trackTimestamp: true" on a device that supports them.' );
-			this._warnedTimestamps = true;
-
-		}
-
 		// time this update unless the last measurement is still reading back
-		const timed = trackTimestamp && ! this._timingFrame;
-		const budget = this.frameBudget;
+		const timed = renderer.backend.trackTimestamp && ! this._timingFrame;
 		this._timestampUIDs = timed ? [] : null;
 		this._renderTask.next();
 
 		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
 		if ( timed && this._timestampUIDs.length > 0 ) {
 
-			this._measureFrameTime( this._timestampUIDs, budget );
+			this._measureFrameTime( this._timestampUIDs );
 
 		}
 
@@ -293,12 +263,13 @@ export class PathTracerBackend {
 
 	}
 
-	// Reads back the gpu time of an update's dispatches into "frameTime" and adapts the budget to it
-	async _measureFrameTime( uids, budget ) {
+	// Reads back the gpu time of an update's dispatches into "timing"
+	async _measureFrameTime( uids ) {
 
-		const { renderer } = this;
+		// what the update ran with, read before the readback since it may change meanwhile
+		const { renderer, timing, frameBudget, lowResMode } = this;
 		const { backend } = renderer;
-		const lowResMode = this.lowResMode;
+		const { width, height } = this.outputTarget;
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
@@ -311,57 +282,11 @@ export class PathTracerBackend {
 
 		}
 
-		this.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
-
-		// the low res preview traces too few pixels to say what a full update costs
-		if ( this.adaptiveFrameBudget && ! lowResMode ) {
-
-			this._adaptFrameBudget( this.frameTime, budget );
-
-		}
-
-	}
-
-	// Moves "frameBudget" toward the slot count that would take "targetFrameTime"
-	_adaptFrameBudget( frameTime, budget ) {
-
-		// a measurement from before the budget changed doesn't describe the current one
-		if ( budget !== this.frameBudget ) {
-
-			this._frameTimeTotal = 0;
-			this._frameTimeCount = 0;
-			return;
-
-		}
-
-		this._frameTimeTotal += frameTime;
-		this._frameTimeCount ++;
-		if ( this._frameTimeCount < BUDGET_WINDOW ) {
-
-			return;
-
-		}
-
-		const { targetFrameTime } = this;
-		const average = this._frameTimeTotal / this._frameTimeCount;
-		this._frameTimeTotal = 0;
-		this._frameTimeCount = 0;
-
-		// leave the budget alone while it's close enough to the target
-		const ratio = average / targetFrameTime;
-		if ( ratio < BUDGET_CHANGE_THRESHOLD && ratio > 1 / BUDGET_CHANGE_THRESHOLD ) {
-
-			return;
-
-		}
-
-		// scale the work done to land the average on the target. A budget past the pixel count does no
-		// more work, so it is capped there.
-		const { width, height } = this.outputTarget;
-		const pixelCount = width * height;
-		const next = Math.min( budget, pixelCount ) * targetFrameTime / average;
-		const stepped = MathUtils.clamp( next, budget / BUDGET_MAX_STEP, budget * BUDGET_MAX_STEP );
-		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, pixelCount ) );
+		timing.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
+		timing.frameBudget = frameBudget;
+		timing.lowResMode = lowResMode;
+		timing.pixelCount = width * height;
+		timing.count ++;
 
 	}
 
@@ -419,8 +344,6 @@ export class PathTracerBackend {
 		}
 
 		this._renderTask = null;
-		this._frameTimeTotal = 0;
-		this._frameTimeCount = 0;
 
 	}
 

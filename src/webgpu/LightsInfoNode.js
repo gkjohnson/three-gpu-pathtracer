@@ -36,7 +36,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		// ies profiles packed into an atlas alongside their placement rects
 		this.iesAtlas = new AtlasTexture( { type: HalfFloatType } );
 		this.iesProfilesNode = texture( this.iesAtlas.texture );
-		this.iesInfoNode = uniformArray( this.iesAtlas.textureInfo, 'uvec4' );
+		this.iesInfoNode = uniformArray( this.iesAtlas.textureInfo, 'uvec4' ).setName( 'iesInfo' );
 
 		this._initFns();
 

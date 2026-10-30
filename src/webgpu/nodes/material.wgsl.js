@@ -837,7 +837,8 @@ export const transmissionFresnelFunc = ( iridescentFresnel = iridescentFresnelFu
 		// Include the base-color tint in the transmission energy, as Cycles does when it
 		// computes the glass reflection probability from its two tinted coefficients.
 		let reflectEnergy = dot( reflectance, vec3f( 1.0 / 3.0 ) );
-		let transmitEnergy = dot( transmittance * surf.color, vec3f( 1.0 / 3.0 ) );
+		let transmissionTint = select( sqrt( surf.color ), surf.color, surf.thinWall );
+		let transmitEnergy = dot( transmittance * transmissionTint, vec3f( 1.0 / 3.0 ) );
 		let totalEnergy = reflectEnergy + transmitEnergy;
 		result.reflectProbability = select( 0.0, reflectEnergy / max( totalEnergy, EPSILON ), totalEnergy > EPSILON );
 

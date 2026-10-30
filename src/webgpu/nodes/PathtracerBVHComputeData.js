@@ -231,7 +231,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { textureAtlas, storage, fns } = this;
 		const textures = textureAtlas.texture;
-		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' );
+		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'bvh_textureInfo' );
 
 		// build the single sampleTexel bound to this instance's textureInfo node
 		const sampleTexel = sampleTexelFunc( textureInfo, texture( textures ) );

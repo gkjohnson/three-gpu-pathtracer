@@ -138,8 +138,8 @@ export class LogicKernel extends ComputeKernel {
 					if ( ! occluded ) {
 
 						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight,
-						// or when a bsdf ray could never reach the light
-						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && shadowHit.forwardBlocked == 0u;
+						// or when a bsdf ray could never reach the light or isn't traced past the bounce limit
+						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && shadowHit.forwardBlocked == 0u && input.currentBounce < maxBounces;
 						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), isMISWeighted );
 						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );

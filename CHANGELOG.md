@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: The scene data is available to kernels and camera ray functions through the TSL context as "bvhData".
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
 - WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
+- WebGPUPathTracer: "adaptiveDynamicRes" sizes the low resolution preview from its measured GPU time to take about "targetFrameTime", from "lowResScale" up to the full render size.
 - WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
 
 ### Changed
@@ -27,6 +28,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
 - WebGPUPathTracer: "setSceneAsync" no longer leaves geometry unusable when its attributes share a buffer, as in glTF files.
 - WebGPUPathTracer: Path buffers being reallocated on every reset for the low resolution preview.
+- WebGPUPathTracer: NaN pixels next to thin area lights.
+- WebGPUPathTracer: Diffuse surfaces losing indirect light when viewed almost head-on.
+- WebGPUPathTracer: Area and environment light being lost at the last bounce.
+- WebGPUPathTracer: Transmissive volumes being tinted by the square of their color, now matching Blender.
 
 ## [0.0.27] - 2026.10.08
 ### Added

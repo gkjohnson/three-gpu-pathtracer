@@ -207,9 +207,16 @@ export const misHeuristicFn = wgslFn( /* wgsl */ `
 
 	fn misHeuristic( a: f32, b: f32 ) -> f32 {
 
-		let aa = a * a;
-		let bb = b * b;
-		return aa / ( aa + bb );
+		// computed as a ratio so squaring large pdfs can't overflow to Inf / Inf
+		if ( a >= b ) {
+
+			let r = b / a;
+			return 1.0 / ( 1.0 + r * r );
+
+		}
+
+		let r = a / b;
+		return r * r / ( 1.0 + r * r );
 
 	}
 
