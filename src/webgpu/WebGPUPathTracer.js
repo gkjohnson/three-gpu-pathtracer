@@ -655,7 +655,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		/**
 		 * Resolution of the low resolution preview, as a fraction of the render size. The smallest
-		 * it gets when {@link WebGPUPathTracer#dynamicLowResScale} is set.
+		 * it gets when {@link WebGPUPathTracer#adaptiveDynamicRes} is set.
 		 * @type {number}
 		 * @default 0.1
 		 */
@@ -667,7 +667,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @type {boolean}
 		 * @default true
 		 */
-		this.dynamicLowResScale = true;
+		this.adaptiveDynamicRes = true;
 
 		/**
 		 * Resolution the path tracer renders at, as a fraction of the canvas size. Lowering it
@@ -1222,7 +1222,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			synchronizeRenderSize,
 			renderScale,
 			lowResScale,
-			dynamicLowResScale,
+			adaptiveDynamicRes,
 			minSamples,
 			maxSamples,
 		} = this;
@@ -1272,7 +1272,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( lowResMode ) {
 
 			let scale = lowResScale;
-			if ( dynamicLowResScale ) {
+			if ( adaptiveDynamicRes ) {
 
 				scale = Math.min( Math.max( Math.sqrt( pathTracer.lowResPixelBudget / ( width * height ) ), lowResScale ), 1 );
 
@@ -1307,7 +1307,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
-			pathTracer.lowResBudgeted = dynamicLowResScale;
+			pathTracer.lowResBudgeted = adaptiveDynamicRes;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 
