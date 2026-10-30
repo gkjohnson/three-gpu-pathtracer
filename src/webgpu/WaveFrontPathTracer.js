@@ -100,13 +100,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// a preview past the path slots would take several updates to trace every pixel once, so it is capped there
-	get lowResPixelCount() {
-
-		return Math.min( super.lowResPixelCount, this._getRequestedSlotCount() );
-
-	}
-
 	resetSeed() {
 
 		this.seed = 0;
@@ -489,10 +482,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 					shadowRayIntersectionsStorage,
 				} = this;
 
-				// slots past the pixel count never run. Each slot advancing a bounce is a unit of the budget
+				// slots past the pixel count never run
 				const rayCount = Math.min( this.rayCount, pixelCount );
-				this._updateWork += rayCount;
-				this._updatePixels = rayCount;
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = rayQueue;

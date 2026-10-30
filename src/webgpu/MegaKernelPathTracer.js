@@ -1,4 +1,4 @@
-import { MathUtils, Matrix4, Vector2 } from 'three/webgpu';
+import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
@@ -213,8 +213,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			}
 
-			// split the frame into a near square grid of tiles no larger than the budget. The low res preview
-			// is sized from its own time and traced in one
+			// split the frame into a near square grid of tiles no larger than the budget
 			this.getSize( _size );
 			const budgetTiles = lowResMode ? 1 : Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
 			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
@@ -252,12 +251,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 					kernel.offset.set( x, y ).multiply( tileSize );
 					this.dispatch( kernel, dispatchSize );
-
-					// each pixel of the tile within the target traces a path, a unit of the budget
-					const tileWidth = MathUtils.clamp( _size.x - kernel.offset.x, 0, tileSize.x );
-					const tileHeight = MathUtils.clamp( _size.y - kernel.offset.y, 0, tileSize.y );
-					this._updateWork += tileWidth * tileHeight;
-					this._updatePixels += tileWidth * tileHeight;
 
 					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );

@@ -37,9 +37,8 @@ const _color = new Color();
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
 
-// how far the adaptive low res preview's pixel count can drift from what its measured time allows before
-// it's resized
-const LOW_RES_CHANGE_THRESHOLD = 1.15;
+// how much the adaptive low res preview's scale has to change before it's resized, since a resize restarts it
+const LOW_RES_SCALE_CHANGE = 0.05;
 
 // the options the mesh geometry bvhs are built with and how many workers build them at once
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
@@ -615,9 +614,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._fadeState = 0;
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
-
-		// the pixel count the adaptive low res preview is sized to, zero until its time is measured
-		this._lowResPixels = 0;
+		this._lowResScale = 0;
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// avoid mipmap gen on copy, not always supported with float type
@@ -1280,20 +1277,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
-			// the adaptive preview follows its measured time, resizing only once it's off by the threshold
-			// since a resize restarts the preview
 			let scale = lowResScale;
-			if ( adaptiveDynamicRes ) {
+			if ( adaptiveDynamicRes && pathTracer.lowResPixelTime > 0 ) {
 
-				const pixels = pathTracer.lowResPixelCount;
-				const ratio = pixels / this._lowResPixels;
-				if ( ! ( ratio < LOW_RES_CHANGE_THRESHOLD && ratio > 1 / LOW_RES_CHANGE_THRESHOLD ) ) {
+				// the scale whose preview takes "targetFrameTime", from the time per pixel the last one took
+				const pixels = this.targetFrameTime / pathTracer.lowResPixelTime;
+				const fitScale = Math.min( Math.max( Math.sqrt( pixels / ( width * height ) ), lowResScale ), 1 );
+				if ( Math.abs( fitScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE ) {
 
-					this._lowResPixels = pixels;
+					this._lowResScale = fitScale;
 
 				}
 
-				scale = Math.min( Math.max( Math.sqrt( this._lowResPixels / ( width * height ) ), lowResScale ), 1 );
+				scale = this._lowResScale;
 
 			}
 
