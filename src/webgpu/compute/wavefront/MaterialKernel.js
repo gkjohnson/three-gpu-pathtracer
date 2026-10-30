@@ -177,12 +177,11 @@ export class MaterialKernel extends ComputeKernel {
 
 				} else if ( input.walkPending == 0u ) {
 
-					// evaluate the surface staged by LogicKernel. A path still walking a medium has none, and
-					// its walk continues in MediumKernel
+					// evaluate the surface staged by LogicKernel. Paths still walking a medium have none
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
 
-					// the medium the path is inside of, which the bsdf sample below may enter or exit
+					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
 					let segmentInMedium = medium.inside;
 
@@ -289,8 +288,8 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// attenuate the light transmitted through the volume when exiting a backface so
-					// the surface's emission and NEE resolve against the attenuated throughput. A
-					// scattering medium has already applied its transmittance in MediumKernel
+					// the surface's emission and NEE resolve against the attenuated throughput. MediumKernel
+					// already applied a scattering medium's transmittance
 					if ( input.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
@@ -348,8 +347,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].currentBounce = newBounce;
 					rayDataStorage[ index ].mediumScattered = 0u;
 
-					// As in "KHR_materials_scatter", the medium's surface bsdf is its boundary: the walk ends when
-					// light refracts out through it, and continues inside when it reflects back
+					// As in "KHR_materials_scatter", the surface bsdf is the medium's boundary: refracting out
+					// ends the walk, reflecting continues it
 					if ( segmentInMedium && u32( input.objectIndex ) == medium.object && input.side < 0.0 && scatterRec.isTransmissive ) {
 
 						medium.inside = false;
@@ -376,8 +375,7 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
-					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel
-					// walks the segment instead of the trace kernel
+					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
 					if ( ! isTerminated && medium.inside ) {
 
 						rayDataStorage[ index ].walkPending = 1u;

@@ -94,17 +94,16 @@ const rayDataMembers = {
 	// scatter events taken inside media, counted separately from the bounce count
 	volumeSteps: 'uint',
 
-	// whether the path's next segment is walked through a medium by MediumKernel, which clears it once
-	// the walk reaches a surface or ends
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
 	walkPending: 'uint',
 
-	// whether the staged segment leaves a medium scatter event, where no light is sampled
+	// whether the staged segment starts at a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
 
 };
 
-// The medium the path is inside of is nested at the end. It shares the ray data buffer to stay within
-// the kernels' storage buffer limit, and is sized separately since nested structs aren't.
+// The path's medium, nested at the end to share the ray data buffer under the storage buffer limit. Sized
+// separately since nested structs aren't.
 export const rayDataStruct = new DependentStructTypeNode( {
 	...rayDataMembers,
 	medium: mediumStateStruct.name,
@@ -121,8 +120,7 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	direction: 'vec3f',
 
-	// the random sequence index the traversal samples at, counting bounces, alpha pass throughs and
-	// volume steps as the megakernel does
+	// the traversal's random sequence index: bounces, alpha pass throughs and volume steps, as in the megakernel
 	rngIndex: 'uint',
 
 	seed: 'uint',
