@@ -215,7 +215,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			// split the frame into a near square grid of tiles no larger than the budget
 			this.getSize( _size );
-			const budgetTiles = Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
+			const budgetTiles = lowResMode ? 1 : Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
 			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
 			tiles.y = Math.ceil( budgetTiles / tiles.x );
 
