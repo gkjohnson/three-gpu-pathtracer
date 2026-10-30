@@ -100,6 +100,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	// a low res preview frame advances every slot several bounces, each costing a unit of the budget
+	// TODO: derive the cost of a preview frame rather than dividing by the iteration count
+	get lowResPixelBudget() {
+
+		return this.frameBudget / LOW_RES_ITERATIONS;
+
+	}
+
 	resetSeed() {
 
 		this.seed = 0;
@@ -482,8 +490,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 					shadowRayIntersectionsStorage,
 				} = this;
 
-				// slots past the pixel count never run
+				// slots past the pixel count never run. Each slot advancing a bounce is a unit of the budget
 				const rayCount = Math.min( this.rayCount, pixelCount );
+				this._updateWork += rayCount;
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = rayQueue;

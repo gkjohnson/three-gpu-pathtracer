@@ -182,6 +182,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	fadeDuration: number;
 	dynamicLowRes: boolean;
 	lowResScale: number;
+	dynamicLowResScale: boolean;
 	renderScale: number;
 	synchronizeRenderSize: boolean;
 	renderToCanvas: boolean;

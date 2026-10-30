@@ -11,6 +11,8 @@ const COMPILE_COMPLETE = 1;
 // a window of measurements has been taken at it, and only changes when their average is off the target
 // by the threshold ratio, since a wavefront budget change reallocates the path buffers. It moves at most
 // the step ratio per window.
+// TODO: adapt more often, with a window of around 4, once the wavefront path buffers are grow-only so a budget
+// change only changes the active slot count rather than reallocating them
 const BUDGET_WINDOW = 16;
 const BUDGET_CHANGE_THRESHOLD = 1.15;
 const BUDGET_MAX_STEP = 2;
@@ -35,6 +37,9 @@ export class PathTracerBackend {
 		this.maxTransparentBounces = 15;
 		this.lowResMode = false;
 
+		// whether the low res preview is sized to the frame budget, so its updates can adapt the budget too
+		this.lowResBudgeted = false;
+
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
@@ -57,8 +62,11 @@ export class PathTracerBackend {
 		this._timingFrame = false;
 		this._warnedTimestamps = false;
 
-		// the sum and count of the frame times measured at the current budget that the adaptive budget
-		// is set from
+		// the units of the budget the current update's dispatches do, set by the render task
+		this._updateWork = 0;
+
+		// the sum and count of the gpu times per unit of the budget measured at the current budget, which
+		// the adaptive budget is set from
 		this._frameTimeTotal = 0;
 		this._frameTimeCount = 0;
 
@@ -229,6 +237,13 @@ export class PathTracerBackend {
 
 	}
 
+	// how many pixels a low res preview frame traces within the frame budget, a full path each
+	get lowResPixelBudget() {
+
+		return this.frameBudget;
+
+	}
+
 	getSize( target ) {
 
 		const { width, height } = this.outputTarget;
@@ -266,12 +281,13 @@ export class PathTracerBackend {
 		const timed = trackTimestamp && ! this._timingFrame;
 		const budget = this.frameBudget;
 		this._timestampUIDs = timed ? [] : null;
+		this._updateWork = 0;
 		this._renderTask.next();
 
 		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
 		if ( timed && this._timestampUIDs.length > 0 ) {
 
-			this._measureFrameTime( this._timestampUIDs, budget );
+			this._measureFrameTime( this._timestampUIDs, budget, this._updateWork );
 
 		}
 
@@ -289,11 +305,12 @@ export class PathTracerBackend {
 	}
 
 	// Reads back the gpu time of an update's dispatches into "frameTime" and adapts the budget to it
-	async _measureFrameTime( uids, budget ) {
+	async _measureFrameTime( uids, budget, work ) {
 
 		const { renderer } = this;
 		const { backend } = renderer;
 		const lowResMode = this.lowResMode;
+		const lowResBudgeted = this.lowResBudgeted;
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
@@ -308,17 +325,18 @@ export class PathTracerBackend {
 
 		this.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
 
-		// the low res preview traces too few pixels to say what a full update costs
-		if ( this.adaptiveFrameBudget && ! lowResMode ) {
+		// a low res preview not sized to the budget traces too few pixels to say what a unit of it costs
+		if ( this.adaptiveFrameBudget && work > 0 && ( ! lowResMode || lowResBudgeted ) ) {
 
-			this._adaptFrameBudget( this.frameTime, budget );
+			this._adaptFrameBudget( this.frameTime / work, budget, lowResMode );
 
 		}
 
 	}
 
-	// Moves "frameBudget" toward the slot count that would take "targetFrameTime"
-	_adaptFrameBudget( frameTime, budget ) {
+	// Moves "frameBudget" toward the slot count that would take "targetFrameTime", from the gpu time a unit
+	// of the budget took
+	_adaptFrameBudget( unitTime, budget, lowResMode ) {
 
 		// a measurement from before the budget changed doesn't describe the current one
 		if ( budget !== this.frameBudget ) {
@@ -329,7 +347,7 @@ export class PathTracerBackend {
 
 		}
 
-		this._frameTimeTotal += frameTime;
+		this._frameTimeTotal += unitTime;
 		this._frameTimeCount ++;
 		if ( this._frameTimeCount < BUDGET_WINDOW ) {
 
@@ -342,21 +360,21 @@ export class PathTracerBackend {
 		this._frameTimeTotal = 0;
 		this._frameTimeCount = 0;
 
-		// leave the budget alone while it's close enough to the target
-		const ratio = average / targetFrameTime;
+		// leave the budget alone while it's close enough to the one that takes the target time
+		const next = targetFrameTime / average;
+		const ratio = budget / next;
 		if ( ratio < BUDGET_CHANGE_THRESHOLD && ratio > 1 / BUDGET_CHANGE_THRESHOLD ) {
 
 			return;
 
 		}
 
-		// scale the work done to land the average on the target. A budget past the pixel count does no
-		// more work, so it is capped there.
+		// A budget past the pixel count does no more work, so it is capped there. The preview's target is
+		// smaller than the render's, so the cap waits for a full resolution measurement
 		const { width, height } = this.outputTarget;
-		const pixelCount = width * height;
-		const next = Math.min( budget, pixelCount ) * targetFrameTime / average;
+		const maxBudget = lowResMode ? Infinity : Math.max( MIN_FRAME_BUDGET, width * height );
 		const stepped = MathUtils.clamp( next, budget / BUDGET_MAX_STEP, budget * BUDGET_MAX_STEP );
-		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, pixelCount ) );
+		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, maxBudget );
 
 	}
 
@@ -413,9 +431,8 @@ export class PathTracerBackend {
 
 		}
 
+		// the measured time per unit of the budget holds across a reset, so a moving camera keeps adapting it
 		this._renderTask = null;
-		this._frameTimeTotal = 0;
-		this._frameTimeCount = 0;
 
 	}
 

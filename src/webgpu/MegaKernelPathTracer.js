@@ -1,4 +1,4 @@
-import { Matrix4, Vector2 } from 'three/webgpu';
+import { MathUtils, Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
@@ -251,6 +251,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 					kernel.offset.set( x, y ).multiply( tileSize );
 					this.dispatch( kernel, dispatchSize );
+
+					// each pixel of the tile within the target traces a path, a unit of the budget
+					const tileWidth = MathUtils.clamp( _size.x - kernel.offset.x, 0, tileSize.x );
+					const tileHeight = MathUtils.clamp( _size.y - kernel.offset.y, 0, tileSize.y );
+					this._updateWork += tileWidth * tileHeight;
 
 					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );

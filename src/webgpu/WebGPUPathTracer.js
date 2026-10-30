@@ -654,11 +654,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.dynamicLowRes = true;
 
 		/**
-		 * Resolution of the low resolution preview, as a fraction of the render size.
+		 * Resolution of the low resolution preview, as a fraction of the render size. The smallest
+		 * it gets when {@link WebGPUPathTracer#dynamicLowResScale} is set.
 		 * @type {number}
 		 * @default 0.1
 		 */
 		this.lowResScale = 0.1;
+
+		/**
+		 * Whether the low resolution preview traces as many pixels as the frame budget covers, between
+		 * {@link WebGPUPathTracer#lowResScale} and the full render size.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.dynamicLowResScale = true;
 
 		/**
 		 * Resolution the path tracer renders at, as a fraction of the canvas size. Lowering it
@@ -1213,6 +1222,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			synchronizeRenderSize,
 			renderScale,
 			lowResScale,
+			dynamicLowResScale,
 			minSamples,
 			maxSamples,
 		} = this;
@@ -1261,8 +1271,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
-			width = Math.ceil( lowResScale * width );
-			height = Math.ceil( lowResScale * height );
+			let scale = lowResScale;
+			if ( dynamicLowResScale ) {
+
+				scale = Math.min( Math.max( Math.sqrt( pathTracer.lowResPixelBudget / ( width * height ) ), lowResScale ), 1 );
+
+			}
+
+			width = Math.ceil( scale * width );
+			height = Math.ceil( scale * height );
 
 		}
 
@@ -1276,7 +1293,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				// copy the low reset content if we're transitioning to the full
 				// resolution view so we can fade to it
-				lowResTarget.setSize( Math.ceil( lowResScale * width ), Math.ceil( lowResScale * height ) );
+				lowResTarget.setSize( _resolution.x, _resolution.y );
 				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
 
 			}
@@ -1290,6 +1307,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
+			pathTracer.lowResBudgeted = dynamicLowResScale;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 
