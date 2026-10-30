@@ -293,7 +293,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-
 					if ( didHit ) {
 
 						let objectInfo = transforms[ hitResult.objectIndex ];
