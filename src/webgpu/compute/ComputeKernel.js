@@ -46,6 +46,14 @@ export class ComputeKernel {
 			}
 
 			const node = parameters[ key ];
+
+			// name storage buffers so equivalent kernels generate identical WGSL and hit the pipeline cache
+			if ( node.isStorageBufferNode && ! node.name ) {
+
+				node.setName( `kernel_${ key }` );
+
+			}
+
 			if ( 'value' in node ) {
 
 				Object.defineProperty( this, key, {
