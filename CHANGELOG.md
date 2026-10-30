@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
 - WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
 - WebGPUPathTracer: "adaptiveDynamicRes" sizes the low resolution preview from its measured GPU time to take about "targetFrameTime", from "lowResScale" up to the full render size.
-- WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxVolumeSteps". Megakernel only.
+- WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxVolumeSteps".
 
 ### Changed
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
