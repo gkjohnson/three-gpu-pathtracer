@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -36,6 +36,17 @@ const _color = new Color();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
+
+// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered once
+// a window of measurements has been taken at it, and only changes when their average is off the target
+// by the threshold ratio, since a wavefront budget change reallocates the path buffers. It moves at most
+// the step ratio per window.
+// TODO: adapt more often, with a window of around 4, once the wavefront path buffers are grow-only so a budget
+// change only changes the active slot count rather than reallocating them
+const BUDGET_WINDOW = 16;
+const BUDGET_CHANGE_THRESHOLD = 1.15;
+const BUDGET_MAX_STEP = 2;
+const MIN_FRAME_BUDGET = 4096;
 
 // how much the adaptive low res preview's scale has to change before it's resized, since a resize restarts it
 const LOW_RES_SCALE_CHANGE = 0.05;
@@ -245,44 +256,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Whether {@link WebGPUPathTracer#frameBudget} is adjusted to keep each
-	 * {@link WebGPUPathTracer#renderSample} call near {@link WebGPUPathTracer#targetFrameTime} of
-	 * GPU time. Requires a renderer created with `trackTimestamp: true`.
-	 * @type {boolean}
-	 * @default true
-	 */
-	get adaptiveFrameBudget() {
-
-		return this._pathTracer.adaptiveFrameBudget;
-
-	}
-
-	set adaptiveFrameBudget( v ) {
-
-		this._pathTracer.adaptiveFrameBudget = v;
-
-	}
-
-	/**
-	 * GPU time in milliseconds each {@link WebGPUPathTracer#renderSample} call is tuned toward when
-	 * {@link WebGPUPathTracer#adaptiveFrameBudget} is enabled, and each low resolution preview frame when
-	 * {@link WebGPUPathTracer#adaptiveDynamicRes} is.
-	 * @type {number}
-	 * @default 16
-	 */
-	get targetFrameTime() {
-
-		return this._pathTracer.targetFrameTime;
-
-	}
-
-	set targetFrameTime( v ) {
-
-		this._pathTracer.targetFrameTime = v;
-
-	}
-
-	/**
 	 * GPU time in milliseconds of a recent {@link WebGPUPathTracer#renderSample} call. Only measured
 	 * when the renderer is created with `trackTimestamp: true`.
 	 * @type {number}
@@ -290,7 +263,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	get frameTime() {
 
-		return this._pathTracer.frameTime;
+		return this._pathTracer.timing.frameTime;
 
 	}
 
@@ -578,6 +551,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.maxSamples = maxSamples;
+		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setMaterial( this.material );
 		this._pathTracer.setRandom( this.random );
@@ -614,8 +588,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._fadeState = 0;
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
-		this._lowResScale = 0;
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+
+		// The adaptive budget and preview, set from the tracer's gpu time measurements: the last measurement
+		// read, the frame times summed toward the budget's next change, the preview's time per pixel and
+		// scale, and whether the missing timestamp warning has been logged
+		this._timingCount = 0;
+		this._frameTimeTotal = 0;
+		this._frameTimeCount = 0;
+		this._lowResPixelTime = 0;
+		this._lowResScale = 0;
+		this._warnedTimestamps = false;
 
 		// avoid mipmap gen on copy, not always supported with float type
 		this._lowResTarget = new StorageTexture( 1, 1 );
@@ -674,6 +657,24 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @default true
 		 */
 		this.adaptiveDynamicRes = true;
+
+		/**
+		 * Whether {@link WebGPUPathTracer#frameBudget} is adjusted to keep each
+		 * {@link WebGPUPathTracer#renderSample} call near {@link WebGPUPathTracer#targetFrameTime} of
+		 * GPU time. Requires a renderer created with `trackTimestamp: true`.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.adaptiveFrameBudget = true;
+
+		/**
+		 * GPU time in milliseconds each {@link WebGPUPathTracer#renderSample} call is tuned toward when
+		 * {@link WebGPUPathTracer#adaptiveFrameBudget} is enabled, and each low resolution preview frame when
+		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is.
+		 * @type {number}
+		 * @default 16
+		 */
+		this.targetFrameTime = 16;
 
 		/**
 		 * Resolution the path tracer renders at, as a fraction of the canvas size. Lowering it
@@ -1202,12 +1203,83 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
+		this._frameTimeTotal = 0;
+		this._frameTimeCount = 0;
 
 		if ( this.stableNoise ) {
 
 			this._pathTracer.resetSeed();
 
 		}
+
+	}
+
+	// Adapts the frame budget, or the low res preview's time per pixel, to the tracer's latest gpu time
+	// measurement, which arrives a few frames after its update
+	_readTiming() {
+
+		const { timing } = this._pathTracer;
+		const { trackTimestamp } = this._renderer.backend;
+		if ( ( this.adaptiveFrameBudget || this.adaptiveDynamicRes ) && ! trackTimestamp && ! this._warnedTimestamps ) {
+
+			console.warn( 'WebGPUPathTracer: "adaptiveFrameBudget" and "adaptiveDynamicRes" need timestamp queries. Create the renderer with "trackTimestamp: true" on a device that supports them.' );
+			this._warnedTimestamps = true;
+
+		}
+
+		if ( timing.count === this._timingCount ) {
+
+			return;
+
+		}
+
+		this._timingCount = timing.count;
+
+		// the low res preview traces every pixel each update, and is sized from its own time
+		if ( timing.lowResMode ) {
+
+			this._lowResPixelTime = timing.frameTime / timing.pixelCount;
+			return;
+
+		}
+
+		// a measurement from before the budget changed doesn't describe the current one
+		const { frameBudget } = timing;
+		if ( ! this.adaptiveFrameBudget || frameBudget !== this.frameBudget ) {
+
+			this._frameTimeTotal = 0;
+			this._frameTimeCount = 0;
+			return;
+
+		}
+
+		this._frameTimeTotal += timing.frameTime;
+		this._frameTimeCount ++;
+		if ( this._frameTimeCount < BUDGET_WINDOW ) {
+
+			return;
+
+		}
+
+		const { targetFrameTime } = this;
+		const average = this._frameTimeTotal / this._frameTimeCount;
+		this._frameTimeTotal = 0;
+		this._frameTimeCount = 0;
+
+		// leave the budget alone while it's close enough to the target
+		const ratio = average / targetFrameTime;
+		if ( ratio < BUDGET_CHANGE_THRESHOLD && ratio > 1 / BUDGET_CHANGE_THRESHOLD ) {
+
+			return;
+
+		}
+
+		// scale the work done to land the average on the target. A budget past the pixel count does no
+		// more work, so it is capped there.
+		const { pixelCount } = timing;
+		const next = Math.min( frameBudget, pixelCount ) * targetFrameTime / average;
+		const stepped = MathUtils.clamp( next, frameBudget / BUDGET_MAX_STEP, frameBudget * BUDGET_MAX_STEP );
+		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, pixelCount ) );
 
 	}
 
@@ -1278,10 +1350,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( lowResMode ) {
 
 			let scale = lowResScale;
-			if ( adaptiveDynamicRes && pathTracer.lowResPixelTime > 0 ) {
+			if ( adaptiveDynamicRes && this._lowResPixelTime > 0 ) {
 
-				// the scale whose preview takes "targetFrameTime", from the time per pixel the last one took
-				const pixels = this.targetFrameTime / pathTracer.lowResPixelTime;
+				// the scale whose preview takes "targetFrameTime", from the time per pixel the last one took. It
+				// traces at most the frame budget's pixels, which is how many paths the wavefront tracer holds
+				const pixels = Math.min( this.targetFrameTime / this._lowResPixelTime, this.frameBudget );
 				const fitScale = Math.min( Math.max( Math.sqrt( pixels / ( width * height ) ), lowResScale ), 1 );
 				if ( Math.abs( fitScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE ) {
 
@@ -1324,6 +1397,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
+			this._readTiming();
 
 			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
 			// and leave the last frame on screen
