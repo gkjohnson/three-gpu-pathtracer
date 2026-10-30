@@ -179,6 +179,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel,
 			maxBounces,
 			maxTransparentBounces,
+			maxVolumeSteps,
 
 			outputTarget,
 			sampleCountTarget,
@@ -193,6 +194,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		kernel.maxBounces = maxBounces;
 		kernel.maxTransparentBounces = maxTransparentBounces;
+		kernel.maxVolumeSteps = maxVolumeSteps;
 
 		// compile the kernel before its first dispatch
 		yield* this.compileKernels( [ kernel ] );

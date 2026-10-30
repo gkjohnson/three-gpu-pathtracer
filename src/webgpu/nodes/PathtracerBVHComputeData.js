@@ -943,6 +943,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			// anisotropyMap transform - offset 264
 			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
+			// scattering volume - offset 276
+			const multiscatterColor = getField( m, 'multiscatterColor', null );
+			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
+			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
+			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;
+			floatArray[ index ++ ] = getField( m, 'scatterStrength', 0.0 );
+			floatArray[ index ++ ] = getField( m, 'scatterAnisotropy', 0.0 );
+
+			// padding to the struct's 16 byte alignment
+			index += 3;
+
 		}
 
 		return { materialData: intArray, textures };
