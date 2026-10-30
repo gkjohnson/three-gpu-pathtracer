@@ -70,9 +70,6 @@ const params = {
 	enable: true,
 	displaySampleDensity: false,
 	overlayReference: false,
-
-	// volume scattering is only supported by the megakernel so far
-	useMegakernel: false,
 	multipleImportanceSampling: true,
 	maxBounces: 15,
 	maxVolumeSteps: 256,
@@ -113,7 +110,6 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
-	pathTracer.useMegakernel( params.useMegakernel );
 	pathTracer.frameBudget = params.frameBudget;
 
 	scene = new Scene();
@@ -180,11 +176,6 @@ async function init() {
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'useMegakernel' ).onChange( v => {
-
-		pathTracer.useMegakernel( v );
-
-	} );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
