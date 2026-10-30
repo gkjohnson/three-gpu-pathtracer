@@ -939,12 +939,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
 		const geometries = new Set();
 		scene.traverse( child => {
 
 			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
 
-				geometries.add( child.geometry );
+				const { geometry } = child;
+				if ( geometry.attributes.position.isInterleavedBufferAttribute || geometry.index && geometry.index.isInterleavedBufferAttribute ) {
+
+					return;
+
+				}
+
+				geometries.add( geometry );
 
 			}
 
