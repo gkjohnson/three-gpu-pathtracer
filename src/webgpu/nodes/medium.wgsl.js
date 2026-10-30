@@ -1,6 +1,7 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from './sampling.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // TODO: consider removing the Dwivedi guiding, which may help less here than in Cycles
@@ -241,6 +242,13 @@ export const sampleMediumDistanceFn = wgslTagFn/* wgsl */`
 
 		}
 
+		// a channel with no extinction never scatters, and WGSL doesn't guarantee an infinite quotient
+		if ( extinction <= 0.0 ) {
+
+			return ${ LIGHT_FAR_DISTANCE };
+
+		}
+
 		return - log( 1.0 - u.y ) / extinction;
 
 	}
@@ -255,7 +263,7 @@ export const findMediumOppositeFn = wgslTagFn/* wgsl */`
 		medium.firstSegment = false;
 
 		let minExtinction = min( min( medium.extinction.r, medium.extinction.g ), medium.extinction.b );
-		let searchDist = max( scatterDist, ${ MEDIUM_OPPOSITE_SEARCH_PATHS }.0 / minExtinction );
+		let searchDist = select( ${ LIGHT_FAR_DISTANCE }, max( scatterDist, ${ MEDIUM_OPPOSITE_SEARCH_PATHS }.0 / minExtinction ), minExtinction > 0.0 );
 		if ( hitOwnSurface && hitDist <= searchDist ) {
 
 			medium.hasOpposite = true;

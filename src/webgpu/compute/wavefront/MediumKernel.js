@@ -98,7 +98,8 @@ export class MediumKernel extends ComputeKernel {
 
 						let resultIndex = rayCount + index;
 						rayIntersectionsStorage[ resultIndex ].barycoord = hitResult.barycoord;
-						rayIntersectionsStorage[ resultIndex ].objectIndex = i32( hitResult.objectIndex );
+						// a walk that leaves without hitting anything is a miss, as in the trace kernel
+						rayIntersectionsStorage[ resultIndex ].objectIndex = select( - 1, i32( hitResult.objectIndex ), didHit );
 						rayIntersectionsStorage[ resultIndex ].position = ray.origin + ray.direction * hitResult.dist;
 						rayIntersectionsStorage[ resultIndex ].dist = hitResult.dist;
 						rayIntersectionsStorage[ resultIndex ].normal = hitResult.normal.xyz;
