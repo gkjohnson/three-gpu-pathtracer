@@ -119,7 +119,7 @@ const eonLtcBasisFunc = wgslFn( /* wgsl */ `
 	fn eonLtcBasis( wo: vec3f ) -> mat3x3f {
 
 		let lenSqr = dot( wo.xy, wo.xy );
-		let invLen = inverseSqrt( max( lenSqr, 1e-7 ) );
+		let invLen = inverseSqrt( lenSqr );
 		let x = select(
 			vec3f( 1.0, 0.0, 0.0 ),
 			vec3f( wo.x, wo.y, 0.0 ) * invLen,
