@@ -235,15 +235,13 @@ export class PathTracerBackend {
 
 		// time this update unless the last measurement is still reading back
 		const timed = renderer.backend.trackTimestamp && ! this._timingFrame;
-		const { frameBudget, lowResMode } = this;
 		this._timestampUIDs = timed ? [] : null;
 		this._renderTask.next();
 
 		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
 		if ( timed && this._timestampUIDs.length > 0 ) {
 
-			const { width, height } = this.outputTarget;
-			this._measureFrameTime( this._timestampUIDs, frameBudget, lowResMode, width * height );
+			this._measureFrameTime( this._timestampUIDs );
 
 		}
 
@@ -261,10 +259,12 @@ export class PathTracerBackend {
 	}
 
 	// Reads back the gpu time of an update's dispatches into "timing"
-	async _measureFrameTime( uids, frameBudget, lowResMode, pixelCount ) {
+	async _measureFrameTime( uids ) {
 
-		const { renderer, timing } = this;
+		// what the update ran with, read before the readback since it may change meanwhile
+		const { renderer, timing, frameBudget, lowResMode } = this;
 		const { backend } = renderer;
+		const { width, height } = this.outputTarget;
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
@@ -280,7 +280,7 @@ export class PathTracerBackend {
 		timing.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
 		timing.frameBudget = frameBudget;
 		timing.lowResMode = lowResMode;
-		timing.pixelCount = pixelCount;
+		timing.pixelCount = width * height;
 		timing.count ++;
 
 	}
