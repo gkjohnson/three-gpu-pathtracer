@@ -1,5 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn, directionFromCosineFn, dwivediPhasePdfFn, sampleDwivediPhaseFn } from './sampling.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
 
@@ -23,19 +23,25 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const MEDIUM_STACK_SIZE = 4;
 
+// how many fog volume boundaries a shadow ray passes before it counts as occluded
+const MEDIUM_SHADOW_MAX_BOUNDARIES = 8;
+
 // the bit flags of the stored medium and segment
 const MEDIUM_INSIDE = 1;
 const MEDIUM_FIRST_SEGMENT = 2;
 const MEDIUM_HAS_OPPOSITE = 4;
+const MEDIUM_FOG = 8;
 const SEGMENT_GUIDABLE = 1;
 const SEGMENT_GUIDED = 2;
 const SEGMENT_BACKWARD = 4;
 
 // The media of the stack combined. "inside" marks one that scatters, which is walked, while one that only
-// absorbs attenuates the segments through it
+// absorbs attenuates the segments through it. A walk through fog samples light at each scatter event, as
+// Cycles does in volumes, where a subsurface walk doesn't
 export const mediumStruct = new StructTypeNode( {
 	stack: 'vec4u',
 	inside: 'bool',
+	fog: 'bool',
 	object: 'uint',
 	extinction: 'vec3f',
 	albedo: 'vec3f',
@@ -112,7 +118,8 @@ export const storeMediumFn = wgslTagFn/* wgsl */`
 		state.flags =
 			select( 0u, ${ MEDIUM_INSIDE }u, medium.inside ) |
 			select( 0u, ${ MEDIUM_FIRST_SEGMENT }u, medium.firstSegment ) |
-			select( 0u, ${ MEDIUM_HAS_OPPOSITE }u, medium.hasOpposite );
+			select( 0u, ${ MEDIUM_HAS_OPPOSITE }u, medium.hasOpposite ) |
+			select( 0u, ${ MEDIUM_FOG }u, medium.fog );
 
 		state.segmentFlags =
 			select( 0u, ${ SEGMENT_GUIDABLE }u, segment.guidable ) |
@@ -137,6 +144,7 @@ export const loadMediumFn = wgslTagFn/* wgsl */`
 		var medium: ${ mediumStruct };
 		medium.stack = state.stack;
 		medium.inside = ( state.flags & ${ MEDIUM_INSIDE }u ) != 0u;
+		medium.fog = ( state.flags & ${ MEDIUM_FOG }u ) != 0u;
 		medium.object = state.object;
 		medium.extinction = state.extinction;
 		medium.albedo = state.albedo;
@@ -223,12 +231,14 @@ const enterMediumFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Refracting in through a front face pushes the object's volume, unless it has none or is already on the stack
+// Refracting in through a front face pushes the volume the hit object's face bounds, by its medium id, unless it
+// has none or is already on the stack
 export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 	fn mediumStackEnter( stack: vec4u, object: u32 ) -> vec4u {
 
-		let material = ${ materials }[ ${ transforms }[ object ].materialIndex ];
+		let id = ${ transforms }[ object ].mediumId;
+		let material = ${ materials }[ ${ transforms }[ id ].materialIndex ];
 		if ( all( ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
 			return stack;
@@ -238,7 +248,7 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 		var result = stack;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( result[ i ] == object ) {
+			if ( result[ i ] == id ) {
 
 				break;
 
@@ -246,7 +256,7 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 
 			if ( result[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
 
-				result[ i ] = object;
+				result[ i ] = id;
 				break;
 
 			}
@@ -260,15 +270,16 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 `;
 
 // ... and refracting out through a back face removes it, moving the entries after it up
-export const mediumStackExitFn = wgslTagFn/* wgsl */`
+export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 
 	fn mediumStackExit( stack: vec4u, object: u32 ) -> vec4u {
 
+		let id = ${ transforms }[ object ].mediumId;
 		var result = stack;
 		var found = false;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			found = found || stack[ i ] == object;
+			found = found || stack[ i ] == id;
 			if ( found ) {
 
 				let next = stack[ min( i + 1u, ${ MEDIUM_STACK_SIZE - 1 }u ) ];
@@ -295,6 +306,7 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 		var maxAlbedo = vec3f( 0.0 );
 		var anisotropy = 0.0;
 		var anisotropyWeight = 0.0;
+		var fog = false;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
 			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
@@ -312,6 +324,7 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 			maxAlbedo = max( maxAlbedo, material.scatterAlbedo );
 			anisotropy += material.scatterAnisotropy * weight;
 			anisotropyWeight += weight;
+			fog = fog || material.fogVolume != 0;
 
 		}
 
@@ -321,11 +334,142 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 		var medium = ${ enterMediumFn }( extinction, albedo, meanAnisotropy, object, position, normal );
 		medium.stack = stack;
+		medium.fog = fog;
+
+		// the guiding steers a walk back out through the surface it entered, which fog has no use for
+		if ( fog ) {
+
+			medium.guidedFraction = 0.0;
+
+		}
+
 		return medium;
 
 	}
 
 `;
+
+// The stack a surface's shadow ray starts in. A light on the far side of a volume's boundary is reached through
+// it, entering or leaving the volume
+export const shadowMediumStackFunc = ( mediumStackEnterFn, mediumStackExitFn ) => wgslTagFn/* wgsl */`
+
+	fn shadowMediumStack(
+		stack: vec4u, object: u32, side: f32, thinWall: bool,
+		direction: vec3f, lightDirection: vec3f, normal: vec3f,
+	) -> vec4u {
+
+		let crossesSurface = dot( direction, normal ) * dot( lightDirection, normal ) > 0.0;
+		if ( ! crossesSurface || thinWall ) {
+
+			return stack;
+
+		}
+
+		if ( side > 0.0 ) {
+
+			return ${ mediumStackEnterFn }( stack, object );
+
+		}
+
+		return ${ mediumStackExitFn }( stack, object );
+
+	}
+
+`;
+
+// The summed extinction of a stack's volumes
+const stackExtinctionFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
+
+	fn stackExtinction( stack: vec4u ) -> vec3f {
+
+		var extinction = vec3f( 0.0 );
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
+
+			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+
+				break;
+
+			}
+
+			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
+			extinction += ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+
+		}
+
+		return extinction;
+
+	}
+
+`;
+
+// The transmittance of a shadow ray starting inside the stack's volumes. As in Cycles' transparent shadows, the
+// boundaries of fog volumes are passed, entering and leaving their volumes, while any other surface occludes
+// the light. "forwardBlocked" is set when a face a bsdf ray would hit was passed
+export const mediumShadowTransmittanceFunc = ( raycastShadow, raycastOutput, offsetRayOrigin, transforms, materials, mediumStackEnterFn, mediumStackExitFn ) => {
+
+	const stackExtinctionFn = stackExtinctionFunc( transforms, materials );
+	return wgslTagFn/* wgsl */`
+
+		fn mediumShadowTransmittance( ray: ${ rayStruct }, stack: vec4u, forwardBlocked: ptr<function, bool> ) -> vec3f {
+
+			var shadowRay = ray;
+			var shadowStack = stack;
+			var shadowExtinction = ${ stackExtinctionFn }( stack );
+			var transmittance = vec3f( 1.0 );
+			var remaining = ray.maxDist;
+			*forwardBlocked = false;
+			for ( var i = 0u; i <= ${ MEDIUM_SHADOW_MAX_BOUNDARIES }u; i ++ ) {
+
+				shadowRay.maxDist = remaining;
+
+				var hit: ${ raycastOutput };
+				let occluded = ${ raycastShadow }( shadowRay, &hit );
+				*forwardBlocked = *forwardBlocked || hit.forwardBlocked;
+				if ( ! occluded ) {
+
+					return transmittance * exp( - shadowExtinction * remaining );
+
+				}
+
+				let material = ${ materials }[ ${ transforms }[ hit.objectIndex ].materialIndex ];
+				if ( material.fogVolume == 0 ) {
+
+					break;
+
+				}
+
+				transmittance *= exp( - shadowExtinction * hit.dist );
+				if ( hit.side > 0.0 ) {
+
+					shadowStack = ${ mediumStackEnterFn }( shadowStack, hit.objectIndex );
+
+				} else {
+
+					shadowStack = ${ mediumStackExitFn }( shadowStack, hit.objectIndex );
+
+				}
+
+				shadowExtinction = ${ stackExtinctionFn }( shadowStack );
+
+				// a zero distance traces unbounded, so stop once the light is reached
+				remaining -= hit.dist;
+				if ( remaining <= 0.0 ) {
+
+					return transmittance;
+
+				}
+
+				shadowRay.origin = ${ offsetRayOrigin }( shadowRay.origin + shadowRay.direction * hit.dist, shadowRay.direction, hit.normal );
+
+			}
+
+			return vec3f( 0.0 );
+
+		}
+
+	`;
+
+};
 
 // The probability of sampling each color channel's distance, in proportion to throughput times albedo
 export const mediumChannelPdfFn = wgslTagFn/* wgsl */`

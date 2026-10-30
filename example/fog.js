@@ -29,6 +29,7 @@ const params = {
 	color: '#eeeeee',
 	fog: true,
 	density: 0.01,
+	anisotropy: 0,
 	lightIntensity: 500,
 	lightColor: '#ffffff',
 
@@ -129,6 +130,7 @@ async function init() {
 	const fogFolder = gui.addFolder( 'Fog' );
 	fogFolder.addColor( params, 'color' ).onChange( onParamsChange );
 	fogFolder.add( params, 'density', 0, 1 ).onChange( onParamsChange );
+	fogFolder.add( params, 'anisotropy', - 0.9, 0.9 ).onChange( onParamsChange );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
 	lightFolder.add( params, 'lightIntensity', 0, 1000 ).onChange( onParamsChange );
@@ -142,6 +144,7 @@ function onParamsChange() {
 
 	fogMaterial.color.set( params.color ).convertSRGBToLinear();
 	fogMaterial.density = params.density;
+	fogMaterial.scatterAnisotropy = params.anisotropy;
 
 	spotLight.intensity = params.lightIntensity;
 	spotLight.color.set( params.lightColor );

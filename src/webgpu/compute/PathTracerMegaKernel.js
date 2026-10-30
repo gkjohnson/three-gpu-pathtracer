@@ -4,8 +4,8 @@ import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_GUIDE } from '../nodes/random.wgsl.js';
-import { misHeuristicFn, weightedAlphaBlendFn } from '../nodes/sampling.wgsl.js';
-import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
+import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
+import { mediumSegmentStruct, mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, mediumShadowTransmittanceFunc, mediumChannelPdfFn, sampleMediumDistanceFn, findMediumOppositeFn, mediumSegmentPdfFn, sampleMediumDirectionFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
@@ -72,7 +72,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
 		const materialsNode = contextProxy( 'bvhData.storage.materials' );
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
+		const mediumStackExitFn = mediumStackExitFunc( transformsNode );
 		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
+		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
+		const mediumShadowTransmittanceFn = mediumShadowTransmittanceFunc( raycastShadowFn, raycastOutput, offsetRayOriginFunc, transformsNode, materialsNode, mediumStackEnterFn, mediumStackExitFn );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -180,7 +183,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var segment: ${ mediumSegmentStruct };
 				var volumeSteps = 0u;
 
-				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
+				// no light is sampled at a subsurface scatter event, so whatever the next segment reaches takes full weight
 				var mediumScattered = false;
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
@@ -214,6 +217,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// Inside a medium, sample a scatter event before the next surface
 					let segmentInMedium = medium.inside;
+					var segmentEnd = surfaceDist;
+					var fogScatter = false;
 					if ( medium.inside ) {
 
 						let channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
@@ -238,6 +243,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							// reaching the surface, weighted by the probability of no scatter event before it
 							throughputColor *= transmittance / distancePdf;
+
+						} else if ( medium.fog ) {
+
+							// a scatter event in fog is a path vertex, resolved once the lights before it are found
+							throughputColor *= medium.albedo * medium.extinction * transmittance / distancePdf;
+							isFullyTransmissive = false;
+							fogScatter = true;
+							segmentEnd = scatterDist;
 
 						} else {
 
@@ -266,7 +279,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none, and
-					// neither do scatter events in a medium
+					// neither do scatter events in a subsurface walk
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
@@ -285,7 +298,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < segmentEnd ) {
 
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
@@ -299,6 +312,89 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							cameraHitLight = cameraHitLight || bounce == 0u;
 
 						}
+
+					}
+
+					// A scatter event in fog is a path vertex like a surface, counted as a bounce, where light is
+					// sampled through the phase function
+					if ( fogScatter ) {
+
+						ray.origin += ray.direction * segmentEnd;
+						ray.maxDist = 0.0;
+
+						if ( misEnabled != 0u ) {
+
+							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
+							var selectionPdf = 0.0;
+							let lightIndex = ${ selectLightFn }( ray.origin, envWeight, ruv.x, &selectionPdf );
+							if ( selectionPdf > 0.0 ) {
+
+								var lightRec: ${ lightRecordStruct };
+								if ( envActive && lightIndex == lightsCount ) {
+
+									let envSample = ${ sampleEnvDir }( ruv.yz );
+									lightRec.direction = envSample.direction;
+									lightRec.emission = envSample.color;
+									lightRec.pdf = envSample.pdf;
+									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+								} else {
+
+									lightRec = ${ randomLightSampleFn }( lightIndex, ray.origin, ruv.yz );
+
+								}
+
+								if ( lightRec.pdf > 0.0 ) {
+
+									var shadowRay: ${ rayStruct };
+									shadowRay.origin = ray.origin;
+									shadowRay.direction = lightRec.direction;
+									shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
+
+									var forwardBlocked = false;
+									let lightTransmittance = ${ mediumShadowTransmittanceFn }( shadowRay, medium.stack, &forwardBlocked );
+									if ( any( lightTransmittance > vec3f( 0.0 ) ) ) {
+
+										// the phase function is its own pdf
+										let lightPdf = lightRec.pdf * selectionPdf;
+										let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
+										let isMISWeightedLight = ${ isMISWeightLightFn }( lightRec.lightType ) && ! forwardBlocked;
+										let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, phasePdf ), isMISWeightedLight );
+										let directLight = throughputColor * lightRec.emission * lightTransmittance * phasePdf * misWeight / lightPdf;
+										let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+										resultColor += vec4f( contribution, 0.0 );
+
+									}
+
+								}
+
+							}
+
+						}
+
+						// russian roulette, as at a surface. The phase function's sample weight is one
+						if ( bounce >= 3u ) {
+
+							let rrProb = saturate( sqrt( max( max( throughputColor.r, throughputColor.g ), throughputColor.b ) ) );
+							if ( rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb ) {
+
+								break;
+
+							}
+
+							throughputColor /= rrProb;
+
+						}
+
+						let newDirection = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+						bsdfPdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, newDirection ), medium.anisotropy );
+						ray.direction = newDirection;
+						segment = ${ mediumSegmentStruct }();
+						mediumScattered = false;
+
+						${ rngNextBounce }();
+						continue;
 
 					}
 
@@ -342,13 +438,37 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						// Stochastically pass through partially transparent surfaces by restarting
-						// the ray at the hit point, advancing the rng but not the bounce count.
-						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
+						// the ray at the hit point, advancing the rng but not the bounce count. A fog
+						// volume's boundary is always passed, entering or leaving its volume
+						let isFogBoundary = materialInfo.fogVolume != 0;
+						if ( isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 							// stop once the transparent bounces run out
 							if ( transparentBounce >= maxTransparentBounces ) {
 
 								break;
+
+							}
+
+							if ( isFogBoundary ) {
+
+								var stack: vec4u;
+								if ( hitResult.side > 0.0 ) {
+
+									stack = ${ mediumStackEnterFn }( medium.stack, hitResult.objectIndex );
+
+								} else {
+
+									stack = ${ mediumStackExitFn }( medium.stack, hitResult.objectIndex );
+
+								}
+
+								if ( any( stack != medium.stack ) ) {
+
+									medium = ${ stackMediumFn }( stack, hitResult.objectIndex, vertexData.position.xyz, surface.normal );
+									segment = ${ mediumSegmentStruct }();
+
+								}
 
 							}
 
@@ -414,20 +534,21 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										shadowRay.direction = lightRec.direction;
 										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
-										// opaque occlusion up to the light distance. A shadow-specific any hit
-										// traversal could support tinted shadows from transmissive and partially
-										// opaque objects
-										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
-										if ( ! occluded ) {
+										// opaque occlusion up to the light distance, through the volumes on the way. A
+										// shadow-specific any hit traversal could support tinted shadows from transmissive
+										// and partially opaque objects
+										var forwardBlocked = false;
+										let shadowStack = ${ shadowMediumStackFn }( medium.stack, hitResult.objectIndex, hitResult.side, surface.thinWall, ray.direction, lightRec.direction, hitResult.normal );
+										let lightTransmittance = ${ mediumShadowTransmittanceFn }( shadowRay, shadowStack, &forwardBlocked );
+										if ( any( lightTransmittance > vec3f( 0.0 ) ) ) {
 
 											let lightPdf = lightRec.pdf * selectionPdf;
 
 											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
 											// or when a bsdf ray could never reach the light
-											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked;
+											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! forwardBlocked;
 											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
-											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
+											let directLight = throughputColor * lightRec.emission * lightTransmittance * evalRec.color * misWeight / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
 

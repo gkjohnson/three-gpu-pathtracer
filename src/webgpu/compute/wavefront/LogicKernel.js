@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -141,7 +141,7 @@ export class LogicKernel extends ComputeKernel {
 						// or when a bsdf ray could never reach the light
 						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && shadowHit.forwardBlocked == 0u;
 						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf;
+						let directLight = throughputColor * input.lightEmission * shadowHit.transmittance * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 
@@ -183,12 +183,14 @@ export class LogicKernel extends ComputeKernel {
 
 				} else if ( ! isTerminated ) {
 
+					// a walk ending at a scatter event in fog is staged like a surface hit
 					let hitResult = ( *rayIntersectionsStorage )[ u32( input.rayIntersectionIndex ) ];
-					let didHit = hitResult.objectIndex >= 0;
+					let isMediumScatter = hitResult.objectIndex == ${ MEDIUM_SCATTER_HIT };
+					let didHit = hitResult.objectIndex >= 0 || isMediumScatter;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
-					// and neither do scatter events in a medium
+					// and neither do scatter events in a subsurface walk
 					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u && input.mediumScattered == 0u;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
@@ -231,8 +233,14 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].normal = hitResult.normal;
 						rayDataStorage[ index ].side = hitResult.side;
 						rayDataStorage[ index ].indices = hitResult.indices;
-						rayDataStorage[ index ].objectIndex = hitResult.objectIndex;
+						rayDataStorage[ index ].objectIndex = max( hitResult.objectIndex, 0 );
 						rayDataStorage[ index ].dist = hitResult.dist;
+						rayDataStorage[ index ].mediumVertex = select( 0u, 1u, isMediumScatter );
+						if ( isMediumScatter ) {
+
+							rayDataStorage[ index ].origin = hitResult.position;
+
+						}
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.

@@ -13,8 +13,15 @@ const _colorVec = new Vector4();
 const _matrix = /* @__PURE__ */ new Matrix4();
 const _ray = /* @__PURE__ */ new Ray();
 
-// Whether a material has a volume a path enters by refracting into it, as "mediumStackEnter" decides
+// Whether a material has a volume a path enters by refracting into it or crossing a fog volume's boundary, as
+// "mediumStackEnter" decides
 function hasMedium( material ) {
+
+	if ( material && material.isFogVolumeMaterial ) {
+
+		return material.density > 0;
+
+	}
 
 	if ( ! material || ! material.attenuationColor || ! ( material.transmission > 0 ) ) {
 
@@ -64,7 +71,10 @@ const transformStruct = new StructTypeNode( {
 	visible: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
-	_alignment0: 'uint',
+
+	// the slot the medium stack holds for the volume this slot bounds: the first of the object's bvh groups
+	// with the same material, so a path enters and leaves the volume through any of them
+	mediumId: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -105,8 +115,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.bvhMap = new Map();
 		this.textureAtlas = new AtlasTexture();
 
-		// the transform slots whose material has a volume, for "getMediumStack"
+		// the transform slots whose material has a volume, for "getMediumStack", and each volume's medium id
 		this._mediumSlots = null;
+		this._mediumIds = new Map();
 
 	}
 
@@ -592,6 +603,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		materialsStorage.value.needsUpdate = true;
 
 		// update the transform content
+		this._mediumIds.clear();
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
@@ -707,44 +719,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];
-
-			// if ( m.isFogVolumeMaterial ) {
-			//
-			// 	// features.setUsed( 'FOG' );
-			//
-			// 	for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
-			//
-			// 		floatArray[ index + j ] = 0;
-			//
-			// 	}
-			//
-			// 	// sample 0 .rgb
-			// 	floatArray[ index + 0 * 4 + 0 ] = m.color.r;
-			// 	floatArray[ index + 0 * 4 + 1 ] = m.color.g;
-			// 	floatArray[ index + 0 * 4 + 2 ] = m.color.b;
-			//
-			// 	// sample 2 .a
-			// 	floatArray[ index + 2 * 4 + 3 ] = getField( m, 'emissiveIntensity', 0.0 );
-			//
-			// 	// sample 3 .rgb
-			// 	floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
-			// 	floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
-			// 	floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
-			//
-			// 	// sample 13 .g
-			// 	// reusing opacity field
-			// 	floatArray[ index + 13 * 4 + 1 ] = m.density;
-			//
-			// 	// side
-			// 	floatArray[ index + 13 * 4 + 3 ] = 0.0;
-			//
-			// 	// sample 14 .b
-			// 	floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
-			//
-			// 	index += MATERIAL_STRIDE;
-			// 	continue;
-			//
-			// }
+			const isFogVolume = Boolean( m.isFogVolumeMaterial );
 
 			// color - offset 0
 			floatArray[ index ++ ] = m.color.r;
@@ -859,8 +834,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
-			// attenuation - offset 44
-			if ( 'attenuationColor' in m ) {
+			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = Math.exp( - 1 );
+				floatArray[ index ++ ] = Math.exp( - 1 );
+				floatArray[ index ++ ] = Math.exp( - 1 );
+
+			} else if ( 'attenuationColor' in m ) {
 
 				floatArray[ index ++ ] = m.attenuationColor.r;
 				floatArray[ index ++ ] = m.attenuationColor.g;
@@ -874,7 +855,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = m.density > 0 ? 1 / m.density : Infinity;
+
+			} else {
+
+				floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
+
+			}
 
 			// alphaMap - offset 48
 			intArray[ index ++ ] = getTexture( m, 'alphaMap' );
@@ -882,8 +871,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 
-			// side & matte - offset 52
-			if ( ! isThinWall && m.transmission > 0.0 ) {
+			// side & matte - offset 52. Volumes are entered and left through both faces
+			if ( ! isThinWall && m.transmission > 0.0 || isFogVolume ) {
 
 				floatArray[ index ++ ] = 0;
 
@@ -935,7 +924,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			// transparent, fogVolume - offset 64
 			intArray[ index ++ ] = Number( m.transparent );
-			intArray[ index ++ ] = 0;
+			intArray[ index ++ ] = Number( isFogVolume );
 
 			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
 			floatArray[ index ++ ] = getField( m, 'anisotropy', 0.0 );
@@ -996,13 +985,25 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			// anisotropyMap transform - offset 264
 			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
-			// scattering volume - offset 276. "scatterStrength" scales the multi scatter albedo
+			// scattering volume - offset 276. "scatterStrength" scales the multi scatter albedo, while a fog
+			// volume's color is its single scatter albedo
 			const scatterStrength = getField( m, 'scatterStrength', 0.0 );
 			const scatterAnisotropy = getField( m, 'scatterAnisotropy', 0.0 );
 			const multiscatterColor = getField( m, 'multiscatterColor', null );
-			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.r : 1.0 ) * scatterStrength, scatterAnisotropy );
-			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.g : 1.0 ) * scatterStrength, scatterAnisotropy );
-			floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.b : 1.0 ) * scatterStrength, scatterAnisotropy );
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = m.color.r;
+				floatArray[ index ++ ] = m.color.g;
+				floatArray[ index ++ ] = m.color.b;
+
+			} else {
+
+				floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.r : 1.0 ) * scatterStrength, scatterAnisotropy );
+				floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.g : 1.0 ) * scatterStrength, scatterAnisotropy );
+				floatArray[ index ++ ] = getSingleScatterAlbedo( ( multiscatterColor ? multiscatterColor.b : 1.0 ) * scatterStrength, scatterAnisotropy );
+
+			}
+
 			floatArray[ index ++ ] = scatterAnisotropy;
 
 		}
@@ -1039,6 +1040,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
+		// slots are written in order, so the first one seen for a volume is its id
+		const mediumKey = `${ object.uuid }_${ instanceId }_${ index }`;
+		if ( ! this._mediumIds.has( mediumKey ) ) {
+
+			this._mediumIds.set( mediumKey, writeOffset );
+
+		}
+
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 35 ] = this._mediumIds.get( mediumKey );
+
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
 		// if colors have not been defined.
@@ -1073,9 +1084,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	// Writes the object indices of the volumes containing the world position to "target", the medium stack a
-	// camera ray there starts with. As in Cycles a closed mesh contains the point when the nearest of its faces
-	// along a ray is a back face. Skinned and batched meshes are not checked
+	// Writes the medium ids of the volumes containing the world position to "target", the medium stack a camera
+	// ray there starts with. As in Cycles a closed mesh contains the point when the nearest of its faces along
+	// a ray is a back face. Skinned and batched meshes are not checked
 	getMediumStack( position, target ) {
 
 		const { bvh, storage, structs } = this;
@@ -1084,11 +1095,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		if ( this._mediumSlots === null ) {
 
+			// one slot per volume, the one its medium id names
 			this._mediumSlots = [];
 			this._getTransformMap( bvh ).forEach( info => {
 
-				const { object, root } = info;
-				if ( ! object.isSkinnedMesh && ! object.isBatchedMesh && hasMedium( getGroupMaterial( object, root ) ) ) {
+				const { object, root, slot } = info;
+				const isMediumId = transformsU32[ slot * transformLength + 35 ] === slot;
+				if ( isMediumId && ! object.isSkinnedMesh && ! object.isBatchedMesh && hasMedium( getGroupMaterial( object, root ) ) ) {
 
 					this._mediumSlots.push( info );
 
@@ -1139,16 +1152,23 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			// the nearest face of the slot's own group
-			const group = geometry.groups.length > 0 ? geometry.groups[ root ] : null;
+			// the nearest face of the volume, which with an array of materials is the groups sharing the slot's
+			const { groups } = geometry;
+			const materialIndex = Array.isArray( object.material ) ? groups[ root ].materialIndex : - 1;
 			let nearest = null;
 			const hits = geometry.boundsTree.raycast( _ray, DoubleSide );
 			for ( let i = 0, l = hits.length; i < l; i ++ ) {
 
 				const hit = hits[ i ];
-				if ( group && ( hit.faceIndex * 3 < group.start || hit.faceIndex * 3 >= group.start + group.count ) ) {
+				if ( materialIndex !== - 1 ) {
 
-					continue;
+					const start = hit.faceIndex * 3;
+					const group = groups.find( g => start >= g.start && start < g.start + g.count );
+					if ( ! group || group.materialIndex !== materialIndex ) {
+
+						continue;
+
+					}
 
 				}
 

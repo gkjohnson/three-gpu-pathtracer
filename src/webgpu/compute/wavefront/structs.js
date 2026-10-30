@@ -101,6 +101,9 @@ const rayDataMembers = {
 	// whether the staged segment leaves a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
 
+	// whether the staged hit is a scatter event in fog at "origin", a path vertex where light is sampled
+	mediumVertex: 'uint',
+
 };
 
 // The medium the path is inside of is nested at the end. It shares the ray data buffer to stay within
@@ -127,10 +130,16 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	maxDist: 'float',
 	_alignment0: 'uint',
 
+	// shadow rays only: the media the ray starts in
+	mediumStack: 'vec4u',
+
 }, 'TraceQueuedRay' );
 
+// the object index MediumKernel writes for a walk ending at a scatter event in fog
+export const MEDIUM_SCATTER_HIT = - 2;
+
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
-// LogicKernel the following frame. objectIndex < 0 encodes a miss.
+// LogicKernel the following frame. objectIndex < 0 encodes a miss, or a scatter event in fog.
 export const intersectionResultStruct = new StructTypeNode( {
 
 	barycoord: 'vec3f',
@@ -146,6 +155,9 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 	// shadow rays only: a face a bsdf ray would hit was passed
 	forwardBlocked: 'uint',
+
+	// shadow rays only: the transmittance through the volumes on the way to the light
+	transmittance: 'vec3f',
 
 }, 'TraceResult' );
 

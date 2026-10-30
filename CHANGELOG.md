@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
 - WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
 - WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
+- WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, and a "scatterAnisotropy" phase setting.
 
 ### Changed
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
