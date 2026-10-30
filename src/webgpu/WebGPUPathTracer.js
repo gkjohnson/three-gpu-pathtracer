@@ -1356,13 +1356,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 				// traces at most the frame budget's pixels, which is how many paths the wavefront tracer holds
 				const pixels = Math.min( this.targetFrameTime / this._lowResPixelTime, this.frameBudget );
 				const fitScale = Math.min( Math.max( Math.sqrt( pixels / ( width * height ) ), lowResScale ), 1 );
-				if ( Math.abs( fitScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE ) {
+				// only changed as a preview starts, so one already showing isn't restarted
+				if ( firstFrame && Math.abs( fitScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE ) {
 
 					this._lowResScale = fitScale;
 
 				}
 
-				scale = this._lowResScale;
+				scale = this._lowResScale > 0 ? this._lowResScale : lowResScale;
 
 			}
 
