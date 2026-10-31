@@ -1,4 +1,4 @@
-import { Vector2 } from 'three';
+import { Vector2, Vector4 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
@@ -9,9 +9,9 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
-import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
 import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
@@ -34,6 +34,9 @@ export class MaterialKernel extends ComputeKernel {
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 
+			// the media the camera is inside of
+			cameraMediumStack: uniform( new Vector4().setScalar( MEDIUM_STACK_EMPTY ), 'uvec4' ),
+
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
@@ -51,6 +54,11 @@ export class MaterialKernel extends ComputeKernel {
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
 
+		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
+		const materialsNode = contextProxy( 'bvhData.storage.materials' );
+		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
+		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -61,6 +69,7 @@ export class MaterialKernel extends ComputeKernel {
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
+				cameraMediumStack: vec4u,
 
 				globalId: vec3u
 			) -> void {
@@ -174,7 +183,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].subsurfaceBounces = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
-					rayDataStorage[ index ].medium.inside = 0u;
+					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u ) );
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -221,6 +230,17 @@ export class MaterialKernel extends ComputeKernel {
 					let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 					var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, view, blurRoughness );
+
+					// a medium that doesn't scatter only absorbs the light reaching the surface, so its emission
+					// and NEE resolve against the attenuated throughput. One that does applied its transmittance
+					// in MediumKernel
+					var throughputColor = input.throughputColor;
+					if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
+
+						throughputColor *= exp( - medium.extinction * input.dist );
+						rayDataStorage[ index ].throughputColor = throughputColor;
+
+					}
 
 					// Stochastically pass through partially transparent surfaces by re-enqueueing
 					// the ray at the hit point, advancing the alpha depth but not the bounce count.
@@ -279,7 +299,6 @@ export class MaterialKernel extends ComputeKernel {
 
 					// apply the hero wavelength to dispersive surfaces, folding the spectral weight
 					// into the throughput at the path's first dispersive interaction
-					var throughputColor = input.throughputColor;
 					let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 					if ( isDispersive ) {
 
@@ -292,16 +311,6 @@ export class MaterialKernel extends ComputeKernel {
 							rayDataStorage[ index ].throughputColor = throughputColor;
 
 						}
-
-					}
-
-					// attenuate the light transmitted through the volume when exiting a backface so
-					// the surface's emission and NEE resolve against the attenuated throughput. MediumKernel
-					// already applied a scattering medium's transmittance
-					if ( input.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
-
-						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
-						rayDataStorage[ index ].throughputColor = throughputColor;
 
 					}
 
@@ -355,28 +364,33 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].currentBounce = newBounce;
 					rayDataStorage[ index ].mediumScattered = 0u;
 
-					// As in "KHR_materials_scatter", the surface bsdf is the medium's boundary: refracting out
-					// ends the walk, reflecting continues it
-					if ( segmentInMedium && u32( input.objectIndex ) == medium.object && input.side < 0.0 && scatterRec.isTransmissive ) {
+					// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
+					// through it enters the volume and out through it leaves, while light reflecting stays
+					var mediumChanged = false;
+					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
-						medium.inside = false;
+						var stack: vec4u;
+						if ( input.side > 0.0 ) {
 
-					}
+							stack = ${ mediumStackEnterFn }( medium.stack, u32( input.objectIndex ) );
 
-					// refracting into a front face of a scattering material starts a random walk inside it
-					if ( scatterRec.isTransmissive && ! surface.thinWall && input.side > 0.0 ) {
+						} else {
 
-						let entered = ${ enterMediumFn }( materialInfo, u32( input.objectIndex ) );
-						if ( entered.inside ) {
+							stack = ${ mediumStackExitFn }( medium.stack, u32( input.objectIndex ) );
 
-							medium = entered;
+						}
+
+						if ( any( stack != medium.stack ) ) {
+
+							medium = ${ stackMediumFn }( stack, u32( input.objectIndex ) );
+							mediumChanged = true;
 
 						}
 
 					}
 
 					// keep the medium the path left or entered
-					if ( segmentInMedium || medium.inside ) {
+					if ( mediumChanged ) {
 
 						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 

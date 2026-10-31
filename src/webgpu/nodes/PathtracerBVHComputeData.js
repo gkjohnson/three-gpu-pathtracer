@@ -1,4 +1,4 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, Matrix4, Ray } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
@@ -7,8 +7,41 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
+import { MEDIUM_STACK_EMPTY, MEDIUM_STACK_SIZE } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
+const _matrix = /* @__PURE__ */ new Matrix4();
+const _ray = /* @__PURE__ */ new Ray();
+
+// Whether a material has a volume a path enters by refracting into it, as "mediumStackEnter" decides
+function hasMedium( material ) {
+
+	if ( ! material || ! material.attenuationColor || ! ( material.transmission > 0 ) ) {
+
+		return false;
+
+	}
+
+	const { attenuationColor, attenuationDistance } = material;
+	return attenuationDistance !== Infinity && Math.min( attenuationColor.r, attenuationColor.g, attenuationColor.b ) < 1;
+
+}
+
+// The material of a transform slot's bvh group
+function getGroupMaterial( object, root ) {
+
+	let material = object.material;
+	if ( Array.isArray( material ) ) {
+
+		const { materialIndex } = object.geometry.groups[ root ];
+		material = material[ materialIndex ];
+
+	}
+
+	return material;
+
+}
+
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -57,6 +90,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.materials = [];
 		this.bvhMap = new Map();
 		this.textureAtlas = new AtlasTexture();
+
+		// the transform slots whose material has a volume, for "getMediumStack"
+		this._mediumSlots = null;
 
 	}
 
@@ -561,6 +597,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// save the textures
 		this.textures = textures;
+		this._mediumSlots = null;
 
 	}
 
@@ -1031,6 +1068,106 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// whether shadow rays see the object, in the slot after the material index
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 34 ] = info.object.visibleToShadowRays === false ? 0 : 1;
+
+	}
+
+	// Writes the object indices of the volumes containing the world position to "target", the medium stack a
+	// camera ray there starts with. As in Cycles a closed mesh contains the point when the nearest of its faces
+	// along a ray is a back face. Skinned and batched meshes are not checked
+	getMediumStack( position, target ) {
+
+		const { bvh, storage, structs } = this;
+		const transformsU32 = new Uint32Array( storage.transforms.proxyNode.value.array.buffer );
+		const transformLength = structs.transform.getLength();
+
+		if ( this._mediumSlots === null ) {
+
+			this._mediumSlots = [];
+			this._getTransformMap( bvh ).forEach( info => {
+
+				const { object, root } = info;
+				if ( ! object.isSkinnedMesh && ! object.isBatchedMesh && hasMedium( getGroupMaterial( object, root ) ) ) {
+
+					this._mediumSlots.push( info );
+
+				}
+
+			} );
+
+		}
+
+		target.setScalar( MEDIUM_STACK_EMPTY );
+
+		let count = 0;
+		this._mediumSlots.forEach( info => {
+
+			const { object, instanceId, root, slot } = info;
+			const visible = transformsU32[ slot * transformLength + 32 ] !== 0;
+			if ( count >= MEDIUM_STACK_SIZE || ! visible ) {
+
+				return;
+
+			}
+
+			// the position in the object's local space
+			if ( object.isInstancedMesh ) {
+
+				object.getMatrixAt( instanceId, _matrix );
+				_matrix.premultiply( object.matrixWorld );
+
+			} else {
+
+				_matrix.copy( object.matrixWorld );
+
+			}
+
+			const { geometry } = object;
+			_ray.origin.copy( position ).applyMatrix4( _matrix.invert() );
+			_ray.direction.set( 0, 0, 1 );
+
+			if ( geometry.boundingBox === null ) {
+
+				geometry.computeBoundingBox();
+
+			}
+
+			if ( ! geometry.boundingBox.containsPoint( _ray.origin ) ) {
+
+				return;
+
+			}
+
+			// the nearest face of the slot's own group
+			const group = geometry.groups.length > 0 ? geometry.groups[ root ] : null;
+			let nearest = null;
+			const hits = geometry.boundsTree.raycast( _ray, DoubleSide );
+			for ( let i = 0, l = hits.length; i < l; i ++ ) {
+
+				const hit = hits[ i ];
+				if ( group && ( hit.faceIndex * 3 < group.start || hit.faceIndex * 3 >= group.start + group.count ) ) {
+
+					continue;
+
+				}
+
+				if ( nearest === null || hit.distance < nearest.distance ) {
+
+					nearest = hit;
+
+				}
+
+			}
+
+			if ( nearest !== null && nearest.face.normal.dot( _ray.direction ) > 0 ) {
+
+				target.setComponent( count, slot );
+				count ++;
+
+			}
+
+		} );
+
+		return target;
 
 	}
 
