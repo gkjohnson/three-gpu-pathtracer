@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Shadow rays pass through partially transparent surfaces, attenuated by their opacity, and stop at the first opaque hit.
 
 ### Fixed
-- WebGPUPathTracer: Light through transparent or transmissive objects hidden with "visibleToShadowRays" no longer being counted twice.
+- WebGPUPathTracer: Light through partially transparent objects hidden with "visibleToShadowRays" no longer being counted twice.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
 - WebGPUPathTracer: "setSceneAsync" no longer leaves geometry unusable when its attributes share a buffer, as in glTF files.

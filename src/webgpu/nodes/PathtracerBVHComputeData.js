@@ -19,8 +19,8 @@ const transformStruct = new StructTypeNode( {
 	color: 'vec4f',
 }, 'TransformStruct' );
 
-// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a face a bsdf ray would hit and the
-// fraction of its light blocked by the partially transparent surfaces it passed
+// three-mesh-bvh's ray hit result, plus the share of bsdf rays the faces a shadow ray passed unseen would
+// stop, and the fraction of its light blocked by the partially transparent surfaces it passed
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
@@ -29,7 +29,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	objectIndex: 'uint',
 	side: 'float',
 	dist: 'float',
-	forwardBlocked: 'bool',
+	forwardOcclusion: 'float',
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
@@ -343,15 +343,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass the objects not visible to them. A bsdf ray stopped by this face can't reach
-							// the light, but one that passes through it or is transmitted by it can, and still takes its
-							// MIS weight, so the light sample keeps its own
+							// shadow rays pass the objects not visible to them. A bsdf ray hitting this face passes it by
+							// chance if it's partially transparent and is stopped otherwise, so it stops the opacity's share
+							// of the bsdf rays still getting through, whose light the light sample takes over
 							if ( ${ skipShadowObject } ) {
 
-								let isPassable = ( material.transparent != 0 && opacity < 1.0 ) || material.transmission > 0.0;
-								if ( ( material.side == 0 || triResult.side == material.side ) && ! isPassable ) {
+								if ( material.side == 0 || triResult.side == material.side ) {
 
-									result.forwardBlocked = true;
+									let stopped = select( 1.0, opacity, material.transparent != 0 );
+									result.forwardOcclusion += ( 1.0 - result.forwardOcclusion ) * stopped;
 
 								}
 
