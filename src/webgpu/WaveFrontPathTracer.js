@@ -551,7 +551,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
-				materialKernel.maxVolumeSteps = this.maxVolumeSteps;
+				materialKernel.maxFogBounces = this.maxFogBounces;
 				materialKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
@@ -592,7 +592,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				mediumKernel.mediumQueue = mediumQueue;
 				mediumKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				mediumKernel.rayCount = rayCount;
-				mediumKernel.maxVolumeSteps = this.maxVolumeSteps;
+				mediumKernel.maxSubsurfaceBounces = this.maxSubsurfaceBounces;
 				mediumKernel.stepsPerPass = this.mediumStepsPerPass;
 				this.dispatch( mediumKernel, mediumDispatchConverter.outputDispatch );
 

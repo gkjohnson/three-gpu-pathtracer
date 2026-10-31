@@ -19,7 +19,8 @@ export class PathTracerBackend {
 		this.frameBudget = 250000;
 
 		this.maxTransparentBounces = 15;
-		this.maxVolumeSteps = 256;
+		this.maxSubsurfaceBounces = 256;
+		this.maxFogBounces = 0;
 		this.lowResMode = false;
 
 		// whether the scene has volumes, so camera rays trace for the ones they start inside of

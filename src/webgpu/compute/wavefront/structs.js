@@ -91,8 +91,11 @@ const rayDataMembers = {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-	// scatter events taken inside media, counted separately from the bounce count
-	volumeSteps: 'uint',
+	// scatter events taken in subsurface walks, fog volume boundaries passed and fog scatters continued
+	// after, each counted separately from the bounce count
+	subsurfaceBounces: 'uint',
+	fogBoundaries: 'uint',
+	fogBounces: 'uint',
 
 	// whether the path's next segment is walked through a medium by MediumKernel, which clears it once
 	// the walk reaches a surface or ends

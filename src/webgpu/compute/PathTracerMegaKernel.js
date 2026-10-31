@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_VOLUME_LIGHT_POINT, RNG_INDEX_VOLUME_DIRECT_LIGHT } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, mediumShadowTransmittanceFunc, originMediumStackFunc, sampleVolumeLightPointFn, getLightPointFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, mediumShadowTransmittanceFunc, originMediumStackFunc, sampleVolumeLightPointFn, getLightPointFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY, MEDIUM_MAX_BOUNDARIES } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
@@ -35,7 +35,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 			maxBounces: uniform( 5 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
-			maxVolumeSteps: uniform( 256, 'uint' ),
+			maxSubsurfaceBounces: uniform( 256, 'uint' ),
+			maxFogBounces: uniform( 0, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -138,7 +139,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				seed: u32,
 				maxBounces: u32,
 				maxTransparentBounces: u32,
-				maxVolumeSteps: u32,
+				maxSubsurfaceBounces: u32,
+				maxFogBounces: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -215,7 +217,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				var medium = ${ stackMediumFn }( originStack, ${ MEDIUM_STACK_EMPTY }u );
-				var volumeSteps = 0u;
+				var subsurfaceBounces = 0u;
+				var fogBoundaries = 0u;
+				var fogBounces = 0u;
 
 				// the point the last light sample reached, which fog segments draw equiangular samples toward
 				var lightPoint = vec4f( 0.0 );
@@ -358,10 +362,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							mediumScattered = true;
 							isFullyTransmissive = false;
 
-							// volume steps are capped separately from bounces
-							volumeSteps ++;
+							// subsurface bounces are capped separately from bounces
+							subsurfaceBounces ++;
 							let maxThroughput = max( max( throughputColor.r, throughputColor.g ), throughputColor.b );
-							if ( volumeSteps >= maxVolumeSteps || maxThroughput < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+							if ( subsurfaceBounces >= maxSubsurfaceBounces || maxThroughput < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
 
 								break;
 
@@ -416,6 +420,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// sampled with the segment's above
 					if ( fogScatter ) {
 
+						// out of fog bounces the path ends here, keeping the light sampled at the scatter
+						if ( fogBounces >= maxFogBounces ) {
+
+							break;
+
+						}
+
+						fogBounces ++;
 						ray.origin += ray.direction * segmentEnd;
 						ray.maxDist = 0.0;
 
@@ -488,11 +500,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let isFogBoundary = materialInfo.fogVolume != 0;
 						if ( isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
-							// stop once the transparent bounces run out. Fog boundaries count as volume steps
-							// instead, as Cycles counts them apart from transparent bounces
+							// stop once the transparent bounces run out. Fog boundaries are counted apart instead,
+							// with a safety limit, as Cycles counts them
 							if ( isFogBoundary ) {
 
-								volumeSteps ++;
+								fogBoundaries ++;
 
 							} else {
 
@@ -500,7 +512,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							if ( transparentBounce > maxTransparentBounces || volumeSteps > maxVolumeSteps ) {
+							if ( transparentBounce > maxTransparentBounces || fogBoundaries > ${ MEDIUM_MAX_BOUNDARIES }u ) {
 
 								break;
 

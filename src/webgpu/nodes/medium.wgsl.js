@@ -21,6 +21,9 @@ export const MEDIUM_STACK_SIZE = 4;
 // how many fog volume boundaries a shadow ray passes before it counts as occluded
 const MEDIUM_SHADOW_MAX_BOUNDARIES = 8;
 
+// how many fog volume boundaries a path passes before it ends, a safety limit like Cycles' VOLUME_BOUNDS_MAX
+export const MEDIUM_MAX_BOUNDARIES = 1024;
+
 // how many surfaces the ray finding the volumes a camera ray starts in passes
 const MEDIUM_ORIGIN_MAX_HITS = 16;
 

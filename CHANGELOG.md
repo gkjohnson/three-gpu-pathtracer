@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "adaptiveDynamicRes" sizes the low resolution preview from its measured GPU time to take about "targetFrameTime", from "lowResScale" up to the full render size.
 - WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxVolumeSteps".
 - WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
-- WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, and a "scatterAnisotropy" phase setting.
+- WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, a "scatterAnisotropy" phase setting, and "maxFogBounces", single scattering by default as in Cycles.
 - FogVolumeNodeMaterial: A fog volume material for the WebGPU path tracer that also renders as haze when rasterized.
 
 ### Changed

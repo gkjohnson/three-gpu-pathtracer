@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY, MEDIUM_MAX_BOUNDARIES } from '../../nodes/medium.wgsl.js';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
@@ -31,7 +31,7 @@ export class MaterialKernel extends ComputeKernel {
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
-			maxVolumeSteps: uniform( 256, 'uint' ),
+			maxFogBounces: uniform( 0, 'uint' ),
 
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
@@ -68,7 +68,7 @@ export class MaterialKernel extends ComputeKernel {
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
-				maxVolumeSteps: u32,
+				maxFogBounces: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -178,7 +178,9 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 					rayDataStorage[ index ].auxAlbedo = 0u;
 					rayDataStorage[ index ].auxNormal = 0u;
-					rayDataStorage[ index ].volumeSteps = 0u;
+					rayDataStorage[ index ].subsurfaceBounces = 0u;
+					rayDataStorage[ index ].fogBoundaries = 0u;
+					rayDataStorage[ index ].fogBounces = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
 					rayDataStorage[ index ].mediumVertex = 0u;
@@ -198,7 +200,7 @@ export class MaterialKernel extends ComputeKernel {
 					// evaluate the surface staged by LogicKernel. A path still walking a medium has none, and
 					// its walk continues in MediumKernel
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
+					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries );
 
 					// the medium the path is inside of, which the bsdf sample below may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
@@ -232,9 +234,10 @@ export class MaterialKernel extends ComputeKernel {
 						let newDirection = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 						let phasePdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, newDirection ), medium.anisotropy );
 
-						// russian roulette, as at a surface. The phase function's sample weight is one
+						// russian roulette, as at a surface. The phase function's sample weight is one. Out of
+						// fog bounces the path ends here, keeping the light sampled at the scatter
 						var scatterColor = vec3f( phasePdf );
-						var isTerminated = newBounce >= maxBounces;
+						var isTerminated = newBounce >= maxBounces || input.fogBounces >= maxFogBounces;
 						if ( ! isTerminated && newBounce >= 3u ) {
 
 							let rrThroughput = input.throughputColor;
@@ -253,6 +256,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].isFullyTransmissive = 0u;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].currentBounce = newBounce;
+						rayDataStorage[ index ].fogBounces = input.fogBounces + 1u;
 						rayDataStorage[ index ].mediumScattered = 0u;
 						rayDataStorage[ index ].mediumVertex = 0u;
 
@@ -324,10 +328,10 @@ export class MaterialKernel extends ComputeKernel {
 
 						// out of transparent bounces, so stop rather than shading a surface that
 						// should be invisible. A zeroed throughput terminates in LogicKernel. Fog
-						// boundaries count as volume steps instead, as Cycles counts them apart
+						// boundaries are counted apart instead, with a safety limit, as Cycles counts them
 						let alphaDepth = input.alphaDepth + select( 1u, 0u, isFogBoundary );
-						let volumeSteps = input.volumeSteps + select( 0u, 1u, isFogBoundary );
-						if ( alphaDepth > maxTransparentBounces || volumeSteps > maxVolumeSteps ) {
+						let fogBoundaries = input.fogBoundaries + select( 0u, 1u, isFogBoundary );
+						if ( alphaDepth > maxTransparentBounces || fogBoundaries > ${ MEDIUM_MAX_BOUNDARIES }u ) {
 
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
@@ -385,7 +389,7 @@ export class MaterialKernel extends ComputeKernel {
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
 						rayDataStorage[ index ].alphaDepth = alphaDepth;
-						rayDataStorage[ index ].volumeSteps = volumeSteps;
+						rayDataStorage[ index ].fogBoundaries = fogBoundaries;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;

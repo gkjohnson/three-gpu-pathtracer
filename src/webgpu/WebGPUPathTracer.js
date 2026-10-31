@@ -287,21 +287,40 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Maximum number of scatter events a path can take inside a scattering volume, and of fog volume
-	 * boundaries it can cross. Counted separately from {@link WebGPUPathTracer#maxBounces}. Paths that
-	 * reach it end, darkening dense volumes.
+	 * Maximum number of scatter events a path can take inside a subsurface scattering volume. Counted
+	 * separately from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
 	 * @type {number}
 	 * @default 256
 	 */
-	get maxVolumeSteps() {
+	get maxSubsurfaceBounces() {
 
-		return this._pathTracer.maxVolumeSteps;
+		return this._pathTracer.maxSubsurfaceBounces;
 
 	}
 
-	set maxVolumeSteps( v ) {
+	set maxSubsurfaceBounces( v ) {
 
-		this._pathTracer.maxVolumeSteps = v;
+		this._pathTracer.maxSubsurfaceBounces = v;
+		this.reset();
+
+	}
+
+	/**
+	 * Maximum number of times a path continues after scattering in fog. Light is still sampled at the
+	 * scatter that reaches it, so 0 renders single scattering, as Cycles' volume bounces do. Fog scatters
+	 * also count toward {@link WebGPUPathTracer#maxBounces}.
+	 * @type {number}
+	 * @default 0
+	 */
+	get maxFogBounces() {
+
+		return this._pathTracer.maxFogBounces;
+
+	}
+
+	set maxFogBounces( v ) {
+
+		this._pathTracer.maxFogBounces = v;
 		this.reset();
 
 	}
