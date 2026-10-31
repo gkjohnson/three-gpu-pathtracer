@@ -120,7 +120,7 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	direction: 'vec3f',
 
-	// the traversal's random sequence index: bounces, alpha pass throughs and volume steps, as in the megakernel
+	// the traversal's random sequence index: bounces, alpha pass throughs and subsurface bounces, as in the megakernel
 	rngIndex: 'uint',
 
 	seed: 'uint',
