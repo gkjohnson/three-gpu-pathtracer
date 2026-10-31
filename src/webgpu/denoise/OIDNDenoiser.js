@@ -103,6 +103,9 @@ export class OIDNDenoiser {
 		this._complete = false;
 		this._abort = null;
 		this._requestId = 0;
+
+		// set when a pass started by "update" fails, so the render loop doesn't retry it every frame
+		this._failed = false;
 		this._unets = { aux: null, color: null };
 
 		this._resultPipeline = null;
@@ -134,7 +137,7 @@ export class OIDNDenoiser {
 	 */
 	update( target, aux = null ) {
 
-		if ( this._complete || this._running ) {
+		if ( this._complete || this._running || this._failed ) {
 
 			return this._texture;
 
@@ -152,7 +155,13 @@ export class OIDNDenoiser {
 
 		}
 
-		this.denoise( target, albedo, normal );
+		// a failure, such as the weights failing to download, is retried after the next reset
+		this.denoise( target, albedo, normal ).catch( error => {
+
+			this._failed = true;
+			console.error( error );
+
+		} );
 
 		return this._texture;
 
@@ -257,6 +266,7 @@ export class OIDNDenoiser {
 
 		this._running = false;
 		this._complete = false;
+		this._failed = false;
 
 	}
 
@@ -300,13 +310,14 @@ export class OIDNDenoiser {
 
 	}
 
-	// loads each model once, with concurrent calls sharing the same promise
+	// loads each model once, with concurrent calls sharing the same promise. A failed load isn't kept,
+	// so a later pass tries again
 	_initUNet( aux ) {
 
 		const key = aux ? 'aux' : 'color';
 		if ( ! this._unets[ key ] ) {
 
-			this._unets[ key ] = ( async () => {
+			const unet = ( async () => {
 
 				const device = this.renderer.backend.device;
 				const url = aux ? this.auxWeightsUrl : this.colorWeightsUrl;
@@ -324,6 +335,18 @@ export class OIDNDenoiser {
 				return this.initUNetFromURL( url, { device }, options );
 
 			} )();
+
+			unet.catch( () => {
+
+				if ( this._unets[ key ] === unet ) {
+
+					this._unets[ key ] = null;
+
+				}
+
+			} );
+
+			this._unets[ key ] = unet;
 
 		}
 
