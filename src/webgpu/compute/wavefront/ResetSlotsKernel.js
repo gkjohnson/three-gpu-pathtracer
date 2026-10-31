@@ -2,7 +2,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct, pixelQueueStruct } from './structs.js';
+import { rayDataStruct, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 
 // Moves pixels between a range of path slots and the queue when the pool is resized. Slots added
 // by a grow take a pixel from the queue tail and start idle, as MaterialKernel expects. Slots
@@ -13,10 +13,8 @@ export class ResetSlotsKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
-			// storage buffer as an array, in r187
-			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
-			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
 			start: uniform( 0, 'uint' ),
 			end: uniform( 0, 'uint' ),
 			addingSlots: uniform( 0, 'uint' ),
@@ -39,14 +37,14 @@ export class ResetSlotsKernel extends ComputeKernel {
 				if ( addingSlots == 0u ) {
 
 					// slots being removed hand their pixel back before the pool is discarded
-					let queueIndex = atomicAdd( &pixelQueue.elementCount, 1u );
-					atomicStore( &pixelQueue.elements[ queueIndex ], rayDataStorage[ index ].pixelIndex );
+					let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ], 1u );
+					atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], rayDataStorage[ index ].pixelIndex );
 
 				} else {
 
 					// the pool never exceeds the pixel count, so the queue holds enough for every new slot
-					let previousCount = atomicSub( &pixelQueue.elementCount, 1u );
-					rayDataStorage[ index ].pixelIndex = atomicLoad( &pixelQueue.elements[ previousCount - 1u ] );
+					let previousCount = atomicSub( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ], 1u );
+					rayDataStorage[ index ].pixelIndex = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + previousCount - 1u ] );
 					rayDataStorage[ index ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 					rayDataStorage[ index ].objectIndex = - 1;

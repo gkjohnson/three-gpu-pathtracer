@@ -14,7 +14,11 @@ import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
-import { rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, rayQueueStruct, pixelQueueStruct, mediumQueueStruct } from './compute/wavefront/structs.js';
+import {
+	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct,
+	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT, PIXEL_QUEUE_HEADER,
+	MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER,
+} from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import {
@@ -63,9 +67,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// persistent per-path state, one slot per in-flight path
 		this.rayDataStorage = null;
 
-		// append-only trace queues, prefixed by an atomic length header
+		// append-only trace queues, with their lengths in the counters buffer
 		this.rayQueue = null;
 		this.shadowRayQueue = null;
+		this.queueCounters = new StorageBufferAttribute( new Uint32Array( QUEUE_COUNTER_COUNT ), 1 );
+		this.queueCounters.name = 'Queue Counters';
 
 		// per-queue-slot trace results, indexed by the ray's position in its queue, then one entry per
 		// slot for medium walk hits
@@ -92,9 +98,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.mediumKernel = new MediumKernel().setWorkgroupSize( 64, 1, 1 );
 		this.queueMediumWalksKernel = new QueueMediumWalksKernel().setWorkgroupSize( 64, 1, 1 );
 		this.cameraMediumKernel = new CameraMediumKernel().setWorkgroupSize( 64, 1, 1 );
-		this.rayDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.shadowDispatchConverter = new QueueLengthToDispatchKernel().setWorkgroupSize( 1, 1, 1 );
-		this.mediumDispatchConverter = new QueueLengthToDispatchKernel( mediumQueueStruct ).setWorkgroupSize( 1, 1, 1 );
+		this.rayDispatchConverter = new QueueLengthToDispatchKernel( RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
+		this.shadowDispatchConverter = new QueueLengthToDispatchKernel( SHADOW_RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
+		this.mediumDispatchConverter = new QueueLengthToDispatchKernel( MEDIUM_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 
@@ -269,6 +275,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayDataStorage?.dispose();
 		this.rayQueue?.dispose();
 		this.shadowRayQueue?.dispose();
+		this.queueCounters.dispose();
 		this.rayIntersectionsStorage?.dispose();
 		this.shadowRayIntersectionsStorage?.dispose();
 		this.mediumQueue?.dispose();
@@ -303,7 +310,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	// retired by a shrink can always return theirs.
 	_updatePixelQueue( width, height ) {
 
-		const size = pixelQueueStruct.getLength() + Math.max( width * height, 1 );
+		const size = PIXEL_QUEUE_HEADER + Math.max( width * height, 1 );
 		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
 			this.pixelQueue?.dispose();
@@ -344,13 +351,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const rayDataStorage = new StorageBufferAttribute( count, rayDataStruct.getLength() );
 		rayDataStorage.name = 'Ray Data';
 
-		const queueSize = rayQueueStruct.getLength() + count * traceQueuedRayStruct.getLength();
-		const rayQueue = new StorageBufferAttribute( new Float32Array( queueSize ), queueSize );
+		const rayQueue = new StorageBufferAttribute( count, traceQueuedRayStruct.getLength() );
 		rayQueue.name = 'Ray Queue';
 
 		// a slot can trace a surface's shadow ray and a fog segment's in the same frame
-		const shadowQueueSize = rayQueueStruct.getLength() + 2 * count * traceQueuedRayStruct.getLength();
-		const shadowRayQueue = new StorageBufferAttribute( new Float32Array( shadowQueueSize ), shadowQueueSize );
+		const shadowRayQueue = new StorageBufferAttribute( 2 * count, traceQueuedRayStruct.getLength() );
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
 		const rayIntersectionsStorage = new StorageBufferAttribute( 2 * count, intersectionResultStruct.getLength() );
@@ -359,7 +364,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const shadowRayIntersectionsStorage = new StorageBufferAttribute( 2 * count, intersectionResultStruct.getLength() );
 		shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
 
-		const mediumQueueSize = mediumQueueStruct.getLength() + count;
+		const mediumQueueSize = MEDIUM_QUEUE_HEADER + count;
 		const mediumQueue = new StorageBufferAttribute( new Uint32Array( mediumQueueSize ), mediumQueueSize );
 		mediumQueue.name = 'Medium Queue';
 
@@ -467,12 +472,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 		] );
 
-		// reset the trace queues — only the length header needs zeroing
-		zeroDispatchKernel.target = this.rayQueue;
-		this.dispatch( zeroDispatchKernel, [ 1 ] );
-
-		zeroDispatchKernel.target = this.shadowRayQueue;
-		this.dispatch( zeroDispatchKernel, [ 1 ] );
+		// reset the trace queues — only their lengths need zeroing
+		zeroDispatchKernel.target = this.queueCounters;
+		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
 		// assign every path slot in use a pixel and park the overflow pixels in the pixel queue
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
@@ -521,6 +523,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 					rayDataStorage,
 					rayQueue,
 					shadowRayQueue,
+					queueCounters,
 					rayIntersectionsStorage,
 					shadowRayIntersectionsStorage,
 					mediumQueue,
@@ -530,20 +533,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				const rayCount = Math.min( this.rayCount, pixelCount );
 
 				// Step 2: reset the trace queues for this frame's population
-				zeroDispatchKernel.target = rayQueue;
-				this.dispatch( zeroDispatchKernel, [ 1 ] );
-
-				zeroDispatchKernel.target = shadowRayQueue;
-				this.dispatch( zeroDispatchKernel, [ 1 ] );
+				zeroDispatchKernel.target = queueCounters;
+				this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
 				zeroDispatchKernel.target = mediumQueue;
-				this.dispatch( zeroDispatchKernel, [ 1 ] );
+				this.dispatch( zeroDispatchKernel, [ MEDIUM_QUEUE_HEADER ] );
 
 				// Step 3: evaluate materials — spawn camera rays for freed slots, sample the bsdf, and
 				// enqueue this frame's bounce + shadow rays
 				materialKernel.rayDataStorage = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
+				materialKernel.queueCounters = queueCounters;
 				materialKernel.pixelQueue = this.pixelQueue;
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
 				materialKernel.seed = this.seed;
@@ -565,17 +566,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				}
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
-				rayDispatchConverter.queue = rayQueue;
+				rayDispatchConverter.queueCounters = queueCounters;
 				this.dispatch( rayDispatchConverter, [ 1, 1, 1 ] );
 
 				traceRayKernel.rayQueue = rayQueue;
+				traceRayKernel.queueCounters = queueCounters;
 				traceRayKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				this.dispatch( traceRayKernel, rayDispatchConverter.outputDispatch );
 
-				shadowDispatchConverter.queue = shadowRayQueue;
+				shadowDispatchConverter.queueCounters = queueCounters;
 				this.dispatch( shadowDispatchConverter, [ 1, 1, 1 ] );
 
 				traceShadowRayKernel.shadowRayQueue = shadowRayQueue;
+				traceShadowRayKernel.queueCounters = queueCounters;
 				traceShadowRayKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				this.dispatch( traceShadowRayKernel, shadowDispatchConverter.outputDispatch );
 
@@ -585,7 +588,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				queueMediumWalksKernel.rayCount = rayCount;
 				this.dispatch( queueMediumWalksKernel, queueMediumWalksKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-				mediumDispatchConverter.queue = mediumQueue;
+				// the medium queue's length leads it, where the converter reads it as a counter
+				mediumDispatchConverter.queueCounters = mediumQueue;
 				this.dispatch( mediumDispatchConverter, [ 1, 1, 1 ] );
 
 				mediumKernel.rayDataStorage = rayDataStorage;

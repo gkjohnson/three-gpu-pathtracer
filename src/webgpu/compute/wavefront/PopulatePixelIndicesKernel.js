@@ -3,7 +3,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct, pixelQueueNonAtomicStruct } from './structs.js';
+import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 
 // Runs once per reset: assigns each of the first rayData-pool-count pixels to a path slot and parks
 // the overflow pixel indices in the pixel queue. Slots are initialized so LogicKernel skips them and
@@ -14,10 +14,8 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
-			// storage buffer as an array, in r187
-			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
-			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueNonAtomicStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
 			frameBudget: uniform( 0, 'uint' ),
 			globalId: globalId,
@@ -39,8 +37,8 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 				let pixelCount = targetDimensions.x * targetDimensions.y;
 				if ( globalId.x == 0u && globalId.y == 0u ) {
 
-					pixelQueue.current = 0u;
-					pixelQueue.elementCount = select( 0u, pixelCount - rayCount, pixelCount >= rayCount );
+					pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ] = 0u;
+					pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] = select( 0u, pixelCount - rayCount, pixelCount >= rayCount );
 
 				}
 
@@ -58,7 +56,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 				} else {
 
-					pixelQueue.elements[ pixelIndex - rayCount ] = pixelHash;
+					pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + pixelIndex - rayCount ] = pixelHash;
 
 				}
 

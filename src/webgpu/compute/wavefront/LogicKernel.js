@@ -48,11 +48,9 @@ export class LogicKernel extends ComputeKernel {
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
 
-			// TODO: two elements so the placeholders compile as arrays. Remove once three declares every
-			// storage buffer as an array, in r187
-			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
-			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};

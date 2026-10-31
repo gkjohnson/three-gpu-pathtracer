@@ -5,7 +5,7 @@ import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { mediumStackEnterFunc, mediumStackExitFunc, mediumShadowTransmittanceFunc } from '../../nodes/medium.wgsl.js';
 import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { rayQueueStruct, intersectionResultStruct } from './structs.js';
+import { traceQueuedRayStruct, intersectionResultStruct, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
 
 // Pure BVH traversal over the queued shadow rays. Uses first-hit traversals without face culling
 // ( no dedicated any-hit traversal exists yet ), passing fog volume boundaries and accumulating the
@@ -16,10 +16,9 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 		const params = {
 
-			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
-			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
-			// storage buffer as an array, in r187
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
+			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
+			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
@@ -38,16 +37,17 @@ export class TraceShadowRayKernel extends ComputeKernel {
 			fn compute( globalId: vec3u ) -> void {
 
 				let shadowRayQueue = &${ params.shadowRayQueue };
+				let queueCounters = &${ params.queueCounters };
 				let shadowRayIntersectionsStorage = &${ params.shadowRayIntersectionsStorage };
 
 				let index = globalId.x;
-				if ( index >= shadowRayQueue.length ) {
+				if ( index >= queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ] ) {
 
 					return;
 
 				}
 
-				let queuedRay = ( *shadowRayQueue ).elements[ index ];
+				let queuedRay = shadowRayQueue[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, queuedRay.seed, queuedRay.rngIndex );
 
