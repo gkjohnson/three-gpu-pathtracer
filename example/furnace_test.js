@@ -6,7 +6,7 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 // material properties that can be assigned to a grid axis
-const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specular intensity', 'specular color', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
+const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specular intensity', 'specular color', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'subsurface', 'opacity', 'none' ];
 
 const options = {
 	enable: true,
@@ -221,6 +221,16 @@ function buildGrid() {
 			// any non zero thickness marks the material as a solid volume in the path tracer
 			material.transmission = val;
 			material.thickness = 1.0;
+
+		} else if ( field === 'subsurface' ) {
+
+			// a lossless scattering volume, varying the phase anisotropy short of the degenerate +/- 1
+			material.transmission = 1.0;
+			material.thickness = 1.0;
+			material.attenuationColor.setRGB( 0.5, 0.5, 0.5 );
+			material.attenuationDistance = 0.5;
+			material.scatterStrength = 1.0;
+			material.scatterAnisotropy = ( val * 2 - 1 ) * 0.9;
 
 		} else if ( field === 'opacity' ) {
 
