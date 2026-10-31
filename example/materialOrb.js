@@ -209,7 +209,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'anisotropyRotation', 0.0, 2.0 * Math.PI ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'scatterStrength', 0.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'multiscatterColor' ).onChange( onParamsChange );
-	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 0.99, 0.99 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 1.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
