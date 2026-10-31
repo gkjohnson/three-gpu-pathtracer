@@ -171,6 +171,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 				var bsdfPdf = 0.0;
+
+				// Alpha pass throughs only move where the BVH traversal starts, "rayStart" along the ray, so the
+				// ray keeps the origin it scattered from, which its MIS weights are measured from
+				var rayStart = 0.0;
+				var traceOrigin = ray.origin;
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
@@ -212,6 +217,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var channelPdf = vec3f( 0.0 );
 					var scatterDist = 0.0;
 					var traceRay = ray;
+					traceRay.origin = traceOrigin;
 					if ( medium.inside ) {
 
 						channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
@@ -245,7 +251,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						} else {
 
 							throughputColor *= medium.albedo * medium.extinction * transmittance / distancePdf;
-							ray.origin += ray.direction * scatterDist;
+							ray.origin = traceOrigin + ray.direction * scatterDist;
+							traceOrigin = ray.origin;
+							rayStart = 0.0;
 							ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 							ray.maxDist = 0.0;
 							mediumScattered = true;
@@ -278,7 +286,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					// forward hits on area lights along the traced segment. Camera rays only see visibleToCameraRays
+					// lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -288,7 +297,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist > rayStart && lightRec.dist < rayStart + surfaceDist ) {
 
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
@@ -344,7 +353,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						// Stochastically pass through partially transparent surfaces by restarting
-						// the ray at the hit point, advancing the rng but not the bounce count.
+						// the traversal at the hit point, advancing the rng but not the bounce count.
 						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 							// stop once the transparent bounces run out
@@ -354,7 +363,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
+							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
+							rayStart += hitResult.dist;
 							${ rngNextBounce }();
 							transparentBounce ++;
 							bounce --;
@@ -416,20 +426,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										shadowRay.direction = lightRec.direction;
 										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
-										// opaque occlusion up to the light distance. A shadow-specific any hit
-										// traversal could support tinted shadows from transmissive and partially
-										// opaque objects
+										// opaque occlusion up to the light distance, attenuated by the partially
+										// transparent surfaces passed
 										var shadowHit: ${ raycastOutput };
 										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
 
 											let lightPdf = lightRec.pdf * selectionPdf;
 
-											// env + area lights are also bsdf-sampled, so MIS-weight them - punctual lights take full weight,
-											// or when a bsdf ray could never reach the light or isn't traced past the bounce limit
-											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked && bounce + 1u < maxBounces;
-											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
-											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
+											// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
+											// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
+											// find the light, so their share of the weight moves to the light sample
+											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
+											let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, evalRec.pdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
+											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight * ( 1.0 - shadowHit.occlusion ) / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
 
@@ -518,6 +528,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
 						ray.maxDist = 0.0;
+						traceOrigin = ray.origin;
+						rayStart = 0.0;
 
 					} else {
 

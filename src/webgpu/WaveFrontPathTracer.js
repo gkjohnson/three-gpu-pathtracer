@@ -14,7 +14,7 @@ import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
 import {
-	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct,
+	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT, PIXEL_QUEUE_HEADER,
 	MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER,
 } from './compute/wavefront/structs.js';
@@ -357,7 +357,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
 
-		const shadowRayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
+		const shadowRayIntersectionsStorage = new StorageBufferAttribute( count, shadowTraceResultStruct.getLength() );
 		shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
 
 		const mediumQueueSize = MEDIUM_QUEUE_HEADER + count;

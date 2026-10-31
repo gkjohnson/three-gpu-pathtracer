@@ -77,8 +77,10 @@ const rayDataMembers = {
 	// the traced segment length, for the transmission attenuation applied by MaterialKernel
 	dist: 'float',
 
-	// alpha test pass throughs, counted separately from the bounce count
+	// alpha test pass throughs, counted separately from the bounce count, and how far along the ray they
+	// moved the start of its traversal. The ray keeps the origin it scattered from
 	alphaDepth: 'uint',
+	rayStart: 'float',
 
 	// the camera segment's maximum trace distance, carried across alpha pass throughs
 	maxDist: 'float',
@@ -145,10 +147,21 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
 
-	// shadow rays only: a face a bsdf ray would hit was passed
-	forwardBlocked: 'uint',
-
 }, 'TraceResult' );
+
+// Shadow ray trace result, written by TraceShadowRayKernel at the ray's queue index and consumed by
+// LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
+export const shadowTraceResultStruct = new StructTypeNode( {
+
+	objectIndex: 'int',
+
+	// the share of bsdf rays the skipped faces would stop, whose light weight moves to the light sample
+	skippedOcclusion: 'float',
+
+	// the fraction of light blocked by the partially transparent surfaces passed
+	occlusion: 'float',
+
+}, 'ShadowTraceResult' );
 
 // The ray and shadow ray queues are plain arrays of queued rays, with their append-only lengths in a
 // separate counters buffer: storage buffers are always bound as arrays, which can't hold a struct
