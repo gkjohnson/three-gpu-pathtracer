@@ -92,7 +92,7 @@ const rayDataMembers = {
 	auxNormal: 'uint',
 
 	// scatter events taken inside media, counted separately from the bounce count
-	volumeSteps: 'uint',
+	subsurfaceBounces: 'uint',
 
 	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
 	walkPending: 'uint',

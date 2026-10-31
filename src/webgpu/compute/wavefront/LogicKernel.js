@@ -109,7 +109,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				// one-sample NEE chooses between the analytic lights and the environment, matched with
 				// the megakernel

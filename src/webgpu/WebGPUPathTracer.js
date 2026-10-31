@@ -270,7 +270,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
 	 * {@link WebGPUPathTracer#maxBounces} so foliage and cutouts cannot exhaust the bounce budget.
 	 * @type {number}
-	 * @default 5
+	 * @default 15
 	 */
 	get maxTransparentBounces() {
 
@@ -286,20 +286,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Maximum number of scatter events a path can take inside a scattering volume. Counted separately
-	 * from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
+	 * Maximum number of scatter events a path can take inside a subsurface scattering volume. Counted
+	 * separately from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
 	 * @type {number}
 	 * @default 256
 	 */
-	get maxVolumeSteps() {
+	get maxSubsurfaceBounces() {
 
-		return this._pathTracer.maxVolumeSteps;
+		return this._pathTracer.maxSubsurfaceBounces;
 
 	}
 
-	set maxVolumeSteps( v ) {
+	set maxSubsurfaceBounces( v ) {
 
-		this._pathTracer.maxVolumeSteps = v;
+		this._pathTracer.maxSubsurfaceBounces = v;
 		this.reset();
 
 	}

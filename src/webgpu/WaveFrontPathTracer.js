@@ -572,7 +572,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				mediumKernel.mediumQueue = mediumQueue;
 				mediumKernel.rayIntersectionsStorage = rayIntersectionsStorage;
 				mediumKernel.rayCount = rayCount;
-				mediumKernel.maxVolumeSteps = this.maxVolumeSteps;
+				mediumKernel.maxSubsurfaceBounces = this.maxSubsurfaceBounces;
 				mediumKernel.stepsPerPass = this.mediumStepsPerPass;
 				this.dispatch( mediumKernel, mediumDispatchConverter.outputDispatch );
 

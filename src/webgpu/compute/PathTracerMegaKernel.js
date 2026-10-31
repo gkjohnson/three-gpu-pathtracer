@@ -35,7 +35,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			seed: uniform( 0 ),
 			maxBounces: uniform( 5 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
-			maxVolumeSteps: uniform( 256, 'uint' ),
+			maxSubsurfaceBounces: uniform( 256, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -99,7 +99,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				seed: u32,
 				maxBounces: u32,
 				maxTransparentBounces: u32,
-				maxVolumeSteps: u32,
+				maxSubsurfaceBounces: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -168,7 +168,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// the scattering volume the path is in. Media don't nest
 				var medium: ${ mediumStruct };
-				var volumeSteps = 0u;
+				var subsurfaceBounces = 0u;
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
 				var mediumScattered = false;
@@ -233,10 +233,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							mediumScattered = true;
 							isFullyTransmissive = false;
 
-							// volume steps are capped separately from bounces
-							volumeSteps ++;
+							// subsurface bounces are capped separately from bounces
+							subsurfaceBounces ++;
 							let maxThroughput = max( max( throughputColor.r, throughputColor.g ), throughputColor.b );
-							if ( volumeSteps >= maxVolumeSteps || maxThroughput < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+							if ( subsurfaceBounces >= maxSubsurfaceBounces || maxThroughput < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
 
 								break;
 
