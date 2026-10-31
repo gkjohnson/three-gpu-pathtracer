@@ -12,6 +12,10 @@ const MEDIUM_MIN_ATTENUATION = 1e-6;
 // the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
 export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 
+// the largest phase anisotropy used, short of the +/- 1 delta phase function the scatter albedo
+// inversion and the Henyey-Greenstein pdf divide by zero at
+const MEDIUM_MAX_ANISOTROPY = 0.999;
+
 export const mediumStruct = new StructTypeNode( {
 	inside: 'bool',
 	object: 'uint',
@@ -84,12 +88,14 @@ export const enterMediumFn = wgslTagFn/* wgsl */`
 
 	fn enterMedium( material: ${ materialStruct }, object: u32 ) -> ${ mediumStruct } {
 
+		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
+
 		var medium: ${ mediumStruct };
 		medium.extinction = - log( max( material.attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) ) ) / material.attenuationDistance;
-		medium.albedo = ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, material.scatterAnisotropy );
+		medium.albedo = ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
 		medium.inside = any( medium.albedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) );
 		medium.object = object;
-		medium.anisotropy = material.scatterAnisotropy;
+		medium.anisotropy = anisotropy;
 		return medium;
 
 	}

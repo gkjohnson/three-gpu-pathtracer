@@ -224,13 +224,12 @@ function buildGrid() {
 
 		} else if ( field === 'subsurface' ) {
 
-			// a lossless scattering volume, varying the phase anisotropy short of the degenerate +/- 1
+			// a scattering volume, varying the scatter strength
 			material.transmission = 1.0;
 			material.thickness = 1.0;
 			material.attenuationColor.setRGB( 0.5, 0.5, 0.5 );
 			material.attenuationDistance = 0.5;
-			material.scatterStrength = 1.0;
-			material.scatterAnisotropy = ( val * 2 - 1 ) * 0.9;
+			material.scatterStrength = val;
 
 		} else if ( field === 'opacity' ) {
 
