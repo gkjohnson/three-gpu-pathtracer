@@ -19,8 +19,8 @@ const transformStruct = new StructTypeNode( {
 	color: 'vec4f',
 }, 'TransformStruct' );
 
-// three-mesh-bvh's ray hit result, plus the share of bsdf rays the faces a shadow ray passed unseen would
-// stop, and the fraction of its light blocked by the partially transparent surfaces it passed
+// three-mesh-bvh's ray hit result. Shadow rays also record the share of bsdf rays the faces they skipped
+// would stop, and the share of light the partially transparent surfaces they passed block
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
@@ -343,9 +343,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass the objects not visible to them. A bsdf ray hitting this face passes it by
-							// chance if it's partially transparent and is stopped otherwise, so it stops the opacity's share
-							// of the bsdf rays still getting through, whose light the light sample takes over
+							// shadow rays skip the objects not visible to them. Record the share of bsdf rays this face
+							// would stop: all of them if it's opaque, its opacity if it's partially transparent
 							if ( ${ skipShadowObject } ) {
 
 								if ( material.side == 0 || triResult.side == material.side ) {
