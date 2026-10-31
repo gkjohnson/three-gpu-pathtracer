@@ -46,7 +46,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 				var hitResult: ${ raycastOutput };
 				let occluded = ${ raycastShadowFn }( ray, &hitResult );
 				shadowRayIntersectionsStorage[ index ].objectIndex = select( - 1, i32( hitResult.objectIndex ), occluded );
-				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( hitResult.forwardBlocked );
+				shadowRayIntersectionsStorage[ index ].skippedOcclusion = hitResult.skippedOcclusion;
 				shadowRayIntersectionsStorage[ index ].occlusion = hitResult.occlusion;
 
 			}

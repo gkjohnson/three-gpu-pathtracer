@@ -155,8 +155,8 @@ export const shadowTraceResultStruct = new StructTypeNode( {
 
 	objectIndex: 'int',
 
-	// a face a bsdf ray would hit was passed
-	forwardBlocked: 'uint',
+	// the share of bsdf rays the skipped faces would stop, whose light weight moves to the light sample
+	skippedOcclusion: 'float',
 
 	// the fraction of light blocked by the partially transparent surfaces passed
 	occlusion: 'float',
