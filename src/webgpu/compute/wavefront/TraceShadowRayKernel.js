@@ -16,9 +16,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
 			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
-			// TODO: two elements so the placeholder compiles as an array. Remove once three declares every
-			// storage buffer as an array, in r187
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
