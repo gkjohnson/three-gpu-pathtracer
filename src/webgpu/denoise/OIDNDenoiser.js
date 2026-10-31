@@ -6,8 +6,8 @@ import { createAuxImageTarget } from '../compute/targets.js';
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
 
 /**
- * Fired with the `error` when a pass started by `update` fails, such as the weights failing to
- * download. No other pass starts until a reset.
+ * Fired when a pass started by `update` fails, such as the weights failing to download, with the
+ * failure as the event's `error`. No other pass starts until a reset.
  * @event OIDNDenoiser#error
  */
 
