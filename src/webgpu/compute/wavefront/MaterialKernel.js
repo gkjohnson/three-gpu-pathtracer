@@ -164,6 +164,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
+					rayDataStorage[ index ].rayStart = 0.0;
 					rayDataStorage[ index ].maxDist = ray.maxDist;
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -241,8 +242,10 @@ export class MaterialKernel extends ComputeKernel {
 						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
 						if ( segmentInMedium ) {
 
-							// inside a medium, MediumKernel walks on past the surface
+							// inside a medium, MediumKernel walks on past the surface, from the surface
 							rayDataStorage[ index ].walkPending = 1u;
+							rayDataStorage[ index ].origin = alphaOrigin;
+							rayDataStorage[ index ].rayStart = 0.0;
 
 						} else {
 
@@ -257,6 +260,9 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
 							rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
 
+							// the ray keeps its origin, and only the queued traversal starts past the surface
+							rayDataStorage[ index ].rayStart = input.rayStart + input.dist;
+
 						}
 
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
@@ -266,7 +272,6 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
-						rayDataStorage[ index ].origin = alphaOrigin;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
@@ -384,6 +389,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].walkPending = 1u;
 						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 						rayDataStorage[ index ].direction = scatterRec.direction;
+						rayDataStorage[ index ].rayStart = 0.0;
 
 					} else if ( ! isTerminated ) {
 
@@ -398,6 +404,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						rayDataStorage[ index ].origin = rayQueue[ rayIndex ].origin;
 						rayDataStorage[ index ].direction = scatterRec.direction;
+						rayDataStorage[ index ].rayStart = 0.0;
 
 					}
 
