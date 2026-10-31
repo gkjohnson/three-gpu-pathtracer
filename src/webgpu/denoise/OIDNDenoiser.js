@@ -1,9 +1,15 @@
-import { ExternalTexture } from 'three/webgpu';
+import { EventDispatcher, ExternalTexture } from 'three/webgpu';
 import { UnpackAuxKernel } from '../compute/UnpackAuxKernel.js';
 import { createAuxImageTarget } from '../compute/targets.js';
 
 /** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
+
+/**
+ * Fired with the `error` when a pass started by `update` fails, such as the weights failing to
+ * download. No other pass starts until a reset.
+ * @event OIDNDenoiser#error
+ */
 
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
@@ -20,7 +26,7 @@ import { createAuxImageTarget } from '../compute/targets.js';
  * Weights come from the oidn-weights repository, where the "_small" and "_large" variants trade
  * quality against download size and per tile cost.
  */
-export class OIDNDenoiser {
+export class OIDNDenoiser extends EventDispatcher {
 
 	/**
 	 * The denoised result, or null until the first tile has been produced.
@@ -70,6 +76,8 @@ export class OIDNDenoiser {
 	 */
 	constructor( options = {} ) {
 
+		super();
+
 		const {
 			initUNetFromURL,
 			auxWeightsUrl,
@@ -103,6 +111,9 @@ export class OIDNDenoiser {
 		this._complete = false;
 		this._abort = null;
 		this._requestId = 0;
+
+		// set when a pass started by "update" fails, so the render loop doesn't start another until a reset
+		this._failed = false;
 		this._unets = { aux: null, color: null };
 
 		this._resultPipeline = null;
@@ -134,7 +145,7 @@ export class OIDNDenoiser {
 	 */
 	update( target, aux = null ) {
 
-		if ( this._complete || this._running ) {
+		if ( this._complete || this._running || this._failed ) {
 
 			return this._texture;
 
@@ -152,7 +163,13 @@ export class OIDNDenoiser {
 
 		}
 
-		this.denoise( target, albedo, normal );
+		// a failure, such as the weights failing to download, is reported once rather than every frame
+		this.denoise( target, albedo, normal ).catch( error => {
+
+			this._failed = true;
+			this.dispatchEvent( { type: 'error', error } );
+
+		} );
 
 		return this._texture;
 
@@ -257,6 +274,7 @@ export class OIDNDenoiser {
 
 		this._running = false;
 		this._complete = false;
+		this._failed = false;
 
 	}
 
