@@ -337,7 +337,7 @@ export const MODEL_LIST = {
 
 		// aperture refit from the source scene's f/0.45 at 82mm to the normalized model scale
 		bokehSize: 28,
-		focusDistance: 0.536,
+		focusDistance: 0.56,
 
 		postProcess: model => {
 
