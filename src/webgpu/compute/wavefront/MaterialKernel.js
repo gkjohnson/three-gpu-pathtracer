@@ -153,9 +153,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue.elements[ rayIndex ].origin = ray.origin;
 					rayQueue.elements[ rayIndex ].direction = ray.direction;
 					rayQueue.elements[ rayIndex ].pixelIndex = pixelIndex;
-					rayQueue.elements[ rayIndex ].currentBounce = 0u;
+					rayQueue.elements[ rayIndex ].rngIndex = 0u;
 					rayQueue.elements[ rayIndex ].seed = seed + samples;
-					rayQueue.elements[ rayIndex ].alphaDepth = 0u;
 					rayQueue.elements[ rayIndex ].maxDist = ray.maxDist;
 
 					rayDataStorage[ index ].origin = ray.origin;
@@ -197,12 +196,11 @@ export class MaterialKernel extends ComputeKernel {
 
 				} else if ( input.walkPending == 0u ) {
 
-					// evaluate the surface staged by LogicKernel. A path still walking a medium has none, and
-					// its walk continues in MediumKernel
+					// evaluate the surface staged by LogicKernel. Paths still walking a medium have none
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries );
 
-					// the medium the path is inside of, which the bsdf sample below may enter or exit
+					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
 					let segmentInMedium = medium.inside;
 
@@ -213,9 +211,8 @@ export class MaterialKernel extends ComputeKernel {
 						shadowRayQueue.elements[ shadowIndex ].origin = input.volumeLightPosition;
 						shadowRayQueue.elements[ shadowIndex ].direction = input.volumeLightDirection;
 						shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
-						shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
+						shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries;
 						shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
-						shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
 						shadowRayQueue.elements[ shadowIndex ].maxDist = input.volumeLightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 						shadowRayQueue.elements[ shadowIndex ].mediumStack = medium.stack;
 						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = i32( shadowIndex );
@@ -375,9 +372,8 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue.elements[ alphaIndex ].origin = alphaOrigin;
 							rayQueue.elements[ alphaIndex ].direction = input.direction;
 							rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue.elements[ alphaIndex ].currentBounce = input.currentBounce;
+							rayQueue.elements[ alphaIndex ].rngIndex = input.currentBounce + alphaDepth + input.subsurfaceBounces + fogBoundaries;
 							rayQueue.elements[ alphaIndex ].seed = input.seed;
-							rayQueue.elements[ alphaIndex ].alphaDepth = alphaDepth;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
 							rayQueue.elements[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
@@ -500,8 +496,7 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
-					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel
-					// walks the segment instead of the trace kernel
+					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
 					if ( ! isTerminated && medium.inside ) {
 
 						rayDataStorage[ index ].walkPending = 1u;
@@ -514,9 +509,8 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 						rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
 						rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
-						rayQueue.elements[ rayIndex ].currentBounce = newBounce;
+						rayQueue.elements[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries;
 						rayQueue.elements[ rayIndex ].seed = input.seed;
-						rayQueue.elements[ rayIndex ].alphaDepth = input.alphaDepth;
 						rayQueue.elements[ rayIndex ].maxDist = 0.0;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
@@ -540,9 +534,8 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.normal );
 							shadowRayQueue.elements[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue.elements[ shadowIndex ].currentBounce = input.currentBounce;
+							shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
-							shadowRayQueue.elements[ shadowIndex ].alphaDepth = input.alphaDepth;
 							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							shadowRayQueue.elements[ shadowIndex ].mediumStack = ${ shadowMediumStackFn }(
 								surfaceStack, u32( input.objectIndex ), input.side, surface.thinWall,

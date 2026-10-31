@@ -13,12 +13,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
 - WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
 - WebGPUPathTracer: "adaptiveDynamicRes" sizes the low resolution preview from its measured GPU time to take about "targetFrameTime", from "lowResScale" up to the full render size.
-- WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxVolumeSteps".
+- WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxSubsurfaceBounces".
 - WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
 - WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, a "scatterAnisotropy" phase setting, and "maxFogBounces", single scattering by default as in Cycles.
 - FogVolumeNodeMaterial: A fog volume material for the WebGPU path tracer that also renders as haze when rasterized.
 
 ### Changed
+- WebGPUPathTracer: Sobol is the default random strategy instead of Blue Dither.
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
 - OIDNDenoiser: The albedo and normal auxiliary buffers are accumulated by the path tracer from the first scatter of every sample instead of rasterized, so they match the image under depth of field and transparency. "setScene" is gone and "update" takes the auxiliary buffer.
 - AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.

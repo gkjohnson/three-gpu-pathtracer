@@ -12,10 +12,9 @@ import {
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, mediumQueueStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
 
-// Random walks through scattering media, as in Cycles' dedicated subsurface kernel, but capped per pass: a
-// walk that reaches the surface hands its hit to LogicKernel like a traced ray, and one that doesn't
-// resumes in the next pass. The walk's weight is folded into the staged scatter color, which LogicKernel
-// applies after resolving the entry surface's lighting.
+// Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
+// reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
+// walk's weight goes into the staged scatter color.
 export class MediumKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -100,8 +99,8 @@ export class MediumKernel extends ComputeKernel {
 
 					if ( ! scattered ) {
 
-						// reaching the surface, weighted by the probability of no scatter event before it. The
-						// hit goes in the slot's own result entry, past the traced rays' entries
+						// reaching the surface, weighted by the chance of not scattering before it. The hit goes
+						// in the slot's own result entry
 						weight *= transmittance / distancePdf;
 
 						let resultIndex = rayCount + index;

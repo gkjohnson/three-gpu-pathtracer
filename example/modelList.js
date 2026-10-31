@@ -760,6 +760,44 @@ export const MODEL_LIST = {
 		}
 	},
 
+	'Super Human': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/super-human/scene.glb',
+		credit: 'Model by Davyd Vidiger on <a href="https://sketchfab.com/3d-models/super-human-7aa58e978b9f4357b8e73d8e0440c896">Sketchfab</a>, CC-BY 4.0.',
+		postProcess( model ) {
+
+			// skin as a scattering volume: a 0.2 unit mean free path scaled per channel by [ 1, 0.5, 0.25 ]
+			const SKIN_RADIUS = [ 0.2, 0.1, 0.05 ];
+			const distance = Math.min( ...SKIN_RADIUS );
+
+			model.traverse( c => {
+
+				if ( c.material && c.material.name === 'blinn1SG' ) {
+
+					const material = new MeshPhysicalMaterial();
+					MeshStandardMaterial.prototype.copy.call( material, c.material );
+					material.color.set( 0xffffff );
+
+					// the skin's color comes from the volume rather than the model's emissive texture
+					material.emissive.set( 0x000000 );
+					material.emissiveMap = null;
+					material.roughness = 0.45;
+					material.metalness = 0;
+					material.ior = 1.4;
+					material.transmission = 1;
+					material.thickness = 1;
+					material.scatterStrength = 1;
+					material.multiscatterColor = new Color().setRGB( 0.9, 0.6, 0.48 );
+					material.attenuationDistance = distance;
+					material.attenuationColor.setRGB( ...SKIN_RADIUS.map( r => Math.exp( - distance / r ) ) );
+					c.material = material;
+
+				}
+
+			} );
+
+		}
+	},
+
 	'Happy Buddha': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/happy-buddha/buddha.glb',
 		credit: 'Model from the <a href="http://graphics.stanford.edu/data/3Dscanrep/">Stanford 3D Scanning Repository</a>, via <a href="https://casual-effects.com/data/">Morgan McGuire\'s Computer Graphics Archive</a>.',

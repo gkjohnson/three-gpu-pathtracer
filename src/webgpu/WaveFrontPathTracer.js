@@ -48,7 +48,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// options
 		this.seed = 0;
 
-		// the scatter events a medium walk takes per pass before handing the frame back to the other kernels
+		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
 
 		this.envInfo = new EquirectHdrInfoNode();
@@ -67,8 +67,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayQueue = null;
 		this.shadowRayQueue = null;
 
-		// per-queue-slot trace results, indexed by the ray's position in its queue. The bounce results
-		// are followed by one entry per slot for the hits of medium walks
+		// per-queue-slot trace results, indexed by the ray's position in its queue, then one entry per
+		// slot for medium walk hits
 		this.rayIntersectionsStorage = null;
 		this.shadowRayIntersectionsStorage = null;
 
