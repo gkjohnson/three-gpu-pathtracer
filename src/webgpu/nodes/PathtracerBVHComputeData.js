@@ -29,7 +29,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	objectIndex: 'uint',
 	side: 'float',
 	dist: 'float',
-	forwardOcclusion: 'float',
+	skippedOcclusion: 'float',
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
@@ -349,8 +349,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								if ( material.side == 0 || triResult.side == material.side ) {
 
-									let stopped = select( 1.0, opacity, material.transparent != 0 );
-									result.forwardOcclusion += ( 1.0 - result.forwardOcclusion ) * stopped;
+									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
 
 								}
 
