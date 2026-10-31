@@ -66,12 +66,16 @@ export class MediumKernel extends ComputeKernel {
 
 				for ( var i = 0u; i < stepsPerPass; i ++ ) {
 
+					// a subsurface walk only traces up to the sampled scatter event, while a fog segment's light
+					// point needs the full distance to the surface
+					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
+					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+					ray.maxDist = select( scatterDist, 0.0, medium.fog );
+
 					var hitResult: ${ raycastOutput };
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
-					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 					let scattered = scatterDist < surfaceDist;
 					let segmentDist = select( surfaceDist, scatterDist, scattered );
 					let transmittance = exp( - medium.extinction * segmentDist );
