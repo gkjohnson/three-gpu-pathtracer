@@ -271,7 +271,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
 	 * {@link WebGPUPathTracer#maxBounces} so foliage and cutouts cannot exhaust the bounce budget.
 	 * @type {number}
-	 * @default 5
+	 * @default 15
 	 */
 	get maxTransparentBounces() {
 
