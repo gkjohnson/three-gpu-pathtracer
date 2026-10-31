@@ -379,27 +379,75 @@ export const MODEL_LIST = {
 
 		postProcess: model => {
 
-			// the source scene renders the monster with subsurface scattering, which the path tracer
-			// has no equivalent for, so stand in a rough transmissive material
+			// subsurface settings from the source Blender scene, whose random walk radius Cycles scales by 1 / ( 4 PI )
+			const CYCLES_RANDOM_WALK_RADIUS_SCALE = 0.25 / Math.PI;
+			const SUBSURFACE = {
+				monster: { color: [ 0.352, 0.24, 0.8 ], radius: [ 1, 0.2, 0.1 ], scale: 3, clearcoat: 0.5 },
+				hand: { color: [ 0.6, 0.348, 0.24 ], radius: [ 1, 0.2, 0.1 ], scale: 0.2, clearcoat: 0.125 },
+			};
+
+			// the exported lamps rely on a Blender shader trick, so they're replaced with area lights below
+			const toRemove = [];
 			model.traverse( c => {
 
-				if ( c.material && /^monster/.test( c.material.name ) ) {
+				if ( c.material && c.material.emissive.getHex() !== 0 ) {
+
+					toRemove.push( c );
+
+				}
+
+				const name = c.material && /^(monster|hand)/.exec( c.material.name );
+				if ( name ) {
+
+					const { color, scale, clearcoat } = SUBSURFACE[ name[ 1 ] ];
+					const radius = SUBSURFACE[ name[ 1 ] ].radius.map( r => r * scale * CYCLES_RANDOM_WALK_RADIUS_SCALE );
+					const distance = Math.min( ...radius );
 
 					const material = new MeshPhysicalMaterial();
 					MeshStandardMaterial.prototype.copy.call( material, c.material );
+					material.color.set( 0xffffff );
+					material.map = null;
+					material.metalness = 0;
+					material.metalnessMap = null;
+					material.ior = 1.45;
+					material.clearcoat = clearcoat;
+					material.clearcoatRoughness = 0.2;
 					material.transmission = 1;
-					material.roughness = 0.55;
-					material.ior = 1.4;
-					material.thickness = 0.15;
-					material.attenuationDistance = 0.25;
-					material.attenuationColor.copy( c.material.color );
+					material.thickness = 1;
+					material.scatterStrength = 1;
+					material.multiscatterColor = new Color().setRGB( ...color );
+					material.attenuationDistance = distance;
+					material.attenuationColor.setRGB( ...radius.map( r => Math.exp( - distance / r ) ) );
 					c.material = material;
 
 				}
 
 			} );
 
-			convertEmissivePlanesToLights( model );
+			toRemove.forEach( c => c.removeFromParent() );
+
+			const LIGHTS = [
+				// key and fill
+				{ size: [ 2, 2 ], position: [ - 2.2, 4.2, 3 ], target: [ 0.1, 1.7, 0.3 ], intensity: 14 },
+				{ size: [ 2, 2 ], position: [ 2.8, 1.4, 3.5 ], target: [ 0, 1, 0.5 ], intensity: 3 },
+
+				// backlight
+				{ size: [ 1.5, 1 ], position: [ 0.3, 1, - 2 ], target: [ 0, 0.8, 0 ], intensity: 25 },
+
+				// wall and floor
+				{ size: [ 2, 1 ], position: [ 0, 3.5, 0 ], target: [ 0, 1.8, - 2.4 ], intensity: 4 },
+				{ size: [ 1.5, 1.5 ], position: [ - 3.4, 0.5, 0.5 ], target: [ 0, 0, 0.5 ], intensity: 5 },
+				{ size: [ 1.5, 1.5 ], position: [ 3.4, 0.5, 0.5 ], target: [ 0, 0, 0.5 ], intensity: 5 },
+			];
+
+			LIGHTS.forEach( ( { size, position, target, intensity } ) => {
+
+				const light = new RectAreaLight( 0xffcfa2, intensity, ...size );
+				light.position.set( ...position );
+				light.lookAt( ...target );
+				model.add( light );
+
+			} );
 
 		}
 	},
