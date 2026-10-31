@@ -143,7 +143,8 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	direction: 'vec3f',
 
-	// the traversal's random sequence index: bounces, alpha pass throughs, subsurface bounces and fog boundaries, as in the megakernel
+	// the traversal's random sequence index: bounces, alpha pass throughs, subsurface bounces and fog
+	// boundaries, as in the megakernel
 	rngIndex: 'uint',
 
 	seed: 'uint',
