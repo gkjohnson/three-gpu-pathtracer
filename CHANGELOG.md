@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxSubsurfaceBounces". Megakernel only.
 
 ### Changed
+- WebGPUPathTracer: Requires three.js r187, which binds every storage buffer as an array.
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
 - OIDNDenoiser: The albedo and normal auxiliary buffers are accumulated by the path tracer from the first scatter of every sample instead of rasterized, so they match the image under depth of field and transparency. "setScene" is gone and "update" takes the auxiliary buffer.
 - AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.
