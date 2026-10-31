@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -48,7 +48,7 @@ export class LogicKernel extends ComputeKernel {
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
 
 			globalId: globalId,
 		};

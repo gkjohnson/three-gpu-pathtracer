@@ -125,12 +125,21 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
 
-	// shadow rays only: a face a bsdf ray would hit was passed, and the fraction of light blocked by the
-	// partially transparent surfaces passed
+}, 'TraceResult' );
+
+// Shadow ray trace result, written by TraceShadowRayKernel at the ray's queue index and consumed by
+// LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
+export const shadowTraceResultStruct = new StructTypeNode( {
+
+	objectIndex: 'int',
+
+	// a face a bsdf ray would hit was passed
 	forwardBlocked: 'uint',
+
+	// the fraction of light blocked by the partially transparent surfaces passed
 	occlusion: 'float',
 
-}, 'TraceResult' );
+}, 'ShadowTraceResult' );
 
 // The ray and shadow ray queues are plain arrays of queued rays, with their append-only lengths in a
 // separate counters buffer: storage buffers are always bound as arrays, which can't hold a struct

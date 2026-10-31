@@ -3,7 +3,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
-import { traceQueuedRayStruct, intersectionResultStruct, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
+import { traceQueuedRayStruct, shadowTraceResultStruct, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
 
 // Pure BVH traversal over the queued shadow rays. Uses an any-hit traversal without face culling that
 // passes partially transparent surfaces, accumulating the light they block.
@@ -15,7 +15,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
 			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
 
 			globalId: globalId,
 		};
@@ -44,17 +44,8 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
-				if ( ${ raycastShadowFn }( ray, &hitResult ) ) {
-
-					shadowRayIntersectionsStorage[ index ].objectIndex = i32( hitResult.objectIndex );
-					shadowRayIntersectionsStorage[ index ].dist = hitResult.dist;
-
-				} else {
-
-					shadowRayIntersectionsStorage[ index ].objectIndex = - 1;
-
-				}
-
+				let occluded = ${ raycastShadowFn }( ray, &hitResult );
+				shadowRayIntersectionsStorage[ index ].objectIndex = select( - 1, i32( hitResult.objectIndex ), occluded );
 				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( hitResult.forwardBlocked );
 				shadowRayIntersectionsStorage[ index ].occlusion = hitResult.occlusion;
 
