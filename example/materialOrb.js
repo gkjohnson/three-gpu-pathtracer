@@ -101,7 +101,7 @@ async function init() {
 	imgEl = document.getElementById( 'materialImage' );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
+	renderer = new WebGPURenderer( { antialias: true, alpha: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = AgXToneMapping;
 	renderer.toneMappingExposure = 1;
@@ -177,11 +177,6 @@ async function init() {
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );

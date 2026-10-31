@@ -1,4 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
+import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
 
 // StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
 // a type string, so we build each dependency first, which registers its definition ahead of this struct.
@@ -28,7 +29,7 @@ class DependentStructTypeNode extends StructTypeNode {
 
 // Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
 // the previous frame's trace results and stage the next bounce.
-export const rayDataStruct = new StructTypeNode( {
+const rayDataMembers = {
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
@@ -90,7 +91,26 @@ export const rayDataStruct = new StructTypeNode( {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-}, 'RayData' );
+	// scatter events taken inside media, counted separately from the bounce count
+	subsurfaceBounces: 'uint',
+
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	walkPending: 'uint',
+
+	// whether the staged segment starts at a medium scatter event, where no light is sampled
+	mediumScattered: 'uint',
+
+};
+
+// The path's medium, nested at the end to share the ray data buffer under the storage buffer limit. Sized
+// separately since nested structs aren't.
+export const rayDataStruct = new DependentStructTypeNode( {
+	...rayDataMembers,
+	medium: mediumStateStruct.name,
+}, 'RayData', [ mediumStateStruct ] );
+
+const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
+rayDataStruct.getLength = () => rayDataLength + mediumStateStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
@@ -99,12 +119,14 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	pixelIndex: 'uint',
 
 	direction: 'vec3f',
-	currentBounce: 'uint',
+
+	// the traversal's random sequence index: bounces, alpha pass throughs and subsurface bounces, as in the megakernel
+	rngIndex: 'uint',
 
 	seed: 'uint',
-	alphaDepth: 'uint',
 	maxDist: 'float',
 	_alignment0: 'uint',
+	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
 
@@ -134,6 +156,11 @@ export const intersectionResultStruct = new StructTypeNode( {
 export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
+
+// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
+// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+export const MEDIUM_QUEUE_LENGTH = 0;
+export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its

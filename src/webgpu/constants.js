@@ -13,7 +13,7 @@ import * as bluedither from './nodes/rand/bluedither.wgsl.js';
 export const RANDOM_PCG = pcg;
 
 /**
- * Sobol low discrepancy samples, scrambled per pixel. Converges faster than `RANDOM_PCG`.
+ * Sobol low discrepancy samples, scrambled per pixel. Converges faster than `RANDOM_PCG`. The default.
  * @section Random Strategies
  * @type {Object}
  */
@@ -21,7 +21,7 @@ export const RANDOM_SOBOL = sobol;
 
 /**
  * The same Sobol sequence for every pixel, offset by a blue noise dither so early frames read as
- * smooth grain rather than clumped noise. The default.
+ * smooth grain rather than clumped noise.
  * @section Random Strategies
  * @type {Object}
  */

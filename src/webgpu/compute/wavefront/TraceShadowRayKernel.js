@@ -41,7 +41,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				let queuedRay = shadowRayQueue[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, queuedRay.seed, queuedRay.currentBounce + queuedRay.alphaDepth );
+				${ rngInit }( indexUV, queuedRay.seed, queuedRay.rngIndex );
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };

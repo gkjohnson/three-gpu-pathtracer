@@ -199,16 +199,25 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
+					// Inside a medium, sample a scatter event before the next surface and only trace up to it
+					var channelPdf = vec3f( 0.0 );
+					var scatterDist = 0.0;
+					var traceRay = ray;
+					if ( medium.inside ) {
+
+						channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
+						scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+						traceRay.maxDist = select( scatterDist, min( ray.maxDist, scatterDist ), ray.maxDist > 0.0 );
+
+					}
+
 					var hitResult: ${ raycastOutput };
-					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
+					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// Inside a medium, sample a scatter event before the next surface
 					let segmentInMedium = medium.inside;
 					if ( medium.inside ) {
 
-						let channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
-						let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 						let scattered = scatterDist < surfaceDist;
 						let segmentDist = select( surfaceDist, scatterDist, scattered );
 						let transmittance = exp( - medium.extinction * segmentDist );

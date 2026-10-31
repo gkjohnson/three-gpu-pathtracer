@@ -96,8 +96,8 @@ const LIGHT_RIGS = {
 };
 
 const RANDOM_STRATEGIES = {
-	'Blue Dither': RANDOM_BLUE_DITHER,
 	'Sobol': RANDOM_SOBOL,
+	'Blue Dither': RANDOM_BLUE_DITHER,
 	'PCG': RANDOM_PCG,
 };
 
@@ -151,7 +151,7 @@ const params = {
 
 	multipleImportanceSampling: true,
 	renderScale: 1,
-	randomStrategy: 'Blue Dither',
+	randomStrategy: 'Sobol',
 	frameBudget: 250000,
 	adaptiveFrameBudget: true,
 	targetFrameTime: 16,
