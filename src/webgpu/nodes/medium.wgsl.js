@@ -20,6 +20,49 @@ export const mediumStruct = new StructTypeNode( {
 	anisotropy: 'float',
 }, 'Medium' );
 
+// a medium in a storage buffer, which can't hold bools, for walks that span passes
+export const mediumStateStruct = new StructTypeNode( {
+	extinction: 'vec3f',
+	object: 'uint',
+
+	albedo: 'vec3f',
+	anisotropy: 'float',
+
+	inside: 'uint',
+}, 'MediumState' );
+
+export const storeMediumFn = wgslTagFn/* wgsl */`
+
+	fn storeMedium( medium: ${ mediumStruct } ) -> ${ mediumStateStruct } {
+
+		var state: ${ mediumStateStruct };
+		state.extinction = medium.extinction;
+		state.object = medium.object;
+		state.albedo = medium.albedo;
+		state.anisotropy = medium.anisotropy;
+		state.inside = select( 0u, 1u, medium.inside );
+		return state;
+
+	}
+
+`;
+
+export const loadMediumFn = wgslTagFn/* wgsl */`
+
+	fn loadMedium( state: ${ mediumStateStruct } ) -> ${ mediumStruct } {
+
+		var medium: ${ mediumStruct };
+		medium.inside = state.inside != 0u;
+		medium.object = state.object;
+		medium.extinction = state.extinction;
+		medium.albedo = state.albedo;
+		medium.anisotropy = state.anisotropy;
+		return medium;
+
+	}
+
+`;
+
 // The single scatter albedo of a volume from its perceived multi scatter albedo and phase anisotropy, using the
 // inversion from "KHR_materials_scatter" (after Kulla and Conty 2017). A zero multi scatter albedo maps to exactly zero
 // https://github.com/KhronosGroup/glTF/pull/2579

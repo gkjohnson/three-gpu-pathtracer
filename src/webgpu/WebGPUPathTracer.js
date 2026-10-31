@@ -15,8 +15,7 @@ import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
-import { TRANSMISSIVE_BACKGROUND_OVERLAY } from './constants.js';
-import * as RANDOM_BLUE_DITHER from './nodes/rand/bluedither.wgsl.js';
+import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
@@ -291,7 +290,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * separately from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
 	 * @type {number}
 	 * @default 256
-	 * @note Only the megakernel renders scattering volumes.
 	 */
 	get maxSubsurfaceBounces() {
 
@@ -720,7 +718,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		/**
 		 * Whether to compile the kernels asynchronously so a compile doesn't stall the page. Nothing
-		 * new renders while {@link WebGPUPathTracer#compiling} is true. Requires three.js r186.
+		 * new renders while {@link WebGPUPathTracer#compiling} is true.
 		 * @type {boolean}
 		 * @default false
 		 */
@@ -767,7 +765,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @type {Object}
 		 * @private
 		 */
-		this.random = RANDOM_BLUE_DITHER;
+		this.random = RANDOM_SOBOL;
 
 		/**
 		 * Material model the kernels evaluate surfaces with.
@@ -954,12 +952,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
 		const geometries = new Set();
 		scene.traverse( child => {
 
 			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
 
-				geometries.add( child.geometry );
+				const { geometry } = child;
+				if ( geometry.attributes.position.isInterleavedBufferAttribute || geometry.index && geometry.index.isInterleavedBufferAttribute ) {
+
+					return;
+
+				}
+
+				geometries.add( geometry );
 
 			}
 

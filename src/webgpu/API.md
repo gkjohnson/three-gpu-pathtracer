@@ -17,7 +17,7 @@ Uncorrelated pseudo random samples. Converges slowest but never shows structured
 RANDOM_SOBOL: Object
 ```
 
-Sobol low discrepancy samples, scrambled per pixel. Converges faster than `RANDOM_PCG`.
+Sobol low discrepancy samples, scrambled per pixel. Converges faster than `RANDOM_PCG`. The default.
 
 ### RANDOM_BLUE_DITHER
 
@@ -26,7 +26,7 @@ RANDOM_BLUE_DITHER: Object
 ```
 
 The same Sobol sequence for every pixel, offset by a blue noise dither so early frames read as
-smooth grain rather than clumped noise. The default.
+smooth grain rather than clumped noise.
 
 ## Transmissive Background Modes
 
@@ -151,6 +151,14 @@ Weights come from the oidn-weights repository, where the "_small" and "_large" v
 quality against download size and per tile cost.
 
 
+### events
+
+```js
+// Fired when a pass started by `update` fails, such as the weights failing to download, with the
+// failure as the event's `error`. No other pass starts until a reset.
+{ type: 'error' }
+```
+
 ### .texture
 
 ```js
@@ -210,20 +218,17 @@ init( renderer: WebGPURenderer ): void
 ```
 
 
-### .setScene
-
-```js
-setScene( scene: Scene, camera: Camera ): void
-```
-
-
 ### .update
 
 ```js
-update( target: Texture ): Texture | null
+update(
+	target: Texture,
+	aux = null: StorageArrayTexture | null
+): Texture | null
 ```
 
-Renders the auxiliary buffers and starts a pass. Safe to call every frame.
+Unpacks the auxiliary buffers the path tracer accumulated and starts a pass. Safe to call
+every frame.
 
 
 ### .denoise
@@ -289,14 +294,34 @@ Number of path slots dispatched per [WebGPUPathTracer#renderSample](WebGPUPathTr
 independent of resolution. Raising it trades frame rate for convergence speed.
 
 
+### .frameTime
+
+```js
+readonly frameTime: number
+```
+
+GPU time in milliseconds of a recent [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) call. Only measured
+when the renderer is created with `trackTimestamp: true`.
+
+
 ### .maxTransparentBounces
 
 ```js
-maxTransparentBounces: number = 5
+maxTransparentBounces: number = 15
 ```
 
 Maximum number of alpha tested surfaces a ray can pass through. Counted separately from
 [WebGPUPathTracer#maxBounces](WebGPUPathTracer#maxBounces) so foliage and cutouts cannot exhaust the bounce budget.
+
+
+### .maxSubsurfaceBounces
+
+```js
+maxSubsurfaceBounces: number = 256
+```
+
+Maximum number of scatter events a path can take inside a subsurface scattering volume. Counted
+separately from [WebGPUPathTracer#maxBounces](WebGPUPathTracer#maxBounces). Paths that reach it end, darkening dense volumes.
 
 
 ### .maxSamples
@@ -413,6 +438,17 @@ readonly lowResMode: boolean
 Whether the tracer is currently rendering the low resolution preview.
 
 
+### .compiling
+
+```js
+readonly compiling: boolean
+```
+
+Whether the kernels are compiling, such as after the scene or material changes. Nothing new
+renders until they finish and the canvas keeps the last frame, so an app may draw its own
+preview in the meantime.
+
+
 ### .textureAtlas
 
 ```js
@@ -464,7 +500,40 @@ Whether to render a low resolution preview while the camera is moving.
 lowResScale: number = 0.1
 ```
 
-Resolution of the low resolution preview, as a fraction of the render size.
+Resolution of the low resolution preview, as a fraction of the render size. The minimum when
+[WebGPUPathTracer#adaptiveDynamicRes](WebGPUPathTracer#adaptiveDynamicRes) is set. The preview never has more pixels than
+[WebGPUPathTracer#frameBudget](WebGPUPathTracer#frameBudget).
+
+
+### .adaptiveDynamicRes
+
+```js
+adaptiveDynamicRes: boolean = true
+```
+
+Whether the low resolution preview is sized to take [WebGPUPathTracer#targetFrameTime](WebGPUPathTracer#targetFrameTime) per
+frame. Requires a renderer created with `trackTimestamp: true`.
+
+
+### .adaptiveFrameBudget
+
+```js
+adaptiveFrameBudget: boolean = true
+```
+
+Whether [WebGPUPathTracer#frameBudget](WebGPUPathTracer#frameBudget) is adjusted to keep each
+[WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) call near [WebGPUPathTracer#targetFrameTime](WebGPUPathTracer#targetFrameTime) of
+GPU time. Requires a renderer created with `trackTimestamp: true`.
+
+
+### .targetFrameTime
+
+```js
+targetFrameTime: number = 16
+```
+
+GPU time in milliseconds per frame targeted by [WebGPUPathTracer#adaptiveFrameBudget](WebGPUPathTracer#adaptiveFrameBudget) and
+[WebGPUPathTracer#adaptiveDynamicRes](WebGPUPathTracer#adaptiveDynamicRes).
 
 
 ### .renderScale
@@ -496,6 +565,16 @@ renderToCanvas: boolean = true
 Whether [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) draws the result to the current render
 target, the canvas by default. Set to `false` to only accumulate, as when baking to a
 texture read through [WebGPUPathTracer#target](WebGPUPathTracer#target).
+
+
+### .asyncCompile
+
+```js
+asyncCompile: boolean = false
+```
+
+Whether to compile the kernels asynchronously so a compile doesn't stall the page. Nothing
+new renders while [WebGPUPathTracer#compiling](WebGPUPathTracer#compiling) is true.
 
 
 ### .generateMissingAttributes
@@ -568,7 +647,8 @@ setDenoiser( denoiser: OIDNDenoiser | null ): void
 ```
 
 Attaches a denoiser, run once the render settles and displayed in place of the raw image.
-Settings live on the instance. Pass null to remove it.
+Settings live on the instance. Pass null to remove it. The render restarts when the auxiliary
+buffers it needs are added or dropped.
 
 
 ### .setUpscaler
@@ -758,6 +838,16 @@ Draws a heatmap of the per pixel sample counts, for spotting pixels that converg
 > [!NOTE]
 > Measures on every call and draws with the previous result, since the readback lands a
 >   frame later.
+
+### .renderAuxBuffer
+
+```js
+renderAuxBuffer( buffer = 'albedo': 'albedo' | 'normal' ): void
+```
+
+Draws the albedo or normal auxiliary buffer accumulated for the denoiser, for checking what
+it is given. Nothing is drawn until a denoiser that uses them is attached.
+
 
 ### .dispose
 
