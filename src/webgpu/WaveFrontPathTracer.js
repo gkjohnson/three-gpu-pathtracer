@@ -360,7 +360,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// Traced rays fill the results from the front at their queue index, and MediumKernel fills them from the
 		// back with the hits of medium walks. In a round each path slot either queues one ray or walks a medium,
-		// never both, so the two ranges together never exceed the slot count and can't overlap
+		// never both, so the two ranges together never exceed the slot count and can't overlap. A camera ray found
+		// inside a medium after it was queued walks it instead, reusing that ray's entry
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
 

@@ -10,7 +10,7 @@ import {
 	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, sampleVolumeLightPointFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HIT_COUNT, MEDIUM_QUEUE_HEADER, WALK_PENDING_CAMERA } from './structs.js';
 
 // Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
 // reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
@@ -25,7 +25,7 @@ export class MediumKernel extends ComputeKernel {
 			rayCount: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
@@ -42,18 +42,24 @@ export class MediumKernel extends ComputeKernel {
 				let mediumQueue = &${ params.mediumQueue };
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 
-				if ( globalId.x >= mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ] ) {
+				if ( globalId.x >= atomicLoad( &mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ] ) ) {
 
 					return;
 
 				}
 
-				let index = mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ];
+				let index = atomicLoad( &mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ] );
 				let input = ( *rayDataStorage )[ index ];
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+
+				// A finished walk's hit takes an entry from the back of the ray results, counted by its own counter,
+				// while the traced rays fill them from the front. A path slot walking a medium queued no ray this
+				// round, so the two ranges never exceed the slot count or overlap. A camera ray found inside a
+				// medium was queued first, so its walk reuses that ray's unused entry instead
+				let isCameraWalk = input.walkPending == ${ WALK_PENDING_CAMERA }u;
 
 				var ray = Ray( input.origin, input.direction, 0.0 );
 				var weight = input.scatterColor;
@@ -104,10 +110,13 @@ export class MediumKernel extends ComputeKernel {
 						// reaching the surface, weighted by the chance of not scattering before it
 						weight *= transmittance / distancePdf;
 
-						// The hit fills the ray results from the back, by the walk's medium queue position, while the
-						// traced rays fill them from the front. A path slot walking a medium queued no ray this round,
-						// so the two ranges never exceed the slot count or overlap
-						let resultIndex = rayCount - 1u - globalId.x;
+						var resultIndex = u32( input.rayIntersectionIndex );
+						if ( ! isCameraWalk ) {
+
+							resultIndex = rayCount - 1u - atomicAdd( &mediumQueue[ ${ MEDIUM_QUEUE_HIT_COUNT }u ], 1u );
+
+						}
+
 						rayIntersectionsStorage[ resultIndex ].barycoord = hitResult.barycoord;
 						// a walk that leaves without hitting anything is a miss, as in the trace kernel
 						rayIntersectionsStorage[ resultIndex ].objectIndex = select( - 1, i32( hitResult.objectIndex ), didHit );
@@ -129,7 +138,13 @@ export class MediumKernel extends ComputeKernel {
 					// a surface hit
 					if ( medium.fog ) {
 
-						let resultIndex = rayCount + index;
+						var resultIndex = u32( input.rayIntersectionIndex );
+						if ( ! isCameraWalk ) {
+
+							resultIndex = rayCount - 1u - atomicAdd( &mediumQueue[ ${ MEDIUM_QUEUE_HIT_COUNT }u ], 1u );
+
+						}
+
 						rayIntersectionsStorage[ resultIndex ].objectIndex = ${ MEDIUM_SCATTER_HIT };
 						rayIntersectionsStorage[ resultIndex ].position = ray.origin + ray.direction * scatterDist;
 						rayIntersectionsStorage[ resultIndex ].dist = scatterDist;

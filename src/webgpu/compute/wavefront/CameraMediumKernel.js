@@ -4,7 +4,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
-import { rayDataStruct } from './structs.js';
+import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Finds the volumes each new camera ray starts inside of by tracing from the ray's own origin, and starts its
 // medium with them. Runs after MaterialKernel spawns the camera rays and before they are traced, only for scenes
@@ -55,12 +55,11 @@ export class CameraMediumKernel extends ComputeKernel {
 				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin ), ${ MEDIUM_STACK_EMPTY }u );
 				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
-				// the walk hands its hit back in the slot's own result entry
+				// the walk hands its hit back in the queued ray's result entry, which its trace leaves unused
 				if ( medium.inside ) {
 
-					rayDataStorage[ index ].walkPending = 1u;
+					rayDataStorage[ index ].walkPending = ${ WALK_PENDING_CAMERA }u;
 					rayDataStorage[ index ].objectIndex = 0;
-					rayDataStorage[ index ].rayIntersectionIndex = i32( rayCount + index );
 
 				}
 
