@@ -281,9 +281,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
+							var opacity = ${ baseOpacityScalar };
 							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
-
-								var opacity = ${ baseOpacityScalar };
 
 								// add support for vertex color opacity
 								if ( material.vertexColors == 1 ) {
@@ -341,10 +340,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass the objects not visible to them, but a bsdf ray would hit this face
+							// shadow rays pass the objects not visible to them. A bsdf ray stopped by this face can't reach
+							// the light, but one that passes through it or is transmitted by it can, and still takes its
+							// MIS weight, so the light sample keeps its own
 							if ( ${ skipShadowObject } ) {
 
-								if ( material.side == 0 || triResult.side == material.side ) {
+								let isPassable = ( material.transparent != 0 && opacity < 1.0 ) || material.transmission > 0.0;
+								if ( ( material.side == 0 || triResult.side == material.side ) && ! isPassable ) {
 
 									result.forwardBlocked = true;
 
