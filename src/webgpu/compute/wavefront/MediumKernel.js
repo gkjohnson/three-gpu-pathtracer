@@ -2,15 +2,15 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, uniform, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_VOLUME_LIGHT_POINT } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { sampleHenyeyGreensteinFn } from '../../nodes/sampling.wgsl.js';
 import {
 	loadMediumFn,
-	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn,
+	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, sampleVolumeLightPointFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HIT_COUNT, MEDIUM_QUEUE_HEADER, WALK_PENDING_CAMERA } from './structs.js';
 
 // Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
 // reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
@@ -25,7 +25,7 @@ export class MediumKernel extends ComputeKernel {
 			rayCount: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
@@ -42,18 +42,24 @@ export class MediumKernel extends ComputeKernel {
 				let mediumQueue = &${ params.mediumQueue };
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 
-				if ( globalId.x >= mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ] ) {
+				if ( globalId.x >= atomicLoad( &mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ] ) ) {
 
 					return;
 
 				}
 
-				let index = mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ];
+				let index = atomicLoad( &mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ] );
 				let input = ( *rayDataStorage )[ index ];
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+
+				// A finished walk's hit takes an entry from the back of the ray results, counted by its own counter,
+				// while the traced rays fill them from the front. A path slot walking a medium queued no ray this
+				// round, so the two ranges never exceed the slot count or overlap. A camera ray found inside a
+				// medium was queued first, so its walk reuses that ray's unused entry instead
+				let isCameraWalk = input.walkPending == ${ WALK_PENDING_CAMERA }u;
 
 				var ray = Ray( input.origin, input.direction, 0.0 );
 				var weight = input.scatterColor;
@@ -64,10 +70,11 @@ export class MediumKernel extends ComputeKernel {
 
 				for ( var i = 0u; i < stepsPerPass; i ++ ) {
 
-					// only trace up to the sampled scatter event
+					// a subsurface walk only traces up to the sampled scatter event, while a fog segment's light
+					// point needs the full distance to the surface
 					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
 					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
-					ray.maxDist = scatterDist;
+					ray.maxDist = select( scatterDist, 0.0, medium.fog );
 
 					var hitResult: ${ raycastOutput };
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
@@ -84,15 +91,32 @@ export class MediumKernel extends ComputeKernel {
 
 					}
 
+					// the point on a fog segment where light is sampled, weighted from the segment's start
+					if ( medium.fog ) {
+
+						var pointDist = 0.0;
+						let pointWeight = ${ sampleVolumeLightPointFn }(
+							medium, channelPdf, scatterDist, surfaceDist, ray.origin, ray.direction, input.lightPoint,
+							${ rand2 }( ${ RNG_INDEX_VOLUME_LIGHT_POINT } ), &pointDist,
+						);
+
+						rayDataStorage[ index ].volumeLightPosition = ray.origin + ray.direction * pointDist;
+						rayDataStorage[ index ].volumePointWeight = weight * pointWeight;
+
+					}
+
 					if ( ! scattered ) {
 
 						// reaching the surface, weighted by the chance of not scattering before it
 						weight *= transmittance / distancePdf;
 
-						// The hit fills the ray results from the back, by the walk's medium queue position, while the
-						// traced rays fill them from the front. A path slot walking a medium queued no ray this round,
-						// so the two ranges never exceed the slot count or overlap
-						let resultIndex = rayCount - 1u - globalId.x;
+						var resultIndex = u32( input.rayIntersectionIndex );
+						if ( ! isCameraWalk ) {
+
+							resultIndex = rayCount - 1u - atomicAdd( &mediumQueue[ ${ MEDIUM_QUEUE_HIT_COUNT }u ], 1u );
+
+						}
+
 						rayIntersectionsStorage[ resultIndex ].barycoord = hitResult.barycoord;
 						// a walk that leaves without hitting anything is a miss, as in the trace kernel
 						rayIntersectionsStorage[ resultIndex ].objectIndex = select( - 1, i32( hitResult.objectIndex ), didHit );
@@ -109,11 +133,34 @@ export class MediumKernel extends ComputeKernel {
 					}
 
 					weight *= medium.albedo * medium.extinction * transmittance / distancePdf;
+
+					// a scatter event in fog is a path vertex where light is sampled, handed to LogicKernel like
+					// a surface hit
+					if ( medium.fog ) {
+
+						var resultIndex = u32( input.rayIntersectionIndex );
+						if ( ! isCameraWalk ) {
+
+							resultIndex = rayCount - 1u - atomicAdd( &mediumQueue[ ${ MEDIUM_QUEUE_HIT_COUNT }u ], 1u );
+
+						}
+
+						rayIntersectionsStorage[ resultIndex ].objectIndex = ${ MEDIUM_SCATTER_HIT };
+						rayIntersectionsStorage[ resultIndex ].position = ray.origin + ray.direction * scatterDist;
+						rayIntersectionsStorage[ resultIndex ].dist = scatterDist;
+						rayDataStorage[ index ].rayIntersectionIndex = i32( resultIndex );
+
+						isFinished = true;
+						break;
+
+					}
+
 					ray.origin += ray.direction * scatterDist;
 					ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 					hasScattered = true;
 
-					// capped separately from bounces, and ends once the throughput is negligible
+					// the walk doesn't count against the bounce limit, but is capped, and ends once its
+					// throughput is negligible
 					subsurfaceBounces ++;
 					let throughput = input.throughputColor * weight / input.scatterPdf;
 					if ( subsurfaceBounces >= maxSubsurfaceBounces || max( max( throughput.r, throughput.g ), throughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {

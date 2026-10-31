@@ -1,4 +1,4 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, Matrix4, Ray } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
@@ -6,15 +6,20 @@ import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
+import { materialExtinctionFn, fogShadowDistanceFn } from './medium.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
-import { MEDIUM_STACK_EMPTY, MEDIUM_STACK_SIZE } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
-const _matrix = /* @__PURE__ */ new Matrix4();
-const _ray = /* @__PURE__ */ new Ray();
 
-// Whether a material has a volume a path enters by refracting into it, as "mediumStackEnter" decides
+// Whether a material has a volume a path enters by refracting into it or crossing a fog volume's boundary, as
+// "mediumStackEnter" decides
 function hasMedium( material ) {
+
+	if ( material && material.isFogVolumeMaterial ) {
+
+		return material.density > 0;
+
+	}
 
 	if ( ! material || ! material.attenuationColor || ! ( material.transmission > 0 ) ) {
 
@@ -27,39 +32,29 @@ function hasMedium( material ) {
 
 }
 
-// The material of a transform slot's bvh group
-function getGroupMaterial( object, root ) {
-
-	let material = object.material;
-	if ( Array.isArray( material ) ) {
-
-		const { materialIndex } = object.geometry.groups[ root ];
-		material = material[ materialIndex ];
-
-	}
-
-	return material;
-
-}
-
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	visible: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
-	_alignment0: 'uint',
+
+	// the slot the medium stack holds for the volume this slot bounds: the first of the object's bvh groups
+	// with the same material, so a path enters and leaves the volume through any of them
+	mediumId: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
 // three-mesh-bvh's ray hit result. Shadow rays also record the share of bsdf rays the faces they skipped
-// would stop, and the share of light the partially transparent surfaces they passed block
+// would stop, the share of light the partially transparent surfaces they passed block, and the optical
+// depth of the fog volume boundaries they passed
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
 	barycoord: 'vec3f',
 	objectIndex: 'uint',
+	fogDepth: 'vec3f',
 	side: 'float',
 	dist: 'float',
 	skippedOcclusion: 'float',
@@ -91,8 +86,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.bvhMap = new Map();
 		this.textureAtlas = new AtlasTexture();
 
-		// the transform slots whose material has a volume, for "getMediumStack"
-		this._mediumSlots = null;
+		// whether any material has a volume, and each volume's medium id
+		this.hasVolumes = false;
+		this._mediumIds = new Map();
 
 	}
 
@@ -316,6 +312,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// shadow rays hit both sides
 							if ( ! ${ isShadowRay } && material.side != 0 && triResult.side != material.side ) {
 
+								continue;
+
+							}
+
+							// shadow rays pass fog volume boundaries, in any order: entering adds the fog's optical depth
+							// back from the fog shadow distance, and leaving takes it away
+							if ( ${ isShadowRay } && material.fogVolume != 0 ) {
+
+								let extinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+								let depth = extinction * ( ${ fogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
 								continue;
 
 							}
@@ -588,6 +595,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		materialsStorage.value.needsUpdate = true;
 
 		// update the transform content
+		this._mediumIds.clear();
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
@@ -597,7 +605,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// save the textures
 		this.textures = textures;
-		this._mediumSlots = null;
+		this.hasVolumes = materials.some( hasMedium );
 
 	}
 
@@ -703,44 +711,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];
-
-			// if ( m.isFogVolumeMaterial ) {
-			//
-			// 	// features.setUsed( 'FOG' );
-			//
-			// 	for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
-			//
-			// 		floatArray[ index + j ] = 0;
-			//
-			// 	}
-			//
-			// 	// sample 0 .rgb
-			// 	floatArray[ index + 0 * 4 + 0 ] = m.color.r;
-			// 	floatArray[ index + 0 * 4 + 1 ] = m.color.g;
-			// 	floatArray[ index + 0 * 4 + 2 ] = m.color.b;
-			//
-			// 	// sample 2 .a
-			// 	floatArray[ index + 2 * 4 + 3 ] = getField( m, 'emissiveIntensity', 0.0 );
-			//
-			// 	// sample 3 .rgb
-			// 	floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
-			// 	floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
-			// 	floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
-			//
-			// 	// sample 13 .g
-			// 	// reusing opacity field
-			// 	floatArray[ index + 13 * 4 + 1 ] = m.density;
-			//
-			// 	// side
-			// 	floatArray[ index + 13 * 4 + 3 ] = 0.0;
-			//
-			// 	// sample 14 .b
-			// 	floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
-			//
-			// 	index += MATERIAL_STRIDE;
-			// 	continue;
-			//
-			// }
+			const isFogVolume = Boolean( m.isFogVolumeMaterial );
 
 			// color - offset 0
 			floatArray[ index ++ ] = m.color.r;
@@ -855,8 +826,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
-			// attenuation - offset 44
-			if ( 'attenuationColor' in m ) {
+			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = Math.exp( - 1 );
+				floatArray[ index ++ ] = Math.exp( - 1 );
+				floatArray[ index ++ ] = Math.exp( - 1 );
+
+			} else if ( 'attenuationColor' in m ) {
 
 				floatArray[ index ++ ] = m.attenuationColor.r;
 				floatArray[ index ++ ] = m.attenuationColor.g;
@@ -870,7 +847,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = m.density > 0 ? 1 / m.density : Infinity;
+
+			} else {
+
+				floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
+
+			}
 
 			// alphaMap - offset 48
 			intArray[ index ++ ] = getTexture( m, 'alphaMap' );
@@ -878,8 +863,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 
-			// side & matte - offset 52
-			if ( ! isThinWall && m.transmission > 0.0 ) {
+			// side & matte - offset 52. Volumes are entered and left through both faces
+			if ( ! isThinWall && m.transmission > 0.0 || isFogVolume ) {
 
 				floatArray[ index ++ ] = 0;
 
@@ -931,7 +916,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			// transparent, fogVolume - offset 64
 			intArray[ index ++ ] = Number( m.transparent );
-			intArray[ index ++ ] = 0;
+			intArray[ index ++ ] = Number( isFogVolume );
 
 			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
 			floatArray[ index ++ ] = getField( m, 'anisotropy', 0.0 );
@@ -992,8 +977,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			// anisotropyMap transform - offset 264
 			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
-			// scattering volume - offset 276
-			const multiscatterColor = getField( m, 'multiscatterColor', null );
+			// scattering volume - offset 276. A fog volume's color is its single scatter albedo, used as is
+			const multiscatterColor = isFogVolume ? m.color : getField( m, 'multiscatterColor', null );
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;
@@ -1037,6 +1022,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
+		// slots are written in order, so the first one seen for a volume is its id
+		const mediumKey = `${ object.uuid }_${ instanceId }_${ index }`;
+		if ( ! this._mediumIds.has( mediumKey ) ) {
+
+			this._mediumIds.set( mediumKey, writeOffset );
+
+		}
+
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 35 ] = this._mediumIds.get( mediumKey );
+
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
 		// if colors have not been defined.
@@ -1068,106 +1063,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// whether shadow rays see the object, in the slot after the material index
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 34 ] = info.object.visibleToShadowRays === false ? 0 : 1;
-
-	}
-
-	// Writes the object indices of the volumes containing the world position to "target", the medium stack a
-	// camera ray there starts with. As in Cycles a closed mesh contains the point when the nearest of its faces
-	// along a ray is a back face. Skinned and batched meshes are not checked
-	getMediumStack( position, target ) {
-
-		const { bvh, storage, structs } = this;
-		const transformsU32 = new Uint32Array( storage.transforms.proxyNode.value.array.buffer );
-		const transformLength = structs.transform.getLength();
-
-		if ( this._mediumSlots === null ) {
-
-			this._mediumSlots = [];
-			this._getTransformMap( bvh ).forEach( info => {
-
-				const { object, root } = info;
-				if ( ! object.isSkinnedMesh && ! object.isBatchedMesh && hasMedium( getGroupMaterial( object, root ) ) ) {
-
-					this._mediumSlots.push( info );
-
-				}
-
-			} );
-
-		}
-
-		target.setScalar( MEDIUM_STACK_EMPTY );
-
-		let count = 0;
-		this._mediumSlots.forEach( info => {
-
-			const { object, instanceId, root, slot } = info;
-			const visible = transformsU32[ slot * transformLength + 32 ] !== 0;
-			if ( count >= MEDIUM_STACK_SIZE || ! visible ) {
-
-				return;
-
-			}
-
-			// the position in the object's local space
-			if ( object.isInstancedMesh ) {
-
-				object.getMatrixAt( instanceId, _matrix );
-				_matrix.premultiply( object.matrixWorld );
-
-			} else {
-
-				_matrix.copy( object.matrixWorld );
-
-			}
-
-			const { geometry } = object;
-			_ray.origin.copy( position ).applyMatrix4( _matrix.invert() );
-			_ray.direction.set( 0, 0, 1 );
-
-			if ( geometry.boundingBox === null ) {
-
-				geometry.computeBoundingBox();
-
-			}
-
-			if ( ! geometry.boundingBox.containsPoint( _ray.origin ) ) {
-
-				return;
-
-			}
-
-			// the nearest face of the slot's own group
-			const group = geometry.groups.length > 0 ? geometry.groups[ root ] : null;
-			let nearest = null;
-			const hits = geometry.boundsTree.raycast( _ray, DoubleSide );
-			for ( let i = 0, l = hits.length; i < l; i ++ ) {
-
-				const hit = hits[ i ];
-				if ( group && ( hit.faceIndex * 3 < group.start || hit.faceIndex * 3 >= group.start + group.count ) ) {
-
-					continue;
-
-				}
-
-				if ( nearest === null || hit.distance < nearest.distance ) {
-
-					nearest = hit;
-
-				}
-
-			}
-
-			if ( nearest !== null && nearest.face.normal.dot( _ray.direction ) > 0 ) {
-
-				target.setComponent( count, slot );
-				count ++;
-
-			}
-
-		} );
-
-		return target;
 
 	}
 

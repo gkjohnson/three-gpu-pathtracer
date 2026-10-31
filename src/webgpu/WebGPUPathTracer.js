@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Vector3, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -32,7 +32,6 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
-const _cameraPosition = /* @__PURE__ */ new Vector3();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -301,6 +300,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 	set maxSubsurfaceBounces( v ) {
 
 		this._pathTracer.maxSubsurfaceBounces = v;
+		this.reset();
+
+	}
+
+	/**
+	 * Maximum number of times a path continues after scattering in fog. Light is still sampled at the
+	 * scatter that reaches it, so 0 renders single scattering, as Cycles' volume bounces do. Fog scatters
+	 * also count toward {@link WebGPUPathTracer#maxBounces}.
+	 * @type {number}
+	 * @default 0
+	 */
+	get maxFogBounces() {
+
+		return this._pathTracer.maxFogBounces;
+
+	}
+
+	set maxFogBounces( v ) {
+
+		this._pathTracer.maxFogBounces = v;
 		this.reset();
 
 	}
@@ -1092,7 +1111,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
-		this._updateCameraMedium();
+		this._pathTracer.hasVolumes = this._bvhData.hasVolumes;
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1107,7 +1126,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { _bvhData, _renderer } = this;
 		_bvhData.updateMaterials();
 		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
-		this._updateCameraMedium();
+		this._pathTracer.hasVolumes = _bvhData.hasVolumes;
 		this.reset();
 
 	}
@@ -1121,7 +1140,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
-		this._updateCameraMedium();
 		this.reset();
 
 	}
@@ -1138,23 +1156,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._updateCameraMedium();
 		this.reset();
-
-	}
-
-	// the volumes the camera is inside of, which camera rays start in
-	_updateCameraMedium() {
-
-		const { camera, _bvhData, _pathTracer } = this;
-		if ( ! camera || ! _bvhData ) {
-
-			return;
-
-		}
-
-		_cameraPosition.setFromMatrixPosition( camera.matrixWorld );
-		_bvhData.getMediumStack( _cameraPosition, _pathTracer.cameraMediumStack );
 
 	}
 

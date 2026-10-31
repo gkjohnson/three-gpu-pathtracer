@@ -2,6 +2,7 @@ export * from './WebGPUPathTracer.js';
 export * from './BlurredEnvMapGenerator.js';
 export * from './constants.js';
 export * from './materials/RenderToScreenMaterial.js';
+export * from './materials/FogVolumeNodeMaterial.js';
 export * from './denoise/OIDNDenoiser.js';
 export * from './upscale/FSRUpscaler.js';
 

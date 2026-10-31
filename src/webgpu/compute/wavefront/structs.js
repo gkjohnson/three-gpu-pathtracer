@@ -93,14 +93,37 @@ const rayDataMembers = {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-	// scatter events taken inside media, counted separately from the bounce count
+	// scatter events taken in subsurface walks and fog scatters continued after, each counted separately
+	// from the bounce count
 	subsurfaceBounces: 'uint',
+	fogBounces: 'uint',
 
-	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends.
+	// WALK_PENDING_CAMERA marks a camera ray's first pass
 	walkPending: 'uint',
 
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
+
+	// whether the staged hit is a scatter event in fog at "origin", a path vertex
+	mediumVertex: 'uint',
+
+	// the point the last light sample reached, which fog segments draw equiangular samples toward
+	lightPoint: 'vec4f',
+
+	// The light sampled from a point on the last fog segment, apart from the surface's: MediumKernel stages
+	// the point and its weight, which LogicKernel samples a light from, giving the color its shadow ray
+	// resolves the following frame. The color is kept apart since MediumKernel stages the next point first
+	volumeLightPosition: 'vec3f',
+	volumeShadowRayIntersectionIndex: 'int',
+
+	volumePointWeight: 'vec3f',
+	volumeLightMisWeight: 'float',
+
+	volumeLightColor: 'vec3f',
+	volumeLightDist: 'float',
+
+	volumeLightDirection: 'vec3f',
 
 };
 
@@ -130,10 +153,20 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	_alignment0: 'uint',
 	_alignment1: 'uint',
 
+	// shadow rays only: the media the ray starts in
+	mediumStack: 'vec4u',
+
 }, 'TraceQueuedRay' );
 
+// the object index MediumKernel writes for a walk ending at a scatter event in fog
+export const MEDIUM_SCATTER_HIT = - 2;
+
+// The "walkPending" value of a camera ray found inside a medium after it was queued for tracing. Its first
+// walk pass writes its hit into that ray's unused result entry rather than one from the back
+export const WALK_PENDING_CAMERA = 2;
+
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
-// LogicKernel the following frame. objectIndex < 0 encodes a miss.
+// LogicKernel the following frame. objectIndex < 0 encodes a miss, or a scatter event in fog.
 export const intersectionResultStruct = new StructTypeNode( {
 
 	barycoord: 'vec3f',
@@ -153,13 +186,13 @@ export const intersectionResultStruct = new StructTypeNode( {
 // LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
 export const shadowTraceResultStruct = new StructTypeNode( {
 
+	// the light let through by the partially transparent surfaces and the volumes passed
+	transmittance: 'vec3f',
+
 	objectIndex: 'int',
 
 	// the share of bsdf rays the skipped faces would stop, whose light weight moves to the light sample
 	skippedOcclusion: 'float',
-
-	// the fraction of light blocked by the partially transparent surfaces passed
-	occlusion: 'float',
 
 }, 'ShadowTraceResult' );
 
@@ -170,10 +203,12 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
-// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+// The path slots walking through a medium this pass, for MediumKernel. Its length, and the count of walk hits
+// taken from the back of the ray results, lead the same u32 array, ahead of the elements, as MediumKernel is
+// at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
-export const MEDIUM_QUEUE_HEADER = 1;
+export const MEDIUM_QUEUE_HIT_COUNT = 1;
+export const MEDIUM_QUEUE_HEADER = 2;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its

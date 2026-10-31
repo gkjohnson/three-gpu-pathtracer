@@ -1,15 +1,16 @@
-import { Vector2, Vector4 } from 'three';
+import { Vector2 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -33,9 +34,7 @@ export class MaterialKernel extends ComputeKernel {
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
-
-			// the media the camera is inside of
-			cameraMediumStack: uniform( new Vector4().setScalar( MEDIUM_STACK_EMPTY ), 'uvec4' ),
+			maxFogBounces: uniform( 0, 'uint' ),
 
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
@@ -57,7 +56,9 @@ export class MaterialKernel extends ComputeKernel {
 		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
 		const materialsNode = contextProxy( 'bvhData.storage.materials' );
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
+		const mediumStackExitFn = mediumStackExitFunc( transformsNode );
 		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
+		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -69,7 +70,7 @@ export class MaterialKernel extends ComputeKernel {
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
-				cameraMediumStack: vec4u,
+				maxFogBounces: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -181,9 +182,17 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].auxAlbedo = 0u;
 					rayDataStorage[ index ].auxNormal = 0u;
 					rayDataStorage[ index ].subsurfaceBounces = 0u;
+					rayDataStorage[ index ].fogBounces = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
-					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u ) );
+					rayDataStorage[ index ].mediumVertex = 0u;
+
+					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
+					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ), ${ MEDIUM_STACK_EMPTY }u ) );
+					rayDataStorage[ index ].lightPoint = vec4f( 0.0 );
+					rayDataStorage[ index ].volumePointWeight = vec3f( 0.0 );
+					rayDataStorage[ index ].volumeLightColor = vec3f( 0.0 );
+					rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -197,6 +206,74 @@ export class MaterialKernel extends ComputeKernel {
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
 					let segmentInMedium = medium.inside;
+
+					// the shadow ray of the light LogicKernel sampled from a point on the fog segment just walked
+					if ( any( input.volumeLightColor > vec3f( 0.0 ) ) ) {
+
+						let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
+						shadowRayQueue[ shadowIndex ].origin = input.volumeLightPosition;
+						shadowRayQueue[ shadowIndex ].direction = input.volumeLightDirection;
+						shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
+						shadowRayQueue[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
+						shadowRayQueue[ shadowIndex ].seed = input.seed;
+						shadowRayQueue[ shadowIndex ].maxDist = input.volumeLightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+						shadowRayQueue[ shadowIndex ].mediumStack = medium.stack;
+						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = i32( shadowIndex );
+
+					} else {
+
+						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
+
+					}
+
+					// A scatter event in fog, staged at "origin" by LogicKernel, is a path vertex like a surface,
+					// counted as a bounce, that continues through the phase function
+					if ( input.mediumVertex != 0u ) {
+
+						let newBounce = input.currentBounce + 1u;
+						let newDirection = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+						let phasePdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, newDirection ), medium.anisotropy );
+
+						// russian roulette, as at a surface. The phase function's sample weight is one. Out of
+						// fog bounces the path ends here, keeping the light sampled at the scatter
+						var scatterColor = vec3f( phasePdf );
+						var isTerminated = newBounce >= maxBounces || input.fogBounces >= maxFogBounces;
+						if ( ! isTerminated && newBounce >= 3u ) {
+
+							let rrThroughput = input.throughputColor;
+							let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+							isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+							if ( ! isTerminated ) {
+
+								scatterColor /= rrProb;
+
+							}
+
+						}
+
+						rayDataStorage[ index ].scatterColor = scatterColor;
+						rayDataStorage[ index ].scatterPdf = select( phasePdf, 0.0, isTerminated );
+						rayDataStorage[ index ].isFullyTransmissive = 0u;
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
+						rayDataStorage[ index ].currentBounce = newBounce;
+						rayDataStorage[ index ].fogBounces = input.fogBounces + 1u;
+						rayDataStorage[ index ].mediumScattered = 0u;
+						rayDataStorage[ index ].mediumVertex = 0u;
+
+						// the next segment is walked through the fog by MediumKernel
+						if ( ! isTerminated ) {
+
+							rayDataStorage[ index ].walkPending = 1u;
+							rayDataStorage[ index ].direction = newDirection;
+
+						}
+
+						// its light was sampled with its segment's
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
 
 					let objectInfo = transforms[ u32( input.objectIndex ) ];
 					var materialInfo = ( *materials )[ objectInfo.materialIndex ];
@@ -243,13 +320,16 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// Stochastically pass through partially transparent surfaces by re-enqueueing
-					// the ray at the hit point, advancing the alpha depth but not the bounce count.
-					let passesThrough = ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+					// the ray at the hit point, advancing the alpha depth but not the bounce count. A
+					// fog volume's boundary is always passed, entering or leaving its volume
+					let isFogBoundary = materialInfo.fogVolume != 0;
+					let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 					if ( passesThrough ) {
 
 						// out of transparent bounces, so stop rather than shading a surface that
 						// should be invisible. A zeroed throughput terminates in LogicKernel.
-						if ( input.alphaDepth >= maxTransparentBounces ) {
+						let alphaDepth = input.alphaDepth + 1u;
+						if ( alphaDepth > maxTransparentBounces ) {
 
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
@@ -259,8 +339,30 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
+						if ( isFogBoundary ) {
+
+							var stack: vec4u;
+							if ( input.side > 0.0 ) {
+
+								stack = ${ mediumStackEnterFn }( medium.stack, u32( input.objectIndex ) );
+
+							} else {
+
+								stack = ${ mediumStackExitFn }( medium.stack, u32( input.objectIndex ) );
+
+							}
+
+							if ( any( stack != medium.stack ) ) {
+
+								medium = ${ stackMediumFn }( stack, u32( input.objectIndex ) );
+								rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
+
+							}
+
+						}
+
 						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
-						if ( segmentInMedium ) {
+						if ( medium.inside ) {
 
 							// inside a medium, MediumKernel walks on past the surface, from the surface
 							rayDataStorage[ index ].walkPending = 1u;
@@ -273,7 +375,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue[ alphaIndex ].origin = alphaOrigin;
 							rayQueue[ alphaIndex ].direction = input.direction;
 							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue[ alphaIndex ].rngIndex = input.currentBounce + input.alphaDepth + 1u + input.subsurfaceBounces;
+							rayQueue[ alphaIndex ].rngIndex = input.currentBounce + alphaDepth + input.subsurfaceBounces;
 							rayQueue[ alphaIndex ].seed = input.seed;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
@@ -288,7 +390,7 @@ export class MaterialKernel extends ComputeKernel {
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
-						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
+						rayDataStorage[ index ].alphaDepth = alphaDepth;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
@@ -366,6 +468,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
 					// through it enters the volume and out through it leaves, while light reflecting stays
+					let surfaceStack = medium.stack;
 					var mediumChanged = false;
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
@@ -440,6 +543,10 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue[ shadowIndex ].seed = input.seed;
 							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+							shadowRayQueue[ shadowIndex ].mediumStack = ${ shadowMediumStackFn }(
+								surfaceStack, u32( input.objectIndex ), input.side, surface.thinWall,
+								input.direction, input.lightDirection, input.normal,
+							);
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {

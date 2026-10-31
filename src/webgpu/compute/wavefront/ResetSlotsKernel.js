@@ -51,6 +51,7 @@ export class ResetSlotsKernel extends ComputeKernel {
 					rayDataStorage[ index ].alphaDepth = 0u;
 					rayDataStorage[ index ].rayIntersectionIndex = - 1;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+					rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
 
 				}
 
