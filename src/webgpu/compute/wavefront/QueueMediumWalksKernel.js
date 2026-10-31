@@ -4,8 +4,8 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rayDataStruct, mediumQueueStruct } from './structs.js';
 
-// Gathers the live path slots walking a medium into the queue MediumKernel is dispatched over. Kept out
-// of MaterialKernel, which is at its storage buffer limit.
+// Gathers the path slots walking a medium for MediumKernel's dispatch. Separate from MaterialKernel, which
+// is at its storage buffer limit.
 export class QueueMediumWalksKernel extends ComputeKernel {
 
 	constructor( ) {

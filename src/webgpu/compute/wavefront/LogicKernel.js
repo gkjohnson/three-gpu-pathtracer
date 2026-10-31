@@ -109,7 +109,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				// one-sample NEE chooses between the analytic lights and the environment, matched with
 				// the megakernel
@@ -173,8 +173,8 @@ export class LogicKernel extends ComputeKernel {
 				let isWalking = ! isTerminated && input.walkPending != 0u;
 				if ( isWalking ) {
 
-					// the medium walk hasn't reached a surface yet, so there is no hit to stage. Clear what
-					// was just resolved, and let MediumKernel accumulate the walk's weight afresh
+					// the walk hasn't reached a surface yet, so there's no hit to stage. Clear what was
+					// resolved and let MediumKernel accumulate the walk's weight
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;

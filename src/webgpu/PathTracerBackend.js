@@ -20,7 +20,7 @@ export class PathTracerBackend {
 		this.frameBudget = 250000;
 
 		this.maxTransparentBounces = 15;
-		this.maxVolumeSteps = 256;
+		this.maxSubsurfaceBounces = 256;
 		this.lowResMode = false;
 
 		// the object indices of the media the camera is inside of, as the medium stack camera rays start with

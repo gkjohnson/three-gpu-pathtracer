@@ -12,16 +12,15 @@ import {
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, mediumQueueStruct, intersectionResultStruct } from './structs.js';
 
-// Random walks through scattering media, as in Cycles' dedicated subsurface kernel, but capped per pass: a
-// walk that reaches the surface hands its hit to LogicKernel like a traced ray, and one that doesn't
-// resumes in the next pass. The walk's weight is folded into the staged scatter color, which LogicKernel
-// applies after resolving the entry surface's lighting.
+// Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
+// reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
+// walk's weight goes into the staged scatter color.
 export class MediumKernel extends ComputeKernel {
 
 	constructor( ) {
 
 		const params = {
-			maxVolumeSteps: uniform( 256, 'uint' ),
+			maxSubsurfaceBounces: uniform( 256, 'uint' ),
 			stepsPerPass: uniform( 16, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 
@@ -39,7 +38,7 @@ export class MediumKernel extends ComputeKernel {
 
 		const fn = wgslTagFn/* wgsl */`
 
-			fn compute( maxVolumeSteps: u32, stepsPerPass: u32, rayCount: u32, globalId: vec3u ) -> void {
+			fn compute( maxSubsurfaceBounces: u32, stepsPerPass: u32, rayCount: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let mediumQueue = &${ params.mediumQueue };
@@ -56,11 +55,11 @@ export class MediumKernel extends ComputeKernel {
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.volumeSteps );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				var ray = Ray( input.origin, input.direction, 0.0 );
 				var weight = input.scatterColor;
-				var volumeSteps = input.volumeSteps;
+				var subsurfaceBounces = input.subsurfaceBounces;
 				var hasScattered = false;
 				var isFinished = false;
 				var isTerminated = false;
@@ -86,8 +85,8 @@ export class MediumKernel extends ComputeKernel {
 
 					if ( ! scattered ) {
 
-						// reaching the surface, weighted by the probability of no scatter event before it. The
-						// hit goes in the slot's own result entry, past the traced rays' entries
+						// reaching the surface, weighted by the chance of not scattering before it. The hit goes
+						// in the slot's own result entry
 						weight *= transmittance / distancePdf;
 
 						let resultIndex = rayCount + index;
@@ -111,11 +110,10 @@ export class MediumKernel extends ComputeKernel {
 					ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 					hasScattered = true;
 
-					// the walk doesn't count against the bounce limit, but is capped, and ends once its
-					// throughput is negligible
-					volumeSteps ++;
+					// capped separately from bounces, and ends once the throughput is negligible
+					subsurfaceBounces ++;
 					let throughput = input.throughputColor * weight / input.scatterPdf;
-					if ( volumeSteps >= maxVolumeSteps || max( max( throughput.r, throughput.g ), throughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+					if ( subsurfaceBounces >= maxSubsurfaceBounces || max( max( throughput.r, throughput.g ), throughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
 
 						isTerminated = true;
 						break;
@@ -131,7 +129,7 @@ export class MediumKernel extends ComputeKernel {
 				rayDataStorage[ index ].scatterPdf = select( input.scatterPdf, 0.0, isTerminated );
 				rayDataStorage[ index ].origin = ray.origin;
 				rayDataStorage[ index ].direction = ray.direction;
-				rayDataStorage[ index ].volumeSteps = volumeSteps;
+				rayDataStorage[ index ].subsurfaceBounces = subsurfaceBounces;
 				rayDataStorage[ index ].walkPending = select( 1u, 0u, isFinished || isTerminated );
 				if ( hasScattered ) {
 
