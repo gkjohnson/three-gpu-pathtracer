@@ -1,4 +1,4 @@
-import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, Source, RepeatWrapping, RGBAFormat, FloatType, ClampToEdgeWrapping } from 'three';
+import { DataTexture, RedFormat, LinearFilter, DataUtils, HalfFloatType, TextureSource, RepeatWrapping, RGBAFormat, FloatType, ClampToEdgeWrapping } from 'three';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
 
 function binarySearchFindClosestIndexOf( array, targetValue, offset = 0, count = array.length ) {
@@ -42,7 +42,7 @@ function colorToLuminance( r, g, b ) {
 function preprocessEnvMap( envMap, targetType = HalfFloatType ) {
 
 	const map = envMap.clone();
-	map.source = new Source( { ...map.image } );
+	map.source = new TextureSource( { ...map.image } );
 	const { width, height, data } = map.image;
 
 	// TODO: is there a simple way to avoid cloning and adjusting the env map data here?

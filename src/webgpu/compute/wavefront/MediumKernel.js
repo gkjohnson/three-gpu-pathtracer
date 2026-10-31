@@ -10,7 +10,7 @@ import {
 	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
-import { rayDataStruct, mediumQueueStruct, intersectionResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
 
 // Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
 // reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
@@ -24,11 +24,9 @@ export class MediumKernel extends ComputeKernel {
 			stepsPerPass: uniform( 16, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 
-			// TODO: two elements so the placeholders compile as arrays. Remove once three declares every
-			// storage buffer as an array, in r187
-			rayDataStorage: storage( new StorageBufferAttribute( 2, 1 ), rayDataStruct ),
-			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), mediumQueueStruct ),
-			rayIntersectionsStorage: storage( new StorageBufferAttribute( 2, 1 ), intersectionResultStruct ),
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
@@ -44,13 +42,13 @@ export class MediumKernel extends ComputeKernel {
 				let mediumQueue = &${ params.mediumQueue };
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 
-				if ( globalId.x >= atomicLoad( &mediumQueue.length ) ) {
+				if ( globalId.x >= mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ] ) {
 
 					return;
 
 				}
 
-				let index = mediumQueue.elements[ globalId.x ];
+				let index = mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ];
 				let input = ( *rayDataStorage )[ index ];
 				let medium = ${ loadMediumFn }( input.medium );
 
