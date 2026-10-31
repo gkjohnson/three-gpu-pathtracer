@@ -1,4 +1,4 @@
-import { Box3, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
+import { Box3, Color, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
@@ -676,6 +676,25 @@ export const MODEL_LIST = {
 		}
 	},
 
+	'Just a Girl': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/just-a-girl/scene.glb',
+		credit: 'Model by "腱鞘炎の人" on Sketchfab.',
+		postProcess( model ) {
+
+			// the inverted hull outlines must not shadow the body they wrap
+			model.traverse( c => {
+
+				if ( c.isMesh && c.material.name.endsWith( ' solid' ) ) {
+
+					c.visibleToShadowRays = false;
+
+				}
+
+			} );
+
+		},
+	},
+
 	'Halo Twist Ring': {
 		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/ring-twist-halo/scene.glb',
 		credit: 'Model credit NASA / JPL-Caltech',
@@ -736,6 +755,80 @@ export const MODEL_LIST = {
 				if ( c.material ) c.material = material;
 
 			} );
+
+		}
+	},
+
+	'Super Human': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/super-human/scene.glb',
+		credit: 'Model by Davyd Vidiger on <a href="https://sketchfab.com/3d-models/super-human-7aa58e978b9f4357b8e73d8e0440c896">Sketchfab</a>, CC-BY 4.0.',
+		postProcess( model ) {
+
+			// skin as a scattering volume: a 0.2 unit mean free path scaled per channel by [ 1, 0.5, 0.25 ]
+			const SKIN_RADIUS = [ 0.2, 0.1, 0.05 ];
+			const distance = Math.min( ...SKIN_RADIUS );
+
+			model.traverse( c => {
+
+				if ( c.material && c.material.name === 'blinn1SG' ) {
+
+					const material = new MeshPhysicalMaterial();
+					MeshStandardMaterial.prototype.copy.call( material, c.material );
+					material.color.set( 0xffffff );
+
+					// the skin's color comes from the volume rather than the model's emissive texture
+					material.emissive.set( 0x000000 );
+					material.emissiveMap = null;
+					material.roughness = 0.45;
+					material.metalness = 0;
+					material.ior = 1.4;
+					material.transmission = 1;
+					material.thickness = 1;
+					material.scatterStrength = 1;
+					material.multiscatterColor = new Color().setRGB( 0.9, 0.6, 0.48 );
+					material.attenuationDistance = distance;
+					material.attenuationColor.setRGB( ...SKIN_RADIUS.map( r => Math.exp( - distance / r ) ) );
+					c.material = material;
+
+				}
+
+			} );
+
+		}
+	},
+
+	'Happy Buddha': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/happy-buddha/buddha.glb',
+		credit: 'Model from the <a href="http://graphics.stanford.edu/data/3Dscanrep/">Stanford 3D Scanning Repository</a>, via <a href="https://casual-effects.com/data/">Morgan McGuire\'s Computer Graphics Archive</a>.',
+		rotation: [ 0, Math.PI, 0 ],
+		postProcess( model ) {
+
+			// the scattering distance is a fraction of the model size rather than a fixed distance
+			const size = new Box3().setFromObject( model ).getSize( new Vector3() );
+
+			// red wax - red travels furthest before scattering so thin areas glow
+			const material = new MeshPhysicalMaterial();
+			material.roughness = 0.35;
+			material.metalness = 0;
+			material.transmission = 1;
+			material.ior = 1.45;
+			material.thickness = 1;
+			material.scatterStrength = 1;
+			material.multiscatterColor = new Color().setRGB( 0.4, 0.025, 0.015 );
+			material.attenuationDistance = 0.005 * Math.max( size.x, size.y, size.z );
+			material.attenuationColor.setRGB( Math.exp( - 1 ), Math.exp( - 1 / 0.25 ), Math.exp( - 1 / 0.17 ) );
+
+			model.traverse( c => {
+
+				if ( c.material ) c.material = material;
+
+			} );
+
+			// the viewer's default view pulled back a little, in model space before the rotation above
+			const camera = new PerspectiveCamera( 45, 1 );
+			camera.position.set( 1.29, 0.5, - 1.29 );
+			camera.lookAt( 0.02, 0.05, - 0.02 );
+			model.add( camera );
 
 		}
 	},

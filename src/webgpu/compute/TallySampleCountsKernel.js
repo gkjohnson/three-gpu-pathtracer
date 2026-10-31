@@ -37,11 +37,11 @@ export class PrimeSampleCountersKernel extends ComputeKernel {
 		const fn = wgslTagFn/* wgsl */`
 			fn compute() -> void {
 
-				atomicStore( &${ params.counters }.minSamples, 0xFFFFFFFFu );
-				atomicStore( &${ params.counters }.maxSamples, 0u );
-				atomicStore( &${ params.counters }.totalLo, 0u );
-				atomicStore( &${ params.counters }.totalHi, 0u );
-				atomicStore( &${ params.counters }.pixelCount, 0u );
+				atomicStore( &${ params.counters }[ 0 ].minSamples, 0xFFFFFFFFu );
+				atomicStore( &${ params.counters }[ 0 ].maxSamples, 0u );
+				atomicStore( &${ params.counters }[ 0 ].totalLo, 0u );
+				atomicStore( &${ params.counters }[ 0 ].totalHi, 0u );
+				atomicStore( &${ params.counters }[ 0 ].pixelCount, 0u );
 
 			}
 		`;
@@ -86,16 +86,16 @@ export class TallySampleCountsKernel extends ComputeKernel {
 
 				let samples = combinedField & ${ SAMPLE_COUNT_MASK }u;
 
-				atomicMin( &${ params.counters }.minSamples, samples );
-				atomicMax( &${ params.counters }.maxSamples, samples );
-				atomicAdd( &${ params.counters }.pixelCount, 1u );
+				atomicMin( &${ params.counters }[ 0 ].minSamples, samples );
+				atomicMax( &${ params.counters }[ 0 ].maxSamples, samples );
+				atomicAdd( &${ params.counters }[ 0 ].pixelCount, 1u );
 
 				// the sum overflowed if it came out smaller than the value already there, so carry
 				// the wrap into "totalHi"
-				let previousTotal = atomicAdd( &${ params.counters }.totalLo, samples );
+				let previousTotal = atomicAdd( &${ params.counters }[ 0 ].totalLo, samples );
 				if ( previousTotal + samples < previousTotal ) {
 
-					atomicAdd( &${ params.counters }.totalHi, 1u );
+					atomicAdd( &${ params.counters }[ 0 ].totalHi, 1u );
 
 				}
 

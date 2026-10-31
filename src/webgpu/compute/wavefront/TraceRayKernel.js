@@ -1,9 +1,9 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
-import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
-import { rayQueueStruct, intersectionResultStruct } from './structs.js';
+import { traceQueuedRayStruct, intersectionResultStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
 // Pure BVH traversal over the queued bounce rays: one thread per queued ray, writing a compact
 // intersection result at the ray's queue index for LogicKernel to consume next frame.
@@ -12,34 +12,35 @@ export class TraceRayKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 
-			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
+			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
 
 		const fn = wgslTagFn /* wgsl */`
 
 			fn compute( globalId: vec3u ) -> void {
 
 				let rayQueue = &${ params.rayQueue };
+				let queueCounters = &${ params.queueCounters };
 				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
 
 				let index = globalId.x;
-				if ( index >= rayQueue.length ) {
+				if ( index >= queueCounters[ ${ RAY_QUEUE_LENGTH }u ] ) {
 
 					return;
 
 				}
 
-				let queuedRay = rayQueue.elements[ index ];
+				let queuedRay = rayQueue[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, queuedRay.seed, queuedRay.currentBounce + queuedRay.alphaDepth );
+				${ rngInit }( indexUV, queuedRay.seed, queuedRay.rngIndex );
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };

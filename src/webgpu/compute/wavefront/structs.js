@@ -1,4 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
+import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
 
 // StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
 // a type string, so we build each dependency first, which registers its definition ahead of this struct.
@@ -28,7 +29,7 @@ class DependentStructTypeNode extends StructTypeNode {
 
 // Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
 // the previous frame's trace results and stage the next bounce.
-export const rayDataStruct = new StructTypeNode( {
+const rayDataMembers = {
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
@@ -76,8 +77,10 @@ export const rayDataStruct = new StructTypeNode( {
 	// the traced segment length, for the transmission attenuation applied by MaterialKernel
 	dist: 'float',
 
-	// alpha test pass throughs, counted separately from the bounce count
+	// alpha test pass throughs, counted separately from the bounce count, and how far along the ray they
+	// moved the start of its traversal. The ray keeps the origin it scattered from
 	alphaDepth: 'uint',
+	rayStart: 'float',
 
 	// the camera segment's maximum trace distance, carried across alpha pass throughs
 	maxDist: 'float',
@@ -86,7 +89,30 @@ export const rayDataStruct = new StructTypeNode( {
 	// first dispersive interaction
 	dispersionWavelength: 'float',
 
-}, 'RayData' );
+	// the first scatter's albedo and normal, 8 bits per channel, for the denoiser's auxiliary buffers
+	auxAlbedo: 'uint',
+	auxNormal: 'uint',
+
+	// scatter events taken inside media, counted separately from the bounce count
+	subsurfaceBounces: 'uint',
+
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	walkPending: 'uint',
+
+	// whether the staged segment starts at a medium scatter event, where no light is sampled
+	mediumScattered: 'uint',
+
+};
+
+// The path's medium, nested at the end to share the ray data buffer under the storage buffer limit. Sized
+// separately since nested structs aren't.
+export const rayDataStruct = new DependentStructTypeNode( {
+	...rayDataMembers,
+	medium: mediumStateStruct.name,
+}, 'RayData', [ mediumStateStruct ] );
+
+const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
+rayDataStruct.getLength = () => rayDataLength + mediumStateStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
@@ -95,12 +121,14 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	pixelIndex: 'uint',
 
 	direction: 'vec3f',
-	currentBounce: 'uint',
+
+	// the traversal's random sequence index: bounces, alpha pass throughs and subsurface bounces, as in the megakernel
+	rngIndex: 'uint',
 
 	seed: 'uint',
-	alphaDepth: 'uint',
 	maxDist: 'float',
 	_alignment0: 'uint',
+	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
 
@@ -118,37 +146,38 @@ export const intersectionResultStruct = new StructTypeNode( {
 	side: 'float',
 
 	indices: 'vec3u',
-	_alignment0: 'uint',
 
 }, 'TraceResult' );
 
-// Queue wrappers that keep an append-only length counter in a header ahead of the elements. The
-// atomic variant is bound where rays are pushed with atomicAdd; the plain one where the length is
-// only read or reset. getLength returns just the header since the trailing array is runtime-sized.
-export const rayQueueStruct = new DependentStructTypeNode( {
-	length: 'uint',
-	elements: `array<${ traceQueuedRayStruct.name }>`,
-}, 'RayQueue', [ traceQueuedRayStruct ] );
-rayQueueStruct.getLength = () => 4;
+// Shadow ray trace result, written by TraceShadowRayKernel at the ray's queue index and consumed by
+// LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
+export const shadowTraceResultStruct = new StructTypeNode( {
 
-export const rayQueueAtomicStruct = new DependentStructTypeNode( {
-	length: { type: 'uint', atomic: true },
-	elements: `array<${ traceQueuedRayStruct.name }>`,
-}, 'RayQueue', [ traceQueuedRayStruct ] );
-rayQueueAtomicStruct.getLength = () => 4;
+	objectIndex: 'int',
+
+	// the share of bsdf rays the skipped faces would stop, whose light weight moves to the light sample
+	skippedOcclusion: 'float',
+
+	// the fraction of light blocked by the partially transparent surfaces passed
+	occlusion: 'float',
+
+}, 'ShadowTraceResult' );
+
+// The ray and shadow ray queues are plain arrays of queued rays, with their append-only lengths in a
+// separate counters buffer: storage buffers are always bound as arrays, which can't hold a struct
+// ending in a runtime-sized array.
+export const RAY_QUEUE_LENGTH = 0;
+export const SHADOW_RAY_QUEUE_LENGTH = 1;
+export const QUEUE_COUNTER_COUNT = 2;
+
+// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
+// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+export const MEDIUM_QUEUE_LENGTH = 0;
+export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
-// the ray data pool. The non-atomic variant is used for contention-free initialization.
-export const pixelQueueStruct = new DependentStructTypeNode( {
-	current: { type: 'uint', atomic: true },
-	elementCount: 'uint',
-	elements: 'array<atomic<u32>>',
-}, 'PixelQueue' );
-pixelQueueStruct.getLength = () => 2;
-
-export const pixelQueueNonAtomicStruct = new DependentStructTypeNode( {
-	current: 'uint',
-	elementCount: 'uint',
-	elements: 'array<u32>',
-}, 'PixelQueue' );
-pixelQueueNonAtomicStruct.getLength = () => 2;
+// the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
+// counters lead the same u32 array, ahead of the elements.
+export const PIXEL_QUEUE_CURRENT = 0;
+export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
+export const PIXEL_QUEUE_HEADER = 2;

@@ -1,8 +1,15 @@
-import { ExternalTexture, NearestFilter, NoToneMapping, RenderTarget, UnsignedByteType } from 'three/webgpu';
-import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
+import { EventDispatcher, ExternalTexture } from 'three/webgpu';
+import { UnpackAuxKernel } from '../compute/UnpackAuxKernel.js';
+import { createAuxImageTarget } from '../compute/targets.js';
 
-/** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
-/** @import { DynamicTileSetting } from 'oidn-web' */
+/** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { DynamicTileSetting } from 'oidn-webgpu' */
+
+/**
+ * Fired when a pass started by `update` fails, such as the weights failing to download, with the
+ * failure as the event's `error`. No other pass starts until a reset.
+ * @event OIDNDenoiser#error
+ */
 
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
@@ -12,14 +19,14 @@ import { diffuseColor, mrt, normalView, vec4 } from 'three/tsl';
  * nor the network files become a dependency.
  *
  * ```js
- * import { initUNetFromURL } from 'oidn-web';
+ * import { initUNetFromURL } from 'oidn-webgpu';
  * pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) );
  * ```
  *
  * Weights come from the oidn-weights repository, where the "_small" and "_large" variants trade
  * quality against download size and per tile cost.
  */
-export class OIDNDenoiser {
+export class OIDNDenoiser extends EventDispatcher {
 
 	/**
 	 * The denoised result, or null until the first tile has been produced.
@@ -69,6 +76,8 @@ export class OIDNDenoiser {
 	 */
 	constructor( options = {} ) {
 
+		super();
+
 		const {
 			initUNetFromURL,
 			auxWeightsUrl,
@@ -80,7 +89,7 @@ export class OIDNDenoiser {
 
 		if ( ! initUNetFromURL ) {
 
-			throw new Error( 'OIDNDenoiser: "initUNetFromURL" from "oidn-web" must be provided.' );
+			throw new Error( 'OIDNDenoiser: "initUNetFromURL" from "oidn-webgpu" must be provided.' );
 
 		}
 
@@ -88,27 +97,32 @@ export class OIDNDenoiser {
 		this.auxWeightsUrl = auxWeightsUrl;
 		this.colorWeightsUrl = colorWeightsUrl;
 
-		// `false` falls back to the color only model, which is blurrier but skips a scene render
+		// `false` falls back to the color only model, which is blurrier but needs no auxiliary buffers
 		this.useAuxiliaryBuffers = useAuxiliaryBuffers;
 
-		// tiling, passed through to oidn-web. Null keeps its defaults
+		// tiling, passed through to oidn-webgpu. Null keeps its defaults
 		this.maxTileSize = maxTileSize;
 		this.dynamicTile = dynamicTile;
 
 		this.renderer = null;
-		this.scene = null;
-		this.camera = null;
 
 		this._texture = null;
 		this._running = false;
 		this._complete = false;
 		this._abort = null;
 		this._requestId = 0;
+
+		// set when a pass started by "update" fails, so the render loop doesn't start another until a reset
+		this._failed = false;
 		this._unets = { aux: null, color: null };
 
 		this._resultPipeline = null;
 		this._rawTexture = null;
-		this._auxTarget = null;
+
+		// the albedo and normal unpacked from the path tracer's auxiliary target for a pass
+		this._unpackAuxKernel = new UnpackAuxKernel().setWorkgroupSize( 8, 8, 1 );
+		this._albedoTarget = createAuxImageTarget( 'Denoiser Albedo' );
+		this._normalTarget = createAuxImageTarget( 'Denoiser Normal' );
 
 	}
 
@@ -122,41 +136,40 @@ export class OIDNDenoiser {
 	}
 
 	/**
-	 * @param {Scene} scene
-	 * @param {Camera} camera
-	 */
-	setScene( scene, camera ) {
-
-		this.scene = scene;
-		this.camera = camera;
-
-	}
-
-	/**
-	 * Renders the auxiliary buffers and starts a pass. Safe to call every frame.
+	 * Unpacks the auxiliary buffers the path tracer accumulated and starts a pass. Safe to call
+	 * every frame.
 	 *
 	 * @param {Texture} target - The path traced result, in linear HDR.
+	 * @param {StorageArrayTexture|null} aux - The packed auxiliary buffers, see "aux.wgsl.js".
 	 * @returns {Texture|null}
 	 */
-	update( target ) {
+	update( target, aux = null ) {
 
-		if ( this._complete || this._running ) {
+		if ( this._complete || this._running || this._failed ) {
 
 			return this._texture;
 
 		}
 
+		// TODO: denoise the alpha for transparent backgrounds. oidn-webgpu's "denoiseAlpha" runs as a
+		// second pass, but its "_updatePasses" doesn't rebuild its shaders when the option changes
 		let albedo = null;
 		let normal = null;
-		if ( this.useAuxiliaryBuffers ) {
+		if ( this.useAuxiliaryBuffers && aux ) {
 
-			const auxTarget = this._renderAuxiliaryBuffers( target.width, target.height );
-			albedo = auxTarget.textures[ 0 ];
-			normal = auxTarget.textures[ 1 ];
+			this._unpackAux( aux );
+			albedo = this._albedoTarget;
+			normal = this._normalTarget;
 
 		}
 
-		this.denoise( target, albedo, normal );
+		// a failure, such as the weights failing to download, is reported once rather than every frame
+		this.denoise( target, albedo, normal ).catch( error => {
+
+			this._failed = true;
+			this.dispatchEvent( { type: 'error', error } );
+
+		} );
 
 		return this._texture;
 
@@ -213,14 +226,17 @@ export class OIDNDenoiser {
 		const inputs = {
 			color: { data: backend.get( color ).texture, width, height },
 
+			// pace the tiles to display frames so the path tracer keeps rendering between them
+			scheduling: 'animation-frame',
+
 			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
 			progress: output => this._copyOutputToTexture( output, width, height ),
 			done: output => {
 
-				this._copyOutputToTexture( output, width, height );
 				this._running = false;
 				this._complete = true;
 				this._abort = null;
+				this._disposeAuxImages();
 
 			},
 		};
@@ -254,17 +270,18 @@ export class OIDNDenoiser {
 		this._rawTexture?.destroy();
 		this._rawTexture = null;
 
+		this._disposeAuxImages();
+
 		this._running = false;
 		this._complete = false;
+		this._failed = false;
 
 	}
 
 	dispose() {
 
 		this.reset();
-
-		this._auxTarget?.dispose();
-		this._auxTarget = null;
+		this._unpackAuxKernel.dispose();
 
 		// the networks hold the weights on the GPU, and a load may still be in flight
 		for ( const key in this._unets ) {
@@ -276,52 +293,28 @@ export class OIDNDenoiser {
 
 	}
 
-	// Rasterizes the albedo and normal buffers that guide the filter. oidn-web takes normals
-	// mapped into [0,1], with (0.5, 0.5, 1) as a flat normal.
-	_renderAuxiliaryBuffers( width, height ) {
+	// Unpacks the path tracer's auxiliary target into albedo and normal textures, since oidn-webgpu
+	// reads every input as the same kind as the color texture
+	_unpackAux( aux ) {
 
-		const { renderer, scene, camera } = this;
+		const { renderer, _unpackAuxKernel, _albedoTarget, _normalTarget } = this;
+		const { width, height } = aux.image;
 
-		if ( ! this._auxTarget ) {
+		_albedoTarget.setSize( width, height );
+		_normalTarget.setSize( width, height );
 
-			// Eight bits per channel since both buffers hold [0,1]. Multisampled so the rasterized
-			// silhouettes match the jittered path traced ones.
-			this._auxTarget = new RenderTarget( 1, 1, {
-				count: 2,
-				type: UnsignedByteType,
-				minFilter: NearestFilter,
-				magFilter: NearestFilter,
-				samples: 4,
-			} );
+		_unpackAuxKernel.auxTarget = aux;
+		_unpackAuxKernel.albedoTarget = _albedoTarget;
+		_unpackAuxKernel.normalTarget = _normalTarget;
+		renderer.compute( _unpackAuxKernel.kernel, _unpackAuxKernel.getDispatchSize( width, height ) );
 
-			// the MRT keys are matched against these names
-			this._auxTarget.textures[ 0 ].name = 'output';
-			this._auxTarget.textures[ 1 ].name = 'normal';
+	}
 
-		}
+	// the unpacked images only live for a pass
+	_disposeAuxImages() {
 
-		const auxTarget = this._auxTarget;
-		auxTarget.setSize( width, height );
-
-		const originalTarget = renderer.getRenderTarget();
-		const originalMRT = renderer.getMRT();
-		const originalToneMapping = renderer.toneMapping;
-
-		// the buffers are data rather than an image, so they must not be tone mapped
-		renderer.toneMapping = NoToneMapping;
-		renderer.setRenderTarget( auxTarget );
-		renderer.setMRT( mrt( {
-			output: diffuseColor,
-			normal: vec4( normalView.mul( 0.5 ).add( 0.5 ), 1.0 ),
-		} ) );
-
-		renderer.render( scene, camera );
-
-		renderer.setMRT( originalMRT );
-		renderer.setRenderTarget( originalTarget );
-		renderer.toneMapping = originalToneMapping;
-
-		return auxTarget;
+		this._albedoTarget.dispose();
+		this._normalTarget.dispose();
 
 	}
 
@@ -346,7 +339,7 @@ export class OIDNDenoiser {
 				if ( this.maxTileSize !== null ) options.maxTileSize = this.maxTileSize;
 				if ( this.dynamicTile !== null ) options.dynamicTile = this.dynamicTile;
 
-				return this.initUNetFromURL( url, { device, adapterInfo: device.adapterInfo }, options );
+				return this.initUNetFromURL( url, { device }, options );
 
 			} )();
 
@@ -358,7 +351,7 @@ export class OIDNDenoiser {
 
 	// Copies the denoiser's packed output buffer into a sampleable texture, using a compute pass
 	// since copyBufferToTexture requires 256 byte row alignment.
-	// TODO: remove the copy once oidn-web can write into a caller-provided storage texture.
+	// TODO: remove the copy once oidn-webgpu can write into a caller-provided storage texture.
 	_copyOutputToTexture( output, width, height ) {
 
 		const device = this.renderer.backend.device;

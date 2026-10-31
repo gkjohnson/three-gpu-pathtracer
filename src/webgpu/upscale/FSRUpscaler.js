@@ -1,5 +1,5 @@
-import { Vector2 } from 'three/webgpu';
 /** @import { Camera, Texture, WebGPURenderer } from 'three/webgpu' */
+import { Vector2 } from 'three/webgpu';
 
 const _size = /*@__PURE__*/ new Vector2();
 
@@ -50,6 +50,7 @@ export class FSRUpscaler {
 	init( renderer ) {
 
 		this.renderer = renderer;
+		this._upscaler?.dispose();
 		this._upscaler = new this.Upscaler( { renderer } );
 		this._upscaler.init();
 
@@ -100,7 +101,7 @@ export class FSRUpscaler {
 
 	dispose() {
 
-		this._upscaler.dispose();
+		this._upscaler?.dispose();
 		this._upscaler = null;
 
 	}

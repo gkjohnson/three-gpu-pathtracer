@@ -70,7 +70,7 @@ function App() {
 			camera={ { position: [ 3, 2.5, 5 ], fov: 40 } }
 			gl={ async props => {
 
-				const renderer = new WebGPURenderer( props );
+				const renderer = new WebGPURenderer( { ...props, trackTimestamp: true } );
 				await renderer.init();
 				return renderer;
 

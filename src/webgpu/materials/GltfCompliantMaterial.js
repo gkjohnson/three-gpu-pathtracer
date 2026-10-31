@@ -1,6 +1,6 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { PathtracingMaterial } from './PathtracingMaterial';
+import { PathtracingMaterial } from './PathtracingMaterial.js';
 import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc } from '../nodes/material.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
@@ -160,8 +160,10 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						}
 
-						// the refracted half is not attenuated by the layers above
-						result += ( 1.0 - surf.metalness ) * surf.transmission * refraction * surf.color;
+						// the refracted half is not attenuated by the layers above. A volume is entered and exited,
+						// so each crossing takes the square root of the color, as in Cycles
+						let transmissionTint = select( sqrt( surf.color ), surf.color, surf.thinWall );
+						result += ( 1.0 - surf.metalness ) * surf.transmission * refraction * transmissionTint;
 
 					} else {
 
@@ -417,7 +419,8 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// Cycles represents a singular event with a large matching BSDF and PDF. Their
 					// ratio preserves throughput while forward MIS correctly gives the event full weight.
-					result.color = ( 1.0 - surf.metalness ) * surf.transmission * surf.color *
+					let transmissionTint = select( sqrt( surf.color ), surf.color, surf.thinWall );
+					result.color = ( 1.0 - surf.metalness ) * surf.transmission * transmissionTint *
 						deltaTransmittance * ${ SINGULAR_EVENT_SCALE };
 					result.direction = worldWi;
 					result.pdf = weights.transmission * deltaProbability * ${ SINGULAR_EVENT_SCALE };

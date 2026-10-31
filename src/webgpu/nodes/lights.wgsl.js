@@ -11,7 +11,7 @@ export const POINT_LIGHT_TYPE = 4;
 export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
-// tolerance for comparing a shadow hit distance to the sampled light distance
+// fraction of the light distance a shadow ray stops short of the light
 export const LIGHT_EPSILON = 1e-5;
 
 // light kinds that are also bsdf-sampled and so take MIS-weighted NEE - punctual lights take full weight
@@ -201,3 +201,23 @@ export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
 	}
 
 `, [ lightStruct, lightRecordStruct, constants, getDistanceAttenuationFn ] );
+
+// The cosine to the spot axis and the distance from a position to the nearest point on the spot
+// light's disc, where the disc lights the position the most
+export const getSpotLightNearestFn = wgslFn( /* wgsl */ `
+
+	fn getSpotLightNearest( light: Light, position: vec3f ) -> vec2f {
+
+		let normal = normalize( cross( light.u, light.v ) );
+		let startDistance = light.radius / max( tan( acos( light.coneCos ) ), EPSILON );
+		let discCenter = light.position - normal * startDistance;
+
+		let toPosition = position - discCenter;
+		let along = dot( toPosition, - normal );
+		let across = max( length( toPosition + normal * along ) - light.radius, 0.0 );
+		let dist = length( vec2f( along, across ) );
+		return vec2f( along / max( dist, EPSILON ), dist );
+
+	}
+
+`, [ lightStruct, constants ] );

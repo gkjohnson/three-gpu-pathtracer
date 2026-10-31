@@ -108,14 +108,55 @@ export const sampleHemisphereFn = wgslFn( /* wgsl */ `
 
 `, [ constants ] );
 
+// below this anisotropy the Henyey-Greenstein phase function is sampled as isotropic, avoiding the
+// division by zero in its inverted CDF
+const HG_ISOTROPIC_EPSILON = 1e-3;
+
+// Samples a new direction from the Henyey-Greenstein phase function around the propagation direction
+// "d". Positive "g" scatters forward. The sample is exact, so the phase function over its pdf is one.
+// https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume_util.h#L36
+export const sampleHenyeyGreensteinFn = wgslFn( /* wgsl */ `
+
+	fn sampleHenyeyGreenstein( d: vec3f, g: f32, uv: vec2f ) -> vec3f {
+
+		var cosTheta = 1.0 - 2.0 * uv.x;
+		if ( abs( g ) > ${ HG_ISOTROPIC_EPSILON } ) {
+
+			let sqrTerm = ( 1.0 - g * g ) / ( 1.0 - g + 2.0 * g * uv.x );
+			cosTheta = clamp( ( 1.0 + g * g - sqrTerm * sqrTerm ) / ( 2.0 * g ), - 1.0, 1.0 );
+
+		}
+
+		// orthonormal basis around "d", from https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+		let sign = select( sign( d.z ), 1.0, d.z == 0.0 );
+		let a = - 1.0 / ( sign + d.z );
+		let b = d.x * d.y * a;
+		let b1 = vec3( 1.0 + sign * d.x * d.x * a, sign * b, - sign * d.x );
+		let b2 = vec3( b, sign + d.y * d.y * a, - d.y );
+
+		let sinTheta = sqrt( max( 0.0, 1.0 - cosTheta * cosTheta ) );
+		let phi = 2.0 * PI * uv.y;
+		return normalize( sinTheta * cos( phi ) * b1 + sinTheta * sin( phi ) * b2 + cosTheta * d );
+
+	}
+
+`, [ constants ] );
+
 // power heuristic for multiple importance sampling
 export const misHeuristicFn = wgslFn( /* wgsl */ `
 
 	fn misHeuristic( a: f32, b: f32 ) -> f32 {
 
-		let aa = a * a;
-		let bb = b * b;
-		return aa / ( aa + bb );
+		// computed as a ratio so squaring large pdfs can't overflow to Inf / Inf
+		if ( a >= b ) {
+
+			let r = b / a;
+			return 1.0 / ( 1.0 + r * r );
+
+		}
+
+		let r = a / b;
+		return r * r / ( 1.0 + r * r );
 
 	}
 

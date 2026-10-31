@@ -1,0 +1,153 @@
+import { StorageBufferAttribute } from 'three/webgpu';
+import { ComputeKernel } from '../ComputeKernel.js';
+import { storage, uniform, globalId } from 'three/tsl';
+import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
+import { sampleHenyeyGreensteinFn } from '../../nodes/sampling.wgsl.js';
+import {
+	loadMediumFn,
+	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn,
+	MEDIUM_THROUGHPUT_EPSILON,
+} from '../../nodes/medium.wgsl.js';
+import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
+
+// Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
+// reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
+// walk's weight goes into the staged scatter color.
+export class MediumKernel extends ComputeKernel {
+
+	constructor( ) {
+
+		const params = {
+			maxSubsurfaceBounces: uniform( 256, 'uint' ),
+			stepsPerPass: uniform( 16, 'uint' ),
+			rayCount: uniform( 0, 'uint' ),
+
+			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			mediumQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+
+			globalId: globalId,
+		};
+
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+
+		const fn = wgslTagFn/* wgsl */`
+
+			fn compute( maxSubsurfaceBounces: u32, stepsPerPass: u32, rayCount: u32, globalId: vec3u ) -> void {
+
+				let rayDataStorage = &${ params.rayDataStorage };
+				let mediumQueue = &${ params.mediumQueue };
+				let rayIntersectionsStorage = &${ params.rayIntersectionsStorage };
+
+				if ( globalId.x >= mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ] ) {
+
+					return;
+
+				}
+
+				let index = mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ];
+				let input = ( *rayDataStorage )[ index ];
+				let medium = ${ loadMediumFn }( input.medium );
+
+				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+
+				var ray = Ray( input.origin, input.direction, 0.0 );
+				var weight = input.scatterColor;
+				var subsurfaceBounces = input.subsurfaceBounces;
+				var hasScattered = false;
+				var isFinished = false;
+				var isTerminated = false;
+
+				for ( var i = 0u; i < stepsPerPass; i ++ ) {
+
+					// only trace up to the sampled scatter event
+					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
+					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+					ray.maxDist = scatterDist;
+
+					var hitResult: ${ raycastOutput };
+					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
+					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+
+					let scattered = scatterDist < surfaceDist;
+					let segmentDist = select( surfaceDist, scatterDist, scattered );
+					let transmittance = exp( - medium.extinction * segmentDist );
+					let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
+					if ( distancePdf <= 0.0 ) {
+
+						isTerminated = true;
+						break;
+
+					}
+
+					if ( ! scattered ) {
+
+						// reaching the surface, weighted by the chance of not scattering before it
+						weight *= transmittance / distancePdf;
+
+						// The hit fills the ray results from the back, by the walk's medium queue position, while the
+						// traced rays fill them from the front. A path slot walking a medium queued no ray this round,
+						// so the two ranges never exceed the slot count or overlap
+						let resultIndex = rayCount - 1u - globalId.x;
+						rayIntersectionsStorage[ resultIndex ].barycoord = hitResult.barycoord;
+						// a walk that leaves without hitting anything is a miss, as in the trace kernel
+						rayIntersectionsStorage[ resultIndex ].objectIndex = select( - 1, i32( hitResult.objectIndex ), didHit );
+						rayIntersectionsStorage[ resultIndex ].position = ray.origin + ray.direction * hitResult.dist;
+						rayIntersectionsStorage[ resultIndex ].dist = hitResult.dist;
+						rayIntersectionsStorage[ resultIndex ].normal = hitResult.normal.xyz;
+						rayIntersectionsStorage[ resultIndex ].side = hitResult.side;
+						rayIntersectionsStorage[ resultIndex ].indices = hitResult.indices.xyz;
+						rayDataStorage[ index ].rayIntersectionIndex = i32( resultIndex );
+
+						isFinished = true;
+						break;
+
+					}
+
+					weight *= medium.albedo * medium.extinction * transmittance / distancePdf;
+					ray.origin += ray.direction * scatterDist;
+					ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+					hasScattered = true;
+
+					// capped separately from bounces, and ends once the throughput is negligible
+					subsurfaceBounces ++;
+					let throughput = input.throughputColor * weight / input.scatterPdf;
+					if ( subsurfaceBounces >= maxSubsurfaceBounces || max( max( throughput.r, throughput.g ), throughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+
+						isTerminated = true;
+						break;
+
+					}
+
+					${ rngNextBounce }();
+
+				}
+
+				// a zeroed pdf terminates the path in LogicKernel
+				rayDataStorage[ index ].scatterColor = weight;
+				rayDataStorage[ index ].scatterPdf = select( input.scatterPdf, 0.0, isTerminated );
+				rayDataStorage[ index ].origin = ray.origin;
+				rayDataStorage[ index ].direction = ray.direction;
+				rayDataStorage[ index ].subsurfaceBounces = subsurfaceBounces;
+				rayDataStorage[ index ].walkPending = select( 1u, 0u, isFinished || isTerminated );
+				if ( hasScattered ) {
+
+					rayDataStorage[ index ].mediumScattered = 1u;
+					rayDataStorage[ index ].isFullyTransmissive = 0u;
+
+				}
+
+			}
+		`;
+
+		super( fn( params ) );
+
+		this.defineUniformAccessors( params );
+
+	}
+
+}

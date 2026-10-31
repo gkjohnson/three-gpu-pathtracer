@@ -2,6 +2,7 @@ import { searchForWorkspaceRoot } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
+import path from 'path';
 
 export default ( { mode } ) => ( {
 
@@ -16,7 +17,7 @@ export default ( { mode } ) => ( {
 			input: fs
 				.readdirSync( './example/' )
 				.filter( p => /\.html$/.test( p ) )
-				.map( p => `./example/${ p }` ),
+				.map( p => path.resolve( './example/', p ) ),
 		},
 	},
 	server: {

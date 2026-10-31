@@ -1,59 +1,53 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, globalId } from 'three/tsl';
-import { proxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
-import { rayQueueStruct, intersectionResultStruct } from './structs.js';
+import { traceQueuedRayStruct, shadowTraceResultStruct, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
 
-// Pure BVH traversal over the queued shadow rays. Uses the same first-hit traversal as the bounce
-// rays ( no dedicated any-hit traversal exists yet ); LogicKernel decides occlusion by comparing the
-// hit distance against the light distance.
+// Pure BVH traversal over the queued shadow rays. Uses an any-hit traversal without face culling that
+// passes partially transparent surfaces, accumulating the light they block.
 export class TraceShadowRayKernel extends ComputeKernel {
 
 	constructor( ) {
 
 		const params = {
-			bvhData: { value: null },
 
-			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), rayQueueStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
+			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
 
 			globalId: globalId,
 		};
 
-		const raycastOutput = proxy( 'bvhData.value.fns.raycastFirstHit.outputType', params );
-		const raycastFirstHitFn = proxy( 'bvhData.value.fns.raycastFirstHit', params );
+		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+		const raycastShadowFn = contextProxy( 'bvhData.fns.raycastShadow' );
 
 		const fn = wgslTagFn /* wgsl */`
 
 			fn compute( globalId: vec3u ) -> void {
 
 				let shadowRayQueue = &${ params.shadowRayQueue };
+				let queueCounters = &${ params.queueCounters };
 				let shadowRayIntersectionsStorage = &${ params.shadowRayIntersectionsStorage };
 
 				let index = globalId.x;
-				if ( index >= shadowRayQueue.length ) {
+				if ( index >= queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ] ) {
 
 					return;
 
 				}
 
-				let queuedRay = shadowRayQueue.elements[ index ];
+				let queuedRay = shadowRayQueue[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, queuedRay.seed, queuedRay.currentBounce + queuedRay.alphaDepth );
+				${ rngInit }( indexUV, queuedRay.seed, queuedRay.rngIndex );
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
-				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
-
-					shadowRayIntersectionsStorage[ index ].objectIndex = i32( hitResult.objectIndex );
-					shadowRayIntersectionsStorage[ index ].dist = hitResult.dist;
-
-				} else {
-
-					shadowRayIntersectionsStorage[ index ].objectIndex = - 1;
-
-				}
+				let occluded = ${ raycastShadowFn }( ray, &hitResult );
+				shadowRayIntersectionsStorage[ index ].objectIndex = select( - 1, i32( hitResult.objectIndex ), occluded );
+				shadowRayIntersectionsStorage[ index ].skippedOcclusion = hitResult.skippedOcclusion;
+				shadowRayIntersectionsStorage[ index ].occlusion = hitResult.occlusion;
 
 			}
 		`;

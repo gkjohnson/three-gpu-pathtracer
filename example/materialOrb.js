@@ -51,6 +51,9 @@ function getDefaultMaterialProperties() {
 		specularIntensity: 1.0,
 		anisotropy: 0.0,
 		anisotropyRotation: 0.0,
+		scatterStrength: 0.0,
+		multiscatterColor: '#ffffff',
+		scatterAnisotropy: 0.0,
 		matte: false,
 		flatShading: false,
 		castShadow: true,
@@ -98,7 +101,7 @@ async function init() {
 	imgEl = document.getElementById( 'materialImage' );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true, alpha: true } );
+	renderer = new WebGPURenderer( { antialias: true, alpha: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = AgXToneMapping;
 	renderer.toneMappingExposure = 1;
@@ -174,11 +177,6 @@ async function init() {
 	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'displaySampleDensity' );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
@@ -195,7 +193,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'transmission', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'dispersion', 0, 1 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'thinWall', 0, 1 ).onChange( onParamsChange );
-	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.05, 2.0 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'attenuationDistance', 0.001, 2.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'attenuationColor' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'ior', 0.9, 3.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'clearcoat', 0, 1 ).onChange( onParamsChange );
@@ -209,12 +207,79 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'specularIntensity', 0.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'anisotropy', 0.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'anisotropyRotation', 0.0, 2.0 * Math.PI ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'scatterStrength', 0.0, 1.0 ).onChange( onParamsChange );
+	matFolder1.addColor( params.materialProperties, 'multiscatterColor' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 0.99, 0.99 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
 
 	animate();
+
+}
+
+// the multi scatter albedo for a single scatter albedo and phase anisotropy, inverting the
+// "KHR_materials_scatter" mapping
+function getMultiscatterAlbedo( singleScatterAlbedo, anisotropy ) {
+
+	const s = Math.sqrt( ( 1 - singleScatterAlbedo ) / ( 1 - anisotropy * singleScatterAlbedo ) );
+	const k = 4.09712 - s;
+	return Math.min( Math.max( ( k * k - 9.59217 ) / ( 41.6808 - 2 * 4.20863 * k ), 0 ), 1 );
+
+}
+
+// the mean free path for a subsurface radius, as in Cycles' bssrdf_setup_radius
+function getSkinMeanFreePath( radius, albedo, ior ) {
+
+	// Cycles' dipole albedo solver limits from bssrdf_dipole_compute_alpha_prime
+	const DIPOLE_MIN_ALBEDO = 1e-4;
+	const DIPOLE_MAX_ALBEDO = 0.995;
+	const DIPOLE_MAX_ALPHA_PRIME = 0.999999;
+	const DIPOLE_ITERATIONS = 12;
+
+	const invEta = 1 / ior;
+	const fdr = invEta * ( - 1.440 * invEta + 0.710 ) + 0.668 + 0.0636 * ior;
+	const fourThirdsA = ( 4 / 3 ) * ( 1 + fdr ) / ( 1 - fdr );
+	const getRd = alphaPrime => {
+
+		const s = Math.sqrt( 3 * ( 1 - alphaPrime ) );
+		return 0.5 * alphaPrime * ( 1 + Math.exp( - fourThirdsA * s ) ) * Math.exp( - s );
+
+	};
+
+	// Cycles' bisection for the albedo whose dipole reflectance is "albedo"
+	let alphaPrime;
+	if ( albedo < DIPOLE_MIN_ALBEDO ) {
+
+		alphaPrime = 0;
+
+	} else if ( albedo >= DIPOLE_MAX_ALBEDO ) {
+
+		alphaPrime = DIPOLE_MAX_ALPHA_PRIME;
+
+	} else {
+
+		let x0 = 0;
+		let x1 = 1;
+		for ( let i = 0; i < DIPOLE_ITERATIONS; i ++ ) {
+
+			alphaPrime = 0.5 * ( x0 + x1 );
+			if ( getRd( alphaPrime ) < albedo ) {
+
+				x0 = alphaPrime;
+
+			} else {
+
+				x1 = alphaPrime;
+
+			}
+
+		}
+
+	}
+
+	return radius * Math.sqrt( 3 * ( 1 - alphaPrime ) );
 
 }
 
@@ -246,8 +311,36 @@ function applyDatabaseMaterial( info ) {
 
 	}
 
-	// a transmissive material tints by attenuation rather than base color
-	if ( materialProperties.transmission ) {
+	// a glass surface over a scattering volume, with coefficients per centimeter
+	if ( info.volumeCoefficients ) {
+
+		const { absorption, scattering, anisotropy } = info.volumeCoefficients;
+		const g = anisotropy ? anisotropy[ 0 ].color.reduce( ( a, b ) => a + b ) / 3 : 0;
+		const extinction = absorption[ 0 ].color.map( ( a, i ) => a + scattering[ 0 ].color[ i ] );
+		const albedo = extinction.map( ( e, i ) => e > 0 ? scattering[ 0 ].color[ i ] / e : 0 );
+		const distance = 1 / Math.max( ...extinction );
+		materialProperties.transmission = 1;
+		materialProperties.scatterStrength = 1;
+		materialProperties.scatterAnisotropy = g;
+		materialProperties.attenuationDistance = distance;
+		materialProperties.attenuationColor = toHex( extinction.map( e => Math.exp( - e * distance ) ) );
+		materialProperties.multiscatterColor = toHex( albedo.map( a => getMultiscatterAlbedo( a, g ) ) );
+
+	} else if ( info.subsurfaceRadius ) {
+
+		// a subsurface material becomes a scattering volume, using Cycles' "Random Walk (Skin)" radius
+		const albedo = info.color ? info.color[ 0 ].color : [ 1, 1, 1 ];
+		const radius = info.subsurfaceRadius.map( ( r, i ) => getSkinMeanFreePath( r, albedo[ i ], materialProperties.ior ) );
+		const distance = Math.min( ...radius );
+		materialProperties.transmission = 1;
+		materialProperties.scatterStrength = 1;
+		materialProperties.attenuationDistance = distance;
+		materialProperties.attenuationColor = toHex( radius.map( r => Math.exp( - distance / r ) ) );
+		if ( info.color ) materialProperties.multiscatterColor = toHex( info.color[ 0 ].color );
+
+	} else if ( materialProperties.transmission ) {
+
+		// a transmissive material tints by attenuation rather than base color
 
 		if ( info.color ) materialProperties.attenuationColor = toHex( info.color[ 0 ].color );
 		materialProperties.attenuationDistance = info.transmissionDepth ?? 1;
@@ -331,6 +424,11 @@ function onParamsChange() {
 	material.diffuseRoughness = materialProperties.diffuseRoughness;
 	material.matte = materialProperties.matte;
 	material.castShadow = materialProperties.castShadow;
+
+	// volume scattering, following the "KHR_materials_scatter" proposal
+	material.scatterStrength = materialProperties.scatterStrength;
+	material.multiscatterColor = ( material.multiscatterColor ?? new Color() ).set( materialProperties.multiscatterColor );
+	material.scatterAnisotropy = materialProperties.scatterAnisotropy;
 
 	pathTracer.updateMaterials();
 

@@ -848,7 +848,8 @@ export const transmissionFresnelFunc = ( iridescentFresnel = iridescentFresnelFu
 		// Include the base-color tint in the transmission energy, as Cycles does when it
 		// computes the glass reflection probability from its two tinted coefficients.
 		let reflectEnergy = dot( reflectance, vec3f( 1.0 / 3.0 ) );
-		let transmitEnergy = dot( transmittance * surf.color, vec3f( 1.0 / 3.0 ) );
+		let transmissionTint = select( sqrt( surf.color ), surf.color, surf.thinWall );
+		let transmitEnergy = dot( transmittance * transmissionTint, vec3f( 1.0 / 3.0 ) );
 		let totalEnergy = reflectEnergy + transmitEnergy;
 		result.reflectProbability = select( 0.0, reflectEnergy / max( totalEnergy, EPSILON ), totalEnergy > EPSILON );
 
@@ -884,13 +885,12 @@ export const fresnelCoatFunc = wgslFn( /* wgsl */ `
 // GGX Multibounce compensation using Turquin's method. Bakes the directional albedo of the
 // reflection lobe, optionally fresnel-weighted, and optionally including the refraction lobe
 // for the full transmissive bsdf. "eta" is the incident over transmitted ior ratio.
-export const turquinIntegralFn = wgslTagFn/* wgsl */ `
+export const turquinIntegralFn = outputTarget => wgslTagFn/* wgsl */ `
 
 	fn albedo(
 		eta: f32,
 		includeFresnel: bool,
 		includeRefraction: bool,
-		outputTarget: texture_storage_3d<r16float, write>,
 		globalId: vec3u,
 		layer: u32,
 	) -> void {
@@ -899,7 +899,7 @@ export const turquinIntegralFn = wgslTagFn/* wgsl */ `
 		// be integrated with the rough BTDF below.
 		if ( includeRefraction && ${ isMatchedIorFunc }( eta ) ) {
 
-			textureStore( outputTarget, vec3( globalId.xy, layer ), vec4( 1.0 ) );
+			textureStore( ${ outputTarget }, vec3( globalId.xy, layer ), vec4( 1.0 ) );
 			return;
 
 		}
@@ -910,7 +910,7 @@ export const turquinIntegralFn = wgslTagFn/* wgsl */ `
 		// TODO: this sampling means that energy at 0.0 & 1.0 roughness (and 0 and 90deg cos) are never
 		// written to the texture due to the half texel inset, resulting in small, though possibly noticeable,
 		// error in common cases.
-		let dimensions = textureDimensions( outputTarget ).xy;
+		let dimensions = textureDimensions( ${ outputTarget } ).xy;
 		let uv = ( vec2f( globalId.xy ) + vec2f( 0.5 ) ) / vec2f( dimensions );
 
 		let cosThetaO = uv.x;
@@ -984,7 +984,7 @@ export const turquinIntegralFn = wgslTagFn/* wgsl */ `
 
 		result /= f32( GRID_SIZE * GRID_SIZE );
 
-		textureStore( outputTarget, vec3( globalId.xy, layer ), vec4( result ) );
+		textureStore( ${ outputTarget }, vec3( globalId.xy, layer ), vec4( result ) );
 
 	}
 

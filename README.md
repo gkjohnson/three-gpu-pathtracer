@@ -2,15 +2,14 @@
 
 [![npm version](https://img.shields.io/npm/v/three-gpu-pathtracer.svg?style=flat-square)](https://www.npmjs.com/package/three-gpu-pathtracer)
 [![build](https://img.shields.io/github/actions/workflow/status/gkjohnson/three-gpu-pathtracer/node.js.yml?style=flat-square&label=build&branch=main)](https://github.com/gkjohnson/three-gpu-pathtracer/actions)
+[![docs](https://img.shields.io/badge/docs-API-blue?style=flat-square)](https://gkjohnson.github.io/tools/docs/three-gpu-pathtracer/)
 [![github](https://flat.badgen.net/badge/icon/github?icon=github&label)](https://github.com/gkjohnson/three-gpu-pathtracer/)
 [![twitter](https://flat.badgen.net/badge/twitter/@garrettkjohnson/?icon&label)](https://twitter.com/garrettkjohnson)
 [![sponsors](https://img.shields.io/github/sponsors/gkjohnson?style=flat-square&color=1da1f2)](https://github.com/sponsors/gkjohnson/)
 
-![](https://user-images.githubusercontent.com/734200/162287477-96696b18-890b-4c1b-8a73-d662e577cc48.png)
+![](./docs/banner.webp)
 
 Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) and WebGPU compute shaders to accelerate high quality, physically based rendering on the GPU.
-
-_More features and capabilities in progress!_
 
 # Examples
 
@@ -105,7 +104,9 @@ scene.environment = blurredEnvMap;
 
 # API
 
-See [API.md](./src/webgpu/API.md) for the WebGPU API documentation.
+See the [docs site](https://gkjohnson.github.io/tools/docs/three-gpu-pathtracer/) for the WebGPU API documentation.
+
+The same documentation is also available as markdown in [API.md](./src/webgpu/API.md).
 
 # Gotchas
 

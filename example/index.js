@@ -31,7 +31,8 @@ import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
-import { initUNetFromURL } from 'oidn-web';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler } from '@pmndrs/upscaler';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
@@ -95,8 +96,8 @@ const LIGHT_RIGS = {
 };
 
 const RANDOM_STRATEGIES = {
-	'Blue Dither': RANDOM_BLUE_DITHER,
 	'Sobol': RANDOM_SOBOL,
+	'Blue Dither': RANDOM_BLUE_DITHER,
 	'PCG': RANDOM_PCG,
 };
 
@@ -150,8 +151,10 @@ const params = {
 
 	multipleImportanceSampling: true,
 	renderScale: 1,
-	randomStrategy: 'Blue Dither',
+	randomStrategy: 'Sobol',
 	frameBudget: 250000,
+	adaptiveFrameBudget: true,
+	targetFrameTime: 16,
 
 	model: '',
 
@@ -171,6 +174,7 @@ const params = {
 	maxSamples: 16,
 
 	denoise: true,
+	auxView: 'none',
 
 	upscale: true,
 	sharpness: 1,
@@ -196,6 +200,9 @@ const dropZone = document.getElementById( 'drop-zone' );
 
 // sample counts are measured asynchronously, so the average is kept for the pause check
 let averageSamples = 0;
+
+// whether a model is loading, during which the canvas is hidden
+let loading = false;
 
 const orthoWidth = 2;
 
@@ -252,18 +259,22 @@ async function init() {
 	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true, requiredLimits } );
+	renderer = new WebGPURenderer( { antialias: true, requiredLimits, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
+	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.adaptiveFrameBudget = params.adaptiveFrameBudget;
+	pathTracer.targetFrameTime = params.targetFrameTime;
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
-	// the library ships neither "oidn-web" nor the network weights, so the app provides both
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
 		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
@@ -419,16 +430,29 @@ function animate() {
 
 		}
 
+		// draws the denoiser's auxiliary buffer over the render
+		if ( params.auxView !== 'none' ) {
+
+			pathTracer.renderAuxBuffer( params.auxView );
+
+		}
+
 	} else {
 
 		renderer.render( scene, activeCamera );
 
 	}
 
+	// hide the canvas while loading and while the kernels compile
+	renderer.domElement.style.visibility = loading || pathTracer.compiling ? 'hidden' : 'visible';
+
 	pathTracer.getSampleCountsAsync().then( counts => {
 
 		averageSamples = counts.avg;
 		loader.setSamples( counts );
+
+		// shows the budget the tracer has adapted to
+		params.frameBudget = pathTracer.frameBudget;
 
 	} );
 
@@ -614,9 +638,20 @@ function buildGui() {
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
+	const frameBudgetController = pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
 
 		pathTracer.frameBudget = v;
+
+	} ).listen().disable( params.adaptiveFrameBudget );
+	pathTracingFolder.add( params, 'adaptiveFrameBudget' ).onChange( v => {
+
+		pathTracer.adaptiveFrameBudget = v;
+		frameBudgetController.enable( ! v );
+
+	} );
+	pathTracingFolder.add( params, 'targetFrameTime', 4, 100, 1 ).onChange( v => {
+
+		pathTracer.targetFrameTime = v;
 
 	} );
 	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
@@ -643,6 +678,7 @@ function buildGui() {
 		pathTracer.setDenoiser( v ? denoiser : null );
 
 	} );
+	postFolder.add( params, 'auxView', [ 'none', 'albedo', 'normal' ] );
 	postFolder.add( params, 'upscale' ).onChange( v => {
 
 		pathTracer.setUpscaler( v ? upscaler : null );
@@ -789,6 +825,7 @@ async function updateModel() {
 	// hide the canvas and the transparency checkerboard while loading
 	document.body.classList.remove( 'checkerboard' );
 	renderer.domElement.style.visibility = 'hidden';
+	loading = true;
 	loader.setPercentage( 0 );
 
 	if ( model ) {
@@ -919,7 +956,7 @@ async function updateModel() {
 
 	alignBackdropToCamera();
 
-	pathTracer.setScene( scene, activeCamera );
+	await pathTracer.setSceneAsync( scene, activeCamera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( modelInfo.credit || '' );
@@ -941,7 +978,7 @@ async function updateModel() {
 	buildGui();
 	onParamsChange();
 
-	renderer.domElement.style.visibility = 'visible';
+	loading = false;
 
 }
 

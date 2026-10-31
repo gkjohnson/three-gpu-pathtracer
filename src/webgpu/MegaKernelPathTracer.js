@@ -69,7 +69,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setBVHData( bvhData ) {
 
-		this.kernel.bvhData = bvhData;
+		this.kernel.context.bvhData = bvhData;
 		this.rebuild();
 
 	}
@@ -179,6 +179,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel,
 			maxBounces,
 			maxTransparentBounces,
+			maxSubsurfaceBounces,
 
 			outputTarget,
 			sampleCountTarget,
@@ -193,6 +194,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		kernel.maxBounces = maxBounces;
 		kernel.maxTransparentBounces = maxTransparentBounces;
+		kernel.maxSubsurfaceBounces = maxSubsurfaceBounces;
+
+		// compile the kernel before its first dispatch
+		yield* this.compileKernels( [ kernel ] );
 
 		// number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
@@ -201,6 +206,8 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			// skip the tile loop entirely once every pixel is finished
 			kernel.maxSamples = this.maxSamples;
+			kernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
+			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
 				yield;
@@ -210,7 +217,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			// split the frame into a near square grid of tiles no larger than the budget
 			this.getSize( _size );
-			const budgetTiles = Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
+			const budgetTiles = lowResMode ? 1 : Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
 			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
 			tiles.y = Math.ceil( budgetTiles / tiles.x );
 
@@ -245,7 +252,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 				for ( let y = 0; y < tiles.y; y ++ ) {
 
 					kernel.offset.set( x, y ).multiply( tileSize );
-					renderer.compute( kernel.kernel, dispatchSize );
+					this.dispatch( kernel, dispatchSize );
 
 					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );
@@ -271,6 +278,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// TODO: dispose of all buffers
 		this.envInfo.dispose();
 		this.lightsInfo.dispose();
+		this.kernel.dispose();
 
 	}
 
