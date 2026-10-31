@@ -170,18 +170,17 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// NEE's total weight at the vertex this segment left, for MIS, measured from that vertex rather
-					// than where an alpha pass through restarted the ray. Camera segments have none
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
 					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
-					let vertexPosition = input.origin - input.direction * input.alphaDistance;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( vertexPosition ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray.
+					// Camera rays only see visibleToCameraRays lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -191,16 +190,13 @@ export class LogicKernel extends ComputeKernel {
 						}
 
 						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist > input.rayStart && lightRec.dist < input.rayStart + surfaceDist ) {
 
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								// the light's solid angle pdf grows with the square of its distance from the vertex
-								let selectionPdf = ${ getLightWeightFn }( li, vertexPosition ) / lightTotalWeight;
-								let vertexDist = lightRec.dist + input.alphaDistance;
-								let lightPdf = lightRec.pdf * vertexDist * vertexDist / ( lightRec.dist * lightRec.dist );
-								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf * selectionPdf );
+								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
+								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
 
 							}
 

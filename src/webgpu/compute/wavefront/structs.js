@@ -76,10 +76,10 @@ export const rayDataStruct = new StructTypeNode( {
 	// the traced segment length, for the transmission attenuation applied by MaterialKernel
 	dist: 'float',
 
-	// alpha test pass throughs, counted separately from the bounce count, and how far they carried the
-	// ray since the vertex it scattered from
+	// alpha test pass throughs, counted separately from the bounce count, and how far along the ray they
+	// moved the start of its traversal. The ray keeps the origin it scattered from
 	alphaDepth: 'uint',
-	alphaDistance: 'float',
+	rayStart: 'float',
 
 	// the camera segment's maximum trace distance, carried across alpha pass throughs
 	maxDist: 'float',

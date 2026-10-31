@@ -163,8 +163,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var throughputColor = vec3f( 1.0 );
 				var bsdfPdf = 0.0;
 
-				// how far the ray has traveled through alpha pass throughs since the vertex it scattered from
-				var alphaDistance = 0.0;
+				// Alpha pass throughs only move where the BVH traversal starts, "rayStart" along the ray, so the
+				// ray keeps the origin it scattered from, which its MIS weights are measured from
+				var rayStart = 0.0;
+				var traceOrigin = ray.origin;
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
@@ -202,8 +204,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
+					var traceRay = ray;
+					traceRay.origin = traceOrigin;
+
 					var hitResult: ${ raycastOutput };
-					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
+					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
 					// Inside a medium, sample a scatter event before the next surface
@@ -230,7 +235,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						} else {
 
 							throughputColor *= medium.albedo * medium.extinction * transmittance / distancePdf;
-							ray.origin += ray.direction * scatterDist;
+							ray.origin = traceOrigin + ray.direction * scatterDist;
+							traceOrigin = ray.origin;
+							rayStart = 0.0;
 							ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 							ray.maxDist = 0.0;
 							mediumScattered = true;
@@ -253,19 +260,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// NEE's total weight at the vertex this ray left, for MIS, measured from that vertex rather than
-					// where an alpha pass through restarted the ray. Camera rays have none, and neither do scatter
-					// events in a medium
+					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none, and
+					// neither do scatter events in a medium
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
-					let vertexPosition = ray.origin - ray.direction * alphaDistance;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( vertexPosition ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					// forward hits on area lights along the traced segment. Camera rays only see visibleToCameraRays
+					// lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -275,16 +281,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist > rayStart && lightRec.dist < rayStart + surfaceDist ) {
 
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								// the light's solid angle pdf grows with the square of its distance from the vertex
-								let selectionPdf = ${ getLightWeightFn }( li, vertexPosition ) / lightTotalWeight;
-								let vertexDist = lightRec.dist + alphaDistance;
-								let lightPdf = lightRec.pdf * vertexDist * vertexDist / ( lightRec.dist * lightRec.dist );
-								misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf * selectionPdf );
+								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
+								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
 
 							}
 
@@ -326,7 +329,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
 
 						// Stochastically pass through partially transparent surfaces by restarting
-						// the ray at the hit point, advancing the rng but not the bounce count.
+						// the traversal at the hit point, advancing the rng but not the bounce count.
 						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 							// stop once the transparent bounces run out
@@ -336,8 +339,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
-							alphaDistance += hitResult.dist;
+							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
+							rayStart += hitResult.dist;
 							${ rngNextBounce }();
 							transparentBounce ++;
 							bounce --;
@@ -506,7 +509,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
 						ray.maxDist = 0.0;
-						alphaDistance = 0.0;
+						traceOrigin = ray.origin;
+						rayStart = 0.0;
 
 					} else {
 
