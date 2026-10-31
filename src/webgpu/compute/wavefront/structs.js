@@ -123,8 +123,10 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
 
-	// shadow rays only: a face a bsdf ray would hit was passed
+	// shadow rays only: a face a bsdf ray would hit was passed, and the fraction of light blocked by the
+	// partially transparent surfaces passed
 	forwardBlocked: 'uint',
+	occlusion: 'float',
 
 }, 'TraceResult' );
 

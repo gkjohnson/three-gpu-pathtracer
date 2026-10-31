@@ -5,9 +5,8 @@ import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { traceQueuedRayStruct, intersectionResultStruct, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
 
-// Pure BVH traversal over the queued shadow rays. Uses a first-hit traversal without face culling
-// ( no dedicated any-hit traversal exists yet ); LogicKernel decides occlusion by comparing the
-// hit distance against the light distance.
+// Pure BVH traversal over the queued shadow rays. Uses an any-hit traversal without face culling that
+// passes partially transparent surfaces, accumulating the light they block.
 export class TraceShadowRayKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -57,6 +56,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 				}
 
 				shadowRayIntersectionsStorage[ index ].forwardBlocked = u32( hitResult.forwardBlocked );
+				shadowRayIntersectionsStorage[ index ].occlusion = hitResult.occlusion;
 
 			}
 		`;

@@ -398,9 +398,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										shadowRay.direction = lightRec.direction;
 										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
-										// opaque occlusion up to the light distance. A shadow-specific any hit
-										// traversal could support tinted shadows from transmissive and partially
-										// opaque objects
+										// opaque occlusion up to the light distance, attenuated by the partially
+										// transparent surfaces passed
 										var shadowHit: ${ raycastOutput };
 										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
 										if ( ! occluded ) {
@@ -411,7 +410,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 											// or when a bsdf ray could never reach the light or isn't traced past the bounce limit
 											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && ! shadowHit.forwardBlocked && bounce + 1u < maxBounces;
 											let misWeight = select( 1.0, ${ misHeuristicFn }( lightPdf, evalRec.pdf ), isMISWeighted );
-											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight / lightPdf;
+											let directLight = throughputColor * lightRec.emission * evalRec.color * misWeight * ( 1.0 - shadowHit.occlusion ) / lightPdf;
 											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 											resultColor += vec4f( contribution, 0.0 );
 

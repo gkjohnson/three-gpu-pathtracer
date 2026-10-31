@@ -19,7 +19,8 @@ const transformStruct = new StructTypeNode( {
 	color: 'vec4f',
 }, 'TransformStruct' );
 
-// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a face a bsdf ray would hit
+// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a face a bsdf ray would hit and the
+// fraction of its light blocked by the partially transparent surfaces it passed
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
@@ -29,6 +30,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	side: 'float',
 	dist: 'float',
 	forwardBlocked: 'bool',
+	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
@@ -193,7 +195,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays hit both sides, and pass through the objects not visible to them
+		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
+		// surfaces, and stop at the first opaque hit
 		const isShadowRay = bool( false ).toVar( 'bvh_isShadowRay' );
 		const skipShadowObject = bool( false ).toVar( 'bvh_skipShadowObject' );
 
@@ -211,8 +214,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					// early-out if our object is completely transparent
-					if ( ${ baseOpacityScalar } == 0.0 ) {
+					// early-out if our object is completely transparent, or a shadow ray is already occluded
+					if ( ${ baseOpacityScalar } == 0.0 || ( ${ isShadowRay } && result.didHit ) ) {
 
 						return 0u;
 
@@ -281,9 +284,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
+							var opacity = ${ baseOpacityScalar };
 							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
-
-								var opacity = ${ baseOpacityScalar };
 
 								// add support for vertex color opacity
 								if ( material.vertexColors == 1 ) {
@@ -350,6 +352,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 								}
 
+								continue;
+
+							}
+
+							// shadow rays pass partially transparent surfaces, attenuated by their opacity just as bsdf
+							// rays pass them by chance
+							if ( ${ isShadowRay } && material.transparent != 0 && opacity < 1.0 ) {
+
+								result.occlusion = 1.0 - ( 1.0 - result.occlusion ) * ( 1.0 - opacity );
 								continue;
 
 							}

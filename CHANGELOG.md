@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
 - WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
+- WebGPUPathTracer: Shadow rays pass through partially transparent surfaces, attenuated by their opacity, and stop at the first opaque hit.
 
 ### Fixed
 - WebGPUPathTracer: Environment map importance sampling accuracy.
