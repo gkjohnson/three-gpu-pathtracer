@@ -101,11 +101,13 @@ export class MediumKernel extends ComputeKernel {
 
 					if ( ! scattered ) {
 
-						// reaching the surface, weighted by the chance of not scattering before it. The hit goes
-						// in the slot's own result entry
+						// reaching the surface, weighted by the chance of not scattering before it
 						weight *= transmittance / distancePdf;
 
-						let resultIndex = rayCount + index;
+						// The hit fills the ray results from the back, by the walk's medium queue position, while the
+						// traced rays fill them from the front. A path slot walking a medium queued no ray this round,
+						// so the two ranges never exceed the slot count or overlap
+						let resultIndex = rayCount - 1u - globalId.x;
 						rayIntersectionsStorage[ resultIndex ].barycoord = hitResult.barycoord;
 						// a walk that leaves without hitting anything is a miss, as in the trace kernel
 						rayIntersectionsStorage[ resultIndex ].objectIndex = select( - 1, i32( hitResult.objectIndex ), didHit );

@@ -73,8 +73,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.queueCounters = new StorageBufferAttribute( new Uint32Array( QUEUE_COUNTER_COUNT ), 1 );
 		this.queueCounters.name = 'Queue Counters';
 
-		// per-queue-slot trace results, indexed by the ray's position in its queue, then one entry per
-		// slot for medium walk hits
+		// per-queue-slot trace results, indexed by the ray's position in its queue. The ray results also
+		// hold the hits of medium walks, filled from the back
 		this.rayIntersectionsStorage = null;
 		this.shadowRayIntersectionsStorage = null;
 
@@ -358,7 +358,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const shadowRayQueue = new StorageBufferAttribute( 2 * count, traceQueuedRayStruct.getLength() );
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
-		const rayIntersectionsStorage = new StorageBufferAttribute( 2 * count, intersectionResultStruct.getLength() );
+		// Traced rays fill the results from the front at their queue index, and MediumKernel fills them from the
+		// back with the hits of medium walks. In a round each path slot either queues one ray or walks a medium,
+		// never both, so the two ranges together never exceed the slot count and can't overlap
+		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
 
 		const shadowRayIntersectionsStorage = new StorageBufferAttribute( 2 * count, intersectionResultStruct.getLength() );
