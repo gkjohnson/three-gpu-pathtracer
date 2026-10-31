@@ -287,21 +287,21 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Maximum number of scatter events a path can take inside a scattering volume. Counted separately
-	 * from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
+	 * Maximum number of scatter events a path can take inside a subsurface scattering volume. Counted
+	 * separately from {@link WebGPUPathTracer#maxBounces}. Paths that reach it end, darkening dense volumes.
 	 * @type {number}
 	 * @default 256
 	 * @note Only the megakernel renders scattering volumes.
 	 */
-	get maxVolumeSteps() {
+	get maxSubsurfaceBounces() {
 
-		return this._pathTracer.maxVolumeSteps;
+		return this._pathTracer.maxSubsurfaceBounces;
 
 	}
 
-	set maxVolumeSteps( v ) {
+	set maxSubsurfaceBounces( v ) {
 
-		this._pathTracer.maxVolumeSteps = v;
+		this._pathTracer.maxSubsurfaceBounces = v;
 		this.reset();
 
 	}
