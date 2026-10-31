@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -48,7 +48,7 @@ export class LogicKernel extends ComputeKernel {
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
 
 			globalId: globalId,
 		};
@@ -107,7 +107,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				// one-sample NEE chooses between the analytic lights and the environment, matched with
 				// the megakernel
@@ -139,7 +139,7 @@ export class LogicKernel extends ComputeKernel {
 						// or when a bsdf ray could never reach the light or isn't traced past the bounce limit
 						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && shadowHit.forwardBlocked == 0u && input.currentBounce < maxBounces;
 						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight / input.lightPdf;
+						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight * ( 1.0 - shadowHit.occlusion ) / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 
@@ -161,17 +161,33 @@ export class LogicKernel extends ComputeKernel {
 				// MaterialKernel, which stages a zeroed pdf and skips the bounce trace when they fire
 				var isTerminated = all( throughputColor == vec3f( 0.0 ) ) || input.currentBounce >= maxBounces || ${ isTerminatingScatterFunc }( scatterRec );
 
+				// apply the scatter across the traced segment, including the weight of a medium walk
 				if ( ! isTerminated ) {
 
-					// apply the scatter across the traced segment
 					throughputColor *= scatterRec.color / scatterRec.pdf;
+
+				}
+
+				let isWalking = ! isTerminated && input.walkPending != 0u;
+				if ( isWalking ) {
+
+					// the walk hasn't reached a surface yet, so there's no hit to stage. Clear what was
+					// resolved and let MediumKernel accumulate the walk's weight
+					rayDataStorage[ index ].emission = vec3f( 0.0 );
+					rayDataStorage[ index ].lightPdf = 0.0;
+					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+					rayDataStorage[ index ].scatterColor = vec3f( 1.0 );
+					rayDataStorage[ index ].scatterPdf = 1.0;
+
+				} else if ( ! isTerminated ) {
 
 					let hitResult = ( *rayIntersectionsStorage )[ u32( input.rayIntersectionIndex ) ];
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
-					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
+					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
+					// and neither do scatter events in a medium
+					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u && input.mediumScattered == 0u;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
@@ -179,7 +195,8 @@ export class LogicKernel extends ComputeKernel {
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray.
+					// Camera rays only see visibleToCameraRays lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -189,7 +206,7 @@ export class LogicKernel extends ComputeKernel {
 						}
 
 						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist > input.rayStart && lightRec.dist < input.rayStart + surfaceDist ) {
 
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {

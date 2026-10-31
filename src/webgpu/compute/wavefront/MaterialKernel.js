@@ -9,6 +9,7 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
+import { enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -145,9 +146,8 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue[ rayIndex ].origin = ray.origin;
 					rayQueue[ rayIndex ].direction = ray.direction;
 					rayQueue[ rayIndex ].pixelIndex = pixelIndex;
-					rayQueue[ rayIndex ].currentBounce = 0u;
+					rayQueue[ rayIndex ].rngIndex = 0u;
 					rayQueue[ rayIndex ].seed = seed + samples;
-					rayQueue[ rayIndex ].alphaDepth = 0u;
 					rayQueue[ rayIndex ].maxDist = ray.maxDist;
 
 					rayDataStorage[ index ].origin = ray.origin;
@@ -164,21 +164,30 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
+					rayDataStorage[ index ].rayStart = 0.0;
 					rayDataStorage[ index ].maxDist = ray.maxDist;
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 					rayDataStorage[ index ].auxAlbedo = 0u;
 					rayDataStorage[ index ].auxNormal = 0u;
+					rayDataStorage[ index ].subsurfaceBounces = 0u;
+					rayDataStorage[ index ].walkPending = 0u;
+					rayDataStorage[ index ].mediumScattered = 0u;
+					rayDataStorage[ index ].medium.inside = 0u;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
 
-				} else {
+				} else if ( input.walkPending == 0u ) {
 
-					// evaluate the surface staged by LogicKernel
+					// evaluate the surface staged by LogicKernel. Paths still walking a medium have none
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth );
+					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+
+					// the medium the path is in, which the bsdf sample may enter or exit
+					var medium = ${ loadMediumFn }( input.medium );
+					let segmentInMedium = medium.inside;
 
 					let objectInfo = transforms[ u32( input.objectIndex ) ];
 					var materialInfo = ( *materials )[ objectInfo.materialIndex ];
@@ -230,16 +239,31 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						let alphaIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
-						rayQueue[ alphaIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
-						rayQueue[ alphaIndex ].direction = input.direction;
-						rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
-						rayQueue[ alphaIndex ].currentBounce = input.currentBounce;
-						rayQueue[ alphaIndex ].seed = input.seed;
-						rayQueue[ alphaIndex ].alphaDepth = input.alphaDepth + 1u;
-						// the origin advanced to the hit point, so the remaining budget shrinks by the
-						// distance already traced
-						rayQueue[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
+						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.normal );
+						if ( segmentInMedium ) {
+
+							// inside a medium, MediumKernel walks on past the surface, from the surface
+							rayDataStorage[ index ].walkPending = 1u;
+							rayDataStorage[ index ].origin = alphaOrigin;
+							rayDataStorage[ index ].rayStart = 0.0;
+
+						} else {
+
+							let alphaIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
+							rayQueue[ alphaIndex ].origin = alphaOrigin;
+							rayQueue[ alphaIndex ].direction = input.direction;
+							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
+							rayQueue[ alphaIndex ].rngIndex = input.currentBounce + input.alphaDepth + 1u + input.subsurfaceBounces;
+							rayQueue[ alphaIndex ].seed = input.seed;
+							// the origin advanced to the hit point, so the remaining budget shrinks by the
+							// distance already traced
+							rayQueue[ alphaIndex ].maxDist = max( input.maxDist - input.dist, 0.0 );
+							rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
+
+							// the ray keeps its origin, and only the queued traversal starts past the surface
+							rayDataStorage[ index ].rayStart = input.rayStart + input.dist;
+
+						}
 
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
@@ -248,8 +272,6 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
-						rayDataStorage[ index ].origin = rayQueue[ alphaIndex ].origin;
-						rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
 
@@ -274,8 +296,9 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// attenuate the light transmitted through the volume when exiting a backface so
-					// the surface's emission and NEE resolve against the attenuated throughput
-					if ( input.side < 0.0 && materialInfo.transmission > 0.0 ) {
+					// the surface's emission and NEE resolve against the attenuated throughput. MediumKernel
+					// already applied a scattering medium's transmittance
+					if ( input.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
 						rayDataStorage[ index ].throughputColor = throughputColor;
@@ -330,23 +353,58 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 					rayDataStorage[ index ].emission = surface.emission;
 					rayDataStorage[ index ].currentBounce = newBounce;
+					rayDataStorage[ index ].mediumScattered = 0u;
+
+					// As in "KHR_materials_scatter", the surface bsdf is the medium's boundary: refracting out
+					// ends the walk, reflecting continues it
+					if ( segmentInMedium && u32( input.objectIndex ) == medium.object && input.side < 0.0 && scatterRec.isTransmissive ) {
+
+						medium.inside = false;
+
+					}
+
+					// refracting into a front face of a scattering material starts a random walk inside it
+					if ( scatterRec.isTransmissive && ! surface.thinWall && input.side > 0.0 ) {
+
+						let entered = ${ enterMediumFn }( materialInfo, u32( input.objectIndex ) );
+						if ( entered.inside ) {
+
+							medium = entered;
+
+						}
+
+					}
+
+					// keep the medium the path left or entered
+					if ( segmentInMedium || medium.inside ) {
+
+						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
+
+					}
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
-					// the bounce segment is skipped for finished paths
-					if ( ! isTerminated ) {
+					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
+					if ( ! isTerminated && medium.inside ) {
+
+						rayDataStorage[ index ].walkPending = 1u;
+						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
+						rayDataStorage[ index ].direction = scatterRec.direction;
+						rayDataStorage[ index ].rayStart = 0.0;
+
+					} else if ( ! isTerminated ) {
 
 						let rayIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
 						rayQueue[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 						rayQueue[ rayIndex ].direction = scatterRec.direction;
 						rayQueue[ rayIndex ].pixelIndex = input.pixelIndex;
-						rayQueue[ rayIndex ].currentBounce = newBounce;
+						rayQueue[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces;
 						rayQueue[ rayIndex ].seed = input.seed;
-						rayQueue[ rayIndex ].alphaDepth = input.alphaDepth;
 						rayQueue[ rayIndex ].maxDist = 0.0;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
 						rayDataStorage[ index ].origin = rayQueue[ rayIndex ].origin;
 						rayDataStorage[ index ].direction = scatterRec.direction;
+						rayDataStorage[ index ].rayStart = 0.0;
 
 					}
 
@@ -365,9 +423,8 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.normal );
 							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue[ shadowIndex ].currentBounce = input.currentBounce;
+							shadowRayQueue[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue[ shadowIndex ].seed = input.seed;
-							shadowRayQueue[ shadowIndex ].alphaDepth = input.alphaDepth;
 							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 

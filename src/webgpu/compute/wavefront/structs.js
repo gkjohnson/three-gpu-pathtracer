@@ -1,4 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
+import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
 
 // StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
 // a type string, so we build each dependency first, which registers its definition ahead of this struct.
@@ -28,7 +29,7 @@ class DependentStructTypeNode extends StructTypeNode {
 
 // Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
 // the previous frame's trace results and stage the next bounce.
-export const rayDataStruct = new StructTypeNode( {
+const rayDataMembers = {
 
 	throughputColor: 'vec3f',
 	currentBounce: 'uint',
@@ -76,8 +77,10 @@ export const rayDataStruct = new StructTypeNode( {
 	// the traced segment length, for the transmission attenuation applied by MaterialKernel
 	dist: 'float',
 
-	// alpha test pass throughs, counted separately from the bounce count
+	// alpha test pass throughs, counted separately from the bounce count, and how far along the ray they
+	// moved the start of its traversal. The ray keeps the origin it scattered from
 	alphaDepth: 'uint',
+	rayStart: 'float',
 
 	// the camera segment's maximum trace distance, carried across alpha pass throughs
 	maxDist: 'float',
@@ -90,7 +93,26 @@ export const rayDataStruct = new StructTypeNode( {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-}, 'RayData' );
+	// scatter events taken inside media, counted separately from the bounce count
+	subsurfaceBounces: 'uint',
+
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	walkPending: 'uint',
+
+	// whether the staged segment starts at a medium scatter event, where no light is sampled
+	mediumScattered: 'uint',
+
+};
+
+// The path's medium, nested at the end to share the ray data buffer under the storage buffer limit. Sized
+// separately since nested structs aren't.
+export const rayDataStruct = new DependentStructTypeNode( {
+	...rayDataMembers,
+	medium: mediumStateStruct.name,
+}, 'RayData', [ mediumStateStruct ] );
+
+const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
+rayDataStruct.getLength = () => rayDataLength + mediumStateStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
@@ -99,12 +121,14 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	pixelIndex: 'uint',
 
 	direction: 'vec3f',
-	currentBounce: 'uint',
+
+	// the traversal's random sequence index: bounces, alpha pass throughs and subsurface bounces, as in the megakernel
+	rngIndex: 'uint',
 
 	seed: 'uint',
-	alphaDepth: 'uint',
 	maxDist: 'float',
 	_alignment0: 'uint',
+	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
 
@@ -123,10 +147,21 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
 
-	// shadow rays only: a face a bsdf ray would hit was passed
+}, 'TraceResult' );
+
+// Shadow ray trace result, written by TraceShadowRayKernel at the ray's queue index and consumed by
+// LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
+export const shadowTraceResultStruct = new StructTypeNode( {
+
+	objectIndex: 'int',
+
+	// a face a bsdf ray would hit was passed
 	forwardBlocked: 'uint',
 
-}, 'TraceResult' );
+	// the fraction of light blocked by the partially transparent surfaces passed
+	occlusion: 'float',
+
+}, 'ShadowTraceResult' );
 
 // The ray and shadow ray queues are plain arrays of queued rays, with their append-only lengths in a
 // separate counters buffer: storage buffers are always bound as arrays, which can't hold a struct
@@ -134,6 +169,11 @@ export const intersectionResultStruct = new StructTypeNode( {
 export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
+
+// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
+// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+export const MEDIUM_QUEUE_LENGTH = 0;
+export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
