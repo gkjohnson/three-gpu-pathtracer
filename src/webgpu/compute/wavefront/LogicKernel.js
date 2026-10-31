@@ -16,7 +16,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -50,7 +50,7 @@ export class LogicKernel extends ComputeKernel {
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
-			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
+			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
 
 			globalId: globalId,
 		};
@@ -137,10 +137,11 @@ export class LogicKernel extends ComputeKernel {
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
-						// env + area lights are also bsdf-sampled, so MIS-weight them; punctual take full weight,
-						// or when a bsdf ray could never reach the light or isn't traced past the bounce limit
-						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && shadowHit.forwardBlocked == 0u && input.currentBounce < maxBounces;
-						let misWeight = select( 1.0, ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), isMISWeighted );
+						// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
+						// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
+						// find the light, so their share of the weight moves to the light sample
+						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && input.currentBounce < maxBounces;
+						let misWeight = select( 1.0, mix( ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
 						let directLight = throughputColor * input.lightEmission * shadowHit.transmittance * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
@@ -156,7 +157,7 @@ export class LogicKernel extends ComputeKernel {
 					let shadowHit = ( *shadowRayIntersectionsStorage )[ u32( input.volumeShadowRayIntersectionIndex ) ];
 					if ( shadowHit.objectIndex < 0 ) {
 
-						let misWeight = select( 1.0, input.volumeLightMisWeight, shadowHit.forwardBlocked == 0u );
+						let misWeight = mix( input.volumeLightMisWeight, 1.0, shadowHit.skippedOcclusion );
 						let directLight = input.volumeLightColor * shadowHit.transmittance * misWeight;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.currentBounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
@@ -264,7 +265,8 @@ export class LogicKernel extends ComputeKernel {
 
 					}
 
-					// forward hits on area lights. Camera rays only see visibleToCameraRays lights, at full weight
+					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray.
+					// Camera rays only see visibleToCameraRays lights, at full weight
 					for ( var li = 0u; li < lightsCount; li ++ ) {
 
 						if ( input.currentBounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
@@ -274,7 +276,7 @@ export class LogicKernel extends ComputeKernel {
 						}
 
 						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist < surfaceDist ) {
+						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist > input.rayStart && lightRec.dist < input.rayStart + surfaceDist ) {
 
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {

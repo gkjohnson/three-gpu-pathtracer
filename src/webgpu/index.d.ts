@@ -124,7 +124,13 @@ export interface OIDNDenoiserOptions {
 
 }
 
-export class OIDNDenoiser {
+export interface OIDNDenoiserEventMap {
+
+	'error': { error: Error };
+
+}
+
+export class OIDNDenoiser extends EventDispatcher<OIDNDenoiserEventMap> {
 
 	constructor( options: OIDNDenoiserOptions );
 

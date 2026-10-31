@@ -18,8 +18,8 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const MEDIUM_STACK_SIZE = 4;
 
-// how many fog volume boundaries a shadow ray passes before it counts as occluded
-const MEDIUM_SHADOW_MAX_BOUNDARIES = 8;
+// the shadow ray length past which the light is distant, as the far distance shortened by the light epsilon
+const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
 // how many surfaces the ray finding the volumes a camera ray starts in passes
 const MEDIUM_ORIGIN_MAX_HITS = 16;
@@ -108,7 +108,7 @@ const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
 `;
 
 // A material's extinction from its glTF attenuation, zero for one without a volume
-const materialExtinctionFn = wgslTagFn/* wgsl */`
+export const materialExtinctionFn = wgslTagFn/* wgsl */`
 
 	fn materialExtinction( attenuationColor: vec3f, attenuationDistance: f32 ) -> vec3f {
 
@@ -341,68 +341,31 @@ const stackExtinctionFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 `;
 
-// The transmittance of a shadow ray starting inside the stack's volumes. As in Cycles' transparent shadows, the
-// boundaries of fog volumes are passed, entering and leaving their volumes, while any other surface occludes
-// the light. "forwardBlocked" is set when a face a bsdf ray would hit was passed
-export const mediumShadowTransmittanceFunc = ( raycastShadow, raycastOutput, offsetRayOrigin, transforms, materials, mediumStackEnterFn, mediumStackExitFn ) => {
+// The distance a shadow ray's fog depth is measured back from: the light's. A distant light is outside of every
+// closed volume, so the depth is measured from the origin instead, where a far distance would lose its precision
+export const fogShadowDistanceFn = wgslTagFn/* wgsl */`
+
+	fn fogShadowDistance( maxDist: f32 ) -> f32 {
+
+		return select( maxDist, 0.0, maxDist >= ${ MEDIUM_DISTANT_SHADOW_DISTANCE } );
+
+	}
+
+`;
+
+// The light a shadow ray starting inside the stack's volumes lets through: what the partially transparent surfaces
+// passed let through, times the transmittance of the fog on the way. The traversal passes fog boundaries in any
+// order, adding their optical depth to "fogDepth" back from the fog shadow distance, so the stack's volumes cover
+// the ray up to it
+export const shadowTransmittanceFunc = ( transforms, materials ) => {
 
 	const stackExtinctionFn = stackExtinctionFunc( transforms, materials );
 	return wgslTagFn/* wgsl */`
 
-		fn mediumShadowTransmittance( ray: ${ rayStruct }, stack: vec4u, forwardBlocked: ptr<function, bool> ) -> vec3f {
+		fn shadowTransmittance( stack: vec4u, maxDist: f32, fogDepth: vec3f, occlusion: f32 ) -> vec3f {
 
-			var shadowRay = ray;
-			var shadowStack = stack;
-			var shadowExtinction = ${ stackExtinctionFn }( stack );
-			var transmittance = vec3f( 1.0 );
-			var remaining = ray.maxDist;
-			*forwardBlocked = false;
-			for ( var i = 0u; i <= ${ MEDIUM_SHADOW_MAX_BOUNDARIES }u; i ++ ) {
-
-				shadowRay.maxDist = remaining;
-
-				var hit: ${ raycastOutput };
-				let occluded = ${ raycastShadow }( shadowRay, &hit );
-				*forwardBlocked = *forwardBlocked || hit.forwardBlocked;
-				if ( ! occluded ) {
-
-					return transmittance * exp( - shadowExtinction * remaining );
-
-				}
-
-				let material = ${ materials }[ ${ transforms }[ hit.objectIndex ].materialIndex ];
-				if ( material.fogVolume == 0 ) {
-
-					break;
-
-				}
-
-				transmittance *= exp( - shadowExtinction * hit.dist );
-				if ( hit.side > 0.0 ) {
-
-					shadowStack = ${ mediumStackEnterFn }( shadowStack, hit.objectIndex );
-
-				} else {
-
-					shadowStack = ${ mediumStackExitFn }( shadowStack, hit.objectIndex );
-
-				}
-
-				shadowExtinction = ${ stackExtinctionFn }( shadowStack );
-
-				// a zero distance traces unbounded, so stop once the light is reached
-				remaining -= hit.dist;
-				if ( remaining <= 0.0 ) {
-
-					return transmittance;
-
-				}
-
-				shadowRay.origin = ${ offsetRayOrigin }( shadowRay.origin + shadowRay.direction * hit.dist, shadowRay.direction, hit.normal );
-
-			}
-
-			return vec3f( 0.0 );
+			let depth = fogDepth + ${ stackExtinctionFn }( stack ) * ${ fogShadowDistanceFn }( maxDist );
+			return ( 1.0 - occlusion ) * exp( - max( depth, vec3f( 0.0 ) ) );
 
 		}
 

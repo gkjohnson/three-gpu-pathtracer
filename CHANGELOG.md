@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "setBVHWorker" and "setSceneAsync" to build the mesh BVHs in workers without blocking the page.
 - WebGPUPathTracer: A "complete" event and flag once every pixel has reached "maxSamples" and the denoiser, if any, has run.
 - WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
+- OIDNDenoiser: An "error" event when a pass started by "update" fails, such as the weights failing to download.
 - WebGPUPathTracer: The scene data is available to kernels and camera ray functions through the TSL context as "bvhData".
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
 - WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
@@ -27,8 +28,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
 - WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
+- WebGPUPathTracer: Shadow rays pass through partially transparent surfaces, attenuated by their opacity, and stop at the first opaque hit.
 
 ### Fixed
+- WebGPUPathTracer: Light through partially transparent objects hidden with "visibleToShadowRays" no longer being counted twice.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
 - WebGPUPathTracer: "setSceneAsync" no longer leaves geometry unusable when its attributes share a buffer, as in glTF files.

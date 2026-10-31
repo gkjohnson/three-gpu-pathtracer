@@ -6,6 +6,7 @@ import { materialStruct } from './structs.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { getSurfaceRecordFunc } from './material.wgsl.js';
+import { materialExtinctionFn, fogShadowDistanceFn } from './medium.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 
 const _colorVec = new Vector4();
@@ -44,16 +45,20 @@ const transformStruct = new StructTypeNode( {
 	color: 'vec4f',
 }, 'TransformStruct' );
 
-// three-mesh-bvh's ray hit result, plus whether a shadow ray passed a face a bsdf ray would hit
+// three-mesh-bvh's ray hit result. Shadow rays also record the share of bsdf rays the faces they skipped
+// would stop, the share of light the partially transparent surfaces they passed block, and the optical
+// depth of the fog volume boundaries they passed
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
 	barycoord: 'vec3f',
 	objectIndex: 'uint',
+	fogDepth: 'vec3f',
 	side: 'float',
 	dist: 'float',
-	forwardBlocked: 'bool',
+	skippedOcclusion: 'float',
+	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
@@ -222,7 +227,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays hit both sides, and pass through the objects not visible to them
+		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
+		// surfaces, and stop at the first opaque hit
 		const isShadowRay = bool( false ).toVar( 'bvh_isShadowRay' );
 		const skipShadowObject = bool( false ).toVar( 'bvh_skipShadowObject' );
 
@@ -240,8 +246,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					// early-out if our object is completely transparent
-					if ( ${ baseOpacityScalar } == 0.0 ) {
+					// early-out if our object is completely transparent, or a shadow ray is already occluded
+					if ( ${ baseOpacityScalar } == 0.0 || ( ${ isShadowRay } && result.didHit ) ) {
 
 						return 0u;
 
@@ -310,9 +316,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
+							// shadow rays pass fog volume boundaries, in any order: entering adds the fog's optical depth
+							// back from the fog shadow distance, and leaving takes it away
+							if ( ${ isShadowRay } && material.fogVolume != 0 ) {
 
-								var opacity = ${ baseOpacityScalar };
+								let extinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+								let depth = extinction * ( ${ fogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
+								continue;
+
+							}
+
+							var opacity = ${ baseOpacityScalar };
+							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 								// add support for vertex color opacity
 								if ( material.vertexColors == 1 ) {
@@ -370,15 +386,25 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass the objects not visible to them, but a bsdf ray would hit this face
+							// shadow rays skip the objects not visible to them. Record the share of bsdf rays this face
+							// would stop: all of them if it's opaque, its opacity if it's partially transparent
 							if ( ${ skipShadowObject } ) {
 
 								if ( material.side == 0 || triResult.side == material.side ) {
 
-									result.forwardBlocked = true;
+									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
 
 								}
 
+								continue;
+
+							}
+
+							// shadow rays pass partially transparent surfaces, each blocking its opacity's share of the
+							// light still getting through, just as bsdf rays pass them by chance
+							if ( ${ isShadowRay } && material.transparent != 0 && opacity < 1.0 ) {
+
+								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
 								continue;
 
 							}
