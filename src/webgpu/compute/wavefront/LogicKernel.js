@@ -170,12 +170,14 @@ export class LogicKernel extends ComputeKernel {
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none
+					// NEE's total weight at the vertex this segment left, for MIS, measured from that vertex rather
+					// than where an alpha pass through restarted the ray. Camera segments have none
 					let isMISWeighted = misEnabled != 0u && input.currentBounce > 0u;
+					let vertexPosition = input.origin - input.direction * input.alphaDistance;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( vertexPosition ) + envWeight;
 
 					}
 
@@ -194,8 +196,11 @@ export class LogicKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
+								// the light's solid angle pdf grows with the square of its distance from the vertex
+								let selectionPdf = ${ getLightWeightFn }( li, vertexPosition ) / lightTotalWeight;
+								let vertexDist = lightRec.dist + input.alphaDistance;
+								let lightPdf = lightRec.pdf * vertexDist * vertexDist / ( lightRec.dist * lightRec.dist );
+								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightPdf * selectionPdf );
 
 							}
 

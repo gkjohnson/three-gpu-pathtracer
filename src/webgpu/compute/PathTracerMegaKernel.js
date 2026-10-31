@@ -162,6 +162,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 				var bsdfPdf = 0.0;
+
+				// how far the ray has traveled through alpha pass throughs since the vertex it scattered from
+				var alphaDistance = 0.0;
 				var isFullyTransmissive = true;
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
@@ -250,13 +253,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none, and
-					// neither do scatter events in a medium
+					// NEE's total weight at the vertex this ray left, for MIS, measured from that vertex rather than
+					// where an alpha pass through restarted the ray. Camera rays have none, and neither do scatter
+					// events in a medium
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
+					let vertexPosition = ray.origin - ray.direction * alphaDistance;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( vertexPosition ) + envWeight;
 
 					}
 
@@ -275,8 +280,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							var misWeight = 1.0;
 							if ( isMISWeighted ) {
 
-								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
+								// the light's solid angle pdf grows with the square of its distance from the vertex
+								let selectionPdf = ${ getLightWeightFn }( li, vertexPosition ) / lightTotalWeight;
+								let vertexDist = lightRec.dist + alphaDistance;
+								let lightPdf = lightRec.pdf * vertexDist * vertexDist / ( lightRec.dist * lightRec.dist );
+								misWeight = ${ misHeuristicFn }( bsdfPdf, lightPdf * selectionPdf );
 
 							}
 
@@ -329,6 +337,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							}
 
 							ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
+							alphaDistance += hitResult.dist;
 							${ rngNextBounce }();
 							transparentBounce ++;
 							bounce --;
@@ -497,6 +506,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
 						ray.direction = scatterRec.direction;
 						ray.maxDist = 0.0;
+						alphaDistance = 0.0;
 
 					} else {
 

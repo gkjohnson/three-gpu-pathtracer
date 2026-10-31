@@ -356,11 +356,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							// shadow rays pass partially transparent surfaces, attenuated by their opacity just as bsdf
-							// rays pass them by chance
+							// shadow rays pass partially transparent surfaces, each blocking its opacity's share of the
+							// light still getting through, just as bsdf rays pass them by chance
 							if ( ${ isShadowRay } && material.transparent != 0 && opacity < 1.0 ) {
 
-								result.occlusion = 1.0 - ( 1.0 - result.occlusion ) * ( 1.0 - opacity );
+								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
 								continue;
 
 							}

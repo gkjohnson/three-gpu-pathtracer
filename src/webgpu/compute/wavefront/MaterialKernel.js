@@ -164,6 +164,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
+					rayDataStorage[ index ].alphaDistance = 0.0;
 					rayDataStorage[ index ].maxDist = ray.maxDist;
 					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -245,6 +246,7 @@ export class MaterialKernel extends ComputeKernel {
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
 						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
+						rayDataStorage[ index ].alphaDistance = input.alphaDistance + input.dist;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
@@ -347,6 +349,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						rayDataStorage[ index ].origin = rayQueue[ rayIndex ].origin;
 						rayDataStorage[ index ].direction = scatterRec.direction;
+						rayDataStorage[ index ].alphaDistance = 0.0;
 
 					}
 
