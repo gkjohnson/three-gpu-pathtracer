@@ -150,41 +150,21 @@ export const intersectionResultStruct = new StructTypeNode( {
 
 }, 'TraceResult' );
 
-// Queue wrappers that keep an append-only length counter in a header ahead of the elements. The
-// atomic variant is bound where rays are pushed with atomicAdd; the plain one where the length is
-// only read or reset. getLength returns just the header since the trailing array is runtime-sized.
-export const rayQueueStruct = new DependentStructTypeNode( {
-	length: 'uint',
-	elements: `array<${ traceQueuedRayStruct.name }>`,
-}, 'RayQueue', [ traceQueuedRayStruct ] );
-rayQueueStruct.getLength = () => 4;
+// The ray and shadow ray queues are plain arrays of queued rays, with their append-only lengths in a
+// separate counters buffer: storage buffers are always bound as arrays, which can't hold a struct
+// ending in a runtime-sized array.
+export const RAY_QUEUE_LENGTH = 0;
+export const SHADOW_RAY_QUEUE_LENGTH = 1;
+export const QUEUE_COUNTER_COUNT = 2;
 
-export const rayQueueAtomicStruct = new DependentStructTypeNode( {
-	length: { type: 'uint', atomic: true },
-	elements: `array<${ traceQueuedRayStruct.name }>`,
-}, 'RayQueue', [ traceQueuedRayStruct ] );
-rayQueueAtomicStruct.getLength = () => 4;
-
-// The path slots walking through a medium this pass, for MediumKernel
-export const mediumQueueStruct = new DependentStructTypeNode( {
-	length: { type: 'uint', atomic: true },
-	elements: 'array<u32>',
-}, 'MediumQueue' );
-mediumQueueStruct.getLength = () => 1;
+// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
+// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+export const MEDIUM_QUEUE_LENGTH = 0;
+export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
-// the ray data pool. Sized to the pixel count so retiring slots can always return their pixel. The
-// non-atomic variant is used for contention-free initialization.
-export const pixelQueueStruct = new DependentStructTypeNode( {
-	current: { type: 'uint', atomic: true },
-	elementCount: { type: 'uint', atomic: true },
-	elements: 'array<atomic<u32>>',
-}, 'PixelQueue' );
-pixelQueueStruct.getLength = () => 2;
-
-export const pixelQueueNonAtomicStruct = new DependentStructTypeNode( {
-	current: 'uint',
-	elementCount: 'uint',
-	elements: 'array<u32>',
-}, 'PixelQueue' );
-pixelQueueNonAtomicStruct.getLength = () => 2;
+// the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
+// counters lead the same u32 array, ahead of the elements.
+export const PIXEL_QUEUE_CURRENT = 0;
+export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
+export const PIXEL_QUEUE_HEADER = 2;
