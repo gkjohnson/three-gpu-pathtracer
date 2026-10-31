@@ -1,9 +1,15 @@
-import { ExternalTexture } from 'three/webgpu';
+import { EventDispatcher, ExternalTexture } from 'three/webgpu';
 import { UnpackAuxKernel } from '../compute/UnpackAuxKernel.js';
 import { createAuxImageTarget } from '../compute/targets.js';
 
 /** @import { StorageArrayTexture, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { DynamicTileSetting } from 'oidn-webgpu' */
+
+/**
+ * Fired with the `error` when a pass started by `update` fails, such as the weights failing to
+ * download. No other pass starts until a reset.
+ * @event OIDNDenoiser#error
+ */
 
 /**
  * Runs Open Image Denoise over a path traced image. Pass one to
@@ -20,7 +26,7 @@ import { createAuxImageTarget } from '../compute/targets.js';
  * Weights come from the oidn-weights repository, where the "_small" and "_large" variants trade
  * quality against download size and per tile cost.
  */
-export class OIDNDenoiser {
+export class OIDNDenoiser extends EventDispatcher {
 
 	/**
 	 * The denoised result, or null until the first tile has been produced.
@@ -69,6 +75,8 @@ export class OIDNDenoiser {
 	 * `maxTileSize`. An object tunes the adaptive sizing.
 	 */
 	constructor( options = {} ) {
+
+		super();
 
 		const {
 			initUNetFromURL,
@@ -155,11 +163,11 @@ export class OIDNDenoiser {
 
 		}
 
-		// a failure, such as the weights failing to download, is thrown once rather than every frame
+		// a failure, such as the weights failing to download, is reported once rather than every frame
 		this.denoise( target, albedo, normal ).catch( error => {
 
 			this._failed = true;
-			throw error;
+			this.dispatchEvent( { type: 'error', error } );
 
 		} );
 

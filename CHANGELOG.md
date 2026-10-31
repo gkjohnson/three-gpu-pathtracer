@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "setBVHWorker" and "setSceneAsync" to build the mesh BVHs in workers without blocking the page.
 - WebGPUPathTracer: A "complete" event and flag once every pixel has reached "maxSamples" and the denoiser, if any, has run.
 - WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
+- OIDNDenoiser: An "error" event when a pass started by "update" fails, such as the weights failing to download.
 - WebGPUPathTracer: The scene data is available to kernels and camera ray functions through the TSL context as "bvhData".
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
 - WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
