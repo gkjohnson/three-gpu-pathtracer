@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, rayQueueAtomicStruct, pixelQueueStruct } from './structs.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY, MEDIUM_MAX_BOUNDARIES } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
@@ -178,7 +178,6 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].auxAlbedo = 0u;
 					rayDataStorage[ index ].auxNormal = 0u;
 					rayDataStorage[ index ].subsurfaceBounces = 0u;
-					rayDataStorage[ index ].fogBoundaries = 0u;
 					rayDataStorage[ index ].fogBounces = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
@@ -198,7 +197,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// evaluate the surface staged by LogicKernel. Paths still walking a medium have none
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries );
+					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
@@ -211,7 +210,7 @@ export class MaterialKernel extends ComputeKernel {
 						shadowRayQueue.elements[ shadowIndex ].origin = input.volumeLightPosition;
 						shadowRayQueue.elements[ shadowIndex ].direction = input.volumeLightDirection;
 						shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
-						shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries;
+						shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
 						shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
 						shadowRayQueue.elements[ shadowIndex ].maxDist = input.volumeLightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 						shadowRayQueue.elements[ shadowIndex ].mediumStack = medium.stack;
@@ -324,11 +323,9 @@ export class MaterialKernel extends ComputeKernel {
 					if ( passesThrough ) {
 
 						// out of transparent bounces, so stop rather than shading a surface that
-						// should be invisible. A zeroed throughput terminates in LogicKernel. Fog
-						// boundaries are counted apart instead, with a safety limit, as Cycles counts them
-						let alphaDepth = input.alphaDepth + select( 1u, 0u, isFogBoundary );
-						let fogBoundaries = input.fogBoundaries + select( 0u, 1u, isFogBoundary );
-						if ( alphaDepth > maxTransparentBounces || fogBoundaries > ${ MEDIUM_MAX_BOUNDARIES }u ) {
+						// should be invisible. A zeroed throughput terminates in LogicKernel.
+						let alphaDepth = input.alphaDepth + 1u;
+						if ( alphaDepth > maxTransparentBounces ) {
 
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
@@ -372,7 +369,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue.elements[ alphaIndex ].origin = alphaOrigin;
 							rayQueue.elements[ alphaIndex ].direction = input.direction;
 							rayQueue.elements[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue.elements[ alphaIndex ].rngIndex = input.currentBounce + alphaDepth + input.subsurfaceBounces + fogBoundaries;
+							rayQueue.elements[ alphaIndex ].rngIndex = input.currentBounce + alphaDepth + input.subsurfaceBounces;
 							rayQueue.elements[ alphaIndex ].seed = input.seed;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
@@ -385,7 +382,6 @@ export class MaterialKernel extends ComputeKernel {
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
 						rayDataStorage[ index ].alphaDepth = alphaDepth;
-						rayDataStorage[ index ].fogBoundaries = fogBoundaries;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;
@@ -509,7 +505,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue.elements[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.normal );
 						rayQueue.elements[ rayIndex ].direction = scatterRec.direction;
 						rayQueue.elements[ rayIndex ].pixelIndex = input.pixelIndex;
-						rayQueue.elements[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries;
+						rayQueue.elements[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces;
 						rayQueue.elements[ rayIndex ].seed = input.seed;
 						rayQueue.elements[ rayIndex ].maxDist = 0.0;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
@@ -534,7 +530,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue.elements[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.normal );
 							shadowRayQueue.elements[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue.elements[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries;
+							shadowRayQueue.elements[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue.elements[ shadowIndex ].seed = input.seed;
 							shadowRayQueue.elements[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							shadowRayQueue.elements[ shadowIndex ].mediumStack = ${ shadowMediumStackFn }(

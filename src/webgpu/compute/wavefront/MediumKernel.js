@@ -55,7 +55,7 @@ export class MediumKernel extends ComputeKernel {
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces + input.fogBoundaries );
+				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				var ray = Ray( input.origin, input.direction, 0.0 );
 				var weight = input.scatterColor;

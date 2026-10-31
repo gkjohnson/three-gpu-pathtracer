@@ -91,10 +91,9 @@ const rayDataMembers = {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-	// scatter events taken in subsurface walks, fog volume boundaries passed and fog scatters continued
-	// after, each counted separately from the bounce count
+	// scatter events taken in subsurface walks and fog scatters continued after, each counted separately
+	// from the bounce count
 	subsurfaceBounces: 'uint',
-	fogBoundaries: 'uint',
 	fogBounces: 'uint',
 
 	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
@@ -143,8 +142,7 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	direction: 'vec3f',
 
-	// the traversal's random sequence index: bounces, alpha pass throughs, subsurface bounces and fog
-	// boundaries, as in the megakernel
+	// the traversal's random sequence index: bounces, alpha pass throughs and subsurface bounces, as in the megakernel
 	rngIndex: 'uint',
 
 	seed: 'uint',
