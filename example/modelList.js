@@ -1,4 +1,4 @@
-import { Box3, Color, CylinderGeometry, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
+import { Box3, Color, CylinderGeometry, DirectionalLight, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
 import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
@@ -842,8 +842,8 @@ export const MODEL_LIST = {
 			// a cylinder of fog around the whole diorama
 			const box = new Box3().setFromObject( model );
 			const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeNodeMaterial( {
-				color: 0xaaaaaa,
-				density: 1,
+				color: 0x666666,
+				density: 1.5,
 			} ) );
 
 			fog.scale.subVectors( box.max, box.min );
@@ -855,20 +855,21 @@ export const MODEL_LIST = {
 			box.getCenter( fog.position );
 			fog.position.y += 0.02;
 
-			// only the lamps glow
-			model.traverse( c => {
+			const sun = new DirectionalLight( 0xfff1dd, 80 );
+			sun.position.set( 1, 0.4, - 1 );
+			sun.target.position.set( - 1, - 0.4, 1 );
+			sun.add( sun.target );
 
-				if ( c.material && c.material.emissive.r < 0.1 ) {
+			const camera = new PerspectiveCamera( 45, 1, 0.025, 500 );
+			camera.position.set( - 0.078, 0.11, 0.11 );
+			camera.rotation.set( 0.04, - 0.51, 0.02 );
 
-					c.material.emissive.set( 0 );
+			model.add( fog, sun, camera );
 
-				}
-
-			} );
-
-			model.add( fog );
-
-		}
+		},
+		background: 'black',
+		envMap: 'none',
+		stage: 'none',
 	},
 
 	'Crab Sculpture': {
