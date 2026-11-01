@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - WebGPUPathTracer: Requires three.js r187, which binds every storage buffer as an array.
 - WebGPUPathTracer: Sobol is the default random strategy instead of Blue Dither.
+- WebGPUPathTracer: "renderDelay" defaults to 16 and "fadeDuration" to 250, and the fade starts once the average pixel reaches "minSamples", so the full render shows sooner after the camera stops.
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
 - OIDNDenoiser: The albedo and normal auxiliary buffers are accumulated by the path tracer from the first scatter of every sample instead of rasterized, so they match the image under depth of field and transparency. "setScene" is gone and "update" takes the auxiliary buffer.
 - AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.

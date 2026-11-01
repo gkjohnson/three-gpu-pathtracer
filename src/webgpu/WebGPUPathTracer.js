@@ -630,7 +630,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// options
 
 		/**
-		 * Samples every pixel must reach before the full resolution render is faded in.
+		 * Average samples per pixel the full resolution render must reach before it is faded in.
 		 * @type {number}
 		 * @default 1
 		 */
@@ -639,16 +639,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		/**
 		 * Milliseconds to show the low resolution preview for after a reset.
 		 * @type {number}
-		 * @default 500
+		 * @default 16
 		 */
-		this.renderDelay = 500;
+		this.renderDelay = 16;
 
 		/**
 		 * Milliseconds taken to cross fade from the preview to the full render.
 		 * @type {number}
-		 * @default 500
+		 * @default 250
 		 */
-		this.fadeDuration = 500;
+		this.fadeDuration = 250;
 
 		/**
 		 * Whether to render a low resolution preview while the camera is moving.
@@ -1447,7 +1447,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// counts every frame. A count of the camera rays dispatched would answer it in one value
 		const awaitingDenoise = Boolean( denoiser ) && ! denoiser.complete && ! denoiser.running && maxSamples > 0;
 
-		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
+		// Gate on the average pixel. Measuring is expensive so it stops once faded in, and
 		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
@@ -1464,7 +1464,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
-			if ( this._lastSampleCounts.min >= minSamples ) {
+			if ( this._lastSampleCounts.avg >= minSamples ) {
 
 				this._fadeState += delta / this.fadeDuration;
 				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
