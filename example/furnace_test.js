@@ -62,6 +62,12 @@ const loader = new LoaderElement();
 loader.attach( document.body );
 loader.setPercentage( 1 );
 
+pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+	loader.setStage( stage, progress, samples );
+
+} );
+
 const gui = new GUI();
 gui.add( options, 'enable' );
 gui.add( options, 'useMegakernel' ).onChange( () => {
@@ -113,8 +119,6 @@ function animate() {
 		renderer.render( scene, camera );
 
 	}
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 

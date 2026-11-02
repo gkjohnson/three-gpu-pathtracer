@@ -37,10 +37,8 @@ let animationDuration = 0;
 let videoUrl = '';
 let loader;
 
-// Sample counts are measured asynchronously, so the average is kept for the recording checks. A
-// measurement requested before the latest reset is dropped so it cannot trigger a frame write
+// the average sample count from the latest "progress" event, kept for the recording checks
 let averageSamples = 0;
-let resetCount = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
 let recordingState = 'idle';
@@ -87,6 +85,16 @@ async function init() {
 	// the tracer stops itself at the target, and without a fade a captured frame is never dimmed
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.fadeDuration = 0;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+		if ( samples ) {
+
+			averageSamples = samples.avg;
+
+		}
+
+	} );
 
 	// scene
 	scene = new Scene();
@@ -227,7 +235,6 @@ function regenerateScene() {
 	pathTracer.setScene( scene, camera );
 
 	averageSamples = 0;
-	resetCount ++;
 
 }
 
@@ -300,6 +307,7 @@ async function finishRecording() {
 		videoOutput = null;
 		videoSource = null;
 		isWritingFrame = false;
+		loader.setPercentage( 1 );
 
 		pathTracer.minSamples = 1;
 		recordedFrames = 0;
@@ -363,18 +371,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const measuredReset = resetCount;
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		loader.setSamples( counts );
-		if ( measuredReset === resetCount ) {
-
-			averageSamples = counts.avg;
-
-		}
-
-	} );
-
 	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
@@ -418,10 +414,6 @@ function animate() {
 		const samplesPerc = averageSamples / params.maxSamples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
 		loader.setPercentage( percentDone );
-
-	} else {
-
-		loader.setPercentage( 1 );
 
 	}
 

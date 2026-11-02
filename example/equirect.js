@@ -51,6 +51,11 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.dynamicLowRes = true;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// cameras, positioned once the scene's authored viewpoint is available
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -178,8 +183,6 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 

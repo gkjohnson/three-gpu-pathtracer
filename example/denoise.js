@@ -56,6 +56,11 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// Denoising and upscaling are opt in - construct the instance, set anything it exposes, and
 	// hand it to the path tracer. It runs both as part of "renderSample".
@@ -199,7 +204,5 @@ function animate() {
 	}
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

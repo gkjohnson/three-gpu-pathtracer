@@ -68,6 +68,16 @@ async function init() {
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+		if ( samples ) {
+
+			averageSamples = samples.avg;
+
+		}
+
+	} );
 
 	// generator
 	hdrGenerator = new HDRImageGenerator( renderer );
@@ -212,12 +222,5 @@ function animate() {
 	const doPause = params.pause && averageSamples >= 1;
 	pathTracer.pause = averageSamples >= MAX_SAMPLES || doPause;
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		averageSamples = counts.avg;
-		loader.setSamples( counts );
-
-	} );
 
 }

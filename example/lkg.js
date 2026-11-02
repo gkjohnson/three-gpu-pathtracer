@@ -123,6 +123,11 @@ async function init() {
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
@@ -276,12 +281,6 @@ function animate() {
 
 	previewQuad.material.quiltMap = pathTracer.target;
 	previewQuad.render( renderer );
-
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		loader.setSamples( counts );
-
-	} );
 
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 

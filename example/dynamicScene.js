@@ -94,6 +94,12 @@ window.addEventListener( 'keydown', event => {
 const loader = new LoaderElement();
 loader.attach( document.body );
 
+pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+	loader.setStage( stage, progress, samples );
+
+} );
+
 const raycaster = new Raycaster();
 const pointer = new Vector2();
 const pointerStart = new Vector2();
@@ -287,8 +293,6 @@ function animate() {
 	}
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	if ( selected ) {
 

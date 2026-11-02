@@ -47,6 +47,11 @@ async function init() {
 	pathTracer.renderScale = 0.5;
 	pathTracer.setRandom( RANDOM_SOBOL );
 	pathTracer.maxSamples = 3;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -139,7 +144,5 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

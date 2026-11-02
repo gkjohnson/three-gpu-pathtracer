@@ -41,6 +41,11 @@ async function init() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.renderScale = renderScale;
 	pathTracer.frameBudget = frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// camera
 	camera = new PerspectiveCamera( 75, 1, 0.025, 500 );
@@ -126,7 +131,5 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

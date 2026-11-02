@@ -49,6 +49,11 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// camera, positioned once the model bounds are known
 	camera = new PhysicalCamera( 25, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -257,7 +262,5 @@ function animate() {
 	}
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
