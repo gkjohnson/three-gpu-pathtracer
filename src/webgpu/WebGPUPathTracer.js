@@ -1373,17 +1373,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// set the size if necessary
 		pathTracer.getSize( _resolution );
 
-		const resized = _resolution.x !== width || _resolution.y !== height;
-		if ( resized ) {
+		// copy the low res content when transitioning to the full resolution view so we can fade from
+		// it, including when the preview was already full size and nothing is resized
+		if ( ! lowResMode && pathTracer.lowResMode && dynamicLowRes ) {
 
-			if ( ! lowResMode && dynamicLowRes ) {
+			lowResTarget.setSize( _resolution.x, _resolution.y );
+			renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
 
-				// copy the low reset content if we're transitioning to the full
-				// resolution view so we can fade to it
-				lowResTarget.setSize( _resolution.x, _resolution.y );
-				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
+		}
 
-			}
+		if ( _resolution.x !== width || _resolution.y !== height ) {
 
 			pathTracer.setSize( width, height );
 
