@@ -65,6 +65,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
+		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
+		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -110,9 +112,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				accumulateAux: u32,
 
 			) -> void {
-
-				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
-				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
 
 				// make sure we don't bleed over the edge of our tile
 				if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -307,8 +306,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					if ( didHit ) {
 
-						let objectInfo = transforms[ hitResult.objectIndex ];
-						var materialInfo = ( *materials )[ objectInfo.materialIndex ];
+						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
+						let objectInfo = ${ transformsStorage }[ hitResult.objectIndex ];
+						var materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 						// a matte surface hit by the camera ray renders as a fully transparent
 						if ( materialInfo.matte != 0 && bounce == 0u ) {

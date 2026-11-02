@@ -49,7 +49,8 @@ export class MediumKernel extends ComputeKernel {
 				}
 
 				let index = mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ];
-				let input = ( *rayDataStorage )[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let input = ${ params.rayDataStorage }[ index ];
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );

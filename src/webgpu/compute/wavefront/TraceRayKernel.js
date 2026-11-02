@@ -38,7 +38,8 @@ export class TraceRayKernel extends ComputeKernel {
 
 				}
 
-				let queuedRay = rayQueue[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let queuedRay = ${ params.rayQueue }[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
 				${ rngInit }( indexUV, queuedRay.seed, queuedRay.rngIndex );
 

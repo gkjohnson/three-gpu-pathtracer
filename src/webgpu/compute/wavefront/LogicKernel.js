@@ -99,7 +99,8 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				// skip slots that have never spawned a ray
-				let input = ( *rayDataStorage )[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.rayIntersectionIndex < 0 ) {
 
 					return;
@@ -131,7 +132,7 @@ export class LogicKernel extends ComputeKernel {
 				// is negative when no shadow ray was enqueued last frame
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
-					let shadowHit = ( *shadowRayIntersectionsStorage )[ u32( input.shadowRayIntersectionIndex ) ];
+					let shadowHit = ${ params.shadowRayIntersectionsStorage }[ u32( input.shadowRayIntersectionIndex ) ];
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
@@ -182,7 +183,7 @@ export class LogicKernel extends ComputeKernel {
 
 				} else if ( ! isTerminated ) {
 
-					let hitResult = ( *rayIntersectionsStorage )[ u32( input.rayIntersectionIndex ) ];
+					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
 					let didHit = hitResult.objectIndex >= 0;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
