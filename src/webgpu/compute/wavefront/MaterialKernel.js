@@ -50,6 +50,8 @@ export class MaterialKernel extends ComputeKernel {
 		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
 		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
+		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
+		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -71,9 +73,6 @@ export class MaterialKernel extends ComputeKernel {
 				let queueCounters = &${ params.queueCounters };
 				let pixelQueue = &${ params.pixelQueue };
 
-				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
-				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
-
 				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
 				// workgroup size and those extra slots hold a zeroed pixel index
 				let index = globalId.x;
@@ -83,7 +82,8 @@ export class MaterialKernel extends ComputeKernel {
 
 				}
 
-				let input = ( *rayDataStorage )[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.objectIndex < 0 ) {
 
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
@@ -189,8 +189,8 @@ export class MaterialKernel extends ComputeKernel {
 					var medium = ${ loadMediumFn }( input.medium );
 					let segmentInMedium = medium.inside;
 
-					let objectInfo = transforms[ u32( input.objectIndex ) ];
-					var materialInfo = ( *materials )[ objectInfo.materialIndex ];
+					let objectInfo = ${ transformsStorage }[ u32( input.objectIndex ) ];
+					var materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 					// a matte surface hit by the camera ray renders as a fully transparent
 					let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
@@ -378,7 +378,8 @@ export class MaterialKernel extends ComputeKernel {
 					// keep the medium the path left or entered
 					if ( segmentInMedium || medium.inside ) {
 
-						rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
+						// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+						${ params.rayDataStorage }[ index ].medium = ${ storeMediumFn }( medium );
 
 					}
 
