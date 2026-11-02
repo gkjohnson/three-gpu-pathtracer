@@ -205,6 +205,15 @@ class TextureCache {
  */
 
 /**
+ * Fired as the render advances, with the `stage` it is in and the fraction of that stage done as
+ * `progress`, or null when it can't be measured. The stages, in order, are "building" for the BVHs
+ * built by `setSceneAsync`, "compiling" for the kernels, "rendering", reported a few times a second
+ * with the average `samples` per pixel and a fraction of `maxSamples` when it's set, and "denoising"
+ * for an attached denoiser.
+ * @event WebGPUPathTracer#progress
+ */
+
+/**
  * Progressive path tracer running on WebGPU. Call {@link WebGPUPathTracer#setScene} once,
  * then {@link WebGPUPathTracer#renderSample} every frame to accumulate samples into the canvas.
  *
@@ -351,6 +360,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// written in place. reset swaps in a new object so a late measurement can't overwrite it.
 		const counts = this._lastSampleCounts;
+		const { lowResMode } = pathTracer;
 		const measured = await pathTracer.getSampleCountsAsync();
 
 		counts.min = measured.min;
@@ -360,6 +370,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// averaged over the whole render, and idle time counts against it
 		const elapsed = this.getRenderTime() / 1000;
 		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+
+		// the preview isn't measured, so only the full resolution render reports its progress, until
+		// every pixel has finished
+		const { maxSamples } = this;
+		const finished = maxSamples > 0 && counts.min >= maxSamples;
+		if ( ! lowResMode && ! finished && ! this._loadingScene ) {
+
+			const progress = maxSamples > 0 ? Math.min( counts.avg / maxSamples, 1 ) : null;
+			this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples: counts.avg } );
+
+		}
 
 		return { ...counts };
 
@@ -622,6 +643,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser = null;
 		this._upscaler = null;
 
+		// progress events: the attached denoiser's are forwarded, and the start of a compile is reported once
+		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
+		this._wasCompiling = false;
+
 		// set while "setSceneAsync" builds the BVHs of the scene that replaces the current one
 		this._loadingScene = false;
 
@@ -812,11 +837,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// a detached instance stops receiving resets, so clear it rather than let it hold a
 		// result from a camera position that has since moved
 		this._denoiser?.reset();
+		this._denoiser?.removeEventListener( 'progress', this._onDenoiserProgress );
 		this._denoiser = denoiser;
 
 		if ( denoiser ) {
 
 			denoiser.init( this._renderer );
+			denoiser.addEventListener( 'progress', this._onDenoiserProgress );
 
 		}
 
@@ -970,6 +997,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// each worker runs one job at a time so they pull from a shared queue
 		const queue = Array.from( geometries );
+
+		// progress is weighted by triangle count, from each worker's own build progress
+		const getTriangleCount = geometry => ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
+		const totalTriangles = queue.reduce( ( sum, geometry ) => sum + getTriangleCount( geometry ), 0 );
+		let builtTriangles = 0;
+		const dispatchBuildProgress = () => {
+
+			const progress = totalTriangles > 0 ? builtTriangles / totalTriangles : 1;
+			this.dispatchEvent( { type: 'progress', stage: 'building', progress } );
+
+		};
+
+		dispatchBuildProgress();
+
 		const workers = [];
 		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
 
@@ -988,7 +1029,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					geometry.boundsTree = await generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					const triangles = getTriangleCount( geometry );
+					let reported = 0;
+					const onProgress = progress => {
+
+						builtTriangles += ( progress - reported ) * triangles;
+						reported = progress;
+						dispatchBuildProgress();
+
+					};
+
+					geometry.boundsTree = await generateBVHInWorker( worker, geometry, { ...MESH_BVH_OPTIONS, onProgress } );
+					onProgress( 1 );
 
 				}
 
@@ -1413,10 +1465,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// camera moves, and a rasterized preview compiles its own materials
 			if ( pathTracer.compiling ) {
 
+				if ( ! this._wasCompiling ) {
+
+					this._wasCompiling = true;
+					this.dispatchEvent( { type: 'progress', stage: 'compiling', progress: null } );
+
+				}
+
 				this._resetTime = - 1;
 				return;
 
 			}
+
+			this._wasCompiling = false;
 
 		}
 
@@ -1436,10 +1497,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				this.getSampleCountsAsync();
 
-			} else if ( maxSamples > 0 && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
+			} else if ( this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
 
-				// the readback stalls the gpu pipeline, so a capped render only measures a few times
-				// a second. The "complete" event and the denoiser both key off it
+				// the readback stalls the gpu pipeline, so the render only measures a few times a second.
+				// The "progress" and "complete" events and the denoiser key off it
 				this._lastCompleteCheck = this._resetTime;
 				this.getSampleCountsAsync();
 

@@ -54,6 +54,12 @@ const DEVICE_LIMITS_REQUESTED = [
 
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
+// the labels shown for the path tracer's loading stages
+const STAGE_LABELS = {
+	building: 'Building BVHs',
+	compiling: 'Compiling shaders',
+};
+
 const DEFAULT_FOV = 45;
 const DEFAULT_BOKEH_SIZE = 0;
 
@@ -274,6 +280,22 @@ async function init() {
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
+	// the loading line shows the building and compiling stages, and gives way to the sample counts
+	// once rendering starts
+	pathTracer.addEventListener( 'progress', ( { stage, progress } ) => {
+
+		if ( stage in STAGE_LABELS ) {
+
+			loader.setProgress( STAGE_LABELS[ stage ], progress );
+
+		} else {
+
+			loader.setPercentage( 1 );
+
+		}
+
+	} );
+
 	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
@@ -443,8 +465,11 @@ function animate() {
 
 	}
 
-	// hide the canvas while loading and while the kernels compile
-	renderer.domElement.style.visibility = loading || pathTracer.compiling ? 'hidden' : 'visible';
+	// hide the canvas while loading and while the kernels compile, with the text light against the page
+	// behind it until the canvas shows
+	const hidden = loading || pathTracer.compiling;
+	renderer.domElement.style.visibility = hidden ? 'hidden' : 'visible';
+	document.body.classList.toggle( 'light-background', ! hidden && params.background === 'white' );
 
 	pathTracer.getSampleCountsAsync().then( counts => {
 
@@ -535,7 +560,6 @@ function onParamsChange() {
 	backdrop.material.roughness = light ? 0.2 : 0.6;
 
 	document.body.classList.toggle( 'checkerboard', transparent );
-	document.body.classList.toggle( 'light-background', light );
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
@@ -823,7 +847,7 @@ async function updateModel() {
 	const modelInfo = customModel || models[ params.model ];
 
 	// hide the canvas and the transparency checkerboard while loading
-	document.body.classList.remove( 'checkerboard' );
+	document.body.classList.remove( 'checkerboard', 'light-background' );
 	renderer.domElement.style.visibility = 'hidden';
 	loading = true;
 	loader.setPercentage( 0 );
@@ -858,7 +882,7 @@ async function updateModel() {
 
 		model = await loadModel( modelInfo.url, v => {
 
-			loader.setPercentage( 0.5 * v );
+			loader.setProgress( 'Loading', v );
 
 		}, modelInfo.fileMap );
 
@@ -958,7 +982,13 @@ async function updateModel() {
 
 	await pathTracer.setSceneAsync( scene, activeCamera );
 
-	loader.setPercentage( 1 );
+	// otherwise the first render finishes the loading line
+	if ( ! params.enable ) {
+
+		loader.setPercentage( 1 );
+
+	}
+
 	loader.setCredits( modelInfo.credit || '' );
 
 	// models that carry their own lighting can override the scene defaults

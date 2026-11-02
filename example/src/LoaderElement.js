@@ -137,27 +137,26 @@ export class LoaderElement {
 
 	}
 
+	// shows a loading stage and its progress from 0 to 1, or null when it can't be measured
+	setProgress( label, progress ) {
+
+		this._loaderBar.style.width = `${ ( progress ?? 0 ) * 100 }%`;
+		this._percentage.innerText = progress === null ? `${ label }...` : `${ label } ${ ( progress * 100 ).toFixed( 2 ) }%`;
+		this._container.classList.add( 'loading' );
+
+	}
+
+	// loading progress from 0 to 1, finished at 1
 	setPercentage( perc ) {
-
-		this._loaderBar.style.width = `${ perc * 100 }%`;
-
-		if ( perc === 0 ) {
-
-			this._percentage.innerText = 'Loading...';
-
-		} else {
-
-			this._percentage.innerText = `${ ( perc * 100 ).toFixed( 0 ) }%`;
-
-		}
 
 		if ( perc >= 1 ) {
 
+			this._loaderBar.style.width = '100%';
 			this._container.classList.remove( 'loading' );
 
 		} else {
 
-			this._container.classList.add( 'loading' );
+			this.setProgress( 'Loading', perc );
 
 		}
 

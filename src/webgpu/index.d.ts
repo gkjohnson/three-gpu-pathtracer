@@ -115,6 +115,7 @@ export interface OIDNDenoiserOptions {
 export interface OIDNDenoiserEventMap {
 
 	'error': { error: Error };
+	'progress': { progress: number };
 
 }
 
@@ -173,6 +174,7 @@ export interface DebugBoundsOptions {
 export interface WebGPUPathTracerEventMap {
 
 	'complete': {};
+	'progress': { stage: 'building' | 'compiling' | 'rendering' | 'denoising', progress: number | null, samples?: number };
 
 }
 
