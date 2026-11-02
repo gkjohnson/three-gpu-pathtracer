@@ -37,7 +37,7 @@ let animationDuration = 0;
 let videoUrl = '';
 let loader;
 
-// the average sample count from the latest "progress" event, kept for the recording checks
+// the average sample count from the latest "progress" event, shown in the recording progress
 let averageSamples = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
@@ -87,10 +87,27 @@ async function init() {
 	pathTracer.fadeDuration = 0;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
-		loader.setStage( stage, progress, samples );
+		// the loading line shows the recording progress while recording
+		if ( recordingState !== 'recording' ) {
+
+			loader.setStage( stage, progress, samples );
+
+		}
+
 		if ( samples ) {
 
 			averageSamples = samples.avg;
+
+		}
+
+	} );
+
+	// write the video frame and advance the animation once every pixel reaches the target sample count
+	pathTracer.addEventListener( 'complete', () => {
+
+		if ( recordingState === 'recording' ) {
+
+			writeVideoFrame();
 
 		}
 
@@ -384,23 +401,9 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; ! isWritingFrame && i < 1; i ++ ) {
+		if ( ! isWritingFrame ) {
 
 			pathTracer.renderSample();
-
-			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && averageSamples >= params.maxSamples ) {
-
-				break;
-
-			}
-
-		}
-
-		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && averageSamples >= params.maxSamples ) {
-
-			writeVideoFrame();
 
 		}
 
@@ -413,7 +416,7 @@ function animate() {
 		const percStride = 1 / total;
 		const samplesPerc = averageSamples / params.maxSamples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-		loader.setPercentage( percentDone );
+		loader.setProgress( 'Recording', percentDone );
 
 	}
 
