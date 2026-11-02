@@ -105,7 +105,7 @@ async function init() {
 	// write the video frame and advance the animation once every pixel reaches the target sample count
 	pathTracer.addEventListener( 'complete', () => {
 
-		if ( recordingState === 'recording' ) {
+		if ( recordingState === 'recording' && ! isWritingFrame ) {
 
 			writeVideoFrame();
 
@@ -300,6 +300,8 @@ async function finishRecording() {
 
 	if ( recordingState !== 'recording' ) return;
 
+	// no more frames are written while the video finalizes
+	recordingState = 'finishing';
 	rebuildGUI();
 
 	try {
