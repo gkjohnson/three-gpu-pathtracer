@@ -623,6 +623,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._frameTimeCount = 0;
 		this._warnedTimestamps = false;
 
+		// the budget from before the first pixels finished, restored on reset. The last few pixels render
+		// quickly and inflate the budget
+		this._fullFrameBudget = null;
+
 		// avoid mipmap gen on copy, not always supported with float type
 		this._lowResTarget = new StorageTexture( 1, 1 );
 		this._lowResTarget.type = FloatType;
@@ -1314,6 +1318,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		if ( this._fullFrameBudget !== null ) {
+
+			this.frameBudget = this._fullFrameBudget;
+			this._fullFrameBudget = null;
+
+		}
+
 		if ( this._stage === STAGE_RENDERING ) {
 
 			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
@@ -1356,6 +1367,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			// skip if the render was reset or a new scene started building meanwhile
 			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
+
+				// save the budget once the first pixels finish
+				const { maxSamples } = this;
+				if ( this._fullFrameBudget === null && maxSamples > 0 && samples.max >= maxSamples ) {
+
+					this._fullFrameBudget = this.frameBudget;
+
+				}
 
 				this._dispatchRenderProgress( samples );
 
