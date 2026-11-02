@@ -276,10 +276,11 @@ async function init() {
 
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
-		loader.setStage( stage, progress, samples );
+		loader.setStage( stage, progress );
 		if ( samples ) {
 
 			averageSamples = samples.avg;
+			loader.setSamples( samples );
 
 		}
 

@@ -153,7 +153,7 @@ export class LoaderElement {
 	}
 
 	// shows a path tracer "progress" event, finishing the loading line once rendering starts
-	setStage( stage, progress, samples ) {
+	setStage( stage, progress ) {
 
 		if ( stage in STAGE_LABELS ) {
 
@@ -162,7 +162,6 @@ export class LoaderElement {
 		} else if ( stage === 'rendering' ) {
 
 			this.setPercentage( 1 );
-			this.setSamples( samples );
 
 		}
 

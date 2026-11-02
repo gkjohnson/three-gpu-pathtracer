@@ -1316,7 +1316,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		if ( this._stage === STAGE_RENDERING ) {
 
-			this._dispatchRenderProgress();
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
 
 		}
 
@@ -1342,7 +1342,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			this._dispatchRenderProgress();
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
 
 		}
 
@@ -1352,12 +1352,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 	_measureSamples() {
 
 		const counts = this._lastSampleCounts;
-		this.getSampleCountsAsync().then( () => {
+		this.getSampleCountsAsync().then( samples => {
 
 			// skip if the render was reset or a new scene started building meanwhile
 			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
 
-				this._dispatchRenderProgress();
+				this._dispatchRenderProgress( samples );
 
 			}
 
@@ -1365,11 +1365,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// Reports the render's progress from the last sample counts
-	_dispatchRenderProgress() {
+	_dispatchRenderProgress( samples ) {
 
 		const { maxSamples } = this;
-		const samples = { ...this._lastSampleCounts };
 		const progress = maxSamples > 0 ? Math.min( samples.avg / maxSamples, 1 ) : null;
 		this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples } );
 
