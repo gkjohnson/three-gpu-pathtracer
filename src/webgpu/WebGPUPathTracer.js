@@ -957,7 +957,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		const request = ++ this._sceneRequest;
+		this._sceneRequest ++;
+
+		const request = this._sceneRequest;
 		const pendingBVHs = this._pendingBVHs;
 
 		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
@@ -997,7 +999,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// stop rendering the previous scene while the next one builds
+		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
+		// its tiles on its own schedule, so it's reset separately
 		this._stage = STAGE_BUILDING;
 		this._denoiser?.reset();
 
@@ -1036,14 +1039,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// a later call replaced this scene while it built
-		if ( request !== this._sceneRequest ) {
+		// skip the scene if a later call replaced it while it built
+		if ( request === this._sceneRequest ) {
 
-			return;
+			this.setScene( scene, camera );
 
 		}
-
-		this.setScene( scene, camera );
 
 	}
 
