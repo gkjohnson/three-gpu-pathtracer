@@ -212,7 +212,7 @@ class TextureCache {
 /**
  * Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
  * `progress` is the fraction of it done, or null when unknown. "rendering" also gives the sample
- * counts as `samples`, reported a few times a second and on every reset.
+ * counts as `samples`, reported a few times a second.
  * @event WebGPUPathTracer#progress
  */
 
@@ -1322,12 +1322,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			this.frameBudget = this._fullFrameBudget;
 			this._fullFrameBudget = null;
-
-		}
-
-		if ( this._stage === STAGE_RENDERING ) {
-
-			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
 
 		}
 

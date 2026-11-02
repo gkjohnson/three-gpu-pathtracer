@@ -154,7 +154,6 @@ const params = {
 	randomStrategy: 'Sobol',
 	frameBudget: 250000,
 	adaptiveFrameBudget: true,
-	targetFrameTime: 16,
 
 	model: '',
 
@@ -270,7 +269,6 @@ async function init() {
 	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.adaptiveFrameBudget = params.adaptiveFrameBudget;
-	pathTracer.targetFrameTime = params.targetFrameTime;
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
@@ -435,11 +433,9 @@ function animate() {
 
 	if ( params.enable ) {
 
-		if ( ! params.pause || averageSamples < 1 ) {
-
-			pathTracer.renderSample();
-
-		}
+		// a paused render still takes its first sample
+		pathTracer.pause = params.pause && averageSamples >= 1;
+		pathTracer.renderSample();
 
 		// draws the denoiser's auxiliary buffer over the render
 		if ( params.auxView !== 'none' ) {
@@ -652,11 +648,6 @@ function buildGui() {
 
 		pathTracer.adaptiveFrameBudget = v;
 		frameBudgetController.enable( ! v );
-
-	} );
-	pathTracingFolder.add( params, 'targetFrameTime', 4, 100, 1 ).onChange( v => {
-
-		pathTracer.targetFrameTime = v;
 
 	} );
 	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
