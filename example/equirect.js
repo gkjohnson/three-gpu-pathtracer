@@ -42,7 +42,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -125,11 +125,6 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	gui.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	gui.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	gui.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	gui.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );

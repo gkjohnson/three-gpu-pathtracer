@@ -25,7 +25,7 @@ const scene = new Scene();
 const transformScene = new Scene();
 const camera = new PerspectiveCamera( 50, 1, 0.01, 100 );
 
-const renderer = new WebGPURenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 

@@ -136,7 +136,7 @@ async function init() {
 async function createRenderer() {
 
 	// renderer - WebGPU version
-	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearAlpha( 0 );
@@ -329,11 +329,6 @@ function buildGui() {
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
-
-	} );
-	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
-
-		pathTracer.frameBudget = v;
 
 	} );
 	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );

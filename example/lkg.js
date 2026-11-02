@@ -103,7 +103,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// init renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -444,11 +444,6 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
-
-		pathTracer.frameBudget = v;
-
-	} );
 
 	const lkgFolder = gui.addFolder( 'Looking Glass Views' );
 	lkgFolder.add( params, 'numViews', 1, 100, 1 ).onChange( onLkgParamsChange );

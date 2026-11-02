@@ -73,7 +73,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -191,11 +191,6 @@ function rebuildGUI() {
 
 	// dynamic parameters
 	const renderFolder = gui.addFolder( 'rendering' );
-	renderFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	renderFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( value => {
 
 		pathTracer.maxSamples = value;

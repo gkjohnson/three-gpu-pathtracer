@@ -59,7 +59,7 @@ async function init() {
 	// renderer
 	// outputType HalfFloatType configures the canvas for extended-range tone mapping, so the path
 	// tracer's linear values above 1.0 are displayed directly in HDR ( on a capable display ).
-	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType } );
+	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType, trackTimestamp: true } );
 	renderer.init();
 	document.body.appendChild( renderer.domElement );
 

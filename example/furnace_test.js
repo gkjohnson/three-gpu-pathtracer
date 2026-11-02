@@ -19,7 +19,7 @@ const options = {
 };
 
 // renderers
-const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );

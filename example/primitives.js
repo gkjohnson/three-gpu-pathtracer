@@ -54,7 +54,7 @@ camera.position.set( 0, 1, - 5 );
 camera.lookAt( 0, 0, 0 );
 
 // renderer
-const renderer = new WebGPURenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.setAnimationLoop( animate );

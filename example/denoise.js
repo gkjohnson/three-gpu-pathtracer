@@ -48,7 +48,7 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );

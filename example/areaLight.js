@@ -56,7 +56,7 @@ async function init() {
 	RectAreaLightNode.setLTC( RectAreaLightTexturesLib );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = AgXToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -127,11 +127,6 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.close();
