@@ -47,9 +47,6 @@ const BUDGET_CHANGE_THRESHOLD = 1.15;
 const BUDGET_MAX_STEP = 2;
 const MIN_FRAME_BUDGET = 4096;
 
-// how much the adaptive preview scale must change, relative to its current value, before it's resized
-const LOW_RES_SCALE_CHANGE = 0.1;
-
 // the options the mesh geometry bvhs are built with and how many workers build them at once
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
 const MAX_BVH_WORKERS = 4;
@@ -1367,8 +1364,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// reached by the wavefront in a preview
 			const budgetScale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
 
-			// fill the budget, resized only as a preview starts so it isn't restarted
-			if ( adaptiveDynamicRes && firstFrame && Math.abs( budgetScale - this.lowResScale ) > LOW_RES_SCALE_CHANGE * this.lowResScale ) {
+			if ( adaptiveDynamicRes ) {
 
 				this.lowResScale = budgetScale;
 
