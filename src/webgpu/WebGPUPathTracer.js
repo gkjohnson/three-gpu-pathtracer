@@ -613,7 +613,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._frameTimeTotal = 0;
 		this._frameWorkTotal = 0;
 		this._frameTimeCount = 0;
-		this._lowResScale = 0;
 		this._warnedTimestamps = false;
 
 		// avoid mipmap gen on copy, not always supported with float type
@@ -658,7 +657,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.dynamicLowRes = true;
 
 		/**
-		 * Resolution of the low resolution preview, as a fraction of the render size. The minimum when
+		 * Resolution of the low resolution preview, as a fraction of the render size. Adjusted when
 		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set. The preview never has more pixels than a
 		 * frame of {@link WebGPUPathTracer#frameBudget} can render.
 		 * @type {number}
@@ -667,7 +666,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.lowResScale = 0.1;
 
 		/**
-		 * Whether the low resolution preview is sized to the pixels a frame of
+		 * Whether {@link WebGPUPathTracer#lowResScale} is adjusted to the pixels a frame of
 		 * {@link WebGPUPathTracer#frameBudget} can render.
 		 * @type {boolean}
 		 * @default true
@@ -1315,7 +1314,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 			dynamicLowRes,
 			synchronizeRenderSize,
 			renderScale,
-			lowResScale,
 			adaptiveDynamicRes,
 			minSamples,
 			maxSamples,
@@ -1369,22 +1367,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// reached by the wavefront in a preview
 			const budgetScale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
 
-			let scale = lowResScale;
-			if ( adaptiveDynamicRes ) {
+			// fill the budget, resized only as a preview starts so it isn't restarted
+			if ( adaptiveDynamicRes && firstFrame && Math.abs( budgetScale - this.lowResScale ) > LOW_RES_SCALE_CHANGE * this.lowResScale ) {
 
-				// fill the budget, resized only as a preview starts so it isn't restarted
-				if ( firstFrame && Math.abs( budgetScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE * this._lowResScale ) {
-
-					this._lowResScale = budgetScale;
-
-				}
-
-				scale = Math.max( this._lowResScale, lowResScale );
+				this.lowResScale = budgetScale;
 
 			}
 
 			// checked every frame since the budget adapts separately
-			scale = Math.min( scale, budgetScale );
+			const scale = Math.min( this.lowResScale, budgetScale );
 			width = Math.max( 1, Math.floor( scale * width ) );
 			height = Math.max( 1, Math.floor( scale * height ) );
 
