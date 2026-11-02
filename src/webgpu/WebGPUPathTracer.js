@@ -622,8 +622,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser = null;
 		this._upscaler = null;
 
-		// set while "setSceneAsync" builds the next scene
+		// set while "setSceneAsync" builds the next scene. Only the latest call sets its scene, and a geometry
+		// already building for an earlier call is awaited rather than built again
 		this._loadingScene = false;
+		this._sceneRequest = 0;
+		this._pendingBVHs = new WeakMap();
 
 		// options
 
@@ -949,8 +952,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		const request = ++ this._sceneRequest;
+		const pendingBVHs = this._pendingBVHs;
+
 		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
 		const geometries = new Set();
+		const pending = new Set();
 		scene.traverse( child => {
 
 			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
@@ -962,7 +969,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				}
 
-				geometries.add( geometry );
+				if ( pendingBVHs.has( geometry ) ) {
+
+					pending.add( pendingBVHs.get( geometry ) );
+
+				} else {
+
+					geometries.add( geometry );
+
+				}
 
 			}
 
@@ -983,21 +998,43 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		try {
 
-			await Promise.all( workers.map( async worker => {
+			await Promise.all( [ ...pending, ...workers.map( async worker => {
 
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					geometry.boundsTree = await generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					const promise = generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					pendingBVHs.set( geometry, promise );
+
+					try {
+
+						geometry.boundsTree = await promise;
+
+					} finally {
+
+						pendingBVHs.delete( geometry );
+
+					}
 
 				}
 
-			} ) );
+			} ) ] );
 
 		} finally {
 
 			workers.forEach( worker => worker.dispose() );
-			this._loadingScene = false;
+			if ( request === this._sceneRequest ) {
+
+				this._loadingScene = false;
+
+			}
+
+		}
+
+		// a later call replaced this scene while it built
+		if ( request !== this._sceneRequest ) {
+
+			return;
 
 		}
 
