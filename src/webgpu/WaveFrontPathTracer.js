@@ -32,11 +32,13 @@ import {
 	U32_RANGE,
 } from './compute/TallySampleCountsKernel.js';
 
-// the pool is sized off the ray data, the largest per slot buffer
-const RAY_DATA_BYTES = rayDataStruct.getLength() * 4;
+// set the buffers to the max possible size supported by default (128MB)
+// TODO: this can be increased based on platform.
+const MAX_BUFFER_SIZE = 134217728;
 
-// the most path slots the pool holds. A larger budget runs more iterations per frame instead
-const MAX_SLOT_COUNT = 1048576;
+// the persistent path-slot pool is sized off the ray data struct; every other per-slot buffer
+// ( queues, intersections ) is sized to the same count so a full pool can never overflow them
+const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
 
 const LOW_RES_ITERATIONS = 5;
 
@@ -402,16 +404,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	// The slot count the current budget asks for, capped by the pool limit
 	_getRequestedSlotCount() {
 
-		return Math.min( this._getMaxSlotCount(), Math.max( 1, Math.floor( this.frameBudget ) ) );
-
-	}
-
-	// "MAX_SLOT_COUNT", or fewer if the device's largest storage buffer can't hold them
-	_getMaxSlotCount() {
-
-		const { limits } = this.renderer.backend.device;
-		const maxSize = Math.min( limits.maxStorageBufferBindingSize, limits.maxBufferSize );
-		return Math.min( MAX_SLOT_COUNT, Math.floor( maxSize / RAY_DATA_BYTES ) );
+		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ) );
 
 	}
 
@@ -422,20 +415,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// the iterations that spend the budget over the slots in use
-	_getFrameIterations() {
-
-		const { width, height } = this.outputTarget;
-		const activeSlots = Math.min( this._getRequestedSlotCount(), width * height );
-		const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-		return Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
-
-	}
-
 	// a preview steps every path several times, so it covers that many fewer pixels than the budget
 	getPreviewPixelBudget() {
 
-		return Math.min( this.frameBudget / this._getPreviewIterations(), this._getMaxSlotCount() );
+		return Math.min( this.frameBudget / this._getPreviewIterations(), MAX_RAY_DATA_COUNT );
 
 	}
 
@@ -514,7 +497,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
-			const iter = this._getFrameIterations();
+			// the iterations that spend the budget over the slots in use
+			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
+			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
+			const iter = Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
