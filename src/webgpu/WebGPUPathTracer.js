@@ -210,6 +210,13 @@ class TextureCache {
  */
 
 /**
+ * Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
+ * `progress` is the fraction of it done, or null when unknown. "rendering" also gives the sample
+ * counts as `samples`, reported a few times a second and on every reset.
+ * @event WebGPUPathTracer#progress
+ */
+
+/**
  * Progressive path tracer running on WebGPU. Call {@link WebGPUPathTracer#setScene} once,
  * then {@link WebGPUPathTracer#renderSample} every frame to accumulate samples into the canvas.
  *
@@ -627,6 +634,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser = null;
 		this._upscaler = null;
 
+		// the attached denoiser's progress events are forwarded
+		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
+
 		// the current stage. Only the latest "setSceneAsync" call sets its scene, and a geometry already building
 		// for an earlier call is awaited rather than built again
 		this._stage = STAGE_RENDERING;
@@ -820,11 +830,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// a detached instance stops receiving resets, so clear it rather than let it hold a
 		// result from a camera position that has since moved
 		this._denoiser?.reset();
+		this._denoiser?.removeEventListener( 'progress', this._onDenoiserProgress );
 		this._denoiser = denoiser;
 
 		if ( denoiser ) {
 
 			denoiser.init( this._renderer );
+			denoiser.addEventListener( 'progress', this._onDenoiserProgress );
 
 		}
 
@@ -992,6 +1004,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// each worker runs one job at a time so they pull from a shared queue
 		const queue = Array.from( geometries );
+
+		// build progress, weighted by triangle count
+		const getTriangleCount = geometry => ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
+		const totalTriangles = queue.reduce( ( sum, geometry ) => sum + getTriangleCount( geometry ), 0 );
+		let builtTriangles = 0;
+
 		const workers = [];
 		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
 
@@ -1001,7 +1019,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
 		// its tiles on its own schedule, so it's reset separately
-		this._stage = STAGE_BUILDING;
+		this._setStage( STAGE_BUILDING );
 		this._denoiser?.reset();
 
 		try {
@@ -1011,12 +1029,29 @@ export class WebGPUPathTracer extends EventDispatcher {
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					const promise = generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					const triangles = getTriangleCount( geometry );
+					let reported = 0;
+					const onProgress = progress => {
+
+						builtTriangles += ( progress - reported ) * triangles;
+						reported = progress;
+
+						// skip if a later call replaced this scene
+						if ( request === this._sceneRequest ) {
+
+							this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
+
+						}
+
+					};
+
+					const promise = generateBVHInWorker( worker, geometry, { ...MESH_BVH_OPTIONS, onProgress } );
 					pendingBVHs.set( geometry, promise );
 
 					try {
 
 						geometry.boundsTree = await promise;
+						onProgress( 1 );
 
 					} finally {
 
@@ -1033,7 +1068,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			workers.forEach( worker => worker.dispose() );
 			if ( request === this._sceneRequest ) {
 
-				this._stage = STAGE_COMPILING;
+				this._setStage( STAGE_COMPILING );
 
 			}
 
@@ -1279,6 +1314,63 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		if ( this._stage === STAGE_RENDERING ) {
+
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
+
+		}
+
+	}
+
+	// Sets the stage, reporting when each one starts
+	_setStage( stage ) {
+
+		if ( this._stage === stage ) {
+
+			return;
+
+		}
+
+		this._stage = stage;
+		if ( stage === STAGE_BUILDING ) {
+
+			this.dispatchEvent( { type: 'progress', stage: 'building', progress: 0 } );
+
+		} else if ( stage === STAGE_COMPILING ) {
+
+			this.dispatchEvent( { type: 'progress', stage: 'compiling', progress: null } );
+
+		} else {
+
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
+
+		}
+
+	}
+
+	// Measures the sample counts and reports them
+	_measureSamples() {
+
+		const counts = this._lastSampleCounts;
+		this.getSampleCountsAsync().then( samples => {
+
+			// skip if the render was reset or a new scene started building meanwhile
+			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
+
+				this._dispatchRenderProgress( samples );
+
+			}
+
+		} );
+
+	}
+
+	_dispatchRenderProgress( samples ) {
+
+		const { maxSamples } = this;
+		const progress = maxSamples > 0 ? Math.min( samples.avg / maxSamples, 1 ) : null;
+		this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples } );
+
 	}
 
 	// Adapts the frame budget to the tracer's latest gpu time measurement
@@ -1447,7 +1539,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 			this._readTiming();
-			this._stage = pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING;
+			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
 
 		}
 
@@ -1476,14 +1568,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			if ( this._fadeState < 1 && minSamples > 0 ) {
 
-				this.getSampleCountsAsync();
+				this._measureSamples();
 
-			} else if ( maxSamples > 0 && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
+			} else if ( this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
 
-				// the readback stalls the gpu pipeline, so a capped render only measures a few times
-				// a second. The "complete" event and the denoiser both key off it
+				// the readback stalls the gpu pipeline, so the render only measures a few times a second.
+				// The "progress" and "complete" events and the denoiser key off it
 				this._lastCompleteCheck = this._resetTime;
-				this.getSampleCountsAsync();
+				this._measureSamples();
 
 			}
 

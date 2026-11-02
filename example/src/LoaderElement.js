@@ -1,3 +1,9 @@
+// the labels shown for the path tracer's loading stages
+const STAGE_LABELS = {
+	building: 'Building BVHs',
+	compiling: 'Compiling shaders',
+};
+
 let _styleElement;
 function initializeStyles() {
 
@@ -137,27 +143,41 @@ export class LoaderElement {
 
 	}
 
-	setPercentage( perc ) {
+	// shows a loading stage and its progress from 0 to 1, or null when it can't be measured
+	setProgress( label, progress ) {
 
-		this._loaderBar.style.width = `${ perc * 100 }%`;
+		this._loaderBar.style.width = `${ ( progress ?? 0 ) * 100 }%`;
+		this._percentage.innerText = progress === null ? `${ label }...` : `${ label } ${ ( progress * 100 ).toFixed( 2 ) }%`;
+		this._container.classList.add( 'loading' );
 
-		if ( perc === 0 ) {
+	}
 
-			this._percentage.innerText = 'Loading...';
+	// shows a path tracer "progress" event, finishing the loading line once rendering starts
+	setStage( stage, progress ) {
 
-		} else {
+		if ( stage in STAGE_LABELS ) {
 
-			this._percentage.innerText = `${ ( perc * 100 ).toFixed( 0 ) }%`;
+			this.setProgress( STAGE_LABELS[ stage ], progress );
+
+		} else if ( stage === 'rendering' ) {
+
+			this.setPercentage( 1 );
 
 		}
 
+	}
+
+	// loading progress from 0 to 1, finished at 1
+	setPercentage( perc ) {
+
 		if ( perc >= 1 ) {
 
+			this._loaderBar.style.width = '100%';
 			this._container.classList.remove( 'loading' );
 
 		} else {
 
-			this._container.classList.add( 'loading' );
+			this.setProgress( 'Loading', perc );
 
 		}
 
