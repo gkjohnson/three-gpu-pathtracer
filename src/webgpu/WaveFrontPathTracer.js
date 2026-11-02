@@ -1,4 +1,4 @@
-import { MathUtils, Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PopulatePixelIndicesKernel } from './compute/wavefront/PopulatePixelIndicesKernel.js';
 import { LogicKernel } from './compute/wavefront/LogicKernel.js';
 import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
@@ -40,9 +40,6 @@ const RAY_DATA_BYTES = rayDataStruct.getLength() * 4;
 // the most path slots the pool holds, about 480MB of per slot buffers, whatever the device allows. A
 // frame budget past the slots runs more iterations per frame instead, so memory stays bounded
 const MAX_SLOT_COUNT = 1048576;
-
-// the most iterations a frame runs, each stepping every slot's path once
-const MAX_FRAME_ITERATIONS = 16;
 
 const LOW_RES_ITERATIONS = 5;
 
@@ -441,7 +438,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	_getFrameIterations() {
 
 		const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-		return MathUtils.clamp( Math.round( this.frameBudget / this._getActiveSlotCount() ), minIterations, MAX_FRAME_ITERATIONS );
+		return Math.max( minIterations, Math.round( this.frameBudget / this._getActiveSlotCount() ) );
 
 	}
 
@@ -451,10 +448,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// a frame can step every active slot up to "MAX_FRAME_ITERATIONS" times
-	getMaxFrameBudget( pixelCount ) {
+	// a budget past the slots runs more iterations, so any budget does more work
+	getMaxFrameBudget() {
 
-		return Math.min( pixelCount, this._getMaxSlotCount() ) * MAX_FRAME_ITERATIONS;
+		return Infinity;
 
 	}
 
