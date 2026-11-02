@@ -146,8 +146,7 @@ export class PathTracerBackend {
 		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
 		if ( requested.length > 0 ) {
 
-			// report the compile and let a frame present before it starts, since three creates and uploads the
-			// first bindings' buffers on the main thread
+			// let a frame present before the compile blocks the main thread
 			this.compiling = true;
 			yield;
 

@@ -647,7 +647,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
 		this._wasCompiling = false;
 
-		// set while "setSceneAsync" builds the BVHs of the scene that replaces the current one
+		// set while "setSceneAsync" builds the next scene
 		this._loadingScene = false;
 
 		// options
@@ -1018,7 +1018,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// the previous scene is replaced once the builds finish, so it isn't rendered or denoised meanwhile
+		// stop rendering the previous scene while the next one builds
 		this._loadingScene = true;
 		this._denoiser?.reset();
 
@@ -1371,7 +1371,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		timer.update();
 
-		// the scene being replaced isn't worth the GPU time, and the canvas keeps its last frame
+		// skip the scene being replaced
 		if ( ! this._renderer._initialized || this._loadingScene ) {
 
 			return;
@@ -1458,9 +1458,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.update();
 			this._readTiming();
 
-			// nothing renders while the kernels compile, so restart the reset timer for the low res preview
-			// and leave the last frame on screen. Restarted rather than held, since the frame the compile
-			// finishes in can block for hundreds of milliseconds
+			// nothing renders while the kernels compile, so restart the preview timer and keep the last frame
 			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
 			// camera moves, and a rasterized preview compiles its own materials
 			if ( pathTracer.compiling ) {
