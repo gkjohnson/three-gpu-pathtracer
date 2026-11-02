@@ -280,8 +280,7 @@ async function init() {
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
-	// the loading line shows the building and compiling stages, and gives way to the sample counts
-	// once rendering starts
+	// show the building and compiling stages on the loading line
 	pathTracer.addEventListener( 'progress', ( { stage, progress } ) => {
 
 		if ( stage in STAGE_LABELS ) {
@@ -465,8 +464,7 @@ function animate() {
 
 	}
 
-	// hide the canvas while loading and while the kernels compile, with the text light against the page
-	// behind it until the canvas shows
+	// hide the canvas while loading and compiling, keeping the text light until it shows
 	const hidden = loading || pathTracer.compiling;
 	renderer.domElement.style.visibility = hidden ? 'hidden' : 'visible';
 	document.body.classList.toggle( 'light-background', ! hidden && params.background === 'white' );
@@ -982,7 +980,7 @@ async function updateModel() {
 
 	await pathTracer.setSceneAsync( scene, activeCamera );
 
-	// otherwise the first render finishes the loading line
+	// otherwise the "rendering" progress event hides the loading line
 	if ( ! params.enable ) {
 
 		loader.setPercentage( 1 );

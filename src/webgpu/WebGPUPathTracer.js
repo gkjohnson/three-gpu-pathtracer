@@ -210,11 +210,9 @@ class TextureCache {
  */
 
 /**
- * Fired as the render advances, with the `stage` it is in and the fraction of that stage done as
- * `progress`, or null when it can't be measured. The stages, in order, are "building" for the BVHs
- * built by `setSceneAsync`, "compiling" for the kernels, "rendering", reported a few times a second
- * with the average `samples` per pixel and a fraction of `maxSamples` when it's set, and "denoising"
- * for an attached denoiser.
+ * Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
+ * `progress` is the fraction of it done, or null when unknown. "rendering" also gives the average
+ * `samples` per pixel.
  * @event WebGPUPathTracer#progress
  */
 
@@ -365,7 +363,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// written in place. reset swaps in a new object so a late measurement can't overwrite it.
 		const counts = this._lastSampleCounts;
-		const { lowResMode } = pathTracer;
 		const measured = await pathTracer.getSampleCountsAsync();
 
 		counts.min = measured.min;
@@ -375,17 +372,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// averaged over the whole render, and idle time counts against it
 		const elapsed = this.getRenderTime() / 1000;
 		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
-
-		// the preview isn't measured, so only the full resolution render reports its progress, until
-		// every pixel has finished
-		const { maxSamples } = this;
-		const finished = maxSamples > 0 && counts.min >= maxSamples;
-		if ( ! lowResMode && ! finished && this._stage === STAGE_RENDERING ) {
-
-			const progress = maxSamples > 0 ? Math.min( counts.avg / maxSamples, 1 ) : null;
-			this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples: counts.avg } );
-
-		}
 
 		return { ...counts };
 
@@ -1019,23 +1005,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// each worker runs one job at a time so they pull from a shared queue
 		const queue = Array.from( geometries );
 
-		// progress is weighted by triangle count, from each worker's own build progress
+		// build progress, weighted by triangle count
 		const getTriangleCount = geometry => ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
 		const totalTriangles = queue.reduce( ( sum, geometry ) => sum + getTriangleCount( geometry ), 0 );
 		let builtTriangles = 0;
-		const dispatchBuildProgress = () => {
-
-			// a later call replaced this scene
-			if ( request === this._sceneRequest ) {
-
-				const progress = totalTriangles > 0 ? builtTriangles / totalTriangles : 1;
-				this.dispatchEvent( { type: 'progress', stage: 'building', progress } );
-
-			}
-
-		};
-
-		dispatchBuildProgress();
 
 		const workers = [];
 		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
@@ -1046,7 +1019,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
 		// its tiles on its own schedule, so it's reset separately
-		this._stage = STAGE_BUILDING;
+		this._setStage( STAGE_BUILDING );
 		this._denoiser?.reset();
 
 		try {
@@ -1062,7 +1035,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 						builtTriangles += ( progress - reported ) * triangles;
 						reported = progress;
-						dispatchBuildProgress();
+
+						// skip if a later call replaced this scene
+						if ( request === this._sceneRequest ) {
+
+							this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
+
+						}
 
 					};
 
@@ -1089,7 +1068,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			workers.forEach( worker => worker.dispose() );
 			if ( request === this._sceneRequest ) {
 
-				this._stage = STAGE_COMPILING;
+				this._setStage( STAGE_COMPILING );
 
 			}
 
@@ -1337,6 +1316,32 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
+	// Sets the stage, reporting when each one starts
+	_setStage( stage ) {
+
+		if ( this._stage === stage ) {
+
+			return;
+
+		}
+
+		this._stage = stage;
+		if ( stage === STAGE_BUILDING ) {
+
+			this.dispatchEvent( { type: 'progress', stage: 'building', progress: 0 } );
+
+		} else if ( stage === STAGE_COMPILING ) {
+
+			this.dispatchEvent( { type: 'progress', stage: 'compiling', progress: null } );
+
+		} else {
+
+			this.dispatchEvent( { type: 'progress', stage: 'rendering', progress: this.maxSamples > 0 ? 0 : null, samples: 0 } );
+
+		}
+
+	}
+
 	// Adapts the frame budget to the tracer's latest gpu time measurement
 	_readTiming() {
 
@@ -1499,25 +1504,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
-			const wasCompiling = pathTracer.compiling;
-			const previousStage = this._stage;
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 			this._readTiming();
-			this._stage = pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING;
-
-			// report the start of a compile and of the render once. The sample measurements report the
-			// render's progress after that
-			if ( ! wasCompiling && pathTracer.compiling ) {
-
-				this.dispatchEvent( { type: 'progress', stage: 'compiling', progress: null } );
-
-			} else if ( previousStage < STAGE_RENDERING && this._stage === STAGE_RENDERING ) {
-
-				this.dispatchEvent( { type: 'progress', stage: 'rendering', progress: maxSamples > 0 ? 0 : null, samples: 0 } );
-
-			}
+			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
 
 		}
 
@@ -1553,7 +1544,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 				// the readback stalls the gpu pipeline, so the render only measures a few times a second.
 				// The "progress" and "complete" events and the denoiser key off it
 				this._lastCompleteCheck = this._resetTime;
-				this.getSampleCountsAsync();
+				this.getSampleCountsAsync().then( counts => {
+
+					// skip if a new scene started building or every pixel has finished
+					const finished = maxSamples > 0 && counts.min >= maxSamples;
+					if ( this._stage === STAGE_RENDERING && ! finished ) {
+
+						const progress = maxSamples > 0 ? Math.min( counts.avg / maxSamples, 1 ) : null;
+						this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples: counts.avg } );
+
+					}
+
+				} );
 
 			}
 
