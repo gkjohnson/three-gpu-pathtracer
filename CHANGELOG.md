@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Shadow rays pass through partially transparent surfaces, attenuated by their opacity, and stop at the first opaque hit.
 
 ### Fixed
+- WebGPUPathTracer: Rough transmission at the critical angle producing a NaN direction, which could stall the GPU for minutes inside subsurface scattering volumes.
 - WebGPUPathTracer: Diffuse surfaces losing energy when "specularIntensity" or "specularColor" is lowered.
 - WebGPUPathTracer: Light through partially transparent objects hidden with "visibleToShadowRays" no longer being counted twice.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
