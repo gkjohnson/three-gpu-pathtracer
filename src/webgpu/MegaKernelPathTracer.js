@@ -201,7 +201,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		yield* this.compileKernels( [ kernel ] );
 
 		// the sample index restarts with the render, and the global seed gives each render its own sequence
-		kernel.seed = 0;
+		kernel.sampleIndex = 0;
 
 		// number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
@@ -242,7 +242,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			}
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
-			kernel.seed += 1;
+			kernel.sampleIndex += 1;
 
 			// Swap targets to support devices without <rgba32float, read_write> textures
 			// Copy latest data to a new outputTarget to keep the appearance
