@@ -391,6 +391,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						wi = refract( - wo, wh, surf.eta );
 
+						// "refract" returns zero on total internal reflection, so reflect instead and let "isDead" drop it
+						if ( dot( wi, wi ) == 0.0 ) {
+
+							wi = - normalize( reflect( wo, wh ) );
+
+						}
+
 					}
 
 					// the facet choice must agree with the resulting hemisphere - reflection above,
