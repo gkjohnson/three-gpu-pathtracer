@@ -59,7 +59,7 @@ const rayDataMembers = {
 	pixelIndex: 'uint',
 
 	indices: 'vec3u',
-	seed: 'uint',
+	sampleIndex: 'uint',
 
 	lightDirection: 'vec3f',
 	lightPdf: 'float',
@@ -125,7 +125,7 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	// the traversal's random sequence index: bounces, alpha pass throughs and subsurface bounces, as in the megakernel
 	rngIndex: 'uint',
 
-	seed: 'uint',
+	sampleIndex: 'uint',
 	maxDist: 'float',
 	_alignment0: 'uint',
 	_alignment1: 'uint',
