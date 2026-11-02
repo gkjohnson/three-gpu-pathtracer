@@ -1356,8 +1356,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		timer.update();
 
-		// skip the scene being replaced
-		if ( ! this._renderer._initialized || this._loadingScene ) {
+		if ( ! this._renderer._initialized ) {
 
 			return;
 
@@ -1436,22 +1435,23 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
-		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
+		if ( ! this.pause && ! samplesComplete && ! this._loadingScene && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 			this._readTiming();
 
-			// nothing renders while the kernels compile, so restart the preview timer and keep the last frame
-			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
-			// camera moves, and a rasterized preview compiles its own materials
-			if ( pathTracer.compiling ) {
+		}
 
-				this._resetTime = - 1;
-				return;
+		// nothing renders while the next scene builds or the kernels compile, so restart the preview timer and
+		// keep the last frame
+		// TODO: decide what to display meanwhile - the last frame goes stale when the camera moves, and a
+		// rasterized preview compiles its own materials
+		if ( this._loadingScene || pathTracer.compiling ) {
 
-			}
+			this._resetTime = - 1;
+			return;
 
 		}
 
