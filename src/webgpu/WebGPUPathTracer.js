@@ -622,6 +622,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser = null;
 		this._upscaler = null;
 
+		// set while "setSceneAsync" builds the BVHs of the scene that replaces the current one
+		this._loadingScene = false;
+
 		// options
 
 		/**
@@ -974,6 +977,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// the previous scene is replaced once the builds finish, so it isn't rendered or denoised meanwhile
+		this._loadingScene = true;
+		this._denoiser?.reset();
+
 		try {
 
 			await Promise.all( workers.map( async worker => {
@@ -990,6 +997,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		} finally {
 
 			workers.forEach( worker => worker.dispose() );
+			this._loadingScene = false;
 
 		}
 
@@ -1311,7 +1319,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		timer.update();
 
-		if ( ! this._renderer._initialized ) {
+		// the scene being replaced isn't worth the GPU time, and the canvas keeps its last frame
+		if ( ! this._renderer._initialized || this._loadingScene ) {
 
 			return;
 
@@ -1397,13 +1406,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.update();
 			this._readTiming();
 
-			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
-			// and leave the last frame on screen
+			// nothing renders while the kernels compile, so restart the reset timer for the low res preview
+			// and leave the last frame on screen. Restarted rather than held, since the frame the compile
+			// finishes in can block for hundreds of milliseconds
 			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
 			// camera moves, and a rasterized preview compiles its own materials
 			if ( pathTracer.compiling ) {
 
-				this._resetTime -= delta;
+				this._resetTime = - 1;
 				return;
 
 			}
