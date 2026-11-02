@@ -863,7 +863,7 @@ export const MODEL_LIST = {
 			material.thickness = 1;
 			material.scatterStrength = 1;
 			material.multiscatterColor = new Color().setRGB( 0.4, 0.025, 0.015 );
-			material.attenuationDistance = 0.005 * Math.max( size.x, size.y, size.z );
+			material.attenuationDistance = 0.01 * Math.max( size.x, size.y, size.z );
 			material.attenuationColor.setRGB( Math.exp( - 1 ), Math.exp( - 1 / 0.25 ), Math.exp( - 1 / 0.17 ) );
 
 			model.traverse( c => {
