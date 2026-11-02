@@ -1,4 +1,4 @@
-import { Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { MathUtils, Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PopulatePixelIndicesKernel } from './compute/wavefront/PopulatePixelIndicesKernel.js';
 import { LogicKernel } from './compute/wavefront/LogicKernel.js';
 import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
@@ -32,13 +32,17 @@ import {
 	U32_RANGE,
 } from './compute/TallySampleCountsKernel.js';
 
-// set the buffers to the max possible size supported by default (128MB)
-// TODO: this can be increased based on platform.
-const MAX_BUFFER_SIZE = 134217728;
+// the persistent path-slot pool is sized off the ray data struct, the largest per slot buffer; every
+// other per-slot buffer ( queues, intersections ) is sized to the same count so a full pool can never
+// overflow them
+const RAY_DATA_BYTES = rayDataStruct.getLength() * 4;
 
-// the persistent path-slot pool is sized off the ray data struct; every other per-slot buffer
-// ( queues, intersections ) is sized to the same count so a full pool can never overflow them
-const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
+// the most path slots the pool holds, about 480MB of per slot buffers, whatever the device allows. A
+// frame budget past the slots runs more iterations per frame instead, so memory stays bounded
+const MAX_SLOT_COUNT = 1048576;
+
+// the most iterations a frame runs, each stepping every slot's path once
+const MAX_FRAME_ITERATIONS = 16;
 
 const LOW_RES_ITERATIONS = 5;
 
@@ -404,7 +408,38 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	// The slot count the current budget asks for, capped by the pool limit
 	_getRequestedSlotCount() {
 
-		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ) );
+		return Math.min( this._getMaxSlotCount(), Math.max( 1, Math.floor( this.frameBudget ) ) );
+
+	}
+
+	// the slot pool's limit: "MAX_SLOT_COUNT", or the ray data that fits the largest storage buffer the
+	// device can bind if smaller. The application raises that with "requiredLimits" on the renderer
+	_getMaxSlotCount() {
+
+		const { limits } = this.renderer.backend.device;
+		const maxSize = Math.min( limits.maxStorageBufferBindingSize, limits.maxBufferSize );
+		return Math.min( MAX_SLOT_COUNT, Math.floor( maxSize / RAY_DATA_BYTES ) );
+
+	}
+
+	// the iterations a preview frame runs at least, so its samples finish within the frame
+	_getPreviewIterations() {
+
+		return Math.max( 1, Math.min( this.maxBounces, LOW_RES_ITERATIONS ) );
+
+	}
+
+	// a frame can step every active slot up to "MAX_FRAME_ITERATIONS" times
+	getMaxFrameBudget( pixelCount ) {
+
+		return Math.min( pixelCount, this._getMaxSlotCount() ) * MAX_FRAME_ITERATIONS;
+
+	}
+
+	// a preview frame steps every path several times, so it covers that many fewer pixels than the budget
+	getPreviewPixelBudget() {
+
+		return Math.min( this.frameBudget / this._getPreviewIterations(), this._getMaxSlotCount() );
 
 	}
 
@@ -483,9 +518,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
-			// TODO: this only makes sense if we can cap the number rays per iteration to the full
-			// frame
-			const iter = this.lowResMode ? Math.min( this.maxBounces, LOW_RES_ITERATIONS ) : 1;
+			// the budget is spent over the active slots in as many iterations as it covers
+			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
+			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
+			const iter = MathUtils.clamp( Math.round( this.frameBudget / activeSlots ), minIterations, MAX_FRAME_ITERATIONS );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -525,6 +561,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// slots past the pixel count never run
 				const rayCount = Math.min( this.rayCount, pixelCount );
+				this._frameWork += rayCount;
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = queueCounters;
