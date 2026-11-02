@@ -608,7 +608,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// adaptive frame budget and preview state
 		this._timingCount = 0;
 		this._frameTimeTotal = 0;
-		this._frameWorkTotal = 0;
 		this._frameTimeCount = 0;
 		this._warnedTimestamps = false;
 
@@ -1256,15 +1255,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.adaptiveFrameBudget || frameBudget !== this.frameBudget ) {
 
 			this._frameTimeTotal = 0;
-			this._frameWorkTotal = 0;
 			this._frameTimeCount = 0;
 			return;
 
 		}
 
-		// preview and full resolution frames are both measured as time per unit of budget work
 		this._frameTimeTotal += timing.frameTime;
-		this._frameWorkTotal += timing.work;
 		this._frameTimeCount ++;
 		if ( this._frameTimeCount < BUDGET_WINDOW ) {
 
@@ -1273,25 +1269,22 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		const { targetFrameTime } = this;
-		const timePerWork = this._frameTimeTotal / this._frameWorkTotal;
+		const average = this._frameTimeTotal / this._frameTimeCount;
 		this._frameTimeTotal = 0;
-		this._frameWorkTotal = 0;
 		this._frameTimeCount = 0;
 
-		// leave the budget alone while a full frame of it is close enough to the target. A budget past
-		// what the backend can use at the render size does no more work, so it is capped there.
-		const maxBudget = Math.max( MIN_FRAME_BUDGET, this._pathTracer.getMaxFrameBudget( this._size.x * this._size.y ) );
-		const ratio = Math.min( frameBudget, maxBudget ) * timePerWork / targetFrameTime;
+		// leave the budget alone while it's close enough to the target
+		const ratio = average / targetFrameTime;
 		if ( ratio < BUDGET_CHANGE_THRESHOLD && ratio > 1 / BUDGET_CHANGE_THRESHOLD ) {
 
 			return;
 
 		}
 
-		// the work that lands a frame on the target
-		const next = targetFrameTime / timePerWork;
+		// scale the budget to land the average on the target
+		const next = frameBudget * targetFrameTime / average;
 		const stepped = MathUtils.clamp( next, frameBudget / BUDGET_MAX_STEP, frameBudget * BUDGET_MAX_STEP );
-		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, maxBudget );
+		this.frameBudget = Math.max( Math.round( stepped ), MIN_FRAME_BUDGET );
 
 	}
 

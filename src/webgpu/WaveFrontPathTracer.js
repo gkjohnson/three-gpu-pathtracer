@@ -32,13 +32,10 @@ import {
 	U32_RANGE,
 } from './compute/TallySampleCountsKernel.js';
 
-// the persistent path-slot pool is sized off the ray data struct, the largest per slot buffer; every
-// other per-slot buffer ( queues, intersections ) is sized to the same count so a full pool can never
-// overflow them
+// the pool is sized off the ray data, the largest per slot buffer
 const RAY_DATA_BYTES = rayDataStruct.getLength() * 4;
 
-// the most path slots the pool holds, about 480MB of per slot buffers, whatever the device allows. A
-// frame budget past the slots runs more iterations per frame instead, so memory stays bounded
+// the most path slots the pool holds. A larger budget runs more iterations per frame instead
 const MAX_SLOT_COUNT = 1048576;
 
 const LOW_RES_ITERATIONS = 5;
@@ -409,8 +406,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// the slot pool's limit: "MAX_SLOT_COUNT", or the ray data that fits the largest storage buffer the
-	// device can bind if smaller. The application raises that with "requiredLimits" on the renderer
+	// "MAX_SLOT_COUNT", or fewer if the device's largest storage buffer can't hold them
 	_getMaxSlotCount() {
 
 		const { limits } = this.renderer.backend.device;
@@ -419,43 +415,24 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// the iterations a preview frame runs at least, so its samples finish within the frame
+	// a preview runs at least this many iterations so its samples finish within the frame
 	_getPreviewIterations() {
 
 		return Math.max( 1, Math.min( this.maxBounces, LOW_RES_ITERATIONS ) );
 
 	}
 
-	// slots past the pixel count never run
-	_getActiveSlotCount() {
-
-		const { width, height } = this.outputTarget;
-		return Math.min( this._getRequestedSlotCount(), width * height );
-
-	}
-
-	// the iterations a frame spends the budget over the active slots in
+	// the iterations that spend the budget over the slots in use
 	_getFrameIterations() {
 
+		const { width, height } = this.outputTarget;
+		const activeSlots = Math.min( this._getRequestedSlotCount(), width * height );
 		const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-		return Math.max( minIterations, Math.round( this.frameBudget / this._getActiveSlotCount() ) );
+		return Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
 
 	}
 
-	getFrameWork() {
-
-		return this._getActiveSlotCount() * this._getFrameIterations();
-
-	}
-
-	// a budget past the slots runs more iterations, so any budget does more work
-	getMaxFrameBudget() {
-
-		return Infinity;
-
-	}
-
-	// a preview frame steps every path several times, so it covers that many fewer pixels than the budget
+	// a preview steps every path several times, so it covers that many fewer pixels than the budget
 	getPreviewPixelBudget() {
 
 		return Math.min( this.frameBudget / this._getPreviewIterations(), this._getMaxSlotCount() );
