@@ -786,9 +786,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
 
 			// offset 32
-			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );
-			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
-			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
+			floatArray[ index ++ ] = getField( m, 'iridescenceThicknessMinimum', 100 );
+			floatArray[ index ++ ] = getField( m, 'iridescenceThicknessMaximum', 400 );
 			floatArray[ index ++ ] = getField( m, 'diffuseRoughness', 0.0 );
 			floatArray[ index ++ ] = getField( m, 'dispersion', 0.0 );
 

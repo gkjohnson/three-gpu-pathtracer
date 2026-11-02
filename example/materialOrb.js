@@ -407,7 +407,8 @@ function onParamsChange() {
 	material.sheenRoughness = materialProperties.sheenRoughness;
 	material.iridescence = materialProperties.iridescence;
 	material.iridescenceIOR = materialProperties.iridescenceIOR;
-	material.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
+	material.iridescenceThicknessMinimum = 0;
+	material.iridescenceThicknessMaximum = materialProperties.iridescenceThickness;
 	material.specularColor.set( materialProperties.specularColor );
 	material.specularIntensity = materialProperties.specularIntensity;
 	material.anisotropy = materialProperties.anisotropy;

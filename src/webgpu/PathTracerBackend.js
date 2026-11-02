@@ -146,6 +146,10 @@ export class PathTracerBackend {
 		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
 		if ( requested.length > 0 ) {
 
+			// let a frame present before the compile blocks the main thread
+			this.compiling = true;
+			yield;
+
 			requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_STARTED ) );
 			renderer.compileComputeAsync( requested )
 				.catch( () => {

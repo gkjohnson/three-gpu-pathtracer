@@ -51,6 +51,11 @@ const MIN_FRAME_BUDGET = 4096;
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
 const MAX_BVH_WORKERS = 4;
 
+// the stages before a scene renders, in order
+const STAGE_BUILDING = 0;
+const STAGE_COMPILING = 1;
+const STAGE_RENDERING = 2;
+
 // Builds a geometry's BVH in a worker without giving up its buffers. The workers transfer the position and
 // index buffers, which neuters them for every other array viewing them, such as the attributes of other
 // meshes in a glTF. So the worker gets copies, the original arrays are restored, and the reordered index
@@ -622,6 +627,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser = null;
 		this._upscaler = null;
 
+		// the current stage. Only the latest "setSceneAsync" call sets its scene, and a geometry already building
+		// for an earlier call is awaited rather than built again
+		this._stage = STAGE_RENDERING;
+		this._sceneRequest = 0;
+		this._pendingBVHs = new WeakMap();
+
 		// options
 
 		/**
@@ -946,8 +957,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._sceneRequest ++;
+
+		const request = this._sceneRequest;
+		const pendingBVHs = this._pendingBVHs;
+
 		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
 		const geometries = new Set();
+		const pending = new Set();
 		scene.traverse( child => {
 
 			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
@@ -959,7 +976,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				}
 
-				geometries.add( geometry );
+				if ( pendingBVHs.has( geometry ) ) {
+
+					pending.add( pendingBVHs.get( geometry ) );
+
+				} else {
+
+					geometries.add( geometry );
+
+				}
 
 			}
 
@@ -974,26 +999,52 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
+		// its tiles on its own schedule, so it's reset separately
+		this._stage = STAGE_BUILDING;
+		this._denoiser?.reset();
+
 		try {
 
-			await Promise.all( workers.map( async worker => {
+			await Promise.all( [ ...pending, ...workers.map( async worker => {
 
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					geometry.boundsTree = await generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					const promise = generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					pendingBVHs.set( geometry, promise );
+
+					try {
+
+						geometry.boundsTree = await promise;
+
+					} finally {
+
+						pendingBVHs.delete( geometry );
+
+					}
 
 				}
 
-			} ) );
+			} ) ] );
 
 		} finally {
 
 			workers.forEach( worker => worker.dispose() );
+			if ( request === this._sceneRequest ) {
+
+				this._stage = STAGE_COMPILING;
+
+			}
 
 		}
 
-		this.setScene( scene, camera );
+		// skip the scene if a later call replaced it while it built
+		if ( request === this._sceneRequest ) {
+
+			this.setScene( scene, camera );
+
+		}
 
 	}
 
@@ -1390,23 +1441,24 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
-		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
+		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 			this._readTiming();
+			this._stage = pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING;
 
-			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
-			// and leave the last frame on screen
-			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
-			// camera moves, and a rasterized preview compiles its own materials
-			if ( pathTracer.compiling ) {
+		}
 
-				this._resetTime -= delta;
-				return;
+		// nothing renders while the next scene's BVHs build or the kernels compile, so restart the preview timer and
+		// keep the last frame
+		// TODO: decide what to display meanwhile - the last frame goes stale when the camera moves, and a
+		// rasterized preview compiles its own materials
+		if ( this._stage < STAGE_RENDERING ) {
 
-			}
+			this._resetTime = - 1;
+			return;
 
 		}
 
