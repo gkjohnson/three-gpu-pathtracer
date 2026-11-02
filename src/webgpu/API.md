@@ -157,6 +157,9 @@ quality against download size and per tile cost.
 // Fired when a pass started by `update` fails, such as the weights failing to download, with the
 // failure as the event's `error`. No other pass starts until a reset.
 { type: 'error' }
+
+// Fired as each tile of a pass finishes, with the fraction of the pass done as `progress`.
+{ type: 'progress' }
 ```
 
 ### .texture
@@ -272,6 +275,11 @@ the accumulated image restarts it.
 // Fired once every pixel has reached `maxSamples` and an attached denoiser has finished. Fires
 // again after a reset, or after `maxSamples` is raised, once the render has caught up.
 { type: 'complete' }
+
+// Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
+// `progress` is the fraction of it done, or null when unknown. "rendering" also gives the sample
+// counts as `samples`, reported a few times a second.
+{ type: 'progress' }
 ```
 
 ### .maxBounces
