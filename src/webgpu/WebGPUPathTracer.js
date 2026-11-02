@@ -532,6 +532,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * The resolution currently traced, as a fraction of the render size. Below 1 while the low
+	 * resolution preview renders.
+	 * @type {number}
+	 * @readonly
+	 */
+	get renderResolution() {
+
+		const { x } = this._pathTracer.getSize( _resolution );
+		return this._size.x > 0 ? x / this._size.x : 1;
+
+	}
+
+	/**
 	 * Whether the kernels are compiling, such as after the scene or material changes. Nothing new
 	 * renders until they finish and the canvas keeps the last frame, so an app may draw its own
 	 * preview in the meantime.
