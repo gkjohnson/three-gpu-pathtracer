@@ -429,6 +429,28 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	// slots past the pixel count never run
+	_getActiveSlotCount() {
+
+		const { width, height } = this.outputTarget;
+		return Math.min( this._getRequestedSlotCount(), width * height );
+
+	}
+
+	// the iterations a frame spends the budget over the active slots in
+	_getFrameIterations() {
+
+		const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
+		return MathUtils.clamp( Math.round( this.frameBudget / this._getActiveSlotCount() ), minIterations, MAX_FRAME_ITERATIONS );
+
+	}
+
+	getFrameWork() {
+
+		return this._getActiveSlotCount() * this._getFrameIterations();
+
+	}
+
 	// a frame can step every active slot up to "MAX_FRAME_ITERATIONS" times
 	getMaxFrameBudget( pixelCount ) {
 
@@ -518,10 +540,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
-			// the budget is spent over the active slots in as many iterations as it covers
-			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
-			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-			const iter = MathUtils.clamp( Math.round( this.frameBudget / activeSlots ), minIterations, MAX_FRAME_ITERATIONS );
+			const iter = this._getFrameIterations();
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -561,7 +580,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				// slots past the pixel count never run
 				const rayCount = Math.min( this.rayCount, pixelCount );
-				this._frameWork += rayCount;
 
 				// Step 2: reset the trace queues for this frame's population
 				zeroDispatchKernel.target = queueCounters;

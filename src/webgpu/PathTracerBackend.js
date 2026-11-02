@@ -35,9 +35,6 @@ export class PathTracerBackend {
 		// dispatched, in frame budget units, and "count" increments per measurement
 		this.timing = { count: 0, frameTime: 0, frameBudget: 0, work: 0 };
 
-		// the path steps dispatched by the update in progress, counted by the render task
-		this._frameWork = 0;
-
 		this._renderTask = null;
 		this._compileState = new WeakMap();
 
@@ -237,6 +234,14 @@ export class PathTracerBackend {
 
 	}
 
+	// the path steps an update dispatches, in frame budget units
+	getFrameWork() {
+
+		const { width, height } = this.outputTarget;
+		return Math.min( this.frameBudget, width * height );
+
+	}
+
 	update() {
 
 		const { renderer } = this;
@@ -255,13 +260,12 @@ export class PathTracerBackend {
 		// time this update unless the last measurement is still reading back
 		const timed = renderer.backend.trackTimestamp && ! this._timingFrame;
 		this._timestampUIDs = timed ? [] : null;
-		this._frameWork = 0;
 		this._renderTask.next();
 
 		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
 		if ( timed && this._timestampUIDs.length > 0 ) {
 
-			this._measureFrameTime( this._timestampUIDs, this._frameWork );
+			this._measureFrameTime( this._timestampUIDs );
 
 		}
 
@@ -279,11 +283,12 @@ export class PathTracerBackend {
 	}
 
 	// Reads back the gpu time of an update's dispatches into "timing"
-	async _measureFrameTime( uids, work ) {
+	async _measureFrameTime( uids ) {
 
 		// what the update ran with, read before the readback since it may change meanwhile
 		const { renderer, timing, frameBudget } = this;
 		const { backend } = renderer;
+		const work = this.getFrameWork();
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
