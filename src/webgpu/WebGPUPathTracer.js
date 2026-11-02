@@ -1607,16 +1607,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// fires once the render, and the denoiser if one is attached, has finished
-		const complete = this.complete;
-		if ( complete && ! this._wasComplete ) {
-
-			this.dispatchEvent( { type: 'complete' } );
-
-		}
-
-		this._wasComplete = complete;
-
 		// the upscale and the draw only serve the display
 		if ( this.renderToCanvas ) {
 
@@ -1641,6 +1631,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// reset the renderer
 		renderer.autoClear = originalAutoClear;
 		renderer.setRenderTarget( originalTarget );
+
+		// fires once the render, and the denoiser if one is attached, has finished and the result is drawn
+		const complete = this.complete;
+		if ( complete && ! this._wasComplete ) {
+
+			this.dispatchEvent( { type: 'complete' } );
+
+		}
+
+		this._wasComplete = complete;
 
 	}
 
