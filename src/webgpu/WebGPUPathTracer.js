@@ -1579,11 +1579,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
-			if ( this._fadeState < 1 && minSamples > 0 ) {
+			// the counts can't change once every pixel has finished, so measuring stops
+			if ( ! samplesComplete && this._fadeState < 1 && minSamples > 0 ) {
 
 				this._measureSamples();
 
-			} else if ( this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
+			} else if ( ! samplesComplete && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
 
 				// the readback stalls the gpu pipeline, so the render only measures a few times a second.
 				// The "progress" and "complete" events and the denoiser key off it
