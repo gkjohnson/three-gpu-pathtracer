@@ -33,6 +33,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			// settings
 			seed: uniform( 0 ),
+			globalSeed: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxSubsurfaceBounces: uniform( 256, 'uint' ),
@@ -99,6 +100,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// settings
 				seed: u32,
+				globalSeed: u32,
 				maxBounces: u32,
 				maxTransparentBounces: u32,
 				maxSubsurfaceBounces: u32,
@@ -138,7 +140,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-				${ rngInit }( indexUV.xy, seed, 0 );
+				${ rngInit }( globalSeed, indexUV.xy, seed, 0 );
 
 				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );

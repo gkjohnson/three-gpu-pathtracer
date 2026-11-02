@@ -38,6 +38,7 @@ export class LogicKernel extends ComputeKernel {
 			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
 
 			// settings
+			globalSeed: uniform( 0, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
@@ -75,6 +76,7 @@ export class LogicKernel extends ComputeKernel {
 
 			fn compute(
 				// settings
+				globalSeed: u32,
 				misEnabled: u32,
 				rayCount: u32,
 				maxBounces: u32,
@@ -108,7 +110,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+				${ rngInit }( globalSeed, indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				// one-sample NEE chooses between the analytic lights and the environment, matched with
 				// the megakernel

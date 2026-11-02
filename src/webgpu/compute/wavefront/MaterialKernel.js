@@ -26,7 +26,7 @@ export class MaterialKernel extends ComputeKernel {
 		const params = {
 			material: { value: null },
 
-			seed: uniform( 0, 'uint' ),
+			globalSeed: uniform( 0, 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
@@ -56,7 +56,7 @@ export class MaterialKernel extends ComputeKernel {
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
-				seed: u32,
+				globalSeed: u32,
 				targetDimensions: vec2u,
 				maxSamples: u32,
 				rayCount: u32,
@@ -116,7 +116,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					${ rngInit }( indexUV, seed + samples, 0 );
+					${ rngInit }( globalSeed, indexUV, samples, 0 );
 
 					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
@@ -147,13 +147,13 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue[ rayIndex ].direction = ray.direction;
 					rayQueue[ rayIndex ].pixelIndex = pixelIndex;
 					rayQueue[ rayIndex ].rngIndex = 0u;
-					rayQueue[ rayIndex ].seed = seed + samples;
+					rayQueue[ rayIndex ].seed = samples;
 					rayQueue[ rayIndex ].maxDist = ray.maxDist;
 
 					rayDataStorage[ index ].origin = ray.origin;
 					rayDataStorage[ index ].direction = ray.direction;
 					rayDataStorage[ index ].pixelIndex = pixelIndex;
-					rayDataStorage[ index ].seed = seed + samples;
+					rayDataStorage[ index ].seed = samples;
 					rayDataStorage[ index ].currentBounce = 0u;
 					rayDataStorage[ index ].throughputColor = vec3f( 1.0 );
 					rayDataStorage[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
@@ -183,7 +183,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// evaluate the surface staged by LogicKernel. Paths still walking a medium have none
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-					${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+					${ rngInit }( globalSeed, indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );

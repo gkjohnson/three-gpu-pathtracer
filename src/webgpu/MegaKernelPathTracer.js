@@ -36,13 +36,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	resetSeed() {
 
-		this.kernel.seed = 0;
+		this.kernel.globalSeed = 0;
 
 	}
 
 	reset() {
 
 		super.reset();
+		this.kernel.globalSeed ++;
 		this._completedSamples = 0;
 		this._tileProgress = 0;
 
@@ -198,6 +199,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// compile the kernel before its first dispatch
 		yield* this.compileKernels( [ kernel ] );
+
+		// the sample index restarts with the render, and the global seed gives each render its own sequence
+		kernel.seed = 0;
 
 		// number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
