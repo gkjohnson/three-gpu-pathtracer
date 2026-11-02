@@ -174,7 +174,7 @@ export interface DebugBoundsOptions {
 export interface WebGPUPathTracerEventMap {
 
 	'complete': {};
-	'progress': { stage: 'building' | 'compiling' | 'rendering' | 'denoising', progress: number | null, samples?: number };
+	'progress': { stage: 'building' | 'compiling' | 'rendering' | 'denoising', progress: number | null, samples?: SampleCounts };
 
 }
 

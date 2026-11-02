@@ -54,12 +54,6 @@ const DEVICE_LIMITS_REQUESTED = [
 
 const DESCRIPTION = 'Drag and drop a GLTF, GLB, DAE, or MPD file to view it.';
 
-// the labels shown for the path tracer's loading stages
-const STAGE_LABELS = {
-	building: 'Building BVHs',
-	compiling: 'Compiling shaders',
-};
-
 const DEFAULT_FOV = 45;
 const DEFAULT_BOKEH_SIZE = 0;
 
@@ -280,16 +274,12 @@ async function init() {
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
-	// show the building and compiling stages on the loading line
-	pathTracer.addEventListener( 'progress', ( { stage, progress } ) => {
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
-		if ( stage in STAGE_LABELS ) {
+		loader.setStage( stage, progress, samples );
+		if ( samples ) {
 
-			loader.setProgress( STAGE_LABELS[ stage ], progress );
-
-		} else {
-
-			loader.setPercentage( 1 );
+			averageSamples = samples.avg;
 
 		}
 
@@ -469,15 +459,8 @@ function animate() {
 	renderer.domElement.style.visibility = hidden ? 'hidden' : 'visible';
 	document.body.classList.toggle( 'light-background', ! hidden && params.background === 'white' );
 
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		averageSamples = counts.avg;
-		loader.setSamples( counts );
-
-		// shows the budget the tracer has adapted to
-		params.frameBudget = pathTracer.frameBudget;
-
-	} );
+	// shows the budget the tracer has adapted to
+	params.frameBudget = pathTracer.frameBudget;
 
 }
 

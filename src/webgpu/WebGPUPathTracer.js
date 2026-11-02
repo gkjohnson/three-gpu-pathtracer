@@ -211,8 +211,8 @@ class TextureCache {
 
 /**
  * Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
- * `progress` is the fraction of it done, or null when unknown. "rendering" also gives the average
- * `samples` per pixel.
+ * `progress` is the fraction of it done, or null when unknown. "rendering" also gives the sample
+ * counts as `samples`, reported a few times a second and on every reset.
  * @event WebGPUPathTracer#progress
  */
 
@@ -1314,6 +1314,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		if ( this._stage === STAGE_RENDERING ) {
+
+			this._dispatchRenderProgress();
+
+		}
+
 	}
 
 	// Sets the stage, reporting when each one starts
@@ -1336,9 +1342,36 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			this.dispatchEvent( { type: 'progress', stage: 'rendering', progress: this.maxSamples > 0 ? 0 : null, samples: 0 } );
+			this._dispatchRenderProgress();
 
 		}
+
+	}
+
+	// Measures the sample counts and reports them
+	_measureSamples() {
+
+		const counts = this._lastSampleCounts;
+		this.getSampleCountsAsync().then( () => {
+
+			// skip if the render was reset or a new scene started building meanwhile
+			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
+
+				this._dispatchRenderProgress();
+
+			}
+
+		} );
+
+	}
+
+	// Reports the render's progress from the last sample counts
+	_dispatchRenderProgress() {
+
+		const { maxSamples } = this;
+		const samples = { ...this._lastSampleCounts };
+		const progress = maxSamples > 0 ? Math.min( samples.avg / maxSamples, 1 ) : null;
+		this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples } );
 
 	}
 
@@ -1537,25 +1570,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			if ( this._fadeState < 1 && minSamples > 0 ) {
 
-				this.getSampleCountsAsync();
+				this._measureSamples();
 
 			} else if ( this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
 
 				// the readback stalls the gpu pipeline, so the render only measures a few times a second.
 				// The "progress" and "complete" events and the denoiser key off it
 				this._lastCompleteCheck = this._resetTime;
-				this.getSampleCountsAsync().then( counts => {
-
-					// skip if a new scene started building or every pixel has finished
-					const finished = maxSamples > 0 && counts.min >= maxSamples;
-					if ( this._stage === STAGE_RENDERING && ! finished ) {
-
-						const progress = maxSamples > 0 ? Math.min( counts.avg / maxSamples, 1 ) : null;
-						this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples: counts.avg } );
-
-					}
-
-				} );
+				this._measureSamples();
 
 			}
 
