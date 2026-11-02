@@ -156,9 +156,6 @@ const params = {
 	adaptiveFrameBudget: true,
 	targetFrameTime: 16,
 
-	// the traced resolution as a percentage of the render size, for display
-	resolution: 100,
-
 	model: '',
 
 	envMap: envMaps[ 'Aristea Wreck Puresky' ],
@@ -433,8 +430,6 @@ function animate() {
 
 		}
 
-		params.resolution = Math.round( 100 * pathTracer.renderResolution );
-
 		// draws the denoiser's auxiliary buffer over the render
 		if ( params.auxView !== 'none' ) {
 
@@ -625,7 +620,7 @@ function onResize() {
 
 function buildGui() {
 
-	gui = new GUI( { width: 400 } );
+	gui = new GUI();
 
 	// custom models are shown as an empty entry since they are not in the list
 	const modelOptions = customModel ? [ '', ...Object.keys( models ) ] : Object.keys( models );
@@ -659,7 +654,6 @@ function buildGui() {
 		pathTracer.targetFrameTime = v;
 
 	} );
-	pathTracingFolder.add( params, 'resolution' ).name( 'resolution %' ).listen().disable();
 	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
