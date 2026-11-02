@@ -1500,16 +1500,22 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			const wasCompiling = pathTracer.compiling;
+			const previousStage = this._stage;
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 			this._readTiming();
 			this._stage = pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING;
 
-			// report the start of a compile once
+			// report the start of a compile and of the render once. The sample measurements report the
+			// render's progress after that
 			if ( ! wasCompiling && pathTracer.compiling ) {
 
 				this.dispatchEvent( { type: 'progress', stage: 'compiling', progress: null } );
+
+			} else if ( previousStage < STAGE_RENDERING && this._stage === STAGE_RENDERING ) {
+
+				this.dispatchEvent( { type: 'progress', stage: 'rendering', progress: maxSamples > 0 ? 0 : null, samples: 0 } );
 
 			}
 
