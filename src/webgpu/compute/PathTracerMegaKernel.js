@@ -2,15 +2,15 @@ import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { blendAuxFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
+import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
-import { mediumStruct, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { mediumStruct, enterMediumFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
-import { dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -66,9 +66,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = proxyFn( 'shadingModel.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'shadingModel.value.bsdfEvalPdf', params );
-		const applyDispersionFn = proxyFn( 'shadingModel.value.applyDispersion', params );
-		const enterMediumFn = proxyFn( 'shadingModel.value.enterMedium', params );
-		const isAuxSurfaceFn = proxyFn( 'shadingModel.value.isAuxSurface', params );
 		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
@@ -356,9 +353,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let wavelength = abs( dispersionWavelength );
-						if ( ${ applyDispersionFn }( &surface, wavelength ) ) {
+						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+						if ( isDispersive ) {
 
+							let wavelength = abs( dispersionWavelength );
+							${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
 							if ( dispersionWavelength < 0.0 ) {
 
 								dispersionWavelength = wavelength;
@@ -370,7 +369,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// attenuate the light transmitted through the volume when exiting a backface. A scattering
 						// medium has already applied its transmittance above
-						if ( hitResult.side < 0.0 && ! segmentInMedium ) {
+						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
 							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, surface.attenuationColor, surface.attenuationDistance );
 
@@ -494,7 +493,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// refracting into a front face of a scattering material starts a random walk inside it
-						if ( scatterRec.isTransmissive && hitResult.side > 0.0 ) {
+						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
 
 							let entered = ${ enterMediumFn }( surface, hitResult.objectIndex );
 

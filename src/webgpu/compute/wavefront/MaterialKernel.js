@@ -9,11 +9,12 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
-import { dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
+import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
 
 // Pure material evaluation and ray generation: terminated slots pull a recycled pixel and emit a
 // fresh camera ray; live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
@@ -49,9 +50,6 @@ export class MaterialKernel extends ComputeKernel {
 		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
 		const bsdfSampleFn = proxyFn( 'shadingModel.value.bsdfSample', params );
 		const bsdfEvalPdfFn = proxyFn( 'shadingModel.value.bsdfEvalPdf', params );
-		const applyDispersionFn = proxyFn( 'shadingModel.value.applyDispersion', params );
-		const enterMediumFn = proxyFn( 'shadingModel.value.enterMedium', params );
-		const isAuxSurfaceFn = proxyFn( 'shadingModel.value.isAuxSurface', params );
 		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
@@ -278,9 +276,11 @@ export class MaterialKernel extends ComputeKernel {
 					// apply the hero wavelength to dispersive surfaces, folding the spectral weight
 					// into the throughput at the path's first dispersive interaction
 					var throughputColor = input.throughputColor;
-					let wavelength = abs( input.dispersionWavelength );
-					if ( ${ applyDispersionFn }( &surface, wavelength ) ) {
+					let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+					if ( isDispersive ) {
 
+						let wavelength = abs( input.dispersionWavelength );
+						${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
 						if ( input.dispersionWavelength < 0.0 ) {
 
 							rayDataStorage[ index ].dispersionWavelength = wavelength;
@@ -294,7 +294,7 @@ export class MaterialKernel extends ComputeKernel {
 					// attenuate the light transmitted through the volume when exiting a backface so
 					// the surface's emission and NEE resolve against the attenuated throughput. MediumKernel
 					// already applied a scattering medium's transmittance
-					if ( input.side < 0.0 && ! segmentInMedium ) {
+					if ( input.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, surface.attenuationColor, surface.attenuationDistance );
 						rayDataStorage[ index ].throughputColor = throughputColor;
@@ -360,7 +360,7 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// refracting into a front face of a scattering material starts a random walk inside it
-					if ( scatterRec.isTransmissive && input.side > 0.0 ) {
+					if ( scatterRec.isTransmissive && ! surface.thinWall && input.side > 0.0 ) {
 
 						let entered = ${ enterMediumFn }( surface, u32( input.objectIndex ) );
 						if ( entered.inside ) {

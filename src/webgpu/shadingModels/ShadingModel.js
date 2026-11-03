@@ -3,19 +3,20 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
-import { getSurfaceRecordFunc, applyDispersionFunc } from '../nodes/material.wgsl.js';
-import { enterMediumFn } from '../nodes/medium.wgsl.js';
-import { isAuxSurfaceFn } from '../nodes/aux.wgsl.js';
+import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
- * A custom material struct must keep the fields the ray traversal reads: "opacity", "side",
- * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap" and "alphaMapTransform".
+ * A custom material struct must keep the fields the ray traversal and kernels read: "opacity", "side",
+ * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform"
+ * and "transmission".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
- * "normal", "color", "emission", "opacity", "matte", "attenuationColor" and "attenuationDistance".
+ * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
+ * "frontFace", "transmission", "thinWall", "attenuationColor", "attenuationDistance", "dispersion",
+ * "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
  */
 export class ShadingModel {
 
@@ -84,45 +85,6 @@ export class ShadingModel {
 			}
 
 		`;
-
-	}
-
-	/**
-	 *
-	 * Must return a function node with signature
-	 * ( surface: ptr<function, SurfaceRecord>, wavelength: f32 ) -> bool
-	 * adjusting the surface to the given wavelength, returning false if it isn't dispersive
-	 *
-	 */
-	getDispersionNode() {
-
-		return applyDispersionFunc;
-
-	}
-
-	/**
-	 *
-	 * Must return a function node with signature
-	 * ( surface: SurfaceRecord, object: u32 ) -> Medium
-	 * returning the medium entered by refracting into the surface
-	 *
-	 */
-	getMediumNode() {
-
-		return enterMediumFn;
-
-	}
-
-	/**
-	 *
-	 * Must return a function node with signature
-	 * ( surface: SurfaceRecord, scatterRec: ScatterRecord ) -> bool
-	 * returning whether a scatter shows the surface in the denoiser's auxiliary images
-	 *
-	 */
-	getAuxSurfaceNode() {
-
-		return isAuxSurfaceFn;
 
 	}
 
@@ -580,9 +542,6 @@ export class ShadingModel {
 
 			bsdfSample: this.getBsdfNode(),
 			bsdfEvalPdf: this.getBsdfEvalPdfNode(),
-			applyDispersion: this.getDispersionNode(),
-			enterMedium: this.getMediumNode(),
-			isAuxSurface: this.getAuxSurfaceNode(),
 
 		};
 

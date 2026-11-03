@@ -82,8 +82,8 @@ const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
 
 `;
 
-// The medium entered by refracting into a material, not "inside" if the material doesn't scatter or
-// is a thin wall. Takes the surface by name since the shading model defines its struct
+// The medium entered by refracting into a material, not "inside" if the material doesn't scatter.
+// Takes the surface by name since the shading model defines its struct
 export const enterMediumFn = wgslTagFn/* wgsl */`
 
 	fn enterMedium( surf: SurfaceRecord, object: u32 ) -> ${ mediumStruct } {
@@ -93,7 +93,7 @@ export const enterMediumFn = wgslTagFn/* wgsl */`
 		var medium: ${ mediumStruct };
 		medium.extinction = - log( max( surf.attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) ) ) / surf.attenuationDistance;
 		medium.albedo = ${ singleScatterAlbedoFn }( surf.multiscatterColor * surf.scatterStrength, anisotropy );
-		medium.inside = ! surf.thinWall && any( medium.albedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) );
+		medium.inside = any( medium.albedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) );
 		medium.object = object;
 		medium.anisotropy = anisotropy;
 		return medium;
