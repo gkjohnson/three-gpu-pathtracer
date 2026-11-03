@@ -366,7 +366,11 @@ export class MaterialKernel extends ComputeKernel {
 					// refracting into a front face of a scattering material starts a random walk inside it
 					if ( scatterRec.isTransmissive && ! surface.thinWall && input.side > 0.0 ) {
 
-						let entered = ${ enterMediumFn }( materialInfo, u32( input.objectIndex ) );
+						let entered = ${ enterMediumFn }(
+							materialInfo.attenuationColor, materialInfo.attenuationDistance,
+							materialInfo.multiscatterColor, materialInfo.scatterStrength, materialInfo.scatterAnisotropy,
+							u32( input.objectIndex ),
+						);
 						if ( entered.inside ) {
 
 							medium = entered;
