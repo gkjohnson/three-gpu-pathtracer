@@ -1113,7 +1113,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			_bvhData.setShadingModel( shadingModel );
 			_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
-			this._pathTracer.setBVHData( _bvhData );
 
 		}
 
