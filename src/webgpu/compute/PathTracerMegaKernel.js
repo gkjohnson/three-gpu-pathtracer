@@ -18,7 +18,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			material: { value: null },
+			shadingModel: { value: null },
 			envInfo: { value: null },
 			lightsInfo: { value: null },
 
@@ -64,8 +64,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
-		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
+		const bsdfSampleFn = proxyFn( 'shadingModel.value.bsdfSample', params );
+		const bsdfEvalPdfFn = proxyFn( 'shadingModel.value.bsdfEvalPdf', params );
 		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
