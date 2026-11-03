@@ -2,7 +2,7 @@ import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, M
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { materialStruct } from '../nodes/structs.wgsl.js';
+import { materialStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
@@ -13,6 +13,10 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
  * "color", "opacity", "side", "transparent", "alphaTest", "vertexColors", "map", "mapTransform",
  * "alphaMap", "alphaMapTransform", "matte", "dispersion", "transmission", "attenuationColor",
  * "attenuationDistance", "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
+ *
+ * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
+ * "normal", "color", "emission", "opacity", "roughness", "metalness", "ior", "eta", "f0",
+ * "frontFace", "transmission" and "thinWall".
  */
 export class ShadingModel {
 
@@ -97,6 +101,17 @@ export class ShadingModel {
 
 	/**
 	 *
+	 * Must return the struct node the surface is evaluated into at a hit
+	 *
+	 */
+	getSurfaceRecordStruct() {
+
+		return surfaceRecordStruct;
+
+	}
+
+	/**
+	 *
 	 * Must return a function node with signature
 	 * ( material: Material, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
 	 * reading the surface from the material struct at a hit
@@ -104,7 +119,7 @@ export class ShadingModel {
 	 */
 	getSurfaceRecordNode( sampleTexel, getUvFromChannel, getColor ) {
 
-		return getSurfaceRecordFunc( sampleTexel, getUvFromChannel, getColor );
+		return getSurfaceRecordFunc( this.getSurfaceRecordStruct(), sampleTexel, getUvFromChannel, getColor );
 
 	}
 

@@ -133,7 +133,7 @@ const ensureValidViewNormal = wgslTagFn/* wgsl */`
 // clamps to zero for any path pdf when the inverted filter value is this large.
 export const FILTER_GLOSSY_DISABLED = 3.402823466e38;
 
-export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
+export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
 		material: Material,
@@ -460,7 +460,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	sampleTexel,
 	getUvFromChannel,
 	getColor,
-	surfaceRecordStruct,
+	surfaceRecord,
 	constants,
 	ensureValidReflectionNormal,
 	ensureValidViewNormal,
@@ -622,9 +622,10 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, ${ surfaceRecordStruct }>, dispersion: f32, wavelength: f32 ) -> void {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
 
 		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
 		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
