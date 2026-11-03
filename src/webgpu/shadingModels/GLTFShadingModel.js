@@ -6,7 +6,7 @@ import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js'
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
@@ -50,6 +50,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 	getBsdfNode() {
 
+		const surfaceRecordStruct = this.getSurfaceRecordStruct();
 		this._bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
@@ -477,6 +478,7 @@ export class GLTFShadingModel extends ShadingModel {
 		}
 
 		const bsdfEvalFunc = this._bsdfEvalFunc;
+		const surfaceRecordStruct = this.getSurfaceRecordStruct();
 
 		this._bsdfEvalPdfNode = wgslTagFn/* wgsl */`
 
