@@ -24,7 +24,7 @@ export class MaterialKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			material: { value: null },
+			shadingModel: { value: null },
 
 			globalSeed: uniform( 0, 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
@@ -48,8 +48,8 @@ export class MaterialKernel extends ComputeKernel {
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
-		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
+		const bsdfSampleFn = proxyFn( 'shadingModel.value.bsdfSample', params );
+		const bsdfEvalPdfFn = proxyFn( 'shadingModel.value.bsdfEvalPdf', params );
 		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
