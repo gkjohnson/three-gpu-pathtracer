@@ -14,13 +14,13 @@ import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.j
 import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
-import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
 /** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
-/** @import { PathtracingMaterial } from './materials/PathtracingMaterial.js' */
+/** @import { ShadingModel } from './shadingModels/ShadingModel.js' */
 
 /**
  * @typedef {Object} SampleCounts
@@ -580,7 +580,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.maxSamples = maxSamples;
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
-		this._pathTracer.setMaterial( this.material );
+		this._pathTracer.setShadingModel( this.shadingModel );
 		this._pathTracer.setRandom( this.random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
@@ -787,11 +787,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.random = RANDOM_SOBOL;
 
 		/**
-		 * Material model the kernels evaluate surfaces with.
-		 * @type {PathtracingMaterial}
+		 * Shading model the kernels evaluate surfaces with.
+		 * @type {ShadingModel}
 		 * @private
 		 */
-		this.material = new GltfCompliantMaterial();
+		this.shadingModel = new GLTFShadingModel();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
@@ -805,7 +805,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._wasComplete = false;
 
 		// initialize the scene so it doesn't fail
-		this.setMaterial( this.material );
+		this.setShadingModel( this.shadingModel );
 		this.setRandom( this.random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
@@ -1088,26 +1088,25 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * @returns {PathtracingMaterial}
+	 * @returns {ShadingModel}
 	 * @private
 	 */
-	// TODO: consider renaming these functions or removing them
-	getMaterial() {
+	getShadingModel() {
 
-		return this.material;
+		return this.shadingModel;
 
 	}
 
 	/**
-	 * Replaces the material model and recompiles the kernels.
+	 * Replaces the shading model and recompiles the kernels.
 	 *
-	 * @param {PathtracingMaterial} material
+	 * @param {ShadingModel} shadingModel
 	 * @private
 	 */
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.material = material;
-		this._pathTracer.setMaterial( material );
+		this.shadingModel = shadingModel;
+		this._pathTracer.setShadingModel( shadingModel );
 		this.reset();
 
 	}
@@ -1473,10 +1472,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		if ( ! this.material.initialized ) {
+		if ( ! this.shadingModel.initialized ) {
 
-			this.material.init( renderer );
-			this.material.initialized = true;
+			this.shadingModel.init( renderer );
+			this.shadingModel.initialized = true;
 
 		}
 

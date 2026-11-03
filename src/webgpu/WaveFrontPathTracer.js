@@ -179,9 +179,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.materialKernel.material = material.getData();
+		this.materialKernel.material = shadingModel.getData();
 		this.materialKernel.needsUpdate = true;
 		this.reset();
 

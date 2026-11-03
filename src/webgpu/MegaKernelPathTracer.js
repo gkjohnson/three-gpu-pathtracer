@@ -91,9 +91,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.kernel.material = material.getData();
+		this.kernel.material = shadingModel.getData();
 		this.kernel.needsUpdate = true;
 		this.reset();
 

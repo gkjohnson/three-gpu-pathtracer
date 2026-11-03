@@ -93,7 +93,7 @@ export class PathTracerBackend {
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
 	}
 
