@@ -404,6 +404,11 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.thinWall = material.thinWall == 1;
 		surf.attenuationColor = material.attenuationColor;
 		surf.attenuationDistance = material.attenuationDistance;
+		surf.dispersion = material.dispersion;
+
+		surf.multiscatterColor = material.multiscatterColor;
+		surf.scatterStrength = material.scatterStrength;
+		surf.scatterAnisotropy = material.scatterAnisotropy;
 
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;
