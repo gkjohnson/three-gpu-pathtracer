@@ -3,9 +3,9 @@ import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 
 /**
- * Defines a material sampled by the pathtracer
+ * Defines how the pathtracer interprets the scene's materials
  */
-export class PathtracingMaterial {
+export class ShadingModel {
 
 	/**
 	 *

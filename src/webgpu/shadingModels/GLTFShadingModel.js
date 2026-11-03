@@ -1,6 +1,6 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { PathtracingMaterial } from './PathtracingMaterial.js';
+import { ShadingModel } from './ShadingModel.js';
 import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc } from '../nodes/material.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
@@ -14,7 +14,7 @@ import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresn
 const CLEARCOAT_IOR = float( 1.5 );
 const SINGULAR_EVENT_SCALE = float( 1e6 );
 
-export class GltfCompliantMaterial extends PathtracingMaterial {
+export class GLTFShadingModel extends ShadingModel {
 
 	constructor( options = {} ) {
 
