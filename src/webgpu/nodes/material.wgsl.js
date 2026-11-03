@@ -137,6 +137,7 @@ export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChann
 
 	fn getSurfaceRecord(
 		material: Material,
+		objectColor: vec4f,
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
@@ -181,7 +182,7 @@ export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChann
 
 		normal = ensureValidReflectionNormal( normal, faceNormal, view );
 
-		var albedo = vec4( material.color, material.opacity );
+		var albedo = vec4( material.color, material.opacity ) * objectColor;
 		if ( material.vertexColors == 1 ) {
 
 			albedo *= getColor( vertexData );
@@ -398,12 +399,16 @@ export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChann
 		surf.emission = emission;
 
 		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
+		surf.matte = material.matte != 0;
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
 		surf.thinWall = material.thinWall == 1;
-		surf.attenuationColor = material.attenuationColor;
-		surf.attenuationDistance = material.attenuationDistance;
+
+		// only transmissive materials attenuate the light passing through their volume
+		let isTransmissive = material.transmission > 0.0;
+		surf.attenuationColor = select( vec3f( 1.0 ), material.attenuationColor, isTransmissive );
+		surf.attenuationDistance = select( 1.0, material.attenuationDistance, isTransmissive );
 		surf.dispersion = material.dispersion;
 
 		surf.multiscatterColor = material.multiscatterColor;
@@ -622,14 +627,23 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// takes the surface by name since the shading model defines its struct
+// Adjusts the surface ior to the given wavelength, returning false if the surface isn't dispersive.
+// Takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, wavelength: f32 ) -> bool {
 
-		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
+		let isDispersive = surf.dispersion > 0.0 && surf.ior > 1.0 && surf.transmission > 0.0 && ! surf.thinWall;
+		if ( ! isDispersive ) {
+
+			return false;
+
+		}
+
+		surf.ior = ${ dispersionIorFunc }( surf.ior, surf.dispersion, wavelength );
 		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
 		surf.f0 = ${ iorToF0Func }( surf.eta );
+		return true;
 
 	}
 

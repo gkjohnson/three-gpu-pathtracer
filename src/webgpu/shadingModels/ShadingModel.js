@@ -3,20 +3,19 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
-import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
+import { getSurfaceRecordFunc, applyDispersionFunc } from '../nodes/material.wgsl.js';
+import { enterMediumFn } from '../nodes/medium.wgsl.js';
+import { isAuxSurfaceFn } from '../nodes/aux.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
- * A custom material struct must keep the fields the ray traversal and kernels read:
- * "color", "opacity", "side", "transparent", "alphaTest", "vertexColors", "map", "mapTransform",
- * "alphaMap", "alphaMapTransform", "matte", "dispersion", "transmission", "attenuationColor",
- * "attenuationDistance", "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
+ * A custom material struct must keep the fields the ray traversal reads: "opacity", "side",
+ * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap" and "alphaMapTransform".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
- * "normal", "color", "emission", "opacity", "roughness", "metalness", "ior", "eta", "f0",
- * "frontFace", "transmission" and "thinWall".
+ * "normal", "color", "emission", "opacity", "matte", "attenuationColor" and "attenuationDistance".
  */
 export class ShadingModel {
 
@@ -90,6 +89,45 @@ export class ShadingModel {
 
 	/**
 	 *
+	 * Must return a function node with signature
+	 * ( surface: ptr<function, SurfaceRecord>, wavelength: f32 ) -> bool
+	 * adjusting the surface to the given wavelength, returning false if it isn't dispersive
+	 *
+	 */
+	getDispersionNode() {
+
+		return applyDispersionFunc;
+
+	}
+
+	/**
+	 *
+	 * Must return a function node with signature
+	 * ( surface: SurfaceRecord, object: u32 ) -> Medium
+	 * returning the medium entered by refracting into the surface
+	 *
+	 */
+	getMediumNode() {
+
+		return enterMediumFn;
+
+	}
+
+	/**
+	 *
+	 * Must return a function node with signature
+	 * ( surface: SurfaceRecord, scatterRec: ScatterRecord ) -> bool
+	 * returning whether a scatter shows the surface in the denoiser's auxiliary images
+	 *
+	 */
+	getAuxSurfaceNode() {
+
+		return isAuxSurfaceFn;
+
+	}
+
+	/**
+	 *
 	 * Must return the struct node each material is written to
 	 *
 	 */
@@ -113,8 +151,8 @@ export class ShadingModel {
 	/**
 	 *
 	 * Must return a function node with signature
-	 * ( material: Material, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
-	 * reading the surface from the material struct at a hit
+	 * ( material: Material, objectColor: vec4f, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
+	 * reading the surface from the material struct at a hit, tinted by the object's instance color
 	 *
 	 */
 	getSurfaceRecordNode( sampleTexel, getUvFromChannel, getColor ) {
@@ -542,6 +580,9 @@ export class ShadingModel {
 
 			bsdfSample: this.getBsdfNode(),
 			bsdfEvalPdf: this.getBsdfEvalPdfNode(),
+			applyDispersion: this.getDispersionNode(),
+			enterMedium: this.getMediumNode(),
+			isAuxSurface: this.getAuxSurfaceNode(),
 
 		};
 
