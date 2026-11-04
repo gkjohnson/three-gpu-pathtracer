@@ -354,8 +354,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const rayQueue = new StorageBufferAttribute( count, traceQueuedRayStruct.getLength() );
 		rayQueue.name = 'Ray Queue';
 
-		// a slot can trace a surface's shadow ray and a fog segment's in the same frame
-		const shadowRayQueue = new StorageBufferAttribute( 2 * count, traceQueuedRayStruct.getLength() );
+		const shadowRayQueue = new StorageBufferAttribute( count, traceQueuedRayStruct.getLength() );
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
 		// Traced rays fill the results from the front at their queue index, and MediumKernel fills them from the
@@ -365,7 +364,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
 
-		const shadowRayIntersectionsStorage = new StorageBufferAttribute( 2 * count, shadowTraceResultStruct.getLength() );
+		const shadowRayIntersectionsStorage = new StorageBufferAttribute( count, shadowTraceResultStruct.getLength() );
 		shadowRayIntersectionsStorage.name = 'Shadow Ray Intersections';
 
 		const mediumQueueSize = MEDIUM_QUEUE_HEADER + count;

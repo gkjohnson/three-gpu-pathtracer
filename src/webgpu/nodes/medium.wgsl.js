@@ -1,8 +1,6 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
-import { misHeuristicFn } from './sampling.wgsl.js';
-import { LIGHT_FAR_DISTANCE, DIR_LIGHT_TYPE, ENVIRONMENT_LIGHT_TYPE } from './lights.wgsl.js';
-import { lightRecordStruct } from './structs.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
@@ -23,10 +21,6 @@ const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
 // how many surfaces the ray finding the volumes a camera ray starts in passes
 const MEDIUM_ORIGIN_MAX_HITS = 16;
-
-// the smallest distance from a segment to the light point its equiangular samples are drawn toward, keeping
-// their pdf finite
-const MEDIUM_EQUIANGULAR_MIN_DISTANCE = 1e-4;
 
 // The media of the stack combined. "inside" marks one that scatters, which is walked, while one that only
 // absorbs attenuates the segments through it. A walk through fog samples light at each scatter event, as
@@ -373,82 +367,6 @@ export const shadowTransmittanceFunc = ( transforms, materials ) => {
 
 };
 
-// The point a light sample reaches, which equiangular sampling draws toward. Distant lights have none
-export const getLightPointFn = wgslTagFn/* wgsl */`
-
-	fn getLightPoint( position: vec3f, lightRec: ${ lightRecordStruct } ) -> vec4f {
-
-		let isDistant = lightRec.lightType == ${ DIR_LIGHT_TYPE } || lightRec.lightType == ${ ENVIRONMENT_LIGHT_TYPE };
-		return select( vec4f( position + lightRec.direction * lightRec.dist, 1.0 ), vec4f( 0.0 ), isDistant );
-
-	}
-
-`;
-
-// The point on a fog segment where light is sampled. As in Cycles it is chosen apart from the distance sample
-// that continues the path, between that sample and an equiangular one toward the last sampled light point
-// ("Importance Sampling Techniques for Path Tracing in Participating Media", Kulla and Fajardo 2012), weighted
-// by one sample MIS. The light point is any one chosen independently of the segment, "w" zero for none.
-// Returns the point's scattering and transmittance over its pdf with the MIS weight, zero when the chosen
-// strategy has no point
-export const sampleVolumeLightPointFn = wgslTagFn/* wgsl */`
-
-	fn sampleVolumeLightPoint(
-		medium: ${ mediumStruct }, channelPdf: vec3f, scatterDist: f32, segmentLength: f32,
-		origin: vec3f, direction: vec3f, lightPoint: vec4f, u: vec2f, dist: ptr<function, f32>,
-	) -> vec3f {
-
-		let scattering = medium.albedo * medium.extinction;
-		let scattered = scatterDist < segmentLength;
-
-		// the equiangular distribution over the segment, from the angles to the light point's projection on it
-		let toLight = lightPoint.xyz - origin;
-		let delta = dot( toLight, direction );
-		let height = max( length( toLight - direction * delta ), ${ MEDIUM_EQUIANGULAR_MIN_DISTANCE } );
-		let thetaA = atan2( - delta, height );
-		let thetaB = atan2( segmentLength - delta, height );
-		let hasEquiangular = lightPoint.w != 0.0 && thetaB > thetaA;
-
-		// the distance sample alone, when there is no light point to sample toward
-		if ( ! hasEquiangular ) {
-
-			if ( ! scattered ) {
-
-				return vec3f( 0.0 );
-
-			}
-
-			*dist = scatterDist;
-			let transmittance = exp( - medium.extinction * scatterDist );
-			return scattering * transmittance / dot( channelPdf, medium.extinction * transmittance );
-
-		}
-
-		let isEquiangular = u.x < 0.5;
-		var t = scatterDist;
-		if ( isEquiangular ) {
-
-			t = clamp( delta + height * tan( mix( thetaA, thetaB, u.y ) ), 0.0, segmentLength );
-
-		} else if ( ! scattered ) {
-
-			return vec3f( 0.0 );
-
-		}
-
-		let transmittance = exp( - medium.extinction * t );
-		let distancePdf = select( 0.0, dot( channelPdf, medium.extinction * transmittance ), t < segmentLength );
-		let offset = t - delta;
-		let equiangularPdf = height / ( ( thetaB - thetaA ) * ( height * height + offset * offset ) );
-
-		let pdf = select( distancePdf, equiangularPdf, isEquiangular );
-		let misWeight = ${ misHeuristicFn }( pdf, select( equiangularPdf, distancePdf, isEquiangular ) );
-		*dist = t;
-		return scattering * transmittance * misWeight / ( 0.5 * pdf );
-
-	}
-
-`;
 
 // The probability of sampling each color channel's distance, in proportion to throughput times albedo
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume.h#L157

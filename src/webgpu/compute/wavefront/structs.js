@@ -108,23 +108,6 @@ const rayDataMembers = {
 	// whether the staged hit is a scatter event in fog at "origin", a path vertex
 	mediumVertex: 'uint',
 
-	// the point the last light sample reached, which fog segments draw equiangular samples toward
-	lightPoint: 'vec4f',
-
-	// The light sampled from a point on the last fog segment, apart from the surface's: MediumKernel stages
-	// the point and its weight, which LogicKernel samples a light from, giving the color its shadow ray
-	// resolves the following frame. The color is kept apart since MediumKernel stages the next point first
-	volumeLightPosition: 'vec3f',
-	volumeShadowRayIntersectionIndex: 'int',
-
-	volumePointWeight: 'vec3f',
-	volumeLightMisWeight: 'float',
-
-	volumeLightColor: 'vec3f',
-	volumeLightDist: 'float',
-
-	volumeLightDirection: 'vec3f',
-
 };
 
 // The path's medium, nested at the end to share the ray data buffer under the storage buffer limit. Sized

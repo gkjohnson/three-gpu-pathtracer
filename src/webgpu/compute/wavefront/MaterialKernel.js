@@ -189,10 +189,6 @@ export class MaterialKernel extends ComputeKernel {
 
 					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
 					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ), ${ MEDIUM_STACK_EMPTY }u ) );
-					rayDataStorage[ index ].lightPoint = vec4f( 0.0 );
-					rayDataStorage[ index ].volumePointWeight = vec3f( 0.0 );
-					rayDataStorage[ index ].volumeLightColor = vec3f( 0.0 );
-					rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -206,25 +202,6 @@ export class MaterialKernel extends ComputeKernel {
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
 					let segmentInMedium = medium.inside;
-
-					// the shadow ray of the light LogicKernel sampled from a point on the fog segment just walked
-					if ( any( input.volumeLightColor > vec3f( 0.0 ) ) ) {
-
-						let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
-						shadowRayQueue[ shadowIndex ].origin = input.volumeLightPosition;
-						shadowRayQueue[ shadowIndex ].direction = input.volumeLightDirection;
-						shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
-						shadowRayQueue[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
-						shadowRayQueue[ shadowIndex ].seed = input.seed;
-						shadowRayQueue[ shadowIndex ].maxDist = input.volumeLightDist * ( 1.0 - ${ LIGHT_EPSILON } );
-						shadowRayQueue[ shadowIndex ].mediumStack = medium.stack;
-						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = i32( shadowIndex );
-
-					} else {
-
-						rayDataStorage[ index ].volumeShadowRayIntersectionIndex = - 1;
-
-					}
 
 					// A scatter event in fog, staged at "origin" by LogicKernel, is a path vertex like a surface,
 					// counted as a bounce, that continues through the phase function
@@ -268,9 +245,30 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						// its light was sampled with its segment's
-						rayDataStorage[ index ].lightPdf = 0.0;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						// evaluate the phase function toward the light LogicKernel selected and enqueue the shadow ray.
+						// The phase function is its own pdf
+						let lightPhasePdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
+						if ( input.lightPdf > 0.0 ) {
+
+							rayDataStorage[ index ].lightBsdf = vec3f( lightPhasePdf );
+							rayDataStorage[ index ].lightBsdfPdf = lightPhasePdf;
+
+							let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
+							shadowRayQueue[ shadowIndex ].origin = input.origin;
+							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
+							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
+							shadowRayQueue[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
+							shadowRayQueue[ shadowIndex ].seed = input.seed;
+							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+							shadowRayQueue[ shadowIndex ].mediumStack = medium.stack;
+							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
+
+						} else {
+
+							rayDataStorage[ index ].lightPdf = 0.0;
+							rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+
+						}
 						return;
 
 					}

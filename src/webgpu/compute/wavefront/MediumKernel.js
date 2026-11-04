@@ -2,12 +2,12 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { storage, uniform, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_VOLUME_LIGHT_POINT } from '../../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { sampleHenyeyGreensteinFn } from '../../nodes/sampling.wgsl.js';
 import {
 	loadMediumFn,
-	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, sampleVolumeLightPointFn,
+	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, MEDIUM_SCATTER_HIT, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HIT_COUNT, MEDIUM_QUEUE_HEADER, WALK_PENDING_CAMERA } from './structs.js';
@@ -70,11 +70,10 @@ export class MediumKernel extends ComputeKernel {
 
 				for ( var i = 0u; i < stepsPerPass; i ++ ) {
 
-					// a subsurface walk only traces up to the sampled scatter event, while a fog segment's light
-					// point needs the full distance to the surface
+					// only trace up to the sampled scatter event
 					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
 					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
-					ray.maxDist = select( scatterDist, 0.0, medium.fog );
+					ray.maxDist = scatterDist;
 
 					var hitResult: ${ raycastOutput };
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
@@ -88,20 +87,6 @@ export class MediumKernel extends ComputeKernel {
 
 						isTerminated = true;
 						break;
-
-					}
-
-					// the point on a fog segment where light is sampled, weighted from the segment's start
-					if ( medium.fog ) {
-
-						var pointDist = 0.0;
-						let pointWeight = ${ sampleVolumeLightPointFn }(
-							medium, channelPdf, scatterDist, surfaceDist, ray.origin, ray.direction, input.lightPoint,
-							${ rand2 }( ${ RNG_INDEX_VOLUME_LIGHT_POINT } ), &pointDist,
-						);
-
-						rayDataStorage[ index ].volumeLightPosition = ray.origin + ray.direction * pointDist;
-						rayDataStorage[ index ].volumePointWeight = weight * pointWeight;
 
 					}
 
