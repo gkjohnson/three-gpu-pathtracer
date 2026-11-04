@@ -11,9 +11,8 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
- * A custom material struct must keep the fields the ray traversal and kernels read: "opacity", "side",
- * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform"
- * and "transmission".
+ * A custom material struct must keep the fields the ray traversal reads: "opacity", "side", "transparent",
+ * "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap" and "alphaMapTransform".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
  * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",

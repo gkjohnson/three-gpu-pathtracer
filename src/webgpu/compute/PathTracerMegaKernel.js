@@ -368,7 +368,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// attenuate the light transmitted through the volume when exiting a backface. A scattering
 						// medium has already applied its transmittance above
-						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
+						if ( hitResult.side < 0.0 && surface.transmission > 0.0 && ! segmentInMedium ) {
 
 							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, surface.attenuationColor, surface.attenuationDistance );
 

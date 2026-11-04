@@ -292,7 +292,7 @@ export class MaterialKernel extends ComputeKernel {
 					// attenuate the light transmitted through the volume when exiting a backface so
 					// the surface's emission and NEE resolve against the attenuated throughput. MediumKernel
 					// already applied a scattering medium's transmittance
-					if ( input.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
+					if ( input.side < 0.0 && surface.transmission > 0.0 && ! segmentInMedium ) {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, surface.attenuationColor, surface.attenuationDistance );
 						rayDataStorage[ index ].throughputColor = throughputColor;
