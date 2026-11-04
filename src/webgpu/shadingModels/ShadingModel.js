@@ -1,6 +1,7 @@
 import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
 import { storage } from 'three/tsl';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, proxyFn } from 'three-mesh-bvh/webgpu';
+import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 import { materialStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
@@ -25,9 +26,11 @@ export class ShadingModel {
 
 	constructor() {
 
-		this.structs = { material: null };
-		this.storage = { materials: null };
-		this.fns = {};
+		// members are accessed through proxy nodes so they can be referenced up front and keep working
+		// across rebuilds, like BVHComputeData
+		this.structs = new NodeProxyObject( { material: null } );
+		this.storage = new NodeProxyObject( { materials: null } );
+		this.fns = new NodeProxyObject( { bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
 		this.materials = [];
 		this.materialsMap = new Map();
 		this.textures = [];
@@ -594,22 +597,23 @@ export class ShadingModel {
 			} );
 
 		// the storage is created once per material struct so the kernels keep referencing it as it grows
-		if ( structs.material === null ) {
+		if ( structs.material.proxyNode === null ) {
 
-			structs.material = this.getMaterialStruct();
-
-			const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
-			this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
+			const materialStruct = this.getMaterialStruct();
+			const attr = new StorageBufferAttribute( new Uint8Array(), materialStruct.getLength() );
+			structs.material = materialStruct;
+			this.storage.materials = storage( attr, materialStruct ).toReadOnly().setName( 'bvh_materials' );
 
 		}
 
 		const { materialData, textures } = this.writeMaterialsBuffer( materials );
-		const materialsStorage = this.storage.materials;
-		const count = materialData.length / structs.material.getLength();
+		const materialStruct = structs.material.proxyNode;
+		const materialsStorage = this.storage.materials.proxyNode;
+		const count = materialData.length / materialStruct.getLength();
 		if ( materialsStorage.value.count < count ) {
 
 			materialsStorage.value.dispose();
-			materialsStorage.value = new StorageBufferAttribute( materialData, structs.material.getLength() );
+			materialsStorage.value = new StorageBufferAttribute( materialData, materialStruct.getLength() );
 
 		}
 
@@ -640,7 +644,7 @@ export class ShadingModel {
 
 	dispose() {
 
-		this.storage.materials?.value.dispose();
+		this.storage.materials.proxyNode?.value.dispose();
 		this.storage.materials = null;
 		this.structs.material = null;
 		this.initialized = false;
