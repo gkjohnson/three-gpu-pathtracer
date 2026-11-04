@@ -183,6 +183,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.materialKernel.shadingModel = shadingModel.getData();
 		this.materialKernel.needsUpdate = true;
+
+		// the shading model defines the material struct the ray traversal reads
+		this.traceRayKernel.needsUpdate = true;
+		this.traceShadowRayKernel.needsUpdate = true;
+		this.mediumKernel.needsUpdate = true;
 		this.reset();
 
 	}

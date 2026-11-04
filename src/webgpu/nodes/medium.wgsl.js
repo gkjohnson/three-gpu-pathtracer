@@ -1,7 +1,6 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
-import { materialStruct } from './structs.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
@@ -86,13 +85,20 @@ const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
 // The medium entered by refracting into a material, not "inside" if the material doesn't scatter
 export const enterMediumFn = wgslTagFn/* wgsl */`
 
-	fn enterMedium( material: ${ materialStruct }, object: u32 ) -> ${ mediumStruct } {
+	fn enterMedium(
+		attenuationColor: vec3f,
+		attenuationDistance: f32,
+		multiscatterColor: vec3f,
+		scatterStrength: f32,
+		scatterAnisotropy: f32,
+		object: u32,
+	) -> ${ mediumStruct } {
 
-		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
+		let anisotropy = clamp( scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 
 		var medium: ${ mediumStruct };
-		medium.extinction = - log( max( material.attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) ) ) / material.attenuationDistance;
-		medium.albedo = ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
+		medium.extinction = - log( max( attenuationColor, vec3f( ${ MEDIUM_MIN_ATTENUATION } ) ) ) / attenuationDistance;
+		medium.albedo = ${ singleScatterAlbedoFn }( multiscatterColor * scatterStrength, anisotropy );
 		medium.inside = any( medium.albedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) );
 		medium.object = object;
 		medium.anisotropy = anisotropy;

@@ -499,7 +499,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// refracting into a front face of a scattering material starts a random walk inside it
 						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
 
-							let entered = ${ enterMediumFn }( materialInfo, hitResult.objectIndex );
+							let entered = ${ enterMediumFn }(
+								materialInfo.attenuationColor, materialInfo.attenuationDistance,
+								materialInfo.multiscatterColor, materialInfo.scatterStrength, materialInfo.scatterAnisotropy,
+								hitResult.objectIndex,
+							);
 
 							if ( entered.inside ) {
 

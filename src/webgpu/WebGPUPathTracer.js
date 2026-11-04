@@ -922,7 +922,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		} );
 
 		// Build TLAS and compute functions
-		const bvhData = new PathtracerBVHComputeData( scene );
+		const bvhData = new PathtracerBVHComputeData( scene, this.shadingModel );
 		bvhData.update();
 		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
 
@@ -1106,6 +1106,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 	setShadingModel( shadingModel ) {
 
 		this.shadingModel = shadingModel;
+
+		// the shading model writes the materials, so rewrite them in its struct
+		const { _bvhData, _renderer } = this;
+		if ( _bvhData ) {
+
+			_bvhData.setShadingModel( shadingModel );
+			_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+
+		}
+
 		this._pathTracer.setShadingModel( shadingModel );
 		this.reset();
 
