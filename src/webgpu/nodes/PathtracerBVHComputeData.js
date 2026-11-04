@@ -1,6 +1,6 @@
-import { BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy } from 'three-mesh-bvh/webgpu';
+import { float, bool, texture, uniformArray, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { sampleTexelFunc } from './utils.wgsl.js';
 import { AtlasTexture } from '../AtlasTexture.js';
@@ -47,13 +47,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			...options,
 		} );
 
-		// the shading model defines the material struct, how materials are written to it and read back
+		// the shading model owns the materials, the traversal reads them through the node context
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
-		this.structs.material = null;
-		this.storage.materials = null;
-		this.materialsMap = new Map();
-		this.materials = [];
 		this.bvhMap = new Map();
 		this.textureAtlas = new AtlasTexture();
 
@@ -189,6 +185,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// the transparency raycast resolve to one textureInfo binding per pipeline
 		fns.getSurfaceRecord = this.shadingModel.getSurfaceRecordNode( sampleTexel, fns.getUvFromChannel, fns.getColor );
 
+		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+
 		// raycast first hit, bounded by the ray's "maxDist" - 0 means unbounded
 		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
@@ -273,7 +271,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						triResult.dist *= ${ scratchRayScalar };
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
-							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
+							let material = ${ materialsStorage }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
 							// shadow rays hit both sides
@@ -396,7 +394,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let object = ${ storage.transforms }[ objectIndex ];
 					${ currentMaterialIndex } = object.materialIndex;
 
-					let material = ${ storage.materials }[ object.materialIndex ];
+					let material = ${ materialsStorage }[ object.materialIndex ];
 					if ( material.transparent == 1 ) {
 
 						${ baseOpacityScalar } = material.opacity * object.color.a;
@@ -458,20 +456,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	update() {
 
-		this.initMaterialStorage();
 		this.updateUvAttributesFromScene();
 
-		// the material indices are written with the transforms
-		this.updateMaterialsMap();
-
+		// the material indices are written with the transforms, so the shading model's materials must
+		// be updated first
 		super.update();
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
 		this.updateColorSampleFn();
-
-		// build material storage
-		this.updateMaterials();
 
 		this.bvhMap.clear();
 		this.useTransparencyRaycastFn();
@@ -480,95 +473,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	setShadingModel( shadingModel ) {
 
-		// the material struct may change, so rebuild its storage and the functions that read it
-		this.storage.materials.value.dispose();
 		this.shadingModel = shadingModel;
-		this.initMaterialStorage();
-		this.updateMaterials();
+		this.updateMaterialIndices();
 		this.useTransparencyRaycastFn();
 
 	}
 
-	initMaterialStorage() {
+	updateMaterialIndices() {
 
-		const { structs, shadingModel } = this;
-		structs.material = shadingModel.getMaterialStruct();
-
-		const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
-		this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
-
-	}
-
-	updateMaterialsMap() {
-
-		const { materials, materialsMap } = this;
-		materialsMap.clear();
-		materials.length = 0;
-		this.getRootObject().traverse( o => {
-
-			if ( o.material ) {
-
-				if ( Array.isArray( o.material ) ) {
-
-					o.material.forEach( m => m && add( m ) );
-
-				} else {
-
-					add( o.material );
-
-				}
-
-			}
-
-		} );
-
-		materials
-			.sort( ( a, b ) => {
-
-				return a.uuid < b.uuid ? 1 : - 1;
-
-			} )
-			.forEach( ( m, i ) => {
-
-				materialsMap.set( m, i );
-
-			} );
-
-		function add( mat ) {
-
-			if ( ! materialsMap.has( mat ) ) {
-
-				materials.push( mat );
-				materialsMap.set( mat, - 1 );
-
-			}
-
-		}
-
-	}
-
-	updateMaterials() {
-
-		this.updateMaterialsMap();
-
-		const { materials, storage, structs, bvh, shadingModel } = this;
-		const { materialData, textures } = shadingModel.writeMaterialsBuffer( materials );
-
-		const materialsStorage = storage.materials.proxyNode;
+		const { storage, bvh } = this;
 		const transformsStorage = storage.transforms.proxyNode;
-		const count = materialData.length / structs.material.getLength();
-		if ( materialsStorage.value.count < count ) {
-
-			materialsStorage.value.dispose();
-			materialsStorage.value = new StorageBufferAttribute( materialData, structs.material.getLength() );
-
-		}
-
-		// copy the material buffer content
-		materialsStorage.value.array.set( materialData );
-		materialsStorage.value.needsUpdate = true;
-
-		// update the transform content
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
@@ -576,15 +490,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		} );
 		transformsStorage.value.needsUpdate = true;
 
-		// save the textures
-		this.textures = textures;
-
 	}
 
 	writeMaterialData( info, writeOffset, targetBuffer ) {
 
 		// write material data to the transforms
-		const { materialsMap } = this;
+		const { shadingModel } = this;
 		const { object, instanceId, root } = info;
 
 		// get the material associated with the bvh group
@@ -598,7 +509,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 
-		const index = materialsMap.has( material ) ? materialsMap.get( material ) : - 1;
+		const index = shadingModel.getMaterialIndex( material );
 		if ( index === - 1 ) {
 
 			// hide the object when there is no material

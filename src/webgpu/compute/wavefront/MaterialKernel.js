@@ -3,7 +3,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
-import { proxyFn, contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import {
 	rayDataStruct, traceQueuedRayStruct,
@@ -24,8 +24,6 @@ export class MaterialKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			shadingModel: { value: null },
-
 			globalSeed: uniform( 0, 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
@@ -48,9 +46,9 @@ export class MaterialKernel extends ComputeKernel {
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
-		const bsdfSampleFn = proxyFn( 'shadingModel.value.bsdfSample', params );
-		const bsdfEvalPdfFn = proxyFn( 'shadingModel.value.bsdfEvalPdf', params );
-		const materialsStorage = contextProxy( 'bvhData.storage.materials' );
+		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
+		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
+		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		const fn = wgslTagFn/* wgsl */`
