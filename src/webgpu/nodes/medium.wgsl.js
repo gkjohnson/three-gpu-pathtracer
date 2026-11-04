@@ -11,6 +11,10 @@ const MEDIUM_MIN_ATTENUATION = 1e-6;
 // the throughput below which a walk stops, matching Cycles' VOLUME_THROUGHPUT_EPSILON
 export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 
+// the largest phase anisotropy used, short of the +/- 1 delta phase function the scatter albedo
+// inversion and the Henyey-Greenstein pdf divide by zero at
+const MEDIUM_MAX_ANISOTROPY = 0.999;
+
 // The media a path is inside of, as in Cycles' volume_stack.h: the object indices of up to four volumes,
 // packed at the front with the empty value after them. A volume entered past a full stack is ignored
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
@@ -197,16 +201,17 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 			}
 
 			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
+			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 			// a fog volume's color is its single scatter albedo already
 			let isFog = material.fogVolume != 0;
-			let entryAlbedo = select( ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, material.scatterAnisotropy ), material.multiscatterColor, isFog );
+			let entryAlbedo = select( ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy ), material.multiscatterColor, isFog );
 			let entryScattering = entryAlbedo * entryExtinction;
 			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
 			extinction += entryExtinction;
 			scattering += entryScattering;
 			maxAlbedo = max( maxAlbedo, entryAlbedo );
-			anisotropy += material.scatterAnisotropy * weight;
+			anisotropy += entryAnisotropy * weight;
 			anisotropyWeight += weight;
 			fog = fog || isFog;
 

@@ -47,7 +47,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -59,6 +59,11 @@ async function init() {
 	pathTracer.minSamples = 1;
 	// keep a live low-res preview while the camera or animation is moving
 	pathTracer.dynamicLowRes = true;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// scene
 	scene = new Scene();
@@ -199,7 +204,6 @@ function animate() {
 		}
 
 		pathTracer.renderSample();
-		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	}
 

@@ -25,7 +25,7 @@ const scene = new Scene();
 const transformScene = new Scene();
 const camera = new PerspectiveCamera( 50, 1, 0.01, 100 );
 
-const renderer = new WebGPURenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 
@@ -93,6 +93,12 @@ window.addEventListener( 'keydown', event => {
 
 const loader = new LoaderElement();
 loader.attach( document.body );
+
+pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+	loader.setStage( stage, progress, samples );
+
+} );
 
 const raycaster = new Raycaster();
 const pointer = new Vector2();
@@ -287,8 +293,6 @@ function animate() {
 	}
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	if ( selected ) {
 

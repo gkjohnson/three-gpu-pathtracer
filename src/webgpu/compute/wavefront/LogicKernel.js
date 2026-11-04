@@ -38,6 +38,7 @@ export class LogicKernel extends ComputeKernel {
 			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
 
 			// settings
+			globalSeed: uniform( 0, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
@@ -75,6 +76,7 @@ export class LogicKernel extends ComputeKernel {
 
 			fn compute(
 				// settings
+				globalSeed: u32,
 				misEnabled: u32,
 				rayCount: u32,
 				maxBounces: u32,
@@ -99,7 +101,8 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				// skip slots that have never spawned a ray
-				let input = ( *rayDataStorage )[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.rayIntersectionIndex < 0 ) {
 
 					return;
@@ -107,7 +110,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				// one-sample NEE chooses between the analytic lights and the environment, matched with
 				// the megakernel
@@ -131,7 +134,7 @@ export class LogicKernel extends ComputeKernel {
 				// is negative when no shadow ray was enqueued last frame
 				if ( input.shadowRayIntersectionIndex >= 0 && input.lightPdf > 0.0 ) {
 
-					let shadowHit = ( *shadowRayIntersectionsStorage )[ u32( input.shadowRayIntersectionIndex ) ];
+					let shadowHit = ${ params.shadowRayIntersectionsStorage }[ u32( input.shadowRayIntersectionIndex ) ];
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
@@ -183,7 +186,7 @@ export class LogicKernel extends ComputeKernel {
 				} else if ( ! isTerminated ) {
 
 					// a walk ending at a scatter event in fog is staged like a surface hit
-					let hitResult = ( *rayIntersectionsStorage )[ u32( input.rayIntersectionIndex ) ];
+					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
 					let isMediumScatter = hitResult.objectIndex == ${ MEDIUM_SCATTER_HIT };
 					let didHit = hitResult.objectIndex >= 0 || isMediumScatter;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );

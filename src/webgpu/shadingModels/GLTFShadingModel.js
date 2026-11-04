@@ -1,12 +1,12 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { PathtracingMaterial } from './PathtracingMaterial.js';
+import { ShadingModel } from './ShadingModel.js';
 import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc } from '../nodes/material.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
@@ -14,7 +14,7 @@ import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresn
 const CLEARCOAT_IOR = float( 1.5 );
 const SINGULAR_EVENT_SCALE = float( 1e6 );
 
-export class GltfCompliantMaterial extends PathtracingMaterial {
+export class GLTFShadingModel extends ShadingModel {
 
 	constructor( options = {} ) {
 
@@ -48,8 +48,16 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	}
 
+	dispose() {
+
+		super.dispose();
+		this.turquinTexture.dispose();
+
+	}
+
 	getBsdfNode() {
 
+		const surfaceRecordStruct = this.getSurfaceRecordStruct();
 		this._bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
@@ -230,11 +238,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let metallic = metallicSpecular * metallicReflectance;
 					let dielectric = dielectricSpecular * dielectricReflectance;
 
-					// the energy the specular interface takes from the layers below
-					let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
+					// The energy the specular interface takes from the layers below, at the lobe's specular color
+					// and intensity. The table holds the albedo at the ior's f0, and the Schlick albedo is linear
+					// in f0, so the tinted albedo slides from it toward the conductor albedo at f0 = 1
+					let iorEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior );
+					let tintedEnergySS = iorEnergySS + ( dielectricF0 - surf.f0 ) * ( energySS - iorEnergySS ) / ( 1.0 - surf.f0 );
+					let fresnelEnergySS = surf.specularIntensity * tintedEnergySS * dielectricBoost;
 
 					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
-					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
+					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, vec3f( 1.0 - filmFresnelMax ), surf.iridescence );
 
 				}
 
@@ -387,6 +399,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						wi = refract( - wo, wh, surf.eta );
 
+						// "refract" returns zero on total internal reflection, so reflect instead and let "isDead" drop it
+						if ( dot( wi, wi ) == 0.0 ) {
+
+							wi = - normalize( reflect( wo, wh ) );
+
+						}
+
 					}
 
 					// the facet choice must agree with the resulting hemisphere - reflection above,
@@ -466,6 +485,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 		}
 
 		const bsdfEvalFunc = this._bsdfEvalFunc;
+		const surfaceRecordStruct = this.getSurfaceRecordStruct();
 
 		this._bsdfEvalPdfNode = wgslTagFn/* wgsl */`
 

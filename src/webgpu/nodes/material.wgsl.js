@@ -133,10 +133,11 @@ const ensureValidViewNormal = wgslTagFn/* wgsl */`
 // clamps to zero for any path pdf when the inverted filter value is this large.
 export const FILTER_GLOSSY_DISABLED = 3.402823466e38;
 
-export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
+export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
 
 	fn getSurfaceRecord(
 		material: Material,
+		objectColor: vec4f,
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
@@ -181,7 +182,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		normal = ensureValidReflectionNormal( normal, faceNormal, view );
 
-		var albedo = vec4( material.color, material.opacity );
+		var albedo = vec4( material.color, material.opacity ) * objectColor;
 		if ( material.vertexColors == 1 ) {
 
 			albedo *= getColor( vertexData );
@@ -398,12 +399,18 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.emission = emission;
 
 		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
+		surf.matte = material.matte != 0;
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
 		surf.thinWall = material.thinWall == 1;
 		surf.attenuationColor = material.attenuationColor;
 		surf.attenuationDistance = material.attenuationDistance;
+		surf.dispersion = material.dispersion;
+
+		surf.multiscatterColor = material.multiscatterColor;
+		surf.scatterStrength = material.scatterStrength;
+		surf.scatterAnisotropy = material.scatterAnisotropy;
 
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;
@@ -455,7 +462,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 	sampleTexel,
 	getUvFromChannel,
 	getColor,
-	surfaceRecordStruct,
+	surfaceRecord,
 	constants,
 	ensureValidReflectionNormal,
 	ensureValidViewNormal,
@@ -606,9 +613,10 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, ${ surfaceRecordStruct }>, dispersion: f32, wavelength: f32 ) -> void {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
 
 		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
 		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );

@@ -68,7 +68,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer();
+	renderer = new WebGPURenderer( { trackTimestamp: true } );
 	renderer.init();
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = PCFSoftShadowMap;
@@ -78,6 +78,11 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -196,11 +201,6 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 
@@ -261,7 +261,6 @@ function animate() {
 	if ( params.enable ) {
 
 		pathTracer.renderSample();
-		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 	} else {
 

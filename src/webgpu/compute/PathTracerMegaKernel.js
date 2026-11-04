@@ -18,7 +18,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
-			material: { value: null },
 			envInfo: { value: null },
 			lightsInfo: { value: null },
 
@@ -32,7 +31,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 
 			// settings
-			seed: uniform( 0 ),
+			sampleIndex: uniform( 0 ),
+			globalSeed: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxSubsurfaceBounces: uniform( 256, 'uint' ),
@@ -67,17 +67,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
-		const bsdfSampleFn = proxyFn( 'material.value.bsdfSample', params );
-		const bsdfEvalPdfFn = proxyFn( 'material.value.bsdfEvalPdf', params );
+		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
+		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
+		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
-		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
-		const materialsNode = contextProxy( 'bvhData.storage.materials' );
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
-		const mediumStackExitFn = mediumStackExitFunc( transformsNode );
-		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
+		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
+		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
+		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
 		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
-		const shadowTransmittanceFn = shadowTransmittanceFunc( transformsNode, materialsNode );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, offsetRayOriginFunc, transformsNode, materialsNode, mediumStackEnterFn );
+		const shadowTransmittanceFn = shadowTransmittanceFunc( transformsStorage, materialsStorage );
+		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, offsetRayOriginFunc, transformsStorage, materialsStorage, mediumStackEnterFn );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -109,7 +109,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				tileSize: vec2u,
 
 				// settings
-				seed: u32,
+				sampleIndex: u32,
+				globalSeed: u32,
 				maxBounces: u32,
 				maxTransparentBounces: u32,
 				maxSubsurfaceBounces: u32,
@@ -125,9 +126,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				accumulateAux: u32,
 
 			) -> void {
-
-				let transforms = &${ contextProxy( 'bvhData.storage.transforms' ) };
-				let materials = &${ contextProxy( 'bvhData.storage.materials' ) };
 
 				// make sure we don't bleed over the edge of our tile
 				if ( globalId.x >= tileSize.x || globalId.y >= tileSize.y ) {
@@ -154,7 +152,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-				${ rngInit }( indexUV.xy, seed, 0 );
+				${ rngInit }( globalSeed, indexUV.xy, sampleIndex, 0 );
 
 				// scene ray
 				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
@@ -442,20 +440,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let objectInfo = transforms[ hitResult.objectIndex ];
-						var materialInfo = ( *materials )[ objectInfo.materialIndex ];
-
-						// a matte surface hit by the camera ray renders as a fully transparent
-						if ( materialInfo.matte != 0 && bounce == 0u ) {
-
-							resultColor = vec4f( 0.0 );
-							break;
-
-						}
-
-						// apply per-object colors
-						materialInfo.color *= objectInfo.color.rgb;
-						materialInfo.opacity *= objectInfo.color.a;
+						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
+						let objectInfo = ${ transformsStorage }[ hitResult.objectIndex ];
+						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
@@ -468,7 +455,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+
+						// a matte surface hit by the camera ray renders as a fully transparent
+						if ( surface.matte && bounce == 0u ) {
+
+							resultColor = vec4f( 0.0 );
+							break;
+
+						}
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the traversal at the hit point, advancing the rng but not the bounce count. A fog
@@ -513,11 +508,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 						if ( isDispersive ) {
 
 							let wavelength = abs( dispersionWavelength );
-							${ applyDispersionFunc }( &surface, materialInfo.dispersion, wavelength );
+							${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
 							if ( dispersionWavelength < 0.0 ) {
 
 								dispersionWavelength = wavelength;

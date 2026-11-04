@@ -6,7 +6,7 @@ import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
 // material properties that can be assigned to a grid axis
-const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specular intensity', 'specular color', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'opacity', 'none' ];
+const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specular intensity', 'specular color', 'iridescence', 'clearcoat', 'thin wall transmission', 'volume transmission', 'subsurface', 'opacity', 'none' ];
 
 const options = {
 	enable: true,
@@ -19,7 +19,7 @@ const options = {
 };
 
 // renderers
-const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
@@ -61,6 +61,12 @@ controls.addEventListener( 'change', () => {
 const loader = new LoaderElement();
 loader.attach( document.body );
 loader.setPercentage( 1 );
+
+pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+	loader.setStage( stage, progress, samples );
+
+} );
 
 const gui = new GUI();
 gui.add( options, 'enable' );
@@ -113,8 +119,6 @@ function animate() {
 		renderer.render( scene, camera );
 
 	}
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 
@@ -221,6 +225,15 @@ function buildGrid() {
 			// any non zero thickness marks the material as a solid volume in the path tracer
 			material.transmission = val;
 			material.thickness = 1.0;
+
+		} else if ( field === 'subsurface' ) {
+
+			// a scattering volume, varying the scatter strength
+			material.transmission = 1.0;
+			material.thickness = 1.0;
+			material.attenuationColor.setRGB( 0.5, 0.5, 0.5 );
+			material.attenuationDistance = 0.5;
+			material.scatterStrength = val;
 
 		} else if ( field === 'opacity' ) {
 

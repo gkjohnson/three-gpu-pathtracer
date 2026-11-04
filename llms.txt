@@ -1,0 +1,48 @@
+# three-gpu-pathtracer
+
+> A progressive, physically based path tracer for three.js scenes, running on WebGPU compute shaders with BVH acceleration from three-mesh-bvh. npm package `three-gpu-pathtracer`. MIT licensed.
+
+## Instructions for Large Language Models
+
+- Use `WebGPUPathTracer` from `three-gpu-pathtracer/webgpu` with three's `WebGPURenderer` from `three/webgpu`. The older `WebGLPathTracer` API is deprecated, so don't generate code for it.
+- Cameras, lights and textures such as `PhysicalCamera`, `EquirectCamera`, `ShapedAreaLight` and `GradientEquirectTexture` are imported from `three-gpu-pathtracer`, not `/webgpu`.
+- Call `setScene( scene, camera )` once, then `renderSample()` every frame. After later changes call the matching update function rather than `setScene` again: `updateCamera`, `updateMaterials`, `updateTransforms`, `updateEnvironment` or `updateLights`. Changed geometry needs `setScene`.
+- For large scenes, call `setBVHWorker( GenerateMeshBVHWorker )` with the worker from `three-mesh-bvh/worker`, then `await setSceneAsync( scene, camera )` so the page isn't blocked.
+- The adaptive frame budget, on by default, needs a renderer created with `trackTimestamp: true`.
+- Only `MeshStandardMaterial` and `MeshPhysicalMaterial` are supported.
+
+## Basic use
+
+```js
+import * as THREE from 'three/webgpu';
+import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+
+const renderer = new THREE.WebGPURenderer( { trackTimestamp: true } );
+await renderer.init();
+
+const pathTracer = new WebGPUPathTracer( renderer );
+pathTracer.setScene( scene, camera );
+
+// "stage" is "building", "compiling", "rendering" or "denoising"
+pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {} );
+
+function animate() {
+
+	requestAnimationFrame( animate );
+	pathTracer.renderSample();
+
+}
+
+animate();
+```
+
+## Denoising
+
+- `OIDNDenoiser` runs Open Image Denoise once the render stops, so set `maxSamples` above zero. The app provides `initUNetFromURL` from `oidn-webgpu` and the network weights from the oidn-weights repository: `pathTracer.setDenoiser( new OIDNDenoiser( { initUNetFromURL, auxWeightsUrl } ) )`.
+
+## Docs
+
+- [API documentation](https://gkjohnson.github.io/tools/docs/three-gpu-pathtracer/): every class, option, method and event
+- [API.md](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/webgpu/API.md): the same documentation as markdown
+- [README](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/README.md): setup, blurred environment maps and known limitations
+- [Examples](https://github.com/gkjohnson/three-gpu-pathtracer/tree/main/example): materials, lights, depth of field, denoising, animation and video rendering

@@ -26,7 +26,7 @@ export class CameraMediumKernel extends ComputeKernel {
 		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
 
 		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
-		const materialsNode = contextProxy( 'bvhData.storage.materials' );
+		const materialsNode = contextProxy( 'shadingModel.storage.materials' );
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
 		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
 		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, offsetRayOriginFunc, transformsNode, materialsNode, mediumStackEnterFn );
@@ -44,8 +44,9 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				// a camera ray spawned this frame: MaterialKernel gave a freed slot a ray to trace
-				let input = ( *rayDataStorage )[ index ];
+				// a camera ray spawned this frame: MaterialKernel gave a freed slot a ray to trace. Whole structs are
+				// read from the buffer, not the pointer alias, which Safari fails to compile
+				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.objectIndex >= 0 || input.rayIntersectionIndex < 0 ) {
 
 					return;

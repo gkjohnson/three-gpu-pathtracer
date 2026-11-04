@@ -165,6 +165,10 @@ The same documentation is also available as markdown in [API.md](./src/webgpu/AP
 <img src="./docs/sasha-ring.webp" />
 </p>
 
+<p align="center">
+<img src="./docs/monster.webp" />
+</p>
+
 ### Resources
 
 [Raytracing in One Weekend Book](https://raytracing.github.io/)
