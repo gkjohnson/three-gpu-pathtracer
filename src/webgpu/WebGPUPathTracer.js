@@ -580,8 +580,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.maxSamples = maxSamples;
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
-		this._pathTracer.setShadingModel( this.shadingModel );
-		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setShadingModel( this._shadingModel );
+		this._pathTracer.setRandom( this._random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
@@ -784,14 +784,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @type {Object}
 		 * @private
 		 */
-		this.random = RANDOM_SOBOL;
+		this._random = RANDOM_SOBOL;
 
 		/**
 		 * Shading model the kernels evaluate surfaces with.
 		 * @type {ShadingModel}
 		 * @private
 		 */
-		this.shadingModel = new GLTFShadingModel();
+		this._shadingModel = new GLTFShadingModel();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
@@ -805,8 +805,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._wasComplete = false;
 
 		// initialize the scene so it doesn't fail
-		this.setShadingModel( this.shadingModel );
-		this.setRandom( this.random );
+		this.setShadingModel( this._shadingModel );
+		this.setRandom( this._random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
@@ -922,7 +922,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		} );
 
 		// the materials are written first since the bvh data writes their indices with the transforms
-		const { shadingModel } = this;
+		const { _shadingModel: shadingModel } = this;
 		shadingModel.updateMaterials( scene );
 
 		// Build TLAS and compute functions
@@ -1097,7 +1097,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	getShadingModel() {
 
-		return this.shadingModel;
+		return this._shadingModel;
 
 	}
 
@@ -1109,7 +1109,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	setShadingModel( shadingModel ) {
 
-		this.shadingModel = shadingModel;
+		this._shadingModel = shadingModel;
 		shadingModel.updateFunctions();
 
 		// the shading model writes the materials, so rewrite them in its struct
@@ -1134,7 +1134,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	setRandom( random ) {
 
-		this.random = random;
+		this._random = random;
 		this._pathTracer.setRandom( random );
 		this.reset();
 
@@ -1201,10 +1201,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	updateMaterials() {
 
-		const { _bvhData, _renderer, shadingModel, scene } = this;
-		shadingModel.updateMaterials( scene );
+		const { _bvhData, _renderer, _shadingModel, scene } = this;
+		_shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
-		_bvhData.textureAtlas.setTextures( _renderer, shadingModel.textures );
+		_bvhData.textureAtlas.setTextures( _renderer, _shadingModel.textures );
 		this.reset();
 
 	}
@@ -1489,10 +1489,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		if ( ! this.shadingModel.initialized ) {
+		if ( ! this._shadingModel.initialized ) {
 
-			this.shadingModel.init( renderer );
-			this.shadingModel.initialized = true;
+			this._shadingModel.init( renderer );
+			this._shadingModel.initialized = true;
 
 		}
 
@@ -1706,7 +1706,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		camera.updateMatrixWorld();
 
 		// (re)build the quad if it hasn't been built or the bvh data or shading model has changed
-		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData || this._debugBoundsShadingModel !== this.shadingModel ) {
+		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData || this._debugBoundsShadingModel !== this._shadingModel ) {
 
 			this._buildDebugBoundsQuad();
 
@@ -1738,7 +1738,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	_buildDebugBoundsQuad() {
 
-		const { _bvhData: bvhData, shadingModel } = this;
+		const { _bvhData: bvhData, _shadingModel: shadingModel } = this;
 		const debugBounds = getDebugBoundsFunction( bvhData, shadingModel );
 
 		const material = new MeshBasicNodeMaterial();
@@ -1868,7 +1868,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
 		this._bvhData.textureAtlas.dispose();
-		this.shadingModel.dispose();
+		this._shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
 		this._lowResTarget.dispose();
