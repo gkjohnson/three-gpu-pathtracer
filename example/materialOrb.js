@@ -110,6 +110,11 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	scene = new Scene();
 
@@ -209,7 +214,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'anisotropyRotation', 0.0, 2.0 * Math.PI ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'scatterStrength', 0.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.addColor( params.materialProperties, 'multiscatterColor' ).onChange( onParamsChange );
-	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 0.99, 0.99 ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 1.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
@@ -407,7 +412,8 @@ function onParamsChange() {
 	material.sheenRoughness = materialProperties.sheenRoughness;
 	material.iridescence = materialProperties.iridescence;
 	material.iridescenceIOR = materialProperties.iridescenceIOR;
-	material.iridescenceThicknessRange = [ 0, materialProperties.iridescenceThickness ];
+	material.iridescenceThicknessMinimum = 0;
+	material.iridescenceThicknessMaximum = materialProperties.iridescenceThickness;
 	material.specularColor.set( materialProperties.specularColor );
 	material.specularIntensity = materialProperties.specularIntensity;
 	material.anisotropy = materialProperties.anisotropy;
@@ -453,7 +459,5 @@ function animate() {
 		renderer.render( scene, camera );
 
 	}
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

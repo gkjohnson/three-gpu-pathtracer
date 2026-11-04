@@ -20,6 +20,7 @@ export class MediumKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
+			globalSeed: uniform( 0, 'uint' ),
 			maxSubsurfaceBounces: uniform( 256, 'uint' ),
 			stepsPerPass: uniform( 16, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
@@ -36,7 +37,7 @@ export class MediumKernel extends ComputeKernel {
 
 		const fn = wgslTagFn/* wgsl */`
 
-			fn compute( maxSubsurfaceBounces: u32, stepsPerPass: u32, rayCount: u32, globalId: vec3u ) -> void {
+			fn compute( globalSeed: u32, maxSubsurfaceBounces: u32, stepsPerPass: u32, rayCount: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let mediumQueue = &${ params.mediumQueue };
@@ -49,11 +50,12 @@ export class MediumKernel extends ComputeKernel {
 				}
 
 				let index = mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ];
-				let input = ( *rayDataStorage )[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let input = ${ params.rayDataStorage }[ index ];
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, input.seed, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
 
 				var ray = Ray( input.origin, input.direction, 0.0 );
 				var weight = input.scatterColor;

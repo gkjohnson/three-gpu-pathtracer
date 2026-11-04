@@ -103,7 +103,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// init renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -123,6 +123,11 @@ async function init() {
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
@@ -276,12 +281,6 @@ function animate() {
 
 	previewQuad.material.quiltMap = pathTracer.target;
 	previewQuad.render( renderer );
-
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		loader.setSamples( counts );
-
-	} );
 
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
 
@@ -444,11 +443,6 @@ function buildGui() {
 
 	const ptFolder = gui.addFolder( 'Path Tracing' );
 	ptFolder.add( params, 'pause' );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
-
-		pathTracer.frameBudget = v;
-
-	} );
 
 	const lkgFolder = gui.addFolder( 'Looking Glass Views' );
 	lkgFolder.add( params, 'numViews', 1, 100, 1 ).onChange( onLkgParamsChange );

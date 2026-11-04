@@ -35,8 +35,8 @@ export class PathTracerBackend {
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
-		// the gpu time of the last timed update and what it ran with. "count" increments per measurement
-		this.timing = { count: 0, frameTime: 0, frameBudget: 0, lowResMode: false, pixelCount: 0 };
+		// the gpu time of the last timed update and the budget it ran with. "count" increments per measurement
+		this.timing = { count: 0, frameTime: 0, frameBudget: 0 };
 
 		this._renderTask = null;
 		this._compileState = new WeakMap();
@@ -97,7 +97,7 @@ export class PathTracerBackend {
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
 	}
 
@@ -149,6 +149,10 @@ export class PathTracerBackend {
 		const computeNodes = kernels.map( kernel => kernel.kernel );
 		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
 		if ( requested.length > 0 ) {
+
+			// let a frame present before the compile blocks the main thread
+			this.compiling = true;
+			yield;
 
 			requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_STARTED ) );
 			renderer.compileComputeAsync( requested )
@@ -223,6 +227,13 @@ export class PathTracerBackend {
 
 	}
 
+	// the most pixels a preview frame can render within the frame budget
+	getPreviewPixelBudget() {
+
+		return this.frameBudget;
+
+	}
+
 	update() {
 
 		const { renderer } = this;
@@ -267,9 +278,8 @@ export class PathTracerBackend {
 	async _measureFrameTime( uids ) {
 
 		// what the update ran with, read before the readback since it may change meanwhile
-		const { renderer, timing, frameBudget, lowResMode } = this;
+		const { renderer, timing, frameBudget } = this;
 		const { backend } = renderer;
-		const { width, height } = this.outputTarget;
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
@@ -284,8 +294,6 @@ export class PathTracerBackend {
 
 		timing.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
 		timing.frameBudget = frameBudget;
-		timing.lowResMode = lowResMode;
-		timing.pixelCount = width * height;
 		timing.count ++;
 
 	}

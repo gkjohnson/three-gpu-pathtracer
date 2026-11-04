@@ -37,10 +37,8 @@ let animationDuration = 0;
 let videoUrl = '';
 let loader;
 
-// Sample counts are measured asynchronously, so the average is kept for the recording checks. A
-// measurement requested before the latest reset is dropped so it cannot trigger a frame write
+// the average sample count from the latest "progress" event, shown in the recording progress
 let averageSamples = 0;
-let resetCount = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
 let recordingState = 'idle';
@@ -73,7 +71,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -87,6 +85,33 @@ async function init() {
 	// the tracer stops itself at the target, and without a fade a captured frame is never dimmed
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.fadeDuration = 0;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		// the loading line shows the recording progress while recording
+		if ( recordingState !== 'recording' ) {
+
+			loader.setStage( stage, progress, samples );
+
+		}
+
+		if ( samples ) {
+
+			averageSamples = samples.avg;
+
+		}
+
+	} );
+
+	// write the video frame and advance the animation once every pixel reaches the target sample count
+	pathTracer.addEventListener( 'complete', () => {
+
+		if ( recordingState === 'recording' && ! isWritingFrame ) {
+
+			writeVideoFrame();
+
+		}
+
+	} );
 
 	// scene
 	scene = new Scene();
@@ -191,11 +216,6 @@ function rebuildGUI() {
 
 	// dynamic parameters
 	const renderFolder = gui.addFolder( 'rendering' );
-	renderFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	renderFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( value => {
 
 		pathTracer.maxSamples = value;
@@ -232,7 +252,6 @@ function regenerateScene() {
 	pathTracer.setScene( scene, camera );
 
 	averageSamples = 0;
-	resetCount ++;
 
 }
 
@@ -281,6 +300,8 @@ async function finishRecording() {
 
 	if ( recordingState !== 'recording' ) return;
 
+	// no more frames are written while the video finalizes
+	recordingState = 'finishing';
 	rebuildGUI();
 
 	try {
@@ -305,6 +326,7 @@ async function finishRecording() {
 		videoOutput = null;
 		videoSource = null;
 		isWritingFrame = false;
+		loader.setPercentage( 1 );
 
 		pathTracer.minSamples = 1;
 		recordedFrames = 0;
@@ -368,18 +390,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const measuredReset = resetCount;
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		loader.setSamples( counts );
-		if ( measuredReset === resetCount ) {
-
-			averageSamples = counts.avg;
-
-		}
-
-	} );
-
 	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
@@ -393,23 +403,9 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; ! isWritingFrame && i < 1; i ++ ) {
+		if ( ! isWritingFrame ) {
 
 			pathTracer.renderSample();
-
-			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && averageSamples >= params.maxSamples ) {
-
-				break;
-
-			}
-
-		}
-
-		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && averageSamples >= params.maxSamples ) {
-
-			writeVideoFrame();
 
 		}
 
@@ -422,11 +418,7 @@ function animate() {
 		const percStride = 1 / total;
 		const samplesPerc = averageSamples / params.maxSamples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-		loader.setPercentage( percentDone );
-
-	} else {
-
-		loader.setPercentage( 1 );
+		loader.setProgress( 'Recording', percentDone );
 
 	}
 

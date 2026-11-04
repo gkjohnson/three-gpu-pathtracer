@@ -188,6 +188,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	color: 'vec3f',
 	emission: 'vec3f',
 	opacity: 'f32',
+	matte: 'bool',
 
 	// transmission
 	ior: 'f32',
@@ -195,6 +196,12 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	thinWall: 'bool',
 	attenuationColor: 'vec3f',
 	attenuationDistance: ' f32',
+	dispersion: 'f32',
+
+	// volume scattering
+	multiscatterColor: 'vec3f',
+	scatterStrength: 'f32',
+	scatterAnisotropy: 'f32',
 
 	// clearcoat
 	clearcoatNormal: 'vec3f',

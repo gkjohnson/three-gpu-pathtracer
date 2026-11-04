@@ -49,7 +49,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		super( renderer );
 
 		// options
-		this.seed = 0;
+		this.globalSeed = 0;
 
 		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
@@ -118,13 +118,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	resetSeed() {
 
-		this.seed = 0;
+		this.globalSeed = 0;
 
 	}
 
 	reset() {
 
 		super.reset();
+		this.globalSeed ++;
 		this._samplesPromise = null;
 
 	}
@@ -178,10 +179,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.materialKernel.material = material.getData();
+		this.materialKernel.context.shadingModel = shadingModel;
 		this.materialKernel.needsUpdate = true;
+
+		// the ray traversal reads the shading model's materials
+		this.traceRayKernel.context.shadingModel = shadingModel;
+		this.traceRayKernel.needsUpdate = true;
+
+		this.traceShadowRayKernel.context.shadingModel = shadingModel;
+		this.traceShadowRayKernel.needsUpdate = true;
+
+		this.mediumKernel.context.shadingModel = shadingModel;
+		this.mediumKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -408,6 +419,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	// a preview runs at least this many iterations so its samples finish within the frame
+	_getPreviewIterations() {
+
+		return Math.max( 1, Math.min( this.maxBounces, LOW_RES_ITERATIONS ) );
+
+	}
+
+	// a preview steps every path several times, so it covers that many fewer pixels than the budget
+	getPreviewPixelBudget() {
+
+		return Math.min( this.frameBudget / this._getPreviewIterations(), MAX_RAY_DATA_COUNT );
+
+	}
+
 	// Resizes the pool when the budget changes. Paths in flight past a smaller budget are dropped.
 	_applyBudget( pixelCount ) {
 
@@ -477,15 +502,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
-		// advance the sequence once per task so each render pass starts from fresh
-		// noise unless "stableNoise" has reset it
-		this.seed ++;
+		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
+		logicKernel.globalSeed = this.globalSeed;
+		materialKernel.globalSeed = this.globalSeed;
+		traceRayKernel.globalSeed = this.globalSeed;
+		traceShadowRayKernel.globalSeed = this.globalSeed;
+		mediumKernel.globalSeed = this.globalSeed;
 
 		while ( true ) {
 
-			// TODO: this only makes sense if we can cap the number rays per iteration to the full
-			// frame
-			const iter = this.lowResMode ? Math.min( this.maxBounces, LOW_RES_ITERATIONS ) : 1;
+			// the iterations that spend the budget over the slots in use
+			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
+			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
+			const iter = Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -541,7 +570,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.queueCounters = queueCounters;
 				materialKernel.pixelQueue = this.pixelQueue;
 				materialKernel.sampleCountTarget = this.sampleCountTarget;
-				materialKernel.seed = this.seed;
 				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;

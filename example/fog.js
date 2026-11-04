@@ -46,7 +46,7 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
@@ -54,6 +54,11 @@ async function init() {
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -119,11 +124,6 @@ async function init() {
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
-
-		pathTracer.frameBudget = value;
-
-	} );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 
 	const fogFolder = gui.addFolder( 'Fog' );
@@ -172,8 +172,6 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }
 

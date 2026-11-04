@@ -1,6 +1,6 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { storage, globalId } from 'three/tsl';
+import { storage, uniform, globalId } from 'three/tsl';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { traceQueuedRayStruct, shadowTraceResultStruct, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
@@ -13,6 +13,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 		const params = {
 
+			globalSeed: uniform( 0, 'uint' ),
 			shadowRayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
 			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
 			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
@@ -25,7 +26,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 		const fn = wgslTagFn /* wgsl */`
 
-			fn compute( globalId: vec3u ) -> void {
+			fn compute( globalSeed: u32, globalId: vec3u ) -> void {
 
 				let shadowRayQueue = &${ params.shadowRayQueue };
 				let queueCounters = &${ params.queueCounters };
@@ -38,9 +39,10 @@ export class TraceShadowRayKernel extends ComputeKernel {
 
 				}
 
-				let queuedRay = shadowRayQueue[ index ];
+				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
+				let queuedRay = ${ params.shadowRayQueue }[ index ];
 				let indexUV = vec2u( queuedRay.pixelIndex >> 16, queuedRay.pixelIndex & 0xFFFF );
-				${ rngInit }( indexUV, queuedRay.seed, queuedRay.rngIndex );
+				${ rngInit }( globalSeed, indexUV, queuedRay.sampleIndex, queuedRay.rngIndex );
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
