@@ -48,6 +48,13 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
+	dispose() {
+
+		super.dispose();
+		this.turquinTexture.dispose();
+
+	}
+
 	getBsdfNode() {
 
 		const surfaceRecordStruct = this.getSurfaceRecordStruct();

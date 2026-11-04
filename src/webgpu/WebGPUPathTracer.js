@@ -921,10 +921,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} );
 
+		// the materials are written first since the bvh data writes their indices with the transforms
+		const { shadingModel } = this;
+		shadingModel.updateMaterials( scene );
+
 		// Build TLAS and compute functions
-		const bvhData = new PathtracerBVHComputeData( scene, this.shadingModel );
+		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
 		bvhData.update();
-		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
+		bvhData.textureAtlas.setTextures( this._renderer, shadingModel.textures );
 
 		if ( this._bvhData ) {
 
@@ -1106,13 +1110,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 	setShadingModel( shadingModel ) {
 
 		this.shadingModel = shadingModel;
+		shadingModel.updateFunctions();
 
 		// the shading model writes the materials, so rewrite them in its struct
-		const { _bvhData, _renderer } = this;
+		const { _bvhData, _renderer, scene } = this;
 		if ( _bvhData ) {
 
+			shadingModel.updateMaterials( scene );
 			_bvhData.setShadingModel( shadingModel );
-			_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+			_bvhData.textureAtlas.setTextures( _renderer, shadingModel.textures );
 
 		}
 
@@ -1195,9 +1201,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	updateMaterials() {
 
-		const { _bvhData, _renderer } = this;
-		_bvhData.updateMaterials();
-		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+		const { _bvhData, _renderer, shadingModel, scene } = this;
+		shadingModel.updateMaterials( scene );
+		_bvhData.updateMaterialIndices();
+		_bvhData.textureAtlas.setTextures( _renderer, shadingModel.textures );
 		this.reset();
 
 	}
@@ -1698,8 +1705,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		camera.updateMatrixWorld();
 
-		// (re)build the quad if it hasn't been built or the bvh data has changed
-		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData ) {
+		// (re)build the quad if it hasn't been built or the bvh data or shading model has changed
+		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData || this._debugBoundsShadingModel !== this.shadingModel ) {
 
 			this._buildDebugBoundsQuad();
 
@@ -1731,8 +1738,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	_buildDebugBoundsQuad() {
 
-		const bvhData = this._bvhData;
-		const debugBounds = getDebugBoundsFunction( bvhData );
+		const { _bvhData: bvhData, shadingModel } = this;
+		const debugBounds = getDebugBoundsFunction( bvhData, shadingModel );
 
 		const material = new MeshBasicNodeMaterial();
 		material.colorNode = debugBounds( varying( uv() ) );
@@ -1750,6 +1757,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._debugBoundsUniforms = debugBounds.uniforms;
 		this._debugBoundsData = bvhData;
+		this._debugBoundsShadingModel = shadingModel;
 
 	}
 
@@ -1860,6 +1868,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
 		this._bvhData.textureAtlas.dispose();
+		this.shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
 		this._lowResTarget.dispose();

@@ -1,4 +1,5 @@
-import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
+import { storage } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
@@ -17,8 +18,21 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
  * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
  * "frontFace", "transmission", "thinWall", "attenuationColor", "attenuationDistance", "dispersion",
  * "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
+ *
+ * The kernels read the "storage" and "fns" members through the node context as "shadingModel".
  */
 export class ShadingModel {
+
+	constructor() {
+
+		this.structs = { material: null };
+		this.storage = { materials: null };
+		this.fns = {};
+		this.materials = [];
+		this.materialsMap = new Map();
+		this.textures = [];
+
+	}
 
 	/**
 	 *
@@ -536,14 +550,100 @@ export class ShadingModel {
 
 	}
 
-	getData() {
+	updateFunctions() {
 
-		return {
+		const { fns } = this;
+		fns.bsdfSample = this.getBsdfNode();
+		fns.bsdfEvalPdf = this.getBsdfEvalPdfNode();
 
-			bsdfSample: this.getBsdfNode(),
-			bsdfEvalPdf: this.getBsdfEvalPdfNode(),
+	}
 
-		};
+	updateMaterials( root ) {
+
+		const { materials, materialsMap, structs } = this;
+		materialsMap.clear();
+		materials.length = 0;
+		root.traverse( o => {
+
+			if ( o.material ) {
+
+				if ( Array.isArray( o.material ) ) {
+
+					o.material.forEach( m => m && add( m ) );
+
+				} else {
+
+					add( o.material );
+
+				}
+
+			}
+
+		} );
+
+		materials
+			.sort( ( a, b ) => {
+
+				return a.uuid < b.uuid ? 1 : - 1;
+
+			} )
+			.forEach( ( m, i ) => {
+
+				materialsMap.set( m, i );
+
+			} );
+
+		// the storage is created once per material struct so the kernels keep referencing it as it grows
+		if ( structs.material === null ) {
+
+			structs.material = this.getMaterialStruct();
+
+			const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
+			this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
+
+		}
+
+		const { materialData, textures } = this.writeMaterialsBuffer( materials );
+		const materialsStorage = this.storage.materials;
+		const count = materialData.length / structs.material.getLength();
+		if ( materialsStorage.value.count < count ) {
+
+			materialsStorage.value.dispose();
+			materialsStorage.value = new StorageBufferAttribute( materialData, structs.material.getLength() );
+
+		}
+
+		materialsStorage.value.array.set( materialData );
+		materialsStorage.value.needsUpdate = true;
+
+		this.textures = textures;
+
+		function add( mat ) {
+
+			if ( ! materialsMap.has( mat ) ) {
+
+				materials.push( mat );
+				materialsMap.set( mat, - 1 );
+
+			}
+
+		}
+
+	}
+
+	getMaterialIndex( material ) {
+
+		const { materialsMap } = this;
+		return materialsMap.has( material ) ? materialsMap.get( material ) : - 1;
+
+	}
+
+	dispose() {
+
+		this.storage.materials?.value.dispose();
+		this.storage.materials = null;
+		this.structs.material = null;
+		this.initialized = false;
 
 	}
 
