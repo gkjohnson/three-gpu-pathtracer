@@ -137,6 +137,7 @@ export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChann
 
 	fn getSurfaceRecord(
 		material: Material,
+		objectColor: vec4f,
 		vertexData: bvh_GeometryStruct,
 		side: f32,
 		faceNormal: vec3f,
@@ -181,7 +182,7 @@ export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChann
 
 		normal = ensureValidReflectionNormal( normal, faceNormal, view );
 
-		var albedo = vec4( material.color, material.opacity );
+		var albedo = vec4( material.color, material.opacity ) * objectColor;
 		if ( material.vertexColors == 1 ) {
 
 			albedo *= getColor( vertexData );
@@ -398,12 +399,18 @@ export const getSurfaceRecordFunc = ( surfaceRecord, sampleTexel, getUvFromChann
 		surf.emission = emission;
 
 		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
+		surf.matte = material.matte != 0;
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
 		surf.thinWall = material.thinWall == 1;
 		surf.attenuationColor = material.attenuationColor;
 		surf.attenuationDistance = material.attenuationDistance;
+		surf.dispersion = material.dispersion;
+
+		surf.multiscatterColor = material.multiscatterColor;
+		surf.scatterStrength = material.scatterStrength;
+		surf.scatterAnisotropy = material.scatterAnisotropy;
 
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;

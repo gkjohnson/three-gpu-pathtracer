@@ -9,14 +9,14 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
- * A custom material struct must keep the fields the ray traversal and kernels read:
- * "color", "opacity", "side", "transparent", "alphaTest", "vertexColors", "map", "mapTransform",
- * "alphaMap", "alphaMapTransform", "matte", "dispersion", "transmission", "attenuationColor",
- * "attenuationDistance", "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
+ * A custom material struct must keep the fields the ray traversal and kernels read: "opacity", "side",
+ * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform"
+ * and "transmission".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
- * "normal", "color", "emission", "opacity", "roughness", "metalness", "ior", "eta", "f0",
- * "frontFace", "transmission" and "thinWall".
+ * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
+ * "frontFace", "transmission", "thinWall", "attenuationColor", "attenuationDistance", "dispersion",
+ * "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
  */
 export class ShadingModel {
 
@@ -113,8 +113,8 @@ export class ShadingModel {
 	/**
 	 *
 	 * Must return a function node with signature
-	 * ( material: Material, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
-	 * reading the surface from the material struct at a hit
+	 * ( material: Material, objectColor: vec4f, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
+	 * reading the surface from the material struct at a hit, tinted by the object's instance color
 	 *
 	 */
 	getSurfaceRecordNode( sampleTexel, getUvFromChannel, getColor ) {

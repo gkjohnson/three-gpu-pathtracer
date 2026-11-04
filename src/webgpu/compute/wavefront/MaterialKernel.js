@@ -190,24 +190,7 @@ export class MaterialKernel extends ComputeKernel {
 					let segmentInMedium = medium.inside;
 
 					let objectInfo = ${ transformsStorage }[ u32( input.objectIndex ) ];
-					var materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
-
-					// a matte surface hit by the camera ray renders as a fully transparent
-					let isMatte = materialInfo.matte != 0 && input.currentBounce == 0u;
-					if ( isMatte ) {
-
-						rayDataStorage[ index ].resultColor = vec4f( 0.0 );
-						rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
-						rayDataStorage[ index ].emission = vec3f( 0.0 );
-						rayDataStorage[ index ].lightPdf = 0.0;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-						return;
-
-					}
-
-					// apply per-object colors
-					materialInfo.color *= objectInfo.color.rgb;
-					materialInfo.opacity *= objectInfo.color.a;
+					let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 					var vertexData = ${ sampleTrianglePointFn }( input.barycoord, input.indices );
 					vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
@@ -220,7 +203,20 @@ export class MaterialKernel extends ComputeKernel {
 					// from the Cycles "filter glossy" approach in integrator/surface_shader.h
 					let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-					var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, input.side, input.normal, view, blurRoughness );
+					var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, input.side, input.normal, view, blurRoughness );
+
+					// a matte surface hit by the camera ray renders as a fully transparent
+					let isMatte = surface.matte && input.currentBounce == 0u;
+					if ( isMatte ) {
+
+						rayDataStorage[ index ].resultColor = vec4f( 0.0 );
+						rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
 
 					// Stochastically pass through partially transparent surfaces by re-enqueueing
 					// the ray at the hit point, advancing the alpha depth but not the bounce count.
@@ -280,11 +276,11 @@ export class MaterialKernel extends ComputeKernel {
 					// apply the hero wavelength to dispersive surfaces, folding the spectral weight
 					// into the throughput at the path's first dispersive interaction
 					var throughputColor = input.throughputColor;
-					let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+					let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 					if ( isDispersive ) {
 
 						let wavelength = abs( input.dispersionWavelength );
-						${ applyDispersionFunc }( &surface, materialInfo.dispersion, wavelength );
+						${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
 						if ( input.dispersionWavelength < 0.0 ) {
 
 							rayDataStorage[ index ].dispersionWavelength = wavelength;
@@ -300,7 +296,7 @@ export class MaterialKernel extends ComputeKernel {
 					// already applied a scattering medium's transmittance
 					if ( input.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
-						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+						throughputColor *= ${ transmissionAttenuationFunc }( input.dist, surface.attenuationColor, surface.attenuationDistance );
 						rayDataStorage[ index ].throughputColor = throughputColor;
 
 					}
@@ -366,11 +362,7 @@ export class MaterialKernel extends ComputeKernel {
 					// refracting into a front face of a scattering material starts a random walk inside it
 					if ( scatterRec.isTransmissive && ! surface.thinWall && input.side > 0.0 ) {
 
-						let entered = ${ enterMediumFn }(
-							materialInfo.attenuationColor, materialInfo.attenuationDistance,
-							materialInfo.multiscatterColor, materialInfo.scatterStrength, materialInfo.scatterAnisotropy,
-							u32( input.objectIndex ),
-						);
+						let entered = ${ enterMediumFn }( surface, u32( input.objectIndex ) );
 						if ( entered.inside ) {
 
 							medium = entered;

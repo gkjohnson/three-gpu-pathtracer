@@ -310,19 +310,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
 						let objectInfo = ${ transformsStorage }[ hitResult.objectIndex ];
-						var materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
-
-						// a matte surface hit by the camera ray renders as a fully transparent
-						if ( materialInfo.matte != 0 && bounce == 0u ) {
-
-							resultColor = vec4f( 0.0 );
-							break;
-
-						}
-
-						// apply per-object colors
-						materialInfo.color *= objectInfo.color.rgb;
-						materialInfo.opacity *= objectInfo.color.a;
+						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
@@ -335,7 +323,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						var surface = ${ getSurfaceRecordFn }( materialInfo, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+
+						// a matte surface hit by the camera ray renders as a fully transparent
+						if ( surface.matte && bounce == 0u ) {
+
+							resultColor = vec4f( 0.0 );
+							break;
+
+						}
 
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the traversal at the hit point, advancing the rng but not the bounce count.
@@ -357,11 +353,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let isDispersive = materialInfo.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
+						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 						if ( isDispersive ) {
 
 							let wavelength = abs( dispersionWavelength );
-							${ applyDispersionFunc }( &surface, materialInfo.dispersion, wavelength );
+							${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
 							if ( dispersionWavelength < 0.0 ) {
 
 								dispersionWavelength = wavelength;
@@ -375,7 +371,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// medium has already applied its transmittance above
 						if ( hitResult.side < 0.0 && materialInfo.transmission > 0.0 && ! segmentInMedium ) {
 
-							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, materialInfo.attenuationColor, materialInfo.attenuationDistance );
+							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, surface.attenuationColor, surface.attenuationDistance );
 
 						}
 
@@ -499,11 +495,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// refracting into a front face of a scattering material starts a random walk inside it
 						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
 
-							let entered = ${ enterMediumFn }(
-								materialInfo.attenuationColor, materialInfo.attenuationDistance,
-								materialInfo.multiscatterColor, materialInfo.scatterStrength, materialInfo.scatterAnisotropy,
-								hitResult.objectIndex,
-							);
+							let entered = ${ enterMediumFn }( surface, hitResult.objectIndex );
 
 							if ( entered.inside ) {
 
