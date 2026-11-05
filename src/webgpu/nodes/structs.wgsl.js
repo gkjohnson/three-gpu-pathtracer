@@ -176,6 +176,9 @@ export const hitRecordStruct = new StructTypeNode( {
 
 	indices: 'vec3u',
 	dist: 'float',
+
+	// the bounce the surface was hit at
+	bounce: 'uint',
 }, 'HitRecord' );
 
 export const surfaceRecordStruct = new StructTypeNode( {

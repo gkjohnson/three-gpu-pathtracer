@@ -33,7 +33,7 @@ class DependentStructTypeNode extends StructTypeNode {
 const rayDataMembers = {
 
 	throughputColor: 'vec3f',
-	currentBounce: 'uint',
+	sampleIndex: 'uint',
 
 	resultColor: 'vec4f',
 
@@ -62,7 +62,6 @@ const rayDataMembers = {
 	lightBsdf: 'vec3f',
 	lightBsdfPdf: 'float',
 
-	sampleIndex: 'uint',
 	rayIntersectionIndex: 'int',
 	shadowRayIntersectionIndex: 'int',
 	lightType: 'int',

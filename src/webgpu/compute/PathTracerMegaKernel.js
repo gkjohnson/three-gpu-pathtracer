@@ -315,6 +315,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.side = hitResult.side;
 						hit.indices = hitResult.indices.xyz;
 						hit.dist = hitResult.dist;
+						hit.bounce = bounce;
 
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
 						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];

@@ -152,7 +152,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].direction = ray.direction;
 					rayDataStorage[ index ].pixelIndex = pixelIndex;
 					rayDataStorage[ index ].sampleIndex = samples;
-					rayDataStorage[ index ].currentBounce = 0u;
+					rayDataStorage[ index ].hit.bounce = 0u;
 					rayDataStorage[ index ].throughputColor = vec3f( 1.0 );
 					rayDataStorage[ index ].resultColor = vec4f( 0.0, 0.0, 0.0, 1.0 );
 					rayDataStorage[ index ].scatterColor = vec3f( 1.0 );
@@ -181,7 +181,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// evaluate the surface staged by LogicKernel. Paths still walking a medium have none
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-					${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+					${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
 
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
@@ -204,7 +204,7 @@ export class MaterialKernel extends ComputeKernel {
 					var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, input.hit, view, blurRoughness );
 
 					// a matte surface hit by the camera ray renders as a fully transparent
-					let isMatte = surface.matte && input.currentBounce == 0u;
+					let isMatte = surface.matte && input.hit.bounce == 0u;
 					if ( isMatte ) {
 
 						rayDataStorage[ index ].resultColor = vec4f( 0.0 );
@@ -247,7 +247,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue[ alphaIndex ].origin = alphaOrigin;
 							rayQueue[ alphaIndex ].direction = input.direction;
 							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue[ alphaIndex ].rngIndex = input.currentBounce + input.alphaDepth + 1u + input.subsurfaceBounces;
+							rayQueue[ alphaIndex ].rngIndex = input.hit.bounce + input.alphaDepth + 1u + input.subsurfaceBounces;
 							rayQueue[ alphaIndex ].sampleIndex = input.sampleIndex;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
@@ -301,7 +301,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// sample the next bounce direction and stage the scatter state for LogicKernel
 					var scatterRec = ${ bsdfSampleFn }( view, surface );
-					let newBounce = input.currentBounce + 1u;
+					let newBounce = input.hit.bounce + 1u;
 
 					// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
 					// found the last mirror or transmission hit stands in, for paths that reach the environment.
@@ -346,7 +346,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
 					rayDataStorage[ index ].isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 					rayDataStorage[ index ].emission = surface.emission;
-					rayDataStorage[ index ].currentBounce = newBounce;
+					rayDataStorage[ index ].hit.bounce = newBounce;
 					rayDataStorage[ index ].mediumScattered = 0u;
 
 					// As in "KHR_materials_scatter", the surface bsdf is the medium's boundary: refracting out
@@ -418,7 +418,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
 							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue[ shadowIndex ].rngIndex = input.currentBounce + input.alphaDepth + input.subsurfaceBounces;
+							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
 							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
