@@ -207,7 +207,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setLights( lights ) {
 
-		this.lightsInfo.updateFrom( this.renderer, lights );
+		if ( this.lightsInfo.updateFrom( this.renderer, lights ) ) {
+
+			this.rebuild();
+
+		}
+
 		this.reset();
 
 	}
