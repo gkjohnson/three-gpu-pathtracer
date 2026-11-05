@@ -560,7 +560,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	get textureAtlas() {
 
-		return this._bvhData.textureAtlas;
+		return this._shadingModel.textureAtlas;
 
 	}
 
@@ -928,12 +928,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
 		bvhData.update();
-		bvhData.textureAtlas.setTextures( this._renderer, shadingModel.textures );
+		shadingModel.updateTextures( this._renderer );
 
 		if ( this._bvhData ) {
 
 			this._bvhData.dispose();
-			this._bvhData.textureAtlas.dispose();
 
 		}
 
@@ -1117,8 +1116,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( _bvhData ) {
 
 			shadingModel.updateMaterials( scene );
+			shadingModel.updateTextures( _renderer );
 			_bvhData.setShadingModel( shadingModel );
-			_bvhData.textureAtlas.setTextures( _renderer, shadingModel.textures );
 
 		}
 
@@ -1203,8 +1202,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
 		_shadingModel.updateMaterials( scene );
+		_shadingModel.updateTextures( _renderer );
 		_bvhData.updateMaterialIndices();
-		_bvhData.textureAtlas.setTextures( _renderer, _shadingModel.textures );
 		this.reset();
 
 	}
@@ -1867,7 +1866,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser?.dispose();
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
-		this._bvhData.textureAtlas.dispose();
 		this._shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();

@@ -1,11 +1,14 @@
+/** @import { WebGPURenderer } from 'three/webgpu' */
 import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
-import { storage } from 'three/tsl';
-import { wgslTagFn, proxyFn } from 'three-mesh-bvh/webgpu';
+import { storage, texture, uniformArray } from 'three/tsl';
+import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
+import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { materialStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
+import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
 /**
@@ -19,7 +22,7 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
  * "frontFace", "transmission", "thinWall", "attenuationColor", "attenuationDistance", "dispersion",
  * "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
  *
- * The kernels read the "storage" and "fns" members through the node context as "shadingModel".
+ * The kernels read the "structs", "storage" and "fns" members through the node context as "shadingModel".
  */
 export class ShadingModel {
 
@@ -27,9 +30,10 @@ export class ShadingModel {
 
 		// members are accessed through proxy nodes so they can be referenced up front and keep working
 		// across rebuilds, like BVHComputeData
-		this.structs = new NodeProxyObject( { material: null } );
+		this.structs = new NodeProxyObject( { material: null, surfaceRecord: null } );
 		this.storage = new NodeProxyObject( { materials: null } );
-		this.fns = new NodeProxyObject( { bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
+		this.fns = new NodeProxyObject( { sampleTexel: null, getSurfaceRecord: null, bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
+		this.textureAtlas = new AtlasTexture();
 		this.materials = [];
 		this.materialsMap = new Map();
 		this.textures = [];
@@ -47,18 +51,37 @@ export class ShadingModel {
 	}
 
 	/**
-	 *
-	 * Must return a bsdf sampling function node with signature
-	 * ( worldView: vec3f, surface: Surface ) -> ScatterRecord
-	 *
+	 * Assigns the structs and functions the kernels read. Subclasses call it and then replace the ones
+	 * they change:
+	 * - "structs.material": the struct each material is written to.
+	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
+	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, side, faceNormal, view, blurRoughness ) -> SurfaceRecord,
+	 *   reading the surface from the material struct at a hit, tinted by the object's instance color.
+	 * - "fns.bsdfSample": ( worldView, surface ) -> ScatterRecord, sampling the next direction.
+	 * - "fns.bsdfEvalPdf": ( worldView, worldLight, surface ) -> ScatterRecord, the bsdf value and sampling
+	 *   pdf for a given light direction, used by next event estimation.
 	 */
-	getBsdfNode() {
+	updateFunctions() {
 
-		return wgslTagFn/* wgsl */`
+		const { structs, fns } = this;
+		structs.material = materialStruct;
+		structs.surfaceRecord = surfaceRecordStruct;
 
-			fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
+		// the geometry helpers come from the bvh data through the node context
+		fns.getSurfaceRecord = getSurfaceRecordFunc( {
+			materialStruct: structs.material,
+			surfaceRecordStruct: structs.surfaceRecord,
+			attributesStruct: contextProxy( 'bvhData.structs.attributes' ),
+			sampleTexel: fns.sampleTexel,
+			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
+			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
+		} );
 
-				var record: ScatterRecord;
+		fns.bsdfSample = wgslTagFn/* wgsl */`
+
+			fn bsdfSample( worldWo: vec3f, surf: ${ structs.surfaceRecord } ) -> ${ scatterRecordStruct } {
+
+				var record: ${ scatterRecordStruct };
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
 				let wi = ${ diffuseDirectionFunc }( wo, ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } ) );
@@ -72,23 +95,11 @@ export class ShadingModel {
 
 		`;
 
-	}
+		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
-	/**
-	 *
-	 * Must return a bsdf evaluation function node with signature
-	 * ( worldView: vec3f, worldLight: vec3f, surface: Surface ) -> ScatterRecord
-	 * returning the bsdf value and sampling pdf for a given light direction.
-	 * Used by next event estimation to weight a chosen light direction.
-	 *
-	 */
-	getBsdfEvalPdfNode() {
+			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ structs.surfaceRecord } ) -> ${ scatterRecordStruct } {
 
-		return wgslTagFn/* wgsl */`
-
-			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
-
-				var record: ScatterRecord;
+				var record: ${ scatterRecordStruct };
 				record.direction = worldWi;
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
@@ -105,37 +116,18 @@ export class ShadingModel {
 	}
 
 	/**
+	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".
 	 *
-	 * Must return the struct node each material is written to
-	 *
+	 * @param {WebGPURenderer} renderer
 	 */
-	getMaterialStruct() {
+	updateTextures( renderer ) {
 
-		return materialStruct;
+		const { textureAtlas } = this;
+		textureAtlas.setTextures( renderer, this.textures );
 
-	}
-
-	/**
-	 *
-	 * Must return the struct node the surface is evaluated into at a hit
-	 *
-	 */
-	getSurfaceRecordStruct() {
-
-		return surfaceRecordStruct;
-
-	}
-
-	/**
-	 *
-	 * Must return a function node with signature
-	 * ( material: Material, objectColor: vec4f, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
-	 * reading the surface from the material struct at a hit, tinted by the object's instance color
-	 *
-	 */
-	getSurfaceRecordNode( sampleTexel, getUvFromChannel, getColor ) {
-
-		return getSurfaceRecordFunc( this.getSurfaceRecordStruct(), sampleTexel, getUvFromChannel, getColor );
+		// rebuilt since the texture info array can change length
+		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
+		this.fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
 
 	}
 
@@ -239,7 +231,7 @@ export class ShadingModel {
 		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
 		// TODO: remove this when fixed in three
 		const materialBufferLength = Math.max( materials.length, 2 );
-		const floatArray = new Float32Array( materialBufferLength * this.getMaterialStruct().getLength() );
+		const floatArray = new Float32Array( materialBufferLength * this.structs.material.proxyNode.getLength() );
 		const intArray = new Int32Array( floatArray.buffer );
 
 		// TODO: make features work
@@ -552,14 +544,6 @@ export class ShadingModel {
 
 	}
 
-	updateFunctions() {
-
-		const { fns } = this;
-		fns.bsdfSample = this.getBsdfNode();
-		fns.bsdfEvalPdf = this.getBsdfEvalPdfNode();
-
-	}
-
 	updateMaterials( root ) {
 
 		const { materials, materialsMap, structs } = this;
@@ -595,12 +579,11 @@ export class ShadingModel {
 
 			} );
 
-		// the storage is created once per material struct so the kernels keep referencing it as it grows
-		if ( structs.material.proxyNode === null ) {
+		// the storage is created once so the kernels keep referencing it as it grows
+		if ( this.storage.materials.proxyNode === null ) {
 
-			const materialStruct = this.getMaterialStruct();
+			const materialStruct = structs.material.proxyNode;
 			const attr = new StorageBufferAttribute( new Uint8Array(), materialStruct.getLength() );
-			structs.material = materialStruct;
 			this.storage.materials = storage( attr, materialStruct ).toReadOnly().setName( 'bvh_materials' );
 
 		}
@@ -645,7 +628,7 @@ export class ShadingModel {
 
 		this.storage.materials.proxyNode?.value.dispose();
 		this.storage.materials = null;
-		this.structs.material = null;
+		this.textureAtlas.dispose();
 		this.initialized = false;
 
 	}

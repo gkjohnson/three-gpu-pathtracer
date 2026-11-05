@@ -61,7 +61,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
-		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
+		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
