@@ -1,9 +1,7 @@
 import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy } from 'three-mesh-bvh/webgpu';
-import { float, bool, texture, uniformArray, uint } from 'three/tsl';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { float, bool, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
-import { sampleTexelFunc } from './utils.wgsl.js';
-import { AtlasTexture } from '../AtlasTexture.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -51,7 +49,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
-		this.textureAtlas = new AtlasTexture();
 
 	}
 
@@ -174,17 +171,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	useTransparencyRaycastFn() {
 
-		const { textureAtlas, storage, fns } = this;
-		const textures = textureAtlas.texture;
-		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'bvh_textureInfo' );
+		const { storage, fns } = this;
 
-		// build the single sampleTexel bound to this instance's textureInfo node
-		const sampleTexel = sampleTexelFunc( textureInfo, texture( textures ) );
-
-		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
-		// the transparency raycast resolve to one textureInfo binding per pipeline
-		fns.getSurfaceRecord = this.shadingModel.getSurfaceRecordNode( sampleTexel, fns.getUvFromChannel, fns.getColor );
-
+		// the shading model owns the textures. Its surface shading reads the same "sampleTexel", so both
+		// resolve to one texture info binding per pipeline
+		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 
 		// raycast first hit, bounded by the ray's "maxDist" - 0 means unbounded
@@ -475,7 +466,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.shadingModel = shadingModel;
 		this.updateMaterialIndices();
-		this.useTransparencyRaycastFn();
 
 	}
 

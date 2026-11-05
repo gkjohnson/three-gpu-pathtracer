@@ -55,10 +55,13 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
-	getBsdfNode() {
+	updateFunctions() {
 
-		const surfaceRecordStruct = this.getSurfaceRecordStruct();
-		this._bsdfEvalFunc = wgslTagFn/* wgsl */`
+		super.updateFunctions();
+
+		const { structs, fns } = this;
+		const surfaceRecordStruct = structs.surfaceRecord;
+		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
 			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
@@ -269,9 +272,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-		const bsdfEvalPdfFn = this.getBsdfEvalPdfNode();
-
-		return wgslTagFn/* wgsl */`
+		fns.bsdfSample = wgslTagFn/* wgsl */`
 
 			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
 
@@ -449,7 +450,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 					// evaluate the shared eval / pdf function for the sampled direction so the sample
 					// and light-sampling paths can never disagree on color or pdf
-					result = ${ bsdfEvalPdfFn }( worldWo, worldWi, surf );
+					result = ${ fns.bsdfEvalPdf }( worldWo, worldWi, surf );
 
 				}
 
@@ -464,30 +465,10 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-	}
-
-	// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
-	// Used by next event estimation to weight a chosen light/environment direction. Shares the same
-	// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
-	getBsdfEvalPdfNode() {
-
-		// bsdfSample embeds this node so both share a single instance
-		if ( this._bsdfEvalPdfNode ) {
-
-			return this._bsdfEvalPdfNode;
-
-		}
-
-		if ( ! this._bsdfEvalFunc ) {
-
-			this.getBsdfNode();
-
-		}
-
-		const bsdfEvalFunc = this._bsdfEvalFunc;
-		const surfaceRecordStruct = this.getSurfaceRecordStruct();
-
-		this._bsdfEvalPdfNode = wgslTagFn/* wgsl */`
+		// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
+		// Used by next event estimation to weight a chosen light/environment direction. Shares the same
+		// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
+		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
 			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
 
@@ -623,8 +604,6 @@ export class GLTFShadingModel extends ShadingModel {
 			}
 
 		`;
-
-		return this._bsdfEvalPdfNode;
 
 	}
 

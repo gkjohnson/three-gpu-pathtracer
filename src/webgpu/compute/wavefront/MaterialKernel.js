@@ -45,7 +45,7 @@ export class MaterialKernel extends ComputeKernel {
 
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
-		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
+		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
