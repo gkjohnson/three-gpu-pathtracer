@@ -1,5 +1,5 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
-import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, MathUtils, Vector4 } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
@@ -55,7 +55,6 @@ export class ShadingModel {
 		this.materialsMap = new Map();
 		this.textures = [];
 		this.texturesMap = new Map();
-		this._textureInfo = [];
 
 	}
 
@@ -136,38 +135,26 @@ export class ShadingModel {
 
 	/**
 	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".
-	 * Returns whether "fns.sampleTexel" was replaced, so the kernels need rebuilding.
+	 * Returns whether the number of textures changed, so the kernels need rebuilding.
 	 *
 	 * @param {WebGPURenderer} renderer
 	 * @returns {boolean}
 	 */
 	updateTextures( renderer ) {
 
+		// the atlas refills its texture info array in place, but the kernels size it when they're built
 		const { textureAtlas } = this;
+		const { length } = textureAtlas.textureInfo;
 		textureAtlas.setTextures( renderer, this.textures );
 
-		// the kernels size the texture info array when they're built, so it's padded to a power of two and
-		// only replaced when the textures outgrow it
-		const { textureInfo } = textureAtlas;
-		let replaced = false;
-		if ( Math.max( textureInfo.length, 1 ) > this._textureInfo.length ) {
+		if ( ! this.fns.sampleTexel.proxyNode ) {
 
-			const length = MathUtils.ceilPowerOfTwo( Math.max( textureInfo.length, 1 ) );
-			this._textureInfo = Array.from( { length }, () => new Vector4() );
-
-			const textureInfoNode = uniformArray( this._textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
-			this.fns.sampleTexel = sampleTexelFunc( textureInfoNode, texture( textureAtlas.texture ) );
-			replaced = true;
+			const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
+			this.fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
 
 		}
 
-		for ( let i = 0, l = textureInfo.length; i < l; i ++ ) {
-
-			this._textureInfo[ i ].copy( textureInfo[ i ] );
-
-		}
-
-		return replaced;
+		return textureAtlas.textureInfo.length !== length;
 
 	}
 

@@ -1204,7 +1204,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		_shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
 
-		// new textures can outgrow the texture info the kernels were built with
+		// the kernels size the texture info when they're built, so a new texture count needs a rebuild
 		if ( _shadingModel.updateTextures( _renderer ) ) {
 
 			this._pathTracer.setShadingModel( _shadingModel );
