@@ -1202,8 +1202,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
 		_shadingModel.updateMaterials( scene );
-		_shadingModel.updateTextures( _renderer );
 		_bvhData.updateMaterialIndices();
+
+		// new textures can outgrow the texture info the kernels were built with
+		if ( _shadingModel.updateTextures( _renderer ) ) {
+
+			this._pathTracer.setShadingModel( _shadingModel );
+
+		}
+
 		this.reset();
 
 	}
