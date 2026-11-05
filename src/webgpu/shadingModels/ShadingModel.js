@@ -56,9 +56,6 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
-		const textureInfo = uniformArray( this.textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
-		this.fns.sampleTexel = sampleTexelFunc( textureInfo, texture( this.textureAtlas.texture ) );
-
 	}
 
 	/**
@@ -76,6 +73,7 @@ export class ShadingModel {
 	 * they change:
 	 * - "structs.material": the struct each material is written to.
 	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
+	 * - "fns.sampleTexel": ( uv, map, lod ) -> vec4f, sampling a material's texture from the atlas.
 	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, hit, view, blurRoughness ) -> SurfaceRecord,
 	 *   reading the surface from the material struct at a HitRecord, tinted by the object's instance color.
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
@@ -84,9 +82,13 @@ export class ShadingModel {
 	 */
 	updateFunctions() {
 
-		const { structs, fns } = this;
+		const { structs, fns, textureAtlas } = this;
 		structs.material = materialStruct;
 		structs.surfaceRecord = surfaceRecordStruct;
+
+		// the atlas refills its texture info array in place, so this reads the latest placements
+		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
+		fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
 
 		// the geometry helpers come from the bvh data through the node context
 		fns.getSurfaceRecord = getSurfaceRecordFunc( {
