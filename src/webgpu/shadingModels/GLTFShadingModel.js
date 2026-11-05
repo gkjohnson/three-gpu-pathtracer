@@ -6,7 +6,7 @@ import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js'
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
@@ -274,7 +274,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 		fns.bsdfSample = wgslTagFn/* wgsl */`
 
-			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+			fn bsdfSample( hit: ${ hitRecordStruct }, surf: ${ surfaceRecordStruct }, worldWo: vec3f ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
@@ -450,7 +450,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 					// evaluate the shared eval / pdf function for the sampled direction so the sample
 					// and light-sampling paths can never disagree on color or pdf
-					result = ${ fns.bsdfEvalPdf }( worldWo, worldWi, surf );
+					result = ${ fns.bsdfEvalPdf }( hit, surf, worldWo, worldWi );
 
 				}
 
@@ -470,7 +470,7 @@ export class GLTFShadingModel extends ShadingModel {
 		// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
 		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
-			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+			fn bsdfEvalPdf( hit: ${ hitRecordStruct }, surf: ${ surfaceRecordStruct }, worldWo: vec3f, worldWi: vec3f ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );

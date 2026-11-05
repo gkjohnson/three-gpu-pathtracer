@@ -2,6 +2,7 @@
 const STAGE_LABELS = {
 	building: 'Building BVHs',
 	compiling: 'Compiling shaders',
+	denoising: 'Denoising',
 };
 
 let _styleElement;
@@ -155,7 +156,12 @@ export class LoaderElement {
 	// shows a path tracer "progress" event, finishing the loading line once rendering starts
 	setStage( stage, progress, samples ) {
 
-		if ( stage in STAGE_LABELS ) {
+		// back to the sample count once the denoise finishes
+		if ( stage === 'denoising' && progress >= 1 ) {
+
+			this.setPercentage( 1 );
+
+		} else if ( stage in STAGE_LABELS ) {
 
 			this.setProgress( STAGE_LABELS[ stage ], progress );
 
