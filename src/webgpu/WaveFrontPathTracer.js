@@ -446,21 +446,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
+			resetSlotsKernel,
+			copyRayDataKernel,
 		} = this;
 
-		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
-		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
-		const targetDimensions = new Vector2();
-		this.getSize( targetDimensions );
-
-		// referenced via "this" since the buffers may be replaced here and in the loop
-		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
-
-		// the populate pass below overwrites whatever the resize carried over
-		const pixelCount = targetDimensions.x * targetDimensions.y;
-		this._applyBudget( pixelCount );
-
-		// compile the kernels before their first dispatch
+		// compile the kernels before their first dispatch, including the pool resize's below
 		yield* this.compileKernels( [
 			logicKernel,
 			materialKernel,
@@ -473,7 +463,21 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
+			resetSlotsKernel,
+			copyRayDataKernel,
 		] );
+
+		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
+		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
+		const targetDimensions = new Vector2();
+		this.getSize( targetDimensions );
+
+		// referenced via "this" since the buffers may be replaced here and in the loop
+		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
+
+		// the populate pass below overwrites whatever the resize carried over
+		const pixelCount = targetDimensions.x * targetDimensions.y;
+		this._applyBudget( pixelCount );
 
 		// reset the trace queues — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;
