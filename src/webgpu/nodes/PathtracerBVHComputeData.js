@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, bool, uint } from 'three/tsl';
-import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
+import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -202,8 +202,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					// early-out if our object is completely transparent, or a shadow ray is already occluded
-					if ( ${ baseOpacityScalar } == 0.0 || ( ${ isShadowRay } && result.didHit ) ) {
+					// early-out if our object is completely transparent
+					if ( ${ baseOpacityScalar } == 0.0 ) {
 
 						return 0u;
 
@@ -212,12 +212,22 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
 					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
 
-					let invDir = 1.0 / ray.direction;
+					// avoid 0 * infinity for rays parallel to a slab and on its boundary, as in three-mesh-bvh
+					let parallel = ray.direction == vec3f( 0.0 );
+					if ( any( parallel & ( ( ray.origin < boundsMin ) | ( ray.origin > boundsMax ) ) ) ) {
+
+						return 0u;
+
+					}
+
+					let invDir = 1.0 / select( ray.direction, vec3f( 1.0 ), parallel );
 					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
 					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
 
-					let tMinHit = min( tMinPlane, tMaxPlane );
-					let tMaxHit = max( tMinPlane, tMaxPlane );
+					// parallel axes never limit the slab interval
+					const FLT_MAX = 3.402823e38;
+					let tMinHit = select( min( tMinPlane, tMaxPlane ), vec3f( - FLT_MAX ), parallel );
+					let tMaxHit = select( max( tMinPlane, tMaxPlane ), vec3f( FLT_MAX ), parallel );
 
 					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
 					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
@@ -245,7 +255,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
@@ -361,13 +371,20 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							result.barycoord = triResult.barycoord;
 							result.indices = vec4u( i0, i1, i2, ti );
 
+							// shadow rays end the whole traversal at the first opaque hit
+							if ( ${ isShadowRay } ) {
+
+								return ${ STOP_TRAVERSAL }u;
+
+							}
+
 							didHit = true;
 
 						}
 
 					}
 
-					return didHit;
+					return select( ${ NOT_INTERSECTED }u, ${ INTERSECTED }u, didHit );
 
 				}
 			`,
