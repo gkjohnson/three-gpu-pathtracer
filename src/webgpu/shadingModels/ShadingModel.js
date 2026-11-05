@@ -6,7 +6,7 @@ import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
@@ -74,8 +74,8 @@ export class ShadingModel {
 	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
 	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, hit, view, blurRoughness ) -> SurfaceRecord,
 	 *   reading the surface from the material struct at a HitRecord, tinted by the object's instance color.
-	 * - "fns.bsdfSample": ( worldView, surface ) -> ScatterRecord, sampling the next direction.
-	 * - "fns.bsdfEvalPdf": ( worldView, worldLight, surface ) -> ScatterRecord, the bsdf value and sampling
+	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
+	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
 	 */
 	updateFunctions() {
@@ -96,7 +96,7 @@ export class ShadingModel {
 
 		fns.bsdfSample = wgslTagFn/* wgsl */`
 
-			fn bsdfSample( worldWo: vec3f, surf: ${ structs.surfaceRecord } ) -> ${ scatterRecordStruct } {
+			fn bsdfSample( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, worldWo: vec3f ) -> ${ scatterRecordStruct } {
 
 				var record: ${ scatterRecordStruct };
 
@@ -114,7 +114,7 @@ export class ShadingModel {
 
 		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
-			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ structs.surfaceRecord } ) -> ${ scatterRecordStruct } {
+			fn bsdfEvalPdf( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, worldWo: vec3f, worldWi: vec3f ) -> ${ scatterRecordStruct } {
 
 				var record: ${ scatterRecordStruct };
 				record.direction = worldWi;
