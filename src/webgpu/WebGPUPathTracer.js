@@ -1305,7 +1305,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( this._size.x !== x || this._size.y !== y ) {
 
 			this._size.set( x, y );
-			this.reset();
+
+			// cameras can depend on the size
+			if ( this._cameraRayFnHandle ) {
+
+				this.updateCamera();
+
+			} else {
+
+				this.reset();
+
+			}
 
 		}
 

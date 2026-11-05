@@ -201,7 +201,7 @@ export class MaterialKernel extends ComputeKernel {
 					// from the Cycles "filter glossy" approach in integrator/surface_shader.h
 					let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
-					var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, input.side, input.normal, view, blurRoughness );
+					var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, input.side, input.normal, view, blurRoughness, input.currentBounce );
 
 					// a matte surface hit by the camera ray renders as a fully transparent
 					let isMatte = surface.matte && input.currentBounce == 0u;

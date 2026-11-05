@@ -150,6 +150,7 @@ export const getSurfaceRecordFunc = ( {
 		faceNormal: vec3f,
 		view: vec3f,
 		blurRoughness: f32,
+		bounce: u32,
 	) -> ${ surfaceRecordStruct } {
 
 		// "faceNormal" is provided on the hit side so flip it back to the geometric side
@@ -397,6 +398,7 @@ export const getSurfaceRecordFunc = ( {
 		var surf: ${ surfaceRecordStruct };
 
 		surf.volumeParticle = false;
+		surf.bounce = bounce;
 		surf.faceNormal = faceNormal;
 		surf.normal = normal;
 

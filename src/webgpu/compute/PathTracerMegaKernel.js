@@ -322,7 +322,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hitResult.side, hitResult.normal, view, blurRoughness, bounce );
 
 						// a matte surface hit by the camera ray renders as a fully transparent
 						if ( surface.matte && bounce == 0u ) {
