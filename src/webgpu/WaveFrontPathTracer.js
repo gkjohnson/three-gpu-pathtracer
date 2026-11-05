@@ -152,11 +152,30 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 
-		// recompile the kernels that bake in the scene, camera and shading model functions
-		this.materialKernel.needsUpdate = true;
-		this.traceRayKernel.needsUpdate = true;
-		this.traceShadowRayKernel.needsUpdate = true;
-		this.mediumKernel.needsUpdate = true;
+		const kernels = [
+			this.populatePixelIndicesKernel,
+			this.logicKernel,
+			this.materialKernel,
+			this.traceRayKernel,
+			this.traceShadowRayKernel,
+			this.mediumKernel,
+			this.queueMediumWalksKernel,
+			this.rayDispatchConverter,
+			this.shadowDispatchConverter,
+			this.mediumDispatchConverter,
+			this.primeSampleCountersKernel,
+			this.tallySampleCountsKernel,
+			this.resetSlotsKernel,
+			this.copyRayDataKernel,
+			this.zeroDispatchKernel,
+		];
+
+		for ( const kernel of kernels ) {
+
+			kernel.needsUpdate = true;
+
+		}
+
 		this.reset();
 
 	}
