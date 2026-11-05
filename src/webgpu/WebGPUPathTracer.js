@@ -1207,7 +1207,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the kernels size the texture info when they're built, so a new texture count needs a rebuild
 		if ( _shadingModel.updateTextures( _renderer ) ) {
 
-			this._pathTracer.setShadingModel( _shadingModel );
+			this._pathTracer.rebuild();
 
 		}
 

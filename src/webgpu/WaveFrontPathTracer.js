@@ -152,8 +152,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 
-		// MaterialKernel bakes in the camera ray function, so a camera swap needs a recompile
+		// recompile the kernels that bake in the scene, camera and shading model functions
 		this.materialKernel.needsUpdate = true;
+		this.traceRayKernel.needsUpdate = true;
+		this.traceShadowRayKernel.needsUpdate = true;
+		this.mediumKernel.needsUpdate = true;
 		this.reset();
 
 	}
