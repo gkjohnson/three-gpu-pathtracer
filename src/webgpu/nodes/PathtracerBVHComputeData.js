@@ -1,9 +1,13 @@
+/** @import { Object3D } from 'three' */
 import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, bool, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 
 const _colorVec = new Vector4();
+const _range = { start: 0, count: 0, vertexStart: 0, vertexCount: 0 };
+
+const getObjectKey = ( object, instanceId, root ) => `${ object.uuid }_${ instanceId }_${ root }`;
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -49,6 +53,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
+		this.objectInfo = new Map();
 
 	}
 
@@ -456,9 +461,51 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
 		this.updateColorSampleFn();
+		this.updateObjectInfo();
 
 		this.bvhMap.clear();
 		this.useTransparencyRaycastFn();
+
+	}
+
+	// records where each object's geometry groups were packed. Each geometry is packed once, in the
+	// order the transforms first reference it
+	updateObjectInfo() {
+
+		const { bvh, objectInfo } = this;
+		const geometryOffsets = new Map();
+		let triangleCount = 0;
+		objectInfo.clear();
+		this._getTransformMap( bvh ).forEach( ( { object, instanceId, root, slot } ) => {
+
+			const primBvh = this.getBVH( object, instanceId, _range );
+			if ( ! geometryOffsets.has( primBvh ) ) {
+
+				// a non indirect bvh stores absolute leaf offsets, so the range start is shifted back
+				geometryOffsets.set( primBvh, triangleCount - ( primBvh.indirect ? 0 : _range.start / 3 ) );
+				triangleCount += _range.count / 3;
+
+			}
+
+			objectInfo.set( getObjectKey( object, instanceId, root ), { slot, triangleOffset: geometryOffsets.get( primBvh ) } );
+
+		} );
+
+	}
+
+	/**
+	 * The transform slot of an object's geometry group and the offset of the geometry's first
+	 * triangle in the merged index buffer, so a hook can address the object's triangles the way the
+	 * kernels do.
+	 *
+	 * @param {Object3D} object
+	 * @param {number} [instanceId=0]
+	 * @param {number} [root=0] - Geometry group index.
+	 * @returns {{ slot: number, triangleOffset: number }}
+	 */
+	getObjectInfo( object, instanceId = 0, root = 0 ) {
+
+		return this.objectInfo.get( getObjectKey( object, instanceId, root ) );
 
 	}
 

@@ -30,7 +30,7 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 //
 // This only guarantees perfect reflection rays are above surface - other diffuse rays, for example,
 // flipped when sampling.
-const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
+export const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
 
 	fn ensureValidReflectionNormal( n: vec3f, ng: vec3f, i: vec3f ) -> vec3f {
 
@@ -90,7 +90,7 @@ const ensureValidReflectionNormal = wgslTagFn/* wgsl */`
 // Adjusts the shading normal such that the provided view normal is guaranteed to be in
 // positive hemisphere by rotating it towards the view direction just enough so view is
 // just glancing the surface as a small epsilon if needed.
-const ensureValidViewNormal = wgslTagFn/* wgsl */`
+export const ensureValidViewNormal = wgslTagFn/* wgsl */`
 
 	fn ensureValidViewNormal( n: vec3f, ng: vec3f, view: vec3f ) -> vec3f {
 

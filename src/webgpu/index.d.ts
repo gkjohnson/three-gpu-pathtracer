@@ -1,5 +1,5 @@
-import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
-import { StorageArrayTexture, WebGPURenderer } from 'three/webgpu';
+import { Camera, Color, EventDispatcher, Mesh, Object3D, Scene, Texture, ExternalTexture } from 'three';
+import { StorageArrayTexture, StorageTexture, WebGPURenderer } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -109,8 +109,19 @@ export interface OIDNDenoiserOptions {
 	useAuxiliaryBuffers?: boolean;
 	maxTileSize?: number | null;
 	dynamicTile?: boolean | object | null;
+	onBeforeDenoise?: OIDNBeforeDenoiseCallback | null;
 
 }
+
+export interface OIDNDenoiseImages {
+
+	color?: Texture;
+	albedo?: Texture | null;
+	normal?: Texture | null;
+
+}
+
+export type OIDNBeforeDenoiseCallback = ( color: Texture, albedo: Texture | null, normal: Texture | null ) => OIDNDenoiseImages;
 
 export interface OIDNDenoiserEventMap {
 
@@ -129,6 +140,7 @@ export class OIDNDenoiser extends EventDispatcher<OIDNDenoiserEventMap> {
 	useAuxiliaryBuffers: boolean;
 	maxTileSize: number | null;
 	dynamicTile: boolean | object | null;
+	onBeforeDenoise: OIDNBeforeDenoiseCallback | null;
 
 	readonly texture: ExternalTexture | null;
 	readonly complete: boolean;
@@ -138,6 +150,126 @@ export class OIDNDenoiser extends EventDispatcher<OIDNDenoiserEventMap> {
 	update( target: Texture, aux?: StorageArrayTexture | null ): Texture | null;
 	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null ): Promise<void>;
 	reset(): void;
+	dispose(): void;
+
+}
+
+// shading model
+
+export class ShadingModel {
+
+	structs: object;
+	storage: object;
+	fns: object;
+	textures: Array<Texture>;
+
+	init( renderer: WebGPURenderer ): void;
+	updateFunctions(): void;
+	getTextureDescriptor( material: object, key: string ): number;
+	getField( material: object, key: string, def: any ): any;
+	writeTextureMatrixToArray( material: object, textureKey: string, array: Float32Array, offset: number ): number;
+	writeMaterialsBuffer( materials: Array<object> ): { materialData: Int32Array };
+	dispose(): void;
+
+}
+
+export class GLTFShadingModel extends ShadingModel {
+
+	constructor( options?: object );
+
+}
+
+// baking
+
+export interface AOMapShadingModelOptions {
+
+	radius?: number;
+	falloff?: boolean;
+
+}
+
+export class AOMapShadingModel extends ShadingModel {
+
+	constructor( options?: AOMapShadingModelOptions );
+
+	radius: { value: number };
+	falloff: { value: number };
+
+}
+
+export class LightmapShadingModel extends GLTFShadingModel {}
+
+export class UVUnwrapper {
+
+	resolution: number;
+	padding: number;
+	useInputUVs: boolean;
+
+	generate( root: Object3D ): Promise<void>;
+
+}
+
+export class UVMapCamera extends Camera {
+
+	constructor( root: Object3D );
+
+	root: Object3D;
+	readonly idTexture: { readonly texture: Texture };
+
+	dispose(): void;
+
+}
+
+export class AOMapCamera extends UVMapCamera {}
+
+export interface LightmapCameraOptions {
+
+	originOffset?: number;
+
+}
+
+export class LightmapCamera extends UVMapCamera {
+
+	constructor( root: Object3D, options?: LightmapCameraOptions );
+
+	originOffset: { value: number };
+
+}
+
+export class GutterFiller {
+
+	constructor( renderer: WebGPURenderer, size: number );
+
+	readonly size: number;
+
+	createTarget(): StorageTexture;
+	fill( map: Texture, ids: Texture, target?: StorageTexture, passes?: number ): StorageTexture;
+	dispose(): void;
+
+}
+
+export interface SeamStitcherOptions {
+
+	iterations?: number;
+	normalThreshold?: number;
+	samplesPerTexel?: number;
+	coveredWeight?: number;
+	paddingWeight?: number;
+	seams?: object | null;
+
+}
+
+export class SeamStitcher {
+
+	constructor( renderer: WebGPURenderer, root: Object3D, coverage: Texture, options?: SeamStitcherOptions );
+
+	renderer: WebGPURenderer;
+	iterations: number;
+	readonly size: number;
+	readonly seams: object;
+	readonly texture: Texture;
+
+	update( map: Texture ): Texture;
 	dispose(): void;
 
 }
@@ -220,6 +352,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	readonly textureAtlas: AtlasTexture;
 
 	getSampleCountsAsync(): Promise<SampleCounts>;
+	setShadingModel( shadingModel: ShadingModel ): void;
+	getObjectInfo( object: Mesh, instanceId?: number, root?: number ): { slot: number, triangleOffset: number };
 	setMultipleImportanceSampling( value: boolean ): void;
 	setDenoiser( denoiser: OIDNDenoiser | null ): void;
 	setUpscaler( upscaler: FSRUpscaler | null ): void;

@@ -16,7 +16,7 @@ import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
-/** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { Camera, Object3D, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
 /** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
@@ -1101,10 +1101,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Replaces the shading model and recompiles the kernels.
+	 * Replaces the shading model and recompiles the kernels. The model evaluates every surface the
+	 * paths hit, so a custom one can bake quantities other than the rendered color, as
+	 * `AOMapShadingModel` and `LightmapShadingModel` do.
 	 *
 	 * @param {ShadingModel} shadingModel
-	 * @private
 	 */
 	setShadingModel( shadingModel ) {
 
@@ -1140,8 +1141,29 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Where an object's geometry group landed in the packed scene buffers: the slot of its transform
+	 * and the offset of its first triangle in the merged index buffer. For a camera that reads the
+	 * scene data by triangle, such as `UVMapCamera`. Valid once the scene is set.
+	 *
+	 * @param {Object3D} object
+	 * @param {number} [instanceId=0] - The instance of an instanced or batched mesh.
+	 * @param {number} [root=0] - The geometry group.
+	 * @returns {{ slot: number, triangleOffset: number }}
+	 */
+	getObjectInfo( object, instanceId = 0, root = 0 ) {
+
+		return this._bvhData.getObjectInfo( object, instanceId, root );
+
+	}
+
+	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
-	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation.
+	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation: a WGSL
+	 * `getCameraRay( uv, resolution, ray ) -> bool` given the uv jittered within the pixel, where
+	 * pixel row 0 is v = 0. Returning `false` marks the pixel finished, with no content. The kernel
+	 * context exposes the scene data as `bvhData`, so the function can read the geometry and
+	 * materials through `contextProxy` and `contextProxyFn`. Its `update( pathTracer )` is called when
+	 * the scene, camera or size changes.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1188,7 +1210,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this._cameraRayFnHandle.update();
+		this._cameraRayFnHandle.update( this );
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1227,7 +1249,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateCamera() {
 
 		const { _cameraRayFnHandle, _pathTracer } = this;
-		if ( _cameraRayFnHandle.update() ) {
+		if ( _cameraRayFnHandle.update( this ) ) {
 
 			_pathTracer.rebuild();
 
@@ -1306,7 +1328,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			this._size.set( x, y );
 
-			// cameras can depend on the size
+			// cameras can depend on the size, such as UVMapCamera
 			if ( this._cameraRayFnHandle ) {
 
 				this.updateCamera();
