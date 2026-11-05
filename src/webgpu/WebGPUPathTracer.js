@@ -1343,12 +1343,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		if ( this._fullFrameBudget !== null ) {
+		// undo the adaptation's last changes, unless the app has since taken over the budget
+		if ( this.adaptiveFrameBudget && this._fullFrameBudget !== null ) {
 
 			this.frameBudget = this._fullFrameBudget;
-			this._fullFrameBudget = null;
 
 		}
+
+		this._fullFrameBudget = null;
 
 	}
 
@@ -1387,9 +1389,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// skip if the render was reset or a new scene started building meanwhile
 			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
 
-				// save the budget once the first pixels finish
+				// save the adaptive budget once the first pixels finish, to undo the adaptation on reset
 				const { maxSamples } = this;
-				if ( this._fullFrameBudget === null && maxSamples > 0 && samples.max >= maxSamples ) {
+				if ( this.adaptiveFrameBudget && this._fullFrameBudget === null && maxSamples > 0 && samples.max >= maxSamples ) {
 
 					this._fullFrameBudget = this.frameBudget;
 
