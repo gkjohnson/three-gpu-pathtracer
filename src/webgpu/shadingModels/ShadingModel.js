@@ -56,6 +56,9 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
+		const textureInfo = uniformArray( this.textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
+		this.fns.sampleTexel = sampleTexelFunc( textureInfo, texture( this.textureAtlas.texture ) );
+
 	}
 
 	/**
@@ -146,13 +149,6 @@ export class ShadingModel {
 		const { textureAtlas } = this;
 		const { length } = textureAtlas.textureInfo;
 		textureAtlas.setTextures( renderer, this.textures );
-
-		if ( ! this.fns.sampleTexel.proxyNode ) {
-
-			const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
-			this.fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
-
-		}
 
 		return textureAtlas.textureInfo.length !== length;
 
