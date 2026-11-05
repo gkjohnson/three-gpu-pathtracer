@@ -11,6 +11,23 @@ import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
+function encodeTextureWrap( wrap ) {
+
+	switch ( wrap ) {
+
+		case RepeatWrapping:
+			return 0;
+		case ClampToEdgeWrapping:
+			return 1;
+		case MirroredRepeatWrapping:
+			return 2;
+		default:
+			return 0;
+
+	}
+
+}
+
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
@@ -132,6 +149,83 @@ export class ShadingModel {
 	}
 
 	/**
+	 * Returns the "*Map" descriptor of a material's texture, or -1 without one, adding the texture to
+	 * "textures" by its shareable source. For use in "writeMaterialsBuffer".
+	 */
+	getTextureDescriptor( material, key, textures, textureLookUp ) {
+
+		if ( key in material && material[ key ] ) {
+
+			const texture = material[ key ];
+			const hash = getTextureHash( texture );
+
+			if ( ! textureLookUp.has( hash ) ) {
+
+				textureLookUp.set( hash, textureLookUp.size );
+				textures.push( texture );
+
+			}
+
+			const idx = textureLookUp.get( hash );							// 23 bits
+			const channel = texture.channel & 7;							// 3 bits
+			const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
+			const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
+			const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
+			return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
+
+		} else {
+
+			return - 1;
+
+		}
+
+	}
+
+	/**
+	 * Returns the material's field, or the default when it has none. For use in "writeMaterialsBuffer".
+	 */
+	getField( material, key, def ) {
+
+		return key in material ? material[ key ] : def;
+
+	}
+
+	/**
+	 * Writes the uv transform of a material's texture as a padded mat3, returning the floats written. For
+	 * use in "writeMaterialsBuffer".
+	 */
+	writeTextureMatrixToArray( material, textureKey, array, offset ) {
+
+		const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
+
+		// check if texture exists
+		if ( texture ) {
+
+			if ( texture.matrixAutoUpdate ) {
+
+				texture.updateMatrix();
+
+			}
+
+			const elements = texture.matrix.elements;
+
+			// Both wgsl struct and elements should be in column-major format
+			for ( let i = 0; i < 3; i ++ ) {
+
+				array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
+				array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
+				array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
+				array[ offset + 4 * i + 3 ] = 0; // padding float
+
+			}
+
+		}
+
+		return 12;
+
+	}
+
+	/**
 	 *
 	 * Must write the given materials to an array in the material struct layout, returning
 	 * { materialData, textures } with the textures the "*Map" fields index
@@ -139,94 +233,13 @@ export class ShadingModel {
 	 */
 	writeMaterialsBuffer( materials ) {
 
-		function encodeTextureWrap( wrap ) {
-
-			switch ( wrap ) {
-
-				case RepeatWrapping:
-					return 0;
-				case ClampToEdgeWrapping:
-					return 1;
-				case MirroredRepeatWrapping:
-					return 2;
-				default:
-					return 0;
-
-			}
-
-		}
-
-		function getTexture( material, key ) {
-
-			if ( key in material && material[ key ] ) {
-
-				const texture = material[ key ];
-				const hash = getTextureHash( texture );
-
-				if ( ! textureLookUp.has( hash ) ) {
-
-					textureLookUp.set( hash, textureLookUp.size );
-					textures.push( texture );
-
-				}
-
-				const idx = textureLookUp.get( hash );							// 23 bits
-				const channel = texture.channel & 7;							// 3 bits
-				const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
-				const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
-				const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
-				return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
-
-			} else {
-
-				return - 1;
-
-			}
-
-		}
-
-		function getField( material, key, def ) {
-
-			return key in material ? material[ key ] : def;
-
-		}
-
-		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
-
-			const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
-
-			// check if texture exists
-			if ( texture ) {
-
-				if ( texture.matrixAutoUpdate ) {
-
-					texture.updateMatrix();
-
-				}
-
-				const elements = texture.matrix.elements;
-
-				// Both wgsl struct and elements should be in column-major format
-				for ( let i = 0; i < 3; i ++ ) {
-
-					array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
-					array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
-					array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
-					array[ offset + 4 * i + 3 ] = 0; // padding float
-
-				}
-
-			}
-
-			return 12;
-
-		}
-
 		let index = 0;
 
 		// Collect and index the list of textures based on shareable source
 		const textureLookUp = new Map();
 		const textures = [];
+		const getTexture = ( material, key ) => this.getTextureDescriptor( material, key, textures, textureLookUp );
+		const { getField, writeTextureMatrixToArray } = this;
 
 		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
 		// TODO: remove this when fixed in three
