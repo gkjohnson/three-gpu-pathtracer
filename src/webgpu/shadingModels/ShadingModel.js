@@ -73,6 +73,7 @@ export class ShadingModel {
 	 * they change:
 	 * - "structs.material": the struct each material is written to.
 	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
+	 * - "fns.sampleTexel": ( uv, map, lod ) -> vec4f, sampling a material's texture from the atlas.
 	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, hit, view, blurRoughness ) -> SurfaceRecord,
 	 *   reading the surface from the material struct at a HitRecord, tinted by the object's instance color.
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
@@ -81,9 +82,13 @@ export class ShadingModel {
 	 */
 	updateFunctions() {
 
-		const { structs, fns } = this;
+		const { structs, fns, textureAtlas } = this;
 		structs.material = materialStruct;
 		structs.surfaceRecord = surfaceRecordStruct;
+
+		// the atlas refills its texture info array in place, so this reads the latest placements
+		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
+		fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
 
 		// the geometry helpers come from the bvh data through the node context
 		fns.getSurfaceRecord = getSurfaceRecordFunc( {
@@ -135,17 +140,19 @@ export class ShadingModel {
 
 	/**
 	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".
+	 * Returns whether the number of textures changed, so the kernels need rebuilding.
 	 *
 	 * @param {WebGPURenderer} renderer
+	 * @returns {boolean}
 	 */
 	updateTextures( renderer ) {
 
+		// the atlas refills its texture info array in place, but the kernels size it when they're built
 		const { textureAtlas } = this;
+		const { length } = textureAtlas.textureInfo;
 		textureAtlas.setTextures( renderer, this.textures );
 
-		// rebuilt since the texture info array can change length
-		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
-		this.fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
+		return textureAtlas.textureInfo.length !== length;
 
 	}
 
