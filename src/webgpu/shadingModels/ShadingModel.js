@@ -54,6 +54,7 @@ export class ShadingModel {
 		this.materials = [];
 		this.materialsMap = new Map();
 		this.textures = [];
+		this.texturesMap = new Map();
 
 	}
 
@@ -152,21 +153,22 @@ export class ShadingModel {
 	 * Returns the "*Map" descriptor of a material's texture, or -1 without one, adding the texture to
 	 * "textures" by its shareable source. For use in "writeMaterialsBuffer".
 	 */
-	getTextureDescriptor( material, key, textures, textureLookUp ) {
+	getTextureDescriptor( material, key ) {
 
 		if ( key in material && material[ key ] ) {
 
+			const { textures, texturesMap } = this;
 			const texture = material[ key ];
 			const hash = getTextureHash( texture );
 
-			if ( ! textureLookUp.has( hash ) ) {
+			if ( ! texturesMap.has( hash ) ) {
 
-				textureLookUp.set( hash, textureLookUp.size );
+				texturesMap.set( hash, textures.length );
 				textures.push( texture );
 
 			}
 
-			const idx = textureLookUp.get( hash );							// 23 bits
+			const idx = texturesMap.get( hash );							// 23 bits
 			const channel = texture.channel & 7;							// 3 bits
 			const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
 			const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
@@ -228,17 +230,14 @@ export class ShadingModel {
 	/**
 	 *
 	 * Must write the given materials to an array in the material struct layout, returning
-	 * { materialData, textures } with the textures the "*Map" fields index
+	 * { materialData }. The "*Map" fields index the textures added with "getTextureDescriptor"
 	 *
 	 */
 	writeMaterialsBuffer( materials ) {
 
 		let index = 0;
 
-		// Collect and index the list of textures based on shareable source
-		const textureLookUp = new Map();
-		const textures = [];
-		const getTexture = ( material, key ) => this.getTextureDescriptor( material, key, textures, textureLookUp );
+		const getTexture = ( material, key ) => this.getTextureDescriptor( material, key );
 		const { getField, writeTextureMatrixToArray } = this;
 
 		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
@@ -553,15 +552,19 @@ export class ShadingModel {
 
 		}
 
-		return { materialData: intArray, textures };
+		return { materialData: intArray };
 
 	}
 
 	updateMaterials( root ) {
 
-		const { materials, materialsMap, structs } = this;
+		const { materials, materialsMap, textures, texturesMap, structs } = this;
 		materialsMap.clear();
 		materials.length = 0;
+
+		// collected again by "getTextureDescriptor" as the materials are written
+		texturesMap.clear();
+		textures.length = 0;
 		root.traverse( o => {
 
 			if ( o.material ) {
@@ -601,7 +604,7 @@ export class ShadingModel {
 
 		}
 
-		const { materialData, textures } = this.writeMaterialsBuffer( materials );
+		const { materialData } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
 		const count = materialData.length / materialStruct.getLength();
@@ -614,8 +617,6 @@ export class ShadingModel {
 
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
-
-		this.textures = textures;
 
 		function add( mat ) {
 
