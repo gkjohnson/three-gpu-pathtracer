@@ -33,7 +33,7 @@ export class QueueMediumWalksKernel extends ComputeKernel {
 
 				}
 
-				if ( rayDataStorage[ index ].walkPending != 0u && rayDataStorage[ index ].objectIndex >= 0 ) {
+				if ( rayDataStorage[ index ].walkPending != 0u && rayDataStorage[ index ].hit.objectIndex >= 0 ) {
 
 					let queueIndex = atomicAdd( &mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ], 1u );
 					atomicStore( &mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + queueIndex ], index );
