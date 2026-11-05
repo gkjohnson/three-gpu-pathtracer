@@ -8,7 +8,7 @@ import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '
 import { mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
-import { lightRecordStruct } from '../nodes/structs.wgsl.js';
+import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
@@ -64,7 +64,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
-		const getSurfaceRecordFn = contextProxyFn( 'bvhData.fns.getSurfaceRecord' );
+		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
@@ -314,20 +314,30 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					if ( didHit ) {
 
+						// the hit, recorded as in the wavefront ray data
+						var hit: ${ hitRecordStruct };
+						hit.barycoord = hitResult.barycoord;
+						hit.objectIndex = i32( hitResult.objectIndex );
+						hit.normal = hitResult.normal;
+						hit.side = hitResult.side;
+						hit.indices = hitResult.indices.xyz;
+						hit.dist = hitResult.dist;
+						hit.bounce = bounce;
+
 						// a medium that doesn't scatter only absorbs the light reaching the surface. One that
 						// does has already applied its transmittance above
 						if ( ! segmentInMedium ) {
 
-							throughputColor *= exp( - medium.extinction * hitResult.dist );
+							throughputColor *= exp( - medium.extinction * hit.dist );
 
 						}
 
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
-						let objectInfo = ${ transformsStorage }[ hitResult.objectIndex ];
+						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 						let view = - ray.direction;
-						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
+						var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices );
 						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 						vertexData.position = objectInfo.matrixWorld * vertexData.position;
@@ -337,7 +347,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hit, view, blurRoughness );
 
 						// a matte surface hit by the camera ray renders as a fully transparent
 						if ( surface.matte && bounce == 0u ) {
@@ -358,8 +368,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
-							rayStart += hitResult.dist;
+							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hit.normal );
+							rayStart += hit.dist;
 							${ rngNextBounce }();
 							transparentBounce ++;
 							bounce --;
@@ -413,11 +423,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								if ( lightRec.pdf > 0.0 ) {
 
-									let evalRec = ${ bsdfEvalPdfFn }( view, lightRec.direction, surface );
+									let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
 									if ( evalRec.pdf > 0.0 ) {
 
 										var shadowRay: ${ rayStruct };
-										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hitResult.normal );
+										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
 										shadowRay.direction = lightRec.direction;
 										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
@@ -448,7 +458,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let scatterRec = ${ bsdfSampleFn }( view, surface );
+						let scatterRec = ${ bsdfSampleFn }( hit, surface, view );
 
 						if ( ! auxFound ) {
 
@@ -495,19 +505,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
 							var stack: vec4u;
-							if ( hitResult.side > 0.0 ) {
+							if ( hit.side > 0.0 ) {
 
-								stack = ${ mediumStackEnterFn }( medium.stack, hitResult.objectIndex );
+								stack = ${ mediumStackEnterFn }( medium.stack, u32( hit.objectIndex ) );
 
 							} else {
 
-								stack = ${ mediumStackExitFn }( medium.stack, hitResult.objectIndex );
+								stack = ${ mediumStackExitFn }( medium.stack, u32( hit.objectIndex ) );
 
 							}
 
 							if ( any( stack != medium.stack ) ) {
 
-								medium = ${ stackMediumFn }( stack, hitResult.objectIndex );
+								medium = ${ stackMediumFn }( stack, u32( hit.objectIndex ) );
 
 							}
 
@@ -520,7 +530,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
+						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hit.normal );
 						ray.direction = scatterRec.direction;
 						ray.maxDist = 0.0;
 						traceOrigin = ray.origin;

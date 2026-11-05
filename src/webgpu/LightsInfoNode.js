@@ -42,12 +42,15 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	}
 
+	// Returns whether the number of ies profiles changed, so the kernels need rebuilding
 	updateFrom( renderer, lights ) {
 
 		// the unique set of ies textures referenced by the lights' "iesMap" fields
 		const iesTextures = Array.from( new Set( lights.map( l => l.iesMap ).filter( t => t ) ) );
-		const changed = super.updateFrom( lights, iesTextures );
+		super.updateFrom( lights, iesTextures );
 
+		// the atlas refills its texture info array in place, but the kernels size it when they're built
+		const { length } = this.iesAtlas.textureInfo;
 		this.iesAtlas.setTextures( renderer, iesTextures );
 		this.iesProfilesNode.value = this.iesAtlas.texture;
 
@@ -82,7 +85,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.buffer.needsUpdate = true;
 		this.countNode.value = this.count;
 
-		return changed;
+		return this.iesAtlas.textureInfo.length !== length;
 
 	}
 
