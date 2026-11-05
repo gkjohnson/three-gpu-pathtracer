@@ -411,6 +411,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
 		// surfaces, and stop at the first opaque hit
+		// TODO: shadow rays could use a thinner result struct with only the occlusion fields, building the
+		// shared bounds test and result transform for each struct
 		fns.raycastShadow = this.getShapecastFn( {
 			...raycastOptions,
 			name: 'raycastShadow',
