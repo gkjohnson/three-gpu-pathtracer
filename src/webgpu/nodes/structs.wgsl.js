@@ -185,9 +185,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	// surface type
 	volumeParticle: 'bool',
 
-	// the bounce the surface was hit at
-	bounce: 'u32',
-
 	// geometry
 	faceNormal: 'vec3f',
 	frontFace: 'bool',

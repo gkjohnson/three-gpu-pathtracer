@@ -399,7 +399,6 @@ export const getSurfaceRecordFunc = ( {
 		var surf: ${ surfaceRecordStruct };
 
 		surf.volumeParticle = false;
-		surf.bounce = hit.bounce;
 		surf.faceNormal = faceNormal;
 		surf.normal = normal;
 

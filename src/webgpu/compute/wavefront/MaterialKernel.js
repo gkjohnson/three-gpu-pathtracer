@@ -300,7 +300,7 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// sample the next bounce direction and stage the scatter state for LogicKernel
-					var scatterRec = ${ bsdfSampleFn }( view, surface );
+					var scatterRec = ${ bsdfSampleFn }( input.hit, surface, view );
 					let newBounce = input.hit.bounce + 1u;
 
 					// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
@@ -408,7 +408,7 @@ export class MaterialKernel extends ComputeKernel {
 					var lightPdf = input.lightPdf;
 					if ( lightPdf > 0.0 ) {
 
-						let evalRec = ${ bsdfEvalPdfFn }( view, input.lightDirection, surface );
+						let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
 						if ( evalRec.pdf > 0.0 ) {
 
 							rayDataStorage[ index ].lightBsdf = evalRec.color;

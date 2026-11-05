@@ -416,7 +416,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								if ( lightRec.pdf > 0.0 ) {
 
-									let evalRec = ${ bsdfEvalPdfFn }( view, lightRec.direction, surface );
+									let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
 									if ( evalRec.pdf > 0.0 ) {
 
 										var shadowRay: ${ rayStruct };
@@ -451,7 +451,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						let scatterRec = ${ bsdfSampleFn }( view, surface );
+						let scatterRec = ${ bsdfSampleFn }( hit, surface, view );
 
 						if ( ! auxFound ) {
 
