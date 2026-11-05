@@ -41,7 +41,7 @@
 			},
 			"rules": {
 				"import/extensions": [ "error", "always", { "ignorePackages": true } ],
-				"jsdoc/check-tag-names": [ "error", { "definedTags": [ "warn", "note", "section" ] } ],
+				"jsdoc/check-tag-names": [ "error", { "definedTags": [ "component", "warn", "note", "section" ] } ],
 				"jsdoc/check-types": "error",
 				"jsdoc/no-undefined-types": [ "error", { "definedTypes": [ "GPUAdapter" ] } ],
 				"jsdoc/require-param-type": "error",
