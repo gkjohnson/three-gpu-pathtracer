@@ -8,7 +8,7 @@ import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '
 import { mediumStruct, enterMediumFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
-import { lightRecordStruct } from '../nodes/structs.wgsl.js';
+import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
@@ -307,12 +307,21 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					if ( didHit ) {
 
+						// the hit, recorded as in the wavefront ray data
+						var hit: ${ hitRecordStruct };
+						hit.barycoord = hitResult.barycoord;
+						hit.objectIndex = i32( hitResult.objectIndex );
+						hit.normal = hitResult.normal;
+						hit.side = hitResult.side;
+						hit.indices = hitResult.indices.xyz;
+						hit.dist = hitResult.dist;
+
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
-						let objectInfo = ${ transformsStorage }[ hitResult.objectIndex ];
+						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 						let view = - ray.direction;
-						var vertexData = ${ sampleTrianglePointFn }( hitResult.barycoord, hitResult.indices.xyz );
+						var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices );
 						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 						vertexData.position = objectInfo.matrixWorld * vertexData.position;
@@ -322,7 +331,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// The smallest pdf seen along the path for the glossy filter is tracked below
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
-						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hitResult.side, hitResult.normal, view, blurRoughness );
+						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hit, view, blurRoughness );
 
 						// a matte surface hit by the camera ray renders as a fully transparent
 						if ( surface.matte && bounce == 0u ) {
@@ -343,8 +352,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hitResult.normal );
-							rayStart += hitResult.dist;
+							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hit.normal );
+							rayStart += hit.dist;
 							${ rngNextBounce }();
 							transparentBounce ++;
 							bounce --;
@@ -368,9 +377,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// attenuate the light transmitted through the volume when exiting a backface. A scattering
 						// medium has already applied its transmittance above
-						if ( hitResult.side < 0.0 && surface.transmission > 0.0 && ! segmentInMedium ) {
+						if ( hit.side < 0.0 && surface.transmission > 0.0 && ! segmentInMedium ) {
 
-							throughputColor *= ${ transmissionAttenuationFunc }( hitResult.dist, surface.attenuationColor, surface.attenuationDistance );
+							throughputColor *= ${ transmissionAttenuationFunc }( hit.dist,surface.attenuationColor, surface.attenuationDistance );
 
 						}
 
@@ -410,7 +419,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									if ( evalRec.pdf > 0.0 ) {
 
 										var shadowRay: ${ rayStruct };
-										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hitResult.normal );
+										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
 										shadowRay.direction = lightRec.direction;
 										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
@@ -485,16 +494,16 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// As in "KHR_materials_scatter", the medium's surface bsdf is its boundary: the walk ends when
 						// light refracts out through it, and continues inside when it reflects back
-						if ( segmentInMedium && hitResult.objectIndex == medium.object && hitResult.side < 0.0 && scatterRec.isTransmissive ) {
+						if ( segmentInMedium && u32( hit.objectIndex ) == medium.object && hit.side < 0.0 && scatterRec.isTransmissive ) {
 
 							medium.inside = false;
 
 						}
 
 						// refracting into a front face of a scattering material starts a random walk inside it
-						if ( scatterRec.isTransmissive && ! surface.thinWall && hitResult.side > 0.0 ) {
+						if ( scatterRec.isTransmissive && ! surface.thinWall && hit.side > 0.0 ) {
 
-							let entered = ${ enterMediumFn }( surface, hitResult.objectIndex );
+							let entered = ${ enterMediumFn }( surface, u32( hit.objectIndex ) );
 
 							if ( entered.inside ) {
 
@@ -511,7 +520,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hitResult.normal );
+						ray.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hit.normal );
 						ray.direction = scatterRec.direction;
 						ray.maxDist = 0.0;
 						traceOrigin = ray.origin;

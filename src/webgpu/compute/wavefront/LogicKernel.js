@@ -230,12 +230,12 @@ export class LogicKernel extends ComputeKernel {
 					if ( didHit ) {
 
 						// stage the hit for MaterialKernel
-						rayDataStorage[ index ].barycoord = hitResult.barycoord;
-						rayDataStorage[ index ].normal = hitResult.normal;
-						rayDataStorage[ index ].side = hitResult.side;
-						rayDataStorage[ index ].indices = hitResult.indices;
-						rayDataStorage[ index ].objectIndex = hitResult.objectIndex;
-						rayDataStorage[ index ].dist = hitResult.dist;
+						rayDataStorage[ index ].hit.barycoord = hitResult.barycoord;
+						rayDataStorage[ index ].hit.normal = hitResult.normal;
+						rayDataStorage[ index ].hit.side = hitResult.side;
+						rayDataStorage[ index ].hit.indices = hitResult.indices;
+						rayDataStorage[ index ].hit.objectIndex = hitResult.objectIndex;
+						rayDataStorage[ index ].hit.dist = hitResult.dist;
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
@@ -404,7 +404,7 @@ export class LogicKernel extends ComputeKernel {
 
 					}
 
-					rayDataStorage[ index ].objectIndex = - 1;
+					rayDataStorage[ index ].hit.objectIndex = - 1;
 
 				} else {
 

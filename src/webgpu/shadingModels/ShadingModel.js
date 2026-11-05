@@ -55,8 +55,8 @@ export class ShadingModel {
 	 * they change:
 	 * - "structs.material": the struct each material is written to.
 	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
-	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, side, faceNormal, view, blurRoughness ) -> SurfaceRecord,
-	 *   reading the surface from the material struct at a hit, tinted by the object's instance color.
+	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, hit, view, blurRoughness ) -> SurfaceRecord,
+	 *   reading the surface from the material struct at a HitRecord, tinted by the object's instance color.
 	 * - "fns.bsdfSample": ( worldView, surface ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( worldView, worldLight, surface ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.

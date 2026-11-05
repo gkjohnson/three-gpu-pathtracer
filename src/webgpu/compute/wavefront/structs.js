@@ -1,5 +1,6 @@
 import { StructTypeNode } from 'three/webgpu';
 import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
+import { hitRecordStruct } from '../../nodes/structs.wgsl.js';
 
 // StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
 // a type string, so we build each dependency first, which registers its definition ahead of this struct.
@@ -50,16 +51,7 @@ const rayDataMembers = {
 	isFullyTransmissive: 'uint',
 
 	direction: 'vec3f',
-	side: 'float',
-
-	normal: 'vec3f',
-	objectIndex: 'int',
-
-	barycoord: 'vec3f',
 	pixelIndex: 'uint',
-
-	indices: 'vec3u',
-	sampleIndex: 'uint',
 
 	lightDirection: 'vec3f',
 	lightPdf: 'float',
@@ -70,12 +62,10 @@ const rayDataMembers = {
 	lightBsdf: 'vec3f',
 	lightBsdfPdf: 'float',
 
+	sampleIndex: 'uint',
 	rayIntersectionIndex: 'int',
 	shadowRayIntersectionIndex: 'int',
 	lightType: 'int',
-
-	// the traced segment length, for the transmission attenuation applied by MaterialKernel
-	dist: 'float',
 
 	// alpha test pass throughs, counted separately from the bounce count, and how far along the ray they
 	// moved the start of its traversal. The ray keeps the origin it scattered from
@@ -104,15 +94,16 @@ const rayDataMembers = {
 
 };
 
-// The path's medium, nested at the end to share the ray data buffer under the storage buffer limit. Sized
-// separately since nested structs aren't.
+// The path's last surface hit, nested first, and its medium, nested at the end to share the ray data buffer
+// under the storage buffer limit. Sized separately since nested structs aren't.
 export const rayDataStruct = new DependentStructTypeNode( {
+	hit: hitRecordStruct.name,
 	...rayDataMembers,
 	medium: mediumStateStruct.name,
-}, 'RayData', [ mediumStateStruct ] );
+}, 'RayData', [ hitRecordStruct, mediumStateStruct ] );
 
 const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
-rayDataStruct.getLength = () => rayDataLength + mediumStateStruct.getLength();
+rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStateStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
