@@ -165,6 +165,22 @@ export const materialStruct = new StructTypeNode( {
 	// total size = 284
 }, 'Material' );
 
+// A ray's surface hit. "normal" is the face normal on the hit side, "side" is -1 for back face hits and
+// objectIndex < 0 encodes a miss
+export const hitRecordStruct = new StructTypeNode( {
+	barycoord: 'vec3f',
+	objectIndex: 'int',
+
+	normal: 'vec3f',
+	side: 'float',
+
+	indices: 'vec3u',
+	dist: 'float',
+
+	// the bounce the surface was hit at
+	bounce: 'uint',
+}, 'HitRecord' );
+
 export const surfaceRecordStruct = new StructTypeNode( {
 	// surface type
 	volumeParticle: 'bool',

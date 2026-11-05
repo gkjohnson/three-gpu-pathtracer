@@ -20,7 +20,7 @@ import {
 	ggxRefractionAdjustedPDFFunc,
 	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
-import { constants, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
+import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
@@ -146,12 +146,13 @@ export const getSurfaceRecordFunc = ( {
 		material: ${ materialStruct },
 		objectColor: vec4f,
 		vertexData: ${ attributesStruct },
-		side: f32,
-		faceNormal: vec3f,
+		hit: ${ hitRecordStruct },
 		view: vec3f,
 		blurRoughness: f32,
-		bounce: u32,
 	) -> ${ surfaceRecordStruct } {
+
+		let side = hit.side;
+		let faceNormal = hit.normal;
 
 		// "faceNormal" is provided on the hit side so flip it back to the geometric side
 		var normal = faceNormal * side;
@@ -398,7 +399,7 @@ export const getSurfaceRecordFunc = ( {
 		var surf: ${ surfaceRecordStruct };
 
 		surf.volumeParticle = false;
-		surf.bounce = bounce;
+		surf.bounce = hit.bounce;
 		surf.faceNormal = faceNormal;
 		surf.normal = normal;
 
