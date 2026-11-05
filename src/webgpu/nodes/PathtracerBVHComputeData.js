@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
-import { float, bool, uint } from 'three/tsl';
+import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
 
 const _colorVec = new Vector4();
@@ -178,16 +178,65 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 
-		// raycast first hit, bounded by the ray's "maxDist" - 0 means unbounded
-		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
+		// the object being traversed, set when the ray is transformed into its space
+		const currentObjectIndex = uint().toVar( 'bvh_objectIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
-		// surfaces, and stop at the first opaque hit
-		const isShadowRay = bool( false ).toVar( 'bvh_isShadowRay' );
-		const skipShadowObject = bool( false ).toVar( 'bvh_skipShadowObject' );
+		// the opacity of a hit triangle at its barycentric coordinate, from the object's opacity, the vertex
+		// colors and the alpha of the map and alpha map
+		const getHitOpacity = wgslTagFn/* wgsl */`
+			fn getHitOpacity( material: ${ contextProxy( 'shadingModel.structs.material' ) }, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
 
+				var opacity = ${ baseOpacityScalar };
+				if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
+
+					// add support for vertex color opacity
+					if ( material.vertexColors == 1 ) {
+
+						let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
+						let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
+						let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+						let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+
+						opacity *= col.a;
+
+					}
+
+					// account for alpha component of albedo map
+					if ( material.map != - 1 ) {
+
+						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
+						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
+						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
+						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+						let uvPrime = material.mapTransform * vec3f( uv, 1 );
+
+						opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
+
+					}
+
+					// account for green component of alpha map
+					if ( material.alphaMap != - 1 ) {
+
+						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
+						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
+						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
+						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+						let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
+
+						opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
+
+					}
+
+				}
+
+				return opacity;
+
+			}
+		`;
+
+		// the traversal shared by the first hit and shadow rays, bounded by the ray's "maxDist" - 0 means unbounded
 		const raycastOptions = {
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
@@ -254,140 +303,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				}
 
 			`,
-			intersectRangeFn: wgslTagFn/* wgsl */`
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
-
-					var didHit = false;
-					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
-
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
-
-						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
-						triResult.dist *= ${ scratchRayScalar };
-						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
-
-							let material = ${ materialsStorage }[ ${ currentMaterialIndex } ];
-
-							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							// shadow rays hit both sides
-							if ( ! ${ isShadowRay } && material.side != 0 && triResult.side != material.side ) {
-
-								continue;
-
-							}
-
-							var opacity = ${ baseOpacityScalar };
-							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
-
-								// add support for vertex color opacity
-								if ( material.vertexColors == 1 ) {
-
-									let barycoord = triResult.barycoord;
-									let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
-									let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
-									let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
-									let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-
-									opacity *= col.a;
-
-								}
-
-								// account for alpha component of albedo map
-								if ( material.map != - 1 ) {
-
-									let barycoord = triResult.barycoord;
-									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
-									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
-									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
-									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-									let uvPrime = material.mapTransform * vec3f( uv, 1 );
-
-									opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
-
-								}
-
-								// account for green component of alpha map
-								if ( material.alphaMap != - 1 ) {
-
-									let barycoord = triResult.barycoord;
-									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
-									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
-									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
-									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
-
-									opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
-
-								}
-
-								// Opacity is resolved at surface processing but skip full transparent hits here.
-								if ( material.transparent != 0 && opacity <= 0.0 ) {
-
-									continue;
-
-								}
-
-								if ( opacity < material.alphaTest ) {
-
-									continue;
-
-								}
-
-							}
-
-							// shadow rays skip the objects not visible to them. Record the share of bsdf rays this face
-							// would stop: all of them if it's opaque, its opacity if it's partially transparent
-							if ( ${ skipShadowObject } ) {
-
-								if ( material.side == 0 || triResult.side == material.side ) {
-
-									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
-
-								}
-
-								continue;
-
-							}
-
-							// shadow rays pass partially transparent surfaces, each blocking its opacity's share of the
-							// light still getting through, just as bsdf rays pass them by chance
-							if ( ${ isShadowRay } && material.transparent != 0 && opacity < 1.0 ) {
-
-								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
-								continue;
-
-							}
-
-							result.didHit = true;
-							result.dist = triResult.dist;
-							result.normal = triResult.normal;
-							result.side = triResult.side;
-							result.barycoord = triResult.barycoord;
-							result.indices = vec4u( i0, i1, i2, ti );
-
-							// shadow rays end the whole traversal at the first opaque hit
-							if ( ${ isShadowRay } ) {
-
-								return ${ STOP_TRAVERSAL }u;
-
-							}
-
-							didHit = true;
-
-						}
-
-					}
-
-					return select( ${ NOT_INTERSECTED }u, ${ INTERSECTED }u, didHit );
-
-				}
-			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
 				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
 
@@ -400,7 +315,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					${ scratchRayScalar } = 1.0 / len;
 
 					let object = ${ storage.transforms }[ objectIndex ];
-					${ currentMaterialIndex } = object.materialIndex;
+					${ currentObjectIndex } = objectIndex;
 
 					let material = ${ materialsStorage }[ object.materialIndex ];
 					if ( material.transparent == 1 ) {
@@ -412,8 +327,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						${ baseOpacityScalar } = 1.0;
 
 					}
-
-					${ skipShadowObject } = ${ isShadowRay } && object.visibleToShadowRays == 0u;
 
 				}
 			`,
@@ -436,25 +349,130 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		};
 
+		// the nearest hit on the material's visible side, past fully transparent and alpha tested surfaces
 		fns.raycastFirstHit = this.getShapecastFn( {
 			...raycastOptions,
 			name: 'raycastFirstHit',
-			prefixFn: wgslTagFn/* wgsl */`
-				fn initFirstHitCull() -> void {
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					${ isShadowRay } = false;
+					var didHit = false;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
+						triResult.dist *= ${ scratchRayScalar };
+						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
+
+							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
+							let material = ${ materialsStorage }[ object.materialIndex ];
+
+							// TODO: if material is a transmissive volume we may need to assume double-sidedness
+							if ( material.side != 0 && triResult.side != material.side ) {
+
+								continue;
+
+							}
+
+							// partial opacity is resolved at surface processing, but fully transparent and alpha
+							// tested surfaces are skipped here
+							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+
+								continue;
+
+							}
+
+							result.didHit = true;
+							result.dist = triResult.dist;
+							result.normal = triResult.normal;
+							result.side = triResult.side;
+							result.barycoord = triResult.barycoord;
+							result.indices = vec4u( i0, i1, i2, ti );
+
+							didHit = true;
+
+						}
+
+					}
+
+					return select( ${ NOT_INTERSECTED }u, ${ INTERSECTED }u, didHit );
 
 				}
 			`,
 		} );
 
+		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
+		// surfaces, and stop at the first opaque hit
 		fns.raycastShadow = this.getShapecastFn( {
 			...raycastOptions,
 			name: 'raycastShadow',
-			prefixFn: wgslTagFn/* wgsl */`
-				fn initShadowCull() -> void {
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectShadowRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					${ isShadowRay } = true;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
+						triResult.dist *= ${ scratchRayScalar };
+						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) ) {
+
+							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
+							let material = ${ materialsStorage }[ object.materialIndex ];
+
+							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+
+								continue;
+
+							}
+
+							// skip the objects not visible to shadow rays. Record the share of bsdf rays this face
+							// would stop: all of them if it's opaque, its opacity if it's partially transparent
+							if ( object.visibleToShadowRays == 0u ) {
+
+								if ( material.side == 0 || triResult.side == material.side ) {
+
+									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
+
+								}
+
+								continue;
+
+							}
+
+							// pass partially transparent surfaces, each blocking its opacity's share of the light still
+							// getting through, just as bsdf rays pass them by chance
+							if ( material.transparent != 0 && opacity < 1.0 ) {
+
+								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
+								continue;
+
+							}
+
+							// the first opaque hit ends the whole traversal
+							result.didHit = true;
+							return ${ STOP_TRAVERSAL }u;
+
+						}
+
+					}
+
+					return ${ NOT_INTERSECTED }u;
 
 				}
 			`,
