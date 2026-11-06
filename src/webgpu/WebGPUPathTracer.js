@@ -1138,7 +1138,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 			shadingModel.updateMaterials( scene );
 			shadingModel.updateTextures( _renderer );
 			_bvhData.setShadingModel( shadingModel );
-			this._pathTracer.hasVolumes = shadingModel.hasVolumes;
 
 		}
 
@@ -1210,7 +1209,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
-		this._pathTracer.hasVolumes = this._shadingModel.hasVolumes;
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1225,7 +1223,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
 		_shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
-		this._pathTracer.hasVolumes = _shadingModel.hasVolumes;
 
 		// the kernels size the texture info when they're built, so a new texture count needs a rebuild
 		if ( _shadingModel.updateTextures( _renderer ) ) {

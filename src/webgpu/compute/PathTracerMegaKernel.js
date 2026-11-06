@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, shadowMediumStackFunc, shadowTransmittanceFunc, originMediumStackFunc, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, originMediumStackFunc, shadowMediumStackFunc, shadowTransmittanceFunc, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON, MEDIUM_STACK_EMPTY } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -43,7 +43,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 
-			// whether the scene has volumes, which camera rays then trace for the ones they start inside of
+			// whether the scene has volumes, which camera rays then look for the ones they start inside of
 			hasVolumes: uniform( 0, 'uint' ),
 
 			backgroundInfo: { value: null },
@@ -75,9 +75,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
 		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
 		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
+		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, transformsStorage, materialsStorage, mediumStackEnterFn );
 		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
 		const shadowTransmittanceFn = shadowTransmittanceFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, offsetRayOriginFunc, transformsStorage, materialsStorage, mediumStackEnterFn );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -192,7 +192,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				var medium = ${ stackMediumFn }( originStack, ${ MEDIUM_STACK_EMPTY }u );
+				var medium = ${ stackMediumFn }( originStack );
 				var subsurfaceBounces = 0u;
 				var fogBounces = 0u;
 
@@ -230,7 +230,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterDist = 0.0;
 					var traceRay = ray;
 					traceRay.origin = traceOrigin;
-					if ( medium.inside ) {
+					if ( medium.scatters ) {
 
 						channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
 						scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
@@ -242,10 +242,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					let segmentInMedium = medium.inside;
+					let segmentInMedium = medium.scatters;
 					var segmentEnd = surfaceDist;
 					var fogScatter = false;
-					if ( medium.inside ) {
+					if ( medium.scatters ) {
 
 						let scattered = scatterDist < surfaceDist;
 						let segmentDist = select( surfaceDist, scatterDist, scattered );
@@ -504,7 +504,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								if ( any( stack != medium.stack ) ) {
 
-									medium = ${ stackMediumFn }( stack, u32( hit.objectIndex ) );
+									medium = ${ stackMediumFn }( stack );
 
 								}
 
@@ -660,7 +660,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							if ( any( stack != medium.stack ) ) {
 
-								medium = ${ stackMediumFn }( stack, u32( hit.objectIndex ) );
+								medium = ${ stackMediumFn }( stack );
 
 							}
 

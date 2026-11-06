@@ -5,7 +5,6 @@ import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVER
 import { materialExtinctionFn, fogShadowDistanceFn } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
-
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -569,7 +568,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
 
-		// slots are written in order, so the first one seen for a volume is its id
+		// slots are written in order, so the first one seen for a volume is its medium id
 		const mediumKey = `${ object.uuid }_${ instanceId }_${ index }`;
 		if ( ! this._mediumIds.has( mediumKey ) ) {
 

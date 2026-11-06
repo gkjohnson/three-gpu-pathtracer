@@ -134,8 +134,8 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 // the object index MediumKernel writes for a walk ending at a scatter event in fog
 export const MEDIUM_SCATTER_HIT = - 2;
 
-// The "walkPending" value of a camera ray found inside a medium after it was queued for tracing. Its first
-// walk pass writes its hit into that ray's unused result entry rather than one from the back
+// The "walkPending" value of a camera ray found inside a scattering medium after it was queued for tracing.
+// Its first walk pass writes its hit into that ray's unused result entry rather than one from the back
 export const WALK_PENDING_CAMERA = 2;
 
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by

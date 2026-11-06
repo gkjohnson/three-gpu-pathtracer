@@ -1,6 +1,7 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
+import { offsetRayOriginFunc } from './utils.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
@@ -15,25 +16,24 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 // inversion and the Henyey-Greenstein pdf divide by zero at
 const MEDIUM_MAX_ANISOTROPY = 0.999;
 
-// The media a path is inside of, as in Cycles' volume_stack.h: the object indices of up to four volumes,
-// packed at the front with the empty value after them. A volume entered past a full stack is ignored
+// The media a path is inside of, as in Cycles' volume_stack.h: the medium ids of up to four volumes, packed
+// at the front with the empty value after them. A volume entered past a full stack is ignored
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const MEDIUM_STACK_SIZE = 4;
+
+// how many surfaces the ray finding the volumes around a camera ray's origin passes
+const MEDIUM_ORIGIN_MAX_HITS = 16;
 
 // the shadow ray length past which the light is distant, as the far distance shortened by the light epsilon
 const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
-// how many surfaces the ray finding the volumes a camera ray starts in passes
-const MEDIUM_ORIGIN_MAX_HITS = 16;
-
-// The media of the stack combined. "inside" marks one that scatters, which is walked, while one that only
-// absorbs attenuates the segments through it. A walk through fog samples light at each scatter event, as
-// Cycles does in volumes, where a subsurface walk doesn't
+// The media of a stack combined. One that scatters is walked, while one that only absorbs attenuates the
+// segments through it. A walk through fog samples light at each scatter event, as Cycles does in volumes,
+// where a subsurface walk doesn't
 export const mediumStruct = new StructTypeNode( {
 	stack: 'vec4u',
-	inside: 'bool',
+	scatters: 'bool',
 	fog: 'bool',
-	object: 'uint',
 	extinction: 'vec3f',
 	albedo: 'vec3f',
 	anisotropy: 'float',
@@ -44,12 +44,11 @@ export const mediumStateStruct = new StructTypeNode( {
 	stack: 'vec4u',
 
 	extinction: 'vec3f',
-	object: 'uint',
+	scatters: 'uint',
 
 	albedo: 'vec3f',
 	anisotropy: 'float',
 
-	inside: 'uint',
 	fog: 'uint',
 }, 'MediumState' );
 
@@ -60,10 +59,9 @@ export const storeMediumFn = wgslTagFn/* wgsl */`
 		var state: ${ mediumStateStruct };
 		state.stack = medium.stack;
 		state.extinction = medium.extinction;
-		state.object = medium.object;
+		state.scatters = select( 0u, 1u, medium.scatters );
 		state.albedo = medium.albedo;
 		state.anisotropy = medium.anisotropy;
-		state.inside = select( 0u, 1u, medium.inside );
 		state.fog = select( 0u, 1u, medium.fog );
 		return state;
 
@@ -77,12 +75,11 @@ export const loadMediumFn = wgslTagFn/* wgsl */`
 
 		var medium: ${ mediumStruct };
 		medium.stack = state.stack;
-		medium.inside = state.inside != 0u;
-		medium.fog = state.fog != 0u;
-		medium.object = state.object;
 		medium.extinction = state.extinction;
+		medium.scatters = state.scatters != 0u;
 		medium.albedo = state.albedo;
 		medium.anisotropy = state.anisotropy;
+		medium.fog = state.fog != 0u;
 		return medium;
 
 	}
@@ -116,14 +113,14 @@ export const materialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Refracting in through a front face pushes the volume the hit object's face bounds, by its medium id, unless it
-// has none or is already on the stack
+// Refracting in through a front face pushes the hit object's volume, by its medium id, unless it has none or
+// is already on the stack
 export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 	fn mediumStackEnter( stack: vec4u, object: u32 ) -> vec4u {
 
-		let id = ${ transforms }[ object ].mediumId;
-		let material = ${ materials }[ ${ transforms }[ id ].materialIndex ];
+		let transform = ${ transforms }[ object ];
+		let material = ${ materials }[ transform.materialIndex ];
 		if ( all( ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
 			return stack;
@@ -133,7 +130,7 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 		var result = stack;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( result[ i ] == id ) {
+			if ( result[ i ] == transform.mediumId ) {
 
 				break;
 
@@ -141,7 +138,7 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 
 			if ( result[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
 
-				result[ i ] = id;
+				result[ i ] = transform.mediumId;
 				break;
 
 			}
@@ -154,21 +151,20 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 
 `;
 
-// ... and refracting out through a back face removes it, moving the entries after it up
+// ... and refracting out through a back face removes it, keeping the rest of the stack packed in order
 export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 
 	fn mediumStackExit( stack: vec4u, object: u32 ) -> vec4u {
 
 		let id = ${ transforms }[ object ].mediumId;
-		var result = stack;
-		var found = false;
+		var result = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		var count = 0u;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			found = found || stack[ i ] == id;
-			if ( found ) {
+			if ( stack[ i ] != id ) {
 
-				let next = stack[ min( i + 1u, ${ MEDIUM_STACK_SIZE - 1 }u ) ];
-				result[ i ] = select( ${ MEDIUM_STACK_EMPTY }u, next, i + 1u < ${ MEDIUM_STACK_SIZE }u );
+				result[ count ] = stack[ i ];
+				count ++;
 
 			}
 
@@ -180,62 +176,10 @@ export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 
 `;
 
-// The medium of a stack, entered through the given object. Overlapping volumes sum their coefficients as in
-// Cycles, with a phase anisotropy averaged by scattering in place of Cycles' mixture of phase functions
-export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
-
-	fn stackMedium( stack: vec4u, object: u32 ) -> ${ mediumStruct } {
-
-		var extinction = vec3f( 0.0 );
-		var scattering = vec3f( 0.0 );
-		var maxAlbedo = vec3f( 0.0 );
-		var anisotropy = 0.0;
-		var anisotropyWeight = 0.0;
-		var fog = false;
-		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
-
-			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
-
-				break;
-
-			}
-
-			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
-			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
-			let entryExtinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-			// a fog volume's color is its single scatter albedo already
-			let isFog = material.fogVolume != 0;
-			let entryAlbedo = select( ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy ), material.multiscatterColor, isFog );
-			let entryScattering = entryAlbedo * entryExtinction;
-			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
-			extinction += entryExtinction;
-			scattering += entryScattering;
-			maxAlbedo = max( maxAlbedo, entryAlbedo );
-			anisotropy += entryAnisotropy * weight;
-			anisotropyWeight += weight;
-			fog = fog || isFog;
-
-		}
-
-		// a channel without extinction never scatters, and keeps the largest albedo for the channel choice
-		var medium: ${ mediumStruct };
-		medium.stack = stack;
-		medium.object = object;
-		medium.fog = fog;
-		medium.extinction = extinction;
-		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
-		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
-		medium.inside = any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) );
-		return medium;
-
-	}
-
-`;
-
-// The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray traced
-// from the origin meets the boundaries of the volumes around it, and one whose back face comes before any of its
-// front faces contains the origin. Like Cycles, it relies on closed volumes with outward facing normals
-export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, offsetRayOrigin, transforms, materials, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
+// The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray from
+// the origin meets the boundaries of the volumes around it, and one whose back face comes before any of its front
+// faces contains the origin. Like Cycles, it relies on closed volumes with outward facing normals
+export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, transforms, materials, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
 
 	fn originMediumStack( origin: vec3f ) -> vec4u {
 
@@ -258,30 +202,81 @@ export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, offsetRay
 
 			}
 
-			let material = ${ materials }[ ${ transforms }[ hit.objectIndex ].materialIndex ];
+			let transform = ${ transforms }[ hit.objectIndex ];
+			let material = ${ materials }[ transform.materialIndex ];
 			let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
-			if ( isVolume ) {
+			if ( isVolume && ! any( outside == vec4u( transform.mediumId ) ) ) {
 
-				let id = ${ transforms }[ hit.objectIndex ].mediumId;
-				let isOutside = any( outside == vec4u( id ) );
-				if ( hit.side > 0.0 && ! isOutside && outsideCount < ${ MEDIUM_STACK_SIZE }u ) {
-
-					outside[ outsideCount ] = id;
-					outsideCount ++;
-
-				} else if ( hit.side < 0.0 && ! isOutside ) {
+				if ( hit.side < 0.0 ) {
 
 					stack = ${ mediumStackEnterFn }( stack, hit.objectIndex );
+
+				} else if ( outsideCount < ${ MEDIUM_STACK_SIZE }u ) {
+
+					outside[ outsideCount ] = transform.mediumId;
+					outsideCount ++;
 
 				}
 
 			}
 
-			ray.origin = ${ offsetRayOrigin }( ray.origin + ray.direction * hit.dist, ray.direction, hit.normal );
+			ray.origin = ${ offsetRayOriginFunc }( ray.origin + ray.direction * hit.dist, ray.direction, hit.normal );
 
 		}
 
 		return stack;
+
+	}
+
+`;
+
+// The medium of a stack. Overlapping volumes sum their coefficients as in Cycles, with a phase anisotropy
+// averaged by scattering in place of Cycles' mixture of phase functions
+export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
+
+	fn stackMedium( stack: vec4u ) -> ${ mediumStruct } {
+
+		var extinction = vec3f( 0.0 );
+		var scattering = vec3f( 0.0 );
+		var maxAlbedo = vec3f( 0.0 );
+		var anisotropy = 0.0;
+		var anisotropyWeight = 0.0;
+		var fog = false;
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
+
+			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+
+				break;
+
+			}
+
+			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
+			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
+			let entryExtinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+
+			// a fog volume's color is its single scatter albedo already
+			let isFog = material.fogVolume != 0;
+			let entryAlbedo = select( ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy ), material.multiscatterColor, isFog );
+			let entryScattering = entryAlbedo * entryExtinction;
+			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
+			extinction += entryExtinction;
+			scattering += entryScattering;
+			maxAlbedo = max( maxAlbedo, entryAlbedo );
+			anisotropy += entryAnisotropy * weight;
+			anisotropyWeight += weight;
+			fog = fog || isFog;
+
+		}
+
+		// a channel without extinction never scatters, and keeps the largest albedo for the channel choice
+		var medium: ${ mediumStruct };
+		medium.stack = stack;
+		medium.fog = fog;
+		medium.extinction = extinction;
+		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
+		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
+		medium.scatters = any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) );
+		return medium;
 
 	}
 
@@ -371,7 +366,6 @@ export const shadowTransmittanceFunc = ( transforms, materials ) => {
 	`;
 
 };
-
 
 // The probability of sampling each color channel's distance, in proportion to throughput times albedo
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume.h#L157

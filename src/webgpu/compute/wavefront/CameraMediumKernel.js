@@ -2,8 +2,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Finds the volumes each new camera ray starts inside of by tracing from the ray's own origin, and starts its
@@ -24,12 +23,11 @@ export class CameraMediumKernel extends ComputeKernel {
 
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
-
-		const transformsNode = contextProxy( 'bvhData.storage.transforms' );
-		const materialsNode = contextProxy( 'shadingModel.storage.materials' );
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsNode, materialsNode );
-		const stackMediumFn = stackMediumFunc( transformsNode, materialsNode );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, offsetRayOriginFunc, transformsNode, materialsNode, mediumStackEnterFn );
+		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
+		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
+		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
+		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, transformsStorage, materialsStorage, mediumStackEnterFn );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -53,11 +51,12 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin ), ${ MEDIUM_STACK_EMPTY }u );
+				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin ) );
 				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
-				// the walk hands its hit back in the queued ray's result entry, which its trace leaves unused
-				if ( medium.inside ) {
+				// the walk hands its hit back in the queued ray's result entry, which its trace leaves unused. Clearing
+				// the free slot marker lets QueueMediumWalksKernel queue it
+				if ( medium.scatters ) {
 
 					rayDataStorage[ index ].walkPending = ${ WALK_PENDING_CAMERA }u;
 					rayDataStorage[ index ].hit.objectIndex = 0;

@@ -210,14 +210,7 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	ior: 'f32',
 	transmission: 'f32',
 	thinWall: 'bool',
-	attenuationColor: 'vec3f',
-	attenuationDistance: ' f32',
 	dispersion: 'f32',
-
-	// volume scattering
-	multiscatterColor: 'vec3f',
-	scatterStrength: 'f32',
-	scatterAnisotropy: 'f32',
 
 	// clearcoat
 	clearcoatNormal: 'vec3f',

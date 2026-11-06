@@ -184,7 +184,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].mediumVertex = 0u;
 
 					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
-					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ), ${ MEDIUM_STACK_EMPTY }u ) );
+					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ) ) );
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -197,7 +197,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
-					let segmentInMedium = medium.inside;
+					let segmentInMedium = medium.scatters;
 
 					// A scatter event in fog, staged at "origin" by LogicKernel, is a path vertex like a surface,
 					// counted as a bounce, that continues through the phase function
@@ -344,7 +344,7 @@ export class MaterialKernel extends ComputeKernel {
 
 							if ( any( stack != medium.stack ) ) {
 
-								medium = ${ stackMediumFn }( stack, u32( input.hit.objectIndex ) );
+								medium = ${ stackMediumFn }( stack );
 								rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 							}
@@ -352,7 +352,7 @@ export class MaterialKernel extends ComputeKernel {
 						}
 
 						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.hit.normal );
-						if ( medium.inside ) {
+						if ( medium.scatters ) {
 
 							// inside a medium, MediumKernel walks on past the surface, from the surface
 							rayDataStorage[ index ].walkPending = 1u;
@@ -475,7 +475,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						if ( any( stack != medium.stack ) ) {
 
-							medium = ${ stackMediumFn }( stack, u32( input.hit.objectIndex ) );
+							medium = ${ stackMediumFn }( stack );
 							mediumChanged = true;
 
 						}
@@ -492,7 +492,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
 					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
-					if ( ! isTerminated && medium.inside ) {
+					if ( ! isTerminated && medium.scatters ) {
 
 						rayDataStorage[ index ].walkPending = 1u;
 						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );

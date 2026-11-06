@@ -23,8 +23,8 @@ export class PathTracerBackend {
 		this.maxFogBounces = 0;
 		this.lowResMode = false;
 
-		// whether the scene has volumes, so camera rays trace for the ones they start inside of
-		this.hasVolumes = false;
+		// the shading model the kernels read the materials through
+		this.shadingModel = null;
 
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
@@ -98,6 +98,8 @@ export class PathTracerBackend {
 	}
 
 	setShadingModel( shadingModel ) {
+
+		this.shadingModel = shadingModel;
 
 	}
 
