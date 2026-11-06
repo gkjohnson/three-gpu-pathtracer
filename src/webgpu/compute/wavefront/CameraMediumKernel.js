@@ -6,9 +6,8 @@ import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMedi
 import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Finds the volumes each new camera ray starts inside of by tracing from the ray's own origin, and starts its
-// medium with them. Runs after MaterialKernel spawns the camera rays and before they are traced, only for scenes
-// with volumes. A camera ray starting in a scattering volume is walked by MediumKernel instead, leaving its queued
-// trace unused.
+// medium with them. Runs after MaterialKernel spawns the camera rays and before they are traced. A camera ray
+// starting in a scattering volume is walked by MediumKernel instead, leaving its queued trace unused.
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {

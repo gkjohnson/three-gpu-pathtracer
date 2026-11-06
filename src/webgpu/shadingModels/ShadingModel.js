@@ -57,9 +57,6 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
-		// whether any material has a volume, so camera rays look for the ones they start inside of
-		this.hasVolumes = false;
-
 	}
 
 	/**
@@ -541,15 +538,6 @@ export class ShadingModel {
 
 	}
 
-	/**
-	 * Must return whether a path refracting into the material or crossing a fog volume's boundary enters a volume
-	 */
-	hasMedium( material ) {
-
-		return material.transmission > 0 || Boolean( material.isFogVolumeMaterial );
-
-	}
-
 	updateMaterials( root ) {
 
 		const { materials, materialsMap, textures, texturesMap, structs } = this;
@@ -611,8 +599,6 @@ export class ShadingModel {
 
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
-
-		this.hasVolumes = materials.some( m => this.hasMedium( m ) );
 
 		function add( mat ) {
 
