@@ -15,13 +15,11 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 // inversion and the Henyey-Greenstein pdf divide by zero at
 const MEDIUM_MAX_ANISOTROPY = 0.999;
 
-// The media a path is inside of, as in Cycles' volume_stack.h: the medium ids of up to four volumes, packed
-// at the front with the empty value after them. A volume entered past a full stack is ignored
+// The media a path is inside of, as in Cycles' volume_stack.h: up to four medium ids, packed at the front
 const MEDIUM_STACK_EMPTY = 0xffffffff;
 const MEDIUM_STACK_SIZE = 4;
 
-// The media of a stack combined. One that scatters is walked, while one that only absorbs attenuates the
-// segments through it
+// the combined media of a stack
 export const mediumStruct = new StructTypeNode( {
 	stack: 'vec4u',
 	scatters: 'bool',
@@ -89,7 +87,6 @@ const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
 
 `;
 
-// the object transforms and materials of the kernel's context, which the stack functions read
 const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 
@@ -104,8 +101,7 @@ const materialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Refracting in through a front face pushes the hit object's volume, by its medium id, unless it has none or
-// is already on the stack
+// entering a volume pushes its medium id, unless it has no extinction or is already on the stack
 export const mediumStackEnterFn = wgslTagFn/* wgsl */`
 
 	fn mediumStackEnter( stack: vec4u, object: u32 ) -> vec4u {
@@ -142,7 +138,7 @@ export const mediumStackEnterFn = wgslTagFn/* wgsl */`
 
 `;
 
-// ... and refracting out through a back face removes it, keeping the rest of the stack packed in order
+// exiting a volume removes its medium id
 export const mediumStackExitFn = wgslTagFn/* wgsl */`
 
 	fn mediumStackExit( stack: vec4u, object: u32 ) -> vec4u {
@@ -167,9 +163,8 @@ export const mediumStackExitFn = wgslTagFn/* wgsl */`
 
 `;
 
-// The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray from
-// the origin meets the boundaries of the volumes around it, and one whose nearest hit is a back face contains the
-// origin. Like Cycles, it relies on closed volumes with outward facing normals
+// The volumes containing a point, as in Cycles' integrator_volume_stack_init: a volume whose nearest hit along a
+// ray from the point is a back face contains it. Assumes closed volumes with outward facing normals
 export const originMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn originMediumStack( origin: vec3f ) -> vec4u {
@@ -182,7 +177,6 @@ export const originMediumStackFn = wgslTagFn/* wgsl */`
 		var hits: ${ contextProxy( 'bvhData.fns.raycastVolumes.outputType' ) };
 		${ contextProxy( 'bvhData.fns.raycastVolumes' ) }( ray, &hits );
 
-		// a medium id is one of its volume's object slots, so it's entered like a hit object
 		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
 		for ( var i = 0u; i < hits.count; i ++ ) {
 
@@ -200,8 +194,7 @@ export const originMediumStackFn = wgslTagFn/* wgsl */`
 
 `;
 
-// The medium of a stack. Overlapping volumes sum their coefficients as in Cycles, with a phase anisotropy
-// averaged by scattering in place of Cycles' mixture of phase functions
+// The medium of a stack: coefficients summed as in Cycles, with the anisotropy averaged by scattering
 export const stackMediumFn = wgslTagFn/* wgsl */`
 
 	fn stackMedium( stack: vec4u ) -> ${ mediumStruct } {
@@ -233,7 +226,7 @@ export const stackMediumFn = wgslTagFn/* wgsl */`
 
 		}
 
-		// a channel without extinction never scatters, and keeps the largest albedo for the channel choice
+		// channels without extinction keep the largest albedo for the channel choice
 		var medium: ${ mediumStruct };
 		medium.stack = stack;
 		medium.extinction = extinction;

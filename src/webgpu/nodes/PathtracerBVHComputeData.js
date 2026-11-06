@@ -11,8 +11,7 @@ const transformStruct = new StructTypeNode( {
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
 
-	// the slot the medium stack holds for the volume this slot bounds: the first of the object's bvh groups
-	// with the same material, so a path enters and leaves the volume through any of them
+	// the volume's id: the first slot of the object's bvh groups with this material
 	mediumId: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
@@ -31,8 +30,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
-// the volumes a ray hits, by medium id, with the distance and side of each one's nearest hit. Volumes past
-// the first 32 are ignored
+// the volumes a ray hits, by medium id, with each one's nearest hit distance and side
 const VOLUME_HITS_SIZE = 32;
 const volumeHitsStruct = new StructTypeNode( {
 	ids: `array<u32, ${ VOLUME_HITS_SIZE }>`,
@@ -41,8 +39,7 @@ const volumeHitsStruct = new StructTypeNode( {
 	count: 'uint',
 }, 'VolumeHits' );
 
-// the volume hits entry of the object being traversed: none in the TLAS, unresolved until the object's entry
-// is looked up, and skipped for an object that isn't a volume
+// the volume hits entry of the object being traversed
 const VOLUME_ENTRY_NONE = 0xffffffff;
 const VOLUME_ENTRY_UNRESOLVED = 0xfffffffe;
 const VOLUME_ENTRY_SKIPPED = 0xfffffffd;
@@ -518,12 +515,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		} );
 
-		// The nearest hit of every volume along the whole ray, for finding the volumes around its origin. Objects
-		// that aren't volumes are skipped, and each volume is only traversed up to the nearest hit found on it
+		// The nearest hit of every volume along the ray. Non-volumes are skipped, and each volume is only traversed
+		// up to its nearest hit so far
 		const volumeEntry = uint( VOLUME_ENTRY_NONE ).toVar( 'bvh_volumeEntry' );
 
-		// the volume's entry in the hits, or the next free one for its first hit to fill. The object transform
-		// has no access to the hits, so it's looked up at the object's first bounds or triangle test
+		// the volume's entry in the hits, or the next free one. Looked up at the object's first test, since the
+		// transform can't see the hits
 		const resolveVolumeEntry = wgslTagFn/* wgsl */`
 			fn resolveVolumeEntry( result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
 
@@ -666,7 +663,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.updateUvAttributesFromScene();
 
 		// the material indices are written with the transforms, so the shading model's materials must
-		// be updated first. The medium ids are slots, so they're found again for the new packing
+		// be updated first. The medium ids are slots, so they're found again
 		this._mediumIds.clear();
 		super.update();
 

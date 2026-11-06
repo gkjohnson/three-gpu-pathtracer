@@ -173,8 +173,6 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
 
-					// CameraMediumKernel sets the ray's medium from the volumes around its origin
-
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
 
@@ -217,9 +215,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// a medium that doesn't scatter only absorbs the light reaching the surface, so its emission
-					// and NEE resolve against the attenuated throughput. One that does applied its transmittance
-					// in MediumKernel
+					// a medium that only absorbs attenuates the segment to the hit
 					var throughputColor = input.throughputColor;
 					if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
 
@@ -350,8 +346,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].hit.bounce = newBounce;
 					rayDataStorage[ index ].mediumScattered = 0u;
 
-					// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
-					// through it enters the volume and out through it leaves, while light reflecting stays
+					// refracting through a volume's surface enters or exits it
 					var mediumChanged = false;
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 

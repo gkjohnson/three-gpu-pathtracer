@@ -171,7 +171,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the media the path is inside of, starting from those around the ray's origin
 				var medium = ${ stackMediumFn }( ${ originMediumStackFn }( ray.origin ) );
 				var subsurfaceBounces = 0u;
 
@@ -317,9 +316,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.dist = hitResult.dist;
 						hit.bounce = bounce;
 
-						// a medium that doesn't scatter only absorbs the light reaching the surface, so its emission
-						// and NEE resolve against the attenuated throughput. One that does applied its transmittance
-						// above
+						// a medium that only absorbs attenuates the segment to the hit
 						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
 
 							throughputColor *= exp( - medium.extinction * hit.dist );
@@ -494,8 +491,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						bsdfPdf = scatterRec.pdf;
 						mediumScattered = false;
 
-						// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
-						// through it enters the volume and out through it leaves, while light reflecting stays
+						// refracting through a volume's surface enters or exits it
 						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
 							var stack: vec4u;
