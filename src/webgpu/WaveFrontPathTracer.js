@@ -6,6 +6,7 @@ import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
 import { MediumKernel } from './compute/wavefront/MediumKernel.js';
 import { QueueMediumWalksKernel } from './compute/wavefront/QueueMediumWalksKernel.js';
+import { CameraRayKernel } from './compute/wavefront/CameraRayKernel.js';
 import { CameraMediumKernel } from './compute/wavefront/CameraMediumKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
@@ -97,6 +98,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel = new TraceShadowRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.mediumKernel = new MediumKernel().setWorkgroupSize( 64, 1, 1 );
 		this.queueMediumWalksKernel = new QueueMediumWalksKernel().setWorkgroupSize( 64, 1, 1 );
+		this.cameraRayKernel = new CameraRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.cameraMediumKernel = new CameraMediumKernel().setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel( RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel( SHADOW_RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
@@ -138,6 +140,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceRayKernel.context.bvhData = bvhData;
 		this.traceShadowRayKernel.context.bvhData = bvhData;
 		this.mediumKernel.context.bvhData = bvhData;
+		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
 		this.rebuild();
 
@@ -153,6 +156,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceRayKernel.needsUpdate = true;
 		this.traceShadowRayKernel.needsUpdate = true;
 		this.mediumKernel.needsUpdate = true;
+		this.cameraRayKernel.needsUpdate = true;
 		this.cameraMediumKernel.needsUpdate = true;
 		this.reset();
 
@@ -162,6 +166,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.logicKernel.context.random = random;
 		this.materialKernel.context.random = random;
+		this.cameraRayKernel.context.random = random;
 		this.traceRayKernel.context.random = random;
 		this.traceShadowRayKernel.context.random = random;
 		this.mediumKernel.context.random = random;
@@ -291,6 +296,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.dispose();
 		this.mediumKernel.dispose();
 		this.queueMediumWalksKernel.dispose();
+		this.cameraRayKernel.dispose();
 		this.cameraMediumKernel.dispose();
 		this.rayDispatchConverter.dispose();
 		this.shadowDispatchConverter.dispose();
@@ -315,7 +321,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this.pixelQueue.name = 'Pixel Queue';
 
 			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
-			this.materialKernel.pixelQueue = this.pixelQueue;
+			this.cameraRayKernel.pixelQueue = this.pixelQueue;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
 
@@ -356,8 +362,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// Traced rays fill the results from the front at their queue index, and MediumKernel fills them from the
 		// back with the hits of medium walks. In a round each path slot either queues one ray or walks a medium,
-		// never both, so the two ranges together never exceed the slot count and can't overlap. A camera ray found
-		// inside a medium after it was queued walks it instead, reusing that ray's entry
+		// never both, so the two ranges together never exceed the slot count and can't overlap
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
 
@@ -450,6 +455,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			traceShadowRayKernel,
 			mediumKernel,
 			queueMediumWalksKernel,
+			cameraRayKernel,
 			cameraMediumKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
@@ -468,6 +474,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			traceShadowRayKernel,
 			mediumKernel,
 			queueMediumWalksKernel,
+			cameraRayKernel,
 			cameraMediumKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
@@ -504,6 +511,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
 		logicKernel.globalSeed = this.globalSeed;
 		materialKernel.globalSeed = this.globalSeed;
+		cameraRayKernel.globalSeed = this.globalSeed;
 		traceRayKernel.globalSeed = this.globalSeed;
 		traceShadowRayKernel.globalSeed = this.globalSeed;
 		mediumKernel.globalSeed = this.globalSeed;
@@ -561,24 +569,31 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				zeroDispatchKernel.target = mediumQueue;
 				this.dispatch( zeroDispatchKernel, [ MEDIUM_QUEUE_HEADER ] );
 
-				// Step 3: evaluate materials — spawn camera rays for freed slots, sample the bsdf, and
-				// enqueue this frame's bounce + shadow rays
+				// Step 3: evaluate materials — sample the bsdf, and enqueue this frame's bounce + shadow rays
 				materialKernel.rayDataStorage = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
 				materialKernel.queueCounters = queueCounters;
-				materialKernel.pixelQueue = this.pixelQueue;
-				materialKernel.sampleCountTarget = this.sampleCountTarget;
-				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
 				materialKernel.maxFogBounces = this.maxFogBounces;
-				materialKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-				// find the scene fog and volumes the new camera rays start inside of
+				// spawn camera rays for the freed slots, then find the volumes they start inside of and queue them
+				// TODO: merge these two kernels, which needs one more storage buffer than the limit allows until the
+				// queue counters can be dropped
+				cameraRayKernel.rayDataStorage = rayDataStorage;
+				cameraRayKernel.pixelQueue = this.pixelQueue;
+				cameraRayKernel.sampleCountTarget = this.sampleCountTarget;
+				cameraRayKernel.maxSamples = this.maxSamples;
+				cameraRayKernel.rayCount = rayCount;
+				cameraRayKernel.targetDimensions.copy( targetDimensions );
+				this.dispatch( cameraRayKernel, cameraRayKernel.getDispatchSize( rayCount, 1, 1 ) );
+
 				cameraMediumKernel.rayDataStorage = rayDataStorage;
+				cameraMediumKernel.rayQueue = rayQueue;
+				cameraMediumKernel.queueCounters = queueCounters;
 				cameraMediumKernel.rayCount = rayCount;
 				cameraMediumKernel.sceneFog = this.shadingModel.hasSceneFog ? 1 : 0;
 				this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );

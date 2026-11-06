@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, sceneMediumStackFn, originMediumStackFunc, shadowMediumStackFunc, shadowTransmittanceFunc, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSceneMediumStackFn, getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -64,8 +64,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
-		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
-		const raycastVolumesFn = contextProxyFn( 'bvhData.fns.raycastVolumes' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
@@ -73,13 +71,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
-
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
-		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
-		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
-		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
-		const shadowTransmittanceFn = shadowTransmittanceFunc( transformsStorage, materialsStorage );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
@@ -186,8 +177,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the media the path is inside of, starting from the scene fog and the volumes around the ray's origin
-				var medium = ${ stackMediumFn }( ${ originMediumStackFn }( ray.origin, ${ sceneMediumStackFn }( sceneFog != 0u ) ) );
+				// get the set of mediums that the camera ray starts within
+				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin, ${ getSceneMediumStackFn }( sceneFog != 0u ) ) );
 				var subsurfaceBounces = 0u;
 				var fogBounces = 0u;
 
@@ -225,9 +216,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterDist = 0.0;
 					var traceRay = ray;
 					traceRay.origin = traceOrigin;
-					if ( medium.scatters ) {
+					if ( medium.scatters != 0u ) {
 
-						channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
+						channelPdf = ${ getMediumChannelPdfFn }( throughputColor, medium.albedo );
 						scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 						traceRay.maxDist = select( scatterDist, min( ray.maxDist, scatterDist ), ray.maxDist > 0.0 );
 
@@ -237,15 +228,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					let segmentInMedium = medium.scatters;
+					let segmentInMedium = medium.scatters != 0u;
 					var segmentEnd = surfaceDist;
 					var fogScatter = false;
-					if ( medium.scatters ) {
+					if ( segmentInMedium ) {
 
 						let scattered = scatterDist < surfaceDist;
 						let segmentDist = select( surfaceDist, scatterDist, scattered );
 						let transmittance = exp( - medium.extinction * segmentDist );
-						let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
+						let distancePdf = dot( channelPdf, ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
 						if ( distancePdf <= 0.0 ) {
 
 							break;
@@ -257,7 +248,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							// reaching the surface, weighted by the probability of no scatter event before it
 							throughputColor *= transmittance / distancePdf;
 
-						} else if ( medium.fog ) {
+						} else if ( medium.fog != 0u ) {
 
 							// a scatter event in fog is a path vertex, resolved once the lights before it are found
 							throughputColor *= medium.albedo * medium.extinction * transmittance / distancePdf;
@@ -375,7 +366,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									if ( ! occluded ) {
 
 										let lightPdf = lightRec.pdf * selectionPdf;
-										let lightTransmittance = ${ shadowTransmittanceFn }( medium.stack, shadowRay.maxDist, shadowHit.fogDepth, shadowHit.occlusion );
+										let mediumDepth = ${ getShadowMediumDepthFn }( medium.stack, shadowRay.maxDist );
+										let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
 										let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
 										let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
 										let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, phasePdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
@@ -436,14 +428,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.dist = hitResult.dist;
 						hit.bounce = bounce;
 
-						// a medium that doesn't scatter only absorbs the light reaching the surface. One that
-						// does has already applied its transmittance above
-						if ( ! segmentInMedium ) {
-
-							throughputColor *= exp( - medium.extinction * hit.dist );
-
-						}
-
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
 						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -469,6 +453,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						// a medium that only absorbs attenuates the segment to the hit
+						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
+
+							throughputColor *= exp( - medium.extinction * hit.dist );
+
+						}
+
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the traversal at the hit point, advancing the rng but not the bounce count. A fog
 						// volume's boundary is always passed, entering or leaving its volume
@@ -484,22 +475,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							if ( isFogBoundary ) {
 
-								var stack: vec4u;
+								var stack = medium.stack;
 								if ( hit.side > 0.0 ) {
 
-									stack = ${ mediumStackEnterFn }( medium.stack, u32( hit.objectIndex ) );
+									${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
 								} else {
 
-									stack = ${ mediumStackExitFn }( medium.stack, u32( hit.objectIndex ) );
+									${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
 
 								}
 
-								if ( any( stack != medium.stack ) ) {
-
-									medium = ${ stackMediumFn }( stack );
-
-								}
+								medium = ${ getCombinedMediumFn }( stack );
 
 							}
 
@@ -573,8 +560,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										if ( ! occluded ) {
 
 											let lightPdf = lightRec.pdf * selectionPdf;
-											let shadowStack = ${ shadowMediumStackFn }( medium.stack, u32( hit.objectIndex ), hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
-											let lightTransmittance = ${ shadowTransmittanceFn }( shadowStack, shadowRay.maxDist, shadowHit.fogDepth, shadowHit.occlusion );
+											let shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
+											let mediumDepth = ${ getShadowMediumDepthFn }( shadowStack, shadowRay.maxDist );
+											let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
 
 											// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
 											// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
@@ -637,26 +625,21 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						bsdfPdf = scatterRec.pdf;
 						mediumScattered = false;
 
-						// As in "KHR_materials_scatter", a volume's surface bsdf is its boundary: light refracting in
-						// through it enters the volume and out through it leaves, while light reflecting stays
+						// refracting through a volume's surface enters or exits it
 						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
-							var stack: vec4u;
+							var stack = medium.stack;
 							if ( hit.side > 0.0 ) {
 
-								stack = ${ mediumStackEnterFn }( medium.stack, u32( hit.objectIndex ) );
+								${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
 							} else {
 
-								stack = ${ mediumStackExitFn }( medium.stack, u32( hit.objectIndex ) );
+								${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
 
 							}
 
-							if ( any( stack != medium.stack ) ) {
-
-								medium = ${ stackMediumFn }( stack );
-
-							}
+							medium = ${ getCombinedMediumFn }( stack );
 
 						}
 

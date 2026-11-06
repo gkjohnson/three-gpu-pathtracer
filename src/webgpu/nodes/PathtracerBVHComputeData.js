@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh }
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
-import { materialExtinctionFn, fogShadowDistanceFn } from './medium.wgsl.js';
+import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -11,10 +11,7 @@ const transformStruct = new StructTypeNode( {
 	visible: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
-
-	// the slot the medium stack holds for the volume this slot bounds: the first of the object's bvh groups
-	// with the same material, so a path enters and leaves the volume through any of them
-	mediumId: 'uint',
+	_alignment0: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -34,8 +31,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
-// the volumes a ray hits, by medium id, with the distance and side of each one's nearest hit. Volumes past
-// the first 32 are ignored
+// the volumes a ray hits, by material index, with each one's nearest hit distance and side
 const VOLUME_HITS_SIZE = 32;
 const volumeHitsStruct = new StructTypeNode( {
 	ids: `array<u32, ${ VOLUME_HITS_SIZE }>`,
@@ -43,12 +39,6 @@ const volumeHitsStruct = new StructTypeNode( {
 	side: `array<f32, ${ VOLUME_HITS_SIZE }>`,
 	count: 'uint',
 }, 'VolumeHits' );
-
-// the volume hits entry of the object being traversed: none in the TLAS, unresolved until the object's entry
-// is looked up, and skipped for an object that isn't a volume
-const VOLUME_ENTRY_NONE = 0xffffffff;
-const VOLUME_ENTRY_UNRESOLVED = 0xfffffffe;
-const VOLUME_ENTRY_SKIPPED = 0xfffffffd;
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
@@ -71,9 +61,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
-
-		// each volume's medium id
-		this._mediumIds = new Map();
 
 	}
 
@@ -481,8 +468,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// the fog shadow distance, and leaving takes it away
 							if ( material.fogVolume != 0 ) {
 
-								let extinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-								let depth = extinction * ( ${ fogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+								let extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+								let depth = extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
 								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
 								continue;
 
@@ -532,78 +519,35 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		} );
 
-		// The nearest hit of every volume along the whole ray, for finding the volumes around its origin. Objects
-		// that aren't volumes are skipped, and each volume is only traversed up to the nearest hit found on it
-		const volumeEntry = uint( VOLUME_ENTRY_NONE ).toVar( 'bvh_volumeEntry' );
+		// The nearest hit of every volume along the ray, skipping the objects that aren't volumes
+		// TODO: accumulating the volume hits through the shapecast hooks this way is a bit brittle
+		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
+		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
+		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
 
-		// the volume's entry in the hits, or the next free one for its first hit to fill. The object transform
-		// has no access to the hits, so it's looked up at the object's first bounds or triangle test
-		const resolveVolumeEntry = wgslTagFn/* wgsl */`
-			fn resolveVolumeEntry( result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
-
-				if ( ${ volumeEntry } != ${ VOLUME_ENTRY_UNRESOLVED }u ) {
-
-					return ${ volumeEntry };
-
-				}
-
-				let mediumId = ${ storage.transforms }[ ${ currentObjectIndex } ].mediumId;
-				${ volumeEntry } = select( ${ VOLUME_ENTRY_SKIPPED }u, result.count, result.count < ${ VOLUME_HITS_SIZE }u );
-				for ( var i = 0u; i < result.count; i ++ ) {
-
-					if ( result.ids[ i ] == mediumId ) {
-
-						${ volumeEntry } = i;
-						break;
-
-					}
-
-				}
-
-				return ${ volumeEntry };
-
-			}
-		`;
-
-		fns.raycastVolumes = this.getShapecastFn( {
-			name: 'raycastVolumes',
+		fns.collectVolumeHits = this.getShapecastFn( {
+			name: 'collectVolumeHits',
 			shapeStruct: rayStruct,
 			resultStruct: volumeHitsStruct,
 
-			prefixFn: wgslTagFn/* wgsl */`
-				fn resetVolumeEntry() -> void {
-
-					${ volumeEntry } = ${ VOLUME_ENTRY_NONE }u;
-
-				}
-			`,
 			boundsOrderFn: raycastOptions.boundsOrderFn,
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
 
-					let entry = ${ resolveVolumeEntry }( result );
-					if ( entry == ${ VOLUME_ENTRY_SKIPPED }u ) {
+					if ( ${ skipObject } != 0u ) {
 
 						return 0u;
 
 					}
 
-					let dist = ${ rayBoundsDistance }( ray, bounds );
-					if ( dist < 0.0 || ( entry < result.count && dist >= result.dist[ entry ] ) ) {
-
-						return 0u;
-
-					}
-
-					return 1u;
+					return select( 0u, 1u, ${ rayBoundsDistance }( ray, bounds ) >= 0.0 );
 
 				}
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
 				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
 
-					let entry = ${ resolveVolumeEntry }( result );
-					if ( entry == ${ VOLUME_ENTRY_SKIPPED }u ) {
+					if ( ${ skipObject } != 0u ) {
 
 						return ${ NOT_INTERSECTED }u;
 
@@ -611,6 +555,25 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
 					let material = ${ materialsStorage }[ object.materialIndex ];
+
+					// the material's entry in the hits, or the next free one
+					var entry = result.count;
+					for ( var i = 0u; i < result.count; i ++ ) {
+
+						if ( result.ids[ i ] == object.materialIndex ) {
+
+							entry = i;
+							break;
+
+						}
+
+					}
+
+					if ( entry == ${ VOLUME_HITS_SIZE }u ) {
+
+						return ${ NOT_INTERSECTED }u;
+
+					}
 
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
@@ -639,7 +602,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						}
 
-						result.ids[ entry ] = object.mediumId;
+						result.ids[ entry ] = object.materialIndex;
 						result.dist[ entry ] = triResult.dist;
 						result.side[ entry ] = triResult.side;
 						result.count = max( result.count, entry + 1u );
@@ -659,7 +622,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
 					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
-					${ volumeEntry } = select( ${ VOLUME_ENTRY_SKIPPED }u, ${ VOLUME_ENTRY_UNRESOLVED }u, isVolume );
+					${ skipObject } = select( 1u, 0u, isVolume );
 
 				}
 			`,
@@ -667,7 +630,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				fn resetVolumeRay( objectIndex: u32 ) -> void {
 
 					${ raycastOptions.resetShapeFn }( objectIndex );
-					${ volumeEntry } = ${ VOLUME_ENTRY_NONE }u;
+					${ skipObject } = 0u;
 
 				}
 			`,
@@ -703,7 +666,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { storage, bvh } = this;
 		const transformsStorage = storage.transforms.proxyNode;
-		this._mediumIds.clear();
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
@@ -740,16 +702,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
-
-		// slots are written in order, so the first one seen for a volume is its medium id
-		const mediumKey = `${ object.uuid }_${ instanceId }_${ index }`;
-		if ( ! this._mediumIds.has( mediumKey ) ) {
-
-			this._mediumIds.set( mediumKey, writeOffset );
-
-		}
-
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 35 ] = this._mediumIds.get( mediumKey );
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
