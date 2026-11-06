@@ -569,14 +569,7 @@ export class ShadingModel {
 	 */
 	hasMedium( material ) {
 
-		if ( ! material || ! material.attenuationColor || ! ( material.transmission > 0 ) ) {
-
-			return false;
-
-		}
-
-		const { attenuationColor, attenuationDistance } = material;
-		return attenuationDistance !== Infinity && Math.min( attenuationColor.r, attenuationColor.g, attenuationColor.b ) < 1;
+		return material.transmission > 0;
 
 	}
 
