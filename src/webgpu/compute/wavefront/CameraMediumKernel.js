@@ -20,13 +20,13 @@ export class CameraMediumKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
-		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
+		const raycastVolumesFn = contextProxy( 'bvhData.fns.raycastVolumes' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
 		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, transformsStorage, materialsStorage, mediumStackEnterFn );
+		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 
 		const fn = wgslTagFn/* wgsl */`
 
