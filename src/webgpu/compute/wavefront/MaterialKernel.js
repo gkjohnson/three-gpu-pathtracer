@@ -318,8 +318,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						// out of transparent bounces, so stop rather than shading a surface that
 						// should be invisible. A zeroed throughput terminates in LogicKernel.
-						let alphaDepth = input.alphaDepth + 1u;
-						if ( alphaDepth > maxTransparentBounces ) {
+						if ( input.alphaDepth >= maxTransparentBounces ) {
 
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
@@ -365,7 +364,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue[ alphaIndex ].origin = alphaOrigin;
 							rayQueue[ alphaIndex ].direction = input.direction;
 							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue[ alphaIndex ].rngIndex = input.hit.bounce + alphaDepth + input.subsurfaceBounces;
+							rayQueue[ alphaIndex ].rngIndex = input.hit.bounce + input.alphaDepth + 1u + input.subsurfaceBounces;
 							rayQueue[ alphaIndex ].sampleIndex = input.sampleIndex;
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
@@ -380,7 +379,7 @@ export class MaterialKernel extends ComputeKernel {
 						// the surface is skipped, so no scatter or emission is staged for LogicKernel.
 						// "pdf" is left alone so the previous scatter still weights the forward MIS,
 						// and "bsdf" matches it so applying the scatter leaves the throughput as is.
-						rayDataStorage[ index ].alphaDepth = alphaDepth;
+						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
 						rayDataStorage[ index ].lightPdf = 0.0;

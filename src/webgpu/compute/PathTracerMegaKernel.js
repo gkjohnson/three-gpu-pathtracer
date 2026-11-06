@@ -429,7 +429,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-
 					if ( didHit ) {
 
 						// the hit, recorded as in the wavefront ray data
@@ -482,8 +481,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
 
 							// stop once the transparent bounces run out
-							transparentBounce ++;
-							if ( transparentBounce > maxTransparentBounces ) {
+							if ( transparentBounce >= maxTransparentBounces ) {
 
 								break;
 
@@ -513,6 +511,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hit.normal );
 							rayStart += hit.dist;
 							${ rngNextBounce }();
+							transparentBounce ++;
 							bounce --;
 							continue;
 

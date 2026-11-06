@@ -146,8 +146,7 @@ export class MediumKernel extends ComputeKernel {
 					ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 					hasScattered = true;
 
-					// the walk doesn't count against the bounce limit, but is capped, and ends once its
-					// throughput is negligible
+					// capped separately from bounces, and ends once the throughput is negligible
 					subsurfaceBounces ++;
 					let throughput = input.throughputColor * weight / input.scatterPdf;
 					if ( subsurfaceBounces >= maxSubsurfaceBounces || max( max( throughput.r, throughput.g ), throughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
