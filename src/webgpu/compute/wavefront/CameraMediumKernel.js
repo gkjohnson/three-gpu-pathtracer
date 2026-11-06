@@ -7,6 +7,9 @@ import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Sets the medium of new camera rays from the volumes around their origin. A ray starting in a scattering
 // medium is walked instead of traced.
+// TODO: turn this into a camera ray spawn kernel, moving the camera ray generation out of MaterialKernel, so a
+// new ray's medium is found before it's queued and a ray starting in a scattering medium is never traced. It
+// needs one more storage buffer than the limit allows until the queue counters can be dropped
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {
